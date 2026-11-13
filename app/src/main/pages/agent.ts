@@ -73,6 +73,7 @@ import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
+import { carryEditor } from "../message-edit";
 import { chatCardAction } from "../chat-cards";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
@@ -630,6 +631,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
   window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
+  /** Messages sent again from their editor, until the history drops them for their replacements. */
+  const replaced = new Set<number>();
+  /** The owner's message open as an editor (`state.editing` draws it): the thread it belongs to and what it carries, as the composer would. */
+  let editDraft: { key: string; draft: ComposerDraft } | null = null;
   const retracted = new Set<string>();
   let attachmentEpoch = 0;
   let attaching = 0;
@@ -930,7 +935,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const sentHere = outgoing.filter(belongs);
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
-    const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    // A message sent again from its editor leaves its place while the replacement is on its way (`replaced`), as it does in the history.
+    const chronological = turns.filter(turn => !replaced.has(turn.id)).sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
     // A first unseen turn inside the newest window leaves that window alone (unreadInTail); a farther one centres it.
     const unseen = openingThread && unreadFrom !== null ? chronological.findIndex(turn => turn.id >= unreadFrom!) : -1;
     const openingTarget = targetTurn ?? (unseen >= 0 && !unreadInTail(unseen, chronological.length) ? chronological[unseen]!.id : undefined);
@@ -954,7 +960,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
-            item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? ""],
+            item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
+            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
         })(), turnId: item.turn.id },
     );
@@ -998,8 +1005,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const changed = patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
-        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
-        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
+        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made), restoreEditor = carryEditor(node, made);
+        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); restoreEditor(); };
       },
     });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
@@ -1045,6 +1052,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
+    // An editor stands only where it was opened, while its message is still in the history.
+    if (state.editing && (editDraft?.key !== draftKey() || !turns.some(turn => turn.id === state.editing!.turnId))) { state.editing = null; editDraft = null; }
     drawComposer();
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
@@ -1403,51 +1412,63 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   // ---------- asking ----------
 
-  /** Sends what the composer holds as a typed question: it shows at once, and Raphael's answer when it lands. */
-  async function send(): Promise<void> {
-    if (attaching) {
+  /**
+   * Sends what the composer holds as a typed question: it shows at once, and Raphael's answer when it lands. A message
+   * edited in its own place (`edit`) goes the same way, with its words and files in place of the composer's, and
+   * leaves the composer as it is.
+   */
+  async function send(edit?: { text: string; draft: ComposerDraft }): Promise<void> {
+    if (!edit && attaching) {
       const epoch = attachmentEpoch;
       await attachQueue;
       if (epoch !== attachmentEpoch) return;
     }
-    if (missingFiles.length > 0) { toaster.info(t("chat.reattach")); return; }
-    const text = typedQuestion(wholeLinks(input.value), files.length > 0);
+    const words = edit ? edit.text : input.value, carried = edit ? edit.draft.files : files;
+    if ((edit ? edit.draft.missing : missingFiles).length > 0) { toaster.info(t("chat.reattach")); return; }
+    const text = typedQuestion(wholeLinks(words), carried.length > 0);
     if (text === null) {
-      if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
+      if (words.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
-    if (pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
+    if (!edit && pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
       clearTimeout(draftTimer); discardComposerDraft(composerKey);
       input.value = "";
       input.dispatchEvent(new Event("composer-draft-restored"));
       fit();
       return;
     }
-    composer.querySelector(".composer-failure")?.remove();
+    if (!edit) composer.querySelector(".composer-failure")?.remove();
     // A page open in the thread's place stays: the member that answers is told which page it is (before the message goes),
     // and what it says shows under the page while it works.
     const pageTold = pagesHost.sent();
-    const sending = files;
-    const dictation = correctionLearning.snapshot();
-    const corrections = correctionLearning.take(input.value);
+    const sending = carried;
+    const dictation = edit ? undefined : correctionLearning.snapshot();
+    const corrections = edit ? [] : correctionLearning.take(input.value);
     const member = memberId();
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
-    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation, pageId: pageDraft.pageId };
+    const draft: ComposerDraft = edit ? { ...edit.draft, text: words, missing: [] } : { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation, pageId: pageDraft.pageId };
     rememberDraft(requestId, draft);
-    clearTimeout(draftTimer); discardComposerDraft(composerKey);
-    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
+    if (!edit) { clearTimeout(draftTimer); discardComposerDraft(composerKey); }
+    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
     outgoing.push(mine);
-    files = [];
-    replacing = undefined;
-    composerQuote = undefined;
+    if (edit) {
+      closeEditor(false);
+      if (draft.replacing !== undefined) replaced.add(draft.replacing);
+    } else {
+      files = [];
+      replacing = undefined;
+      composerQuote = undefined;
+    }
     // Drawn while the layout is still clean, so reading the thread's scroll position costs nothing.
     render(true);
-    input.value = "";
-    input.dispatchEvent(new Event("composer-draft-restored"));
-    drawQuote();
-    drawFile();
-    fit();
+    if (!edit) {
+      input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      drawQuote();
+      drawFile();
+      fit();
+    }
     drawDock();
     askingMember = member;
     try {
@@ -1458,6 +1479,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (retracted.has(requestId)) return;
       if (askingMember === member) askingMember = null;
       outgoing = outgoing.filter((item) => item !== mine);
+      if (edit) {
+        // Its place is back, open again with the words as they were typed.
+        if (draft.replacing !== undefined) replaced.delete(draft.replacing);
+        if (memberId() === member && conversationId() === sentConversation && draft.replacing !== undefined && turns.some(turn => turn.id === draft.replacing)) openEditor(draft.replacing, draft);
+        toaster.info(describeError(err));
+        render();
+        return;
+      }
       if (memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length) restoreDraft(draft);
       else restored.set(draftKey(member, sentConversation), draft);
       if (memberId() === member && conversationId() === sentConversation) {
@@ -1476,6 +1505,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The turn is written by now: the history brings it, and the question waits no more.
     if (memberId() === member && conversationId() === sentConversation) await load(false, true);
     else members.changed();
+    if (draft.replacing !== undefined) replaced.delete(draft.replacing);
     outgoing = outgoing.filter((item) => item !== mine);
     render();
   }
@@ -1820,7 +1850,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawBackgroundQuestions(): void {
     waiting = mountBackgroundQuestions(backgroundSlot, {
       memberId: memberId(),
-      manageLocal: () => app.go("settings", "safety"),
       asker: () => {
         const member = members.member();
         return { face: faceHTML(member, 22, { cls: "bgq-face" }), name: inRaphael() ? null : member.name };
@@ -2129,12 +2158,46 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawFile(); fit(); if (focus) focusComposer();
   }
 
+  /** Whether the editor's Send has something to send: the composer's rule, with every file of the original there. */
+  const editSendable = (text: string, draft: ComposerDraft): boolean => draft.missing.length === 0 && typedQuestion(text, draft.files.length > 0) !== null;
+
+  /** The owner's message turns into an editor where it stands (owner, 2026-11-14); the composer is not touched. */
+  function openEditor(turnId: number, draft: ComposerDraft): void {
+    const carried: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: turnId };
+    editDraft = { key: draftKey(), draft: carried };
+    state.editing = { turnId, text: carried.text, missing: carried.missing, sendable: editSendable(carried.text, carried) };
+    render();
+    focusEditor();
+  }
+
+  function closeEditor(redraw = true): void {
+    if (!state.editing && !editDraft) return;
+    state.editing = null; editDraft = null;
+    if (redraw) render();
+  }
+
+  /** The focus in the editor, the caret at the end of its words, and the editor in view. */
+  function focusEditor(): void {
+    const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
+    if (!field) return;
+    field.focus({ preventScroll: true });
+    field.setSelectionRange(field.value.length, field.value.length);
+    field.closest(".msg-editor")?.scrollIntoView({ block: "nearest" });
+  }
+
+  /** Sends the edited words as the composer would send them (`send`), the message it replaces named as before. */
+  function sendEdit(): void {
+    if (!state.editing || !editDraft) return;
+    void send({ text: state.editing.text, draft: editDraft.draft });
+  }
+
   async function editMessage(control: HTMLElement): Promise<void> {
     const source = messageSource(control);
     if (!source || source.key !== "question") return;
-    const member = memberId(), epoch = attachmentEpoch;
+    if (state.editing?.turnId === source.turn.id) { focusEditor(); return; }
+    const member = memberId(), epoch = attachmentEpoch, key = draftKey();
     const draft = await draftFor(source.turn);
-    if (memberId() === member && attachmentEpoch === epoch) restoreDraft({ ...draft, replacing: source.turn.id });
+    if (memberId() === member && attachmentEpoch === epoch && draftKey() === key) openEditor(source.turn.id, draft);
   }
 
   /** The displayed slot and its action always refer to the same reply in this conversation. */
@@ -2334,6 +2397,21 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const inputs = field?.closest(".secret-card")?.querySelectorAll<HTMLInputElement>("input");
     if (inputs && save) save.disabled = [...inputs].some(input => !input.value.trim());
   });
+  // The words of an editor in the thread are kept where a redraw can find them; Send follows the composer's rule.
+  thread.addEventListener("input", (e) => {
+    const field = (e.target as Element).closest<HTMLTextAreaElement>("[data-edit-input]");
+    if (!field || !state.editing || !editDraft) return;
+    state.editing.text = field.value;
+    state.editing.sendable = editSendable(field.value, editDraft.draft);
+    const button = field.closest(".msg-editor")?.querySelector<HTMLButtonElement>('[data-act="edit-send"]');
+    if (button) button.disabled = !state.editing.sendable;
+  });
+  thread.addEventListener("keydown", (e) => {
+    const editor = (e.target as Element).closest<HTMLTextAreaElement>("[data-edit-input]");
+    if (!editor || !sendsOnEnter(e)) return;
+    e.preventDefault();
+    sendEdit();
+  });
   thread.addEventListener("keydown", (e) => {
     const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");
     if (!field || e.key !== "Enter" || e.isComposing) return;
@@ -2364,9 +2442,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
-        break;
-      case "local-settings":
-        app.go("settings", "safety");
         break;
       case "search":
       case "search-close":
@@ -2417,6 +2492,20 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "edit-message":
         void editMessage(act);
+        break;
+      case "edit-send":
+        sendEdit();
+        break;
+      case "edit-cancel":
+        closeEditor();
+        break;
+      case "drop-edit-missing":
+        if (state.editing && editDraft) {
+          editDraft.draft.missing.splice(Number(act.dataset.index), 1);
+          state.editing.missing = [...editDraft.draft.missing];
+          state.editing.sendable = editSendable(state.editing.text, editDraft.draft);
+          render(); focusEditor();
+        }
         break;
       case "cancel-message":
         void cancelMessage(act);
@@ -2560,6 +2649,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     return visible && !roomPane.active && task ? {
       key: task.key, immediate: task.key.startsWith("listening:") || task.key.startsWith("voice:"), button: voiceButton, hint: t("common.cancelAgain"),
       cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
+    } : null;
+  });
+  // Escape in the editor leaves it: at once while its words are the original's, and as the app's other cancels (a task's Stop)
+  // once they changed: the first press arms Cancel, the second within 1.5 s leaves. It comes before the composer's Stop while the focus is here.
+  cancelGesture().register(() => {
+    const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
+    const cancel = field?.closest(".msg-editor")?.querySelector<HTMLElement>('[data-act="edit-cancel"]');
+    return visible && state.editing && editDraft && field && cancel && document.activeElement === field ? {
+      key: `edit:${state.editing.turnId}`, immediate: field.value === editDraft.draft.text, button: cancel, hint: t("common.cancelAgain"),
+      cancel: () => closeEditor(),
     } : null;
   });
   input.addEventListener("input", () => { fit(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (el.isConnected) saveComposerDraft(); }, 300); });

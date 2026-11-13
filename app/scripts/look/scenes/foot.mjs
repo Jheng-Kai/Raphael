@@ -5,8 +5,8 @@ import { scene, click, hover, check, wait, waitGone, key, focus, accountMenu, dr
 // button and the face stands under it. Every scene runs at all three widths: the list at 1120 and 1920, the rail at 720.
 const marks = { appsInventory: { state: "complete", count: 3, apps: ["GitHub", "Notion", "Slack"].map((name, i) => ({ id: `sample-${i}`, name, connected: true, enabled: true, state: "ready", tools: 1, last_used_at: 3 - i })) } };
 const tight = { allowanceTight: true };
-/** The menu, once the subscription reading has put its number in the 用量 row. */
-const menuWithNumber = [accountMenu(), wait("#app-popover.account-menu .account-used")];
+/** The menu, once the subscription reading has given the 用量 row its chevron. */
+const menuWithNumber = [accountMenu(), wait('#app-popover.account-menu [data-account="usage"]')];
 
 export default [
   scene("start-conversation", "The app opens on Raphael's conversation, the top row of the sidebar selected, with no Home and no page button in the foot",
@@ -16,11 +16,13 @@ export default [
     [wait(".page-agent:not([hidden]) .conversation-trigger"), { action: "startup-order", firstView: ["members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),
   scene("foot-rest", "The foot is one row as Grok Bot's: the owner's round face and the Connections pill (36px, fully round, on its own surface), with no tooltip; on the rail the icon and the face in a column",
     [check("foot-rest"), check("sidebar-shell")], marks),
-  scene("foot-account-menu", "Pressing the face opens the account menu above it (to its right on the rail): 用量 with the tightest window's number and a chevron, 聽寫, 行事曆, a hairline, 設定",
+  scene("foot-account-menu", "Pressing the face opens the account menu above it (to its right on the rail): 用量 with a chevron and no number, 聽寫, 行事曆, a hairline, 設定",
     [...menuWithNumber, check("foot-account-menu")], tight),
-  scene("foot-usage-submenu", "用量 opens a submenu at its right edge: the window, its number, when it resets, a hairline and 管理用量",
+  scene("foot-usage-submenu", "用量 opens a submenu at its right edge: a block for each of the three subscriptions (its window, its number, when it resets), a hairline and 管理用量",
     [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), check("foot-account-menu"), check("foot-usage-submenu")], tight),
-  scene("foot-usage-default", "With the shared fixture's allowances the menu names the tightest of them",
+  scene("foot-usage-two", "With Claude and Codex connected, as the owner has them, the submenu lists both",
+    [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), check("foot-account-menu"), check("foot-usage-submenu")], { allowanceTwo: true }),
+  scene("foot-usage-default", "With the shared fixture's allowances the submenu lists every subscription",
     [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), check("foot-usage-submenu")], { allowanceTight: false }),
   scene("foot-usage-none", "With no subscription window known 用量 has no number and no chevron, and opens the settings' usage itself",
     [accountMenu(), wait("#app-popover.account-menu"), check("foot-account-menu"), check("foot-usage-none")], { usageEmpty: true }),
@@ -30,9 +32,9 @@ export default [
     [focus("#nav .sidebar-account"), key("Enter"), wait("#app-popover.account-menu"), check("foot-account-focus-0"), key("ArrowDown"), check("foot-account-focus-1"), key("ArrowDown"), key("ArrowDown"), check("foot-account-focus-3"),
       key("ArrowDown"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),
   scene("foot-usage-keys", "ArrowRight on 用量 opens its submenu with the focus on 管理用量, and Escape closes the submenu alone",
-    [focus("#nav .sidebar-account"), key("Enter"), wait("#app-popover .account-used"), key("ArrowRight"), wait("#app-submenu"), check("foot-account-focus-manage"), key("Escape"), waitGone("#app-submenu"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),
+    [focus("#nav .sidebar-account"), key("Enter"), wait('#app-popover [data-account="usage"]'), key("ArrowRight"), wait("#app-submenu"), check("foot-account-focus-manage"), key("Escape"), waitGone("#app-submenu"), check("foot-account-focus-0"), key("Escape"), waitGone("#app-popover"), check("foot-account-keys")], tight),
   scene("foot-account-outside", "A press anywhere outside the menu, inside the conversation too, closes it with its submenu",
-    [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), click(".mb-chat:not([hidden]) .cmp-input"), waitGone("#app-popover"), check("foot-account-outside")], tight),
+    [...menuWithNumber, click('#app-popover [data-account="usage"]'), wait("#app-submenu"), click(".mb-chat:not([hidden]) .thread .chat-message"), waitGone("#app-popover"), check("foot-account-outside")], tight),
   scene("foot-account-dictation", "聽寫 opens the dictation page", [accountMenu("dictation"), wait(".page-dictation:not([hidden])"), check("sidebar-selection"), check("foot-rest")]),
   scene("foot-account-calendar", "行事曆 opens the calendar on today", [accountMenu("calendar"), wait(".au-page:not([hidden]) .au-day-col"), check("calendar-shell"), check("foot-rest")]),
   scene("foot-account-settings", "設定 opens Settings", [accountMenu("settings"), wait(".modal-scrim [data-pane]"), check("settings-shell")]),

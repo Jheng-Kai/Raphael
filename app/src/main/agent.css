@@ -191,6 +191,18 @@
 .owner-message > * { grid-column: 2; }
 .owner-message > .message-actions { grid-column: 1; }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
+.owner-message.is-editing { grid-template-columns: minmax(0, 1fr); justify-items: stretch; width: min(var(--pa-bw), 78%); }
+.owner-message.is-editing > * { grid-column: 1; }
+.owner-message.is-editing > .owner-content { width: 100%; max-width: 100%; align-items: stretch; }
+/* The owner's message open as an editor where it stands (owner, 2026-11-14): as wide as the column its bubble stands in, flat
+   like the composer, with its words and, at the right, Cancel and Send; the composer below is not touched. */
+.msg-editor { box-sizing: border-box; width: 100%; display: grid; gap: var(--sp-2); min-width: 0; padding: var(--pa-bpy) var(--pa-bpx) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--pa-br); background: var(--panel); color: var(--text); }
+.msg-editor > .message-quote { margin-block-end: 0; }
+.msg-editor-input { box-sizing: border-box; display: block; width: 100%; min-width: 0; min-height: var(--pa-lh-b); max-height: calc(10lh + 2px); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); padding: 0; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-editor-files { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.msg-editor-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+/* The height of the buttons of a card in the thread (`.conversation-card .card-actions`): the same kind of control, the same size. */
+.msg-editor .msg-editor-actions .btn.sm { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 .mb-chat[data-member-bubble] .owner-message { --bubble: var(--member-bubble); }
 .mb-chat[data-member-bubble="light"] .owner-message { --on-bubble: var(--on-tint-light); }
 .mb-chat[data-member-bubble="dark"] .owner-message { --on-bubble: var(--on-tint-dark); }
@@ -653,6 +665,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 @container main (max-width: 760px) {
   .bubble { max-width: 86%; }
   .owner-message { max-width: 86%; }
+  .owner-message.is-editing { width: 86%; }
   .ra { max-width: 100%; }
   .ask-card { grid-template-columns: var(--pa-ask-face) minmax(0, 1fr); }
   .ask-row { grid-column: 1 / -1; justify-content: flex-end; }

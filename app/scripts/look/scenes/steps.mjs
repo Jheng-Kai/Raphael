@@ -1,6 +1,8 @@
 export const stableClick = (selector, then = []) => ({ action: "stable-click", selector, then });
 export const click = selector => ({ action: "click", selector });
 export const hover = selector => ({ action: "hover", selector });
+/** A real press at a fraction (x, y) of the element, then the page `expect` names must be on screen. */
+export const pressAt = (selector, x, y, expect) => ({ action: "click-position", selector, x, y, expect });
 export const hold = (selector, ms = 500) => ({ action: "hold", selector, ms });
 // A press on `selector` moved `dx` px across and let go there (a pane's edge resizes it, edge-drag.ts). `wide`: only on a desktop-width window, where the list is not a drawer.
 export const drag = (selector, dx, options = {}) => ({ action: "drag", selector, dx, ...options });

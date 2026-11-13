@@ -307,12 +307,12 @@ export async function perform(page, step, evidenceDirectory) {
     case "menu-settings-redraw": {
       const before = await page.$eval('#app-popover', el => ({ x: el.offsetLeft, y: el.offsetTop }));
       await page.evaluate(() => {
-        window.__menuSettingAnchor = document.querySelector('.sel[data-k="local-commands"]');
-        window.__look.data.settings.local_commands_mode = "never";
+        window.__menuSettingAnchor = document.querySelector('.sel[data-k="retention"]');
+        window.__look.data.settings.history_retention_days = 7;
         window.__look.emit({ type: "SettingsChanged" });
       });
-      await page.waitForFunction(() => document.querySelector('.sel[data-k="local-commands"]') !== window.__menuSettingAnchor &&
-        document.querySelector('#app-popover [data-value="never"][aria-checked="true"]'));
+      await page.waitForFunction(() => document.querySelector('.sel[data-k="retention"]') !== window.__menuSettingAnchor &&
+        document.querySelector('#app-popover [data-value="7"][aria-checked="true"]'));
       const stable = await page.$eval('#app-popover', (el, at) => el.offsetLeft === at.x && el.offsetTop === at.y, before);
       if (!stable) throw new Error("Settings redraw moved its open menu");
       break;
