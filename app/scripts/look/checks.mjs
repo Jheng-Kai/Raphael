@@ -6093,6 +6093,109 @@ export function checkRendered(name, context = {}) {
     require(![...document.querySelectorAll('.cmp-page-note')].some(visible), "the submitted draft no longer shows a page note");
     return { check: name };
   }
+  if (name.startsWith("page-dashboard")) {
+    // Raphael's daily overview (owner, 2026-11-14; report-chart.ts): today's figures and every kind of chart on one report,
+    // in the conversation's place, at every width and in both themes, and in the file it is saved as.
+    const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+    if (name === "page-dashboard-card") {
+      const link = document.querySelector('.page-agent .pg-link[data-page="page-dashboard"]');
+      require(link && visible(link) && link.querySelector(".me-file-t")?.textContent === "每日總覽｜11 月 14 日" && link.querySelector("small")?.textContent === "頁面", "the overview's link card: its title and 「頁面」");
+      const line = link.closest(".tn, [data-key]");
+      require(line?.textContent.includes("早安。今天的總覽好了"), "a few words of what the routine did, with the card");
+      return { check: name };
+    }
+    const file = name === "page-dashboard-file";
+    const root = file ? document.body : document.querySelector(".page-agent .rp-view");
+    require(root, "the overview is open");
+    if (file) {
+      require(document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content === "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'", "nothing in the file runs or loads");
+      require(!document.querySelector("script, iframe, img, button, [tabindex], .rc-tip"), "nothing to run, focus or float in the file");
+      require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
+    } else {
+      const page = root.querySelector(":scope > .rp-scroll");
+      require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
+    }
+    require(root.querySelector(".rp-title")?.textContent === "每日總覽｜11 月 14 日", "its title");
+    // Ten titles: the contents stand beside the page where it is wide enough, and are left out above it where it is not.
+    const toc = root.querySelector(".rp-toc"), aside = toc && visible(toc);
+    require(toc?.hasAttribute("data-many") && (!aside || toc.getBoundingClientRect().left >= root.querySelector(".rp-body").getBoundingClientRect().right), "the long contents only beside the page");
+    const sections = [...root.querySelectorAll(".rp-sec")];
+    require(sections.length === 10, `ten sections: ${sections.length}`);
+    const titleOf = section => section.querySelector(".rp-h2")?.textContent ?? section.id;
+    // Every tile and every part of a chart stays inside its own section, and no word of a chart covers another.
+    for (const section of sections) {
+      const box = section.getBoundingClientRect();
+      for (const item of section.querySelectorAll(".rc *, .rs-tile")) {
+        const rect = item.getBoundingClientRect();
+        if (!rect.width && !rect.height) continue;
+        require(rect.left >= box.left - 1 && rect.right <= box.right + 1, `${item.getAttribute("class") || item.tagName} stays inside 「${titleOf(section)}」: ${Math.round(rect.left)}-${Math.round(rect.right)} in ${Math.round(box.left)}-${Math.round(box.right)}`);
+      }
+      const words = [...section.querySelectorAll(".rc-xl, .rc-cap, .rc-tick, .rc-end, .rc-li, .rc-unit, .rc-name, .rc-val, .rc-pn, .rc-pv, .rc-ps")].filter(visible);
+      words.forEach((a, index) => words.slice(index + 1).forEach(b => require(!overlaps(a.getBoundingClientRect(), b.getBoundingClientRect()), `「${a.textContent}」 and 「${b.textContent}」 do not cover each other in 「${titleOf(section)}」`)));
+      for (const cut of section.querySelectorAll(".rs-value b, .rs-name > span:first-child, .rc-xl, .rc-name, .rc-pn")) require(cut.scrollWidth <= cut.clientWidth + 1, `「${cut.textContent}」 is written whole`);
+    }
+    // A pair of half sections stands side by side where the page holds two columns of at least 304 px, else one above the other.
+    const body = root.querySelector(".rp-body"), wide = body.getBoundingClientRect().width >= 640;
+    for (const [a, b] of [[1, 2], [3, 4], [6, 7]]) {
+      const one = sections[a].getBoundingClientRect(), two = sections[b].getBoundingClientRect();
+      require(sections[a].dataset.span === "half" && sections[b].dataset.span === "half", `「${titleOf(sections[a])}」 and 「${titleOf(sections[b])}」 are a pair`);
+      require(wide ? Math.abs(one.top - two.top) <= 1 && two.left >= one.right + 16 : two.top >= one.bottom - 1, `「${titleOf(sections[a])}」 and 「${titleOf(sections[b])}」 stand ${wide ? "side by side" : "one above the other"}`);
+    }
+    for (const index of [0, 5, 8, 9]) require(Math.abs(sections[index].getBoundingClientRect().width - body.getBoundingClientRect().width) <= 1, `「${titleOf(sections[index])}」 takes the page's width`);
+    // The tiles: six figures, as many to a row as fit, the change with its arrow, the recent values as a little line.
+    const tiles = [...sections[0].querySelectorAll(".rs-tile")];
+    require(tiles.length === 6 && tiles.every(visible), "six tiles");
+    require(tiles.map(tile => tile.querySelector(".rs-value b").textContent).join("|") === "24|80|3|23,412|14|11/12", "each tile's value");
+    const up = tiles[3].querySelector('.rs-delta[data-dir="up"]'), arrow = up && getComputedStyle(up, "::before");
+    require(arrow && arrow.borderBottomWidth === "5px" && arrow.borderBottomColor === getComputedStyle(up).color && tiles[3].querySelector(".rs-spark svg path"), "a change that goes up has its arrow, in the words' colour, and the recent values their line");
+    const rows = new Map();
+    for (const tile of tiles) { const box = tile.getBoundingClientRect(); rows.set(Math.round(box.top), [...(rows.get(Math.round(box.top)) ?? []), Math.round(box.height)]); }
+    require([...rows.values()].every(heights => new Set(heights).size === 1), `tiles of a row share their height: ${JSON.stringify([...rows.values()])}`);
+    if (name === "page-dashboard" || file) {
+      // The weather: an area over the day and columns with each hour's value written on them, no axis needed there.
+      const area = root.querySelector('[data-report-chart="1"]'), rain = root.querySelector('[data-report-chart="2"]');
+      require(area.querySelector(".rc-area") && area.querySelector(".rc-line") && area.querySelectorAll(".rc-dot").length === 1 && area.querySelector(".rc-end")?.textContent === "20", "the temperature: an area, its line and its last value");
+      require(rain.querySelectorAll(".rc-band").length === 9 && !rain.querySelector(".rc-y") && [...rain.querySelectorAll(".rc-cap")].map(cap => cap.textContent).join() === "10,10,20,40,80,80,60,30,20", "the rain: nine columns, each value on its column, no axis");
+      const heights = [...rain.querySelectorAll(".rc-bar")].map(bar => bar.getBoundingClientRect().height);
+      require(Math.abs(heights[4] / heights[0] - 8) < 0.2, `a column's height follows its value: ${heights.map(Math.round)}`);
+      require(rain.querySelectorAll(".rc-xl").length <= 9, "the hours along the bottom");
+    }
+    if (name === "page-dashboard-projects") {
+      const chart = root.querySelector('[data-report-chart="5"]');
+      require([...chart.querySelectorAll(".rc-cap")].map(cap => cap.textContent).join("|") === "14|6|22|92|0", "each status's total on its column");
+      require([...chart.querySelectorAll(".rc-li")].map(item => item.textContent).join("|") === "Claude|Codex|主人|拉斐爾", "the owners in the legend");
+      // Three owners are not members, so Raphael takes the fourth chart colour too, not his own blue beside the first.
+      const keys = [...chart.querySelectorAll(".rc-legend .rc-key")].map(key => getComputedStyle(key).backgroundColor);
+      const token = name => { const probe = document.createElement("span"); probe.style.background = `var(${name})`; chart.append(probe); const colour = getComputedStyle(probe).backgroundColor; probe.remove(); return colour; };
+      require(keys.join("|") === ["--chart-1", "--chart-2", "--chart-3", "--chart-4"].map(token).join("|"), `the chart colours in their order: ${keys}`);
+      const done = chart.querySelector('.rc-band[data-i="3"]');
+      require(done.querySelectorAll(".rc-bar").length === 3 && done.querySelectorAll(".rc-bar.is-top").length === 1, "a column is its owners' parts one on another, rounded at its top only");
+      const tip = chart.querySelector(".rc-tip"), view = root.getBoundingClientRect(), box = tip?.getBoundingClientRect();
+      require(tip && visible(tip) && box.left >= view.left && box.right <= view.right && box.top >= view.top, "the box of values shows inside the page");
+      require(tip.querySelector(".rc-tt")?.textContent === "等待回覆" && [...tip.querySelectorAll(".rc-tv")].map(value => value.textContent).join("|") === "6 件|1 件|14 件|1 件|22 件", `who has how many waiting, and the total: ${tip.textContent}`);
+      require(chart.querySelector('.rc-band[data-i="2"]').classList.contains("is-on"), "the column pointed at stands out");
+      return { check: name };
+    }
+    if (name === "page-dashboard-lines") {
+      const chart = root.querySelector('[data-report-chart="6"]');
+      require(chart.querySelectorAll(".rc-line").length === 4 && chart.querySelectorAll(".rc-dot:not(.rc-hover)").length === 3, "three lines, one of them in two stretches around its gap, each with its last point");
+      require(chart.querySelector(".rc-cross") && chart.querySelectorAll(".rc-hover").length >= 2, "a hairline down the plot and each line's point there");
+      const tip = chart.querySelector(".rc-tip");
+      require(tip && visible(tip) && tip.querySelectorAll(".rc-tr").length === 3, "the box names each line with its value");
+      return { check: name };
+    }
+    if (name === "page-dashboard-lower" || file) {
+      const ring = root.querySelector('[data-report-chart="7"]');
+      require(ring.querySelectorAll(".rc-part").length === 4 && ring.querySelector(".rc-mid b")?.textContent === "200" && ring.querySelector(".rc-mid small")?.textContent === "萬元", "a ring of four parts with the whole in its middle");
+      require([...ring.querySelectorAll(".rc-ps")].map(share => share.textContent).join("|") === "42%|35%|15%|8%", "each part's share beside its name");
+      const bars = root.querySelector('[data-report-chart="8"]');
+      require(bars.querySelectorAll(".rc-row").length === 4 && [...bars.querySelectorAll(".rc-val")].map(value => value.textContent).join() === "21,11,16,8", "a bar for each member, its total at its end");
+      const widths = [...bars.querySelectorAll(".rc-track")].map(track => [...track.children].reduce((sum, part) => sum + part.getBoundingClientRect().width, 0));
+      require(Math.abs(widths[0] / widths[3] - 21 / 8) < 0.15, `a bar's length follows its total: ${widths.map(Math.round)}`);
+      require(root.querySelectorAll(".rp-sec:last-child .rp-dot").length === 4, "the members' routines, each with its colour");
+    }
+    return { check: name, wide };
+  }
   if (name.startsWith("page-report-file")) {
     // A report's saved file opened on its own (the `saved-file` step): the app's drawing in its reader's theme, nothing of the app.
     const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;

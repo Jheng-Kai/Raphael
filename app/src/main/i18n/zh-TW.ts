@@ -1469,6 +1469,8 @@ export const zhTW = {
   "page.report.saved": "已存到「{p0}」",
   "page.report.downloads": "下載",
   "page.report.saveFailed": "檔案沒有存成，請再試一次。",
+  "page.chart.other": "其他",
+  "page.chart.total": "合計",
   "page.status.running": "運作中",
   "page.status.done": "完成",
   "page.status.pending": "待執行",

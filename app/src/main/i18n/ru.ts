@@ -296,6 +296,8 @@ export const ru = {
   "page.report.contents": "На этой странице",
   "page.report.all": "Все",
   "page.report.status": "Статус",
+  "page.chart.other": "Прочее",
+  "page.chart.total": "Итого",
   "page.report.gone": "Бывший участник",
   "page.report.share": "Сохранить как файл",
   "page.report.saved": "Сохранено в папке «{p0}»",

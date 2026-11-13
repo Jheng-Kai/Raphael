@@ -90,6 +90,14 @@
   --scroll-thumb: #cfcfcf; --scroll-hover: #8f8f8f;
   /* The card of Raphael's own YES/NO question: strong and neutral. */
   --rg-bg: #f7f7f7; --rg-edge: #8f8f8f; --rg-ink: #0a0a0a; --rg-btn: #0a0a0a; --rg-on: #ffffff; --rg-glow: rgba(0, 0, 0, 0.1);
+  /* A report's charts (report-chart.ts) and the HTML pages members make (core agent/pages.py, the same values): eight series
+     colours in a fixed order, the same hues stepped for each theme and checked as a set for colour-blind readers on this
+     theme's page (neighbours apart by ΔE 9.1 here, 8.4 in the dark: check-palette.mjs). Three of them stand under 3:1 on the
+     light page, so a chart always names its series in words (legend, values, the box under the pointer). A data mark (a
+     column, a bar) rounds only its end, by half a small radius. */
+  --chart-1: #2a78d6; --chart-2: #eb6834; --chart-3: #1baf7a; --chart-4: #eda100;
+  --chart-5: #e87ba4; --chart-6: #008300; --chart-7: #6250d6; --chart-8: #e34948;
+  --mark-radius: 4px;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -126,6 +134,8 @@
   --heat-0: #202020; --hatch: #555555;
   --scroll-thumb: #555555; --scroll-hover: #929292;
   --rg-bg: #1f1f1f; --rg-edge: #777777; --rg-ink: #eeeeee; --rg-btn: #f5f5f5; --rg-on: #0a0a0a; --rg-glow: rgba(255, 255, 255, 0.16);
+  --chart-1: #3987e5; --chart-2: #d95926; --chart-3: #199e70; --chart-4: #c98500;
+  --chart-5: #d55181; --chart-6: #008300; --chart-7: #9085e9; --chart-8: #e66767;
   color-scheme: dark;
 }
 

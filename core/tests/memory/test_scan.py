@@ -83,6 +83,43 @@ def test_a_card_number_is_told_by_its_check_digit():
     assert find_secret("卡號 4111 1111 1111 1111") == "card"
     assert find_secret("4111-1111-1111-1111") == "card"
     assert find_secret("訂單 4111 1111 1111 1112") is None  # fails the Luhn check
+    assert find_secret("Amex 3782 822463 10005") == "card"
+
+
+def test_a_time_in_milliseconds_is_not_a_card_number():
+    # 1794240000006 passes the Luhn check, as one time in ten does; no card number begins with 1.
+    assert find_secret('{"t": 1794240000006}') is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # The two links that kept Raphael's daily overview off its page on 2026-11-14.
+        "https://www.accuweather.com/zh/tw/taichung-city/315040/weather-forecast/315040",
+        "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition/",
+        "https://finance.yahoo.com/news/nvidia-stock-falls-after-ceo-transition-2026-11-13-153000",
+        "C:/Users/me/Documents/Projects/Raphael/weekly-report/2026/v2/final-notes",
+        "https://github.com/OpenAI/codex/releases/tag/v2-mp4-h264-support-notes-2026",
+    ],
+)
+def test_the_words_and_numbers_of_an_address_are_not_a_key(text):
+    assert find_secret(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "https://api.example.com/v1/Q7x9Lm2Pz8Rt4Kw6Vb3Nc5Jd1Hf0Gs7Ya2Ue/forecast",
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "123e4567-e89b-12d3-a456-426614174000",
+        "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5bC7",
+        # Words and digits joined without a slash are a value, not a path (tests/test_chat_setup_share.py, 2026-11-14).
+        "api_key: synthetic_private_credential_123456789",
+        "synthetic-private-credential-123456789",
+    ],
+)
+def test_a_key_inside_an_address_or_split_by_slashes_is_still_one(text):
+    assert find_secret(text) == "token"
 
 
 def test_an_id_number_and_an_iban_are_secrets():

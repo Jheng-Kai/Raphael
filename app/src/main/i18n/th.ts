@@ -296,6 +296,8 @@ export const th = {
   "page.report.contents": "ในหน้านี้",
   "page.report.all": "ทั้งหมด",
   "page.report.status": "สถานะ",
+  "page.chart.other": "อื่น ๆ",
+  "page.chart.total": "รวม",
   "page.report.gone": "อดีตสมาชิก",
   "page.report.share": "บันทึกเป็นไฟล์",
   "page.report.saved": "บันทึกไว้ใน {p0} แล้ว",

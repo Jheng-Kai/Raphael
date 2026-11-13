@@ -59,6 +59,12 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
   contrast.computerActive = Object.fromEntries(["side", "content", "hover", "pressed"].map(surface => [surface, +ratio(palette["computer-active"], palette[surface]).toFixed(2)]));
   if (Object.values(contrast.computerActive).some(value => value < 3)) process.exitCode = 1;
+  // A report's eight chart colours (report-chart.ts) on the page, validated as a set for colour-blind readers when chosen. On
+  // the dark page each clears 3:1; on the light one three do not (aqua, yellow, pink), so a chart names its series in
+  // words: a legend, written values and the box under the pointer.
+  const charts = Array.from({ length: 8 }, (_, index) => palette[`chart-${index + 1}`]);
+  contrast.charts = Object.fromEntries(charts.map((colour, index) => [`chart-${index + 1}`, +ratio(colour, palette.content).toFixed(2)]));
+  if (new Set(charts).size !== 8 || (theme === "dark" && Object.values(contrast.charts).some(value => value < 3))) process.exitCode = 1;
   report[theme] = { tokens: palette, contrast };
 }
 // Overlay confirmations reuse the app's opaque panel and button palette in both themes.
