@@ -396,12 +396,14 @@ def test_a_router_and_a_free_model_and_an_alias_can_answer():
         assert usable(model_id, "cleanup_model") is None
 
 
-def test_every_speech_model_can_transcribe_and_two_get_the_dictionary():
+def test_every_speech_model_can_transcribe_and_three_get_the_dictionary():
     listed = entries_by_id()
     for model_id in SPEECH_MODELS:
         assert usable(model_id, "stt_cloud_model") is None
     hinted = {m for m in SPEECH_MODELS if "dictionary_hints" in listed[m].capabilities}
-    assert hinted == {"openai/gpt-transcribe", "openai/whisper-large-v3-turbo"}
+    assert hinted == {
+        "openai/gpt-transcribe", "openai/whisper-large-v3-turbo", "microsoft/mai-transcribe-2",
+    }
 
 
 def test_a_model_of_the_other_kind_is_never_usable():

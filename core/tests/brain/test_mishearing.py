@@ -230,3 +230,70 @@ def test_a_known_misheard_form_in_the_transcript_counts():
     assert not mishearing.may_be_heard_in("Alt", "右邊那個鍵", ["O S", "OS"])
     # Speech-to-text wrote a CJK form for an English key once: the form is all that is like it.
     assert mishearing.may_be_heard_in("Alt", "按一下偶遇見就開始轉錄", ["偶遇見"])
+
+
+# --- what a transcript may hold misheard (misheard_spans) ------------------------------------------
+# The owner's dictionary holds 「grokbot」; speech-to-text wrote it as below in his dictation history
+# (2026-11-13/14, MAI-Transcribe 2 without the dictionary). The sentences around the term are
+# shortened; the term and how it came out are as they were.
+
+OWNER_DICTIONARY = [
+    "grokbot", "OpenRouter", "Hermes", "GPT", "GitHub", "computer use", "Codex", "Windows",
+    "Telegram", "Space", "claude", "Typeless", "Agent", "YouTube", "MCP", "Google", "Brave", "Gmail",
+    "OpenClaw", "Canva", "STT", "Notion", "Artifacts", "onyx", "herdr", "project", "HiKari", "cron",
+    "token", "Composio", "bot", "Bots", "Jev", "拉斐爾", "唯讀",
+]
+
+
+def spans(word, text, forms=()):
+    return mishearing.misheard_spans(word, text, forms, [w for w in OWNER_DICTIONARY if w != word])
+
+
+@pytest.mark.parametrize(
+    ("text", "found"),
+    [
+        ("我記得 Grabbot 是可以自己喚醒自己的", ["Grabbot"]),
+        ("你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下", ["Grok Bus"]),
+        ("你可以看一下Grokbox是怎麼做的", ["Grokbox"]),
+        ("像是 grok bot 這樣子區分開來", ["grok bot"]),
+        ("像是 Grok-Bot 這樣子", ["Grok-Bot"]),
+    ],
+)
+def test_what_speech_to_text_wrote_for_grokbot_is_found(text, found):
+    assert spans("grokbot", text) == found
+
+
+@pytest.mark.parametrize(
+    ("word", "text"),
+    [
+        # Right as said, or only in another letter case: nothing to correct.
+        ("grokbot", "像是Grokbot這樣子區分開來嗎"),
+        ("grokbot", "像是 grokbot 這樣子"),
+        # A plural is the speaker's word: "Grokbots" stays for the model to judge with the rest.
+        ("grokbot", "像是Grokbots這樣子"),
+        # A run that only begins with the word, and words of the history that are other words.
+        ("grokbot", "我記得 Grok 是可以自己喚醒自己的"),
+        ("GitHub", "我們應該快要可以包新的 GitHub repo"),
+        ("Google", "把一些檔案自動上傳到 Google Drive 這樣子"),
+        ("Brave", "上傳到 Google Drive"),
+        ("Space", "做成 APP 內部的 page"),
+        ("Codex", "不要再快速 index 到那個位置了"),
+        ("Bots", "還有 Dr. Eggbots 就是這些重要的成員"),
+        ("cron", "我的Chrome，我的成員的電腦是可以登入Chrome的"),
+        # Short words are left to the model.
+        ("bot", "我覺得 box 這個不錯"),
+        ("Jev", "Jeff 說好"),
+        # A word of the dictionary is never another word's misspelling.
+        ("Bots", "其實 bot 它是會根據我們的 emoji"),
+    ],
+)
+def test_right_words_and_other_words_are_not_taken_for_a_mishearing(word, text):
+    assert spans(word, text) == []
+
+
+def test_a_known_form_counts_wherever_the_transcript_has_it_whole():
+    assert spans("claude", "為什麼這邊顯示的是Cloud的用量", ["Cloud"]) == ["Cloud"]
+    assert spans("claude", "上傳到 iCloud 就好", ["Cloud"]) == []
+    assert spans("拉米莉絲", "我跟奈米粒子聊過", ["奈米粒子"]) == ["奈米粒子"]
+    # A CJK word is found only by its known forms: no Latin spelling to be near.
+    assert spans("唯讀", "所以幫我把讀寫這個部分也改到完美") == []

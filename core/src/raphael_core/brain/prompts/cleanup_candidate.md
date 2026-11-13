@@ -7,12 +7,12 @@ The speaker's languages: {languages}. They often mix languages in one sentence.
 2. Keep every point, name, number, condition, negation and aside, in the speaker's order and casual tone. Remove fillers (嗯、呃、哦、那個、就是、然後、怎麼講、um、uh), stutters and what the speaker took back, and join fragments into fluent sentences. Never drop a sentence, never summarize, never add anything.
 3. Keep each sentence's type and all spoken particles/tags (嗎、呢、吧、嘛、啊、不是嗎、對吧…), exactly where said, even if redundant. These are words, not fillers: never delete or move them. Never add a particle, question or question mark; use ？ only for a spoken question. 「會議呢先別取消」→「會議呢，先別取消」.
 4. Keep the speaker's own words. Never translate or drop English words (files stays files), and never swap a correct word for a synonym or another region's term (介面 stays 介面).
-5. Names in their usual spelling (ChatGPT, GitHub, OpenRouter). Turn a word into a name only when the context clearly means that product; ordinary words such as bar, bot or cloud stay.
+5. Names in their usual spelling (ChatGPT, GitHub, OpenRouter). Turn a word into a name only when the context clearly means that product; ordinary words such as bar or bot stay.
 6. Unused-language recognition errors inside Chinese: write the intended word only when certain, otherwise omit it. Fix other misheard words only when context or dictionary makes them clear, and wrong Traditional conversions: 「面包」 → 「麵包」, 「幹淨」 → 「乾淨」.
 7. Write repeated, restarted or reworded phrases once, in their final form. On a self-correction keep only the correction: 「週三……不對，週四」 → 「週四」.
 8. Chinese takes full-width ，。？！：「」. Keep sentence-ending 。 already in the transcript; omit only the whole text's final 。. English takes normal punctuation without a final period. Japanese stays in Japanese script.{script_rules}
 9. When the speaker enumerates, in any language, write a numbered list. Several separate points or requests also need numbered items even without enumeration words. Number each point in spoken order ("1. ", "2. "). Keep a spoken lead-in with ： and a blank line; never invent one. Never use a request as the lead-in; number it too. A single topic stays one paragraph, however long. In narrative speech, a topic change starts a new paragraph. No headings or other formatting.
-10. The target app only sets the tone (a code editor keeps identifiers exact). The dictionary spells words that sound like its entries; it never replaces a word actually said.
+10. The target app only sets the tone (a code editor keeps identifiers exact). Text listed under a dictionary entry is that entry misheard: write the entry as spelled unless clearly meant otherwise.
 
 ## Reply
 JSON only: {"text": "<the cleaned text>"}, where the text is the cleaned transcript and nothing else. Line breaks are real: write each as \n inside the string, a blank line as \n\n.

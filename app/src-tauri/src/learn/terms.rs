@@ -269,9 +269,15 @@ pub fn term_corrections(before: &str, after: &str) -> Vec<Correction> {
                 .flatten()
                 .any(|word| common(word) && word.chars().all(|c| !c.is_uppercase()));
         let cjk = right.chars().any(is_cjk);
+        // A name in lower case ("grokbot", "herdr") is one Latin word that is no common word and
+        // that speech-to-text could have written as what it wrote, so that rewording ("meeting"
+        // for "workshop") is never learned. The core checks the pair again (`learning.accepted`).
+        let lower_case_name =
+            !cjk && latin_words.len() == 1 && right_len >= 3 && misheard_alike(wrong, right);
         let term = right.chars().any(|c| c.is_uppercase() || c.is_numeric())
             || (cjk && right.chars().any(|c| c.is_ascii_alphabetic()))
-            || ((2..=8).contains(&right_len) && right.chars().all(is_cjk));
+            || ((2..=8).contains(&right_len) && right.chars().all(is_cjk))
+            || lower_case_name;
         let forbidden = |text: &str| {
             text.chars().any(|c| {
                 matches!(
@@ -322,6 +328,44 @@ pub fn term_corrections(before: &str, after: &str) -> Vec<Correction> {
         }
     }
     corrections
+}
+
+/// Whether `right`, a word in lower case, may be what speech-to-text misheard as `wrong`: written
+/// in another script (偷看 for token), or spelled almost alike, with the same first letter and at
+/// most two edits in five between the letters ("Grok Bus" and "Grokbox" for grokbot, "Herder" for
+/// herdr). "foo" for "bar" is neither.
+fn misheard_alike(wrong: &str, right: &str) -> bool {
+    if wrong.chars().any(is_cjk) {
+        return true;
+    }
+    let compact = |text: &str| -> Vec<char> {
+        text.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    let (wrong, right) = (compact(wrong), compact(right));
+    if wrong.is_empty() || wrong.first() != right.first() {
+        return false;
+    }
+    edit_distance(&wrong, &right) * 5 <= wrong.len().max(right.len()) * 2
+}
+
+/// The fewest insertions, deletions and substitutions of one character between the two.
+fn edit_distance(first: &[char], second: &[char]) -> usize {
+    let mut previous: Vec<usize> = (0..=second.len()).collect();
+    for (i, a) in first.iter().enumerate() {
+        let mut current = vec![i + 1];
+        for (j, b) in second.iter().enumerate() {
+            current.push(
+                (previous[j + 1] + 1)
+                    .min(current[j] + 1)
+                    .min(previous[j] + usize::from(a != b)),
+            );
+        }
+        previous = current;
+    }
+    previous[second.len()]
 }
 
 fn common(text: &str) -> bool {
@@ -583,6 +627,10 @@ mod tests {
             ),
             ("please use FOO2", "please use foo2", &[("FOO2", "foo2")]),
             ("foo", "bar", &[]),
+            ("join the meeting", "join the workshop", &[]),
+            ("用Grokbox做", "用grokbot做", &[("Grokbox", "grokbot")]),
+            ("用 Herder 開", "用 herdr 開", &[("Herder", "herdr")]),
+            ("記得偷看用量", "記得token用量", &[("偷看", "token")]),
             ("明天下午三點開會", "後天早上十點開會", &[]),
             ("four", "ABCDEFGHIJ", &[("four", "ABCDEFGHIJ")]),
             ("abcdefghij", "Name", &[("abcdefghij", "Name")]),

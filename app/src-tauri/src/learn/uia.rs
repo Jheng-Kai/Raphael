@@ -41,6 +41,12 @@ use super::{
 use crate::paste::Target;
 
 const MAX_CHARS: usize = 20_000;
+/// How many levels above the focused field the walk to the target window may go. A web page nests
+/// its fields deep: the composer of Claude's desktop app stood 36 levels below its window
+/// (measured 2026-11-14), and a limit of 32 stopped every watch there before it began.
+const MAX_ANCESTORS: usize = 128;
+// Twice the depth measured in Claude's desktop app, at the least.
+const _: () = assert!(MAX_ANCESTORS > 36 * 2);
 /// UI Automation waits 2 s to connect and 20 s per call unless told otherwise, and the watch
 /// thread would stand still that long on a busy app.
 const CALL_TIMEOUT_MS: u32 = 500;
@@ -167,7 +173,7 @@ impl FieldProbe for UiaProbe {
         if foreground() != target.hwnd || !scope.active() {
             return probe_step(None, "target_changed_before_discovery");
         }
-        let kind = classify(&target.process_name);
+        let kind = refine_kind(classify(&target.process_name), window_class(target.hwnd));
         let mut field = discover_with_retries(&automation, target, pasted, &scope, kind)?;
         let subscribed = field.handler.is_some();
         if kind == AppKind::Terminal {
@@ -274,6 +280,33 @@ fn focus_failure_may_clear(reason: &str, declared_password: Option<bool>) -> boo
         "password_unknown_or_true" => declared_password.is_none(),
         _ => false,
     }
+}
+
+/// Chromium and every Electron app draw their top-level windows with this class.
+fn is_chromium_class(class: &str) -> bool {
+    class.starts_with("Chrome_WidgetWin_")
+}
+
+/// The family of the target, by its window as well as its executable: the list in `apps` names a
+/// few Electron apps, and any other one (Claude's desktop app among them) is a Chromium window all
+/// the same, whose tree is built on demand.
+fn refine_kind(kind: AppKind, class: Option<String>) -> AppKind {
+    match kind {
+        AppKind::Other if class.as_deref().is_some_and(is_chromium_class) => AppKind::Chromium,
+        kind => kind,
+    }
+}
+
+/// The window class of a top-level window: markup of the app, never text of the user; not logged.
+fn window_class(hwnd: isize) -> Option<String> {
+    let mut class = [0u16; 64];
+    // SAFETY: a plain query on a window handle that may already be gone.
+    let length = unsafe { GetClassNameW(HWND(hwnd as *mut _), &mut class) };
+    let class = usize::try_from(length)
+        .ok()
+        .filter(|length| *length > 0)
+        .and_then(|length| class.get(..length))?;
+    Some(String::from_utf16_lossy(class))
 }
 
 /// Apps that build their accessibility tree when a client first asks for it: its first answers
@@ -623,7 +656,7 @@ fn find_readers(
     let walker = unsafe { automation.RawViewWalker() }.ok()?;
     let mut element = focused.clone();
     let mut readers = Vec::new();
-    for _ in 0..32 {
+    for _ in 0..MAX_ANCESTORS {
         if !scope.active()
             || !safe_password_status(
                 unsafe { element.CurrentIsPassword() }
@@ -694,7 +727,7 @@ fn container_ids(
     };
     let mut ids = Vec::new();
     let mut element = focused.clone();
-    for _ in 0..32 {
+    for _ in 0..MAX_ANCESTORS {
         let at_root =
             unsafe { automation.CompareElements(&element, root) }.is_ok_and(|same| same.as_bool());
         if at_root {
@@ -2011,6 +2044,33 @@ mod tests {
         assert!(tree_is_built_on_demand(AppKind::CodeEditor));
         assert!(!tree_is_built_on_demand(AppKind::Terminal));
         assert!(!tree_is_built_on_demand(AppKind::Other));
+    }
+
+    #[test]
+    fn any_electron_window_is_a_chromium_one_whatever_its_executable() {
+        // Claude's desktop app (claude.exe) is in no list; its window class says what it is.
+        let electron = Some("Chrome_WidgetWin_1".to_owned());
+        assert_eq!(
+            refine_kind(AppKind::Other, electron.clone()),
+            AppKind::Chromium
+        );
+        assert_eq!(
+            refine_kind(AppKind::Other, Some("Chrome_WidgetWin_0".to_owned())),
+            AppKind::Chromium
+        );
+        // A known family keeps its own handling: VS Code is an Electron editor, not a browser.
+        assert_eq!(
+            refine_kind(AppKind::CodeEditor, electron.clone()),
+            AppKind::CodeEditor
+        );
+        assert_eq!(refine_kind(AppKind::Terminal, electron), AppKind::Terminal);
+        for class in [
+            Some("Notepad".to_owned()),
+            Some("Qt51517QWindowIcon".to_owned()),
+            None,
+        ] {
+            assert_eq!(refine_kind(AppKind::Other, class), AppKind::Other);
+        }
     }
 
     #[test]

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { DictionaryEntry } from "../types";
-import { isAuto, matches } from "./dictionary";
+import { heardAs, isAuto, matches } from "./dictionary";
 
 const entry = (word: string, source: DictionaryEntry["source"], misheard: string[] = []): DictionaryEntry => ({ id: 1, word, misheard, source });
 
@@ -21,5 +21,14 @@ describe("the dictionary filter", () => {
     expect(matches(auto, "all", "koko")).toBe(true);
     expect(matches(typed, "all", "菲")).toBe(true);
     expect(matches(typed, "all", "xyz")).toBe(false);
+  });
+
+  test("what a correction saved shows with the word and finds it", () => {
+    // The owner corrected Grokbox to his 「grokbot」: the form is a hint until it is seen again.
+    const corrected: DictionaryEntry = { ...entry("grokbot", "manual"), heard: ["Grokbox"] };
+    expect(heardAs(corrected)).toEqual(["Grokbox"]);
+    expect(matches(corrected, "all", "grokbox")).toBe(true);
+    expect(heardAs({ ...entry("Raphael", "manual", ["Rafael"]), heard: ["Rafael", "Rafel"] })).toEqual(["Rafael", "Rafel"]);
+    expect(heardAs(entry("Tauri", "manual"))).toEqual([]);
   });
 });

@@ -348,6 +348,149 @@ def apply_replacements(text: str, rules: Sequence[tuple[str, str]]) -> str:
     return text
 
 
+# A Latin word of a text, and what may stand between the words of a split one ("Grok Bot", "grok-bot").
+_LATIN_TOKEN = re.compile(r"[0-9A-Za-zÀ-ɏ]+")
+_SPLIT_GAP = re.compile(r"[ \t\-]+")
+_WORD_GAP = re.compile(r"[ \t]+")
+# The most words a split dictionary word is found in: "Grok Bot", "tele gram", "Open Ro uter".
+_MAX_SPLIT = 3
+
+
+def _compact_key(text: str) -> str:
+    return "".join(char for char in text.casefold() if char.isalnum())
+
+
+def _cjk_mark(char: str) -> bool:
+    """Full-width punctuation (，。「」（）…): it belongs to Chinese or Japanese text."""
+    return "　" <= char <= "〿" or "＀" <= char <= "￯"
+
+
+def _in_cjk_text(text: str, start: int, end: int) -> bool:
+    """Whether `text[start:end]` stands in Chinese or Japanese text: the nearest letter or
+    full-width mark before it and the nearest after it are CJK or the edge of the text, and at
+    least one of them is CJK. Spaces and other punctuation are looked past."""
+    from .mishearing import _is_cjk
+
+    def nearest(indices) -> str | None:
+        for i in indices:
+            if text[i].isalnum() or _cjk_mark(text[i]):
+                return text[i]
+        return None
+
+    before, after = nearest(range(start - 1, -1, -1)), nearest(range(end, len(text)))
+    sides = [char for char in (before, after) if char is not None]
+    return bool(sides) and all(_is_cjk(char) or _cjk_mark(char) for char in sides)
+
+
+# A misspelt name is respelled only for a dictionary word of this many letters or more: shorter ones
+# ("cron", "onyx") have too many real words a letter away.
+_MIN_RESPELLED_LETTERS = 5
+
+
+def _spelled_as(
+    group: list[re.Match[str]], gaps: list[str], targets: dict[str, str]
+) -> str | None:
+    """The dictionary word that `group`, one to three Latin words of a text with `gaps` between
+    them, writes in other letter case or split apart (see `respell_dictionary_words`)."""
+    from .mishearing import _LATIN_FUNCTION_WORDS
+
+    word = targets.get("".join(token.group().casefold() for token in group))
+    if word is None:
+        return None
+    parts = word.split()
+    if len(parts) == len(group):
+        # The same words in other letter case: only spaces between them.
+        same = all(_WORD_GAP.fullmatch(gap) for gap in gaps) and all(
+            token.group().casefold() == part.casefold()
+            for token, part in zip(group, parts, strict=True)
+        )
+        return word if same else None
+    if len(parts) == 1 and all(_SPLIT_GAP.fullmatch(gap) for gap in gaps) and not any(
+        token.group().casefold() in _LATIN_FUNCTION_WORDS for token in group
+    ):
+        return word
+    return None
+
+
+def _misspelt_name(
+    group: list[re.Match[str]], gaps: list[str], span: str, targets: dict[str, str]
+) -> str | None:
+    """The dictionary word that `span` is a misspelling of as speech-to-text writes a name: a
+    capital first, or split apart, and spelled almost like the word (`mishearing._near_spelling`:
+    the same first letter, one edit in six letters, two in more, no plural). A word of the text in
+    lower case is ordinary English the speaker said ("protect" is no "project"), and is left to
+    the cleanup model; so is a text that is a word of the dictionary itself."""
+    from .mishearing import _LATIN_FUNCTION_WORDS, _near_spelling
+
+    if _compact_key(span) in targets:
+        return None
+    if len(group) > 1:
+        if not all(_SPLIT_GAP.fullmatch(gap) for gap in gaps) or any(
+            token.group().casefold() in _LATIN_FUNCTION_WORDS for token in group
+        ):
+            return None
+    elif not span[0].isupper():
+        return None
+    for key, word in targets.items():
+        if " " not in word and len(key) >= _MIN_RESPELLED_LETTERS and _near_spelling(
+            word, span, len(group)
+        ):
+            return word
+    return None
+
+
+def respell_dictionary_words(text: str, words: Sequence[str]) -> str:
+    """`text` with each Latin word of the dictionary written as the dictionary spells it, inside
+    Chinese or Japanese text, where the text has it in other letter case ("Grokbot" for
+    「grokbot」, "github" for 「GitHub」), split apart ("Grok Bot", "open-router"), or misspelt the
+    way speech-to-text writes a name it does not know ("Grokbox", "Grabbot", "Grok Bus" for
+    「grokbot」, "Herder" for 「herdr」; `_misspelt_name`).
+
+    Speech-to-text cuts dictation at pauses and starts each piece with a capital, and an English
+    name inside Chinese has no sentence of its own whose case could matter: the dictionary's
+    spelling is the one meant. The cleanup model was told the same and did not do it (the owner's
+    cleanup model kept "Grok Bus" and "Grokbox" with the dictionary word named beside them, five
+    times in six, on 2026-11-14), so this is no request but a rule. In English text the case and the
+    words belong to the sentence ("Space" is not "space"), so nothing there changes. A split word is
+    joined only from words that are no function words ("type less" stays). Words of the dictionary
+    come first in the order given: an earlier one wins a text that two of them spell alike.
+    """
+    from .mishearing import _is_cjk
+
+    targets: dict[str, str] = {}
+    for word in words:
+        word = " ".join(word.split())
+        if word and not any(_is_cjk(char) for char in word) and len(_compact_key(word)) >= 2:
+            targets.setdefault(_compact_key(word), word)
+    if not targets:
+        return text
+    tokens = list(_LATIN_TOKEN.finditer(text))
+    pieces: list[str] = []
+    copied = index = 0
+    while index < len(tokens):
+        found = None
+        for size in range(min(_MAX_SPLIT, len(tokens) - index), 0, -1):
+            group = tokens[index : index + size]
+            gaps = [text[a.end() : b.start()] for a, b in zip(group, group[1:], strict=False)]
+            start, end = group[0].start(), group[-1].end()
+            span = text[start:end]
+            word = _spelled_as(group, gaps, targets) or _misspelt_name(group, gaps, span, targets)
+            if word is None or span == word:
+                continue
+            if _in_cjk_text(text, start, end):
+                found = (start, end, word, size)
+                break
+        if found is None:
+            index += 1
+            continue
+        start, end, word, size = found
+        pieces += [text[copied:start], word]
+        copied = end
+        index += size
+    pieces.append(text[copied:])
+    return "".join(pieces)
+
+
 def normalize_transcript(
     text: str, rules: Sequence[tuple[str, str]], *, chinese: str | None = "zh-TW"
 ) -> str:
