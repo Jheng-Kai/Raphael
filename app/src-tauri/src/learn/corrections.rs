@@ -502,6 +502,34 @@ mod tests {
     }
 
     #[test]
+    fn a_name_in_lower_case_typed_over_a_mishearing_is_a_candidate() {
+        // What speech-to-text wrote for the owner's 「grokbot」 (dictation history, 2026-11-13/14).
+        let pasted = "你可以看一下Grokbox是怎麼做的，他們是直接可以開啟來";
+        assert_eq!(
+            learned_after(pasted, &[("Grokbox", "grokbot")]),
+            pairs(&[("Grokbox", "grokbot")])
+        );
+        let pasted = "你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下這樣子";
+        assert_eq!(
+            learned_after(pasted, &[("Grok Bus", "grokbot")]),
+            pairs(&[("Grok Bus", "grokbot")])
+        );
+        let pasted = "幫我用 Herder 開兩個分頁";
+        assert_eq!(
+            learned_after(pasted, &[("Herder", "herdr")]),
+            pairs(&[("Herder", "herdr")])
+        );
+    }
+
+    #[test]
+    fn a_common_word_in_lower_case_is_still_no_term() {
+        assert_eq!(learned_after(EN, &[("yesterday", "today")]), NONE);
+        assert_eq!(learned_after(EN, &[("long", "it")]), NONE);
+        // Two letters are no name.
+        assert_eq!(learned_after(EN, &[("emails", "pr")]), NONE);
+    }
+
+    #[test]
     fn short_words_are_not_terms() {
         assert_eq!(learned_after(EN, &[("it works", "it is")]), NONE);
     }

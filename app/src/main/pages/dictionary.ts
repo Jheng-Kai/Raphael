@@ -30,14 +30,17 @@ export function matches(entry: DictionaryEntry, filter: Filter, query: string): 
   if (filter === "manual" && isAuto(entry)) return false;
   if (!query) return true;
   const q = query.toLowerCase();
-  return entry.word.toLowerCase().includes(q) || entry.misheard.some((m) => m.toLowerCase().includes(q));
+  return entry.word.toLowerCase().includes(q) || heardAs(entry).some((m) => m.toLowerCase().includes(q));
 }
+
+/** Every way the word is known to be misheard: its replacement rules, then the forms learned from corrections. */
+export const heardAs = (entry: DictionaryEntry): string[] => [...new Set([...entry.misheard, ...(entry.heard ?? [])])];
 
 const wordChip = (entry: DictionaryEntry): string =>
   `<div class="wchip wrow${isAuto(entry) ? " auto" : ""}" data-id="${entry.id}">` +
   (isAuto(entry) ? t("dictionary.004", { p0: ico("sparkle") }) : "") +
   `<div class="wtext"><span class="word">${esc(entry.word)}</span>` +
-  (entry.misheard.length > 0 ? t("dictionary.005", { p0: esc(entry.misheard.join("、")) }) : "") +
+  (heardAs(entry).length > 0 ? t("dictionary.005", { p0: esc(heardAs(entry).join("、")) }) : "") +
   `</div><span class="acts">${iconBtn("more", t("members.more", { p0: entry.word }), ' data-act="word-menu" aria-haspopup="menu" aria-expanded="false"')}</span></div>`;
 
 /** The dictionary, and the way in that the tray's 「將單字加入字典」 takes. */

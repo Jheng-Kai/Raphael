@@ -2,7 +2,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
-import { ComposerLearning, bindComposerLearning, composerCorrections, learnComposerCorrections } from "./composer-learning";
+import { ComposerLearning, PASTE_WAIT_MS, bindComposerLearning, composerCorrections, learnComposerCorrections } from "./composer-learning";
 const before = "Please use Sample Tool Ex", after = "Please use SampleToolX";
 const correction = [{ before, after }];
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); document.body.innerHTML = ""; });
@@ -27,6 +27,22 @@ test("only a known dictation seeds a draft; it is consumed once, cleared on navi
   learning.seed(before); learning.clear(); expect(learning.take(after)).toEqual([]);
   learning.seed(before); vi.advanceTimersByTime(60_000); expect(learning.take(after)).toEqual([]);
   learning.seed(before + " ".repeat(20_000)); expect(learning.snapshot()).toBeUndefined();
+});
+test("a dictation the shell names before the paste reaches the field still seeds the draft", () => {
+  vi.useFakeTimers();
+  const input = document.createElement("textarea"), learning = bindComposerLearning(input);
+  input.dispatchEvent(new CustomEvent("dictation-pasted", { detail: before }));
+  expect(learning.snapshot()).toBeUndefined();
+  input.value = before;
+  input.dispatchEvent(new Event("input"));
+  expect(learning.take(after)).toEqual(correction);
+  // Waited for only a moment: a paste that never shows seeds nothing later.
+  input.value = "";
+  input.dispatchEvent(new CustomEvent("dictation-pasted", { detail: before }));
+  vi.advanceTimersByTime(PASTE_WAIT_MS + 1);
+  input.value = before;
+  input.dispatchEvent(new Event("input"));
+  expect(learning.take(after)).toEqual([]);
 });
 test("changes to text typed outside the dictated span never become corrections", () => {
   const learning = new ComposerLearning();

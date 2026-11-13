@@ -333,6 +333,94 @@ def _heard_like(part: str, windows: _Windows) -> bool:
     return any(_alike_in_spelling(part, window) for window in candidates)
 
 
+# A near spelling of a dictionary word in a transcript (`misheard_spans`): the edits allowed, by the
+# length of the longer of the two compact texts. Looser than `_MAX_EDIT_RATIO`, which judges a pair
+# the user corrected; this one judges any run of any transcript, where "page" must not be "Space"
+# and "Drive" must not be "Brave".
+_SPAN_MIN_LETTERS = 4
+_SPAN_EDITS_SHORT = 1  # six letters or fewer
+_SPAN_EDITS_LONG = 2
+_SPAN_SHORT_LETTERS = 6
+
+
+def _latin_windows(text: str) -> list[tuple[str, int]]:
+    """Every run of up to _MAX_WINDOW_RUNS Latin words of `text`, as written, with how many runs it
+    has, in the order of the text."""
+    windows: list[tuple[str, int]] = []
+    for phrase in _LATIN_PHRASE.finditer(text):
+        runs = list(_LATIN_RUN.finditer(phrase.group()))
+        for start in range(len(runs)):
+            for end in range(start + 1, min(start + _MAX_WINDOW_RUNS, len(runs)) + 1):
+                span = phrase.group()[runs[start].start() : runs[end - 1].end()]
+                windows.append((span, end - start))
+    return windows
+
+
+def _inflected(first: str, second: str) -> bool:
+    """Whether one compact text is the other with a plural ending: "projects" is no mishearing of
+    "project", and the speaker may have meant it."""
+    return any(longer == shorter + end for longer, shorter in ((first, second), (second, first))
+               for end in ("s", "es"))
+
+
+def _near_spelling(word: str, span: str, runs: int) -> bool:
+    """Whether `span`, `runs` Latin words of a transcript, may be the dictionary's Latin `word`
+    as speech-to-text misspelled it (see `misheard_spans`)."""
+    target, found = _compact(word), _compact(span)
+    if len(target) < _SPAN_MIN_LETTERS or len(found) < _SPAN_MIN_LETTERS:
+        return False
+    if found == target:
+        # The same letters: only a split ("grok bot") is a misspelling; a difference of letter
+        # case alone is left as speech-to-text wrote it.
+        return runs > 1 and len(word.split()) < runs
+    if found[0] != target[0] or _inflected(found, target):
+        return False
+    longer = max(len(found), len(target))
+    limit = _SPAN_EDITS_SHORT if longer <= _SPAN_SHORT_LETTERS else _SPAN_EDITS_LONG
+    return _within_edits(found, target, limit)
+
+
+def _holds(text: str, form: str) -> bool:
+    """Whether `text` has `form` in it: a Latin form as a word of its own in any letter case, any
+    other form as it is."""
+    if not form:
+        return False
+    if not _LATIN_RUN.search(form[0] + form[-1]):
+        return form in text
+    pattern = r"(?<![0-9A-Za-zÀ-ɏ])" + re.escape(form) + r"(?![0-9A-Za-zÀ-ɏ])"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
+def misheard_spans(
+    word: str, text: str, forms: Sequence[str] = (), others: Sequence[str] = ()
+) -> list[str]:
+    """The parts of `text`, a transcript, that may be the dictionary's `word` misheard, as written
+    in the text, each once: for the cleanup prompt to name ("這次可能是"), so the model corrects
+    them in context, and for the short-sentence shortcut to step aside.
+
+    A known misheard form of the word (`forms`, a rule or a hint) counts wherever the text has it.
+    A Latin word of four letters or more also counts a run of up to three Latin words of the text
+    that is spelled almost like it: the same first letter and at most one edit (two for a word
+    longer than six letters) between the compact texts ("Grok Bus", "Grokbox" and "Grabbot" for
+    "grokbot"), or the same letters split apart ("grok bot"). Not a plural of it ("projects"), not
+    a difference of letter case alone, and not a run that is itself one of the `others`, the other
+    words of the dictionary.
+    """
+    spans = [form for form in forms if _holds(text, form)]
+    if not any(_is_cjk(char) for char in word):
+        taken = {_compact(other) for other in others} | {_compact(word)}
+        for span, runs in _latin_windows(text):
+            if (_compact(span) not in taken or _compact(span) == _compact(word)) and _near_spelling(
+                word, span, runs
+            ):
+                spans.append(span)
+    kept: list[str] = []
+    for span in spans:
+        if span.casefold() not in {k.casefold() for k in kept}:
+            kept.append(span)
+    return kept
+
+
 def may_be_heard_in(word: str, text: str, forms: Sequence[str] = ()) -> bool:
     """Whether `text`, a transcript, may hold the dictionary's `word`, said right or misheard.
 

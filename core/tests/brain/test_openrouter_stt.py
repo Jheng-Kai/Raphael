@@ -163,7 +163,34 @@ def test_the_models_said_to_get_the_dictionary_are_the_ones_that_get_it(model):
     assert hinted == (model in openrouter.STT_MODELS_WITH_HINTS)
 
 
-@pytest.mark.parametrize("model", [m for m in LISTED_STT_MODELS if m.split("/")[0] != "openai"])
+def test_mai_transcribe_2_gets_the_dictionary_as_an_azure_phrase_list():
+    # The owner's speech-to-text. Without the list it wrote "Herder" for 「herdr」 and "Grokbot"
+    # for 「grokbot」; with it, the dictionary's spelling (live check, 2026-11-14). OpenRouter
+    # refuses its top-level `keyterms` with a 400.
+    body = transcription_body(
+        "microsoft/mai-transcribe-2", AUDIO, "wav", language="zh", hints=["grokbot", "herdr"]
+    )
+    assert body["provider"]["options"] == {"azure": {"phraseList": {"phrases": ["grokbot", "herdr"]}}}
+    assert body["provider"]["data_collection"] == "deny"
+    assert body["language"] == "zh"
+    assert "keyterms" not in body and "prompt" not in json.dumps(body)
+    bare = transcription_body("microsoft/mai-transcribe-2", AUDIO, "wav", language=None, hints=[])
+    assert bare["provider"] == {"data_collection": "deny"}
+
+
+def test_the_phrase_list_obeys_the_keyword_rules():
+    hints = ["  grokbot  ", "", "a<b", "x" * 200] + [f"w{i}" for i in range(200)]
+    body = transcription_body("microsoft/mai-transcribe-2", AUDIO, "wav", language=None, hints=hints)
+    phrases = body["provider"]["options"]["azure"]["phraseList"]["phrases"]
+    assert phrases[0] == "grokbot" and len(phrases) == openrouter.MAX_KEYWORDS
+    assert all(p.strip() == p and "<" not in p for p in phrases)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [m for m in LISTED_STT_MODELS
+     if m.split("/")[0] != "openai" and m not in openrouter.STT_MODELS_WITH_HINTS],
+)
 def test_other_models_get_the_language_at_the_top_level_and_no_options(model):
     body = transcription_body(model, AUDIO, "wav", language="en", hints=["Raphael"])
     assert body["language"] == "en"

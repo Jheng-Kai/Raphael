@@ -3283,6 +3283,9 @@
       "id": 2,
       "word": "Methelia",
       "misheard": [],
+      "heard": [
+        "Metelia"
+      ],
       "source": "learned",
       "created_at_ms": 1792720800000
     }

@@ -19,8 +19,8 @@ if operation == "window-action":
     user.IsWindowVisible.argtypes = user.IsIconic.argtypes = [w.HWND]
     pid, action = int(sys.argv[3]), sys.argv[4]
     commands = {"close": 0xF060, "minimize": 0xF020, "restore": 0xF120}
-    if pid <= 0 or action not in (*commands, "state"):
-        raise ValueError("Expected an owned PID and close/minimize/restore/state")
+    if pid <= 0 or action not in (*commands, "state", "front"):
+        raise ValueError("Expected an owned PID and close/minimize/restore/state/front")
     handles = []
 
     @ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
@@ -37,6 +37,32 @@ if operation == "window-action":
     if len(handles) != 1:
         raise RuntimeError(f"Expected one main window for owned PID {pid}, found {len(handles)}")
     hwnd = handles[0]
+    user.GetForegroundWindow.restype = w.HWND
+    if action == "front":
+        # A dictation pastes into the window in front when its key is released: only the owned
+        # window may be there. Windows hands the foreground over only from the thread that has it,
+        # so this one joins that thread's input for the call. No key or click is sent.
+        kernel = ctypes.windll.kernel32
+        user.SetForegroundWindow.argtypes = user.BringWindowToTop.argtypes = [w.HWND]
+        user.ShowWindow.argtypes = [w.HWND, ctypes.c_int]
+        user.AttachThreadInput.argtypes = [w.DWORD, w.DWORD, w.BOOL]
+        theirs = user.GetWindowThreadProcessId(user.GetForegroundWindow(), None)
+        mine = kernel.GetCurrentThreadId()
+        joined = theirs and theirs != mine and user.AttachThreadInput(mine, theirs, True)
+        try:
+            if user.IsIconic(hwnd):
+                user.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user.BringWindowToTop(hwnd)
+            user.SetForegroundWindow(hwnd)
+        finally:
+            if joined:
+                user.AttachThreadInput(mine, theirs, False)
+        deadline = time.monotonic() + 3
+        while user.GetForegroundWindow() != hwnd and time.monotonic() < deadline:
+            time.sleep(0.05)
+        print(json.dumps({"hwnd": hwnd, "pid": pid, "action": action,
+                          "front": user.GetForegroundWindow() == hwnd}))
+        sys.exit(0)
     if action != "state" and not user.PostMessageW(hwnd, 0x0112, commands[action], 0):
         raise ctypes.WinError()
     deadline = time.monotonic() + 3
@@ -46,7 +72,8 @@ if operation == "window-action":
                                        minimized if action == "minimize" else visible and not minimized)
         if reached:
             print(json.dumps({"hwnd": hwnd, "pid": pid, "action": action,
-                              "visible": visible, "minimized": minimized}))
+                              "visible": visible, "minimized": minimized,
+                              "front": user.GetForegroundWindow() == hwnd}))
             break
         if time.monotonic() >= deadline:
             raise RuntimeError(f"Owned main window did not {action}")
@@ -178,6 +205,16 @@ elif operation == "init":
     if len(sys.argv) > 3 and sys.argv[3] == "member-computer":
         # This journey is the computer-per-member mode's: its smoke uses that mode's own tool forms.
         settings["computer_vm_mode"] = "per-bot"
+    if len(sys.argv) > 3 and sys.argv[3] == "dictation-dictionary":
+        # The owner's dictation as he has it set: MAI-Transcribe 2 in the cloud, Taiwan Chinese,
+        # his cleanup model. His dictionary holds 「grokbot」; 「herdr」 is the word he corrects.
+        # The corrected message reaches a real model: it may only plan, every step asks first (nobody
+        # answers), and the journey stops the turn once the correction is learned.
+        settings.update({"stt_engine": "cloud", "stt_cloud_model": "microsoft/mai-transcribe-2",
+                         "languages": ["zh-TW"], "cleanup_model": "~deepseek/deepseek-v4-flash-latest",
+                         "action_mode": "plan"})
+        from raphael_core.brain.dictionary import DictionaryStore
+        DictionaryStore(connection).add("grokbot")
     with connection:
         for key, value in settings.items():
             connection.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (key, json.dumps(value)))

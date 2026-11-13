@@ -1447,7 +1447,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const member = memberId();
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
-    const draft: ComposerDraft = edit ? { ...edit.draft, text: words, missing: [] } : { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation, pageId: pageDraft.pageId };
+    // A correction goes as the message goes, not when its answer ends: the page waits for the whole turn, which can take a
+    // member minutes, and the learned pill came long after the owner had moved on (native run, 2026-11-14). A draft given
+    // back after a failure then holds no evidence, so a retry never counts the same correction twice.
+    void learnComposerCorrections(corrections);
+    const draft: ComposerDraft = edit ? { ...edit.draft, text: words, missing: [] } : { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
     rememberDraft(requestId, draft);
     if (!edit) { clearTimeout(draftTimer); discardComposerDraft(composerKey); }
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
@@ -1474,7 +1478,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     try {
       if (pageTold) await pageTold;
       await api.agentAskText(text, wireAttachments(sending), member, { requestId, ...destinationOf(member, sentConversation), ...(draft.replacing !== undefined ? { replaceTurnId: draft.replacing } : {}), ...(draft.quote ? { quote: draft.quote } : {}) });
-      void learnComposerCorrections(corrections);
     } catch (err) {
       if (retracted.has(requestId)) return;
       if (askingMember === member) askingMember = null;

@@ -58,12 +58,25 @@ export class ComposerLearning {
   }
 }
 
+/** How long a pasted dictation is waited for in the field after the shell says it was pasted. */
+export const PASTE_WAIT_MS = 3_000;
+
 export function bindComposerLearning(input: HTMLTextAreaElement): ComposerLearning {
   const learning = new ComposerLearning();
-  input.addEventListener("input", () => learning.observe(input.value));
+  // The shell says a dictation was pasted once its paste keys went out; the field may show the text a
+  // moment later. The dictation is held that moment and seeds the draft once the field shows it.
+  let awaited: { text: string; until: number } | undefined;
+  const seedWhenShown = () => {
+    if (!awaited) return;
+    if (Date.now() > awaited.until) awaited = undefined;
+    else if (input.value.includes(awaited.text)) { learning.seed(input.value, awaited.text); awaited = undefined; }
+  };
+  input.addEventListener("input", () => { seedWhenShown(); learning.observe(input.value); });
   input.addEventListener("dictation-pasted", event => {
     const text: unknown = (event as CustomEvent).detail;
-    if (typeof text === "string" && input.value.includes(text)) learning.seed(input.value, text);
+    if (typeof text !== "string" || !text) return;
+    awaited = { text, until: Date.now() + PASTE_WAIT_MS };
+    seedWhenShown();
   });
   return learning;
 }
