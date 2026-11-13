@@ -95,12 +95,22 @@
 .cs-state { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; }
 .cs-state > .i { color: var(--ok); }
 .cs-linked > .tg { flex: none; }
+/* A row of this view says it can be pressed, the connected list's and the main view's alike: the pointer, and under it the hover fill of the
+   floating surface, 8 px clear of the words (R-UI-53). The left padding is cancelled by the margin, so the tile stays on the content's edge; on the right
+   the fill stops at the gap before the switch or 連結. A connected row opens the app's page from anywhere on it but its switch. */
+.cs-linked { cursor: pointer; }
+.cs-card .btn.cs-main, .cs-linked .btn.cs-main { padding-inline: var(--sp-2); margin-inline: calc(var(--sp-2) * -1) 0; }
+.cs-card .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled) { background: var(--float-hover); }
+.cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled) { background: var(--pressed); }
 
 /* An app's page: a bare back chevron at the top left (the dialog's own ✕ is at the other corner), the mark on a white tile with the name beside
    it and what can be done at the right, a paragraph on the app, then bordered cards of what is known of it. */
-.cs-back.btn { margin: 0 0 var(--sp-3) calc(var(--sp-2) * -1); }
+/* The back chevron is the dialog ✕'s own control: 36 px, round and bare, its glyph 18 px, so it is as easy to hit and stands on the ✕'s line
+   (owner, 2026-11-14: the 26 px one could not be hit). Its margin puts the glyph, not the hit area, on the content's left edge. */
+.cs .btn.icon.cs-back { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; margin: 0 0 var(--sp-1) -9px; padding: 0; border-radius: var(--r-pill); }
+.cs .btn.icon.cs-back .i { width: 18px; height: 18px; }
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
-.cs-connected > .cs-top > .cs-back.btn { margin: 0 0 0 calc(var(--sp-2) * -1); }
+.cs-connected > .cs-top > .btn.icon.cs-back { margin: 0 0 0 -9px; }
 .cs-head { display: flex; align-items: center; gap: var(--sp-3); }
 .cs-head h2.big { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .cs-join { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
