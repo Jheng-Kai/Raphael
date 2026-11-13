@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AgentTurn, AppContext, MainEvent, Member } from "../types";
 
 const api = vi.hoisted(() => Object.fromEntries([
-  "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentStop", "cancelSession", "workerCancel",
+  "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentVoiceComposed", "agentStop", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
   "membersGreet",
@@ -52,8 +52,8 @@ const pointer = (button: HTMLElement, type: string) => {
   button.dispatchEvent(new PointerEvent(type, { button: 0, pointerId: 7, bubbles: true }));
 };
 const pointerClick = (button: HTMLElement) => button.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true }));
-function mount() {
-  agent = createAgent({ go: vi.fn(), device: () => ({ dictation_mode: "hold" }), cleared: new Cleared(),
+function mount(mode: "hold" | "toggle" = "hold") {
+  agent = createAgent({ go: vi.fn(), device: () => ({ dictation_mode: mode }), cleared: new Cleared(),
     undo: { begin: vi.fn() }, onEvent(handler: typeof emit) { emit = handler; return () => {}; },
   } as unknown as AppContext);
   document.body.append(agent.el); agent.show();
@@ -110,6 +110,107 @@ test("a member's voice button records a voice message on a click, a hold and a k
   expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31], ["down", 3, 31], ["up", 3, 31]]);
 });
 
+const PICTURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+/** The composer holding a picture and the owner's words, as the plus button and the keyboard leave it. */
+const compose = async (words: string) => {
+  const picker = $<HTMLInputElement>(".cmp-picker");
+  Object.defineProperty(picker, "files", { value: [new File([PICTURE], "photo.png", { type: "image/png" })], configurable: true });
+  picker.dispatchEvent(new Event("change")); await flush();
+  const field = $<HTMLTextAreaElement>(".cmp-input"); field.value = words; field.dispatchEvent(new Event("input", { bubbles: true }));
+};
+const PHOTO = { name: "photo.png", mime: "image/png", data: expect.any(String) };
+/** The voice button held and let go in a conversation: the recording is heard in between. */
+const holdAndRelease = async (member: number) => {
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(300); await flush();
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: member });
+  pointer(button, "pointerup"); pointerClick(button); await flush();
+};
+
+test.each([[0, 4], [3, 31]])("the voice button sends the composer's words and picture with the recording (member %s, conversation %s)", async (member, conversation) => {
+  mount(); await flush(); await choose(member, conversation);
+  await compose("Look at this");
+  await holdAndRelease(member);
+  expect(api.agentVoiceComposed).toHaveBeenCalledExactlyOnceWith("Look at this", [PHOTO], member, conversation, undefined);
+  const up = api.agentVoice.mock.calls.findIndex(call => call[0] === "up");
+  expect(up).toBeGreaterThan(0);
+  expect(api.agentVoiceComposed.mock.invocationCallOrder[0]).toBeLessThan(api.agentVoice.mock.invocationCallOrder[up]!);
+  expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
+  expect(document.querySelector(".cmp-file .cmp-chip")).toBeNull();
+});
+
+test("in toggle mode the second press hands the composer over once, before the key's two edges", async () => {
+  mount("toggle"); await flush(); await choose(3, 31);
+  await compose("");
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown"); pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoiceComposed).not.toHaveBeenCalled();
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 3 });
+  api.agentVoice.mockClear();
+  pointer(button, "pointerdown"); pointer(button, "pointerup"); pointerClick(button); await flush();
+  expect(api.agentVoiceComposed).toHaveBeenCalledExactlyOnceWith("", [PHOTO], 3, 31, undefined);
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
+  expect(api.agentVoiceComposed.mock.invocationCallOrder[0]).toBeLessThan(api.agentVoice.mock.invocationCallOrder[0]!);
+  expect(document.querySelector(".cmp-file .cmp-chip")).toBeNull();
+});
+
+test("the composer's own send while recording ends the recording with the picture, and sends no second message", async () => {
+  mount("toggle"); await flush(); await choose(3, 31);
+  await compose("Look at this");
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown"); pointer(button, "pointerup"); pointerClick(button); await flush();
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 3 });
+  api.agentVoice.mockClear();
+  $<HTMLTextAreaElement>(".cmp-input").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); await flush();
+  expect(api.agentVoiceComposed).toHaveBeenCalledExactlyOnceWith("Look at this", [PHOTO], 3, 31, undefined);
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
+  expect(api.agentAskText).not.toHaveBeenCalled();
+  expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
+  expect(document.querySelector(".cmp-file .cmp-chip")).toBeNull();
+});
+
+test("an empty composer sends the voice edges at once, with nothing handed over", async () => {
+  mount(); await flush(); await choose(3, 31);
+  const button = $(".cmp-voice");
+  pointer(button, "pointerdown"); await vi.advanceTimersByTimeAsync(300); await flush();
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 3 });
+  pointer(button, "pointerup"); pointerClick(button);
+  expect(api.agentVoice.mock.calls).toEqual([["down", 3, 31], ["up", 3, 31]]);
+  expect(api.agentVoiceComposed).not.toHaveBeenCalled();
+});
+
+test("a recording that does not take the composer leaves it as it was", async () => {
+  api.agentVoiceComposed.mockResolvedValue(false);
+  mount(); await flush(); await choose(3, 31);
+  await compose("Keep me");
+  await holdAndRelease(3);
+  expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("Keep me");
+  expect(document.querySelector(".cmp-file .cmp-chip")).not.toBeNull();
+  expect(api.agentVoice.mock.calls[api.agentVoice.mock.calls.length - 1]).toEqual(["up", 3, 31]);
+});
+
+test.each(["cancelled", "failed"] as const)("a voice message that is %s gives the composer its words and picture back", async phase => {
+  mount(); await flush(); await choose(3, 31);
+  await compose("Look at this");
+  await holdAndRelease(3);
+  expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
+  emit({ type: "Dictation", phase: "processing", agent: true, member_id: 3 });
+  emit({ type: "Dictation", phase, agent: true, member_id: 3 });
+  expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("Look at this");
+  expect(document.querySelector(".cmp-file .cmp-chip")).not.toBeNull();
+});
+
+test("a voice message that reached the history is not given back by a later cancel", async () => {
+  mount(); await flush(); await choose(3, 31);
+  await compose("Look at this");
+  await holdAndRelease(3);
+  emit({ type: "Dictation", phase: "processing", agent: true, member_id: 3 });
+  emit({ type: "AgentTurn", turn_id: 11, member_id: 3 });
+  emit({ type: "Dictation", phase: "cancelled", agent: true, member_id: 3 });
+  expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
+  expect(document.querySelector(".cmp-file .cmp-chip")).toBeNull();
+});
+
 test.each(["pointercancel", "lostpointercapture"])("%s ends a member's voice message once", async event => {
   mount(); await flush(); await choose(3, 31);
   const button = $(".cmp-voice"); pointer(button, "pointerdown");
@@ -128,7 +229,7 @@ beforeEach(() => {
   api.membersToolChoices.mockResolvedValue({ tools: [], connections: [] }); api.toolsetsList.mockResolvedValue({ groups: [] });
   api.routinesList.mockResolvedValue({ routines: [] }); api.roomsList.mockResolvedValue({ rooms: [] }); api.membersGreet.mockResolvedValue({ turn_id: 1 });
   api.brainsCli.mockResolvedValue({ clis: [] }); api.providersList.mockResolvedValue({ providers: [] });
-  api.agentVoice.mockResolvedValue(undefined); api.cancelSession.mockResolvedValue(undefined);
+  api.agentVoice.mockResolvedValue(undefined); api.agentVoiceComposed.mockResolvedValue(true); api.cancelSession.mockResolvedValue(undefined);
   api.core.mockImplementation(async (method: string, params: { member_id?: number } = {}) => method === "conversations.list"
     ? { conversations: conversations.filter(c => c.member_id === params.member_id) } : { questions: [] });
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; conversation_id?: number }) => ({ turns: turns.filter(turn =>

@@ -63,7 +63,7 @@ use crate::core_process::{CORE_RESTARTED, CoreApi, CoreProcess};
 use crate::device_settings::{
     self, Appearance, DeviceSettings, DeviceStore, DictationMode, FILE_NAME, Subtitles,
 };
-use crate::dictation::{DeskHandle, ModeCell, QuestionNews, TypedQuestion};
+use crate::dictation::{DeskHandle, ModeCell, QuestionNews, TypedQuestion, VoiceExtra};
 use crate::hotkey::{Bindings, HotkeyEvent, HotkeyService, WindowHotkey};
 use crate::mic_access::{self, MicAccess};
 use crate::notices::LanguageCell;
@@ -1139,6 +1139,39 @@ pub async fn agent_ask_text(
         log::warn!("a typed question's task ended badly: {err}");
     }
     Ok(())
+}
+
+/// The composer's voice button ends its recording with words, files or a quote in the composer: they
+/// are held for the question being recorded and go to `agent.ask` with the words that are said, the
+/// way [`agent_ask_text`] carries them. Answers whether that recording took them (false: none is
+/// being made in that conversation, and the composer keeps what it holds).
+#[tauri::command]
+pub fn agent_voice_composed(
+    app: AppHandle,
+    webview: Webview,
+    text: String,
+    attachments: Option<Vec<Value>>,
+    member_id: Option<u64>,
+    conversation_id: u64,
+    quote: Option<Value>,
+) -> Result<bool, String> {
+    require_main(&webview)?;
+    let attachments = typed_attachments(attachments)?;
+    let quote = typed_quote(quote)?;
+    let text = typed_question_with(&text, true)?.to_owned();
+    let desk = app
+        .try_state::<DeskHandle>()
+        .map(|desk| desk.inner().clone())
+        .ok_or(AGENT_OFF)?;
+    Ok(desk.0.voice_composed(
+        member_id.unwrap_or(0),
+        conversation_id,
+        VoiceExtra {
+            text,
+            attachments,
+            quote,
+        },
+    ))
 }
 
 /// The YES/NO question that waits for its answer now, if one does (the page's card when the page
@@ -2433,6 +2466,7 @@ mod tests {
                 "agent_question_answer",
                 "agent_question_open",
                 "agent_retract",
+                "agent_voice_composed",
                 "attachment_source",
                 "core_call",
                 "device_computer_app_remove",
