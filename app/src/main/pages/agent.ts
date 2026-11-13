@@ -1584,9 +1584,55 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     listeningAfter = newestId();
   }
   let pressedMember = RAPHAEL_ID;
-  const sendVoice = (edge: "down" | "up", member: number): Promise<void> =>
-    voiceConversation === undefined ? (member === RAPHAEL_ID ? api.agentVoice(edge) : api.agentVoice(edge, member)) :
+  /** The composer's words, files and quote on their way to the recording that ends: the key's edges wait behind it, in order. */
+  let voiceHandOver: Promise<void> | undefined;
+  let handedRun = 0;
+  /** What the composer held when the voice button was pressed to send: put back if that voice message comes to nothing. */
+  let voiceDraft: { draft: ComposerDraft; member: number; conversation: number } | null = null;
+  const sendVoice = (edge: "down" | "up", member: number): Promise<void> => {
+    const send = (): Promise<void> => voiceConversation === undefined ? (member === RAPHAEL_ID ? api.agentVoice(edge) : api.agentVoice(edge, member)) :
       voiceDestination ? api.agentVoice(edge, member, voiceConversation, voiceDestination) : api.agentVoice(edge, member, voiceConversation);
+    return voiceHandOver ? voiceHandOver.then(send) : send();
+  };
+
+  /**
+   * The press that ends a recording sends the composer with it, as a typed send would: the words, the files and the quote go to
+   * the recording before its key does, and the composer is emptied like a sent one (`takeBackVoiceDraft` fills it again if the
+   * voice message comes to nothing). Nothing happens when the composer holds nothing or is not the thread being recorded.
+   */
+  function handOverComposer(member: number): void {
+    const conversation = voiceConversation;
+    if (!listening || voiceMember !== member || conversation === undefined || handedRun === listeningRun) return;
+    if (member !== memberId() || conversation !== conversationId() || missingFiles.length > 0 || replacing !== undefined) return;
+    if (typedQuestion(wholeLinks(input.value), true) === null) { toaster.info(t("agent.tooLong")); return; }
+    if (!input.value.trim() && !files.length && !composerQuote) return;
+    handedRun = listeningRun;
+    const handing = (async (): Promise<void> => {
+      if (attaching) await attachQueue;
+      if (member !== memberId() || conversation !== conversationId()) return;
+      const sending = files, quote = composerQuote, draft: ComposerDraft = { text: input.value, files: sending, missing: [], quote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
+      let taken = false;
+      try { taken = await api.agentVoiceComposed(typedQuestion(wholeLinks(input.value), true) ?? "", wireAttachments(sending), member, conversation, quote); }
+      catch (err) { toaster.info(describeError(err)); }
+      if (!taken) return;
+      voiceDraft = { draft, member, conversation };
+      clearTimeout(draftTimer); discardComposerDraft(composerKey);
+      correctionLearning.clear();
+      files = []; composerQuote = undefined; input.value = "";
+      input.dispatchEvent(new Event("composer-draft-restored"));
+      drawQuote(); drawFile(); fit();
+    })().finally(() => { if (voiceHandOver === handing) voiceHandOver = undefined; });
+    voiceHandOver = handing;
+  }
+
+  /** A voice message that ended with nothing sent gives the composer back what it took, unless it holds something new. */
+  function takeBackVoiceDraft(): void {
+    const back = voiceDraft;
+    voiceDraft = null;
+    if (!back) return;
+    if (memberId() === back.member && conversationId() === back.conversation && input.value === "" && !files.length && !composerQuote) restoreDraft(back.draft, false);
+    else restored.set(draftKey(back.member, back.conversation), back.draft);
+  }
 
   /**
    * The voice button went down: the question key went down (a click is a press and a release).
@@ -1614,17 +1660,24 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (!listening) voice.down();
       }, LISTEN_WAIT_MS);
     }
+    // In toggle mode the press made while recording is the one that ends it (in hold mode, the release is: `voiceUp`).
+    if (!starting && app.device().dictation_mode !== "hold") handOverComposer(pressedMember);
     void sendVoice("down", pressedMember).catch((err) => {
       voiceRequested = false;
       voice.down();
       toaster.info(describeError(err));
     });
   }
-  const voiceUp = (): void => {if(taskStopPressed){taskStopPressed=false;return;}void sendVoice("up", pressedMember).catch(() => {});};
+  const voiceUp = (): void => {
+    if(taskStopPressed){taskStopPressed=false;return;}
+    if (app.device().dictation_mode === "hold") handOverComposer(pressedMember);
+    void sendVoice("up", pressedMember).catch(() => {});
+  };
 
   /** A click on the flyer: in toggle mode, a second press of the key ends the recording. */
   async function endVoice(): Promise<void> {
     if (app.device().dictation_mode === "hold") return; // the release of the button ends it
+    handOverComposer(voiceMember);
     try {
       await sendVoice("down", voiceMember);
       await sendVoice("up", voiceMember);
@@ -2487,14 +2540,20 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     }
   });
 
+  /** Send pressed while this thread is being recorded (toggle mode) ends the recording with the composer, as the voice button's own press does. */
+  const sendOrEndRecording = (): void => {
+    const holding = input.value.trim() !== "" || files.length > 0 || composerQuote !== undefined;
+    if (holding && listening && voiceMember === memberId() && voiceConversation === conversationId() && app.device().dictation_mode !== "hold") void endVoice();
+    else void send();
+  };
   composer.addEventListener("submit", (e) => {
     e.preventDefault();
-    void send();
+    sendOrEndRecording();
   });
   input.addEventListener("keydown", (e) => {
     if (!sendsOnEnter(e)) return;
     e.preventDefault();
-    void send();
+    sendOrEndRecording();
   });
   cancelGesture().register(() => {
     const task = composerTask();
@@ -2595,7 +2654,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
     if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
-    if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
+    if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); if (voiceDraft?.member === (event.member_id ?? RAPHAEL_ID)) voiceDraft = null; }
     if (event.type === "QuotaChanged") void readQuotas();
     if (event.type === "MembersChanged") slashMenu.invalidate();
     if (wantsRefresh(event)) {
@@ -2641,6 +2700,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         listening = false;
         voiceRequested = false;
         voice.down();
+        if (event.phase === "cancelled" || event.phase === "failed") takeBackVoiceDraft();
         drawComposerTask();
         if (event.phase === "processing") {
           startHearing(voiceMember);
