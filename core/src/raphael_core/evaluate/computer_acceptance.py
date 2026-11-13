@@ -35,12 +35,22 @@ from ..services.attachment_store import AttachmentStore
 
 # Released layers a computer may still be on. A fixture of each is made from the image itself, which is only read.
 # The system's browser entries a user has an entry over: what each starts, and whether it is out of the menu.
-MENU_BROWSERS = ('for entry in google-chrome chromium firefox-esr; do [ -e "/usr/share/applications/$entry.desktop" ] || continue; '
+MENU_BROWSERS = ('for entry in google-chrome chromium; do [ -e "/usr/share/applications/$entry.desktop" ] || continue; '
                  'own="/home/cua/.local/share/applications/$entry.desktop"; '
                  'echo "$entry|$(grep -m1 "^Exec=" "$own")|$(grep -c "^NoDisplay=true$" "$own")"; done')
+# Everything of Firefox ESR a computer could still have (removed from layer 10 on): the package, its programs, its
+# menu entry (the system's and a user's), its configuration, and a mention in the menu's registrations or XFCE's choices
+# (its own helper entry among them).
+NO_FIREFOX = ('for found in /usr/bin/firefox /usr/bin/firefox.real /usr/bin/firefox-esr /usr/lib/firefox-esr /etc/firefox-esr /usr/lib/mozilla '
+              '/usr/share/applications/firefox-esr.desktop /home/cua/.local/share/applications/firefox-esr.desktop '
+              '/usr/share/xfce4/helpers/firefox.desktop /home/cua/.mozilla; do [ -e "$found" ] || [ -L "$found" ] && echo "$found"; done; '
+              'dpkg -s firefox-esr >/dev/null 2>&1 && echo "package firefox-esr"; command -v firefox; command -v firefox-esr; '
+              'grep -ril firefox /usr/share/applications/mimeinfo.cache /usr/share/xfce4/helpers /home/cua/.config/xfce4/helpers.rc '
+              '/usr/local/bin/raphael-browser /usr/local/bin/prepare-raphael-workspace.sh 2>/dev/null; '
+              'grep -il -e mozilla -e parentlock /usr/local/bin/raphael-browser /usr/local/bin/prepare-raphael-workspace.sh 2>/dev/null; true')
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
               "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
-              "8": "raphael/cua-local-vm:driver-0.37.0-v8"}
+              "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
 # A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
 OWN_PICTURE = base64.b64decode(
@@ -643,13 +653,14 @@ class Acceptance:
         require("WebBrowser=raphael-browser" in helper, f"Expected XFCE's Web Browser to be the computer's browser, observed {helper}")
         link = (await self.text(target, ["readlink", "-f", "/usr/bin/x-www-browser"])).strip()
         require(link == "/usr/local/bin/raphael-browser", f"Expected x-www-browser to be the computer's browser, observed {link}")
-        # The menu's other browser entries: one a user has over the system's, started as the computer's browser or,
-        # for Firefox, left out of the menu.
+        # The menu's other browser entries: one a user has over the system's, started as the computer's browser.
         listed = await self.text(target, ["sh", "-c", MENU_BROWSERS])
         menu = {parts[0]: parts[1:] for line in listed.splitlines() if len(parts := line.split("|")) == 3}
-        require(menu and all(hidden == "1" and (entry == "firefox-esr" or started == "Exec=raphael-browser %U")
-                             for entry, (started, hidden) in menu.items()),
+        require(menu and all(hidden == "1" and started == "Exec=raphael-browser %U" for started, hidden in menu.values()),
                 f"Expected the menu's other browser entries hidden and started as the computer's browser, observed {listed!r}")
+        # Firefox ESR is not in the computer at all: the owner's own browser is the only one a person signs in with.
+        left = (await self.text(target, ["sh", "-c", NO_FIREFOX])).strip()
+        require(not left, f"Expected no Firefox ESR in the computer, observed {left!r}")
 
         def classes(text):
             return {parts[0]: parts[2] for line in text.splitlines() if len(parts := line.split(None, 3)) >= 3}
@@ -673,7 +684,8 @@ class Acceptance:
                     break
                 await asyncio.sleep(.3)
         return (f"every launcher is {name} under the {icon} mark; XFCE's Web Browser opened {name} in {took:.1f} s; "
-                f"x-www-browser is the computer's browser; the menu's {', '.join(sorted(menu))} entries are out of the menu")
+                f"x-www-browser is the computer's browser; the menu's {', '.join(sorted(menu))} entries are out of the menu; "
+                "no Firefox ESR is left")
 
     async def steer(self, target, seat):
         rectangles, _ = vm.screen_grid(target.screens)
@@ -1091,7 +1103,7 @@ class Acceptance:
                     await self.machine.stop(target)
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
-        if layer in ("7", "8"):
+        if layer in ("7", "8", "9"):
             await self.previous_shared(layer)
 
     async def previous_shared(self, layer):

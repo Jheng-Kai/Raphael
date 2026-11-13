@@ -576,7 +576,9 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert [a for a, b in zip(seventh, current) if a != b] == [f"{vm.LABEL}.layer=7", acceptance.OLD_IMAGES["7"]]
     eighth = acceptance.previous_args(target, machine.owner, "private", "8")
     assert [a for a, b in zip(eighth, current) if a != b] == [f"{vm.LABEL}.layer=8", acceptance.OLD_IMAGES["8"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8"]
+    ninth = acceptance.previous_args(target, machine.owner, "private", "9")
+    assert [a for a, b in zip(ninth, current) if a != b] == [f"{vm.LABEL}.layer=9", acceptance.OLD_IMAGES["9"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9"]
 
 
 class FakeDocker:
@@ -706,16 +708,18 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v10"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v9"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v8"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v9"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v10"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v10", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v9", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v8", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v7", "image"],
@@ -771,7 +775,7 @@ async def test_run_uses_private_tag_and_owner_and_cleans_even_after_failure(keep
     assert not any("prune" in args or args[0] == "pull" for args in runner.calls)
     report = json.loads((tmp_path / "report/computer-acceptance.json").read_text(encoding="utf-8"))
     assert all(set(row) == {"name", "result", "detail", "seconds"} for row in report["checks"])
-    for layer in ("4", "5", "6", "7", "8"):
+    for layer in ("4", "5", "6", "7", "8", "9"):
         assert any(row["result"] == "skipped" and row["name"] == f"previous layer {layer}" for row in report["checks"])
     assert " ok, " in capsys.readouterr().out
     if keep:
@@ -1392,7 +1396,7 @@ async def test_one_screen_block_runs_product_form_once_and_other_counts_do_not(t
     assert seen == [(1, 1)]
 
 
-@pytest.mark.parametrize("fault", [None, "globe", "helper", "second browser entry", "dialog"])
+@pytest.mark.parametrize("fault", [None, "globe", "helper", "second browser entry", "dialog", "firefox left"])
 async def test_browser_mark_reads_the_launcher_the_helper_the_menu_and_what_the_web_browser_opens(tmp_path, monkeypatch, fault):
     # An owner looked at a globe named "Browser" over Google Chrome; XFCE's own "Web Browser" asked which
     # application to prefer; the menu's Chrome entry was a browser that cannot start in a computer.
@@ -1414,8 +1418,9 @@ async def test_browser_mark_reads_the_launcher_the_helper_the_menu_and_what_the_
             return vm.Result(0, "/usr/local/bin/raphael-browser\n")
         if args[:2] == ["sh", "-c"] and args[2] == acceptance.MENU_BROWSERS:
             chrome = "/usr/bin/google-chrome-stable %U" if fault == "second browser entry" else "raphael-browser %U"
-            return vm.Result(0, f"google-chrome|Exec={chrome}|1\nchromium|Exec=raphael-browser %U|1\n"
-                                "firefox-esr|Exec=/usr/lib/firefox-esr/firefox-esr %u|1\n")
+            return vm.Result(0, f"google-chrome|Exec={chrome}|1\nchromium|Exec=raphael-browser %U|1\n")
+        if args[:2] == ["sh", "-c"] and args[2] == acceptance.NO_FIREFOX:
+            return vm.Result(0, "/usr/lib/firefox-esr\npackage firefox-esr\n" if fault == "firefox left" else "")
         if args[:2] == ["sh", "-c"]:
             assert "exo-open --launch WebBrowser" in args[2]
             opened = "xfce4-mime-helper.Xfce4-mime-helper" if fault == "dialog" else "google-chrome.Google-chrome"
@@ -1436,11 +1441,13 @@ async def test_browser_mark_reads_the_launcher_the_helper_the_menu_and_what_the_
     if fault is None:
         detail = await run.browser_mark(target)
         assert "every launcher is Google Chrome under the google-chrome mark" in detail
-        assert "XFCE's Web Browser opened Google Chrome" in detail and "chromium, firefox-esr, google-chrome entries" in detail
+        assert "XFCE's Web Browser opened Google Chrome" in detail and "chromium, google-chrome entries" in detail
+        assert detail.endswith("no Firefox ESR is left")
         assert closed == ["0x01200004"] and len(listed) == 1
         return
     expected = {"globe": "launcher to be Google Chrome under its own mark", "helper": "Web Browser to be the computer's browser",
-                "second browser entry": "menu's other browser entries", "dialog": "to open Google Chrome, observed"}[fault]
+                "second browser entry": "menu's other browser entries", "dialog": "to open Google Chrome, observed",
+                "firefox left": "no Firefox ESR in the computer, observed"}[fault]
     with pytest.raises(AssertionError, match=expected):
         await run.browser_mark(target)
     # What the check opened is closed again even when it is the wrong thing.
