@@ -30,11 +30,11 @@ import {
 
 afterEach(() => setLocale("zh-TW"));
 
-test("local commands use the shared three-choice dropdown beside computer operations", () => {
+test("Safety has no setting for local commands: only a quick question reaches this PC", () => {
   const html = tab("safety");
-  expect(html).toContain('data-k="local-commands"');
-  expect(html).toContain("本機指令");
-  expect(html).toContain("每次詢問");
+  expect(html).not.toContain('data-k="local-commands"');
+  expect(html).not.toContain("本機指令");
+  expect(html).not.toContain("每次詢問");
 });
 
 test("Models has its own settings navigation entry and provider page", () => {
@@ -139,11 +139,11 @@ test("no tab of Settings shows memory, and an old link to the memory tab lands o
   expect(tab("memory")).toBe(general);
 });
 
-test("shared safety rules and local permissions live in Safety", () => {
+test("shared safety rules and the always-allowed apps live in Safety", () => {
   const rules = { ...emptyRulesView(), status: [{ id: 1, action: "Payment", verdict: "ask" as const, position: 1 }] };
   const html = tab("safety", { rules });
   expect(html).toContain("data-rules-section");
-  expect(html).toContain('data-k="local-commands"');
+  expect(html).not.toContain('data-k="local-commands"');
   expect(html).not.toContain('data-k="computer-host"');
   expect(tab("tools", { rules })).not.toContain("data-rules-section");
 });

@@ -92,8 +92,7 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
     const value = card.message?.[key as keyof typeof labels];
     return value ? `<div class="card-field"><span>${esc(t(label))}</span><span>${esc(value)}</span></div>` : "";
   }).join("") + `<p class="card-body">${esc(card.message.body)}</p>` : "";
-  const details = `<div class="card-well">${!waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : ""}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${esc(card.summary)}</span></div>`}</div>` +
-    (localCard(card) && waiting ? iconBtn("gear", t("local.manage"), ' data-act="local-settings"') : "");
+  const details = `<div class="card-well">${!waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : ""}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${esc(card.summary)}</span></div>`}</div>`;
   return cardHTML({
     title, mark: markOf(card),
     status: waiting ? "waiting" : card.state === "allowed" || card.state === "always" ? "done" : "ready",

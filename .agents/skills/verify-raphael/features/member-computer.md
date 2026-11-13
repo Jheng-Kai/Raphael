@@ -1080,10 +1080,10 @@ members/test_local_commands.py and brain/test_owner.py. No look scene changes: n
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
 pinned local_exec/local_job definitions on API and CLI MCP paths, no other turn does.
-Settings > Raphael places Local commands beside Computer use, with Ask every time
-(default), Always allow and Never. First consent names the requesting member and
-asks for all members, with four real answers. Later command cards show Allow/Skip
-and a settings action. Exact multiline commands and cwd appear on the shared
+Settings has no control for the mode (removed 2026-11-14 at the owner's word: 「本機指定我覺得應該可以先拿掉」),
+and the setting itself stays: ask (default), always and never, one value for a quick question. First consent names the
+requesting member and asks for all members, with four real answers. Later command cards show Allow/Skip
+and no way into a setting. Exact multiline commands and cwd appear on the shared
 permission card; no command arguments or results appear in public steps. The
 background renderer uses the same card. Chat has no timer (also in CLI/shell);
 background questions expire after 30 minutes. Esc denies once. Phone/Telegram
@@ -1099,7 +1099,7 @@ the owner card remains the permission boundary. cua-driver session is removed
 from both schema variants and rejected if injected at execution.
 
 ```powershell
-npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-manage local-command-settings local-command-setting-always local-command-setting-never local-permission-card --theme both --width 1120,720,1920x1080
+npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-settings-gone local-permission-card --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet, all pending/settled/background cards and settings at

@@ -755,12 +755,6 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-foot .ob-pair .ob-tri svg.i { fill: currentColor; }
 .ob-foot .ob-pair .ob-tri svg.i path { transform: translateX(1.5px); }
 .ob-foot .ob-pair .ob-prev.ob-tri svg.i { transform: scaleX(-1); }
-/* The way out of a rerun's welcome, its ×, is on the same quiet grey, one step lighter under the pointer. */
-.ob-foot .ob-back { background: var(--hover); color: var(--text); }
-.ob-foot .ob-back:is(:hover, :active):not(:disabled) { background: var(--pressed); }
-/* The rerun's × is a circle as tall as the pill, with only a drawing in it. */
-.ob-foot .btn.icon.ob-back { flex: none; width: var(--ob-pill); height: var(--ob-pill); border-color: transparent; }
-.ob-foot .btn.icon.ob-back svg.i { width: 20px; height: 20px; }
 /* The team's characters float by a step's title, each where screens.ts puts it: they take no room, and a narrow card
    drops them. */
 .ob-floaters { position: relative; height: 0; pointer-events: none; }

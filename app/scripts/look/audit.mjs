@@ -140,9 +140,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const floatingLatest =element.matches(".page-agent .ra-stage > button.conversation-latest, .peer-chat > button.conversation-latest");
     // The sidebar's icons and the buttons on the window's edges are soft round buttons;
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
-    // and so are the guide's foot's round buttons: a rerun's × on a quiet grey, and a step's pair, the way back on that grey and
+    // and so are the guide's foot's round buttons: a step's pair, the way back on a quiet grey and
     // the way on a circle of the accent (owner, 2026-11-11).
-    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .ob-foot .btn.icon.ob-back, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
+    const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();

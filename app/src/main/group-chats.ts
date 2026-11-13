@@ -392,7 +392,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const status=document.createElement('div');status.className="au-room-controls";el.querySelector('.ra-dock')!.prepend(status);
   // A member's question waits here, where the talk is, not on that member's page.
   const questions = createBackgroundQuestions({
-    memberId: () => 0, roomId: () => roomId, manageLocal: () => _app.go("settings", "safety"),
+    memberId: () => 0, roomId: () => roomId,
     asker: q => { const who = person(q?.member_id ?? null); return who ? { face: faceHTML(who, 22), name: who.name } : { face: "", name: "" }; },
     changed: () => { changed(); scroll.scrollTop = scroll.scrollHeight; },
   });

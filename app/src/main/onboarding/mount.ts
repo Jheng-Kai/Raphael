@@ -169,17 +169,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
    * 「改成集中在中間這邊好不好？然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」; a left and a right
    * button at all since 「我要的是左右 button」 that afternoon, and one row since 「上下堆疊會造成我們畫面有些空間比較緊」). Neither
    * has words, so each is named for assistive tech and in its tooltip. The last step's way on is a check: it finishes, and
-   * nothing comes after it. The welcome has nowhere to go back to and keeps its one wide pill; on a rerun a round × stands
-   * before it and leaves the guide (a close is the × alone, never a word button).
+   * nothing comes after it. The welcome has nowhere to go back to and is its one wide pill alone, on a first run and on a
+   * rerun from the settings alike (owner, 2026-11-14: 「第一頁應該只會有開始就好了」).
    */
   function footHTML(): string {
     const next = ` data-ob="next"${finishing ? " disabled" : ""}`;
     if (flow.step === "welcome") {
-      return actionRow({
-        cls: "ob-actions",
-        secondary: mode === "rerun" ? iconButton("x", t("common.cancel"), ' data-ob="back"', "ob-back") : undefined,
-        primary: { label: esc(t("onboarding.start")), attrs: next },
-      });
+      return actionRow({ cls: "ob-actions", primary: { label: esc(t("onboarding.start")), attrs: next } });
     }
     const last = isLast(flow), label = last ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
     return `<div class="action-row ob-actions ob-pair">` +
@@ -314,11 +310,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   }
 
   function back(): void {
-    if (flow.step === "welcome") {
-      // Only a rerun can be left from its first screen: a first run has nothing to go back to.
-      if (mode === "rerun") leave({ finished: false });
-      return;
-    }
+    if (flow.step === "welcome") return;
     go({ type: "BACK" });
   }
 
