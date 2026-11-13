@@ -154,6 +154,23 @@ async def test_a_call_that_names_the_tool_anyway_is_refused_by_every_door(make_r
     rig.host.execute.assert_not_awaited()
 
 
+def test_the_local_tools_door_asks_the_services_question():
+    # One question for both doors: a request marked quick that was not asked at this computer (a phone, a resumed task)
+    # never reaches the owner's PC, even by a call that names the tool under 全部允許.
+    from types import SimpleNamespace
+    from raphael_core.agent.permissions import AT_THIS_COMPUTER
+    from raphael_core.agent.service import _AT_THIS_COMPUTER
+    from raphael_core.computer.local_tools import ask_context
+
+    def asked(source, quick=True, nested=False):
+        return SimpleNamespace(memory_untrusted=False, attachments=(), nested=nested, steps=(), speaker=SimpleNamespace(id=0),
+                               conversation_id=1, source=source, quick=quick, scope="private", session_id="s")
+    assert set(AT_THIS_COMPUTER) == set(_AT_THIS_COMPUTER)
+    assert all(ask_context(asked(source))[4] for source in ("voice", "overlay", "app"))
+    assert not any(ask_context(request)[4] for request in (asked("telegram"), asked("connector"), asked("discord"),
+                                                           asked("app", quick=False), asked("overlay", nested=True)))
+
+
 # --- a quick question -----------------------------------------------------------------------------------------------
 
 

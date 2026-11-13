@@ -11,7 +11,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from ..agent.plugins import PluginResult, PluginTool, tool_key
-from ..agent.permissions import qualifies
+from ..agent.permissions import owner_pc as reaches_owner_pc, qualifies
 from ..agent.policy import UNATTENDED_WAIT_S, Tier
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
@@ -81,7 +81,7 @@ def ask_context(ask, results=()):
     # The last cell: only a quick question reaches the owner's own PC (R-PC-01); every other turn is refused in `call`.
     return (("chat", ask.speaker.id, ask.conversation_id), external,
             qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id,
-            bool(ask.quick and not ask.nested))
+            reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested))
 
 
 def run_context(run):

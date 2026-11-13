@@ -245,7 +245,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
-from .permissions import AT_A_CHAT, message_preview, permission_identity, qualifies as permission_cards_for
+from .permissions import AT_A_CHAT, message_preview, owner_pc as reaches_owner_pc, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
@@ -3070,7 +3070,7 @@ class AgentService:
         """Whether the owner's own PC is in reach of this turn: only a quick question asked at this computer (the overlay's
         Alt+Space) reaches it, never an ordinary conversation, a room, an exchange between members, a task or a phone, in any
         permission mode (R-PC-01). Their computer work goes to the member's own computer."""
-        return ask.quick and not ask.nested and ask.source in _AT_THIS_COMPUTER
+        return reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested)
 
     def _team_tools(self, ask: _Ask) -> list[str]:
         """The team tools the request `ask` is about. Never for a request one member handed another

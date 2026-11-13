@@ -245,6 +245,16 @@ def qualifies(*, source: str, quick: bool, nested: bool, scope: str) -> bool:
     return source in AT_A_CHAT and not quick and not nested and scope == "private"
 
 
+# The sources of a question asked at this computer: spoken, through the overlay, or typed in the app.
+AT_THIS_COMPUTER = ("voice", "overlay", "app")
+
+
+def owner_pc(*, source: str, quick: bool, nested: bool) -> bool:
+    """Whether a request may reach the owner's own PC: only a quick question asked at this computer, never one member
+    handed another (R-PC-01). The service's offer and the local tools' door ask this one question."""
+    return quick and not nested and source in AT_THIS_COMPUTER
+
+
 class PermissionCards:
     """The cards' flow. `computer` is the registry of runs, to which the answer of a `run` card goes."""
 
