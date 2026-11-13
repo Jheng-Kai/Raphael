@@ -34,6 +34,7 @@ import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draf
 import { messageHTML, replyContentHTML } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
+import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
@@ -277,6 +278,8 @@ export interface TimelineState {
   ended: Set<number>;
   nowMs: number;
   expandedMessages: Set<string>;
+  /** The owner's message open as an editor in its place, if any (message-edit.ts). */
+  editing: OwnerEditing | null;
 }
 
 export const emptyTimelineState = (): TimelineState => ({
@@ -291,6 +294,7 @@ export const emptyTimelineState = (): TimelineState => ({
   ended: new Set(),
   nowMs: Date.now(),
   expandedMessages: new Set(),
+  editing: null,
 });
 
 /** Whether a turn's steps are open: as the reader left them, else open while its task runs and closed once it is done. */
@@ -1073,7 +1077,9 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
-    (asked
+    (asked && state.editing?.turnId === turn.id
+      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question">${ownerEditorHTML(state.editing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote) : "")}</div></div>`
+      : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
         withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))), turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
