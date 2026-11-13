@@ -1,7 +1,7 @@
-"""S15.secret and S15.computer through production RPC, loops, gates and authenticated MCP, with honest fake
-brains on both sides: a recorded MCP server that opens only to the owner's key, and a fake desktop whose page
-asks for a sign-in until the owner has signed in. Each brain asks for the card while it lacks what it needs,
-and reports only what a tool returned."""
+"""S15.secret through production RPC, loops, gates and authenticated MCP, with honest fake brains on both sides: a
+recorded MCP server that opens only to the owner's key. Each brain asks for the card while it lacks what it needs, and
+reports only what a tool returned. (S15.computer, the owner's turn at a sign-in on the desktop, is retired: the
+owner's desktop is a quick question's alone, R-PC-01.)"""
 import json
 import logging
 import re
@@ -11,8 +11,6 @@ import pytest
 
 from raphael_core.agent.cli.drivers import Event
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
-from raphael_core.computer import run as run_module
-from raphael_core.computer.handback import HandbackCards
 from raphael_core.connectors.secret_cards import SecretCardStore, SecretCards
 from raphael_core.evaluate.guardian import Budget
 from raphael_core.evaluate.guardian_driver import RpcDriver
@@ -26,7 +24,6 @@ from test_guardian import FakeBrains
 from test_guardian_scenarios import FakeClient
 
 SECRET = next(cell for cell in cells() if cell.id == "S15.secret")
-COMPUTER = next(cell for cell in cells() if cell.id == "S15.computer")
 API, CLI = "fake/model", "cli:codex:owner-model?effort=high"
 FORECAST = re.compile(r"FC-\w{8}")
 PAGE_CODE = re.compile(r"YT-\w{8}")
@@ -283,91 +280,15 @@ async def test_a_stopped_card_that_still_saves_fails(tmp_path, monkeypatch):
     assert "stop" in reasons
 
 
-# --- the computer half -------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("brain", ["A", "C"])
-async def test_s15_computer_passes_on_both_brains_through_the_suite(tmp_path, monkeypatch, brain):
-    result, client, seen = await run_suite_cell(COMPUTER, tmp_path, monkeypatch, brain)
-    assert result["status"] == "PASS", result
-    assert result["assertions"] == list(COMPUTER.assertions)
-    assert any(tool["tool_key"] == "computer" or tool["name"] == "computer" for tool in result["tools"])
-
-
-async def test_the_computer_cell_holds_the_lease_and_resumes_once(tmp_path, monkeypatch):
-    driver, client, _ = setup(tmp_path, monkeypatch, "A")
-    try:
-        reasons, _ = await driver.execute(COMPUTER)
-        assert not reasons, reasons
-        desktop = driver.desktop
-        assert desktop.violations == []
-        # Every window the run asked for after the hand-over came after the shell's begin: the run is the shell's again.
-        phases = desktop.states
-        assert phases[:1] == ["begin"] and phases.count("end") >= 3 and phases.count("begin") >= 3
-        rows = driver.app._conn.execute("SELECT state FROM handback_cards ORDER BY rowid").fetchall()
-        assert [row[0] for row in rows] == ["done", "stopped"]
-    finally:
-        await driver.aclose()
-
-
-async def test_a_brain_that_claims_the_code_without_the_card_fails(tmp_path, monkeypatch):
-    reasons, _ = await run_s15(COMPUTER, tmp_path, monkeypatch, claims=True)
-    assert "human_lease" in reasons
-
-
-@pytest.mark.parametrize("brain", ["A", "C"])
-async def test_a_turn_that_pauses_the_computer_calls_nothing_else(tmp_path, monkeypatch, brain):
-    driver, _, _ = setup(tmp_path, monkeypatch, brain, extra=True)
-    try:
-        reasons, _ = await driver.execute(COMPUTER)
-        assert not reasons, reasons
-        assert driver.app._conn.execute("SELECT COUNT(*) FROM handback_cards").fetchone()[0] == 2  # one run each, never a third
-    finally:
-        await driver.aclose()
-
-
-async def test_a_run_that_keeps_working_while_the_owner_has_the_computer_fails(tmp_path, monkeypatch):
-    original = run_module.ComputerRun._hand_back
-
-    async def impatient(self, pause):
-        # Tells the service and the shell the owner has it, then goes on looking.
-        self._state("end", "x")
-        self._events.put_nowait(run_module.Handback("a" * 32, pause.reason, "Google Chrome"))
-        await self._apps()
-        return await original(self, pause)
-    monkeypatch.setattr(run_module.ComputerRun, "_hand_back", impatient)
-    reasons, driver = await run_s15(COMPUTER, tmp_path, monkeypatch)
-    assert "human_lease" in reasons and driver.desktop.violations
-
-
-async def test_a_card_whose_end_is_handled_twice_resumes_its_task_once(tmp_path, monkeypatch):
-    original = HandbackCards._ended
-
-    async def twice(self, run, card, final):
-        await original(self, run, card, final)
-        await original(self, run, card, final)
-    monkeypatch.setattr(HandbackCards, "_ended", twice)
-    reasons, _ = await run_s15(COMPUTER, tmp_path, monkeypatch)
-    assert reasons == []  # the one-time claim (returning to done) stands in the way of the second
-
-
-async def test_a_stop_that_leaves_the_run_going_fails(tmp_path, monkeypatch):
-    async def forgets(self, params):
-        return {"card": self._card(params).view(), "stopped": False}
-    monkeypatch.setattr(HandbackCards, "_stop", forgets)
-    reasons, _ = await run_s15(COMPUTER, tmp_path, monkeypatch)
-    assert "stop" in reasons
-
-
 # --- S15 itself ----------------------------------------------------------------------------------------------
 
 
 def test_the_halves_of_s15_have_drivers():
     by_id = {cell.id: cell for cell in cells()}
-    assert by_id["S15.secret"].driver == "secret-card" and by_id["S15.computer"].driver == "computer-card"
+    assert by_id["S15.secret"].driver == "secret-card" and "S15.computer" not in by_id  # retired: R-PC-01
     assert by_id["S15.permission"].driver == "permission-card" and by_id["S15.permission"].dependency == "P08c"
     # No prompt tells a brain to show a card: the owner asks in plain words.
-    for identifier in ("S15.secret", "S15.computer", "S15.permission"):
+    for identifier in ("S15.secret", "S15.permission"):
         assert not any(word in by_id[identifier].prompt for word in ("卡片", "card", "request_secret", "computer_hand_over", "接管"))
 
 
@@ -379,7 +300,7 @@ async def test_a_scenario_with_an_unbuilt_half_never_passes(tmp_path, monkeypatc
 
     async def two_halves_pass(cell, brain, model, directory, **kwargs):
         result = guardian_suite.blank(cell, brain, model, "run", "head")
-        built = cell.id in ("S15.secret", "S15.computer")
+        built = cell.id == "S15.secret"
         result.update(status="PASS" if built else "FAIL", reason="" if built else "not implemented: " + cell.dependency)
         return result
 
@@ -387,8 +308,8 @@ async def test_a_scenario_with_an_unbuilt_half_never_passes(tmp_path, monkeypatc
     await run({"C": None, "A": None}, tmp_path, client=FakeClient([]), brains=FakeBrains(tmp_path, installed=False),
               max_turns=1, head="test-head", include_legacy=False)
     rows = json.loads(next(tmp_path.glob("run-*/report.json")).read_text(encoding="utf-8"))["results"]
-    assert {(row["scenario_id"], row["brain"], row["status"]) for row in rows if row["scenario_id"] in ("S15.secret", "S15.computer")} == {
-        (identifier, brain, "PASS") for identifier in ("S15.secret", "S15.computer") for brain in ("C", "A")}
+    assert {(row["scenario_id"], row["brain"], row["status"]) for row in rows if row["scenario_id"] == "S15.secret"} == {
+        ("S15.secret", brain, "PASS") for brain in ("C", "A")}
     assert {(row["status"], row["reason"]) for row in rows if row["scenario_id"] == "S15"} == {
         ("FAIL", "required child cells incomplete")}
 
@@ -407,19 +328,5 @@ async def test_the_secret_resume_does_not_redo_what_the_task_did_before_its_card
         assert not reasons, reasons
         assert [receipt["operation"] for receipt in driver.recorder.receipts] == ["write", "write"]
         assert [r["operation"] for r in driver.secret_server.receipts if r["authorized"]] == ["forecast"]
-    finally:
-        await driver.aclose()
-
-
-@pytest.mark.parametrize("brain", ["A", "C"])
-async def test_the_computer_resume_does_not_start_the_computer_task_again(tmp_path, monkeypatch, brain):
-    driver, _, _ = setup(tmp_path, monkeypatch, brain, again=True)
-    try:
-        reasons, _ = await driver.execute(COMPUTER)
-        assert not reasons, reasons
-        # The windows were listed once for the task, once for each look after the owner gave the computer back
-        # (the first too early) and once for the stop-phase task: a second run in the resume would add more.
-        assert driver.desktop.made_by_the_run("apps") == 4
-        assert driver.app._conn.execute("SELECT COUNT(*) FROM handback_cards").fetchone()[0] == 2
     finally:
         await driver.aclose()

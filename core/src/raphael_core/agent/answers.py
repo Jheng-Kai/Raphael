@@ -534,6 +534,7 @@ class Voice:
         source: str = "",
         messaging: str = "",
         viewing: str = "",
+        owner_pc: bool = False,
     ) -> Reply:
         """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"), in
         `language`. `summary` is the summary of the earlier conversation and `context` its latest
@@ -563,7 +564,7 @@ class Voice:
                 memory_inline=False,
             )
         else:
-            system = system_prompt(language, route, memory_snapshot, speaker=speaker, memory_inline=False)
+            system = system_prompt(language, route, memory_snapshot, speaker=speaker, memory_inline=False, owner_pc=owner_pc)
         system += MESSAGE_RULES + owner
         began = time.perf_counter()
         try:

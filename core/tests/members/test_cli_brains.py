@@ -313,8 +313,8 @@ async def test_missing_cli_is_one_clear_reply_without_api_key(setup, tmp_path):
     assert [message["kind"] for message in turn["messages"]] == ["reply"]
 
 
-@pytest.mark.parametrize("decision", ["yes", "no", "always"])
-async def test_cli_native_permission_reuses_inline_cards(setup, tmp_path, decision):
+async def test_cli_native_command_request_is_declined_in_a_members_thread_without_a_card(setup, tmp_path):
+    # R-PC-01: a command of the CLI's own is a command on the owner's PC, which only a quick question may ask for.
     rig, team = setup
     teacher = member(team, model="cli:codex")
     path = tmp_path / "fake_codex.py"
@@ -343,13 +343,10 @@ for line in sys.stdin:
     (home / ".codex").mkdir(parents=True)
     (home / ".codex" / "auth.json").write_text("{}", encoding="utf-8")
     rig.service._cli_brains = CliBrains(home=home, environ={**os.environ, "PYTHONUTF8": "1", "CODEX_HOME": str(home / ".codex")}, commands={"codex": [sys.executable, str(path)]})
-    pending = await typed(rig, "Say hello", teacher.id)
-    assert pending["status"] == "confirm", pending
-    result = await rig.call("agent.confirm", {"id": pending["confirm"]["id"], "approved": decision != "no", "always": decision == "always"})
-    assert result["text"] == {"yes": "accept", "no": "decline", "always": "accept"}[decision]
+    result = await typed(rig, "Say hello", teacher.id)
+    assert result["status"] == "done" and "confirm" not in result and result["text"] == "decline", result
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
-    assert turn["id"] == pending["turn_id"] and turn["status"] == "done"
-    assert any(step["tool"] == "cli_permission" for step in turn["steps"])
+    assert turn["id"] == result["turn_id"] and turn["status"] == "done"
     assert any(msg["kind"] == "progress" and msg["text"] == "我先確認這個動作。" for msg in turn["messages"])
     assert not rig.service._cli_loops
     assert len(list((home / ".raphael" / "codex-brains").iterdir())) == 1

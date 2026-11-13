@@ -56,7 +56,7 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
         assert prompt.count(SHARED_CAPABILITIES) == 1
         assert "Replies are text" in prompt
         assert "generate_audio" not in prompt
-        assert "owner's Windows computer" in prompt
+        assert "your own isolated computer" in prompt and "owner's Windows computer" not in prompt  # R-PC-01
     for offered in offers:
         assert all("[Raphael]" not in item["description"] for item in offered.values())
 

@@ -412,7 +412,15 @@ core/tests/brain/test_db.py and the existing member/routine suites.
 Offline tests and fixture scenes do not prove real provider result shapes, remote
 pagination completeness, native persistence or live model choices.
 
-## Owner-PC command boundary (2026-11-01)
+## Owner-PC command boundary (2026-11-01, narrowed 2026-11-13)
+
+Since 2026-11-13 (R-PC-01) the owner's PC is in reach of a quick question alone. The one switch is
+`take_snapshot(owner_pc=...)`, set from `AgentService._owner_pc(ask)` (`ask.quick`, not nested): without it no
+snapshot lists, finds or refreshes into `local__local_exec`, `local__local_job`, the harness `computer` tool or a fixed
+command, so API turns, the CLI MCP server, rooms, exchanges, phone messages, tasks and routines have none in any permission
+mode. `LocalTools.call` refuses every other context, the fast router is asked for a quick question alone, and the prompt of
+every other turn carries no owner's-PC words (`persona._OWNER_PC_RULES`). A conversation's work that needs a computer
+is done on the member's own computer. What follows describes the adapter as built.
 
 `computer/local_tools.py` wraps the existing `VmTools` hub with two pinned tools:
 `local__local_exec` and `local__local_job`. Production API snapshots, authenticated

@@ -180,16 +180,16 @@ async def test_requests_and_history_reject_an_unknown_member(setup):
         await rig.call("agent.history.list", {"member_id": 42})
 
 
-async def test_a_member_has_the_same_desktop_tools(setup, client):
+async def test_a_member_has_no_tool_for_the_owners_desktop(setup, client):
+    # R-PC-01: the owner's PC is a quick question's alone, so a member's conversation neither lists nor finds it.
     rig, team = setup
     one = member(team)
-    client.chats += [chat("先找工具。", ("find_tools", {"query": "operate the computer"})), live_said("我來打開計算機。")]
+    client.chats += [chat("先找工具。", ("find_tools", {"query": "operate the computer"})), live_said("我沒有可以操作電腦的工具。")]
     result = await typed(rig, "打開小算盤算 12 乘 34", one.id)
-    assert (result["prefix"], result["text"]) == ("", "我來打開計算機。")
+    assert (result["prefix"], result["text"]) == ("", "我沒有可以操作電腦的工具。")
     listed = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    # For a member as for Raphael: `open` is listed, the desktop is found (decision 2).
-    assert "open" in listed and "computer" not in listed and {"find_tools", "use_tool"} <= listed
-    assert '"name": "computer"' in client.chat_calls[1]["messages"][-1]["content"]
+    assert not listed & {"open", "computer", "lock_screen", "local__local_exec"} and {"find_tools", "use_tool"} <= listed
+    assert '"name": "computer"' not in client.chat_calls[1]["messages"][-1]["content"]
     assert rig.actions.calls == []
 
 

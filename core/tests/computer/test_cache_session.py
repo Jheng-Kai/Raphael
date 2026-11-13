@@ -56,18 +56,19 @@ async def test_a_run_the_owner_gave_the_computer_back_to_reads_the_same_cache(ma
     assert cached(model.calls) == [(f"raphael-computer-0-{run.run_id}", "1h")] * len(model.calls)
 
 
-async def test_a_run_begun_in_a_private_conversation_is_named_after_it(operating, client):
+async def test_a_run_begun_in_a_typed_quick_conversation_is_named_after_it(operating, client):
+    # R-PC-01: the run on the owner's desktop begins only in the quick conversation, so that is the one it is named after.
     client.chats.extend([
         chat("", use("computer", {"request": "在小算盤按七"})),
         *PRESS_SEVEN,
         chat(json.dumps({"prefix": "Answer", "text": "已按下「七」。", "detail": ""})),
     ])  # fmt: skip
+    main = operating.service.conversations.quick()
     asked = await operating.call("agent.ask", {"session_id": "s1", "text": "在小算盤按七", "ui_language": "zh-TW",
-                                               "source": "app"})  # fmt: skip
+                                               "source": "app", "destination": "quick", "conversation_id": main})  # fmt: skip
     assert asked["status"] == "confirm"
     done = await operating.confirm(asked["confirm"]["id"])
     assert done["status"] == "done"
-    main = operating.service.conversations.main(0)
     calls = cached(client.chat_calls)
     # The conversation and the run are two prefixes, each with its own name, both kept for an hour.
     assert calls[0] == (f"raphael-0-{main}", "1h")

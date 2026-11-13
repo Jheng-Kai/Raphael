@@ -22,7 +22,9 @@ from .local_patterns import DANGEROUS_PATTERNS
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
 FOREGROUND_TIMEOUT_S = 120
-_CONTEXT = ContextVar("local_command_context", default=(None, True, False, ""))
+_CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", False))
+OUT_OF_REACH = ("The owner's own PC is out of reach here: it is only for a quick question asked through the overlay. "
+                "Do the work on your own computer, or say plainly that it cannot be done.")
 _DANGEROUS = [re.compile(pattern, re.I | re.S) for pattern, _ in DANGEROUS_PATTERNS]
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
 _SECRET = re.compile(r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\/]channels|\b(?:cmdkey|vaultcmd|mimikatz|Get-StoredCredential|CredEnumerate|CredRead)\b", re.I)
@@ -76,12 +78,14 @@ def requires_command_approval(settings, command, *, external):
 def ask_context(ask, results=()):
     external = bool(ask.memory_untrusted or ask.attachments or ask.nested or any(getattr(r, "untrusted", False) for r in results)
                     or any(s.tool in ("web_search", "web_read", "read_attachment") or s.server not in (None, "Raphael", "local") for s in ask.steps))
+    # The last cell: only a quick question reaches the owner's own PC (R-PC-01); every other turn is refused in `call`.
     return (("chat", ask.speaker.id, ask.conversation_id), external,
-            qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id)
+            qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id,
+            bool(ask.quick and not ask.nested))
 
 
 def run_context(run):
-    return (("task", run.task_id), bool(run._memory_untrusted or run.attachments), True, "")
+    return (("task", run.task_id), bool(run._memory_untrusted or run.attachments), True, "", False)
 
 
 def command_context(select):
@@ -156,15 +160,18 @@ class LocalTools:
         outcome = "blocked"
         background = False
         try:
-            owner, external, present, session = _CONTEXT.get()
+            owner, external, present, session, owner_pc = _CONTEXT.get()
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
+            if not owner_pc:
+                # Whatever the permission mode: 全部允許 never reopens the owner's PC to an ordinary conversation, a room, a task or a phone.
+                return PluginResult(False, "presence_required", OUT_OF_REACH)
             access = self.data_floor.access(key, arguments)
             if access == "write":
                 return PluginResult(False, "protected_data", WRITE_REFUSAL)
             if (not present and not self._full_permission()) or owner is None:
-                return PluginResult(False, "presence_required", "Local commands need a card in a private conversation in the desktop app. A quick question, a group, a phone or Telegram cannot show one, so tell the owner to ask in a conversation.")
+                return PluginResult(False, "presence_required", "A quick question cannot show the card a local command needs, so nothing was run. Tell the owner plainly that it cannot be done here.")
             if key.endswith("/local_job"):
                 job = self.jobs.get(arguments["job_id"])
                 if job is None or job["owner"] != owner:

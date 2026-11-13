@@ -99,14 +99,12 @@ def cells(registry=(), catalog=(), *, servers=()):
     result.append(ScenarioCell('S05.slack-draft', 'Slack draft edited and sent once',
         'Prepare a Slack reply for my review before sending it.',
         ('editable_slack', 'version_bound_send', 'cancel_zero_send', 'one_receipt'), 'P08c', 'slack-draft'))
-    # S15's halves: a key saved in a card and the owner's turn at the computer (P08b), and the permission card of an
-    # action that needs the owner's yes (P08c).
+    # S15's halves: a key saved in a card (P08b), and the permission card of an action that needs the owner's yes (P08c).
+    # Its third half, the owner's turn at the computer on a sign-in, is retired (2026-11-13, R-PC-01): the run on the
+    # owner's desktop is a quick question's alone, and a quick question shows no card to hand the computer back with.
     result.append(ScenarioCell('S15.secret', 'Secret saved in chat (P08b scope)',
         '請用天氣服務查明天台北的預報，告訴我服務回傳的預報代號。',
         ('secure_save', 'no_secret_transcript', 'done_once', 'stop'), 'P08b', 'secret-card'))
-    result.append(ScenarioCell('S15.computer', 'Sign in on the computer in chat (P08b scope)',
-        '請在電腦上的瀏覽器看一下 YouTube Studio 的上傳頁，告訴我頁面上的確認碼。',
-        ('human_lease', 'done_once', 'stop'), 'P08b', 'computer-card'))
     result.append(ScenarioCell('S15.permission', 'Permission card (P08c scope)', '請用 Guardian 寄出測試信。',
         ('permission_card', 'digest_bound', 'deny_zero', 'no_bypass', 'once', 'always_narrow', 'ask_first_wins', 'expiry'),
         'P08c', 'permission-card'))

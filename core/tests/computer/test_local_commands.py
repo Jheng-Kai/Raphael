@@ -20,7 +20,7 @@ def local(conn):
     host = AsyncMock()
     host.execute.return_value = {"exit_code": 7, "stdout": "head and tail", "stderr": "", "truncated": False}
     hub = LocalTools(EmptyHub(), conn, host=host)
-    token = _CONTEXT.set((("chat", 1, 10), False, True, "local-session"))
+    token = _CONTEXT.set((("chat", 1, 10), False, True, "local-session", True))  # the owner's PC is in reach (a quick question)
     yield hub, host, ToolGate(hub, conn=conn)
     _CONTEXT.reset(token)
 
@@ -34,6 +34,26 @@ async def test_secret_stores_are_refused_even_after_explicit_approval(local, com
     hub, host, gate = local
     result = await hub.call("mcp:local/local_exec", {"command": command}, approver="user")
     assert not result.ok and result.kind == "secret_store"
+    host.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize("mode", ["ask", "always", "never", "bypass"])
+@pytest.mark.parametrize("tool,arguments", [("local_exec", {"command": "Get-Process"}), ("local_job", {"job_id": "x"})])
+async def test_the_owners_pc_is_out_of_reach_of_every_turn_that_is_not_a_quick_question(conn, mode, tool, arguments):
+    # R-PC-01: the context of an ordinary conversation, a task or a phone never reaches the PC, in any permission mode.
+    host = AsyncMock()
+    hub = LocalTools(EmptyHub(), conn, host=host)
+    if mode == "bypass":
+        hub.settings.set("action_mode", "bypass")
+    else:
+        hub.settings.set("local_commands_mode", mode)
+    for context in ((("chat", 1, 10), False, True, "s", False), (("task", 7), False, True, "", False), _CONTEXT.get()):
+        token = _CONTEXT.set(context)
+        try:
+            result = await hub.call(f"mcp:local/{tool}", arguments, approver="user")
+        finally:
+            _CONTEXT.reset(token)
+        assert not result.ok and result.kind == "presence_required" and "out of reach" in result.text
     host.execute.assert_not_awaited()
 
 
@@ -92,7 +112,7 @@ async def test_job_output_and_stop_are_scoped_to_the_conversation(local):
     job_id = json.loads(result.text)["job_id"]
     await asyncio.wait_for(started.wait(), 1)
     assert hub.audit.recent()[0].tool == 'local_exec'
-    token = _CONTEXT.set((("chat", 2, 10), False, True, "other"))
+    token = _CONTEXT.set((("chat", 2, 10), False, True, "other", True))
     try:
         assert (await gate.call_plugin("mcp:local/local_job", {"job_id": job_id, "stop": True})).kind == "not_found"
         assert not stopped.is_set()
@@ -229,10 +249,10 @@ async def test_the_session_is_raphaels_and_never_the_models(desktop, tmp_path):
     assert (await hub.call(key, {'session': 'ended'}, approver='auto')).kind == 'bad_arguments'
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell")
-async def test_statements_of_different_shapes_each_print_whole():
-    # Live: a load figure and then a process list in one command, and the list printed as blank lines.
-    from raphael_core.computer.local_host import LocalHost
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell")
+async def test_statements_of_different_shapes_each_print_whole():
+    # Live: a load figure and then a process list in one command, and the list printed as blank lines.
+    from raphael_core.computer.local_host import LocalHost
     result = await LocalHost().execute("[pscustomobject]@{Load=5}; [pscustomobject]@{Name='proc-測試'; Id=9}; $kept = 7; $kept", timeout_seconds=30)
     assert result["exit_code"] == 0, result
     assert "Load" in result["stdout"] and "proc-測試" in result["stdout"] and "Id" in result["stdout"], result

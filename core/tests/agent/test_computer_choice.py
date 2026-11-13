@@ -22,21 +22,23 @@ def speaker(member_id):
     return SimpleNamespace(id=member_id, is_chief=member_id == 0, depth=0, has_no_job=False, uses_plugin=lambda key: True, uses=lambda name: True)
 
 
-def offered(member_id, plugins):
+def offered(member_id, plugins, **more):
     """What the turn can reach: listed, or found with find_tools (the desktop is seldom called, so it is found)."""
-    snapshot = take_snapshot(plugins, memory=False, speaker=speaker(member_id), max_tier=Tier.T3, interactive=True)
+    snapshot = take_snapshot(plugins, memory=False, speaker=speaker(member_id), max_tier=Tier.T3, interactive=True, **more)
     return set(snapshot.refs) | set(snapshot.work)
 
 
 def test_a_speaker_with_a_computer_of_its_own_is_not_also_offered_the_owners_desktop():
-    assert "computer" not in offered(1, Plugins(1))
-    assert "computer" not in offered(0, Plugins(0))
+    assert "computer" not in offered(1, Plugins(1), owner_pc=True)
+    assert "computer" not in offered(0, Plugins(0), owner_pc=True)
 
 
-def test_a_speaker_without_one_keeps_the_guarded_desktop():
-    assert "computer" in offered(1, Plugins())
-    assert "computer" in offered(0, Plugins())
-    assert "computer" in offered(1, Plugins(2))
+def test_only_a_quick_question_keeps_the_guarded_desktop():
+    # R-PC-01: a conversation that has no computer of its own has none, it is not handed the owner's.
+    assert "computer" in offered(1, Plugins(), owner_pc=True)
+    assert "computer" in offered(0, Plugins(), owner_pc=True)
+    for member, plugins in ((1, Plugins()), (0, Plugins()), (1, Plugins(2)), (1, Plugins(1))):
+        assert "computer" not in offered(member, plugins)
 
 
 def test_a_model_is_told_to_work_where_the_owner_can_see():

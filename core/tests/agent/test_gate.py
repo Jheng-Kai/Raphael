@@ -213,6 +213,18 @@ def test_every_command_for_this_computer_is_for_the_foreground_only():
         gate.check(Action(name, {}), None, worker=True)
 
 
+def test_allow_all_does_not_open_the_owners_pc_to_the_worker(conn):
+    # R-PC-01: no permission mode reopens the commands for this PC or the steps on its desktop to a task.
+    from raphael_core.brain.settings import SettingsStore
+    from raphael_core.computer.tools import GATE_TIERS
+    SettingsStore(conn).set("action_mode", "bypass")
+    gate = ToolGate(conn=conn)
+    assert gate.full_permission
+    for name in (*COMMANDS, *GATE_TIERS):
+        with pytest.raises(NotApproved):
+            gate.check(Action(name, {}), None, worker=True)
+
+
 def test_opening_is_refused_to_the_worker_whatever_the_tier():
     gate = ToolGate()
     assert gate.tier("open") is Tier.T1
