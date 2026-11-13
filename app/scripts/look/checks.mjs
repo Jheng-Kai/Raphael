@@ -6801,6 +6801,49 @@ export function checkRendered(name, context = {}) {
     require(back.getBoundingClientRect().left - edge <= 40, "the chevron stands at the top left");
     return { check: name, rows: rows.length };
   }
+  if (name === "connect-back") {
+    const modal = connectModal(), back = modal.querySelector('.cs-back'), close = modal.querySelector('.modal-x'), content = modal.querySelector('.cs');
+    require(visible(back) && visible(close) && back.matches('button[data-conn="back"]'), "the back chevron and the dialog's ✕ are both real buttons on screen");
+    const a = back.getBoundingClientRect(), x = close.getBoundingClientRect(), centreY = (a.top + a.bottom) / 2, centreX = (a.left + a.right) / 2;
+    require(Math.round(a.width) === Math.round(x.width) && Math.round(a.height) === Math.round(x.height) && a.width >= 30, `the back chevron is the ✕'s own size, not smaller (${a.width}x${a.height} against ${x.width}x${x.height})`);
+    require(parseFloat(getComputedStyle(back).borderTopLeftRadius) >= a.height / 2, "it is round");
+    require(Math.abs(centreY - (x.top + x.bottom) / 2) <= 1, `it stands on the ✕'s line (${centreY} against ${(x.top + x.bottom) / 2})`);
+    const misses = [[a.left + 3, centreY], [a.right - 3, centreY], [centreX, a.top + 3], [centreX, a.bottom - 3], [centreX, centreY]].filter(([px, py]) => { const hit = document.elementFromPoint(px, py); return !(hit && (hit === back || back.contains(hit))); });
+    require(misses.length === 0, `a press anywhere on its 36 px lands on it (${misses.length} points did not)`);
+    const glyph = back.querySelector('svg.i').getBoundingClientRect();
+    require(Math.round(glyph.width) === 18 && Math.abs(glyph.left - content.getBoundingClientRect().left) <= 3, `its glyph is 18 px and stands on the content's left edge (${glyph.left} against ${content.getBoundingClientRect().left})`);
+    return { check: name, size: [a.width, a.height], close: [x.width, x.height] };
+  }
+  if (name === "connect-app-from-row") {
+    const modal = connectModal(), page = modal.querySelector('.cs-page');
+    require(visible(page) && page.querySelector('h2.big')?.textContent === 'Notion', "a press on a connected row opened that app's page");
+    require(visible(page.querySelector('.cs-head .cs-state')) && visible(page.querySelector('.cs-tools')), "the page is the one the main view's row opens: its connected state and its tools");
+    return { check: name };
+  }
+  if (name === "connected-rows") {
+    const modal = connectModal(), list = modal.querySelector('.cs-connected'), rows = [...list.querySelectorAll('.cs-linked')];
+    require(visible(list) && !modal.querySelector('.cs-page') && rows.length >= 3, "the list is on screen and no app's page opened from a press on a switch");
+    const notion = list.querySelector('.cs-linked[data-id="composio:notion"] [role="switch"]');
+    require(notion.getAttribute('aria-checked') === 'true', "the switch only turned the app off and on");
+    const main = list.querySelector('.cs-linked:nth-child(2) .cs-main'), style = getComputedStyle(main);
+    require(main.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and the hover fill of the floating surface (${style.backgroundColor}, ${style.cursor})`);
+    require(getComputedStyle(main.closest('.cs-linked')).cursor === 'pointer', "the whole row has the pointer");
+    const box = main.getBoundingClientRect(), tile = main.querySelector('.cs-tile').getBoundingClientRect(), text = main.querySelector('.tx').getBoundingClientRect();
+    require(tile.left - box.left >= 6 && box.right - text.right >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the words and the mark (${tile.left - box.left}, ${box.right - text.right})`);
+    const switchBox = main.closest('.cs-linked').querySelector('[role="switch"]').getBoundingClientRect();
+    require(switchBox.left - box.right >= 8, `the fill stops 8 px or more before the switch (${switchBox.left - box.right})`);
+    return { check: name, rows: rows.length };
+  }
+  if (name === "app-row-hover") {
+    const modal = connectModal(), row = modal.querySelector('.cs-card .cs-main:hover');
+    require(row && visible(row), "a row of the main view is under the pointer");
+    const style = getComputedStyle(row), box = row.getBoundingClientRect(), tile = row.querySelector('.cs-tile').getBoundingClientRect(), text = row.querySelector('.tx').getBoundingClientRect();
+    require(style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and the hover fill of the floating surface, as a connected row has (${style.backgroundColor}, ${style.cursor})`);
+    require(tile.left - box.left >= 6 && box.right - text.right >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the words and the mark (${tile.left - box.left}, ${box.right - text.right})`);
+    const join = row.parentElement.querySelector('.cs-connect, .cs-state');
+    require(!join || join.getBoundingClientRect().left - box.right >= 8, "the fill stops 8 px or more before the 連結 button");
+    return { check: name };
+  }
   if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {
     const modal = connectModal(), page = modal.querySelector('.cs-page'), back = page.querySelector('[data-conn="back"]'), close = modal.querySelector('.modal-x');
     require(visible(page) && !page.querySelector('.cs-top') && visible(back) && back.tagName === 'BUTTON', "an app's page has a bare back chevron and no title row");
