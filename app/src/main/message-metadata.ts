@@ -7,6 +7,17 @@ export const reactionControlHTML = (): string => iconButton("smile", t("chat.rea
 export function reactionRowHTML(reactions: readonly string[] = []): string {
   return reactions.length ? `<div class="message-reactions" aria-label="${esc(t("chat.reactions"))}">${reactions.map(emoji => `<button type="button" class="btn sm reaction" data-reaction="${esc(emoji)}" aria-pressed="true" aria-label="${esc(t("chat.reactionToggle", { p0: emoji }))}">${esc(emoji)}</button>`).join("")}</div>` : "";
 }
+const FIRST_BUBBLE = /<div class="(?:ans|bubble)(?=[\s"])[^"]*"[^>]*>/;
+/**
+ * A message's reactions stand on its first bubble's top corner (the right one, the left of the owner's), so they belong
+ * to the bubble itself: drawn inside it, they follow it whatever sits under it (cards, a sign-in button, a failure row).
+ * A message with no bubble (only a card) keeps them as the last part, which the CSS puts on the first part's corner.
+ */
+export function withReactions(html: string, reactions: readonly string[] | undefined): string {
+  const row = reactionRowHTML(reactions);
+  const bubble = row ? FIRST_BUBBLE.exec(html) : null;
+  return !row ? html : bubble ? html.slice(0, bubble.index + bubble[0].length) + row + html.slice(bubble.index + bubble[0].length) : html + row;
+}
 /** The quick reactions above a message menu, then the slot for every emoji: each toggles, and the ones already given read as pressed. */
 export function menuReactionsHTML(reactions: readonly string[]): string {
   return `<div class="menu-reactions" role="group" aria-label="${esc(t("chat.react"))}">${quickReactionsHTML(reactions, "data-lead")}</div>`;

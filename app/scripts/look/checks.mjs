@@ -338,19 +338,63 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name };
   }
+  if (name === 'reaction-owner') {
+    const message = document.querySelector('.tn[data-id="8201"] .owner-message'), row = message?.querySelector('.message-reactions');
+    require(row && visible(row) && row.closest('.bubble'), "the owner's reactions are drawn on the owner's own bubble");
+    const chips = [...row.querySelectorAll('[data-reaction]')];
+    require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉 😂', `both reactions are there (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
+    const tops = chips.map(chip => chip.getBoundingClientRect().top);
+    require(tops.every(top => Math.abs(top - tops[0]) < 1), 'several reactions share one row');
+    return { check: name };
+  }
+  if (name === 'reaction-signin') {
+    const message = document.querySelector('.chat-message[data-reply]'), row = message?.querySelector('.message-reactions'), strip = message?.querySelector(':scope > .turn-signin');
+    const button = strip?.querySelector('[data-act="cli-signin"]');
+    require(visible(row) && visible(strip) && visible(button), 'the failed reply has its reaction and its 重新登入 button');
+    require(row.querySelector('[data-reaction="👎"]'), 'the reaction is 👎');
+    require(!strip.contains(row) && !strip.nextElementSibling?.matches('.message-reactions'), 'the reaction is not a part under the button');
+    const bubble = row.closest('.ans').getBoundingClientRect(), pill = row.getBoundingClientRect(), under = button.getBoundingClientRect();
+    require(pill.top < bubble.top && pill.bottom < bubble.bottom, "the reaction stands on the bubble's top edge");
+    require(pill.bottom < under.top, 'and above the button, never below it');
+    return { check: name, strip: Math.round(strip.getBoundingClientRect().right - bubble.right) };
+  }
   if (name === 'reaction-layout-rest' || name === 'reaction-layout-hover') {
-    const rows = [...document.querySelectorAll('.chat-message > .message-reactions')].filter(visible);
+    const rows = [...document.querySelectorAll('.chat-message .message-reactions')].filter(visible);
     require(rows.length > 0, 'there are saved reactions to inspect');
+    const overlaps = (a, b, depth = 0.5) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > depth;
     const positions = rows.map(row => {
-      const bubble = row.previousElementSibling, actions = row.nextElementSibling;
-      require(bubble?.matches('.ans, .bubble') && actions?.matches('.message-actions'), 'reactions follow the bubble before the hover actions');
-      const bounds = row.getBoundingClientRect(), message = row.parentElement.getBoundingClientRect(), edge = bubble.getBoundingClientRect();
-      // On the bubble's bottom-right corner, half over its edge, adding no height.
-      require(bounds.top < edge.bottom && bounds.bottom > edge.bottom, 'reactions straddle the bottom edge of their bubble');
-      require(bounds.right <= edge.right + 1 && edge.right - bounds.right <= 16, 'reactions stand at the bubble\'s right corner');
-      const style = getComputedStyle(row), takes = bounds.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-      require(takes <= 1, `reactions add no height to the message (they take ${Math.round(takes)} px)`);
-      return { top: bounds.top, left: bounds.left, height: message.height };
+      const message = row.closest('.chat-message'), owner = message.classList.contains('owner-message'), bubble = row.closest('.ans, .bubble');
+      // Drawn inside the first bubble, so the cards, buttons and failure rows that follow it never take them from it.
+      require(bubble && message.contains(bubble), 'reactions are drawn inside their bubble');
+      const bounds = row.getBoundingClientRect(), edge = bubble.getBoundingClientRect(), whole = message.getBoundingClientRect();
+      const ring = { left: bounds.left - 2, right: bounds.right + 2, top: bounds.top - 2, bottom: bounds.bottom + 2 };
+      // Standing on the bubble's top-right corner (the owner's top-left), over its top edge, clear of the bubble above.
+      require(bounds.top < edge.top && bounds.bottom > edge.top, 'reactions straddle the top edge of their bubble');
+      require(owner ? bounds.left >= edge.left - 6 && bounds.left <= edge.left + 2 : bounds.right <= edge.right + 6 && bounds.right >= edge.right - 2, `reactions stand on the bubble's top-${owner ? 'left' : 'right'} corner`);
+      require(getComputedStyle(row).position === 'absolute', 'reactions take no room in the message');
+      const above = [...document.querySelectorAll('.chat-message :is(.ans, .bubble)')].filter(other => other !== bubble).map(other => other.getBoundingClientRect())
+        .filter(other => other.width && other.bottom <= edge.top + 1 && other.right > ring.left && other.left < ring.right).sort((a, b) => b.bottom - a.bottom)[0];
+      if (above) require(ring.top >= above.bottom, `reactions keep clear of the bubble above (${Math.round(ring.top)} < ${Math.round(above.bottom)})`);
+      const words = [...bubble.querySelectorAll('.message-text')].some(text => {
+        const walk = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+        for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+          if (!node.textContent.trim()) continue;
+          const range = document.createRange(); range.selectNodeContents(node);
+          if ([...range.getClientRects()].some(rect => overlaps(rect, bounds, 1))) return true;
+        }
+        return false;
+      });
+      require(!words, "reactions never cover the bubble's words");
+      const others = [...message.children].filter(part => part !== row && !part.contains(bubble) && visible(part) && !part.matches('.message-reactions'));
+      require(!others.some(part => overlaps(part.getBoundingClientRect(), bounds)), `reactions cover none of the message's other parts, hover actions included (${others.map(part => part.className).join(' ')})`);
+      const column = row.closest('.tn')?.getBoundingClientRect() ?? whole;
+      require(bounds.left >= Math.max(0, column.left - 1) && bounds.right <= Math.min(window.innerWidth, column.right + 1), 'reactions stay inside the column');
+      const centre = [bounds.left + bounds.width / 2, bounds.top + bounds.height / 2];
+      const heart = [edge.left + edge.width / 2, edge.top + edge.height / 2];
+      // A bubble behind a panel that opened over it (a side thread at 720) is not looked at, so neither are its reactions.
+      const seen = heart[1] > 0 && heart[1] < window.innerHeight && !!document.elementFromPoint(...heart)?.closest('.ans, .bubble')?.isSameNode(bubble);
+      if (seen && centre[1] > 0 && centre[1] < window.innerHeight) require(document.elementFromPoint(...centre)?.closest('.message-reactions') === row, 'nothing clips or covers the reactions');
+      return { top: bounds.top, left: bounds.left, height: whole.height };
     });
     if (name === 'reaction-layout-rest') window.__look.reactionPositions = positions;
     else {
@@ -550,12 +594,31 @@ export function checkRendered(name, context = {}) {
         require(rows.find(row => row.dataset.panelFile === 'delivered-file:bundle')?.querySelector('.lib-icon').dataset.kind === 'archive', 'the kind sets the mark');
       }
       if (long) require(scroll.scrollHeight > scroll.clientHeight * 2, 'a long list scrolls inside the panel');
+    } else if (/^member-panel-library-single(?:-pages)?$/.test(name)) {
+      // A Library of one kind alone: the same four chips in order, 26 px pills in one row; the kind it has under 全部, and the chip
+      // of a kind it has not as one quiet line (never a blank, never the 全部 sentence) under the label's inset.
+      const body = panel.querySelector('.mb-tab-body'), chips = [...body.querySelectorAll('.lib-filters [data-lib-filter]')], pages = name.endsWith('-pages');
+      require(chips.map(button => button.dataset.libFilter).join() === 'all,pages,media,files' && chips.map(button => button.textContent).join() === '全部,頁面,媒體,檔案', `a Library of one kind still has the four chips in order (${chips.map(button => button.textContent)})`);
+      require(new Set(chips.map(button => Math.round(button.getBoundingClientRect().top))).size === 1 && chips.every(button => Math.abs(button.getBoundingClientRect().height - 26) <= 1), 'the chips are one row of 26 px pills');
+      const pressed = chips.filter(button => button.getAttribute('aria-pressed') === 'true');
+      require(pressed.length === 1 && pressed[0].dataset.libFilter === (pages ? 'pages' : 'all'), `the ${pages ? 'pages' : 'all'} chip is the one pressed`);
+      require(chips.every(button => button.getBoundingClientRect().right <= panel.getBoundingClientRect().right) && panel.scrollWidth <= panel.clientWidth + 1, 'the four chips fit the panel');
+      if (pages) {
+        const line = body.querySelector('.lib-filters + .mp-empty');
+        require(line && line.textContent === '還沒有頁面' && !body.querySelector('.lib-row, .lib-card'), `the chip of a kind with nothing is one quiet line (${line?.textContent})`);
+        require(line.getBoundingClientRect().top >= body.querySelector('.lib-filters').getBoundingClientRect().bottom && getComputedStyle(line).color !== getComputedStyle(pressed[0]).color, 'the line stands under the chips, quieter than the pressed chip');
+      } else {
+        const rows = [...body.querySelectorAll('.lib-row')], kinds = new Set(rows.map(row => row.querySelector('.lib-icon').dataset.kind));
+        require(rows.length === 5 && [...kinds].every(kind => ['image', 'video', 'audio'].includes(kind)) && !body.querySelector('.mp-empty'), `全部 lists the five pictures, video and audio (${rows.length})`);
+      }
     } else if (name === 'member-panel-library-open') {
       const opened = window.__look.state?.openedLibraryFile ?? window.__look.openedLibraryFile;
       require(opened?.id === 'delivered-file:bundle' && opened.member_id === 1, `the delivered file opens by its Library handle, never a path (${JSON.stringify(opened)})`);
       require(visible(document.querySelector('.media-lightbox img')), 'a picture opens large');
     } else if (name === 'member-panel-library-empty') {
-      require(panel.querySelector('.mb-tab-body').textContent === '還沒有檔案或頁面', 'library has one empty sentence');
+      const body = panel.querySelector('.mb-tab-body'), chips = [...body.querySelectorAll('.lib-filters [data-lib-filter]')];
+      require(body.querySelector('.lib-filters + .mp-empty')?.textContent === '還沒有檔案或頁面' && !body.querySelector('.lib-row'), 'library has one empty sentence');
+      require(chips.map(button => button.textContent).join() === '全部,頁面,媒體,檔案', 'an empty Library still has the four chips');
     } else if (name === 'member-panel-computer-live') {
       require(visible(panel.querySelector('iframe')), 'the existing stream is visible');
       const open = panel.querySelector('[data-desktop="enlarge"]'), screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), cover = open.getBoundingClientRect(), caption = panel.querySelector('.desktop-caption');
@@ -705,7 +768,7 @@ export function checkRendered(name, context = {}) {
       const menu = document.querySelector('#app-popover');
       require(visible(menu) && ['👍','😂','👎','❤','🎉'].every(emoji=>menu.textContent.includes(emoji)), 'one compact pill of the five available reactions');
     }
-    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear below their message');
+    if (name === 'reaction-row') require(document.querySelector('.tn[data-id="8201"] [data-reaction="👍"]') && document.querySelector('.tn[data-id="8201"] [data-reaction="❤"]'), 'saved reactions appear on the bubble of their message');
     if (name === 'reaction-not-approval') {
       require(calls.some(call=>call.method==='agent.react' && call.params.emoji==='😂'), 'the actual reaction action reached core');
       require(!calls.some(call=>['agent.confirm','owner_questions.answer','integrations.draft_send'].includes(call.method)), 'a reaction never approves, answers or sends');

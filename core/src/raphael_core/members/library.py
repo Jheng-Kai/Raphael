@@ -15,13 +15,31 @@ LINK = re.compile(r'!?\[([^\]\n]{0,320})\]\((?:<([^>\n]+)>|([^\s)]+))(?:\s+"[^"\
 SCAN_LIMIT = 1000
 
 
-def _kind(name, mime):
+# The panel's chips follow the kind: pages are published pages, media are images, video and audio, files are the rest
+# (documents, archives, other files). The mime type the host guesses is not always known (Windows has none for .webp,
+# an upload can arrive as application/octet-stream), so the extension decides when the mime says nothing.
+_SUFFIX_KINDS = {
+    'image': ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tif', '.tiff', '.heic', '.heif', '.avif'),
+    'video': ('.mp4', '.m4v', '.mov', '.webm', '.mkv', '.avi', '.wmv', '.mpg', '.mpeg', '.3gp'),
+    'audio': ('.mp3', '.wav', '.m4a', '.ogg', '.oga', '.opus', '.flac', '.aac', '.wma', '.aiff'),
+    'archive': ('.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.bz2', '.tbz2', '.xz', '.txz', '.zst'),
+    'document': ('.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf', '.txt', '.md', '.csv', '.tsv'),
+}
+_ARCHIVE_MIMES = ('application/zip', 'application/x-zip-compressed', 'application/x-7z-compressed', 'application/vnd.rar',
+                  'application/x-rar-compressed', 'application/x-tar', 'application/gzip', 'application/x-gzip',
+                  'application/x-bzip2', 'application/x-xz', 'application/zstd')
+
+
+def _kind(name, mime, *others):
+    mime = (mime or '').split(';')[0].strip().lower()
     if mime.startswith(('image/', 'video/', 'audio/')):
         return mime.split('/')[0]
-    if Path(name).suffix.lower() in ('.zip', '.7z', '.rar', '.tar', '.gz', '.bz2', '.xz'):
+    for kind, suffixes in _SUFFIX_KINDS.items():
+        if any(Path(candidate).suffix.lower() in suffixes for candidate in (name, *others) if isinstance(candidate, str)):
+            return kind
+    if mime in _ARCHIVE_MIMES:
         return 'archive'
-    return 'document' if mime.startswith('text/') or Path(name).suffix.lower() in (
-        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp', '.rtf') else 'file'
+    return 'document' if mime.startswith('text/') else 'file'
 
 
 def _links(text):
@@ -92,7 +110,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
     def attachment(key, name, mime, row, at_ms):
         if not isinstance(key, str) or not ID.fullmatch(key) or not isinstance(name, str) or not isinstance(mime, str):
             return
-        keep('attachment:' + key, identifier='attachment:' + key, name=name, mime=mime, row=row,
+        keep('attachment:' + key, identifier='attachment:' + key, name=name, mime=mime, kind=_kind(name, mime, key), row=row,
              at_ms=at_ms, attachment_id=key, open={'method': 'attachments.path', 'params': {'id': key}})
 
     # Owner uploads live in agent_turns.attachments and are deliberately not read.

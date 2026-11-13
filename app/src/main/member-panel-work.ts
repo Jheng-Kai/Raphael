@@ -4,8 +4,9 @@ import { t } from "./i18n";
 import { esc, ico, tabs, type IconName } from "./ui";
 
 // The member panel's Library, as Grok Bot's: only what the member delivered, never the screenshots and scratch files of
-// its work. Four chips (全部 / 頁面 / 媒體 / 檔案, only the kinds there are), then the items grouped by recency, each
-// group one rounded card of one-line rows: a 20 px mark (a picture's own thumbnail, else its kind's icon) and the title.
+// its work. Four chips (全部 / 頁面 / 媒體 / 檔案) always stand at the top, as Grok Bot's four tabs do, then the items grouped
+// by recency, each group one rounded card of one-line rows: a 20 px mark (a picture's own thumbnail, else its kind's icon)
+// and the title. A chip whose kind has nothing shows one quiet line in the cards' place.
 // A press opens it (`members.library`, brief 10).
 export type LibraryKind = "document" | "page" | "image" | "video" | "audio" | "archive" | "file" | "link";
 export interface LibraryItem {
@@ -42,16 +43,12 @@ function rowHTML(item: LibraryItem): string {
 
 /** The Library's chips: 頁面 pages, 媒體 pictures, videos and audio, 檔案 documents, archives and other files. */
 export type LibraryFilter = "all" | "pages" | "media" | "files";
+const FILTERS: readonly LibraryFilter[] = ["all", "pages", "media", "files"];
 const FILTER_OF: Record<LibraryKind, Exclude<LibraryFilter, "all"> | null> = {
   page: "pages", image: "media", video: "media", audio: "media", document: "files", archive: "files", file: "files", link: null,
 };
 const FILTER_KEYS = { all: "members.libraryAll", pages: "members.libraryPages", media: "members.libraryMedia", files: "members.libraryFiles" } as const;
-
-/** The chips worth a press: the kinds there are, and 全部, only when there is more than one kind. */
-export function libraryFilters(files: readonly LibraryItem[]): LibraryFilter[] {
-  const kinds = (["pages", "media", "files"] as const).filter(kind => files.some(item => FILTER_OF[item.kind] === kind));
-  return kinds.length > 1 ? ["all", ...kinds] : [];
-}
+const EMPTY_KEYS = { all: "members.panelNoFiles", pages: "members.libraryNoPages", media: "members.libraryNoMedia", files: "members.libraryNoFiles" } as const;
 
 /** Recency groups, newest first: today, yesterday, the rest of the past week, older. */
 const GROUPS = [
@@ -68,10 +65,10 @@ function groupOf(at: number, now: number): (typeof GROUPS)[number]["id"] {
 export function panelLibraryHTML(work: PanelWork | null, failed: boolean, now = Date.now(), filter: LibraryFilter = "all"): string {
   // A link is no deliverable: a member is asked for it again.
   const all = (work?.files ?? []).filter(item => FILTER_OF[item.kind] !== null);
-  if (!all.length) return `<p class="mp-empty">${esc(t(failed ? "members.panelReadFailed" : work ? "members.panelNoFiles" : "common.loading"))}</p>`;
-  const filters = libraryFilters(all), shown = filters.includes(filter) ? filter : "all";
+  const shown = FILTERS.includes(filter) ? filter : "all";
   const files = (shown === "all" ? all : all.filter(item => FILTER_OF[item.kind] === shown)).sort((a, b) => b.at_ms - a.at_ms);
-  const bar = filters.length ? `<div class="lib-filters">${tabs(filters.map(id => ({ id, label: t(FILTER_KEYS[id]), attrs: ` data-lib-filter="${id}"` })), shown, { label: t("members.panelTab.library"), kind: "filter" })}</div>` : "";
+  const bar = `<div class="lib-filters">${tabs(FILTERS.map(id => ({ id, label: t(FILTER_KEYS[id]), attrs: ` data-lib-filter="${id}"` })), shown, { label: t("members.panelTab.library"), kind: "filter" })}</div>`;
+  if (!files.length) return bar + `<p class="mp-empty">${esc(t(failed ? "members.panelReadFailed" : work ? EMPTY_KEYS[shown] : "common.loading"))}</p>`;
   return bar + GROUPS.map(group => {
     const items = files.filter(item => groupOf(item.at_ms, now) === group.id);
     return items.length ? `<section class="lib-group" data-group="${group.id}"><div class="mb-dh">${esc(group.label())}</div><div class="lib-card">${items.map(rowHTML).join("")}</div></section>` : "";
