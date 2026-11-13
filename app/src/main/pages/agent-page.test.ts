@@ -24,6 +24,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { emblemTextureArrived, setAvatar } from "../avatar";
 import { getLocale, setLocale } from "../i18n";
 import * as ui from "../ui";
 
@@ -498,4 +499,24 @@ describe("a continuous typed turn", () => {
     document.querySelector<HTMLButtonElement>('[data-act="open-url"]')!.click();
     expect(api.openExternalUrl).toHaveBeenCalledWith("https://example.com/photo.png");
   });
+});
+
+// Owner rule: a refresh that changes nothing touches nothing. The emblem texture and the owner's picture are read at
+// start-up and end after the first draw; they once cost the reader every line at the next change.
+test("pictures arriving after the first draw leave the drawn lines in place when the next turn comes", async () => {
+  vi.useFakeTimers();
+  let turns = [turn(2), turn(1)];
+  api.agentHistoryList.mockImplementation(async () => ({ turns }));
+  mount();
+  await flush();
+  const drawn = [...document.querySelectorAll<HTMLElement>(".tn[data-id]")];
+  expect(drawn).toHaveLength(2);
+  emblemTextureArrived();
+  setAvatar(null);
+  await flush();
+  turns = [turn(3), ...turns];
+  send({ type: "AgentTurn", turn_id: 3 });
+  await vi.advanceTimersByTimeAsync(300);
+  expect(document.querySelectorAll(".tn[data-id]")).toHaveLength(3);
+  for (const line of drawn) expect(line.isConnected, `line ${line.dataset.id} was replaced`).toBe(true);
 });
