@@ -309,6 +309,16 @@ pub struct TypedQuestion<'a> {
     pub quick: bool,
 }
 
+/// What a composer holds when its voice button ends a recording: the words typed there, its
+/// attachments and its quote. They go to `agent.ask` with the words that were said, as a typed
+/// send would carry them.
+#[derive(Default)]
+pub struct VoiceExtra {
+    pub text: String,
+    pub attachments: Vec<Value>,
+    pub quote: Option<Value>,
+}
+
 /// The first agent call for a typed or spoken question, with optional transcription timing.
 struct AgentQuestion<'a> {
     intent: Option<String>,
@@ -354,6 +364,9 @@ pub trait Desk: Send + Sync {
         member: u64,
         turn_id: Option<u64>,
     ) -> JoinHandle<Result<Value, RpcError>>;
+    /// The composer's voice button is ending its recording with `extra` in the composer: false when
+    /// no such recording is being made, which leaves the composer as it is.
+    fn voice_composed(&self, member: u64, conversation: u64, extra: VoiceExtra) -> bool;
     /// The YES/NO question that waits for its answer now, with the time it has left as its
     /// `timeout_ms`.
     fn open_question(&self) -> Option<AskPrompt>;
@@ -396,6 +409,9 @@ struct State {
     ask: Option<PendingAsk>,
     drafts: Option<Vec<Value>>,
     group_drafts: Option<Vec<Value>>,
+    /// What the composer held when its voice button ended the recording: it goes with the words
+    /// that were said (see [`DictationController::voice_composed`]).
+    voice_extra: Option<VoiceExtra>,
     /// When the current recording started, on the clock of [`DictationController::on_hotkey`].
     started_ms: u64,
     /// When the dictation key last ended a question, on the same clock: the agent key pressed a
@@ -457,6 +473,7 @@ impl State {
         self.speech += 1;
         self.drafts = None;
         self.group_drafts = None;
+        self.voice_extra = None;
         self.take_ask();
         self.session.take()
     }
@@ -575,6 +592,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 ask: None,
                 drafts: None,
                 group_drafts: None,
+                voice_extra: None,
                 started_ms: 0,
                 question_stopped_ms: None,
                 shown: Vec::new(),
@@ -1182,6 +1200,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 started,
             });
             state.agent = (kind == Kind::Agent).then_some(AgentStage::Listening);
+            state.voice_extra = None;
             // The emblem of a dictation that a question takes over is the question's now.
             state.on_overlay = kind == Kind::Agent && replaced.is_some();
             state.started_ms = now_ms;
@@ -1906,6 +1925,17 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             return;
         }
         let transcript_ms = released.elapsed().as_secs_f64() * 1000.0;
+        // What the composer held goes with the words said, as a typed send carries it. Taken only
+        // now that the stage is past hearing: a late hand-over finds no recording to join.
+        let VoiceExtra {
+            text: typed,
+            attachments,
+            quote,
+        } = lock(&self.state).voice_extra.take().unwrap_or_default();
+        let question = match (typed.trim(), question) {
+            ("", spoken) => spoken.to_owned(),
+            (typed, spoken) => format!("{typed} {spoken}"),
+        };
         // The words are in, so the answer is worked on by a turn of its own, as a typed one's is:
         // the microphone and the dictation key are free again meanwhile. Said into a conversation,
         // the answer belongs there; said to the overlay (Alt+Space), it is shown on the overlay
@@ -1917,13 +1947,13 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 &id,
                 AgentQuestion {
                     intent: None,
-                    text: question,
+                    text: &question,
                     target_app,
                     source: None,
-                    attachments: Vec::new(),
+                    attachments,
                     member: session.member,
                     replace_turn_id: None,
-                    quote: None,
+                    quote,
                     conversation_id: session.conversation_id,
                     quick: session.quick,
                     transcript_ms: Some(transcript_ms),
@@ -2780,6 +2810,22 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> Desk
             }
             core.call("agent.history.retract", params).await
         })
+    }
+
+    fn voice_composed(&self, member: u64, conversation: u64, extra: VoiceExtra) -> bool {
+        let mut state = lock(&self.state);
+        let recording = state.session.as_ref().is_some_and(|session| {
+            session.kind == Kind::Agent
+                && session.member == member
+                && session.conversation_id == Some(conversation)
+        }) && matches!(
+            state.agent,
+            Some(AgentStage::Listening | AgentStage::Transcribing)
+        );
+        if recording {
+            state.voice_extra = Some(extra);
+        }
+        recording
     }
 
     fn open_question(&self) -> Option<AskPrompt> {
@@ -6770,6 +6816,133 @@ mod tests {
         let params = c.core().call_params("agent.ask");
         assert_eq!(params["conversation_id"], 4);
         assert_eq!(params["destination"], QUICK_DESTINATION);
+    }
+
+    fn composed(text: &str) -> VoiceExtra {
+        VoiceExtra {
+            text: text.to_owned(),
+            attachments: vec![json!({"name": "photo.png", "mime": "image/png", "data": "AQID"})],
+            quote: Some(json!({"text": "Selected passage", "author": "You"})),
+        }
+    }
+
+    /// The owner, 2026-11-14: with a picture attached, the composer's voice button sent the voice turn without it.
+    #[tokio::test]
+    async fn a_composers_voice_message_carries_its_words_files_and_quote_to_the_agent() {
+        for (member, conversation, quick) in [(3, 42, false), (0, 4, true)] {
+            let c = agent(answer("", "Done"));
+            run(
+                &c,
+                HotkeyEvent::ConversationDown {
+                    member,
+                    conversation,
+                    quick,
+                },
+                0,
+            )
+            .await;
+            assert!(c.voice_composed(member, conversation, composed("Typed first")));
+            run(&c, AgentUp, 900).await;
+            let params = c.core().call_params("agent.ask");
+            assert_eq!(params["text"], "Typed first 幫我複製這句話");
+            assert_eq!(
+                params["attachments"],
+                json!([{"name": "photo.png", "mime": "image/png", "data": "AQID"}])
+            );
+            assert_eq!(
+                params["quote"],
+                json!({"text": "Selected passage", "author": "You"})
+            );
+            assert_eq!(params["conversation_id"], json!(conversation));
+            assert_eq!(params.get("source"), None, "it is still a voice message");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_composers_files_alone_go_with_the_words_said() {
+        let c = agent(answer("", "Done"));
+        run(
+            &c,
+            HotkeyEvent::ConversationDown {
+                member: 3,
+                conversation: 42,
+                quick: false,
+            },
+            0,
+        )
+        .await;
+        let extra = VoiceExtra {
+            text: String::new(),
+            ..composed("")
+        };
+        assert!(c.voice_composed(3, 42, extra));
+        run(&c, AgentUp, 900).await;
+        let params = c.core().call_params("agent.ask");
+        assert_eq!(params["text"], "幫我複製這句話");
+        assert_eq!(params["attachments"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[tokio::test]
+    async fn a_composer_is_taken_only_by_the_recording_of_its_own_thread_and_only_once() {
+        let c = agent(answer("", "Done"));
+        assert!(
+            !c.voice_composed(3, 42, composed("none")),
+            "nothing is recording"
+        );
+        run(
+            &c,
+            HotkeyEvent::ConversationDown {
+                member: 3,
+                conversation: 42,
+                quick: false,
+            },
+            0,
+        )
+        .await;
+        assert!(!c.voice_composed(4, 42, composed("another member")));
+        assert!(!c.voice_composed(3, 43, composed("another conversation")));
+        run(&c, AgentUp, 900).await;
+        let params = c.core().call_params("agent.ask");
+        assert_eq!(params["text"], "幫我複製這句話");
+        assert_eq!(params.get("attachments"), None);
+        assert_eq!(params.get("quote"), None);
+        // The question is with the agent: a late hand-over finds no recording, and the next question starts clean.
+        assert!(!c.voice_composed(3, 42, composed("late")));
+        run(&c, AgentDown, 2000).await;
+        run(&c, AgentUp, 2900).await;
+        assert_eq!(c.core().all_params("agent.ask").len(), 2);
+        assert_eq!(c.core().call_params("agent.ask").get("attachments"), None);
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_recording_forgets_the_composer_it_was_given() {
+        let c = agent(answer("", "Done"));
+        run(
+            &c,
+            HotkeyEvent::ConversationDown {
+                member: 3,
+                conversation: 42,
+                quick: false,
+            },
+            0,
+        )
+        .await;
+        assert!(c.voice_composed(3, 42, composed("Typed first")));
+        run(&c, Cancel, 100).await;
+        run(
+            &c,
+            HotkeyEvent::ConversationDown {
+                member: 3,
+                conversation: 42,
+                quick: false,
+            },
+            1000,
+        )
+        .await;
+        run(&c, AgentUp, 1900).await;
+        let params = c.core().call_params("agent.ask");
+        assert_eq!(params["text"], "幫我複製這句話");
+        assert_eq!(params.get("attachments"), None);
     }
 
     #[tokio::test]

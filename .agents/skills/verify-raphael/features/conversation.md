@@ -1327,7 +1327,7 @@ Room speech uses the shared dictation finalizer and dictionary learning (`chat-c
 See [Owner polish](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
 
 ```powershell
-npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- composer-voice-recording composer-voice-sent composer-voice-attachment-quick composer-voice-attachment-member composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 ```
 
 `composer-send-while-working` sends three messages during running work and checks the slot never moves, each message shows in order and nothing stops.
@@ -1356,7 +1356,7 @@ npm run look -- dialog-caption-confirm --theme both --width 1120,720,1920x1080
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,
 no second control); `composer-voice-sent` presses it and checks the same button is Stop once the recording is sent, with one
-question key down and up and no cancellation. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
+question key down and up and no cancellation. `composer-voice-attachment-quick` and `composer-voice-attachment-member` paste a picture, type words, record and press the same button (owner, 2026-11-14, R-UI-106): the words and the picture cross to the recording once (`agent_voice_composed`) before the key ends it, no typed message is sent and the composer is empty. The native side holds them for the question being recorded and sends them with the words said (`dictation.rs`), so the turn is one voice message with its files and quote; the fixture proves the page's half, the Rust tests the controller's. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
 `agent-members.test.ts` and `chat-composer.test.ts` (`drawTaskSlot`). The fixture cannot prove a microphone or the native key.
 
 ## Rich replies
