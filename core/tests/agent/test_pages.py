@@ -81,6 +81,33 @@ def test_refusals_leave_no_page_or_revision(conn, field, value, kind):
     assert conn.execute("SELECT COUNT(*) FROM page_revisions").fetchone()[0] == 0
 
 
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+
+@pytest.mark.parametrize("html", [
+    # The links on the daily overview Raphael could not show on 2026-11-14.
+    "<button onclick=\"window.raphael.open('https://www.accuweather.com/zh/tw/taichung-city/315040/weather-forecast/315040')\">Source</button>",
+    "<a href='https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition/'>NVIDIA</a>",
+    f'<img alt="dot" src="data:image/png;base64,{PNG}">',
+    '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" '
+    'integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>',
+    "<script>new Chart(c, {data: {labels: ['09', '12'], datasets: [{data: [1794240000006, 1794240000106]}]}})</script>",
+], ids=["weather-link", "news-link", "picture", "library", "times"])
+def test_ordinary_links_pictures_libraries_and_numbers_are_not_secrets(conn, html):
+    assert stored(conn, html=html)["html"] == html
+
+
+@pytest.mark.parametrize("html", [
+    "<a href='https://api.example.com/v1/Q7x9Lm2Pz8Rt4Kw6Vb3Nc5Jd1Hf0Gs7Ya2Ue/forecast'>x</a>",
+    '<object data="data:text/plain;base64,cGFzc3dvcmQgaXMgaHVudGVy"></object>',  # "password is hunter"
+    "<p>sk-or-v1-8f3a9c0d2b7e4f1a6c5d8e9f0a1b2c3d</p>",
+], ids=["key-in-a-link", "secret-in-an-embedded-text", "token"])
+def test_a_secret_in_a_link_or_an_embedded_text_is_still_refused(conn, html):
+    with pytest.raises(PageError) as error:
+        stored(conn, html=html)
+    assert error.value.kind == "secret"
+
+
 def test_updates_keep_only_ten_revisions_and_refuse_secrets_atomically(conn):
     page = stored(conn)
     store = PageStore(conn)
@@ -138,7 +165,10 @@ async def test_host_headers_tokens_host_validation_theme_and_deleted_pages(conn)
                       "Referrer-Policy: no-referrer", "https://cdn.jsdelivr.net"):
             assert value in headers
         assert "allow-same-origin" not in headers and "unsafe-eval" not in headers
-        assert "window.raphael" in body and "ResizeObserver" in body and "--bg:#18181b" in body
+        assert "window.raphael" in body and "ResizeObserver" in body and "--bg:#0a0a0a" in body
+        # The app's own theme words, the chart colours of its dark theme among them, and its face.
+        assert "--surface:#161616" in body and "--chart-1:#3987e5" in body and "--chart-8:#e66767" in body
+        assert "font-family:var(--font)" in body and '--font:"Inter"' in body
         assert "window.loaded=1" in body
         # The page tells the window where the owner is reading, and goes back there when the window asks (a page changed while open).
         assert "post('scroll'" in body and "'scroll-to'" in body and "event.source === parent" in body and "post('escape'" in body
@@ -459,14 +489,14 @@ def _broken(path, value):
 
 @pytest.mark.parametrize("report,words", [
     (_broken(["sections", 1, "rows", 0, "member_id"], 42), "rows[0].member_id is not a member"),
-    (_broken(["sections", 0, "kind"], "chart"), "sections[0].kind must be one of findings, table, team, text"),
+    (_broken(["sections", 0, "kind"], "map"), "sections[0].kind must be one of findings, table, team, text, stats, chart"),
     (_broken(["sections", 1, "rows", 0, "cells"], ["only one"]), "one value for each of the 2 columns"),
     (_broken(["sections", 2, "edges", 0, "to"], "nobody"), "edges[0] must join two different node ids"),
     (_broken(["sections", 2, "nodes", 1, "owner"], True), "nodes[1] needs exactly one of member_id, owner or name"),
     (_broken(["sections", 0, "items", 0, "status"], "late"), "status must be one of running"),
     (_broken(["sections", 0, "items", 0, "label"], "much too long a label"), "label exceeds 12 characters"),
     (_broken(["sections", 0, "callout"], "password is hunter"), "callout contains a secret"),
-    ({"sections": [{"kind": "text", "text": "x"}] * 9}, "sections has more than 8 entries"),
+    ({"sections": [{"kind": "text", "text": "x"}] * 13}, "sections has more than 12 entries"),
     ({"sections": []}, "sections needs at least 1"),
 ], ids=["unknown-member", "unknown-kind", "cells", "edge", "two-identities", "status", "label", "secret", "sections", "empty"])
 async def test_a_report_that_breaks_the_format_is_refused_with_what_to_fix(make_rig, client, report, words):
@@ -477,6 +507,67 @@ async def test_a_report_that_breaks_the_format_is_refused_with_what_to_fix(make_
     assert rig.conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 0
     reply = _tool_reply(client)
     assert words in reply and "hunter" not in reply
+
+
+# The owner's daily overview (2026-11-14): weather, investments, projects by status and owner, members; two halves side by side.
+DASHBOARD = {"sections": [
+    {"kind": "stats", "title": "Today", "tiles": [
+        {"name": "Taichung", "value": "29", "unit": "°C", "note": "Storms after noon", "trend": [24, 26, 29, 27]},
+        {"name": "TAIEX", "value": "23,412", "delta": "+1.35%", "trend": [22900, 23100, 23412]},
+        {"name": "Rain", "value": "90", "unit": "%", "status": "waiting", "label": "Umbrella"}]},
+    {"kind": "chart", "title": "Projects", "span": "half", "type": "stacked", "labels": ["To do", "Waiting", "Done"],
+     "series": [{"name": "Claude", "values": [4, 7, 63]}, {"name": "Raphael", "member_id": 0, "values": [4, 1, 0]}], "unit": "tasks"},
+    {"kind": "chart", "title": "Temperature", "span": "half", "type": "line", "labels": ["09", "12", "15", "18"],
+     "series": [{"values": [24, 28, None, 25]}], "unit": "°C", "note": "Open-Meteo"},
+    {"kind": "chart", "title": "Share", "type": "donut", "labels": ["Done", "Waiting"], "series": [{"values": [92, 22]}]},
+]}
+
+
+def test_a_dashboard_keeps_its_figures_charts_and_halves():
+    from raphael_core.agent.report_page import checked_report, report_fallback, report_html
+    kept = checked_report(DASHBOARD, exists=lambda member_id: member_id == 0, as_of_ms=1794240000000)
+    stats, projects, temperature, share = kept["sections"]
+    assert stats["tiles"][1] == {"name": "TAIEX", "value": "23,412", "delta": "+1.35%", "trend": [22900, 23100, 23412]}
+    assert stats["tiles"][2]["status"] == "waiting" and stats["tiles"][2]["label"] == "Umbrella"
+    assert projects == {"kind": "chart", "title": "Projects", "span": "half", "type": "stacked", "labels": ["To do", "Waiting", "Done"],
+                        "series": [{"values": [4, 7, 63], "name": "Claude"}, {"values": [4, 1, 0], "name": "Raphael", "member_id": 0}],
+                        "unit": "tasks"}
+    assert temperature["series"] == [{"values": [24, 28, None, 25]}] and temperature["note"] == "Open-Meteo"
+    assert share["type"] == "donut" and "span" not in share
+    html = report_html("Daily overview", kept, lambda member_id: "Raphael")
+    assert "<th>Claude</th><th>Raphael</th>" in html and "<td>Done</td><td>63</td><td>0</td>" in html
+    assert "<li>TAIEX: <b>23,412</b> +1.35%</li>" in html
+    assert report_fallback("Daily overview", kept).split("\n")[1] == "Taichung 29°C · TAIEX 23,412 · Rain 90%"
+
+
+def _chart(**changes):
+    return {"sections": [{"kind": "chart", "type": "bar", "labels": ["a", "b"], "series": [{"values": [1, 2]}], **changes}]}
+
+
+@pytest.mark.parametrize("report,words", [
+    (_chart(type="radar"), "type must be one of line, area, bar, stacked, hbar, pie, donut"),
+    (_chart(series=[{"values": [1]}]), "values must have one number for each of the 2 labels"),
+    (_chart(series=[{"values": [1, "2"]}]), "values[1] must be a number"),
+    (_chart(series=[{"values": [1, True]}]), "values[1] must be a number"),
+    (_chart(series=[{"values": [1, None]}]), "values[1] must be a number"),
+    (_chart(type="stacked", series=[{"values": [1, -2]}]), "values[1] is below zero"),
+    (_chart(type="pie", series=[{"values": [0, 0]}]), "add up to nothing"),
+    (_chart(type="pie", series=[{"values": [1, 2]}, {"values": [1, 2]}]), "series has more than 1 entries"),
+    (_chart(series=[{"values": [1, 2]}, {"values": [3, 4]}]), "series[0].name must be text"),
+    (_chart(type="line", series=[{"values": [None, None]}]), "series has no values"),
+    (_chart(series=[{"values": [1, 2], "member_id": 42}]), "member_id is not a member"),
+    (_chart(labels=["a"] * 25, series=[{"values": [1] * 25}]), "labels must be 1 to 24 names"),
+    (_chart(span="third"), "span must be half"),
+    ({"sections": [{"kind": "stats", "tiles": [{"name": "Rain"}]}]}, "tiles[0].value must be text"),
+    ({"sections": [{"kind": "stats", "tiles": [{"name": "Rain", "value": "9", "trend": [1]}]}]}, "trend must be 2 to 24 numbers"),
+    ({"sections": [{"kind": "stats", "tiles": []}]}, "tiles needs at least 1"),
+], ids=["type", "length", "text", "boolean", "gap-in-bars", "negative-part", "empty-whole", "two-wholes", "unnamed", "all-gaps",
+        "member", "labels", "span", "tile-value", "trend", "no-tiles"])
+def test_a_chart_or_tiles_that_break_the_format_are_refused_with_what_to_fix(report, words):
+    from raphael_core.agent.report_page import checked_report
+    with pytest.raises(PageError) as refused:
+        checked_report(report, exists=lambda member_id: member_id == 0, as_of_ms=1794240000000)
+    assert words in str(refused.value)
 
 
 def test_a_report_time_never_reads_as_a_card_number():

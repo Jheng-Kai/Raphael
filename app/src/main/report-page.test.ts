@@ -5,8 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
 import { mountPages, pageCardsHTML } from "./page-card";
 import { mountPageView } from "./page-view";
-import { FILE_POLICY, fileStyle, layoutTeam, mountReportView, reportFile, reportHTML, themeWords, type TeamLayout } from "./report-page";
-import type { AgentTurn, PageCard, Report, ReportEdge, ReportNode } from "./types";
+import { FILE_POLICY, fileStyle, halves, layoutTeam, mountReportView, reportFile, reportHTML, themeWords, type TeamLayout } from "./report-page";
+import type { AgentTurn, PageCard, Report, ReportEdge, ReportNode, ReportSection } from "./types";
 import { ico } from "./ui";
 
 const people = { nameOf: (id: number) => ({ 0: "拉斐爾", 1: "小晴", 2: "小森" } as Record<number, string>)[id] ?? "", colorOf: (id: number) => `var(--m${id})` };
@@ -24,6 +24,21 @@ const report: Report = {
       edges: [{ from: "o", to: "r", label: "交辦" }, { from: "r", to: "s", label: "排進度" }, { from: "s", to: "o", label: "每週進度" }],
       notes: [{ label: "缺口", text: "客戶來信 <i>沒有人負責</i>" }] },
     { kind: "text", text: "沒有其他紀錄。" },
+  ],
+};
+// A daily overview (owner, 2026-11-14): tiles, then every kind of chart, none of them given a span.
+const dashboard: Report = {
+  as_of: "2026-11-14T00:00:00Z",
+  sections: [
+    { kind: "stats", title: "今天", tiles: [{ name: "台中", value: "29", unit: "°C", trend: [21, 24, 29] }, { name: "台股", value: "23,412", delta: "+1.35%" }] },
+    { kind: "chart", title: "氣溫", type: "area", labels: ["06", "12", "18"], series: [{ values: [21, null, 25] }], unit: "°C" },
+    { kind: "chart", title: "降雨", type: "bar", labels: ["06", "12", "18"], series: [{ values: [10, 90, 60] }], unit: "%" },
+    { kind: "chart", title: "專案", type: "stacked", labels: ["待處理", "已完成"], series: [{ name: "Claude", values: [4, 63] }, { name: "拉斐爾", member_id: 0, values: [4, 0] }] },
+    { kind: "table", title: "行程", columns: ["時間", "行程"], rows: [{ cells: ["10:30", "週會"] }] },
+    { kind: "chart", title: "走勢", type: "line", labels: ["11/12", "11/13"], series: [{ name: "台股", values: [100, 101] }, { name: "S&P", values: [100, 99] }] },
+    { kind: "chart", title: "工作量", type: "hbar", labels: ["拉斐爾"], series: [{ values: [21] }] },
+    { kind: "chart", title: "配置", type: "donut", labels: ["台股", "現金"], series: [{ values: [84, 30] }], unit: "萬元" },
+    { kind: "chart", title: "比例", type: "pie", labels: ["是", "否"], series: [{ values: [1, 3] }] },
   ],
 };
 const page: PageCard = { id: "r1", title: "團隊總覽報告", rev: 1, height: 320, source: "html", server: null, fallback: "", kind: "report" };
@@ -289,13 +304,35 @@ test("every element and attribute of a file is one the core takes, under the sam
   const tags = listed("_FILE_TAGS"), attributes = listed("_FILE_ATTRIBUTES");
   expect(tags.has("svg") && attributes.has("viewbox")).toBe(true);
   expect(core).toContain(`FILE_POLICY = "${FILE_POLICY}"`);
-  const file = reportFile("報告", report, people, look);
-  expect(core).toContain(file.match(/<meta name="viewport"[^>]*>/)![0]);
-  const drawn = [...new DOMParser().parseFromString(file, "text/html").body.querySelectorAll("*")];
-  expect(drawn.map(element => element.tagName.toLowerCase()).filter(tag => !tags.has(tag))).toEqual([]);
-  expect(drawn.flatMap(element => [...element.attributes].map(attribute => attribute.name.toLowerCase()))
-    .filter(name => !attributes.has(name) && !/^data-[a-z0-9-]+$/.test(name))).toEqual([]);
-  expect(drawn.flatMap(element => (element.hasAttribute("href") ? [element.getAttribute("href")!] : [])).every(href => href.startsWith("#"))).toBe(true);
+  // The team report and a daily overview with tiles and every kind of chart (R-PAGE-04).
+  for (const shown of [report, dashboard]) {
+    const file = reportFile("報告", shown, people, look);
+    expect(core).toContain(file.match(/<meta name="viewport"[^>]*>/)![0]);
+    const drawn = [...new DOMParser().parseFromString(file, "text/html").body.querySelectorAll("*")];
+    expect(drawn.map(element => element.tagName.toLowerCase()).filter(tag => !tags.has(tag))).toEqual([]);
+    expect(drawn.flatMap(element => [...element.attributes].map(attribute => attribute.name.toLowerCase()))
+      .filter(name => !attributes.has(name) && !/^data-[a-z0-9-]+$/.test(name))).toEqual([]);
+    expect(drawn.flatMap(element => (element.hasAttribute("href") ? [element.getAttribute("href")!] : [])).every(href => href.startsWith("#"))).toBe(true);
+  }
+  expect(reportFile("報告", dashboard, people, look)).toContain('class="rc-part"');
+});
+
+test("two half sections in a row stand side by side, and with no span anywhere two charts in a row do", () => {
+  const chart = (labels: number, span?: "half"): ReportSection => ({ kind: "chart", type: "line", labels: Array.from({ length: labels }, (_, index) => `${index}`), series: [{ values: Array.from({ length: labels }, () => 1) }], ...(span ? { span } : {}) });
+  const text: ReportSection = { kind: "text", text: "x" };
+  expect([...halves([chart(5), chart(5), text, chart(5)])]).toEqual([0, 1]);
+  expect([...halves([chart(5), chart(13), chart(5), chart(5)])]).toEqual([2, 3]);
+  // A span given anywhere is the member's layout: only what it marks is paired, and a half alone takes the width.
+  expect([...halves([chart(5), chart(5), { ...text, span: "half" }, chart(5, "half")])]).toEqual([2, 3]);
+  expect([...halves([chart(5, "half"), text, chart(5, "half")])]).toEqual([]);
+  const doc = document.createElement("div");
+  doc.innerHTML = reportHTML("總覽", dashboard, people);
+  expect([...doc.querySelectorAll<HTMLElement>('.rp-sec[data-span="half"]')].map(section => section.id)).toEqual(["rp-s1", "rp-s2", "rp-s5", "rp-s6", "rp-s7", "rp-s8"]);
+  // Nine titles: the contents stand only beside the page, never above it.
+  expect(doc.querySelector(".rp-toc")!.hasAttribute("data-many")).toBe(true);
+  const short = document.createElement("div");
+  short.innerHTML = reportHTML("報告", report, people);
+  expect(short.querySelector(".rp-toc")!.hasAttribute("data-many")).toBe(false);
 });
 
 test("a file's style holds the theme's words its rules use, the dark ones on a dark screen alone, and never a tag", () => {

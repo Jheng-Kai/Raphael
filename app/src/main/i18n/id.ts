@@ -296,6 +296,8 @@ export const id = {
   "page.report.contents": "Di halaman ini",
   "page.report.all": "Semua",
   "page.report.status": "Status",
+  "page.chart.other": "Lainnya",
+  "page.chart.total": "Total",
   "page.report.gone": "Mantan anggota",
   "page.report.share": "Simpan sebagai file",
   "page.report.saved": "Disimpan di {p0}",

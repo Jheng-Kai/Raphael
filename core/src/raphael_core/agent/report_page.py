@@ -9,17 +9,28 @@ The owner's request (2026-11-09, after Grok Bot's Page): a title, the date the d
 states recorded facts, a table of contents, findings with coloured status words under a summary box, an overview table
 with tabs, and a team diagram: members as boxes with their colour, labelled arrows between them, notes under it.
 Shared, a report is a file of the app's own drawing (2026-11-10): see `checked_file` below.
+Since 2026-11-14 (the owner's daily overview, in place of the old home) a report also holds tiles of figures (`stats`) and
+charts of every common kind (`chart`), drawn by app/src/main/report-chart.ts, and a section may stand at half the width.
 """
 
 import html as html_lib
+import math
 import re
 from datetime import UTC, datetime
 
 from .pages import PageError, checked_text
 
-KINDS = ("findings", "table", "team", "text")
+KINDS = ("findings", "table", "team", "text", "stats", "chart")
 STATUSES = ("running", "done", "pending", "waiting", "blocked", "paused", "failed")
-SECTIONS_MAX = 8
+# The charts the app draws (app/src/main/report-chart.ts): lines and areas over time, columns side by side or stacked, bars
+# across for long names, and parts of one whole.
+CHARTS = ("line", "area", "bar", "stacked", "hbar", "pie", "donut")
+# Charts of one whole, and those whose parts add up: no part below zero.
+PARTS = ("stacked", "hbar", "pie", "donut")
+# A daily overview (owner, 2026-11-14: weather, schedule, investments, projects and members on one page) has more sections
+# than a report; a section may take half the page's width beside another where the page is wide enough.
+SECTIONS_MAX = 12
+SPANS = ("half",)
 NODE_ID = re.compile(r"[A-Za-z0-9_-]{1,24}")
 
 # Characters, not bytes: what fits the design. Each also passes the secret scan.
@@ -43,6 +54,22 @@ NOTES = 6
 NOTE_LABEL = 12
 NOTE_TEXT = 300
 TEXT = 1200
+STATS = 6
+STAT_LABEL = 24
+STAT_VALUE = 16
+STAT_UNIT = 8
+STAT_NOTE = 80
+DELTA = 12
+TREND = 24
+POINTS = 24
+POINT = 16
+SERIES = 8
+SERIES_NAME = 24
+UNIT = 8
+CHART_NOTE = 160
+# Big enough for money in any currency. Values are kept as numbers and the kept content is scanned as a whole (a card
+# number given as a value is refused as a secret like any other).
+VALUE_MAX = 1e15
 
 
 def _text(value, where, limit, *, required=False):
@@ -170,7 +197,71 @@ def _plain(section, where, exists):
     return {"text": _text(section.get("text"), f"{where}.text", TEXT, required=True)}
 
 
-_CHECK = {"findings": _findings, "table": _table, "team": _team, "text": _plain}
+def _number(value, where, *, gap=False, parts=False):
+    """A plain number (never a boolean or text), or None where a line may have a gap."""
+    if value is None and gap:
+        return None
+    if type(value) not in (int, float) or not math.isfinite(value) or abs(value) > VALUE_MAX:
+        raise PageError("bad_arguments", f"{where} must be a number" + (" or null" if gap else ""))
+    if parts and value < 0:
+        raise PageError("bad_arguments", f"{where} is below zero; parts of a whole are zero or more")
+    return value
+
+
+def _stats(section, where, exists):
+    """Figures as tiles: what it is, the value and its unit, its change, a few words and a little line of its recent values.
+    A tile's own name is `name`: `label` is a status's word, as elsewhere in a report."""
+    tiles = []
+    for index, tile in enumerate(_list(section.get("tiles"), f"{where}.tiles", STATS, least=1)):
+        at = f"{where}.tiles[{index}]"
+        value = {"name": _text(tile.get("name"), f"{at}.name", STAT_LABEL, required=True),
+                 "value": _text(tile.get("value"), f"{at}.value", STAT_VALUE, required=True)}
+        for key, limit in (("unit", STAT_UNIT), ("delta", DELTA), ("note", STAT_NOTE)):
+            if text := _text(tile.get(key), f"{at}.{key}", limit):
+                value[key] = text
+        if tile.get("trend") is not None:
+            trend = tile["trend"]
+            if not isinstance(trend, list) or not 2 <= len(trend) <= TREND:
+                raise PageError("bad_arguments", f"{at}.trend must be 2 to {TREND} numbers")
+            value["trend"] = [_number(point, f"{at}.trend[{n}]") for n, point in enumerate(trend)]
+        tiles.append({**value, **_status(tile, at)})
+    return {"tiles": tiles}
+
+
+def _chart(section, where, exists):
+    kind = section.get("type")
+    if kind not in CHARTS:
+        raise PageError("bad_arguments", f"{where}.type must be one of {', '.join(CHARTS)}")
+    labels = section.get("labels")
+    if not isinstance(labels, list) or not 1 <= len(labels) <= POINTS:
+        raise PageError("bad_arguments", f"{where}.labels must be 1 to {POINTS} names, one for each value")
+    labels = [_text(label, f"{where}.labels[{n}]", POINT, required=True) for n, label in enumerate(labels)]
+    whole = kind in ("pie", "donut")
+    series = _list(section.get("series"), f"{where}.series", 1 if whole else SERIES, least=1)
+    kept = []
+    for index, entry in enumerate(series):
+        at = f"{where}.series[{index}]"
+        values = entry.get("values")
+        if not isinstance(values, list) or len(values) != len(labels):
+            raise PageError("bad_arguments", f"{at}.values must have one number for each of the {len(labels)} labels")
+        value = {"values": [_number(point, f"{at}.values[{n}]", gap=kind in ("line", "area"), parts=kind in PARTS)
+                            for n, point in enumerate(values)]}
+        # One series is named by the section's title; more need a name each, for the legend.
+        if name := _text(entry.get("name"), f"{at}.name", SERIES_NAME, required=len(series) > 1):
+            value["name"] = name
+        if entry.get("member_id") is not None:
+            value["member_id"] = _member(entry["member_id"], f"{at}.member_id", exists)
+        kept.append(value)
+    if whole and not any(kept[0]["values"]):
+        raise PageError("bad_arguments", f"{where}.series[0].values add up to nothing; a {kind} needs a part above zero")
+    if all(point is None for entry in kept for point in entry["values"]):
+        raise PageError("bad_arguments", f"{where}.series has no values")
+    extra = {key: text for key, limit in (("unit", UNIT), ("note", CHART_NOTE))
+             if (text := _text(section.get(key), f"{where}.{key}", limit))}
+    return {"type": kind, "labels": labels, "series": kept, **extra}
+
+
+_CHECK = {"findings": _findings, "table": _table, "team": _team, "text": _plain, "stats": _stats, "chart": _chart}
 
 
 def checked_report(value, *, exists, as_of_ms):
@@ -185,7 +276,11 @@ def checked_report(value, *, exists, as_of_ms):
         if kind not in KINDS:
             raise PageError("bad_arguments", f"{where}.kind must be one of {', '.join(KINDS)}")
         title = _text(section.get("title"), f"{where}.title", TITLE)
-        sections.append({"kind": kind, **({"title": title} if title else {}), **_CHECK[kind](section, where, exists)})
+        span = section.get("span")
+        if span is not None and span not in SPANS:
+            raise PageError("bad_arguments", f"{where}.span must be {' or '.join(SPANS)}, or left out for the whole width")
+        sections.append({"kind": kind, **({"title": title} if title else {}), **({"span": span} if span else {}),
+                         **_CHECK[kind](section, where, exists)})
     # A time as text: thirteen digits of milliseconds pass the card-number check one time in ten, and the kept content is
     # scanned for secrets as a whole.
     as_of = datetime.fromtimestamp(as_of_ms / 1000, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -196,6 +291,11 @@ def _who(node, names):
     if "member_id" in node:
         return names(node["member_id"]) or "?"
     return "Owner" if node.get("owner") else node.get("name", "")
+
+
+def _figure(value):
+    """A value as it is written: a whole number without a point."""
+    return str(int(value)) if float(value).is_integer() else f"{value:g}"
 
 
 def report_html(title, report, names):
@@ -223,6 +323,20 @@ def report_html(title, report, names):
             parts.append("<ul>" + "".join(f"<li>{e(_who(nodes[edge['from']], names))} → {e(_who(nodes[edge['to']], names))}"
                                           + (f": {e(edge['label'])}" if edge.get("label") else "") + "</li>" for edge in section["edges"]) + "</ul>")
             parts.extend(f"<p><b>{e(note['label'])}</b> {e(note['text'])}</p>" for note in section.get("notes", []))
+        elif section["kind"] == "stats":
+            parts.append("<ul>" + "".join(
+                f"<li>{e(tile['name'])}: <b>{e(tile['value'])}{e(tile.get('unit', ''))}</b>"
+                + "".join(f" {e(tile[key])}" for key in ("delta", "note") if tile.get(key)) + f"{status(tile)}</li>"
+                for tile in section["tiles"]) + "</ul>")
+        elif section["kind"] == "chart":
+            # A chart's values as the table it was drawn from.
+            names = [entry.get("name", section.get("title", "")) for entry in section["series"]]
+            head = "<th></th>" + "".join(f"<th>{e(name)}</th>" for name in names)
+            rows = "".join(f"<tr><td>{e(label)}</td>" + "".join(
+                f"<td>{'' if entry['values'][n] is None else e(_figure(entry['values'][n]))}</td>" for entry in section["series"])
+                + "</tr>" for n, label in enumerate(section["labels"]))
+            unit = f"<p>{e(section['unit'])}</p>" if section.get("unit") else ""
+            parts.append(f"{unit}<table><tr>{head}</tr>{rows}</table>" + (f"<p>{e(section['note'])}</p>" if section.get("note") else ""))
         else:
             parts.append("".join(f"<p>{e(line)}</p>" for line in section["text"].split("\n") if line.strip()))
     return "\n".join(parts)
@@ -235,6 +349,8 @@ def report_fallback(title, report):
         if section["kind"] == "findings":
             lines.extend(filter(None, [section.get("callout")]))
             lines.extend(item["title"] for item in section["items"])
+        elif section["kind"] == "stats":
+            lines.append(" · ".join(f"{tile['name']} {tile['value']}{tile.get('unit', '')}" for tile in section["tiles"]))
     text = "\n".join(lines)
     return text if len(text) <= 1500 else text[:1499] + "…"
 
@@ -253,7 +369,7 @@ _FILE_HEAD = re.compile(
 # The page's own elements, then the drawing's: the team's arrows and the app's line icons (icon-set.ts).
 _FILE_TAGS = frozenset("html head title body article header h1 h2 p nav a span div section ul li b small "
                        "table thead tbody tr th td dl dt dd svg defs marker path circle ellipse line rect".split())
-_FILE_ATTRIBUTES = frozenset("lang class id href style role aria-label aria-hidden scope width height viewbox d "
+_FILE_ATTRIBUTES = frozenset("lang class id href style role aria-label aria-hidden scope width height viewbox preserveaspectratio d "
                              "marker-end refx refy markerwidth markerheight orient cx cy r rx ry x y x1 y1 x2 y2".split())
 _VALUE = r"(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+)"
 _TAG = re.compile(rf"<(/?)([A-Za-z][A-Za-z0-9]*)((?:\s+[^\s\"'=<>/]+(?:\s*=\s*{_VALUE})?)*)\s*/?>")

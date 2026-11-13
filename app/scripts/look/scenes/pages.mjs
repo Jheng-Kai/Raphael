@@ -1,4 +1,4 @@
-import { scene, check, click, focus, frameExpect, frameScroll, key, lookCall, member, room, scroll, type, wait } from "./steps.mjs";
+import { scene, check, click, focus, frameExpect, frameScroll, hover, key, lookCall, member, room, scroll, type, wait } from "./steps.mjs";
 
 const shown = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 // A page in a card is only a preview (inert): the owner presses the card and the page opens in the conversation's place, where it
@@ -11,6 +11,8 @@ const roomShown = [room(1), wait('.pg-body[data-state="ready"] iframe'), { actio
 const report = [member(1), wait(".pg-link"), click(".pg-link"), wait(".pgv:not([hidden]) .rp-team-draw")];
 const share = [click(".mb-head .ra-tools > [data-page-act]"), wait(".toast")];
 const draft = "還沒送出的草稿";
+const dashboardLink = '.pg-link[data-page="page-dashboard"]', dashboardFixture = { dashboardTurn: true };
+const dashboard = [member(0), wait(dashboardLink), click(dashboardLink), wait(".pgv:not([hidden]) .rs-tiles")];
 
 export default [
   scene("page-product", "A member shows a product page as a card: its title row and the top of the page, clipped, nothing in it to press", [...shown, check("page-card")], { pageTurn: true }),
@@ -46,4 +48,12 @@ export default [
   scene("page-report-share", "Share saves the report as a file and says where it went, and the report stays open", [...report, ...share, check("page-report-shared")], { reportTurn: true }),
   { ...scene("page-report-file", "The saved file opened on its own: the same page in its reader's theme, with nothing of the app", [...report, ...share, { action: "saved-file" }, check("page-report-file")], { reportTurn: true }), file: true },
   { ...scene("page-report-file-team", "The file's contents take its reader to the team, drawn for the width it is read at", [...report, ...share, { action: "saved-file" }, click('.rp-toc a[href="#rp-s2"]'), check("page-report-file-team")], { reportTurn: true }), file: true },
+  // Raphael's daily overview (owner, 2026-11-14: the old home becomes the page a 07:00 routine sends; every kind of chart, as
+  // clean as Grok Bot's): figures, weather, schedule, projects by status and owner, investments, members, on one report.
+  scene("page-dashboard-card", "The 07:00 routine's turn in Raphael's conversation: a few words of what it did, then the overview's link card", [member(0), wait(dashboardLink), check("page-dashboard-card")], dashboardFixture),
+  scene("page-dashboard", "The overview opens in the conversation's place: tiles of today's figures, then charts side by side where the page is wide", [...dashboard, check("page-dashboard")], dashboardFixture),
+  scene("page-dashboard-projects", "Projects by status and owner as stacked columns with their totals; pointing at one shows who has how many", [...dashboard, { ...scroll('[data-report-chart="5"]'), block: "center" }, hover('[data-report-chart="5"] .rc-band[data-i="2"]'), wait(".rc-tip"), check("page-dashboard-projects")], dashboardFixture),
+  scene("page-dashboard-lines", "Investments as lines from one start, with a gap on a closed day; pointing shows each line's value on that day", [...dashboard, { ...scroll('[data-report-chart="6"]'), block: "center" }, hover('[data-report-chart="6"] .rc-plot'), wait(".rc-tip"), check("page-dashboard-lines")], dashboardFixture),
+  scene("page-dashboard-lower", "The lower half: a ring of parts beside its names and shares, bars across, and the members' routines", [...dashboard, { ...scroll('[data-report-chart="8"]'), block: "center" }, check("page-dashboard-lower")], dashboardFixture),
+  { ...scene("page-dashboard-file", "The overview saved as a file and opened on its own: the same tiles and charts, with nothing that runs", [...dashboard, ...share, { action: "saved-file" }, check("page-dashboard-file")], dashboardFixture), file: true },
 ];

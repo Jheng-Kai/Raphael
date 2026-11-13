@@ -8,7 +8,7 @@ from .team_admin import DEFINITIONS as ADMIN_TOOLS, TIERS as ADMIN_TIERS
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS, WRITE_TOOLS as GROWTH_WRITES
 from ..members.schedule import KINDS
 from .owner_questions import ASK_OWNER
-from .report_page import STATUSES as REPORT_STATUSES
+from .report_page import CHARTS as REPORT_CHARTS, STATUSES as REPORT_STATUSES
 
 CONNECT_APP = "connect_app"
 CONNECT_MESSAGING = "connect_messaging"
@@ -78,14 +78,18 @@ _LABEL = {"type": "string", "maxLength": 12, "description": "Your own word for t
 # A report page (agent/report_page.py): the app draws it, so the schema only says what goes where.
 REPORT = {
     "type": "object",
-    "description": "A designed report instead of html; titled sections are listed in its contents. "
-                   "findings: optional callout (one summary box), items with a status. table: columns; rows of one cell per "
-                   "column, optional group (tabs over the table), member_id (colours the first cell), status (a last column). "
-                   "team: nodes (member_id, owner true, or a name; note: their part in a few words), edges (from, to, label: "
-                   "what passes), notes (label, text: overlaps, gaps). text: one paragraph.",
-    "properties": {"sections": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "properties": {
-        "kind": {"type": "string", "enum": ["findings", "table", "team", "text"]},
+    "description": "A designed report or dashboard instead of html, drawn by the app; titled sections are listed in its "
+                   "contents. findings: optional callout (one summary box), items with a status. table: columns; rows of one "
+                   "cell per column, optional group (tabs over the table), member_id (colours the first cell), status (a last "
+                   "column). team: nodes (member_id, owner true, or a name; note: their part in a few words), edges (from, to, "
+                   "label: what passes), notes (label, text: overlaps, gaps). text: one paragraph. stats: tiles (name, value, "
+                   "unit, delta such as +1.2%, note, trend: recent numbers). chart: type line or area (over time; null is a "
+                   "gap), bar, stacked (counts by status and owner), hbar (a ranking), pie or donut (one series); labels, one "
+                   "per value; series: values, name, member_id. A dashboard opens with one stats section, then its charts.",
+    "properties": {"sections": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": {
+        "kind": {"type": "string", "enum": ["findings", "table", "team", "text", "stats", "chart"]},
         "title": {"type": "string", "maxLength": 40},
+        "span": {"enum": ["half"]},
         "callout": {"type": "string", "maxLength": 400},
         "items": {"type": "array", "maxItems": 12, "items": {"type": "object", "properties": {
             "title": {"type": "string", "maxLength": 80}, "text": {"type": "string", "maxLength": 300},
@@ -103,6 +107,18 @@ REPORT = {
         "notes": {"type": "array", "maxItems": 6, "items": {"type": "object", "properties": {
             "label": {"type": "string", "maxLength": 12}, "text": {"type": "string", "maxLength": 300}}, "required": ["label", "text"]}},
         "text": {"type": "string", "maxLength": 1200},
+        # The new kinds' lengths are the checker's (report_page.py): its refusal says what to shorten.
+        "tiles": {"type": "array", "maxItems": 6, "items": {"type": "object", "properties": {
+            "name": {"type": "string"}, "value": {"type": "string"}, "unit": {"type": "string"}, "delta": {"type": "string"},
+            "note": {"type": "string"}, "trend": {"type": "array", "items": {"type": "number"}},
+            "status": _STATUS, "label": _LABEL}, "required": ["name", "value"]}},
+        "type": {"type": "string", "enum": list(REPORT_CHARTS)},
+        "labels": {"type": "array", "maxItems": 24, "items": {"type": "string"}},
+        "series": {"type": "array", "maxItems": 8, "items": {"type": "object", "properties": {
+            "name": {"type": "string"}, "member_id": {"type": "integer"},
+            "values": {"type": "array", "items": {"type": ["number", "null"]}}}, "required": ["values"]}},
+        "unit": {"type": "string"},
+        "note": {"type": "string"},
     }, "required": ["kind"]}}},
     "required": ["sections"],
 }
@@ -112,13 +128,14 @@ DEFINITIONS = {
     CONNECT_MESSAGING: definition("Show the owner a secure bot-token card here for Telegram, Slack or Discord; never ask for the token in chat. The current speaker owns the bot; saving validates it and resumes this turn once. If already connected, report its state and show any waiting pairing card instead of asking for another token. Pairing is approved or rejected here; the bot's panel row has its switch and details. Removing an allowed person or disconnecting is asked here and still needs the owner's approval. Never send the owner to a messaging settings page.", {"platform": {"type": "string", "enum": ["telegram", "slack", "discord"]}}, ["platform"]),
     SHARE_TEMPLATE: definition("Offer your member recipe as a snapshot card for the owner to review, save or publish. Describe what you do for strangers in one or two sentences in the owner's language; no names, private facts, credentials, internal URLs or customer data. Members only.", {"description": {"type": "string", "maxLength": 280}}, ["description"]),
     SHOW_PAGE: definition(
-        "Show a page inside this conversation: a report the owner asked for (報告, 總覽, 統整, report, overview), or an "
-        "operable page such as a product page, form, interactive comparison or small tool. Give exactly one of report or html. "
-        "Prefer plain text or a table for a simple answer. report: the app draws it, opened from a link card; it shows when "
-        "its data is from and that it states only recorded facts, so write only what your tools returned (team_work, "
-        "team_overview, routine_list), leaving out the unknown. html: a fragment or document, at most 256 KB UTF-8, no secrets, run in a sandbox without fetch or server "
-        "forms. window.raphael.send(text) asks the owner's next message to be text; window.raphael.open(url) asks to open an "
-        "HTTPS link. Theme CSS variables: --bg, --fg, --muted, --line, --accent. External assets: cdnjs.cloudflare.com, "
+        "Show a page inside this conversation: a report or dashboard the owner asked for (報告, 總覽, 統整, 儀表板, report, "
+        "overview), or an operable page such as a product page, form, interactive comparison or small tool. Give exactly one "
+        "of report or html. Prefer plain text or a table for a simple answer. report: the app draws it, opened from a link "
+        "card; it shows when its data is from and that it states only recorded facts, so write only what your tools and "
+        "colleagues returned, leaving out the unknown. html: a fragment or document, at most 256 KB UTF-8, no secrets, run in "
+        "a sandbox without fetch or server forms. window.raphael.send(text) asks the owner's next message to be text; "
+        "window.raphael.open(url) asks to open an HTTPS link. Theme CSS variables: --bg, --surface, --fg, --muted, --line, "
+        "--accent, --ok, --warn, --err, --chart-1 to 8, --font. External assets (chart libraries too): cdnjs.cloudflare.com, "
         "cdn.jsdelivr.net, unpkg.com, Google Fonts. Returns page_id; update_page replaces it in place.",
         {"title": {"type": "string", "maxLength": 80}, "report": REPORT, "html": {"type": "string"},
          "fallback_text": {"type": "string", "maxLength": 1500},

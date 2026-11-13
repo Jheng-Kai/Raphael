@@ -6,11 +6,12 @@ advice of Anthropic's own documentation for its memory tool). So a memory is ref
 
 - a secret (`find_secret`): the shapes of API keys and tokens (OpenRouter's and OpenAI's `sk-`,
   GitHub's `ghp_` and `github_pat_`, Slack's `xox?-`, AWS's `AKIA`, Google's `AIza`, a JWT, a
-  `Bearer` token, a private key block), a long run of random-looking characters, what follows a
+  `Bearer` token, a private key block), a long run of random-looking characters (not the words and
+  numbers of an address's path, which on 2026-11-14 kept a weather link off a page), what follows a
   word for a password, a PIN or a one-time code (a value with a digit or a symbol in it, or any
   value at all once "is", ":", "=", 是, 為 or は gives it to the word, so "password is hunter" too,
-  while "password manager" and "the password is stored in ..." pass), a card number (the Luhn
-  check), a Taiwanese ID number or an IBAN;
+  while "password manager" and "the password is stored in ..." pass), a card number (a card's first
+  digit and the Luhn check), a Taiwanese ID number or an IBAN;
 - or something written to steer a model (`find_injection`), which is how a memory is poisoned
   (SpAIware, 2024): an order to ignore the instructions, a line dressed as a system message, a
   Markdown image (a way to send data out), an address with a query string, or invisible characters.
@@ -42,6 +43,12 @@ _TOKEN_SHAPES = (
 _LONG_RUN = re.compile(r"[A-Za-z0-9+/=_\-]{32,}")
 # The entropy, in bits a character, from which such a run looks random rather than like a word.
 _RANDOM_BITS = 3.5
+# What an address or a file name joins its words with.
+_JOINERS = re.compile(r"[/_\-]+")
+# A word changes case a few times at most (iPhone, GitHub, NVIDIA); random letters keep changing it.
+_WORD_CASE_CHANGES = 3
+# A short code among the words of a path (v2, mp4, h264, 3d).
+_CODE = 4
 
 # The words for a password, a PIN or a one-time code, in the three languages and a few spellings,
 # then what is written after them within a few characters ("是", ":", "is"...).
@@ -84,10 +91,33 @@ def _bits_per_char(text: str) -> float:
     return -sum(n / len(text) * math.log2(n / len(text)) for n in counts.values())
 
 
+def _readable(run: str) -> bool:
+    """Words and numbers joined the way an address joins them, with a few short codes among them: a path someone can read
+    (taichung-city/315040/weather-forecast, news/press-release-details/2026/NVIDIA-Announces-CEO-Transition), not a key.
+    A path has a slash: words joined by underscores or hyphens alone (synthetic_private_credential_123456789) are a
+    value given to a key's name as often as a name, and stay judged as keys. A piece that mixes letters and digits beyond
+    a short code, or letters that keep changing case, is a key's."""
+    if "/" not in run or "+" in run or "=" in run:
+        return False
+    words = codes = 0
+    for part in filter(None, _JOINERS.split(run)):
+        if part.isdigit():
+            continue
+        if part.isalpha():
+            if sum(a.isupper() != b.isupper() for a, b in zip(part, part[1:])) > _WORD_CASE_CHANGES:
+                return False
+            words += 1
+        elif len(part) <= _CODE:
+            codes += 1
+        else:
+            return False
+    return words > codes
+
+
 def _looks_random(run: str) -> bool:
     has_digit = any(c.isdigit() for c in run)
     has_letter = any(c.isalpha() for c in run)
-    return has_digit and has_letter and _bits_per_char(run) >= _RANDOM_BITS
+    return has_digit and has_letter and _bits_per_char(run) >= _RANDOM_BITS and not _readable(run)
 
 
 def _luhn(digits: str) -> bool:
@@ -114,7 +144,9 @@ def find_secret(text: str) -> str | None:
         return "password"
     for found in _CARD.finditer(plain):
         digits = re.sub(r"\D", "", found.group())
-        if 13 <= len(digits) <= 19 and _luhn(digits):
+        # A card number begins with 2 to 6 (Mastercard's 2-series, Amex, JCB and Diners 3, Visa 4, Mastercard 5, Discover and
+        # UnionPay 6); a time in milliseconds, which passes the check one time in ten, begins with 1.
+        if 13 <= len(digits) <= 19 and digits[0] in "23456" and _luhn(digits):
             return "card"
     if _TAIWAN_ID.search(plain):
         return "id_number"

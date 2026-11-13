@@ -84,7 +84,8 @@ describe("no sideways scrolling", () => {
     const fixed = /(^|[;\s])(width|inset|grid-template-areas):/;
     for (const r of mainRules) {
       if (!/display:\s*(inline-)?grid/.test(r.body)) continue;
-      const named = /grid-template-columns:\s*[^;]*(minmax\(0|\d+px|repeat\(|var\()/.test(r.body);
+      // A subgrid takes its parent's columns, which are checked on the parent.
+      const named = /grid-template-columns:\s*[^;]*(minmax\(0|\d+px|repeat\(|var\(|subgrid)/.test(r.body);
       expect(named || fixed.test(r.body) || /grid-template-rows/.test(r.body), `${r.file}: ${r.selector}`).toBe(true);
     }
   });

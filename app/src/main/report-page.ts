@@ -4,13 +4,15 @@
 // the time its data is from and the promise that it only states recorded facts, its contents, findings with coloured
 // status words under a summary box, tables with tabs for their groups, and the team as boxes in each member's colour
 // joined by labelled arrows. Everything in it is the member's plain text, escaped here: no markup or script of a model
-// ever runs, so a report needs no frame (R-PAGE-01). Shared, it is a file of this same drawing (`reportFile`).
+// ever runs, so a report needs no frame (R-PAGE-01). Shared, it is a file of this same drawing (`reportFile`). Its figures
+// and charts (R-PAGE-04, the owner's daily overview of 2026-11-14) are drawn by report-chart.ts.
 import "./report-page.css";
 import pageStyle from "./report-page.css?raw";
 import * as api from "./api";
 import { formatClock, formatDate } from "./format";
 import { t } from "./i18n";
 import { ownerName } from "./owner-avatar";
+import { chartHTML, mountChartHover, statsHTML } from "./report-chart";
 import type { Report, ReportEdge, ReportItem, ReportNode, ReportRow, ReportSection, ReportStatus } from "./types";
 import type { PageView } from "./page-view";
 import { esc, ico, tabs, toaster } from "./ui";
@@ -84,25 +86,50 @@ function teamHTML(section: Extract<ReportSection, { kind: "team" }>, index: numb
   return `<div class="rp-team" data-report-team="${index}" role="img" aria-label="${esc(said || [...names.values()].join(", "))}">${drawn}</div>${notes}`;
 }
 
-function sectionHTML(section: ReportSection, index: number, people: ReportPeople, file?: FileDrawing): string {
+function sectionHTML(section: ReportSection, index: number, people: ReportPeople, half: boolean, file?: FileDrawing): string {
   const body = section.kind === "findings" ? findingsHTML(section)
     : section.kind === "table" ? tableHTML(section, people, !file)
     : section.kind === "team" ? teamHTML(section, index, people, file)
+    : section.kind === "stats" ? statsHTML(section, statusHTML, half)
+    : section.kind === "chart" ? chartHTML(section, index, people, Boolean(file), half)
     : section.text.split("\n").filter(line => line.trim()).map(line => `<p class="rp-p">${esc(line)}</p>`).join("");
-  return `<section class="rp-sec" id="rp-s${index}" data-kind="${section.kind}">${section.title ? `<h2 class="rp-h2">${esc(section.title)}</h2>` : ""}${body}</section>`;
+  return `<section class="rp-sec" id="rp-s${index}" data-kind="${section.kind}"${half ? ' data-span="half"' : ""}>` +
+    `${section.title ? `<h2 class="rp-h2">${esc(section.title)}</h2>` : ""}${body}</section>`;
+}
+
+/** A chart this short reads well at half the width. */
+const PAIRED_LABELS = 12;
+
+/**
+ * The sections that stand beside another: two half sections in a row are a pair; a half section alone takes the width.
+ * Where the member gave no span at all (Raphael's daily overviews on a live model gave none even when told, 2026-11-14),
+ * two charts in a row of at most twelve labels each pair the same way, so a dashboard reads as one.
+ */
+export function halves(sections: readonly ReportSection[]): Set<number> {
+  const given = sections.some(section => section.span === "half");
+  const half = (section: ReportSection): boolean =>
+    given ? section.span === "half" : section.kind === "chart" && section.labels.length <= PAIRED_LABELS;
+  const paired = new Set<number>();
+  for (let index = 0; index + 1 < sections.length; index++) {
+    if (half(sections[index]!) && half(sections[index + 1]!)) { paired.add(index).add(index + 1); index++; }
+  }
+  return paired;
 }
 
 /**
  * The whole page. In the app its team diagrams are laid out once their width is known (`layoutTeam`); in a file
- * (`file`) they are drawn at once and the table has no tabs, since nothing runs in a file to switch them.
+ * (`file`) they are drawn at once and the table has no tabs, since nothing runs in a file to switch them. A pair of half
+ * sections stands side by side where the page is wide enough (report-page.css), one above the other where it is not.
  */
 export function reportHTML(title: string, report: Report, people: ReportPeople, file?: FileDrawing): string {
   const titled = report.sections.flatMap((section, index) => (section.title ? [{ title: section.title, index }] : []));
   const contents = t("page.report.contents");
-  const toc = titled.length > 1 ? `<nav class="rp-toc" aria-label="${esc(contents)}"><span class="rp-toc-h">${esc(contents)}</span>` +
+  // A long list of contents (more than six titles, as a daily overview has) shows only beside the page, never above it.
+  const toc = titled.length > 1 ? `<nav class="rp-toc"${titled.length > 6 ? " data-many" : ""} aria-label="${esc(contents)}"><span class="rp-toc-h">${esc(contents)}</span>` +
     titled.map(entry => `<a href="#rp-s${entry.index}" data-report-goto="rp-s${entry.index}">${esc(entry.title)}</a>`).join("") + `</nav>` : "";
+  const paired = halves(report.sections);
   return `<header class="rp-head"><h1 class="rp-title">${esc(title)}</h1><p class="rp-sub">${esc(subtitle(report))}</p></header>${toc}` +
-    `<div class="rp-body">${report.sections.map((section, index) => sectionHTML(section, index, people, file)).join("")}</div>`;
+    `<div class="rp-body">${report.sections.map((section, index) => sectionHTML(section, index, people, paired.has(index), file)).join("")}</div>`;
 }
 
 // ---------- the page as a file ----------
@@ -596,6 +623,10 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
       }
     });
     new ResizeObserver(() => layout()).observe(view);
+    mountChartHover(view, index => {
+      const section = current?.report.sections[index];
+      return section?.kind === "chart" ? section : null;
+    }, people);
     return view;
   }
 

@@ -1473,6 +1473,8 @@ export const en = {
   "page.report.saved": "Saved to {p0}",
   "page.report.downloads": "Downloads",
   "page.report.saveFailed": "The file couldn't be saved. Try again.",
+  "page.chart.other": "Other",
+  "page.chart.total": "Total",
   "page.status.running": "Running",
   "page.status.done": "Done",
   "page.status.pending": "Ready to start",

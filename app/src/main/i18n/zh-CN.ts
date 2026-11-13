@@ -296,6 +296,8 @@ export const zhCN = {
   "page.report.contents": "本页内容",
   "page.report.all": "全部",
   "page.report.status": "状态",
+  "page.chart.other": "其他",
+  "page.chart.total": "合计",
   "page.report.gone": "已不在团队的成员",
   "page.report.share": "存成文件",
   "page.report.saved": "已存到「{p0}」",
