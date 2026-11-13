@@ -32,7 +32,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
-    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍","❤"],...(variant.chatMetadata === 'owner' ? {owner:["🎉","😂"]} : {})},owner_questions:[],permissions:[]};
+    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍"],...(variant.chatMetadata === 'owner' ? {owner:["🎉"]} : {})},owner_questions:[],permissions:[]};
     if (['slack','approval'].includes(variant.chatMetadata)) {
       const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
       turn.drafts = [draft];
@@ -1408,9 +1408,16 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.react": {
         const turn = data.turns.find(item=>item.id===p.turn_id && (item.member_id ?? 0)===(p.member_id ?? 0));
         if (!turn) throw new Error('Unknown private message');
-        const reactions = (turn.reactions ??= {});
-        reactions[p.message_key] = (reactions[p.message_key] ?? []).filter(emoji=>emoji!==p.emoji);
-        if (p.active) reactions[p.message_key].push(p.emoji);
+        // One reaction per message, as the core keeps it: another emoji replaces it, the same one takes it back.
+        const reactions = (turn.reactions ??= {}), current = reactions[p.message_key]?.[0];
+        if (p.active) reactions[p.message_key] = [p.emoji];
+        else if (current === p.emoji) reactions[p.message_key] = [];
+        // `reactionAsk`: a thumbs down on a reply makes its member ask what was wrong, in a turn with no message of the owner's.
+        if (variant.reactionAsk && p.active && p.emoji === "👎" && p.message_key !== "owner" && !data.turns.some(item => item.source === "reaction")) {
+          const words = data.chatMetadataSample.askWhatWasWrong;
+          data.turns.push({ ...structuredClone(turn), id: turn.id + 1, session_id: `reaction-${turn.id}`, source: "reaction", route: "answer", question: "", text: words, detail: null, prefix: "",
+            created_at_ms: data.now + 1000, messages: [{ seq: 1, kind: "reply", text: words, at_ms: data.now + 1000 }], reactions: {}, steps: [], drafts: [], owner_questions: [], permissions: [] });
+        }
         notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
       }
       case "agent.question.open": return null;
@@ -1521,8 +1528,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.react": {
         const message = data.messages.find(item=>item.id===p.message_id && item.room_id===p.room_id);
         if (!message) throw new Error('Unknown room message');
-        message.reactions = (message.reactions ?? []).filter(emoji=>emoji!==p.emoji);
-        if (p.active) message.reactions.push(p.emoji);
+        if (p.active) message.reactions = [p.emoji];
+        else if (message.reactions?.[0] === p.emoji) message.reactions = [];
         notify('RoomsChanged',{room_id:p.room_id}); return {ok:true};
       }
       case "rooms.thread_open": {

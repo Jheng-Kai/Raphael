@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
-import { mountMessageMetadata, reactionControlHTML, reactionRowHTML, withReactions } from "./message-metadata";
+import { menuReactionsHTML, mountMessageMetadata, ownReaction, reactionControlHTML, reactionRowHTML, withReactions } from "./message-metadata";
 import { closeMenu } from "./ui";
 
 beforeEach(() => { closeMenu(); document.body.innerHTML = ""; setLocale("en"); });
@@ -29,11 +29,35 @@ test("the react button opens the quick bar, a reaction only updates its message 
   unmount();
 });
 
-test("any emoji a message has shows as its own chip, the old ones too", () => {
+test("any emoji a message has shows as its one chip, and an older message that carries several shows only the newest", () => {
   const row = document.createElement("div");
-  row.innerHTML = reactionRowHTML(["✓", "🎉", "👨‍👩‍👧"]);
-  expect([...row.querySelectorAll<HTMLElement>("[data-reaction]")].map(chip => chip.dataset.reaction)).toEqual(["✓", "🎉", "👨‍👩‍👧"]);
+  row.innerHTML = reactionRowHTML(["👨‍👩‍👧"]);
+  expect([...row.querySelectorAll<HTMLElement>("[data-reaction]")].map(chip => chip.dataset.reaction)).toEqual(["👨‍👩‍👧"]);
+  row.innerHTML = reactionRowHTML(["✓", "🎉", "👍"]);
+  expect([...row.querySelectorAll<HTMLElement>("[data-reaction]")].map(chip => chip.dataset.reaction)).toEqual(["👍"]);
   expect(reactionRowHTML([])).toBe("");
+  expect(ownReaction(undefined)).toEqual([]);
+  expect(ownReaction(["✓", "🎉"])).toEqual(["🎉"]);
+});
+
+test("one reaction per message: another emoji replaces the one given, the same again takes it back, and only the newest of an older list is pressed", async () => {
+  const host = document.createElement("section"); document.body.append(host);
+  host.innerHTML = `<div class="chat-message"><div class="message-actions">${reactionControlHTML()}</div></div>`;
+  const react = vi.fn().mockResolvedValue({ok:true});
+  const unmount = mountMessageMetadata(host, () => ({reactions:["👍","❤️"],react}), vi.fn(), vi.fn());
+  host.querySelector<HTMLButtonElement>('[data-act="react-message"]')!.click();
+  const bar = document.querySelector<HTMLElement>("#app-popover.reaction-bar")!;
+  expect([...bar.querySelectorAll<HTMLElement>("[aria-pressed='true']")].map(b => b.dataset.quick)).toEqual(["❤️"]);
+  bar.querySelector<HTMLButtonElement>('[data-quick="😂"]')!.click(); await flush();
+  expect(react).toHaveBeenLastCalledWith("😂", true);
+  host.querySelector<HTMLButtonElement>('[data-act="react-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('#app-popover [data-quick="❤️"]')!.click(); await flush();
+  expect(react).toHaveBeenLastCalledWith("❤️", false);
+  host.querySelector<HTMLButtonElement>('[data-act="react-message"]')!.click();
+  document.querySelector<HTMLButtonElement>('#app-popover [data-quick="👍"]')!.click(); await flush();
+  expect(react).toHaveBeenLastCalledWith("👍", true);
+  expect(menuReactionsHTML(["👍", "👎"]).match(/aria-pressed="true"/g)).toHaveLength(1);
+  unmount();
 });
 
 test("reactions are drawn inside the first bubble, so what follows it never takes them from it", () => {
@@ -42,8 +66,8 @@ test("reactions are drawn inside the first bubble, so what follows it never take
   expect(reply.map(part => part.className)).toEqual(["ans", "turn-signin"]);
   expect([...reply[0].children].map(part => part.className)).toEqual(["message-reactions", "message-text"]);
   expect(reply[1].querySelector(".message-reactions")).toBeNull();
-  const owner = sibling(withReactions('<div class="owner-content"><div class="me-files"></div><div class="bubble"><div class="message-quote"></div><div class="message-text">Hi</div></div></div>', ["🎉", "😂"]));
-  expect(owner[0].querySelector(".bubble > .message-reactions")?.querySelectorAll("[data-reaction]")).toHaveLength(2);
+  const owner = sibling(withReactions('<div class="owner-content"><div class="me-files"></div><div class="bubble"><div class="message-quote"></div><div class="message-text">Hi</div></div></div>', ["🎉"]));
+  expect(owner[0].querySelector(".bubble > .message-reactions")?.querySelectorAll("[data-reaction]")).toHaveLength(1);
   expect(owner[0].querySelector(".me-files .message-reactions")).toBeNull();
   const card = sibling(withReactions('<section class="rich-block"></section>', ["👍"]));
   expect(card.map(part => part.className)).toEqual(["rich-block", "message-reactions"]);
