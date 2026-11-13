@@ -1767,7 +1767,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawBackgroundQuestions(): void {
     waiting = mountBackgroundQuestions(backgroundSlot, {
       memberId: memberId(),
-      manageLocal: () => app.go("settings", "safety"),
       asker: () => {
         const member = members.member();
         return { face: faceHTML(member, 22, { cls: "bgq-face" }), name: inRaphael() ? null : member.name };
@@ -2311,9 +2310,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
-        break;
-      case "local-settings":
-        app.go("settings", "safety");
         break;
       case "search":
       case "search-close":

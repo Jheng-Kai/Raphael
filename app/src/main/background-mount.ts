@@ -19,7 +19,6 @@ export interface BackgroundQuestionsMount {
   asker(): Asker;
   /** A question was answered, came or went: the member column reads its 「等你處理」 again. */
   changed(): void;
-  manageLocal?(): void;
 }
 
 interface Mounted {
@@ -44,7 +43,6 @@ export function mountBackgroundQuestions(slot: HTMLElement, o: BackgroundQuestio
         memberId: () => made.current.memberId,
         asker: () => made.current.asker(),
         changed: () => made.current.changed(),
-        manageLocal: () => made.current.manageLocal?.(),
       }),
     };
     entry = made;

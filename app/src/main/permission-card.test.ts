@@ -76,16 +76,16 @@ test("local command consent names the member, preserves exact code and offers fo
   expect(html).toContain("允許所有成員在你的電腦執行指令？");
   expect(html).toContain("&lt;cpu&gt;");
   expect(html).toContain("<pre");
-  expect(actions(html)).toEqual(["local-settings", "perm-once", "perm-always", "perm-deny", "perm-never"]);
+  expect(actions(html)).toEqual(["perm-once", "perm-always", "perm-deny", "perm-never"]);
 });
 
 test("later local commands have Allow and Skip without a standing-approval button", () => {
   const html = permissionCardHTML(card({ kind: "local_command" as PermissionCard["kind"], service: "Alex", always: false, tool: "local_exec", summary: "Get-Process" }));
-  expect(actions(html)).toEqual(["local-settings", "perm-once", "perm-deny"]);
+  expect(actions(html)).toEqual(["perm-once", "perm-deny"]);
   expect(html).toContain("略過");
 });
 
-test("a local command that waits shows the command itself, its directory and settings, with no disclosure to open", () => {
+test("a local command that waits shows the command itself and its directory, with no disclosure to open and no way into a setting", () => {
   const html = permissionCardHTML(card({ kind: "local_command", service: "Alex", summary: "Get-Process", reason: "D:\\Project", always: false }));
   expect(html).toContain('<b class="card-title cc-name">Alex 想要執行指令</b>');
   expect(html).toContain('<p class="card-body cc-state">在你的電腦執行這個指令前，需要你確認。</p>');
@@ -93,7 +93,7 @@ test("a local command that waits shows the command itself, its directory and set
   expect(html).toContain('<pre class="local-command">Get-Process</pre>');
   expect(html).not.toContain("data-card-disclosure");
   expect(html).toContain("D:\\Project");
-  expect(html).toContain('data-act="local-settings"');
+  expect(html).not.toContain('data-act="local-settings"');
   // Once answered the command folds into the details with the rest.
   expect(permissionCardHTML(card({ kind: "local_command", service: "Alex", summary: "Get-Process", state: "allowed", always: false }))).toContain("data-card-disclosure");
 });

@@ -574,8 +574,7 @@ test("a member's question waits in the room above its composer, and its row says
  const card=document.querySelector('.au-room-pane .ra-dock .ra-bgq .permission-card')!;
  expect(card.textContent).toContain('Get-Process');
  expect(api.core).toHaveBeenCalledWith('background.questions.list',{room_id:1});
- card.querySelector<HTMLButtonElement>('[data-act="local-settings"]')!.click();
- expect(app.go).toHaveBeenCalledWith('settings','safety');
+ expect(card.querySelector('[data-act="local-settings"]')).toBeNull();
  api.roomsList.mockResolvedValue({rooms:[{...room,waiting:true,preview:'舊的預覽'}]});
  const section=createRoomsSection(()=>true);document.body.append(section);await flush();
  expect(section.querySelector('[data-room="1"] .mb-dot.is-wait')).not.toBeNull();

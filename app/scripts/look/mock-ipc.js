@@ -754,12 +754,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"],disabled_tools:[]});
     data.home.calendar_google="connected";
   }
-  // A subscription nearly used up, as the account menu's 用量 shows it (the tightest window): Codex's weekly window 96% used, resetting in six days.
-  if (variant.allowanceTight) {
-    const codex = data.allowances.brains.find(brain => brain.id === "codex");
+  // Subscriptions nearly used up, as the account menu's 用量 lists them (each one's tightest window): Codex's weekly window 96% used, resetting in six days,
+  // and Claude's 97% used, resetting in three (what its last turn reported, stamped 20 minutes ago). `allowanceTwo` leaves the two the owner has connected.
+  if (variant.allowanceTight || variant.allowanceTwo) {
+    const codex = data.allowances.brains.find(brain => brain.id === "codex"), claude = data.allowances.brains.find(brain => brain.id === "claude");
     codex.source = "live";
     codex.windows = [{ period: "weekly", remaining_percent: 4, resets_at: Math.round(data.now / 1000) + 6 * 86400 }, ...codex.windows.filter(window => window.period !== "weekly")];
+    claude.windows = [{ period: "weekly", remaining_percent: 3, resets_at: Math.round(data.now / 1000) + 3 * 86400, updated_at_ms: data.now - 20 * 60000 }, ...claude.windows.filter(window => window.period !== "weekly")];
   }
+  if (variant.allowanceTwo) data.allowances.brains = data.allowances.brains.filter(brain => brain.id === "claude" || brain.id === "codex");
   if (variant.homeEmpty) {
     data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];

@@ -11,7 +11,7 @@ test("moved recovery copy names Tools, Safety and the member computer panel in e
       expect(t(key)).toContain(t("settings.paneTools"));
       expect(t(key)).not.toMatch(/設定 › 拉斐爾|Settings > Raphael|設定 › ラファエル/);
     }
-    expect(t("mcp.localDisabled")).toContain(t("settings.paneSafety"));
+    expect(t("mcp.localDisabled")).not.toContain(t("settings.paneSafety"));
     expect(t("missing.docker")).toContain(panel);
   }
   setLocale("zh-TW");
