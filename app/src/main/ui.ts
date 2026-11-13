@@ -618,7 +618,8 @@ export function placeMenu(): void {
   const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" || menu.placement === "center" || menu.placement === "right" || menu.placement === "middle" ? menu.placement : "end");
   if (cap < room) placement.maxHeight = Math.min(placement.maxHeight, cap);
   if (menu.placement === "beside") {
-    const first = el.querySelector<HTMLElement>("button");
+    // The first row is a button, or a block marked `data-menu-row` where the menu starts with words that are not a button.
+    const first = el.querySelector<HTMLElement>("button, [data-menu-row]");
     const inset = first ? first.getBoundingClientRect().top - el.getBoundingClientRect().top : 0;
     placement.top = Math.max(headerBottom + 8, placement.top - inset);
   }

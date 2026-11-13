@@ -816,12 +816,31 @@ Image layer 9 (R-COMP-READY-02). Owner, of the panel on layer 8: 「但看起來
   mark on amd64 (Chromium under its own on arm64). Until then a globe named "Browser" opened Chrome.
 - XFCE's "Web Browser", the menu's Chrome and Chromium entries and `x-www-browser` start the computer's browser.
   On layer 8 the first asked which application to prefer, and the menu's Chrome entry could not start at all.
-- Firefox stays installed and is out of the menu: a second browser is where an owner signs in for nobody.
+- Firefox stayed installed and left the menu (layer 10 removes it, below).
 - Layer 8 computers, the shared six-screen one among them, are made again on layer 9 at their next start. A PC
   that built layer 8 builds layer 9 from what it kept (measured: 15 s for the new step).
 - Check: `N screens browser mark` in `npm run verify -- --computer`, and the shared block's six launchers.
 
-Stated limit: a member that starts `/usr/bin/chromium` or `firefox` by its own path still gets that browser.
+Stated limit: a member that starts `/usr/bin/chromium` by its own path still gets that browser.
+
+## Firefox is removed (2026-11-14)
+
+Image layer 10 (R-COMP-READY-03). Owner: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」
+
+- Firefox ESR is purged from the image: the package, its `x-www-browser` alternative, its menu entry and mime
+  registrations, `/etc/firefox-esr`, `/usr/lib/mozilla`, XFCE's own Firefox entry in its list of preferred applications. `which firefox firefox-esr` finds nothing.
+- Google Chrome (the members' browser on amd64) and Chromium (the driver's, and the members' on arm64) stay. The
+  launcher, the menu, XFCE's Web Browser and `x-www-browser` still open the members' own browser; the last fallback
+  of `raphael-browser` is now an error line and not Firefox.
+- Layer 9 computers, the shared six-screen one among them, are made again on layer 10 at their next start, workspace
+  kept. A PC that built layer 9 builds layer 10 from what it kept (measured: 14 s, nothing downloaded).
+- The image is no smaller (4.17 GB before and after): the base image's own layer still holds Firefox's files and a
+  later layer cannot take them out. The browser is gone, the bytes are not.
+- Check: `N screens browser mark` in `npm run verify -- --computer` reads the computer for any Firefox ESR package,
+  program, entry, configuration or mention; the `previous layer 9` blocks start a layer 9 computer of each shape on
+  layer 10 when a layer 9 image is on the PC.
+
+Stated limit: a `.browser-profiles/mozilla` folder that an existing workspace already has stays in it.
 
 ## Responsive computer tools (2026-11-04)
 
@@ -1126,10 +1145,10 @@ members/test_local_commands.py and brain/test_owner.py. No look scene changes: n
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
 pinned local_exec/local_job definitions on API and CLI MCP paths, no other turn does.
-Settings > Raphael places Local commands beside Computer use, with Ask every time
-(default), Always allow and Never. First consent names the requesting member and
-asks for all members, with four real answers. Later command cards show Allow/Skip
-and a settings action. Exact multiline commands and cwd appear on the shared
+Settings has no control for the mode (removed 2026-11-14 at the owner's word: 「本機指定我覺得應該可以先拿掉」),
+and the setting itself stays: ask (default), always and never, one value for a quick question. First consent names the
+requesting member and asks for all members, with four real answers. Later command cards show Allow/Skip
+and no way into a setting. Exact multiline commands and cwd appear on the shared
 permission card; no command arguments or results appear in public steps. The
 background renderer uses the same card. Chat has no timer (also in CLI/shell);
 background questions expire after 30 minutes. Esc denies once. Phone/Telegram
@@ -1145,7 +1164,7 @@ the owner card remains the permission boundary. cua-driver session is removed
 from both schema variants and rejected if injected at execution.
 
 ```powershell
-npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-manage local-command-settings local-command-setting-always local-command-setting-never local-permission-card --theme both --width 1120,720,1920x1080
+npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-settings-gone local-permission-card --theme both --width 1120,720,1920x1080
 ```
 
 Inspect every contact sheet, all pending/settled/background cards and settings at

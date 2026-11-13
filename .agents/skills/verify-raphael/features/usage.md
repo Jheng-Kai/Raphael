@@ -7,7 +7,8 @@ subscription brain (Claude, Codex, Antigravity) has one card: every window it re
 (5 hours, weekly) as the share left with a bar and when it resets, whether the number is
 live or from the last run, and an honest line when the percentage is unknown or the
 allowance ran out. ChatGPT has its card with 管理用量, which opens its own usage page.
-With no subscription signed in the cards stand aside.
+With no subscription signed in the cards stand aside. The account menu's 用量 submenu lists the same
+subscriptions, one block each (its tightest window, its number and when it resets), from the same reading.
 
 Below them are three rows: the OpenRouter key, what Raphael spent this month (the same
 ledger as everywhere else) and the key's own monthly usage with its limit and what is left.

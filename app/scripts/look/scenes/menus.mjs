@@ -7,8 +7,8 @@ export default [
   scene("menu-wheel-closes", "A real wheel over the page closes both menu levels", [...hovered, { action: "menu-wheel" }, check("menu-scroll-closed")]),
   scene("menu-resize-closes", "Window resizing closes both frozen menu levels", [...hovered, { action: "menu-resize" }, check("menu-scroll-closed")]),
   scene("menu-hide-control", "Hide in the sidebar's menu uses its action icon without a navigation chevron", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="1"]'), wait('#app-popover [data-pick="hide"]'), check("menu-hide-control")]),
-  scene("menu-settings-redraw", "Settings replace their keyed control without moving its open menu", [...settings("safety"), scroll('[data-k="local-commands"]'),
-    click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), { action: "menu-settings-redraw" }, check("menu-settings-redraw")]),
+  scene("menu-settings-redraw", "Settings replace their keyed control without moving its open menu", [...settings("dictation"), scroll('[data-k="retention"]'),
+    click('[data-k="retention"]'), wait('.menu [data-value="7"]'), { action: "menu-settings-redraw" }, check("menu-settings-redraw")]),
   // A row's own ⋯ is never drawn (R-UI-44), so the control that a press returns the menu to is one that is: a message's.
   scene("menu-pointer-return", "A real press on a message's drawn ⋯ returns a menu a right click opened at the pointer to its own control", [rightClick('.chat-message[data-reply="true"] .message-text'),
     wait('#app-popover'), click('.chat-message[data-reply="true"] [data-act="more-message"]'), check("menu-anchor-return")]),
