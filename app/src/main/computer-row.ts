@@ -22,12 +22,14 @@ export interface ComputerRowModel {
   /** The one quiet line of an unavailable computer. */
   problem?: string;
   fix?: ComputerRowFix;
+  /** Who woke the computer and why, when a member's tool did (R-COMP-WAKE-01): it stands in the state's place while awake. */
+  note?: string;
 }
 
 const models = new Map<number, ComputerRowModel>();
 const listeners = new Set<() => void>();
 const same = (a: ComputerRowModel | undefined, b: ComputerRowModel): boolean =>
-  !!a && a.state === b.state && a.picture === b.picture && a.problem === b.problem && a.fix === b.fix;
+  !!a && a.state === b.state && a.picture === b.picture && a.problem === b.problem && a.fix === b.fix && a.note === b.note;
 
 /** The viewer says what the computer of `model.member` looks like now; nothing changes (and nobody is told) when it is the same. */
 export function publishComputerRow(model: ComputerRowModel): void {
@@ -60,7 +62,7 @@ export function computerRowHTML(model: ComputerRowModel | undefined, name: strin
   const row = model ?? { member: 0, state: "asleep" as const };
   const label = t("desktop.event", { p0: name });
   const unavailable = row.state === "unavailable";
-  const state = !model ? "" : unavailable ? (row.problem ?? t("desktop.unavailable")) : t(STATE_WORD[row.state]);
+  const state = !model ? "" : unavailable ? (row.problem ?? t("desktop.unavailable")) : row.state === "awake" && row.note ? row.note : t(STATE_WORD[row.state]);
   const fix = unavailable && (row.fix === "start" || row.fix === "download")
     ? `<button type="button" class="btn sm mb-computer-fix" data-det="computer-fix" data-fix="${row.fix}" data-k="computer-fix">${esc(t(FIX_WORD[row.fix]))}</button>` : "";
   return `<div class="mb-dh"><span>${esc(t("members.panelTab.computer"))}</span></div>` +

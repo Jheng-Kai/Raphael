@@ -536,7 +536,7 @@ export function checkRendered(name, context = {}) {
       // a PC that cannot give one says so in that row with the one action that fixes it. Nothing asks whether the member may have it.
       const kind = name.slice('member-panel-details-computer-'.length), section = panel.querySelector('.mb-panel-computer'), box = section.querySelector('.mb-computer');
       const open = box.querySelector('[data-det="computer-open"]'), word = box.querySelector('.mb-computer-state'), thumb = box.querySelector('[data-computer-thumb]'), fix = box.querySelector('[data-det="computer-fix"]');
-      const expected = { asleep: ['asleep', '休眠中'], connecting: ['connecting', '連線中'], awake: ['awake', '已喚醒'], 'docker-missing': ['unavailable', '這台電腦尚未安裝 Docker Desktop'],
+      const expected = { asleep: ['asleep', '休眠中'], connecting: ['connecting', '連線中'], awake: ['awake', '已喚醒'], 'awake-woken': ['awake', '小晴為了開網頁喚醒了電腦'], 'docker-missing': ['unavailable', '這台電腦尚未安裝 Docker Desktop'],
         'docker-stopped': ['unavailable', '這台電腦的 Docker Desktop 沒有在執行'], remote: ['unavailable', '無法連線至 studio-mini，請檢查電腦位置'] }[kind];
       require(visible(box) && box.dataset.computerState === expected[0] && word.textContent === expected[1], `the row reads ${expected[1]} (${box.dataset.computerState}: ${word.textContent})`);
       require(box.querySelectorAll('button').length === (fix ? 2 : 1) && /的電腦$/.test(open.querySelector('b').textContent), 'one press opens it, and only an unavailable PC adds its one fix');
@@ -885,6 +885,14 @@ export function checkRendered(name, context = {}) {
     requireBareScreen(panel.querySelector('.desktop-screen'), `the ${phase} screen`);
     const words = {sleeping:'電腦在休眠',waking:'正在喚醒',updating:'正在更新',repairing:'正在修復'};
     require(!shownText(panel).includes(words[phase]), 'no sentence says the computer state');
+    return {check:name};
+  }
+  if (name === 'computer-wake-line') {
+    const lines = [...document.querySelectorAll('.chat-message[data-reply="true"]')].filter(line => line.textContent.includes('喚醒了電腦'));
+    require(lines.length === 1 && lines[0].textContent.trim() === '小晴為了開網頁喚醒了電腦', `the conversation says who woke the computer and why, once (${lines.map(line => line.textContent.trim())})`);
+    require(visible(lines[0]) && lines[0].scrollWidth <= lines[0].clientWidth + 1, 'the line is a normal message and fits its column');
+    require(!document.querySelector('.toast, [role="alert"]:not([hidden])'), 'no toast and no alert says it');
+    require(!window.__look.calls.some(call => call.method === 'computer.lifecycle'), 'saying so performs no maintenance');
     return {check:name};
   }
   if (name === 'computer-low-disk') {

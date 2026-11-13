@@ -22,6 +22,8 @@ export interface DesktopState {
   mode?: "shared" | "per-bot";
   idle_minutes?: number;
   repair_revision?: number;
+  /** A member's own tool woke this computer (R-COMP-WAKE-01): who, and for what. Absent when the owner started it. */
+  woken?: { member: number; name: string; reason: "page" | "command" | "other" };
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
   ready: boolean;
   image?: boolean;
@@ -39,6 +41,7 @@ export function isAsleep(state: DesktopState | undefined): boolean {
   return !!state && !state.lifecycle && (state.state === 'stopped' || state.state === 'missing' && state.image !== false)
     && state.error !== 'docker_stopped' && state.error !== 'remote_unavailable';
 }
+const WOKE_WORD = { page: "computer.woke.page", command: "computer.woke.command", other: "computer.woke.other" } as const;
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
 
 export function preparationHTML(state: DesktopState, face = ""): string {
@@ -197,7 +200,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     // A missing image is a first start, not a fault: the same press prepares it.
     if (isAsleep(state) || state.state === 'missing') return { ...base, state: 'asleep' };
     if (state.state === 'starting' || state.state === 'building' || state.state === 'preparing') return { ...base, state: 'connecting' };
-    if (state.state === 'running') return connected || stalled ? { ...base, state: 'awake', picture: lastFrames.get(member()) } : { ...base, state: 'connecting' };
+    if (state.state === 'running') {
+      const woken = state.woken;
+      const note = woken ? t(WOKE_WORD[woken.reason] ?? WOKE_WORD.other, { p0: woken.name }) : undefined;
+      return connected || stalled ? { ...base, state: 'awake', picture: lastFrames.get(member()), ...(note ? { note } : {}) } : { ...base, state: 'connecting' };
+    }
     return trouble('retry');
   }
 

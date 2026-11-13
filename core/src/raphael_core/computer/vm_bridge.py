@@ -119,7 +119,8 @@ class CuaBridge:
         identifier = self.sequence
         future = asyncio.get_running_loop().create_future()
         self.pending[identifier] = future
-        reading = method == "tools/call" and (params or {}).get("name") in SCREEN_READS
+        # browser_prepare starts the browser (and waits for its debugging port): under load that is a read's wait, not an action's.
+        reading = method == "tools/call" and (params or {}).get("name") in SCREEN_READS | {"browser_prepare"}
         timeout = self.read_timeout_s if reading else self.action_timeout_s
         try:
             async with asyncio.timeout(timeout):

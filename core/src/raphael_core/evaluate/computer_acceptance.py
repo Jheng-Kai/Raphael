@@ -50,7 +50,8 @@ NO_FIREFOX = ('for found in /usr/bin/firefox /usr/bin/firefox.real /usr/bin/fire
               'grep -il -e mozilla -e parentlock /usr/local/bin/raphael-browser /usr/local/bin/prepare-raphael-workspace.sh 2>/dev/null; true')
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
               "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
-              "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9"}
+              "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9",
+              "10": "raphael/cua-local-vm:driver-0.37.0-v10"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
 # A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
 OWN_PICTURE = base64.b64decode(
@@ -71,7 +72,7 @@ TEAL, ORANGE = bytes((128, 128, 0)), bytes((0, 140, 255))
 
 def image_helper():
     # Import by source, so the Docker context never acquires __pycache__.
-    path = IMAGE_FOLDER / "desktop/screens.py"
+    path = IMAGE_FOLDER / "layer11/screens.py"
     module = ModuleType("acceptance_image_screens")
     exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)
     return module
@@ -611,23 +612,45 @@ class Acceptance:
         return f"{target.screens} authenticated 1280x900 views; four invalid tokens refused; /vnc.html 200"
 
     async def quiet(self, target):
-        panels, bad = [], []
-        for window in await self.tree(target):
-            if window.title not in ("Displays", "xfce4-panel") or not await self.viewable(target, window):
-                continue
-            if window.title == "Displays":
-                bad.append(window)
-            elif window.rectangle[2:] == (10, 10):
-                continue
-            elif window.rectangle[2:] == (146, 49):
-                panels.append(window)
-            else:
-                bad.append(window)
         rectangles, _ = vm.screen_grid(target.screens)
-        require(not bad and len(panels) == target.screens and all(
-            sum(inside(rect, centre(panel.rectangle)) for panel in panels) == 1 for rect in rectangles),
-            f"Expected one 146x49 panel per output, only 10x10 helpers, no Displays/tooltip; observed panels={panels}, unexpected={bad}")
-        return "No viewable Displays dialog or panel tooltip; one panel per screen"
+        # A panel is 12 px wide until its launchers are loaded, and was once seen so for twenty seconds and more (seat 2 of
+        # six, 2026-11-13): give a booting computer a minute, say how long, and name what each panel holds when it fails.
+        began = time.monotonic()
+        while True:
+            panels, bad = [], []
+            for window in await self.tree(target):
+                if window.title not in ("Displays", "xfce4-panel") or not await self.viewable(target, window):
+                    continue
+                if window.title == "Displays":
+                    bad.append(window)
+                elif window.rectangle[2:] == (10, 10):
+                    continue
+                elif window.rectangle[2:] == (146, 49):
+                    panels.append(window)
+                else:
+                    bad.append(window)
+            whole = not bad and len(panels) == target.screens and all(
+                sum(inside(rect, centre(panel.rectangle)) for panel in panels) == 1 for rect in rectangles)
+            if whole or time.monotonic() > began + 60:
+                break
+            await asyncio.sleep(1)
+        waited = time.monotonic() - began
+        require(whole, f"Expected one 146x49 panel per output within 60 s, only 10x10 helpers, no Displays/tooltip; observed panels={panels}, "
+                       f"unexpected={bad}" + ("" if whole else f", plugin ids {await self.panel_plugins(target)}"))
+        # What makes a panel whole is its launchers: every screen's three, by their own ids.
+        plugins = await self.panel_plugins(target)
+        expected = {i: [str(n) for n in range(i * 3 - 2, i * 3 + 1)] for i in range(1, target.screens + 1)}
+        require(plugins == expected, f"Expected each screen's panel to hold its own three launchers {expected}, observed {plugins}")
+        return ("No viewable Displays dialog or panel tooltip; one panel per screen with its three launchers"
+                + (f", whole after {waited:.1f} s" if waited > 3 else ""))
+
+    async def panel_plugins(self, target):
+        """The plugin ids each screen's panel holds, as the panel's own configuration says."""
+        found = {}
+        for i in range(1, target.screens + 1):
+            result = await self.guest(target, ["xfconf-query", "-c", "xfce4-panel", "-p", f"/panels/panel-{i}/plugin-ids"], allow_failure=True)
+            found[i] = [line.strip() for line in result.stdout.splitlines() if line.strip().isdigit()]
+        return found
 
     async def browser_named(self, target):
         """Which browser this computer has, and that every screen's launcher wears its name and its mark."""
@@ -1898,9 +1921,8 @@ class Acceptance:
                         client.pointer(*point)
 
                     def type_line(line):
-                        for character in line:
-                            client.keys(ord(character))
-                        client.keys(0xff0d)
+                        # As a person types it: Shift held around what needs it (a bare "@" never reaches a seat).
+                        client.type_text(line + "\n")
                     before = await seat_terminals()
                     await asyncio.to_thread(press, launcher)
                     await asyncio.sleep(2)
@@ -1923,6 +1945,15 @@ class Acceptance:
                     while not await made(mark):
                         require(time.monotonic() < until, "Expected the holding owner's typed line to run in the seat's terminal")
                         await asyncio.sleep(.2)
+                    # What needs Shift, typed as a person types it (2026-11-14: a script's bare "@" never reached a seat).
+                    await asyncio.to_thread(type_line, f"echo 'Aa@?#%&(<' > {mark}-shift")
+                    until = time.monotonic() + 5
+                    while not await made(mark + "-shift"):
+                        require(time.monotonic() < until, "Expected the typed line with shifted characters to run in the seat's terminal")
+                        await asyncio.sleep(.2)
+                    await asyncio.sleep(.3)
+                    written = (await self.text(target, ["cat", mark + "-shift"])).strip()
+                    require(written == "Aa@?#%&(<", f"Expected shifted characters to reach the seat's terminal as typed, observed {written!r}")
                     await viewer.control({**opened, "held": False})
                     await asyncio.to_thread(type_line, f"touch {mark}-after")
                     await asyncio.sleep(1.5)

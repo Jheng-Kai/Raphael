@@ -10,7 +10,7 @@ import struct
 
 import pytest
 
-from raphael_core.computer import vm
+from raphael_core.computer import rfb_view, vm
 from raphael_core.evaluate import computer_acceptance as acceptance
 from computer.fixtures.driver_contract import KEPT, SCHEMAS, catalog, validate_call, runtime_refusal
 
@@ -578,7 +578,9 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert [a for a, b in zip(eighth, current) if a != b] == [f"{vm.LABEL}.layer=8", acceptance.OLD_IMAGES["8"]]
     ninth = acceptance.previous_args(target, machine.owner, "private", "9")
     assert [a for a, b in zip(ninth, current) if a != b] == [f"{vm.LABEL}.layer=9", acceptance.OLD_IMAGES["9"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9"]
+    tenth = acceptance.previous_args(target, machine.owner, "private", "10")
+    assert [a for a, b in zip(tenth, current) if a != b] == [f"{vm.LABEL}.layer=10", acceptance.OLD_IMAGES["10"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10"]
 
 
 class FakeDocker:
@@ -708,18 +710,18 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
-    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v10"],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v11"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v9"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v8"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v10"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v11"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
-    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v10", "image"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v11", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v9", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v8", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v7", "image"],
@@ -922,7 +924,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     pointer = [0, 0]
     active = [None]
     launches, attachments = [], []
-    viewers, owner_files = [], set()
+    viewers, owner_files, owner_text = [], set(), {}
     launchers = []
     original_runtime = runtime.__call__
 
@@ -971,6 +973,8 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         if guest[:2] == ["test", "-e"] and guest[2].startswith("/usr/share/icons/"):
             assert guest[2] == "/usr/share/icons/hicolor/48x48/apps/chromium.png", "this world's browser is Chromium"
             return vm.Result(0, "")
+        if guest[:1] == ["cat"] and guest[1] in owner_text:
+            return vm.Result(0, owner_text[guest[1]] + "\n")
         if guest[:1] == ["cat"] and guest[1].endswith("/browser.desktop"):
             launchers.append(guest[1])
             return vm.Result(0, "[Desktop Entry]\nType=Application\nName=Chromium\nExec=raphael-browser %U\nIcon=chromium\n")
@@ -1191,6 +1195,28 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                     self.typed = ""
                 else:
                     self.typed += chr(key)
+
+        def type_text(self, text):
+            """What a seat's view server does with the keys: a key that needs Shift arrives only with Shift held."""
+            if not self.held():
+                return
+            shift = False
+            for character in text:
+                for key, down in rfb_view.keystrokes(character):
+                    if key == rfb_view.SHIFT_L:
+                        shift = bool(down)
+                    elif not down:
+                        continue
+                    elif key == 0xff0d:
+                        line, self.typed = self.typed, ""
+                        if line.startswith("touch "):
+                            owner_files.add(line.removeprefix("touch "))
+                        elif line.startswith("echo '"):
+                            written, _, path = line[len("echo '"):].partition("' > ")
+                            owner_files.add(path)
+                            owner_text[path] = written
+                    elif chr(key) not in rfb_view.SHIFTED or shift:
+                        self.typed += chr(key)
 
     monkeypatch.setattr(run, "http", lambda port, path, origin=None: (200, json.dumps({"path": "/owner/websockify/1", "password": "private"}).encode()))
     monkeypatch.setattr(run, "connect", lambda port, path, password, origin=None: (SimpleNamespace(close=lambda: None), OwnerHands()))
@@ -1569,3 +1595,52 @@ async def test_per_bot_form_restores_callbacks_even_when_teardown_raises(tmp_pat
     with pytest.raises(OSError, match='Synthetic teardown failure'):
         await run.per_bot_form(machine.target(1), 1)
     assert before == (machine.bridge_command, machine.disconnect_driver, machine.busy, machine.native_busy, machine.input_busy)
+
+
+class PanelAcceptance:
+    """`Acceptance.quiet` and `panel_plugins` against a computer whose panels load one after another."""
+
+    def __init__(self, widths, plugins):
+        self.widths, self.plugins, self.looks = widths, plugins, 0
+
+    async def tree(self, target):
+        self.looks += 1
+        widths = self.widths[min(self.looks - 1, len(self.widths) - 1)]
+        return [acceptance.Window(hex(i + 1), "xfce4-panel", (1280 * (i % 2) + 567, 900 * (i // 2) + 851, width, 49), False)
+                for i, width in enumerate(widths)]
+
+    async def viewable(self, target, window):
+        return True
+
+    async def guest(self, target, args, *, allow_failure=False):
+        number = int(args[-1].split("/")[2].removeprefix("panel-"))
+        ids = self.plugins.get(number, [])
+        return vm.Result(0 if ids else 1, "Value is an array with 3 items:\n\n" + "\n".join(ids) if ids else "")
+
+    panel_plugins = acceptance.Acceptance.panel_plugins
+    quiet = acceptance.Acceptance.quiet
+
+
+async def test_a_panel_that_loads_late_is_waited_for_and_one_that_stays_empty_fails_naming_what_it_holds(monkeypatch):
+    # Seat 2's panel was seen 12 px wide, holding nothing, for twenty seconds and more (2026-11-13).
+    target = vm.Target("k", "n", None, None, screen=1, screens=4, container="shared")
+    ids = {i: [str(n) for n in range(i * 3 - 2, i * 3 + 1)] for i in range(1, 5)}
+    sleeps = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+    monkeypatch.setattr(acceptance.asyncio, "sleep", sleep)
+    late = PanelAcceptance([[146, 146, 12, 12], [146, 146, 146, 12], [146] * 4], ids)
+    assert "one panel per screen with its three launchers" in await late.quiet(target)
+    assert late.looks == 3 and len(sleeps) == 2
+    # The panel holds nothing: no plugin ids, and 12 px for as long as the check waits (a clock that jumps a minute).
+    clock = iter([0, 0, 61, 61, 61, 61])
+    monkeypatch.setattr(acceptance.time, "monotonic", lambda: next(clock))
+    empty = PanelAcceptance([[146, 12, 146, 146]], {**ids, 2: []})
+    with pytest.raises(AssertionError, match=r"within 60 s.*plugin ids .*2: \[\]"):
+        await empty.quiet(target)
+    # Whole panels without the three launchers by their own ids are no pass either.
+    monkeypatch.undo()
+    wrong = PanelAcceptance([[146] * 4], {**ids, 2: ["1", "2", "3"]})
+    with pytest.raises(AssertionError, match="its own three launchers"):
+        await wrong.quiet(target)

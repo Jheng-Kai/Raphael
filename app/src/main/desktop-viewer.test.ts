@@ -921,6 +921,17 @@ test('the computer row follows asleep, connecting and awake, and holds the last 
   message('frame', { image:'data:image/jpeg;base64,AAAA' }); expect(computerRowOf(1)?.picture).toBe('data:image/jpeg;base64,AAAA');
 });
 
+test('the row names the member whose own tool woke the computer, and the reason, in its state line', async () => {
+  rowOpen=true; panelOpen=false;
+  api.desktopStatus.mockResolvedValue({ ...running, woken: { member: 2, name: 'Mei', reason: 'command' } }); mounted.show(); await flush();
+  message('connected');
+  expect(computerRowOf(1)).toMatchObject({ state:'awake', note: t('computer.woke.command', { p0:'Mei' }) });
+  expect(computerRowOf(1)?.note).toContain('Mei');
+  // The owner's own start leaves no record: the row says awake and nothing else.
+  api.desktopStatus.mockResolvedValue(running); mounted.refresh(); await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(computerRowOf(1)?.note).toBeUndefined();
+});
+
 test('a PC that cannot give a computer says so in the row with the one action that fixes it', async () => {
   rowOpen=true;
   const cases: [Partial<DesktopState>, string, string | undefined][] = [

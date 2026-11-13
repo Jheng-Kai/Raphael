@@ -1,5 +1,65 @@
 # Member computer (Phases A and B)
 
+## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole (owner, 2026-11-14)
+
+R-COMP-WAKE-01, R-COMP-LOAD-01, R-COMP-PANEL-01, R-COMP-TYPE-01 (image `driver-0.37.0-v11`). The owner: 「電腦的部分你可能要再改好一下…
+你就一次把所有東西都修復吧」, with the wake policy asked for in his words: the computer wakes when a member decides a task needs it (its
+own computer tool) or when he starts it, never merely by opening a conversation or a panel, and not silently.
+
+Wake policy (read first, then changed). Read in the code: a member's computer tool starts a sleeping computer without any question
+(`vm_tools.py::VmTools.call`, `vm.start`), which is the member's decision and stays; opening a conversation or a panel starts
+nothing (`desktop-viewer.ts` streams only a computer that already runs; only a press starts one, `viewer.py::_open` with
+`vm.launch`); but `web_read` (`agent/tools.py`) fell back to the member's browser whenever a page read under 600 characters, came
+back bad, or asked for scripts or cookies, and that fallback went through `rendered_read` and `VmTools.call`, which woke the
+computer for a page read; and nothing counted the owner's open stream as activity, so the idle bound (15 minutes,
+`vm.py::sweep`) could put a computer to sleep under his eyes.
+- `web_read` no longer wakes it. `VmTools.rendered_read` looks first (`_awake`: a status read, never a start); asleep it returns
+  `computer_asleep`, and the page comes back as read with `READ_NEEDS_BROWSER` ("your computer is asleep and reading a page does
+  not wake it; call browser_open with its address yourself"), or, for a page that did not read at all, the failure with that
+  instruction. An awake computer is still used for a short page: nothing is started, the gate, the audit, the owner hold and the
+  cookie rule are the same, so there is nothing to decide against.
+- A start by a member's own tool is never silent. `LocalVm._start` calls `wake_notice` once when a computer that was asleep (or
+  never made) has been started; `VmTools._wake_notice` writes one line in that member's conversation (a notice, or the progress
+  line where a task has no conversation), naming the member and why in the member's language: a page (any browser tool), a
+  command (`vm_exec`) or using the computer (anything else): 「小晴為了開網頁喚醒了電腦」. No toast, no card. The same record
+  (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs, and the computer's row in the
+  member's panel shows the line where 已喚醒 stood. It is dropped when the computer sleeps or when the owner starts it (a press,
+  maintenance), so his own start leaves no line. Routines and background tasks run through the same call, so they follow the same
+  rules (their line goes to their own conversation or progress). All fifteen interface languages: `_computer_words_data.py` for
+  the core and `computer.woke.*` in `app/src/main/i18n`.
+- The owner watching counts. `DesktopViewer._monitor` marks the computer active every second while a view of it has a connected
+  socket (a preview included: an open panel with the screen showing is watching), so the idle bound does not apply to it; an
+  unwatched, quiet computer still sleeps at the bound.
+Evidence: `tests/computer/test_wake.py`, `test_viewer.py::test_a_computer_the_owner_is_watching_is_not_idle_and_one_nobody_watches_sleeps`,
+`tests/agent/test_web_read_hint.py` (each was red before its change), and the look scenes below.
+
+```powershell
+npm run look -- computer-wake-line member-panel-details-computer-awake member-panel-details-computer-awake-woken member-panel-details-computer-asleep member-panel-details-computer-awake-woken member-panel-computer-live computer-low-disk --theme both --width 1120,720,1920x1080
+```
+
+`computer-wake-line` is the conversation's line (one normal message, no toast, no alert); `member-panel-details-computer-awake-woken` is
+the row's line in the state's place (it wraps inside the row, it is not cut). Native, not run: a member's real browser_open on a
+sleeping computer, and a real routine waking one.
+
+Layer 11 (a loaded PC, a panel that stays empty, shifted keys). Two scripts of the image are replaced by the copies in
+`image/layer11/` in a step after the last heavy one; `image/desktop/` is untouched (the stale copies there are what this step writes
+over), so a PC that built layer 10 reruns two steps (3.0 s measured, everything before cached).
+- Window waits. Measured on a real six-screen computer with the browser's first window 45 s late: the layer 10 script ended "no
+  browser window appeared" after 17.7 s, layer 11 opened it in 46.3 s. The script's deadlines are wall clock (60 s, 30 s), not
+  counts of looks. Every bound outside it is longer, and a member's call still says it is reading after 10 s and reports its elapsed
+  time (the same waiting words as before; a member is never told a wait is a failure).
+- Panels. Not reproduced in six boots (two starved, two with browsers opening). Measured: a panel is 12 px until its launchers are
+  loaded; the running panel does not read `/panels` until `xfce4-panel -r`, so the write order was not what emptied it. The helper
+  still writes in the order of dependence, verifies after its restart, and watches (10 s tick, 30 s tolerance, five restarts at
+  most): a panel emptied behind its back (plugin ids removed, restart) was whole again after 41.9 s. Not proven: the original
+  cause; the acceptance now waits for a whole panel per screen and fails naming what each holds.
+- Keys. A seat's view server drops Shift-needing keysyms sent bare (22 of 22 arrived with Shift_L held). Only scripts send bare
+  keysyms (the acceptance's typing); `Rfb.type_text` holds Shift for a US keyboard and refuses other layouts. Members type through
+  the driver, a person through the browser, both unaffected.
+
+Not run: `verify --computer` on the final tree is listed in the report that handed this over; item 2 under real memory starvation
+(stood in by a delayed browser start).
+
 ## The owner can always take the computer; a hold never outlives its use (owner, 2026-11-14)
 
 R-COMP-TAKE-01, R-COMP-HOLD-01 (main e13ff592, image layer 9, members sharing one computer). The owner's picture: the larger
@@ -222,7 +282,7 @@ The browser belongs to the computer. Layer 7 adds the existing-profile grant and
 installs raphael-seat-browser. The launcher uses now-minus-before plus a unique
 title-only data page marker and the main browser pid to identify this launch's
 window, excluding disappeared windows and concurrent same-pid peer popups. It
-places/maximizes the window and waits up to five seconds for settled geometry
+places/maximizes the window and waits for settled geometry (up to thirty seconds since layer 11, R-COMP-LOAD-01)
 (the measured panel height is 49 pixels). Each seat attaches with existing_profile,
 binds, then browser_open navigates to the requested URL. Shared browser_prepare
 normalizes profile/strategy to existing_profile and preserves delivery_mode.
@@ -714,7 +774,7 @@ screen contents. Never reuse the outer approval for another action. Shell,
 takeover, secrets and nested composites are excluded. Shared API/worker and CLI completion guards require a post-action window/page read or verify_state expect containing a meaningful window exists/bounds predicate or an element with a nonempty selector. Historical predicates records remain counted only by the tracker. run_steps validates its observation schema and meaningful expect before dispatching its first action; one correction is allowed, then completion fails.
 
 Thin/empty/consent-wall web_read results escalate through the current member's
-member's own browser. Exact Reject all / necessary-only semantic buttons may be
+member's own browser only while that computer is already awake; a sleeping one is not woken for a page read (R-COMP-WAKE-01). Exact Reject all / necessary-only semantic buttons may be
 clicked; ambiguous controls never imply consent. Every browser subcall retains
 the normal gate and owner-hold checks. No fallback reader/provider is purchased.
 

@@ -806,3 +806,29 @@ async def test_handback_invalidates_an_inflight_websocket_handshake(viewer, monk
         writer.close()
         server.close()
         await server.wait_closed()
+
+
+async def test_a_computer_the_owner_is_watching_is_not_idle_and_one_nobody_watches_sleeps(viewer):
+    """R-COMP-WAKE-01: the stream that is open counts as activity, so the idle bound never puts the computer to sleep under the
+    owner's eyes; the same computer, unwatched and quiet, is stopped at that bound."""
+    bridge, runtime, clock = viewer
+    opened = await bridge.open({})
+    session = bridge.sessions[opened["session"]]
+    key, vm = session.target.state_key, bridge.vm
+    vm.last_activity[key] = 0
+    async def pass_time(seconds):
+        while seconds > 0:
+            clock[0] += min(10, seconds)
+            seconds -= 10
+            await bridge.renew(opened)
+        await asyncio.sleep(1.2)
+    session.sockets.add("watching")
+    await pass_time(1000)
+    assert vm.last_activity[key] == clock[0], "a watched screen keeps the computer from ageing"
+    await vm.sweep()
+    assert runtime.raw["State"]["Running"] is True and not any(args[0] == "stop" for args, _ in runtime.calls)
+    session.sockets.clear()
+    await pass_time(1000)
+    assert vm.last_activity[key] < clock[0] - 900, "nobody is watching now"
+    await vm.sweep()
+    assert runtime.raw["State"]["Running"] is False

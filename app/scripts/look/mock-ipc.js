@@ -350,6 +350,10 @@ export function installMock(fixture, config = {}, target = window) {
     if (variant.lowDisk) {
       runningTurn.messages = [{seq:1,kind:'reply',text:data.lowDiskSample,at_ms:data.now-1000}];
     }
+    if (variant.wokeLine) {
+      // The one line a member's own tool leaves when it wakes a sleeping computer (R-COMP-WAKE-01), then its reply as it goes on.
+      runningTurn.messages = [{seq:1,kind:'reply',text:data.wokeSample,at_ms:data.now-1000}];
+    }
     if (variant.generatedProgress) {
       runningTurn.question = "請製作辦公室宣傳影片。";
       runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];

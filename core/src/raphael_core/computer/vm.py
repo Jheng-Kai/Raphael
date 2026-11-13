@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v10"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v11"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -38,7 +38,7 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "10"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "11"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
 # waits for him and a recording are held until he says so): a lease nobody uses blocks every member (2026-11-14).
@@ -301,13 +301,13 @@ def known_previous(raw, target, owner):
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
         # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
-        # owner's own computer the day layer 8 came; layers 8 and 9 kept that shape. A layer that is not named here is
+        # owner's own computer the day layer 8 came; layers 8, 9 and 10 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it.
-        six = shared_upgrade and layer in ("5", "7", "8", "9") and screens == ["RAPHAEL_SCREENS=6"]
-        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3}.get(layer)
+        six = shared_upgrade and layer in ("5", "7", "8", "9", "10") and screens == ["RAPHAEL_SCREENS=6"]
+        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3, "10": 3}.get(layer)
         # Layer 5 was the first to say its screen count; the two before it had no such entry.
         if ((target.screens != 1 and not shared_upgrade) or memory is None
-                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9") else [])
+                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9", "10") else [])
                 or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
@@ -354,6 +354,11 @@ class LocalVm:
         self.real_transport = runner is None
         self.rebuild_notice = lambda target: None
         self.engine_notice = lambda target: None
+        # Called when a computer that was asleep (or never made) has been started. `woken` keeps who woke the
+        # running computer and why, until it sleeps again: a member's own tool call does (VmTools sets both), and
+        # any start the owner asked for (a press, maintenance) leaves it empty. Looking never starts one.
+        self.wake_notice = lambda target: None
+        self.woken = {}
         self.maintenance, self.lifecycle = {}, {}
         self.disk_checked, self.disk_warned = {}, set()
         async def disconnect_driver(key):
@@ -493,12 +498,16 @@ class LocalVm:
             if result.code:
                 raise VmError("window_move_failed")
 
+    # The launcher script ends itself: 60 s for the browser's first window (a loaded PC took 13 to 41 s, 2026-11-13) and
+    # 30 s for the window to settle on its screen. This is only the outer bound, so that the script's own answer comes first.
+    seat_browser_s = 120
+
     async def seat_browser(self, target):
         from .seat_view import rectangle
         from .carry import before_browser
         await before_browser(self, target)
         result = await self.run_for(target, exec_args(target, ["raphael-seat-browser",
-            *map(str, rectangle(target.screen, target.screens))]), timeout=30)
+            *map(str, rectangle(target.screen, target.screens))]), timeout=self.seat_browser_s)
         match = re.fullmatch(r"pid=([1-9][0-9]*) window_id=([1-9][0-9]*)", result.stdout.strip())
         if result.code or result.truncated or not match:
             raise VmError("browser_window_missing")
@@ -981,6 +990,8 @@ class LocalVm:
             result = Result(0)
         if result.code:
             raise VmError("start_failed")
+        if not already_running:
+            self.wake_notice(target)
         self.last_activity[target.state_key] = self.clock()
         repaired = False
         for attempt in range(45):
@@ -1162,6 +1173,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             if result.code:
                 raise VmError("stop_failed")
             self.wallpaper_attempted.pop((target.remote, target.name), None)
+            self.woken.pop(target.state_key, None)
             if remove and (await self.run_for(target, ["rm", target.name])).code:
                 raise VmError("remove_failed")
             await self.close_viewer(target)

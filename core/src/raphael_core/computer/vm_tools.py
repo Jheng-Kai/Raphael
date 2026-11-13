@@ -35,6 +35,8 @@ _TURN = ContextVar("computer_turn", default=(0, False, None))
 _NOTE = ContextVar("computer_note", default=(None, "en"))
 _REPAIRS = ContextVar("computer_repairs", default=None)
 _NOTICE = ContextVar("computer_notice", default=None)
+# Whose tool call is starting a sleeping computer right now: (member id, tool name). Unset for every other start.
+_WAKE = ContextVar("computer_wake", default=None)
 logger = logging.getLogger(__name__)
 
 
@@ -63,6 +65,33 @@ ENGINE_STARTING = with_ui_words({
     "ja": "コンピューター用に Docker Desktop を起動しています。1分ほどかかります",
     "en": "Starting Docker Desktop for the computer; this takes about a minute",
 })
+
+# The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01, owner, 2026-11-14: the
+# computer wakes when a member decides a task needs it, or when he starts it, and never silently). One quiet line in the
+# conversation, naming the member and why; no toast. The app's row reads the same three reasons from `woken`.
+WOKE = {reason: with_ui_words(table) for reason, table in {
+    "page": {"zh-TW": "{who}為了開網頁喚醒了電腦", "ja": "{who}がウェブページを開くためにコンピューターを起こしました",
+             "en": "{who} woke the computer to open a web page"},
+    "command": {"zh-TW": "{who}為了執行指令喚醒了電腦", "ja": "{who}がコマンドを実行するためにコンピューターを起こしました",
+                "en": "{who} woke the computer to run a command"},
+    "other": {"zh-TW": "{who}為了使用電腦而將它喚醒", "ja": "{who}が使うためにコンピューターを起こしました",
+              "en": "{who} woke the computer to use it"},
+}.items()}
+
+
+def wake_reason(tool):
+    """Why a member's tool needed the computer: a page of the browser, a command in its shell, or anything else."""
+    return "page" if tool.startswith(PAGE_TOOLS) else "command" if tool == "vm_exec" else "other"
+
+
+@contextmanager
+def _waking(member, tool):
+    token = _WAKE.set((member, tool))
+    try:
+        yield
+    finally:
+        _WAKE.reset(token)
+
 
 # What the model is told when Docker Desktop cannot be had, so it never meets a bare kind with nothing to do next.
 DISK_FILES_EN = ("The disk the computer's files are kept on ({p0}) is {p1}% full, with {p2} free. The computer's own folders "
@@ -197,8 +226,17 @@ class VmTools:
     # of it: another may take it, and the holder looks at it again when it comes back.
     lease_idle_s = 60.0
     read_progress_s = 10.0
-    browser_window_wait_s = 5.0
+    # A browser's first window took 13 to 41 s on a loaded PC (2026-11-13), so the waits for it are minutes' worth of
+    # patience, not seconds': the member's call says it is still reading after `read_progress_s` and reports its elapsed
+    # time. A window is polled with a growing pause, so a long wait is not a hundred driver calls.
+    browser_window_wait_s = 60.0
     browser_window_poll_s = 0.2
+    browser_window_poll_max_s = 1.0
+    # Everything one browser_open may take: the window's own wait, a carry-over's budget, the seat's launcher script
+    # (`LocalVm.seat_browser_s`) and the page's load and read. The launcher's own deadline ends first and says why.
+    browser_open_s = 300.0
+    # How long a window that was moved onto its screen is waited for before it is called outside it.
+    window_fit_wait_s = 10.0
 
     def __init__(self, delegate, vm, *, attachments, conn=None, bridge=CuaBridge):
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
@@ -235,6 +273,7 @@ class VmTools:
         self.step_gate = None
         self.vm.rebuild_notice = self._rebuild_notice
         self.vm.engine_notice = self._engine_notice
+        self.vm.wake_notice = self._wake_notice
         self.vm.disconnect_driver = self._disconnect
         self.vm.repair_admit = self._repair_admit
         self.vm.seat_observation = self.seat_observation
@@ -252,6 +291,23 @@ class VmTools:
         progress, language = _NOTE.get()
         if progress:
             progress(ENGINE_STARTING.get(language, ENGINE_STARTING["en"]))
+
+    def _wake_notice(self, target):
+        """A computer was just started. If it was a member's own tool that did it, say who and why, once, in that member's
+        conversation (or task); a start the owner asked for leaves no record, and clears the last one."""
+        wake = _WAKE.get()
+        if wake is None:
+            self.vm.woken.pop(target.state_key, None)
+            return
+        member, tool = wake
+        who = self.names(member) or ("Raphael" if member == 0 else f"#{member}")
+        reason = wake_reason(tool)
+        self.vm.woken[target.state_key] = {"member": member, "name": who, "reason": reason}
+        progress, language = _NOTE.get()
+        publish = _NOTICE.get() or progress
+        if publish:
+            table = WOKE[reason]
+            publish(table.get(language, table["en"]).format(who=who))
 
     async def _disk_notice(self, target):
         from .lifecycle import disk_pressure
@@ -308,6 +364,11 @@ class VmTools:
         # No computer here (computer tools off, or no Docker on this PC): nothing to read the page with.
         if not self.catalogs.get(target.key):
             return PluginResult(False, "blocked")
+        # A page that reads short is not the member's decision to use its computer: a sleeping one stays asleep, and the
+        # member is told the page needs a browser so it can call browser_open itself (R-COMP-WAKE-01). An awake one is
+        # used as before: the same gate, the same audit, nothing started.
+        if not await self._awake(target):
+            return PluginResult(False, "computer_asleep")
         async def call(name, arguments):
             return await self.step_gate(tool_key(f"computer-{target.key}", name), arguments, task_id=task_id)
         opened = await call("browser_open", {"url": url})
@@ -347,6 +408,13 @@ class VmTools:
                 return clicked
             return await call("get_browser_state", {**tab, "include_screenshot": False})
         return opened
+
+    async def _awake(self, target):
+        """Whether the computer runs now. A look, never a start; an engine that does not answer is not awake."""
+        try:
+            return (await self.vm.status(target, probe=False))["state"] == "running"
+        except (VmError, OSError, TimeoutError):
+            return False
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -463,7 +531,10 @@ class VmTools:
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        # On a PC with no Docker there is no computer of its own, so the owner's desktop stays offered.
+        # True once the member's own computer has a tool catalog. The snapshot then leaves out the owner's-desktop
+        # `computer` tool, so that two tools called computer never leave the choice of machine to the model. Without a
+        # catalog (computer tools off, no Docker on this PC) a member simply has no computer: only a quick question
+        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01, PR #78).
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
@@ -811,7 +882,7 @@ class VmTools:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
                 # Only a member's own call that needs its computer may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
-                with engine_start_allowed():
+                with engine_start_allowed(), _waking(member, tool.name):
                     await self.vm.start(target)
                 await self._disk_notice(target)
                 if target != self.vm.target(member):
@@ -888,7 +959,7 @@ class VmTools:
                         sent.setdefault("snapshot_format", "semantic_v2")
                     try:
                         if tool.name == "browser_open":
-                            async with asyncio.timeout(CuaBridge.read_timeout_s):
+                            async with asyncio.timeout(self.browser_open_s):
                                 data = await self._browser_open(target, member, client, session, arguments)
                         else:
                             data = await self._driver_call(target, client, tool.name, sent, own=True)
@@ -1044,6 +1115,7 @@ class VmTools:
             prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
             prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
             until = time.monotonic() + self.browser_window_wait_s
+            pause = self.browser_window_poll_s
             while True:
                 windows = await call("list_windows", {})
                 state = windows.get("structuredContent") or {}
@@ -1065,7 +1137,8 @@ class VmTools:
                 if matches or time.monotonic() >= until:
                     raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
                 # Preparing the CDP endpoint can finish before the window manager maps its window.
-                await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
+                await asyncio.sleep(min(pause, max(0, until - time.monotonic())))
+                pause = min(pause * 1.5, self.browser_window_poll_max_s)
             window = matches[0]
         bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
             "include_screenshot": False, "snapshot_format": "semantic_v2"})
@@ -1324,15 +1397,19 @@ class VmTools:
                 if str(error) != "window_move_failed":
                     raise
                 return None
-            for attempt in range(10):
+            # The window manager applies the move when it gets to it: half a second was enough on an idle PC and not on a loaded one.
+            until, pause = time.monotonic() + self.window_fit_wait_s, .05
+            while True:
                 canvas = await self._canvas_windows(client, session)
                 fresh = next((item for item in canvas["windows"] if item.get("window_id") == identifier), None)
                 if fresh is None or fresh.get("pid") != row.get("pid"):
                     return None
                 if seat_view.contains(fresh["bounds"], target.screen, target.screens):
                     return fresh
-                await asyncio.sleep(.05)
-            return None
+                if time.monotonic() >= until:
+                    return None
+                await asyncio.sleep(pause)
+                pause = min(pause * 2, 1.0)
         return row
 
     async def _bound_window(self, target, client, args):
