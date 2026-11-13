@@ -142,7 +142,14 @@ reading, vision and PDF only.
 ## Message metadata and side threads (2026-11-05)
 
 Reactions are owner-authored message metadata: one hover control opens 👍, ❤, ✓ and ?;
-selected reactions sit under that message. Repeating a selection removes it. Private
+selected reactions stand on their message's bubble, on its top-right corner (the owner's own
+bubble: top-left), over the top edge, as Grok Bot's (R-UI-108, 2026-11-13). They are drawn
+inside the first bubble, so a button (重新登入), card, attachment or failure row under the bubble
+never takes them from it; a message that carries them keeps 8 px more room above it, so they
+never touch the bubble above; they cover neither the words nor the hover actions, and
+several share one row. Scenes: `reaction-row` (reply), `reaction-owner` (the owner's bubble),
+`reaction-signin` (a failed sign-in reply with 重新登入 under it), `room-thread-open` and
+`room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check. Repeating a selection removes it. Private
 model context and room transcripts label reactions as metadata, never approval or
 instructions. No reaction answers a permission, owner question or draft.
 
@@ -168,7 +175,7 @@ Voice memos and manual read-aloud were removed on 2026-11-07 and every other voi
 above): no reply carries a Play/Pause control or transcript, and nothing speaks.
 
 ```powershell
-npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every

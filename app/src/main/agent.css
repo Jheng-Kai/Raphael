@@ -754,9 +754,18 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
 .thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
-/* Reactions sit on the bubble's bottom-right corner, half over its edge, and add no height to the conversation. A ring of the page's own colour parts them from the bubble. */
-.message-reactions { display: flex; gap: 2px; margin-block: -11px; }
-.chat-message > .message-reactions { justify-self: end; position: relative; z-index: 1; margin-inline-end: var(--sp-2); }
+/* Reactions stand on the first bubble's top-right corner, as Grok Bot's (the owner's, on the left), over its top edge. They are drawn inside the bubble (withReactions), so cards, a sign-in button or a failure row under it never
+   take them from it. Their outer edge is the bubble's own, so they reach neither the hover actions nor past the bubble's scroll width.
+   A ring of the page's own colour parts them from the bubble. */
+:is(.ans, .bubble) { position: relative; }
+.message-reactions { display: flex; gap: 2px; position: absolute; z-index: 1; top: -13px; right: 0; user-select: none; }
+.owner-message .message-reactions { right: auto; left: 0; }
+/* A message with no bubble (only a card) has them as its last part: they stand on its first part's corner. */
+.chat-message > .message-reactions { grid-column: 1; grid-row: 1; }
+.owner-message > .message-reactions { grid-column: 2; }
+/* The chips rise 13 px and their ring 2 px more, past the 12 px between messages: a message that carries them keeps a little more
+   room above it, so they never touch the message above. */
+.chat-message:has(.message-reactions) { margin-top: var(--sp-2); }
 .message-reactions .btn.reaction { min-width: 22px; height: 22px; min-height: 22px; padding: 0 6px; border: 1px solid var(--btn-edge); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); line-height: 1; box-shadow: 0 0 0 2px var(--content); }
 /* A message menu opens with its reactions in one quiet row. */
 .menu-reactions { display: flex; justify-content: space-between; gap: 2px; padding: 2px 2px var(--sp-1); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); }
