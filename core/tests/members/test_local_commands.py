@@ -1,4 +1,4 @@
-"""A named member uses the owner-PC command boundary on both brain paths."""
+"""A named member has no tool for the owner's PC on either brain path (R-PC-01); its work that needs a computer is its own."""
 
 import pytest
 
@@ -13,24 +13,23 @@ from .test_cli_brains import fake_mcp
 
 
 @pytest.mark.parametrize("brain", ["api", "cli"])
-async def test_named_member_cpu_question_uses_local_card_and_not_desktop(make_rig, client, conn, tmp_path, brain):
+async def test_named_member_cpu_question_has_no_local_command_and_no_card(make_rig, client, conn, tmp_path, brain):
     team = Team(conn, tmp_path)
     hub, host = local_hub(conn)
     rig = make_rig(plugins=hub, gate=ToolGate(hub, conn=conn), permissions=PermissionCards(conn),
                    team=team.members, memory=team.memory)
     who = member(team, name="CPU helper", model="cli:claude" if brain == "cli" else "openai/gpt-6-sol")
     if brain == "cli":
-        fake_mcp(rig, tmp_path, [("local__local_exec", {"command": "Get-Process"})])
+        fake_mcp(rig, tmp_path, [("local__local_exec", {"command": "Get-Process"})], allowed=False)
     else:
-        client.chats = [chat("Checking CPU.", ("local__local_exec", {"command": "Get-Process"})), chat('{"text":"Checked."}')]
+        client.chats = [chat("Checking CPU.", ("local__local_exec", {"command": "Get-Process"})), chat('{"text":"I cannot reach the PC."}')]
     try:
         asked = await typed(rig, "幫我看一下為甚麼我電腦 CPU 使用率這麼高", who.id)
-        assert asked["status"] == "confirm"
-        card = rig.service._permissions.get(asked["confirm"]["id"])
-        assert card.member_id == who.id and card.service == who.name and card.view()["kind"] == "local_access"
+        assert asked["status"] == "done" and "confirm" not in asked
+        if brain == "api":
+            offered = {tool["function"]["name"] for tool in client.chat_calls[0]["tools"]}
+            assert not [name for name in offered if name.startswith("local__") or name in ("computer", "open")]
         host.execute.assert_not_awaited()
-        await rig.confirm(card.id)
-        host.execute.assert_awaited_once()
         assert not rig.actions.calls
     finally:
         await team.memory.aclose()

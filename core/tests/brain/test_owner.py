@@ -41,8 +41,12 @@ def test_output_folder_is_shared_escaped_data_and_changes_never_move_files(conn,
     settings.set("owner_output_folder", str(first))
     assert str(first).replace("\\", "\\\\") in owner_context(settings)
     settings.set("owner_output_folder", str(second))
-    prompt = owner_context(SettingsStore(conn))
+    prompt = owner_context(SettingsStore(conn), owner_pc=True)
     assert "by default" in prompt and "grants no additional permission" in prompt
+    # Everywhere else the owner's PC is not mentioned and no tool to write there is suggested (R-PC-01).
+    ordinary = owner_context(SettingsStore(conn))
+    assert "owner's PC" not in ordinary and "command tools" not in ordinary and "grants no additional permission" in ordinary
+    assert str(second).replace("\\", "\\\\") in ordinary
     assert original.read_text(encoding="utf-8") == "keep"
     assert not second.exists()
     settings.set("owner_output_folder", "")

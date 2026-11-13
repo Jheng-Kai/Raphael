@@ -245,7 +245,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
-from .permissions import AT_A_CHAT, message_preview, permission_identity, qualifies as permission_cards_for
+from .permissions import AT_A_CHAT, message_preview, owner_pc as reaches_owner_pc, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
@@ -1555,7 +1555,9 @@ class AgentService:
             return self._finish(ask, "chat", "negative", phrase(ask.language, off), ledger)
         settings = self._read_settings(ask.speaker, ask.conversation_id)
         blocked = self._blocked(settings)
-        if (ask.quick and brain_ref(settings.model)) or ask.source != VOICE or not ask.speaker.is_raphael:
+        # Only a quick question is routed by the fast router, which can pick a command for this PC or a run on its
+        # desktop; a conversation, spoken into or typed, goes to the narrated harness, which has no such tool (R-PC-01).
+        if not ask.quick or brain_ref(settings.model) or ask.source != VOICE or not ask.speaker.is_raphael:
             if blocked is not None:
                 return self._failed(ask, "answer", blocked, ledger)
             self._mark_latency(ask, "routing")
@@ -1687,10 +1689,10 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings),
+                roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings, owner_pc=self._owner_pc(ask)),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
-                viewing=viewing_text(ask.viewing),
+                viewing=viewing_text(ask.viewing), owner_pc=self._owner_pc(ask),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -1820,7 +1822,7 @@ class AgentService:
         this computer: a message from a phone is a 否 reply, as is a shell that cannot be reached
         and a model that takes no tools. The reply is the run's first question or how it ended."""
         language = ask.language
-        if ask.source not in _AT_THIS_COMPUTER:
+        if not self._owner_pc(ask):
             return self._finish(ask, "operate", "negative", phrase(language, "computer_away"), ledger)
         if self._computer is None:
             return self._finish(
@@ -2163,16 +2165,18 @@ class AgentService:
                 system = cli_system_prompt(ask.language,
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
-                    personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker)
+                    personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker,
+                    owner_pc=self._owner_pc(ask))
             elif ask.speaker.is_raphael:
-                system = system_prompt(ask.language, "answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False)
+                system = system_prompt(ask.language, "answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False,
+                                       owner_pc=self._owner_pc(ask))
             else:
                 system = member_system_prompt(
                     ask.language, "answer", name=ask.speaker.name, role=ask.speaker.role,
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            system += owner_context(self._settings)
+            system += owner_context(self._settings, owner_pc=self._owner_pc(ask))
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -2267,7 +2271,7 @@ class AgentService:
             snapshot = take_snapshot(
                 self._plugins, memory=self._memory is not None, speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
-                interactive=True, owner_management=self._management_chat(ask),
+                interactive=True, owner_management=self._management_chat(ask), owner_pc=self._owner_pc(ask),
             )
             urls = SeenUrls([ask.text, context.summary, *[
                 "\n".join([turn.question, turn.text, turn.detail or "", *turn.messages])
@@ -2341,7 +2345,7 @@ class AgentService:
                         raise Stop("finished")
                 if name == "computer":
                     self._gate.check(Action(name, args), None)
-                    if ask.source not in _AT_THIS_COMPUTER or ask.nested:
+                    if not self._owner_pc(ask):
                         return ToolOutcome(False, "presence_required")
                     if ask.declined:  # the owner said no in this request: not another way to the same end
                         return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
@@ -2876,6 +2880,9 @@ class AgentService:
             return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
         if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
+        if command_of(args) and not self._owner_pc(ask):
+            # A command of the CLI's own is a command on the owner's PC: only a quick question may ask for one (R-PC-01).
+            return ToolOutcome(False, "presence_required")
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
             return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
         screening = await self._gate.screen(Proposed("cli_permission", "CLI native action", summarize(args)), language=ask.language, ledger=ledger)
@@ -3050,12 +3057,20 @@ class AgentService:
         if self._plugins is not None:
             try:
                 offered = getattr(self._plugins, "offered_for", lambda member: self._plugins.offered())
-                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key)]
+                pc = ask is not None and self._owner_pc(ask)
+                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key) and (pc or not is_local(tool.key))]
             except Exception as exc:  # a plugin that breaks must not break the answer
                 logger.warning("Could not list the plugins' tools: %s", type(exc).__name__)
         if ask is not None:
             tools += [team_tool(name) for name in self._team_tools(ask)]
         return make_offer(tools) if tools else None
+
+    @staticmethod
+    def _owner_pc(ask: _Ask) -> bool:
+        """Whether the owner's own PC is in reach of this turn: only a quick question asked at this computer (the overlay's
+        Alt+Space) reaches it, never an ordinary conversation, a room, an exchange between members, a task or a phone, in any
+        permission mode (R-PC-01). Their computer work goes to the member's own computer."""
+        return reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested)
 
     def _team_tools(self, ask: _Ask) -> list[str]:
         """The team tools the request `ask` is about. Never for a request one member handed another
@@ -3491,7 +3506,7 @@ class AgentService:
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
             elif name in COMMANDS:
-                if ask.source not in _AT_THIS_COMPUTER or ask.nested:
+                if not self._owner_pc(ask):
                     raise HarnessToolError("presence_required")
                 values = dict(args)
                 if name == "open":
@@ -4755,6 +4770,8 @@ class AgentService:
         language = ask.language
         if command is None:  # none of the fixed commands covers it
             return self._finish(ask, "command", "negative", phrase(language, "cannot"), ledger)
+        if not self._owner_pc(ask):  # the router is only asked for a quick question, so this is a second lock
+            return self._finish(ask, "command", "negative", phrase(language, "computer_away"), ledger)
         args: dict[str, Any] = {}
         question = ""
         opening: Opening | None = None

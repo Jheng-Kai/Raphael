@@ -64,10 +64,13 @@ async def test_actual_brain_offers_filter_connections_without_removing_harness(s
 
 
 async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, monkeypatch):
+    # A command of the CLI's own runs on the owner's PC, so only a quick question may ask for one (R-PC-01); there the data
+    # floor still refuses a write and still asks before a read of Raphael's data, 全部允許 or not.
     from raphael_core.worker.loop import Stop
     rig, team = setup
     rig.settings.set("action_mode", "bypass")
-    ask = SimpleNamespace(source="app", nested=False, declined=False, language="en")
+    ordinary = SimpleNamespace(source="app", quick=False, nested=False, declined=False, language="en")
+    ask = SimpleNamespace(source="overlay", quick=True, nested=False, declined=False, language="en")
     loop = SimpleNamespace(response=None)
     cards = []
     followup = SimpleNamespace(loop=None)
@@ -78,6 +81,8 @@ async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, mo
     monkeypatch.setattr(rig.service, "_ask_plugin", card)
     denied = await rig.service._cli_permission(ask, {"command": "del C:/data/raphael.db"}, None, loop)
     assert not denied.ok and denied.kind == "protected_data" and not cards
+    away = await rig.service._cli_permission(ordinary, {"command": "Get-Content C:/data/raphael.db"}, None, loop)
+    assert not away.ok and away.kind == "presence_required" and not cards
     with pytest.raises(Stop):
         await rig.service._cli_permission(ask, {"command": "Get-Content C:/data/raphael.db"}, None, loop)
     assert len(cards) == 1 and followup.loop is loop

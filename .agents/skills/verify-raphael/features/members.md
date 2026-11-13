@@ -877,7 +877,7 @@ room and background paths retain their shared production engines.
 
 Offline tests: core/tests/members/test_skill_library.py,
 core/tests/agent/test_cli_skill_packages.py,
-core/tests/agent/test_local_commands.py::test_imported_skill_script_uses_ordinary_local_command_approval,
+core/tests/agent/test_local_commands.py::test_an_imported_skill_script_is_not_run_by_an_ordinary_turn,
 app/src/main/connections.test.ts (connectors only since 2026-11-07), member-profile-resources.test.ts and member-details.test.ts.
 The existing app/scripts/look/mock-ipc boundary also models shared scope, local
 source selection/import and individual grants; mock-ipc.test.mjs covers that contract.

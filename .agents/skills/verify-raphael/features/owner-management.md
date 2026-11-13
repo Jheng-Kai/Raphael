@@ -78,6 +78,8 @@ tools, management, the commands for this PC except `open`, the desktop `computer
 same gate, steps, audit and guardrails as a direct call. `open` and `update_page` stay listed: a
 model picks a listed look-alike (`show`, `show_page`) over searching for a hidden tool. The core's
 pinned tools (local commands, the member's computer, media models, Composio's router) stay listed.
+The commands for this PC, `computer` and the local command tools are in a quick question's list alone
+(R-PC-01, 2026-11-13): every other turn has none, listed or found.
 The member's computer catalog (a grant, the driver's own catalog) is the one change a task's list
 can still take. Offline: core/tests/members/test_fixed_tools.py (three turns, API and CLI MCP,
 identical lists; find and use in one turn) and core/tests/background/test_fixed_tools.py (worker,
