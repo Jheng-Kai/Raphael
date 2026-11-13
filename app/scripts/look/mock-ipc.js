@@ -26,7 +26,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
-    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍","❤"]},owner_questions:[],permissions:[]};
+    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍","❤"],...(variant.chatMetadata === 'owner' ? {owner:["🎉","😂"]} : {})},owner_questions:[],permissions:[]};
     if (['slack','approval'].includes(variant.chatMetadata)) {
       const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
       turn.drafts = [draft];
@@ -85,6 +85,8 @@ export function installMock(fixture, config = {}, target = window) {
     const row = data.clis.find(item => item.id === cli);
     // An expired session still has its credentials; a CLI that was never signed in or is not there is not available.
     Object.assign(row, { installed: cause !== "not_installed", logged_in: cause === "expired", available: cause === "expired" });
+    // `reacted`: the failed reply also carries a reaction, to see where it stands with the button under the bubble.
+    if (variant.reacted) latest.reactions = { 1: ["👎"] };
   }
   // The member settings page (member-settings.ts): two connections that are on.
   if (variant.memberSettings) {

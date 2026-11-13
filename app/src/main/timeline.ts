@@ -4,7 +4,7 @@ import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
-import { reactionControlHTML, reactionRowHTML } from "./message-metadata";
+import { reactionControlHTML, withReactions } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML, settledQuestions } from "./permission-card";
@@ -641,10 +641,10 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   const retry = reply && last ? rerunActionHTML(turn, state, regenerate) : "";
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
-    (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
+    withReactions(reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
     (reply && last ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
     // Its links are chips in its words, with no row of cards under it.
-    reactionRowHTML(turn.reactions?.[key]) + messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
+    messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
 }
 
 /** The plans whose usage page the app knows: ChatGPT's, which Codex signs in with too. */
@@ -1076,7 +1076,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + reactionRowHTML(turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
+        withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))), turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look) +
