@@ -91,8 +91,9 @@ async def test_the_cores_own_pinned_tools_are_listed():
                     PluginTool("mcp:computer-1/fill_card", "computer", "fill_card", "Fill a card.", {"type": "object"}, Tier.T2, pinned=True, deferred=True),
                     PluginTool("mcp:n/notion-search", "Notion", "notion-search", "Search.", {"type": "object"}, Tier.T0)]
 
-    snapshot = take_snapshot(Hub())
+    snapshot = take_snapshot(Hub(), owner_pc=True)  # the commands for the PC are a quick question's alone (R-PC-01)
     assert "local__local_exec" in names(snapshot) and names(snapshot) == sorted(names(snapshot))
+    assert "local__local_exec" not in names(take_snapshot(Hub()))
     assert {"computer__fill_card", "Notion__notion-search"} <= set(snapshot.hidden())
 
 

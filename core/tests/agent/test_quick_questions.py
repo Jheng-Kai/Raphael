@@ -316,20 +316,21 @@ def copying_asks_first(monkeypatch):
 
 @pytest.mark.usefixtures("copying_asks_first")
 async def test_a_question_waiting_in_one_kind_survives_a_request_of_the_other(make_rig, client, actions):
-    from .test_service import spoken
+    # A command for this PC is a quick question's alone (R-PC-01), so the question that waits is the quick one and a
+    # formal request, typed in a thread, leaves it waiting.
     rig = make_rig()
     quick, formal = rig.service.conversations.quick(), rig.service.conversations.main()
-    rig.seed("Weather", "24 degrees.", conversation_id=formal)
+    rig.seed("Weather", "24 degrees.", conversation_id=quick)
     client.decisions.append(decision("command", "copy_text"))
-    waiting = await rig.call("agent.ask", asking(session="formal-copy", text="copy that", conversation_id=formal))
-    assert waiting["status"] == "confirm"
-    client.decisions.append(decision("chat"))
-    client.replies.append(spoken("Answer", "Hello."))
-    assert (await rig.call("agent.ask", asking(session="quick-hello", destination="quick")))["text"] == "Hello."
+    waiting = await rig.ask("copy that")
+    assert waiting["status"] == "confirm" and waiting["conversation_id"] == quick
+    client.chats.append(chat('{"text":"Hello."}'))
+    typed_reply = await rig.call("agent.ask", asking(session="formal-hello", text="hello", source="app", conversation_id=formal))
+    assert typed_reply["text"] == "Hello."
     assert (await rig.confirm(waiting["confirm"]["id"], True))["status"] == "done"
     assert ("copy_to_clipboard", "24 degrees.") in [call[:2] for call in actions.calls]
-    assert [turn.status for turn in rig.history.list(conversation_id=formal)] == ["done", "done"]
-    assert [turn.question for turn in rig.history.list(conversation_id=quick)] == ["hello"]
+    assert [turn.status for turn in rig.history.list(conversation_id=quick)] == ["done", "done"]
+    assert [turn.question for turn in rig.history.list(conversation_id=formal)] == ["hello"]
 
 
 @pytest.mark.usefixtures("copying_asks_first")

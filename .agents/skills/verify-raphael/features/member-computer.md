@@ -1035,11 +1035,32 @@ desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.p
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
 native shell, live model quality and judge remain separately unverified.
 
-## Owner-PC commands (2026-11-01)
+## The owner's PC is for a quick question alone (2026-11-13, R-PC-01)
+
+Owner: 「正常對話的時候，不會有操控我電腦的邏輯…操控我電腦的邏輯只會在快速問答的部分，就是我按下 Alt+Space 的時候才會有這個權限」.
+One switch decides it, `take_snapshot(owner_pc=...)` (`ask.quick`, never nested): without it a turn is offered, finds and
+refreshes into none of `mcp:local/local_exec`, `mcp:local/local_job`, the harness `computer` tool (the guarded run on the
+owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken
+conversation, Raphael's or a member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event
+runs, on API and CLI brains, in every permission mode. The fast router (Jev) is asked about a quick question alone, so a
+conversation never routes to a command or a desktop run. The prompt of such a turn carries no owner's-PC words
+(`persona._OWNER_PC_RULES` and the owner-context output-folder sentence are added to a quick question only); it says
+that anything needing a computer is done on the member's own computer and, when that is not available, to say so.
+`LocalTools.call` refuses a call whose context is not a quick question (`presence_required`, even under 全部允許), and
+the harness `computer`, command and CLI native-command paths repeat the check (`AgentService._owner_pc`). A quick
+question is unchanged, including that it can show no card, so a local command runs there only where nothing waits for a
+yes. The consent card, the Settings mode and the background approvals below are kept in the code, with no door
+until the owner decides whether a quick question asks at the overlay.
+
+Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question, the member's
+own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
+members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
+
+## Owner-PC commands (2026-11-01; now a quick question's alone, see above)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
-sandbox or guarded real-desktop mouse/keyboard tool. Every member sees the same
-pinned local_exec/local_job definitions on API, CLI MCP and background paths.
+sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
+pinned local_exec/local_job definitions on API and CLI MCP paths, no other turn does.
 Settings > Raphael places Local commands beside Computer use, with Ask every time
 (default), Always allow and Never. First consent names the requesting member and
 asks for all members, with four real answers. Later command cards show Allow/Skip

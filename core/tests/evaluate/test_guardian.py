@@ -151,7 +151,7 @@ def test_budget_is_hard_and_report_errors_never_include_provider_text():
     ("routine-create", "routine_create", {"title": "寫作", "prompt": "練習", "schedule": {"kind": "daily", "time": "09:00"}}, "已建立寫作任務。"),
     ("pdf", "read_attachment", {"index": 1}, "標題是星河筆記。"),
     ("image", "read_attachment", {"index": 1}, "圖片是紅色。"),
-    ("open", "open", {"target_kind": "url", "target": "https://example.com/"}, "已開啟網頁。"),
+    ("open", "show", {"url": "https://example.com/"}, "已在聊天顯示網頁。"),
     ("search", "web_search", {"query": "臺北今日新聞"}, "臺北今日有閱讀活動。"),
 ])
 async def test_each_recorded_capability_on_both_speakers(conn, tmp_path, name, tool, args, text):

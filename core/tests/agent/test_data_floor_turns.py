@@ -27,7 +27,9 @@ OWNER_ZH = "成員想用指令或檔案工具改 Raphael 的資料，不被允�
 
 def ask(rig, language="en", text="Please write the skill file for me"):
     rig.typed_count = getattr(rig, "typed_count", 0) + 1
-    return rig.call("agent.ask", {"session_id": f"floor-{rig.typed_count}", "text": text, "ui_language": language, "source": "app", "member_id": 0})
+    # A quick question: the one turn that has a command for the owner's PC (R-PC-01).
+    return rig.call("agent.ask", {"session_id": f"floor-{rig.typed_count}", "text": text, "ui_language": language, "source": "app", "member_id": 0,
+                                  "destination": "quick", "conversation_id": rig.service.conversations.quick()})
 
 
 @pytest.fixture
@@ -74,7 +76,8 @@ async def test_a_second_refusal_ends_the_turn_in_the_owners_words(floor_rig, cli
 
 async def test_a_command_that_does_not_touch_the_apps_files_is_not_held_back(floor_rig, client):
     floor_rig.host.execute.return_value = {"exit_code": 0, "stdout": "ok", "stderr": "", "truncated": False}
+    floor_rig.settings.set("action_mode", "bypass")  # a quick question shows no card, so only here does a command run
     client.chats = [chat("Checking.", ("local__local_exec", {"command": "Get-Process"})), chat('{"text":"Done."}')]
     result = await ask(floor_rig)
-    assert result["status"] == "confirm"  # the ordinary question for a command, not a refusal
-    assert floor_rig.host.execute.await_count == 0
+    assert result["status"] == "done"  # not a refusal
+    assert floor_rig.host.execute.await_count == 1

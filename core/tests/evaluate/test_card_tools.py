@@ -102,16 +102,17 @@ async def test_a_managed_connection_gets_no_secret_card(driver):
 
 
 @pytest.mark.parametrize("fields,expected", [
-    ({}, True),
-    ({"source": RESUMED}, True),
-    ({"source": "voice"}, True),
+    ({}, None),
+    ({"source": RESUMED}, None),
+    ({"source": "voice"}, None),
     ({"source": "voice", "quick": True}, False),
-    ({"source": "telegram"}, False),
+    ({"source": "telegram"}, None),
     ({"quick": True}, False),
-    ({"peer": 1, "scope": "exchange"}, False),
-    ({"scope": "room", "room_id": 1}, False),
+    ({"peer": 1, "scope": "exchange"}, None),
+    ({"scope": "room", "room_id": 1}, None),
 ])
-async def test_the_owners_turn_at_the_computer_is_offered_only_to_a_private_typed_chat(driver, monkeypatch, fields, expected):
+async def test_the_run_on_the_owners_desktop_is_made_for_a_quick_question_alone_and_never_pauses_for_a_card(driver, monkeypatch, fields, expected):
+    # R-PC-01: the desktop is a quick question's alone, and a quick question shows no card, so the run never hands the computer back.
     agent = driver.app.agent
     seen = {}
 
@@ -128,8 +129,8 @@ async def test_the_owners_turn_at_the_computer_is_offered_only_to_a_private_type
     for name, value in fields.items():
         setattr(ask, name, value)
     ask.ledger = Ledger(agent._spend)
-    if ask.source not in agent_service._AT_THIS_COMPUTER:
-        # A request from elsewhere cannot operate this computer at all.
+    if expected is None:
+        # Any other turn cannot operate this computer at all.
         result = await agent._operate(ask, agent._read_settings(), ask.ledger, narration=object(), request="x")
         assert result["status"] == "done" and not seen
         return

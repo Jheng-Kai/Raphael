@@ -771,7 +771,10 @@ formal request naming the quick one. The quick model and effort answer quick tur
 turns keep no native session, and each turn records the model that actually answered (Raphael's
 face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
 quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
-progress has no reply message: the thread shows its text after the work line.
+progress has no reply message: the thread shows its text after the work line. A quick question is the one
+turn that reaches the owner's own PC (R-PC-01, 2026-11-13): the fast router, the commands to open, lock or
+copy, the desktop run and the local command tools are its alone, and a spoken or typed turn of a formal
+conversation goes to the narrated harness with none of them.
 
 ```powershell
 npm run look -- quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
@@ -850,9 +853,10 @@ npm run look -- chat-secret-masked chat-secret-saved-not-resumed chat-computer-t
 The scenes press the real card buttons and type a made-up key into the real masked field; the IPC fixture reports the
 cards' states as the core does and receives the key in `integrations.card_save` only (the rendered checks scan the page
 and every call for it). They cannot prove the vault, a sign-in or a desktop. Core tests (`core/tests/test_secret_cards.py`,
-`core/tests/computer/test_handback*.py`) and Guardian `S15.secret` and `S15.computer` run the production cards, a recorded
-MCP server that opens only to the saved key and a fake desktop whose page asks for a sign-in, on both brain paths.
-`S15.permission` (below) is the third half of S15. A real key and a real sign-in stay owner-approved native
+`core/tests/computer/test_handback*.py`) and Guardian `S15.secret` run the production cards and a recorded
+MCP server that opens only to the saved key, on both brain paths. `S15.computer` (the owner's turn at a sign-in on his
+desktop) is retired since 2026-11-13 (R-PC-01): that desktop is a quick question's alone, which shows no card.
+`S15.permission` (below) is the other half of S15. A real key and a real sign-in stay owner-approved native
 smokes: type a test key into the card, read the connection's result, and sign in on an isolated test account.
 
 ## Asking the owner's yes and writing mail for them (P08c)

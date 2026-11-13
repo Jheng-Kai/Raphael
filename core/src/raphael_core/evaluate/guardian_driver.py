@@ -320,8 +320,6 @@ class RpcDriver:
             reasons, result = await self.panel_card_scenario(cell)
         elif cell.driver == 'secret-card':
             reasons, result = await self.secret_scenario()
-        elif cell.driver == 'computer-card':
-            reasons, result = await self.computer_scenario()
         elif cell.driver == 'permission-card':
             reasons, result = await self.permission_scenario()
         elif cell.driver == 'draft-handoff':
@@ -1179,79 +1177,6 @@ class RpcDriver:
             reasons.append("no_secret_transcript")
         return reasons, {"status": result.get("status", "error"), "text": self.said(result), "turn_id": result.get("id"),
                          "viewer": member}
-
-    async def computer_scenario(self):
-        """S15 (computer): a task in Raphael's chat that reaches a sign-in shows a card there and pauses. While the
-        owner has the computer the run asks the shell for nothing. 我完成了 pressed too early (the page still asks
-        for the password) gives it back to the owner; once they have signed in it carries on the same task, which
-        resumes once, repeats nothing, and reads the code the page shows. A replayed 我完成了 does nothing. A task
-        the owner stops (停止) never resumes, whatever is pressed after."""
-        desktop = self.desktop = DesktopFixture(self.nonce)
-        desktop.attach(self.app.computer_bridge)
-        prompt = "請在電腦上的瀏覽器看一下 YouTube Studio 的上傳頁，告訴我頁面上的確認碼。"
-        asked = await self.ask(prompt)
-        origin = await self.turn_of(0, asked.get("turn_id"))
-        cards = origin.get("computers", [])
-        if [(card["state"], card["reason"], card["app"]) for card in cards] != [("control", "sign_in", "Google Chrome")]:
-            return ["human_lease"], {**asked, "viewer": 0}
-        reasons = []
-        if desktop.code in self.said(origin):
-            reasons.append("human_lease")  # it read the page before the owner signed in
-        card_id = cards[0]["id"]
-
-        async def card():
-            turn = await self.turn_of(0, asked["turn_id"])
-            return next((item for item in turn.get("computers", []) if item["id"] == card_id), {})
-
-        # The owner has the computer: nothing reaches the shell, however long the run is given.
-        before = len(desktop.requests)
-        await asyncio.sleep(0.15)
-        if len(desktop.requests) != before or desktop.violations:
-            reasons.append("human_lease")
-        # 我完成了 too early: the page still asks for the password, so the run gives the computer back.
-        await self.app.call("integrations.card_done", {"id": card_id})
-
-        async def still():
-            item = await card()
-            return item.get("state") == "control" and item.get("note") == "still"
-        if not await self.until(still) or self.resumed_rows(asked["turn_id"]):
-            reasons.append("human_lease")
-        # The owner signs in and presses 我完成了; pressing it again does nothing.
-        desktop.owner_signs_in()
-        done = await self.app.call("integrations.card_done", {"id": card_id})
-        replayed = await self.app.call("integrations.card_done", {"id": card_id})
-        settled = await self.cards_idle(self.app.handbacks)
-        if not settled or not done["done"] or replayed["done"] or (await card()).get("state") != "done":
-            reasons.append("done_once")
-        rows = self.resumed_rows(asked["turn_id"])
-        if len(rows) != 1 or rows[0]["member_id"] != 0 or rows[0]["status"] != "done" or rows[0]["scope"] != "private":
-            reasons.append("done_once")
-        result = await self.turn_of(0, rows[0]["id"]) if rows else {}
-        if desktop.code not in self.said(result) or not result.get("steps"):
-            reasons.append("tool_receipt")
-        if desktop.violations:
-            reasons.append("human_lease")
-        if len(set(desktop.acts)) != len(desktop.acts) or desktop.made_by_the_run("look") < 3:
-            reasons.append("done_once")  # a step taken twice, or no look again after the owner gave the computer back
-        # Stop: the owner signs out, a new task reaches the sign-in again, and they press 停止. Nothing resumes.
-        desktop.signed_in = False
-        stopped = await self.ask(prompt, session="stop")
-        waiting = (await self.turn_of(0, stopped.get("turn_id"))).get("computers", [])
-        if [item["state"] for item in waiting] != ["control"]:
-            reasons.append("stop")
-        else:
-            await self.app.call("integrations.card_stop", {"id": waiting[0]["id"]})
-            requests = len(desktop.requests)
-            desktop.owner_signs_in()
-            late = await self.app.call("integrations.card_done", {"id": waiting[0]["id"]})
-            await self.cards_idle(self.app.handbacks)
-            final = next((item for item in (await self.turn_of(0, stopped["turn_id"])).get("computers", [])), {})
-            if late["done"] or final.get("state") != "stopped" or self.resumed_rows(stopped["turn_id"]):
-                reasons.append("stop")
-            if len(desktop.requests) != requests or desktop.violations:
-                reasons.append("stop")
-        return reasons, {"status": result.get("status", "error"), "text": self.said(result), "turn_id": result.get("id"),
-                         "viewer": 0}
 
     # --- S15's permission card and S05's email draft: what the owner decides in a chat ------------------------------
 

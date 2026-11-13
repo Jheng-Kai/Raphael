@@ -612,13 +612,8 @@ Never say that you are an AI, a language model or a program, and never mention t
 Only claim actions established by successful tool results. Never expose private reasoning.
 The member's Docker computer is its isolated sandbox. Screenshots, clicks, typing, scrolling,
 app launches and vm_exec need no per-action approval. Never act while the owner holds control.
-For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
-local__local_exec first. It runs on the owner's Windows PC, subject to their approval setting.
-If local commands are off, say so and point to Settings > Raphael > Local commands. Do not claim
-the capability is missing. Service work uses its connected app.
-Long work may use an installed claude -p or codex exec as a local background command, through the
-same card and the owner's subscription. Keep exact commands on their permission cards; public
-progress names the operation without command arguments or raw tool results.
+Anything that needs a computer (opening an app or a website, running a program, looking at a screen)
+is done on your own computer, with its tools. When it is not available, say so plainly. Service work uses its connected app.
 Use browser_open(url): isolated_named/main, semantic refs, no screenshot. Follow with get_browser_state
 and browser_navigate/click/type/pointer. Computer tools exist from turn one; you can click.
 Look: list_windows then get_window_state (max_elements 200, query, include_screenshot false unless needed).
@@ -667,6 +662,26 @@ The calendar
   at once. Never offer to connect Google Calendar for these words, and never say the calendar is missing.
 """
 _SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
+
+# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01; owner, 2026-11-13:
+# 「正常對話的時候，不會有操控我電腦的邏輯…只會在快速問答的部分」). These words are added to its prompt alone; every other prompt
+# says nothing of that PC, and a conversation's work that needs a computer is done on the member's own.
+_OWNER_PC_RULES = """
+The owner's PC (quick question)
+This quick question can reach the owner's Windows computer through the offered local command tools, as well as your own
+computer for work that needs one. For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
+local__local_exec first. It runs on the owner's Windows PC, subject to their approval setting.
+If local commands are off, say so and point to Settings > Raphael > Local commands. Do not claim
+the capability is missing.
+Long work may use an installed claude -p or codex exec as a local background command, through the
+same card and the owner's subscription. Keep exact commands on their permission cards; public
+progress names the operation without command arguments or raw tool results.
+"""
+
+
+def _contract(language: str, owner_pc: bool = False) -> str:
+    """The shared contract of a prompt, with the owner's-PC words only for a quick question."""
+    return interface_context(language) + _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
 
 _FACT_RULES = """\
 Facts
@@ -851,8 +866,7 @@ in, even in full-permission mode; the same task resumes after they finish. Use a
 information only the owner can supply, and the offered secret, draft or page cards when needed. connect_messaging shows the secure Telegram, Slack or Discord bot-token card only when the speaker has no connected bot; never ask for tokens in chat. An existing bot stays connected without another token. Pairing cards arrive in this conversation and the owner approves or rejects them here. The bot's panel row has its switch and details; ask in this conversation to remove an allowed person or disconnect, with owner approval. Never direct the owner to a messaging settings page. share_template lets a member offer its recipe snapshot for the owner to review, save or publish. \
 Never ask for a password or key in chat. If no offered tool can do the action or ask for what is \
 missing, say so in the report instead of pretending it was done. Never say an action was done \
-unless a tool result says it was. Use the offered local command tools for the owner's PC under \
-their existing approvals; a computer whose tools you are offered is yours to use.
+unless a tool result says it was. A computer whose tools you are offered is yours to use.
 """
 
 _WORKER_PROMPT = """\
@@ -886,7 +900,7 @@ def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, sp
     prefixes = PREFIXES[language]
     return (_WORKER_PROMPT + (_CLI_WORKER_REPORT if cli else _WORKER_REPORT)).format(
         persona=_raphael_persona(language, speaker),
-        contract=interface_context(language) + _SHARED_CONTRACT,
+        contract=_contract(language),
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
         language=_LANGUAGE_NAMES[language],
         address=ADDRESS[language],
@@ -1071,7 +1085,7 @@ def _member_fields(language: str, name: str, role: str, instructions: str, perso
             name=name, role=f"Your role: {role}." if role else "",
             personality=personality.strip() or "(unspecified)", instructions=instructions.strip() or "(none)",
         ),
-        "contract": interface_context(language) + _SHARED_CONTRACT,
+        "contract": _contract(language),
         "language_policy": REPLY_LANGUAGE,
         "facts": _FACT_RULES,
         "name": name,
@@ -1084,7 +1098,7 @@ def _member_fields(language: str, name: str, role: str, instructions: str, perso
 
 def cli_system_prompt(
     language: str, *, name: str | None = None, role: str = "", instructions: str = "",
-    personality: str = "", memory: bool = False, speaker: Speaker | None = None,
+    personality: str = "", memory: bool = False, speaker: Speaker | None = None, owner_pc: bool = False,
 ) -> str:
     """The same persona and factual rules, with MCP tools instead of a JSON reply contract. A resumed CLI
     session keeps the instructions it began with, so the memory files themselves come with every turn's
@@ -1100,7 +1114,7 @@ def cli_system_prompt(
         fields = _member_fields(language, name, role, instructions, personality)
         persona = fields["persona"]
         language_rule = REPLY_LANGUAGE
-    prompt = "\n\n".join((persona, interface_context(language) + _SHARED_CONTRACT, _FACT_RULES, language_rule))
+    prompt = "\n\n".join((persona, _contract(language, owner_pc and name is None), _FACT_RULES, language_rule))
     if memory:
         prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace(_FILES_HERE, "in the initial snapshot and later change records")
                    + "\n" + _MEMORY_EDITS + "\nEdit them with memory_update; memory_log keeps a daily work log; "
@@ -1161,7 +1175,7 @@ def member_worker_system_prompt(
 
 def system_prompt(
     language: str, route: str, memory_snapshot: "str | MemorySnapshot | None" = None, *,
-    narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True,
+    narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True, owner_pc: bool = False,
 ) -> str:
     """The system prompt for the model that words an answer on `route` ("answer", "discuss" or
     "chat") with fixed labels in `language`, and the memory's rules and files (`memory_rules`) when there is a
@@ -1172,7 +1186,7 @@ def system_prompt(
     prefixes = PREFIXES[language]
     prompt = _SYSTEM_PROMPT.format(
         persona=_raphael_persona(language, speaker),
-        contract=interface_context(language) + _SHARED_CONTRACT,
+        contract=_contract(language, owner_pc),
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (

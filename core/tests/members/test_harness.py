@@ -11,7 +11,6 @@ from raphael_core.agent.actions import is_action
 from raphael_core.agent.tools import ToolResult
 from raphael_core.members.schedule import KINDS, Schedule
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
-from computer.test_operate import shell, PRESS_SEVEN  # noqa: F401
 
 
 async def test_a_member_creates_lists_and_reads_a_skill_through_the_shared_harness(setup, client):
@@ -75,20 +74,18 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    # The same tools as Raphael's: `open` is listed, the desktop is found with find_tools (decision 2).
-    assert {"open", "web_search", "routine_create", "find_tools", "use_tool"} <= offered and "computer" not in offered
+    # The same tools as Raphael's, but nothing of the owner's PC (R-PC-01): no `open`, no desktop.
+    assert {"web_search", "routine_create", "find_tools", "use_tool"} <= offered and not offered & {"open", "computer"}
 
 
-async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, client):
+async def test_a_member_cannot_open_an_app_on_the_owners_pc_from_any_conversation(setup, client):
+    # R-PC-01: `open` is a quick question's alone, typed in the app or sent from a phone.
     rig, team = setup
     teacher = member(team, tools=[])
-    client.chats = [chat("Opening it.", ("open", {"target_kind": "url", "target": "https://example.com"})), live_said("Opened.")]
-    await typed(rig, "Open example.com", teacher.id)
-    assert rig.actions.calls == [("open_url", "https://example.com")]
-    rig.actions.calls.clear()
-    client.chats = [chat("Opening it.", ("open", {"target_kind": "url", "target": "https://example.com"})), live_said("Please ask at the computer.")]
-    await typed(rig, "Open example.com", teacher.id, source="telegram")
-    assert rig.actions.calls == []
+    for source in ("app", "telegram"):
+        client.chats = [chat("Opening it.", ("open", {"target_kind": "url", "target": "https://example.com"})), live_said("I cannot open it here.")]
+        await typed(rig, "Open example.com", teacher.id, source=source)
+        assert rig.actions.calls == []
 
 
 def test_the_tool_offers_every_schedule_the_engine_runs():
@@ -192,26 +189,6 @@ async def test_a_routine_write_obeys_the_same_safety_rule_as_other_writes(setup,
         assert result["text"] == "已安排。"
         [audit] = rig.conn.execute("SELECT approver FROM tool_audit WHERE tool = 'routine_create'").fetchall()
         assert audit[0] == ("user" if verdict == "ask" else "auto")
-
-
-async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, client, shell):
-    from raphael_core.computer.run import ComputerRuns
-    rig, team = setup
-    teacher = member(team, name="紫苑", tools=[])
-    rig.service._computer = ComputerRuns(shell.bridge)
-    note = {"target": "user", "action": "add", "content": "Untrusted screen data", "old_text": ""}
-    client.chats = [chat("確認計算機。", use("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
-    asked = await typed(rig, "在計算機按七", teacher.id)
-    assert asked["status"] == "confirm"
-    done = await rig.confirm(asked["confirm"]["id"])
-    assert done["prefix"] == "" and done["text"] == "完成了，接著練習日文數字。"
-    assert (await rig.call("agent.history.list", {}))["turns"] == []
-    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    assert turn["id"] == asked["turn_id"] and turn["status"] == "done"
-    assert "PRIVATE-INSTRUCTIONS" in str(client.chat_calls[1]["messages"])
-    assert team.memory.own(teacher.id).read().strip() == "（待確認）Untrusted screen data"
-    assert team.memory.shared.read() == ""
-    assert any(s["tool"] == "memory_update" and s["outcome"] == "ok" for s in turn["steps"])
 
 
 async def test_deleted_routine_receipt_keeps_its_public_name_and_owner(setup):

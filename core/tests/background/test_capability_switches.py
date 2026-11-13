@@ -25,7 +25,7 @@ async def test_team_overview_uses_each_members_brain_and_actual_tool_catalog(mak
     assert rows[reader.id]["brain"]["native_files"] == "read-only"
     assert rows[reader.id]["brain"]["attached_images"] == "native"
     assert rows[writer.id]["brain"]["model"] == "cli:claude:synthetic"
-    assert "allowed" not in rows[reader.id]["computer"] and "local_commands" in rows[writer.id]["computer"]
+    assert "allowed" not in rows[reader.id]["computer"] and "local_commands" not in rows[writer.id]["computer"]  # R-PC-01
     assert {"look", "note"} <= {t["name"] for t in rows[reader.id]["tools"]}
 
 

@@ -65,7 +65,8 @@ SCENARIOS = (
     Scenario("image", "請讀取圖片附件並說明主要顏色。", contains=("紅",), attachment="image"),
     Scenario("pdf", "請讀取 PDF 附件並引用標題。", {"read_attachment": 1}, ("星河筆記",), attachment="pdf"),
     Scenario("memory", "請記住：我喜歡在早上練習寫作。", {"memory_update": 1}),
-    Scenario("open", "請開啟 https://example.com/ 。", {"open": 1}),
+    # An ordinary conversation has no command that opens a page on the owner's PC (R-PC-01): the page is shown in the chat.
+    Scenario("open", "請開啟 https://example.com/ 。", {"show": 1}),
     Scenario("search", "請上網搜尋臺北今日的新聞並簡短說明。", {"web_search": 1}),
     Scenario("approval-yes", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, approval=True),
     Scenario("approval-no", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, approval=False),

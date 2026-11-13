@@ -1,4 +1,4 @@
-"""The owner's approved command is visible, bounded and quietly cancellable."""
+"""A command on the owner's PC (a quick question's alone, R-PC-01) is visible, bounded and quietly cancellable."""
 
 import asyncio
 import json
@@ -26,39 +26,27 @@ def rig_with_command(make_rig, conn):
     return rig, hub, host
 
 
-@pytest.mark.parametrize('native', [False, True])
-async def test_cli_local_question_contains_the_exact_command_even_at_t3(make_rig, conn, tmp_path, monkeypatch, native):
+async def test_a_cli_native_command_request_is_refused_in_an_ordinary_turn(make_rig, conn, tmp_path):
     from members.test_cli_brains import fake_mcp
     rig, hub, host = rig_with_command(make_rig, conn)
     rig.settings.set('agent_model', 'cli:claude')
-    if native:
-        calls = [('approve', {'tool_name': 'Bash', 'input': {'command': COMMAND}, 'reason': 'Inspect synthetic processes'})]
-    else:
-        original = rig.service._gate.tier
-        monkeypatch.setattr(rig.service._gate, 'tier', lambda name, args: Tier.T3 if name == 'mcp:local/local_exec' else original(name, args))
-        calls = [('local__local_exec', {'command': COMMAND})]
-    fake_mcp(rig, tmp_path, calls)
-    asked = await typed(rig, 'Inspect synthetic processes')
-    identifier = asked['confirm']['id']
-    card = rig.service._confirmation_cards.get(identifier)
-    assert card.view()['kind'] == 'local_command'
-    assert card.summary == COMMAND and not card.context_only
-    assert asked['confirm']['text'] == 'Local commands\n' + COMMAND
-    assert asked['confirm']['timeout_ms'] == 0
-    if native:
-        assert card.reason == 'Inspect synthetic processes'
-        assert rig.service._followups[identifier].loop.approval_wait_s == float('inf')
-        from raphael_core.protocol import RpcError
-        with pytest.raises(RpcError):
-            await rig.call('agent.confirm', {'id': identifier, 'approved': True, 'source': 'telegram'})
-    await rig.confirm(identifier)
-    assert host.execute.await_count == (0 if native else 1)
+    fake_mcp(rig, tmp_path, [('approve', {'tool_name': 'Bash', 'input': {'command': COMMAND}, 'reason': 'Inspect synthetic processes'})], allowed=False)
+    result = await typed(rig, 'Inspect synthetic processes')
+    assert result['status'] == 'done'
+    host.execute.assert_not_awaited()
+
+
+def quick_ask(rig, text='Inspect synthetic processes'):
+    # As a question typed in the quick conversation asks (the overlay's spoken one reaches the same turn).
+    return rig.call('agent.ask', {'session_id': 'live', 'text': text, 'ui_language': 'en', 'source': 'app', 'member_id': 0,
+                                  'destination': 'quick', 'conversation_id': rig.service.conversations.quick()})
 
 
 @pytest.mark.parametrize('brain', ['api', 'claude', 'codex', 'gemini'])
 @pytest.mark.parametrize('cancel', [False, True])
-async def test_allow_publishes_running_action_before_completion_and_stop_is_silent(make_rig, client, conn, monkeypatch, brain, cancel):
+async def test_a_quick_question_publishes_running_action_before_completion_and_stop_ends_the_command(make_rig, client, conn, monkeypatch, brain, cancel):
     rig, hub, host = rig_with_command(make_rig, conn)
+    rig.settings.set('action_mode', 'bypass')  # a quick question shows no card: a command runs only where nothing waits for a yes
     started, release, stopped = asyncio.Event(), asyncio.Event(), asyncio.Event()
     async def execute(command, **kwargs):
         started.set()
@@ -76,11 +64,10 @@ async def test_allow_publishes_running_action_before_completion_and_stop_is_sile
             result = await loop._tool('command', 'local__local_exec', {'command': COMMAND})
             loop._queue.put_nowait(Outcome('done', final='Finished.' if result.ok else result.content))
         monkeypatch.setattr(CliLoop, '_work', work)
-    asked = await typed(rig, 'Inspect synthetic processes')
-    task = asyncio.create_task(rig.confirm(asked['confirm']['id']))
+    task = asyncio.create_task(quick_ask(rig))
     try:
         await asyncio.wait_for(started.wait(), 5)
-        turn = rig.history.get(asked['turn_id'])
+        [turn] = rig.history.list(5, conversation_id=rig.service.conversations.quick())
         assert turn.status == 'running'
         actions = [json.loads(item['text']) for item in rig.history.messages([turn.id])[turn.id] if item['kind'] == 'event']
         assert actions[-1]['state'] == 'running'
@@ -88,7 +75,7 @@ async def test_allow_publishes_running_action_before_completion_and_stop_is_sile
         if cancel:
             await rig.call('agent.cancel', {'session_id': 'live'})
             result = await asyncio.wait_for(task, 5)
-            assert result['silent'] is True and result['text'] == ''
+            assert result['status'] == 'done' and result['turn_id'] in (0, turn.id)
             assert rig.history.get(turn.id).status == 'cancelled'
             assert stopped.is_set()
         else:
@@ -107,7 +94,7 @@ async def test_allow_publishes_running_action_before_completion_and_stop_is_sile
 async def test_foreground_command_cannot_request_an_unbounded_timeout(make_rig, conn):
     from raphael_core.computer.local_tools import _CONTEXT
     rig, hub, host = rig_with_command(make_rig, conn)
-    token = _CONTEXT.set((('chat', 0, 1), False, True, 'synthetic'))
+    token = _CONTEXT.set((('chat', 0, 1), False, True, 'synthetic', True))
     try:
         host.execute.return_value = {'exit_code': None, 'stdout': '', 'stderr': '', 'timed_out': True, 'truncated': False}
         result = await hub.call('mcp:local/local_exec', {'command': COMMAND, 'timeout_seconds': 86400}, approver='user')
@@ -146,11 +133,12 @@ async def test_raphael_diagnosis_reads_self_check_before_any_model_or_shell(make
 
 async def test_timeout_is_told_to_the_owner_even_if_the_model_says_nothing_about_it(make_rig, client, conn):
     rig, hub, host = rig_with_command(make_rig, conn)
+    rig.settings.set('action_mode', 'bypass')
     host.execute.return_value = {'exit_code': None, 'stdout': 'partial', 'stderr': '', 'timed_out': True, 'truncated': False}
     client.chats = [chat('Inspecting.', ('local__local_exec', {'command': COMMAND})), chat('Finished checking.')]
-    asked = await typed(rig, 'Inspect synthetic processes')
-    await rig.confirm(asked['confirm']['id'])
-    turn = rig.history.get(asked['turn_id'])
+    result = await quick_ask(rig)
+    assert result['status'] == 'done'
+    turn = rig.history.get(result['turn_id'])
     messages = rig.history.messages([turn.id])[turn.id]
     assert any(item['kind'] == 'reply' and 'was stopped' in item['text'] for item in messages)
     assert any(step.outcome == 'timeout' for step in rig.history.steps([turn.id])[turn.id])

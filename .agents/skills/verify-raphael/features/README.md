@@ -181,7 +181,9 @@ details-routines and automation-edit. Use both themes at
 
 ## Owner-PC commands (2026-11-01)
 
-See [member-computer.md](member-computer.md#owner-pc-commands-2026-11-01) for the
+Since 2026-11-13 only a quick question has them (R-PC-01): see
+[member-computer.md](member-computer.md#the-owners-pc-is-for-a-quick-question-alone-2026-11-13-r-pc-01), and
+[member-computer.md](member-computer.md#owner-pc-commands-2026-11-01-now-a-quick-questions-alone-see-above) for the
 shared command setting, first consent, subsequent approvals and background job gate.
 Selected scenes: local-command-consent, local-command-later,
 local-command-background, local-command-once, local-command-always,
