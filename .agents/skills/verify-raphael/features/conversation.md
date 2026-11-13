@@ -2278,8 +2278,9 @@ links (AccuWeather's `…/taichung-city/315040/weather-forecast/315040`, NVIDIA'
 - **Pointing.** `mountChartHover` (report view): `.rc-tip` in the app's float, crosshair and points
   on lines, the column on columns, the row on bars, the part on a pie; arrow keys on the focused
   plot (`role="img"`, named with every value) do the same.
-- **The secret check.** `memory/scan.py` `_readable`: words and numbers joined by `/ - _` are a
-  path, not a key; card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
+- **The secret check.** `memory/scan.py` `_readable`: words and numbers joined by `/ - _`, with at
+  least one slash, are a path, not a key (a value joined by `_` alone, such as
+  `tests/test_chat_setup_share.py`'s synthetic credential, stays a key); card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
   files and integrity hashes are not read as keys, embedded text is decoded and read.
 - **HTML pages** get the app's theme words (`pages.py THEME`, `page-theme.test.ts` keeps them equal
   to styles.css) and may load chart libraries from the three CDNs; `connect-src` stays `'none'`.
