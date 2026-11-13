@@ -983,6 +983,12 @@ export function checkRendered(name, context = {}) {
       require(visible(row) && row.querySelectorAll('button').length === 1, "one compact row holds pending questions");
       require(row.getBoundingClientRect().bottom <= scroll.getBoundingClientRect().top + 1, "the row sits above the scrollport");
       require(row.getBoundingClientRect().bottom < host.querySelector('.composer').getBoundingClientRect().top, "the floating row never covers the composer");
+      // The stage reaches the window's top under the header: a row left there ran under the name pill and a press on it opened the details instead.
+      const press = row.querySelector('button').getBoundingClientRect(), hit = document.elementFromPoint(press.left + press.width / 2, press.top + press.height / 2);
+      const crowded = [...host.querySelectorAll(':scope > .page-head button, :scope > .page-head h1')].filter(visible).filter(item => { const box = item.getBoundingClientRect(); return box.bottom > press.top && box.top < press.bottom && box.right > press.left && box.left < press.right; });
+      require(!crowded.length && row.contains(hit), `the row stands below the top row, so a press on it lands on it (under it: ${crowded.map(item => item.className || item.localName).join(', ') || 'nothing'}; hit ${hit?.className || hit?.localName})`);
+      const composer = host.querySelector('.composer').getBoundingClientRect();
+      require(Math.abs(press.left - composer.left) <= 2 && Math.abs(press.right - composer.right) <= 2, `the row has the thread's sides (${press.left}-${press.right} vs composer ${composer.left}-${composer.right})`);
       if (name === "owner-question-pending-many") require(visible(document.querySelector('[role="menu"]')) && row.textContent.includes('2'), "a counted row opens the shared question list");
     }
     return { check: name, cards: cards.length };
@@ -1593,15 +1599,17 @@ export function checkRendered(name, context = {}) {
       const proof = window.__polishSearch;
       if (proof?.total === 210) {
         // The group's ⋯ is not drawn (a right click on the row opens its menu: owner, 2026-11-06), so its header tool row is the search button alone.
-        // The head keeps the pane's side inset on both sides (the room gives its padding to its children), so the button ends the head
-        // on the heading's line; while the column fills the window it stands on the composer's right edge, as a conversation's edge button does.
+        // R-TOP-01 (owner, 2026-11-12): the head keeps the pane's side inset on both sides, and where the pane reaches the window's edge its tool
+        // ends 14 px short of the window's buttons; where a side thread stands at the right the tool ends the head at the pane's own edge.
         const room = document.querySelector('.au-room-pane'), head = room.querySelector(':scope > .page-head').getBoundingClientRect(), pane = room.getBoundingClientRect();
         const search = document.querySelector('[data-room-search]'), menu = document.querySelector('[data-room-menu]');
-        const box = search.getBoundingClientRect(), composer = room.querySelector('.composer').getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
+        const box = search.getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
+        const controls = document.querySelector('.window-controls').getBoundingClientRect(), tools = room.querySelector('.page-head .ra-tools'), reserve = parseFloat(getComputedStyle(tools).marginRight);
         require(visible(search) && search.closest('.page-head .ra-tools') && getComputedStyle(menu).display === 'none', 'group search stands alone in the shared header tool row; the menu is the row\'s right click');
-        require(Math.abs(box.right - head.right) <= 1 && Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides and its tool ends it (${head.left - pane.left} / ${pane.right - head.right}, tool ${head.right - box.right} short)`);
+        require(Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides (${head.left - pane.left} / ${pane.right - head.right})`);
+        if (reserve > 0) require(Math.abs(controls.left - box.right - 14) <= 2, `group search ends 14 px short of the window's buttons (${controls.left - box.right})`);
+        else require(Math.abs(box.right - head.right) <= 1, `group search ends the head where a side thread stands at the right (${head.right - box.right} short)`);
         require(Math.abs(box.top + box.height / 2 - (heading.top + heading.height / 2)) <= 2, 'group search shares the heading\'s line');
-        if (composer.left - head.left <= 24) require(Math.abs(box.left + box.width / 2 - composer.right) <= 2, `group search stands on the composer's right edge while the column fills the window (${box.left + box.width / 2} vs ${composer.right})`);
       }
       require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
       require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');

@@ -397,7 +397,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const bar = chromeBar.getBoundingClientRect();
     const surfaceAt = (x, y) => {
       const layers = [];
-      let big = null;
+      let big = null, owner = null;
       for (const element of doc.elementsFromPoint(x, y)) {
         // A picture is no surface to compare: over a member's cover picture the window buttons keep a backing of their own, so that
         // they can be read on whatever the owner chose (member-settings.css; red on main since the audit came, 2026-11-12).
@@ -408,15 +408,27 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         if (!color || color.a <= 0) continue;
         layers.push(color);
         const rect = element.getBoundingClientRect();
-        if (color.a === 1) { big = rect.width >= 160 && rect.height >= 120; break; }
+        if (color.a === 1) { big = rect.width >= 160 && rect.height >= 120; owner = element; break; }
       }
       if (!big) return null;
+      surfaceAt.owner = owner;
       return layers.reduceRight((below, top) => over(top, below));
+    };
+    // A thread scrolls under the strip and fades out there: the edge of a message or card that happens to lie within the strip's height
+    // is content passing under it, not a block of the strip's own colour. The strip's own surface is never inside a scroller that
+    // reaches under it, so a surface that belongs to a scroller standing at the other sample too is skipped.
+    const scrollerOf = element => {
+      for (let node = element; node && node !== doc.body && node !== doc.documentElement; node = node.parentElement) if (['auto', 'scroll'].includes(win.getComputedStyle(node).overflowY)) return node;
+      return null;
     };
     const apart = [];
     for (let x = bar.left + 24; x < bar.right - 24; x += 48) {
-      const top = surfaceAt(x, bar.top + 3), below = surfaceAt(x, bar.bottom + 4);
-      if (top && below && Math.max(Math.abs(top.r - below.r), Math.abs(top.g - below.g), Math.abs(top.b - below.b)) >= 2) apart.push(Math.round(x));
+      const top = surfaceAt(x, bar.top + 3), topOwner = surfaceAt.owner, below = surfaceAt(x, bar.bottom + 4), belowOwner = surfaceAt.owner;
+      if (!top || !below || Math.max(Math.abs(top.r - below.r), Math.abs(top.g - below.g), Math.abs(top.b - below.b)) < 2) continue;
+      const topStack = doc.elementsFromPoint(x, bar.top + 3), belowStack = doc.elementsFromPoint(x, bar.bottom + 4);
+      const topScroller = scrollerOf(topOwner), belowScroller = scrollerOf(belowOwner);
+      if ((belowScroller && topStack.includes(belowScroller)) || (topScroller && belowStack.includes(topScroller))) continue;
+      apart.push(Math.round(x));
     }
     if (apart.length) productRules.push({ ...describe(chromeBar), rule: 'R-UI-141', reason: `The caption strip is a block of another colour than the surface just below it, at x = ${apart.join(', ')}` });
   }

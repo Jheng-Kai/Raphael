@@ -210,6 +210,8 @@ export async function eventStorm(page, options) {
       scrollMoved: calmSeen ? Math.round(calmSeen.scrolls.reduce((sum, [element, top]) => sum + Math.abs(element.scrollTop - top), 0)) : undefined,
       motionSamples: seen.animations?.length ?? 0,
       motionRequired: seen.motionRequired ?? false,
+      motionLost: (seen.animations ?? []).filter(({ animation, start, delay }) => animation.playState !== 'running' || animation.startTime !== start || animation.effect.getTiming().delay !== delay)
+        .map(({ animation, start, delay }) => ({ face: animation.effect.target?.closest?.('svg.slime')?.dataset.state, target: String(animation.effect.target?.className?.baseVal ?? animation.effect.target?.className ?? '').slice(0, 40), connected: !!animation.effect.target?.isConnected, playState: animation.playState, startedBy: Math.round(animation.startTime - start), delayWas: delay, delayNow: animation.effect.getTiming().delay })),
       motionIntact: !seen.animations || ((!seen.motionRequired || seen.animations.length > 0) && seen.animations.every(({ animation, start, delay }) => animation.playState === 'running' && animation.startTime === start && animation.effect.getTiming().delay === delay)),
       anchorMovement: arrival && position === "middle" ? Math.abs(scroller.scrollTop - seen.top) : 0,
       arrivalShown: !arrival || !!scroller.querySelector('[data-id="200001"].is-new'),
