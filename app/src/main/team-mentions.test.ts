@@ -155,21 +155,44 @@ test("an app that is not signed in opens the place to sign it in instead of beco
   expect(input.value).toBe('請用 @Gmail ');
 });
 
-test("five recent ready services and an in-place expansion, with no headings", () => {
+// Owner, 2026-11-14: 「這邊不要用顯示全部 7 個，因為你點下去之後就剩下原本的那 7 個，感覺蠻奇怪的。你這邊就是跟 Grok bot 一樣，設計是滑鼠滾輪往下這樣子」
+test("every other member and every offered app are one list that scrolls, with no show-all row and no pages", () => {
   const apps = Array.from({ length: 30 }, (_, index) => ({ id: `service-${index}`, name: `Service ${index}`, state: index === 0 ? 'needs_sign_in' : 'ready', last_used_at: index }));
   const many = { ...list, team_context: { apps } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: many }));
   input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
   expect(menu()!.querySelector('.menu-head')).toBeNull();
+  expect(menu()!.querySelector('.menu-action, .menu-sep')).toBeNull();
+  expect(menu()!.textContent).not.toContain('顯示全部');
+  expect(menu()!.classList.contains('menu-scroll')).toBe(true);
   expect(rows().filter(name => !name.startsWith('Service'))).toEqual(['拉斐爾', '小森', '小晴']);
-  expect(rows().filter(name => name.startsWith('Service'))).toEqual(['Service 29', 'Service 28', 'Service 27', 'Service 26', 'Service 25']);
-  expect(menu()!.querySelector('[data-value^="Service"] .mtag')).toBeNull();
-  const all = [...menu()!.querySelectorAll<HTMLButtonElement>('button')].find(row => row.textContent?.includes('顯示全部 30 個'))!;
-  expect(all).toBeDefined(); all.click();
-  expect(input.value).toBe('@');
-  expect(rows()).toContain('Service 24');
-  expect(menu()!.querySelector('[data-value^="Service"] .mtag')).toBeNull();
+  const services = rows().filter(name => name.startsWith('Service'));
+  expect(services).toHaveLength(30);
+  expect(services.slice(0, 3)).toEqual(['Service 29', 'Service 28', 'Service 27']);
+  expect(services[services.length - 1]).toBe('Service 0');
+  expect(menu()!.querySelector('[data-value="Service 29"] .mtag')).toBeNull();
+  expect(menu()!.querySelector('[data-value="Service 0"] .mtag')!.textContent).toBe('需要登入');
   expect(menu()!.querySelector('.menu-head[role="option"]')).toBeNull();
+});
+
+test("the arrow keys carry the highlight through the whole scrolling list and its row comes into view", () => {
+  const apps = Array.from({ length: 12 }, (_, index) => ({ id: `service-${index}`, name: `Service ${index}`, state: 'ready', last_used_at: index }));
+  bindTeamMentions(input, () => ({ list: { ...list, team_context: { apps } } as unknown as MembersList }));
+  input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+  const seen: string[] = [];
+  const scrollIntoView = vi.fn(function (this: HTMLElement) { seen.push(this.dataset.value!); });
+  (HTMLElement.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = scrollIntoView;
+  try {
+    const total = rows().length;
+    for (let index = 0; index < total - 1; index++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    expect(document.getElementById(input.getAttribute('aria-activedescendant')!)!.dataset.value).toBe('Service 0');
+    expect(seen).toEqual(rows().slice(1));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(input.value).toBe('@Service 0 ');
+  } finally {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollIntoView;
+  }
 });
 
 test("filtered mentions rank aliases within sections, cap results and honor group recipients", () => {
@@ -193,26 +216,4 @@ test("Arrow keys walk the rows and Tab picks without sending or interrupting an 
   expect(document.getElementById(input.getAttribute('aria-activedescendant')!)?.textContent).toContain('Notion');
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   expect(input.value).toBe('@Notion '); expect(menu()).toBeNull(); expect(send).toHaveBeenCalledTimes(1);
-});
-
-test("a roster larger than the available height remains reachable in bounded pages", () => {
-  const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
-  const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
-  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get() { return this.id === 'app-popover' ? this.querySelectorAll('button').length * 34 + 60 : 0; } });
-  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 220; } });
-  try {
-    const many = { ...list, members: Array.from({length:30},(_,id)=>({id,name:`Member ${id}`})) } as unknown as MembersList;
-    bindTeamMentions(input, () => ({ list: many }));
-    input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
-    expect(rows().length).toBeLessThan(8);
-    const next = [...document.querySelectorAll<HTMLButtonElement>('#app-popover .menu-action')].find(button=>button.textContent?.includes('下一頁'))!;
-    expect(next).toBeDefined(); next.click();
-    input.value = ''; input.dispatchEvent(new Event('input'));
-    expect(document.querySelector('#app-popover')).toBeNull();
-  } finally {
-    for (const [key, descriptor] of [['scrollHeight',scroll],['clientHeight',client]] as const) {
-      if (descriptor) Object.defineProperty(HTMLElement.prototype,key,descriptor);
-      else delete (HTMLElement.prototype as unknown as Record<string,unknown>)[key];
-    }
-  }
 });
