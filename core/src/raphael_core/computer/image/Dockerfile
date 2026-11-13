@@ -86,7 +86,7 @@ RUN printf '%s\n' \
       'find "$profiles" \( -name SingletonLock -o -name SingletonSocket -o -name SingletonCookie -o -name .parentlock -o -name lock -type l \) -delete' \
       > /usr/local/bin/prepare-raphael-workspace.sh \
     && chmod 0755 /usr/local/bin/prepare-raphael-workspace.sh
-# A bot's own desktop: a 200 ms (not 800) watch for windows an action opens still sees Firefox popups; no cursor glide; plain logs.
+# A bot's own desktop: a 200 ms (not 800) watch for windows an action opens still sees a browser's popups; no cursor glide; plain logs.
 RUN printf '%s\n' \
       '#!/bin/sh' \
       '/usr/local/bin/prepare-raphael-workspace.sh' \
@@ -160,14 +160,40 @@ RUN set -eux; \
       chmod 0644 "$folder/raphael.json"; \
       /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$folder/raphael.json"; \
     done
+# Firefox ESR came with the base image and is no one's browser here: the members' is Google's Chrome (Chromium on
+# arm64) and the driver's is Chromium, so a second browser was only a place an owner would sign in for nobody
+# (owner, 2026-11-14: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」). Purging it also takes its
+# alternatives, its menu entry and its mime registrations; what the base put beside it that no package owns (and
+# XFCE's own helper entry for it, which only lists it among the applications to prefer) is removed by name.
+# The base's own layer still holds the files, so this makes the image no smaller: it removes the browser, not the
+# bytes. The two scripts that still named Firefox (the workspace's profile folders, and the last
+# fallback of raphael-browser) are patched here, in the image, and not in desktop/ or the step that wrote them:
+# any change to desktop/ or to an earlier step makes every step after it run again, and a PC that built layer 9
+# would download Chrome and the packages anew. A profile folder an existing workspace already has is the owner's
+# and stays.
+RUN set -eux; \
+    apt-get purge -y --auto-remove firefox-esr; \
+    rm -rf /etc/firefox-esr /usr/lib/mozilla /usr/lib/firefox-esr /usr/share/xfce4/helpers/firefox.desktop /home/cua/.mozilla; \
+    sed -i -e '/migrate_profile "\$HOME\/\.mozilla" mozilla/d' -e 's# "\$profiles/mozilla"##g' \
+      -e 's/ -o -name \.parentlock -o -name lock -type l//' /usr/local/bin/prepare-raphael-workspace.sh; \
+    sed -i 's|^exec firefox "\$@"$|echo "raphael-browser: this computer has no browser" >\&2; exit 1|' /usr/local/bin/raphael-browser; \
+    sh -n /usr/local/bin/prepare-raphael-workspace.sh; \
+    sh -n /usr/local/bin/raphael-browser; \
+    test -z "$(grep -il -e mozilla -e parentlock /usr/local/bin/prepare-raphael-workspace.sh || true)"; \
+    test -z "$(grep -il firefox /usr/local/bin/raphael-browser /usr/share/applications/mimeinfo.cache || true)"; \
+    test -z "$(dpkg-divert --list | grep -i firefox || true)"; \
+    test -z "$(dpkg -l | grep -i firefox || true)"; \
+    test -z "$(command -v firefox || command -v firefox-esr || true)"; \
+    test ! -e /usr/share/applications/firefox-esr.desktop; \
+    test -z "$(grep -ril firefox /usr/share/xfce4/helpers || true)"; \
+    /usr/lib/chromium/chromium --version
 # The desktop says which browser it opens, and each of its ways to a browser opens the computer's own (owner,
 # 2026-11-13, of the panel: 「但看起來底下不是顯示 Chrome ㄟ?」). Measured on layer 8: the panel's launcher wore a globe
 # named "Browser" over Google Chrome; XFCE's own "Web Browser" named a helper that does not exist and asked which
 # application to prefer; the menu's Google Chrome and x-www-browser could not start at all (Chrome's own entry makes
 # a sandbox, and nothing in a computer can); the menu's Chromium and Firefox were each a second browser with a
 # profile of its own, where an owner signs in for nobody. So: the launcher and the menu's one browser carry the
-# browser's own name and mark; the helper, the other two browser entries and x-www-browser all start
-# raphael-browser; Firefox stays installed and leaves the menu.
+# browser's own name and mark; the helper, the other browser entries and x-www-browser all start raphael-browser.
 # Named here and not in desktop/: which browser there is, is known only once the steps above have run.
 RUN set -eux; \
     if [ -x /opt/google/chrome/chrome ]; then name='Google Chrome' icon=google-chrome; else name=Chromium icon=chromium; fi; \
@@ -187,10 +213,6 @@ RUN set -eux; \
           > "/home/cua/.local/share/applications/$entry.desktop"; \
       fi; \
     done; \
-    if [ -e /usr/share/applications/firefox-esr.desktop ]; then \
-      { printf '%s\n' '[Desktop Entry]' 'NoDisplay=true'; sed -e '0,/^\[Desktop Entry\]$/d' -e '/^NoDisplay=/d' /usr/share/applications/firefox-esr.desktop; } \
-        > /home/cua/.local/share/applications/firefox-esr.desktop; \
-    fi; \
     chown cua:cua /home/cua/.config/xfce4/helpers.rc /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/*.desktop; \
     for link in x-www-browser gnome-www-browser; do \
       update-alternatives --install "/usr/bin/$link" "$link" /usr/local/bin/raphael-browser 500; \
@@ -219,4 +241,4 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="9"
+      org.raphael.computer.layer="10"

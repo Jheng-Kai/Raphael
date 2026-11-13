@@ -25,7 +25,10 @@ repair revisions and disk probes are keyed by unit on its host. Capacity, recove
 idle sweep, timezone reconciliation and shutdown enumerate physical units once.
 Shared resources are 6 GiB and 4 CPUs with RAPHAEL_SCREENS=6; per-bot resources stay
 3 GiB and 2 CPUs. Known old one-screen shared layer 3/4/5 shapes preserve mounts on
-rebuild, including a layer 5 shape already using the current image.
+rebuild, including a layer 5 shape already using the current image. Every later layer is named the same way in
+vm.known_previous (layer 10, which removes Firefox ESR from the image, names layer 9), in the shape it was
+released in, so an owner's computer keeps its workspace across the rebuild; the image's later steps are ordered so
+that a PC that built the layer before keeps its cached downloads.
 
 NATIVE_INPUT_TOOLS in vm_catalog.py retains native calls. In shared mode,
 shared_native_input also locks every request dispatched with delivery_mode=foreground,

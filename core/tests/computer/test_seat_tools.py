@@ -456,10 +456,10 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     assert '--permission-mode standard --grant existing-profile' in dockerfile
     assert 'install -m 0755 /opt/raphael-desktop/raphael-seat-browser /usr/local/bin/raphael-seat-browser' in dockerfile
     # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant came on top
-    # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), and 9 is the
-    # desktop saying which browser that is.
-    assert module.IMAGE.endswith("-v9") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "9"
-    assert 'org.raphael.computer.layer="9"' in dockerfile and "librsvg2-common" in dockerfile
+    # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), 9 is the
+    # desktop saying which browser that is, and 10 is the computer without Firefox ESR.
+    assert module.IMAGE.endswith("-v10") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "10"
+    assert 'org.raphael.computer.layer="10"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
@@ -506,13 +506,11 @@ def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens
     assert "> /usr/share/xfce4/helpers/raphael-browser.desktop;" in step
     assert "sed -i 's/^WebBrowser=.*/WebBrowser=raphael-browser/' /home/cua/.config/xfce4/helpers.rc;" in step
     assert "grep -qx 'WebBrowser=raphael-browser' /home/cua/.config/xfce4/helpers.rc;" in step
-    # The menu's other browser entries start the computer's browser and are out of the menu; Firefox stays
-    # installed and is out of the menu.
+    # The menu's other browser entries start the computer's browser and are out of the menu. Firefox has none: it
+    # is not in the computer.
     assert "for entry in google-chrome com.google.Chrome chromium; do" in step
     assert "'Exec=raphael-browser %U' \"Icon=$icon\" 'Terminal=false' 'NoDisplay=true'" in step
-    hide = "sed -e '0,/^\\[Desktop Entry\\]$/d' -e '/^NoDisplay=/d' /usr/share/applications/firefox-esr.desktop"
-    assert hide in step and "> /home/cua/.local/share/applications/firefox-esr.desktop;" in step
-    assert "apt-get purge" not in dockerfile and "apt-get remove" not in dockerfile
+    assert "firefox" not in step.lower()
     assert 'update-alternatives --install "/usr/bin/$link" "$link" /usr/local/bin/raphael-browser 500;' in step
     assert 'test "$(readlink -f /usr/bin/x-www-browser)" = /usr/local/bin/raphael-browser' in step
     # The files are the session user's, as the ones they replace were.
@@ -520,13 +518,52 @@ def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens
     # What the repository keeps is the entry before it is named: it starts the computer's browser either way.
     entry = (image / "desktop/browser.desktop").read_text(encoding="utf-8").splitlines()
     assert "Exec=raphael-browser %U" in entry
-    # The entry Firefox is hidden with keeps everything but its heading and any NoDisplay of its own.
-    sed = shutil.which("sed")
-    if sed is not None:
-        sample = b"[Desktop Entry]\nName=Firefox ESR\nNoDisplay=false\nExec=firefox-esr %u\n\n[Desktop Action new-window]\nName=New\n"
-        kept = subprocess.run([sed, "-e", r"0,/^\[Desktop Entry\]$/d", "-e", "/^NoDisplay=/d"], input=sample, capture_output=True, timeout=10)
-        assert kept.returncode == 0, kept.stderr
-        assert kept.stdout.replace(b"\r\n", b"\n") == b"Name=Firefox ESR\nExec=firefox-esr %u\n\n[Desktop Action new-window]\nName=New\n"
+
+
+def test_firefox_esr_is_purged_and_nothing_that_opens_it_is_left():
+    # Owner, 2026-11-14: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」 The members' browser is Google's
+    # Chrome (Chromium on arm64) and the driver's is Chromium, so a browser the base image brought was only a place an
+    # owner would sign in for nobody. Layer 9 had hidden its menu entry and kept the package.
+    image = Path(module.__file__).parent / "image"
+    dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
+    start = dockerfile.index("RUN set -eux; \\\n    apt-get purge -y --auto-remove firefox-esr;")
+    step = dockerfile[start:dockerfile.index("\n# ", start)]
+    assert dockerfile.count("apt-get purge") == 1 and "apt-get remove" not in dockerfile
+    # The step is after the browsers' own and before the one that names the desktop's browser: nothing before it is
+    # run again on a PC that built layer 9.
+    assert dockerfile.index("apt-get install -y --no-install-recommends google-chrome-stable;") < start
+    assert start < dockerfile.index("if [ -x /opt/google/chrome/chrome ]; then name='Google Chrome' icon=google-chrome;")
+    # The package, what the base put beside it that no package owns, and every way to find it again.
+    assert "rm -rf /etc/firefox-esr /usr/lib/mozilla /usr/lib/firefox-esr /usr/share/xfce4/helpers/firefox.desktop /home/cua/.mozilla;" in step
+    assert 'test -z "$(grep -ril firefox /usr/share/xfce4/helpers || true)";' in step
+    # Each is a `test -z` of what is found: under `set -e` a negated command (`! grep ...`) never stops a build.
+    assert 'test -z "$(dpkg-divert --list | grep -i firefox || true)";' in step
+    assert 'test -z "$(dpkg -l | grep -i firefox || true)";' in step
+    assert 'test -z "$(command -v firefox || command -v firefox-esr || true)";' in step
+    assert 'test -z "$(grep -il firefox /usr/local/bin/raphael-browser /usr/share/applications/mimeinfo.cache || true)";' in step
+    assert 'test -z "$(grep -il -e mozilla -e parentlock /usr/local/bin/prepare-raphael-workspace.sh || true)";' in step
+    assert "test ! -e /usr/share/applications/firefox-esr.desktop;" in step
+    # Chromium, the driver's browser and the arm64 members', survives the purge.
+    assert step.rstrip().endswith("/usr/lib/chromium/chromium --version")
+    # A menu entry for it is no longer made, nor is any hidden one.
+    assert "firefox-esr.desktop" not in dockerfile.replace("/usr/share/applications/firefox-esr.desktop", "")
+    # The two scripts that named it are rewritten in the image, not in desktop/ or in the step that wrote them: any
+    # change there would make every step after it run again (Chrome and the packages downloaded anew).
+    fallback = r"""sed -i 's|^exec firefox "\$@"$|echo "raphael-browser: this computer has no browser" >\&2; exit 1|' /usr/local/bin/raphael-browser;"""
+    assert fallback in step
+    assert r"""sed -i -e '/migrate_profile "\$HOME\/\.mozilla" mozilla/d' -e 's# "\$profiles/mozilla"##g'""" in step
+    assert r"""-e 's/ -o -name \.parentlock -o -name lock -type l//' /usr/local/bin/prepare-raphael-workspace.sh;""" in step
+    assert "sh -n /usr/local/bin/raphael-browser;" in step and "sh -n /usr/local/bin/prepare-raphael-workspace.sh;" in step
+    assert "\n    ! " not in step
+    # Run what the step runs on the script the repository keeps: no Firefox is left in it and it is still a shell script.
+    sed, shell = shutil.which("sed"), shutil.which("sh")
+    if sed is not None and shell is not None:
+        source = (image / "desktop/raphael-browser").read_bytes().replace(b"\r\n", b"\n")
+        rewritten = subprocess.run([sed, r's|^exec firefox "\$@"$|echo "raphael-browser: this computer has no browser" >\&2; exit 1|'],
+                                   input=source, capture_output=True, timeout=10)
+        assert rewritten.returncode == 0, rewritten.stderr
+        assert b"firefox" not in rewritten.stdout.lower() and rewritten.stdout.rstrip().endswith(b"exit 1")
+        assert subprocess.run([shell, "-n"], input=rewritten.stdout, capture_output=True, timeout=10).returncode == 0
 
 
 def test_the_members_browser_is_never_signed_in_to_as_a_browser_and_keeps_nothing_typed():
@@ -554,7 +591,8 @@ def test_the_shared_computers_browser_icon_opens_the_members_own_browser():
     # Chromium reads from /etc/chromium.d: without it the icon opened nothing.
     own = script[script.index("\nfi\n"):]
     chrome = own[own.index("google-chrome-stable"):own.index("for browser in /usr/bin/chromium")]
-    assert "--no-sandbox --test-type" in chrome and "exec firefox" in own
+    # The last line of the source names Firefox; the image's step for layer 10 rewrites it (see the test of that step).
+    assert "--no-sandbox --test-type" in chrome and own.rstrip().endswith('exec firefox "$@"')
     shell = shutil.which("sh")
     if shell is not None:
         assert subprocess.run([shell, "-n"], input=script, text=True, capture_output=True, timeout=10).returncode == 0
@@ -665,11 +703,11 @@ wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} h
     assert '[ "$attempt" -ge 15 ] && filling' in launcher
 
 
-@pytest.mark.parametrize("layer", ["7", "8"])
+@pytest.mark.parametrize("layer", ["7", "8", "9"])
 async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm, layer):
     # The owner's own computer on the day layer 8 came: six screens, 6 GiB, four cores, labelled layer 7. The
     # acceptance run found that layer 7 was not yet named as a released one, and such a computer did not start.
-    # It was on layer 8, in the same shape, the day layer 9 came.
+    # It was on layer 8, in the same shape, the day layer 9 came, and on layer 9 the day layer 10 came.
     vm, runtime = shared_vm
     target = await vm.seat(1)
     raw = container(vm, target, runtime)
