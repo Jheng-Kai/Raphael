@@ -148,3 +148,52 @@ def test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updat
     bad = struct.pack(">HHHHi", 1279, 0, 2, 1, 0)
     with pytest.raises(AssertionError, match="bounded raw rectangle"):
         rfb_view.Rfb(RawStream(struct.pack(">BxH", 0, 2) + whole + bad)).frame()
+
+
+class SentStream:
+    def __init__(self):
+        self.sent = []
+
+    def sendall(self, data):
+        self.sent.append(struct.unpack(">BBxxI", data))
+
+
+def events(text):
+    stream = SentStream()
+    rfb_view.Rfb(stream).type_text(text)
+    assert all(kind == 4 for kind, _, _ in stream.sent)
+    return [(key, down) for _, down, key in stream.sent]
+
+
+SHIFT = 0xffe1
+
+
+@pytest.mark.parametrize("character", list('~!@#$%^&*()_+{}|:"<>?') + list("ABZ"))
+def test_a_character_that_needs_shift_is_sent_with_shift_held_as_a_person_types_it(character):
+    # Measured on a real six-screen computer (2026-11-14): a seat's view server dropped `!@#$%^&*_+{}|:>?~` sent as bare
+    # keysyms, and delivered every one with Shift_L held around it. A person's browser holds Shift; a script now does too.
+    key = ord(character)
+    assert events(character) == [(SHIFT, 1), (key, 1), (key, 0), (SHIFT, 0)]
+
+
+@pytest.mark.parametrize("character,key", [("a", 97), ("7", 55), (" ", 32), ("/", 47), ("-", 45), (".", 46), ("'", 39),
+                                           ("\n", 0xff0d), ("\t", 0xff09)])
+def test_a_character_that_needs_no_shift_is_sent_alone(character, key):
+    assert events(character) == [(key, 1), (key, 0)]
+
+
+def test_a_line_is_typed_in_order_and_one_shift_never_stays_down():
+    sent = events("A@b\n")
+    assert [key for key, down in sent if down] == [SHIFT, 65, SHIFT, 64, 98, 0xff0d]
+    held = 0
+    for key, down in sent:
+        if key == SHIFT:
+            held += 1 if down else -1
+            assert held in (0, 1)
+    assert held == 0
+
+
+@pytest.mark.parametrize("character", ["é", "漢", "\x00", "\r"])
+def test_a_character_of_another_layout_is_refused_rather_than_sent_wrong(character):
+    with pytest.raises(AssertionError, match="printable ASCII"):
+        events(character)

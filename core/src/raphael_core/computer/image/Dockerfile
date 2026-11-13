@@ -238,7 +238,23 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
       'stderr_logfile=/var/log/supervisor/screens.error.log' \
       'priority=25' \
       >> /etc/supervisor/supervisord.conf
+# Layer 11 (owner, 2026-11-14: 「電腦的部分你可能要再改好一下…你就一次把所有東西都修復吧」). Two scripts of the image are
+# replaced by the ones in layer11/: raphael-seat-browser, which waited 15 s for a browser's first window and 5 s for it
+# to settle where a loaded PC took 13 to 41 s (it now waits a minute and 30 s, by the clock and not by a count of looks),
+# and screens.py, which now writes the panels' configuration in the order of dependence (what a panel holds before the
+# panel, the list of panels last) and restarts panels that stay empty (a panel was seen 12 px wide for twenty seconds and
+# more). They are in layer11/ and not in desktop/ for the reason the step above gives: any change to
+# desktop/ or to a step before this one makes every step after it run again, and a PC that built layer 10 would download
+# Chrome and the packages anew. desktop/raphael-seat-browser and desktop/screens.py stay as layer 10 had them, byte for
+# byte, and are what this step writes over; nothing reads them but this build.
+COPY layer11/ /opt/raphael-layer11/
+RUN set -eux; \
+    install -m 0755 /opt/raphael-layer11/raphael-seat-browser /usr/local/bin/raphael-seat-browser; \
+    install -m 0644 /opt/raphael-layer11/screens.py /opt/raphael-desktop/screens.py; \
+    sh -n /usr/local/bin/raphael-seat-browser; \
+    /usr/bin/python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' /opt/raphael-desktop/screens.py; \
+    rm -rf /opt/raphael-layer11
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="10"
+      org.raphael.computer.layer="11"

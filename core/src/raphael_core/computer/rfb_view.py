@@ -176,6 +176,21 @@ class WebSocket:
         return result
 
 
+SHIFT_L = 0xffe1
+FUNCTION_KEYS = {"\n": 0xff0d, "\t": 0xff09}
+SHIFTED = frozenset('~!@#$%^&*()_+{}|:"<>?')
+
+
+def keystrokes(character):
+    """The (keysym, down) events of one character on a US keyboard: Shift_L around the ones that need it."""
+    require(len(character) == 1 and (character in FUNCTION_KEYS or " " <= character <= "~"),
+            f"Expected one printable ASCII character or a newline or tab, observed {character!r}")
+    key = FUNCTION_KEYS.get(character, ord(character))
+    if character in SHIFTED or character.isupper():
+        return [(SHIFT_L, 1), (key, 1), (key, 0), (SHIFT_L, 0)]
+    return [(key, 1), (key, 0)]
+
+
 class Rfb:
     def __init__(self, stream, helper=None):
         self.stream, self.helper = stream, helper
@@ -213,6 +228,16 @@ class Rfb:
             self.stream.sendall(struct.pack(">BBxxI", 4, 1, key))
         for key in reversed(keysyms):
             self.stream.sendall(struct.pack(">BBxxI", 4, 0, key))
+
+    def type_text(self, text):
+        """Type `text` at a screen the way a person at a keyboard does: a character that is Shift's on a US keyboard is
+        sent with Shift held, as a browser's page holds it. A view server types only the key it is sent: measured on a
+        real computer (2026-11-14), `!@#$%^&*_+{}|:>?~` sent as bare keysyms never arrived, and `()<` and capitals only
+        by luck of the layout; with Shift_L held around each, all of them did. Only this keyboard is meant: a character
+        of another layout is not sent."""
+        for character in text:
+            for key, down in keystrokes(character):
+                self.stream.sendall(struct.pack(">BBxxI", 4, down, key))
 
     def close_window(self):
         for key, down in ((0xffe9, 1), (0xffc1, 1), (0xffc1, 0), (0xffe9, 0)):

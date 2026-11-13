@@ -197,8 +197,17 @@ class VmTools:
     # of it: another may take it, and the holder looks at it again when it comes back.
     lease_idle_s = 60.0
     read_progress_s = 10.0
-    browser_window_wait_s = 5.0
+    # A browser's first window took 13 to 41 s on a loaded PC (2026-11-13), so the waits for it are minutes' worth of
+    # patience, not seconds': the member's call says it is still reading after `read_progress_s` and reports its elapsed
+    # time. A window is polled with a growing pause, so a long wait is not a hundred driver calls.
+    browser_window_wait_s = 60.0
     browser_window_poll_s = 0.2
+    browser_window_poll_max_s = 1.0
+    # Everything one browser_open may take: the window's own wait, a carry-over's budget, the seat's launcher script
+    # (`LocalVm.seat_browser_s`) and the page's load and read. The launcher's own deadline ends first and says why.
+    browser_open_s = 300.0
+    # How long a window that was moved onto its screen is waited for before it is called outside it.
+    window_fit_wait_s = 10.0
 
     def __init__(self, delegate, vm, *, attachments, conn=None, bridge=CuaBridge):
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
@@ -888,7 +897,7 @@ class VmTools:
                         sent.setdefault("snapshot_format", "semantic_v2")
                     try:
                         if tool.name == "browser_open":
-                            async with asyncio.timeout(CuaBridge.read_timeout_s):
+                            async with asyncio.timeout(self.browser_open_s):
                                 data = await self._browser_open(target, member, client, session, arguments)
                         else:
                             data = await self._driver_call(target, client, tool.name, sent, own=True)
@@ -1044,6 +1053,7 @@ class VmTools:
             prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
             prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
             until = time.monotonic() + self.browser_window_wait_s
+            pause = self.browser_window_poll_s
             while True:
                 windows = await call("list_windows", {})
                 state = windows.get("structuredContent") or {}
@@ -1065,7 +1075,8 @@ class VmTools:
                 if matches or time.monotonic() >= until:
                     raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
                 # Preparing the CDP endpoint can finish before the window manager maps its window.
-                await asyncio.sleep(min(self.browser_window_poll_s, max(0, until - time.monotonic())))
+                await asyncio.sleep(min(pause, max(0, until - time.monotonic())))
+                pause = min(pause * 1.5, self.browser_window_poll_max_s)
             window = matches[0]
         bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
             "include_screenshot": False, "snapshot_format": "semantic_v2"})
@@ -1324,15 +1335,19 @@ class VmTools:
                 if str(error) != "window_move_failed":
                     raise
                 return None
-            for attempt in range(10):
+            # The window manager applies the move when it gets to it: half a second was enough on an idle PC and not on a loaded one.
+            until, pause = time.monotonic() + self.window_fit_wait_s, .05
+            while True:
                 canvas = await self._canvas_windows(client, session)
                 fresh = next((item for item in canvas["windows"] if item.get("window_id") == identifier), None)
                 if fresh is None or fresh.get("pid") != row.get("pid"):
                     return None
                 if seat_view.contains(fresh["bounds"], target.screen, target.screens):
                     return fresh
-                await asyncio.sleep(.05)
-            return None
+                if time.monotonic() >= until:
+                    return None
+                await asyncio.sleep(pause)
+                pause = min(pause * 2, 1.0)
         return row
 
     async def _bound_window(self, target, client, args):

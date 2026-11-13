@@ -15,7 +15,7 @@ from .test_vm import desktop, per_bot_desktop  # noqa: F401
 
 IMAGE = Path(vm_module.__file__).parent / 'image'
 screens = ModuleType('image_screens')
-helper = IMAGE / 'desktop/screens.py'
+helper = IMAGE / 'layer11/screens.py'
 exec(compile(helper.read_text(encoding='utf-8'), str(helper), 'exec'), screens.__dict__)
 
 
@@ -172,6 +172,57 @@ def test_four_panels_have_independent_outputs_and_unique_launcher_plugins():
         'xfconf-query', '-c', 'xfce4-panel', '-p', '/panels', '-n', '-a', '-t', 'int', '-s', '1', '-t', 'int', '-s', '2']
 
 
+def test_what_a_panel_names_is_written_before_the_panel_and_the_list_of_panels_last():
+    # A panel was seen on a real computer 12 px wide and holding nothing for twenty seconds and more (seat 2 of six, three
+    # runs). A panel is 12 px until its launchers are loaded; the list of panels is what makes one exist, so it comes
+    # last, and an id is never written before the plugin it names has its type and its item.
+    commands = screens.panel_commands(6)
+    paths = [path for path, _, _ in commands]
+    assert paths[-1] == '/panels' and paths.count('/panels') == 1
+    for panel in range(2, 7):
+        ids = list(range(panel * 3 - 2, panel * 3 + 1))
+        named = paths.index(f'/panels/panel-{panel}/plugin-ids')
+        for plugin in ids:
+            assert paths.index(f'/plugins/plugin-{plugin}') < paths.index(f'/plugins/plugin-{plugin}/items') < named
+        assert all(paths.index(f'/panels/panel-{panel}/{name}') < named for name in ('position', 'size', 'length', 'length-adjust'))
+        assert named < paths.index(f'/panels/panel-{panel}/output-name') < paths.index('/panels')
+    assert sorted(paths) == sorted(set(paths))  # no property is written twice
+
+
+WMCTRL = """0x00c00003 -1 567  851  146  49   xfce4-panel.Xfce4-panel  host xfce4-panel
+0x00c00007 -1 1914 851  12   49   xfce4-panel.Xfce4-panel  host xfce4-panel
+0x00c0000b -1 0    0    10   10   xfce4-panel.Xfce4-panel  host xfce4-panel
+0x01800028 -1 0    0    3840 1800 xfdesktop.Xfdesktop       host Desktop
+0x00800003  0 1280 48   1280 827  google-chrome (/p).Google-chrome  host A page - Google Chrome
+"""
+
+
+def test_a_panel_is_whole_only_with_its_launchers_loaded(monkeypatch):
+    monkeypatch.setattr(screens, 'command', lambda args: WMCTRL)
+    assert screens.panel_widths() == [146, 12]
+    assert not screens.panels_whole(2) and not screens.panels_whole(3)
+    monkeypatch.setattr(screens, 'command', lambda args: WMCTRL.replace(' 12   49', ' 146  49'))
+    assert screens.panels_whole(2) and not screens.panels_whole(3)
+
+    def broken(args):
+        raise subprocess.CalledProcessError(1, args)
+    monkeypatch.setattr(screens, 'command', broken)
+    assert screens.panel_widths() == [] and not screens.panels_whole(1)
+
+
+def test_panels_that_stay_empty_are_restarted_until_they_are_whole(monkeypatch):
+    calls, answers = [], iter([False, False, True])
+    monkeypatch.setattr(screens, 'command', lambda args: calls.append(args) or '')
+    monkeypatch.setattr(screens, 'wait_for_panels', lambda count, seconds=30: next(answers))
+    screens.restart_panels(6)
+    assert calls == [['xfce4-panel', '-r']] * 3
+    # Never for ever: a computer whose panels cannot be made whole is left to the watch, which looks again.
+    calls.clear()
+    monkeypatch.setattr(screens, 'wait_for_panels', lambda count, seconds=30: False)
+    screens.restart_panels(6)
+    assert len(calls) == 1 + screens.PANEL_RESTARTS
+
+
 def test_existing_panel_configuration_needs_no_writes_or_restart(monkeypatch):
     values = {path: value for path, _, value in screens.panel_commands(4)}
     calls = []
@@ -208,6 +259,7 @@ def test_changed_panels_wait_for_xfce_before_writes_and_restart(monkeypatch):
         return ''
 
     monkeypatch.setattr(screens, 'command', command)
+    monkeypatch.setattr(screens, 'wait_for_panels', lambda count, seconds=30: True)
     screens.configure_panels(4)
     assert calls[0] == ('wait', ['pgrep', '-x', 'xfce4-panel'])
     assert calls[-1] == ('command', ['xfce4-panel', '-r'])
@@ -491,6 +543,51 @@ def test_views_preserve_boot_mark_during_restart_and_stop(monkeypatch, tmp_path,
         assert 1 in sleeps and publications.count(screens.READY) == 1
 
 
+@pytest.mark.parametrize('whole', [False, True])
+def test_the_watch_restarts_panels_that_stay_empty_and_leaves_whole_ones_alone(monkeypatch, tmp_path, whole):
+    monkeypatch.setattr(screens, 'READY', tmp_path / 'ready')
+    monkeypatch.setattr(screens, 'TOKENS', tmp_path / 'tokens')
+    handlers, clock, commands, sleeps = {}, [0.0], [], []
+
+    class Child:
+        returncode = None
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.returncode = -15
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    def sleep(duration):
+        clock[0] += duration
+        sleeps.append(duration)
+        if len(sleeps) >= 600:  # five minutes
+            handlers[screens.signal.SIGTERM](None, None)
+
+    monkeypatch.setattr(screens.subprocess, 'Popen', lambda args: Child())
+    monkeypatch.setattr(screens.signal, 'signal', lambda signum, callback: handlers.update({signum: callback}))
+    monkeypatch.setattr(screens.time, 'sleep', sleep)
+    monkeypatch.setattr(screens.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(screens, 'atomic_write', lambda path, text: None)
+    monkeypatch.setattr(screens, 'wait_for_port', lambda port, child: None)
+    monkeypatch.setattr(screens, 'cleanup_views', lambda: None)
+    monkeypatch.setattr(screens, 'x_alive', lambda: True)
+    monkeypatch.setattr(screens, 'panels_whole', lambda count: whole)
+    monkeypatch.setattr(screens, 'command', lambda args: commands.append(args) or '')
+    screens.serve(2, screens.grid(2)[0])
+    restarts = [args for args in commands if args == ['xfce4-panel', '-r']]
+    if whole:
+        assert not restarts
+    else:
+        # Thirty seconds of it before the first, and never more than five in a run of the helper.
+        assert 2 <= len(restarts) <= screens.PANEL_RESTARTS + 2
+        # What the panels hold is written again before they are asked to read it (here every property differs).
+        assert len([args for args in commands if '-n' in args]) >= len(restarts) * len(screens.panel_commands(2))
+
+
 @pytest.mark.parametrize('count', range(1, 7))
 def test_run_args_carry_screen_count_and_matching_canvas(desktop, count):
     vm, target, _ = desktop
@@ -557,8 +654,10 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
     ('8', ['VNC_PW=private'], False),
     ('9', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # released 2026-11-13; the owner's computers were on it when 10 came
     ('9', ['VNC_PW=private'], False),
-    ('10', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),    # the current layer on another image is not a previous one
-    ('11', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
+    ('10', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),     # released with 11: the computer without Firefox ESR
+    ('10', ['VNC_PW=private'], False),
+    ('11', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),    # the current layer on another image is not a previous one
+    ('12', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
 ])
 async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(per_bot_desktop, layer, env, recognised):
     # A member's own computer: on this branch the plain `desktop` is the six-screen shared one.
@@ -585,7 +684,7 @@ def test_image_installs_screen_views_and_preserves_the_single_token_port():
     assert 'install -d -o cua -g cua /home/cua/.config/xfce4/panel;' in dockerfile
     assert '[program:raphael-screens]' in dockerfile
     assert 'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' in dockerfile
-    assert 'org.raphael.computer.layer="10"' in dockerfile
+    assert 'org.raphael.computer.layer="11"' in dockerfile
     assert 'stopasgroup' not in dockerfile and 'killasgroup' not in dockerfile
     assert 'supervisor only restarts what exits; the helper ends its own children' in dockerfile
     assert 'Nothing may call supervisorctl stop or restart in a computer' in dockerfile

@@ -1,0 +1,126 @@
+#!/bin/sh
+# Give one screen its own window of the computer's own browser.
+# usage: raphael-seat-browser X Y WIDTH HEIGHT   -> prints "pid=<browser pid> window_id=<decimal id>"
+# The browser belongs to the computer, not to a driver session: every seat attaches to it with its own session.
+set -eu
+x=$1 y=$2 width=$3 height=$4
+profile=/home/cua/workspace/.browser-profiles/driver/main
+# Google's own Chrome where the image has it (amd64), Chromium elsewhere. Its window class starts with these words.
+if [ -x /opt/google/chrome/chrome ]; then
+  chromium=/opt/google/chrome/chrome window_class=google-chrome
+else
+  chromium=/usr/lib/chromium/chromium window_class=chromium-browser
+fi
+# The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same, and:
+# - AutomationControlled off. A browser started with --remote-debugging-port=0 tells every page it is automated
+#   (navigator.webdriver), and Google then refuses the owner's own sign-in ("This browser or app may not be
+#   secure", owner, 2026-11-13). The owner signs in here by hand; the members use what he signed in to.
+# - --test-type: without it the two flags above it each put a yellow warning bar over every window.
+# - no crash bubble: a computer is stopped by ending its processes, and the next start offered "Restore pages?".
+flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox --disable-blink-features=AutomationControlled --test-type --hide-crash-restore-bubble"
+export DISPLAY=:1
+windows() { wmctrl -lx | awk -v prefix="$window_class" 'index($3, prefix) == 1 {print $1}' | sort; }
+before=$(windows)
+browser_pid() { pgrep -f -- "^$chromium --remote-debugging-port=0 --user-data-dir=$profile( |$)" | head -n 1 || true; }
+# Before the browser's first start of a computer's run, its profile is made ready:
+# - The profile of a browser that was ended, not closed, says so, and the browser then asks to restore its pages.
+# - The browser keeps no password, card or address. Every member reads this one profile, and a password kept by the
+#   browser can be shown again on its own page: what an owner types at a seat ("Save password?") stays out of it.
+#   Sign-ins stay, as cookies. Saved values belong to the owner's vault.
+# A Preferences file that is not what the browser writes is left as it is.
+ended_cleanly() {
+  /usr/bin/python3 - "$profile/Default/Preferences" <<'PY' || true
+import json, os, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as file:
+        data = json.load(file)
+except FileNotFoundError:
+    data = {}
+except (OSError, ValueError):
+    raise SystemExit(0)
+if not isinstance(data, dict) or any(not isinstance(data.setdefault(key, {}), dict) for key in ("profile", "autofill")):
+    raise SystemExit(0)
+data["profile"].update(exit_type="Normal", exited_cleanly=True, password_manager_enabled=False)
+data["autofill"].update(profile_enabled=False, credit_card_enabled=False)
+data.update(credentials_enable_service=False, credentials_enable_autosignin=False)
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path + ".raphael", "w", encoding="utf-8") as file:
+    json.dump(data, file, separators=(",", ":"))
+os.replace(path + ".raphael", path)
+PY
+}
+main=$(browser_pid)
+# A private title attributes the new window even when another seat opens a popup in the same process.
+marker=raphael-seat-$(cat /proc/sys/kernel/random/uuid)
+start_page="data:text/html,<title>$marker</title>"
+if [ -n "$main" ]; then
+  "$chromium" $flags --new-window "$start_page" >/dev/null 2>&1 &
+else
+  mkdir -p "$profile"
+  ended_cleanly
+  setsid "$chromium" --remote-debugging-port=0 $flags "$start_page" >/dev/null 2>&1 &
+fi
+new=
+attempt=0
+# A browser's first window took 13 to 41 s on a loaded PC (2026-11-13): the wait is a time, not a count of looks (each look
+# is several processes, slow when the PC is), and a minute is what it is given.
+deadline=$(( $(date +%s) + 60 ))
+while :; do
+  now=$(windows)
+  main=$(browser_pid)
+  candidates=$(printf '%s\n' "$now" | awk -v before="$before" '
+    BEGIN {split(before, rows, "\n"); for (i in rows) old[rows[i]]=1}
+    NF && !($0 in old) {print $0}')
+  # With its own profile folder the browser's class is "chromium-browser (<folder>).Chromium-browser" (Chrome's:
+  # "google-chrome (<folder>).Google-chrome"): a space inside it shifts every later column, so the title's marker
+  # is looked for in any of them.
+  new=$(wmctrl -lpx | awk -v candidates="$candidates" -v pid="$main" -v marker="$marker" -v prefix="$window_class" '
+    BEGIN {split(candidates, rows, "\n"); for (i in rows) fresh[rows[i]]=1}
+    ($1 in fresh) && $3 == pid && index($4, prefix) == 1 {for (i = 5; i <= NF; i++) if ($i == marker) {print $1; exit}}')
+  [ -n "$new" ] && break
+  [ "$(date +%s)" -ge "$deadline" ] && break
+  attempt=$((attempt + 1))
+  sleep 0.2
+done
+[ -n "$new" ] || { echo "no browser window appeared within 60 seconds" >&2; exit 1; }
+# The browser opens a new window beside its first, whatever screen the pointer is on: put it on this screen, then fill it.
+wmctrl -i -r "$new" -b remove,maximized_vert,maximized_horz
+wmctrl -i -r "$new" -e "0,$((x + 20)),$((y + 20)),$((width - 80)),$((height - 120))"
+sleep 0.3
+wmctrl -i -r "$new" -b add,maximized_vert,maximized_horz
+# Maximize returns while XFCE is still animating. Publish only settled screen geometry.
+# Once in about twenty launches the browser keeps its own invisible frame while maximized: its content fills the
+# screen and the window reaches a few pixels past it (measured: 1312x893 at -16,-10 of a 1280x851 work area).
+# After a second and a half, maximized and centred on this screen counts as settled; the core brings a window
+# that reaches past its screen back inside before anything is read from it or sent to it.
+filling() {
+  state=$(xprop -id "$new" _NET_WM_STATE 2>/dev/null)
+  case "$state" in *MAXIMIZED_VERT*) ;; *) return 1 ;; esac
+  case "$state" in *MAXIMIZED_HORZ*) ;; *) return 1 ;; esac
+  wmctrl -lG | awk -v id="$new" -v x="$x" -v y="$y" -v w="$width" -v h="$height" '
+    $1 == id && $3 + $5 / 2 >= x && $3 + $5 / 2 < x + w && $4 + $6 / 2 >= y && $4 + $6 / 2 < y + h {found=1}
+    END {exit !found}'
+}
+attempt=0
+settled=
+settle_deadline=$(( $(date +%s) + 30 ))
+while :; do
+  if wmctrl -lG | awk -v id="$new" -v x="$x" -v y="$y" -v w="$width" -v h="$height" '
+    $1 == id && $3 == x && $4 == y && $5 == w && $6 == h - 49 {found=1}
+    END {exit !found}'; then
+    settled=1
+    break
+  fi
+  if [ "$attempt" -ge 15 ] && filling; then
+    settled=1
+    break
+  fi
+  [ "$(date +%s)" -ge "$settle_deadline" ] && break
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+[ -n "$settled" ] || { echo "browser window geometry did not settle on the screen within 30 seconds" >&2; exit 1; }
+# The window's own pid is the browser's main process: the one the driver binds a window by.
+main=$(wmctrl -lp | awk -v id="$new" '$1 == id {print $3}')
+echo "pid=$main window_id=$((new))"

@@ -3,9 +3,11 @@
 import asyncio
 import base64
 import json
+import re
 import shutil
 import subprocess
 import sys
+import time
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -458,14 +460,90 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant came on top
     # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), 9 is the
     # desktop saying which browser that is, and 10 is the computer without Firefox ESR.
-    assert module.IMAGE.endswith("-v10") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "10"
-    assert 'org.raphael.computer.layer="10"' in dockerfile and "librsvg2-common" in dockerfile
-    launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
-    assert "wmctrl -lG" in launcher and '"$attempt" -lt 50' in launcher
+    assert module.IMAGE.endswith("-v11") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "11"
+    assert 'org.raphael.computer.layer="11"' in dockerfile and "librsvg2-common" in dockerfile
+    launcher = (image / "layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    assert "wmctrl -lG" in launcher and "settle_deadline" in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
     assert "uniq -u" not in launcher and '!($0 in old)' in launcher
     # The title is not at a fixed column: the class of a browser with its own profile folder has a space in it.
     assert '$3 == pid' in launcher and 'if ($i == marker)' in launcher and '$6 == marker' not in launcher
+
+
+def test_a_loaded_pc_gets_a_minute_for_the_browsers_window_and_every_outer_bound_outlasts_it():
+    # Owner, 2026-11-14: 「你就一次把所有東西都修復吧」. On a loaded PC (2026-11-13) a browser's first window took 13 to 41 s
+    # and members saw browser_window_missing: the launcher waited 15 s (150 looks of 0.1 s, each look several processes,
+    # so a loaded PC counted fewer seconds still), the settle wait 5 s, the driver's own launch 5 s.
+    from raphael_core.computer import carry
+    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    assert '-lt 150' not in launcher and '-lt 50' not in launcher
+    first = int(re.search(r'deadline=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)', launcher)[1])
+    settle = int(re.search(r'settle_deadline=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)', launcher)[1])
+    assert first >= 60 and settle >= 30
+    assert f"within {first} seconds" in launcher and f"within {settle} seconds" in launcher
+    # The script ends itself and says why; every bound outside it is longer, so its answer is the one a member reads.
+    assert module.LocalVm.seat_browser_s > first + settle
+    assert VmTools.browser_open_s > carry.BUDGET_SECONDS + module.LocalVm.seat_browser_s
+    assert VmTools.browser_window_wait_s >= 60 and VmTools.browser_open_s > VmTools.browser_window_wait_s + 60
+
+
+@pytest.mark.parametrize("appears_after", [0, 2, None])
+def test_the_launcher_waits_for_the_window_by_the_clock_and_then_says_how_long(appears_after, tmp_path):
+    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    shell = shutil.which("sh")
+    if shell is None:
+        pytest.skip("An installed POSIX shell is required for the launcher's wait test")
+    loop = launcher[launcher.index("new=\nattempt=0"):launcher.index("# The browser opens a new window beside its first")]
+    loop = re.sub(r"(deadline=\$\(\( \$\(date \+%s\) \+ )60", r"\g<1>2", loop)
+    count = (tmp_path / "looks").as_posix()
+    after = 10**6 if appears_after is None else appears_after
+    script = f'''set -eu
+before=
+main=99
+marker=raphael-seat-test
+window_class=chromium-browser
+looks() {{ cat {count} 2>/dev/null || echo 0; }}
+windows() {{ if [ "$(looks)" -ge {after} ]; then echo 0x5; fi; }}
+browser_pid() {{ echo 99; }}
+wmctrl() {{
+  n=$(looks); echo $((n + 1)) > {count}
+  if [ "$n" -ge {after} ]; then
+    echo "0x5  0 99 chromium-browser.Chromium-browser host raphael-seat-test - Chromium"
+  fi
+}}
+''' + loop + '\necho "found $new"\n'
+    began = time.monotonic()
+    result = subprocess.run([shell], input=script, text=True, capture_output=True, timeout=30)
+    took = time.monotonic() - began
+    if appears_after is None:
+        assert result.returncode == 1 and "no browser window appeared within 60 seconds" in result.stderr
+        assert 1.5 <= took < 20, took  # by the clock: two seconds here, however many looks that took
+    else:
+        assert result.returncode == 0 and result.stdout.strip() == "found 0x5", result
+        assert took < 2
+
+
+@pytest.mark.parametrize("late", [False, True])
+async def test_a_window_the_manager_moves_slowly_is_waited_for_before_it_is_called_outside_the_screen(seat_tools, late):
+    # Half a second (ten looks of 0.05 s) was all a moved window had to reach its screen; a loaded PC takes longer.
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    client.rows[1]["bounds"].update(x=1200, width=2000, height=950)
+    first = None
+    original = client.request
+    async def request(method, params, **kwargs):
+        nonlocal first
+        if params["name"] == "list_windows":
+            first = first or time.monotonic()
+            if late and time.monotonic() - first >= 1.0:
+                client.rows[1]["bounds"].update(x=1300, y=20, width=1240, height=860)
+        return await original(method, params, **kwargs)
+    client.request = request
+    vm.fit_window = AsyncMock()
+    hub.window_fit_wait_s = 6.0 if late else 0.3
+    reply = await hub._driver_call(vm.target(2), client, "get_window_state", dict(pid=20, window_id=20, session=session))
+    assert bool(reply.get("isError")) is not late
+    assert time.monotonic() - first >= (1.0 if late else 0.3)
 
 
 def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
@@ -480,7 +558,7 @@ def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
     assert 'if [ "$(dpkg --print-architecture)" = amd64 ]; then' in dockerfile
     assert "signed-by=/usr/share/keyrings/google-linux.asc] https://dl.google.com/linux/chrome/deb/ stable main" in dockerfile
     assert "apt-get install -y --no-install-recommends google-chrome-stable;" in dockerfile
-    launcher = (image / "desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (image / "layer11/raphael-seat-browser").read_text(encoding="utf-8")
     assert "if [ -x /opt/google/chrome/chrome ]; then" in launcher and "chromium=/usr/lib/chromium/chromium window_class=chromium-browser" in launcher
 
 
@@ -603,7 +681,7 @@ def test_the_members_browser_is_one_a_person_signs_in_with():
     # bar about --no-sandbox, and "Restore pages?". A browser started with --remote-debugging-port=0 tells every
     # page it is automated; --test-type keeps the unsupported-flag bars away; a computer is stopped by ending its
     # processes, so the profile is marked as closed before the browser is started.
-    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
     flags = next(line for line in launcher.splitlines() if line.startswith('flags="'))
     for flag in ("--disable-blink-features=AutomationControlled", "--test-type", "--hide-crash-restore-bubble", "--no-sandbox"):
         assert flag in flags.split('"')[1].split(), flag
@@ -631,7 +709,7 @@ KEEPS_NOTHING = {"credentials_enable_service": False, "credentials_enable_autosi
 def test_a_profile_whose_browser_was_ended_is_marked_closed_and_any_other_file_is_left(tmp_path, before, after):
     # The same step keeps passwords, cards and addresses out of the profile every member reads (2026-11-13: an owner
     # signing in at a seat was offered "Save password?").
-    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
     source = launcher[launcher.index("<<'PY' || true\n") + len("<<'PY' || true\n"):launcher.index("\nPY\n")]
     preferences = tmp_path / "Default" / "Preferences"
     if before is not None:
@@ -651,7 +729,7 @@ def test_a_profile_whose_browser_was_ended_is_marked_closed_and_any_other_file_i
     ("google-chrome", "google-chrome (/home/cua/workspace/.browser-profiles/driver/main).Google-chrome"),
 ])
 def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pid_popups(prefix, window_class):
-    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
     # Run the shipped selection itself against a pure shell wmctrl double; no browser, X or Docker.
     selection = launcher[launcher.index("  candidates=$("):launcher.index('  [ -n "$new" ]')]
     shell = shutil.which("sh")
@@ -687,8 +765,8 @@ wmctrl() { printf '%s\\n' "0x2  0 99   $class  host old - Chromium" "0x3  0 99  
     ("_NET_WM_STATE_MAXIMIZED_VERT", "2580 920 1200 851", 2560, False),                                 # half maximized
 ])
 def test_launcher_takes_a_maximized_window_that_keeps_its_own_frame_as_settled_on_its_own_screen(state, geometry, x, settled):
-    launcher = (Path(module.__file__).parent / "image/desktop/raphael-seat-browser").read_text(encoding="utf-8")
-    function = launcher[launcher.index("filling() {"):launcher.index("attempt=0\nwhile [ \"$attempt\" -lt 50 ]")]
+    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    function = launcher[launcher.index("filling() {"):launcher.index("attempt=0\nsettled=")]
     shell = shutil.which("sh")
     if shell is None:
         pytest.skip("An installed POSIX shell is required for the launcher's settle test")
@@ -707,7 +785,7 @@ wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} h
 async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm, layer):
     # The owner's own computer on the day layer 8 came: six screens, 6 GiB, four cores, labelled layer 7. The
     # acceptance run found that layer 7 was not yet named as a released one, and such a computer did not start.
-    # It was on layer 8, in the same shape, the day layer 9 came, and on layer 9 the day layer 10 came.
+    # It was on layer 8, in the same shape, the day layer 9 came, and on layers 9 and 10 the day the next came.
     vm, runtime = shared_vm
     target = await vm.seat(1)
     raw = container(vm, target, runtime)

@@ -17,7 +17,7 @@ from .vm import VmError, exec_args
 logger = logging.getLogger(__name__)
 RECORD = '.raphael-carried.json'
 EXCLUDE = sorted(EXCLUDED | {'.raphael-data', RECORD})
-# The member's browser_open waits this long inside CuaBridge.read_timeout_s (120 s), holding the computer's input
+# The member's browser_open waits this long inside VmTools.browser_open_s (300 s), holding the computer's input
 # lock. The carry itself is not cut short: it goes on behind the browser and keeps each old home's guard until that
 # home's copy has ended.
 BUDGET_SECONDS = 75
