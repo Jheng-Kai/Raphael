@@ -29,6 +29,7 @@ Connections pill having an effect on hover.
   no window known the row has no number and opens that section directly), 聽寫 (the dictation page), 行事曆 (the calendar on today),
   a hairline, 設定. Enter or Space on the face opens it with the focus on the first row, the arrows move, Esc closes it (the submenu alone
   first) and returns the focus to the face, a press outside closes it, the face again closes it (R-UI-124). It uses the app's menu tokens.
+- **The member search.** The search button, Ctrl+Shift+F and the palette's Search (on the rail, which has no button, Ctrl+Shift+F) open one card in the middle of the dimmed window, across and down at every size (owner, 2026-11-14, R-MENU-04): 560 px wide (the window's less 24), 480 px tall (the window's less 96), so the words typed never move it, always below the window controls and inside the window. `sidebar-search` (button, typing never moves it), `sidebar-search-rail` (Ctrl+Shift+F on the rail) and `shortcut-search` (the palette) each check it with `search-card-middle`.
 - **The rail.** Under 860px, or dragged narrow, the foot is a column: the plus alone (no search on the rail, owner 2026-11-12 23:25; Ctrl+Shift+F still opens it), the apps icon (Lucide `grid-2x2-plus`, accessible name
   only, no tooltip), then the face (named on hover, as the other faces of the rail). The menu is the same, opening beside the rail and covering none of its buttons.
 - **What the numbers are.** `usage.allowances` through `api.usageAllowances()`, read at each opening of the menu and shown at once from

@@ -270,6 +270,8 @@ describe("the column, used", () => {
     const column = mount(), anchor = document.createElement("button");
     document.body.append(anchor); column.openSearch(anchor);
     expect(document.activeElement).toBe(document.querySelector("#app-popover input"));
+    // Wherever it was asked from, it takes the middle of the window (R-MENU-03).
+    expect(document.querySelector<HTMLElement>("#app-popover.side-search")!.style.left).not.toBe("");
     document.querySelector<HTMLButtonElement>('#app-popover [data-member="3"]')!.click();
     expect(host.select).toHaveBeenCalledWith(3);
     expect(document.getElementById("app-popover")).toBeNull();
