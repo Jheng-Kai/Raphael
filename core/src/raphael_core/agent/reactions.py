@@ -14,8 +14,9 @@ def set_reaction(conn, params, *, turn_id=None, message_id=None):
     else:
         key = params.get('message_key')
         if key not in ('owner', 'reply'):
+            # A message is one of the member's replies, or a file it sent (a picture is a message of its own, R-UI-156).
             if not isinstance(key, str) or not key.isdecimal() or not conn.execute(
-                    "SELECT 1 FROM agent_messages WHERE turn_id=? AND seq=? AND kind='reply'", (turn_id, int(key))).fetchone():
+                    "SELECT 1 FROM agent_messages WHERE turn_id=? AND seq=? AND kind IN ('reply','media')", (turn_id, int(key))).fetchone():
                 raise invalid_params('reaction must identify a message')
         row = conn.execute('SELECT question,text,detail FROM agent_turns WHERE id=?', (turn_id,)).fetchone()
         if key == 'owner' and not row['question'] or key == 'reply' and not (row['text'] or row['detail']):

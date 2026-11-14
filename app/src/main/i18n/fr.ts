@@ -1170,6 +1170,7 @@ export const fr = {
   "history.sentTo": "À {p0}",
   "history.003": "Copier",
   "chat.copy": "Copier",
+  "chat.copyImage": "Copier l’image",
   "setup.copy": "Copier",
   "history.005": "<div class=\"hdetail\"{p0}><h4>Transcription brute</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>Historique</h1></div>",

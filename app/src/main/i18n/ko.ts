@@ -1170,6 +1170,7 @@ export const ko = {
   "history.sentTo": "{p0}에게",
   "history.003": "복사",
   "chat.copy": "복사",
+  "chat.copyImage": "이미지 복사",
   "setup.copy": "복사",
   "history.005": "<div class=\"hdetail\"{p0}><h4>원본 받아쓰기</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>기록</h1></div>",

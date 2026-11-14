@@ -1170,6 +1170,7 @@ export const id = {
   "history.sentTo": "Ke {p0}",
   "history.003": "Salin",
   "chat.copy": "Salin",
+  "chat.copyImage": "Salin gambar",
   "setup.copy": "Salin",
   "history.005": "<div class=\"hdetail\"{p0}><h4>Transkrip mentah</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>Riwayat</h1></div>",

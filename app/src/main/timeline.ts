@@ -4,7 +4,7 @@ import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
-import { reactionControlHTML, withReactions } from "./message-metadata";
+import { reactionControlHTML, reactionRowHTML, withReactions } from "./message-metadata";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML, settledQuestions } from "./permission-card";
@@ -34,6 +34,7 @@ import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draf
 import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
+import { mediaPicture } from "./picture-message";
 import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
@@ -411,11 +412,14 @@ function liveStepHTML(task: AgentTask): string {
 /** How many things a turn did, in words: 「1 個動作」, 「3 個動作」. */
 const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDoneOne") : t("agent.stepsDone", { p0: count }));
 
-/** The same conversation cards and controls are used in private and room replies. */
-export function conversationCardsHTML(turn: AgentTurn, memberName?: string): string {
+/**
+ * The same conversation cards and controls are used in private and room replies. `pictureActions` is the row of actions of
+ * the room message the turn belongs to: a picture of the turn stands as a message with it beside it (pictureActionsHTML).
+ */
+export function conversationCardsHTML(turn: AgentTurn, memberName?: string, pictureActions?: string): string {
   return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
-    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq, replySpeaks(turn))).join("");
+    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq, replySpeaks(turn), pictureActions === undefined ? undefined : { actions: pictureActions })).join("");
 }
 
 /** Whether the member said something in the turn: then a missing setup under it needs only its repair, not its sentence. */
@@ -668,8 +672,6 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  * (a group's or a side thread's) keeps Copy in sight instead.
  */
 export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
-  const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
-    iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
   // A message that waits its turn says so and offers 立即送出 in sight, as Claude Code does: it is the exception, not a menu item
   // (owner, 2026-11-14: 「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣，因為它這個是例外」).
   const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
@@ -678,6 +680,19 @@ export function messageActionsHTML(_time: number, regenerate = false, owner?: "e
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
     (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""}${queued ? ' data-queued="true"' : ""} aria-haspopup="menu"`) : "") + `</div>`;
+}
+
+/** One bare action beside a message: its icon, its name for a screen reader and the hover, its `data-act`. */
+function action(icon: Parameters<typeof iconBtn>[0], label: string, act: string): string {
+  return iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
+}
+
+/**
+ * A room's row of actions as it stands beside a member's picture (R-UI-156): the row of the message the picture belongs to,
+ * whose Copy copies the picture itself. A private conversation's picture has the row of a reply, with 複製圖片 in its ⋯.
+ */
+export function pictureActionsHTML(actions: string): string {
+  return actions.replace(action("copy", t("chat.copy"), "copy-message"), action("copy", t("chat.copyImage"), "copy-picture"));
 }
 
 /**
@@ -821,9 +836,17 @@ function mediaMissing(text: string): Missing | null {
   } catch { return null; }
 }
 
-function artifactHTML(text: string, seq: number, replied = false): string {
+/**
+ * A file a member delivered in a media message. A picture is a message of its own, as a text bubble is (owner, 2026-11-14:
+ * 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」, R-UI-156): `picture` gives it the actions
+ * beside it, and its reaction stands on its corner. Without `picture` it is drawn as before, with no actions.
+ */
+function artifactHTML(text: string, seq: number, replied = false, picture?: { actions: string; reactions?: readonly string[] }): string {
   const prerequisite = mediaMissing(text);
   if (prerequisite) return `<div class="chat-message" data-message="${seq}">${replied ? missingRepairHTML(prerequisite) : missingHTML(prerequisite)}</div>`;
+  const shown = picture && mediaPicture(text);
+  // Its reaction is drawn inside the picture's own frame, so it stands on the picture's corner, never on the actions' side.
+  if (shown) return `<div class="chat-message" data-message="${seq}" data-picture="true">${sentFileHTML(shown).replace(/<\/div>$/, `${reactionRowHTML(picture.reactions)}</div>`)}${picture.actions}</div>`;
   try {
     const payload = JSON.parse(text);
     const file = payload?.attachment as TurnAttachment | undefined;
@@ -1005,7 +1028,7 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
     if (message.kind === "media") {
       // Under a reply that speaks, a missing setup is only its repair, drawn below the reply (prerequisitesHTML).
       if (replySpeaks(turn) && mediaMissing(text)) return "";
-      const artifact = artifactHTML(text, message.seq);
+      const artifact = artifactHTML(text, message.seq, false, { actions: messageActionsHTML(message.at_ms), reactions: turn.reactions?.[String(message.seq)] });
       if (artifact) return artifact;
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";

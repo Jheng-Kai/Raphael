@@ -1995,6 +1995,73 @@ export function checkRendered(name, context = {}) {
     require(name !== 'generated-video' || element.controls && element.readyState >= 1, 'the existing video player has playable metadata');
     return {check:name,id:element.dataset.attachment};
   }
+  if (name === 'picture-message' || name === 'picture-message-hover' || name === 'picture-message-room') {
+    // R-UI-156: a picture a member sent is a message: the actions of the message (a reply's, or the room message's) beside it,
+    // drawn as beside words, standing against the picture itself and centred on it, as they stand against a bubble.
+    const room = name === 'picture-message-room';
+    const pictures = [...document.querySelectorAll(room ? '[data-room-message="2"] .chat-message[data-picture]' : '.tn[data-id="822"] .chat-message[data-picture]')];
+    require(pictures.length === (room ? 1 : 2), `${room ? 'one picture' : 'two pictures'} stand as messages (${pictures.length})`);
+    const words = document.querySelector(room ? '[data-room-message="2"] .chat-message[data-room-part]' : '.tn[data-id="822"] .chat-message[data-reply]');
+    const acts = message => [...message.querySelectorAll(':scope > .message-actions > button')].map(button => button.dataset.roomAct ?? button.dataset.act);
+    const expected = room ? ['copy-picture', 'react-message', 'thread', 'reply'] : acts(words);
+    if (!room) require(expected.join() === 'react-message,reply-message,more-message', `the reply's own actions are react, reply and ⋯ (${expected})`);
+    else require(acts(words).join() === 'copy-message,react-message,thread,reply', `the room message's words keep their own actions (${acts(words)})`);
+    // Each button is drawn as the same button beside the words: size, colours, frame and corner.
+    const style = button => { const s = getComputedStyle(button), box = button.getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height), s.color, s.backgroundColor, s.borderTopWidth, s.borderRadius].join(' '); };
+    const same = act => words.querySelector(`:scope > .message-actions > button[data-act="${act}"], :scope > .message-actions > button[data-room-act="${act}"]`) ?? words.querySelector(':scope > .message-actions > button[data-act="copy-message"]');
+    const measured = pictures.map(message => {
+      const img = message.querySelector(':scope > .attachment-image .attachment-picture img[data-attachment]'), actions = message.querySelector(':scope > .message-actions');
+      require(img && img.src.startsWith('blob:') && img.naturalWidth > 0, 'the picture is loaded from its stored copy');
+      require(acts(message).join() === expected.join(), `the picture has the same actions in the same order (${acts(message)})`);
+      for (const button of actions.querySelectorAll('button')) {
+        const act = button.dataset.roomAct ?? button.dataset.act;
+        require(Math.round(button.getBoundingClientRect().height) === 28, `each action is the 28 px tall bare button (${Math.round(button.getBoundingClientRect().height)})`);
+        require(style(button) === style(same(act)), `${act} is drawn as beside the words (${style(button)} vs ${style(same(act))})`);
+      }
+      const p = img.getBoundingClientRect(), a = actions.getBoundingClientRect();
+      // The picture's box is the picture: actions never stand across an empty band of a box wider than what is seen.
+      require(Math.abs(p.width / p.height - img.naturalWidth / img.naturalHeight) < 0.02, `the picture keeps its own shape (${Math.round(p.width)}x${Math.round(p.height)} for ${img.naturalWidth}x${img.naturalHeight})`);
+      require(p.height <= 301 && p.width > 120, `the picture is shown at a readable size (${Math.round(p.width)}x${Math.round(p.height)})`);
+      require(a.left - p.right >= 0 && a.left - p.right <= 8, `the actions stand against the picture (${Math.round(a.left - p.right)} px away)`);
+      require(Math.abs((a.top + a.bottom) / 2 - (p.top + p.bottom) / 2) <= 1, 'the actions are centred on the picture, as on a bubble');
+      require(a.right <= message.closest('.tn').getBoundingClientRect().right + 1, 'the actions stay inside the column');
+      return { picture: [Math.round(p.width), Math.round(p.height)], gap: Math.round(a.left - p.right), opacity: getComputedStyle(actions).opacity };
+    });
+    if (name !== 'picture-message') {
+      const hovered = document.querySelector('.chat-message[data-picture]:hover');
+      require(hovered && getComputedStyle(hovered.querySelector(':scope > .message-actions')).opacity === '1', 'pointing at the picture shows its actions');
+      require(pictures.filter(message => message !== hovered).every(message => getComputedStyle(message.querySelector(':scope > .message-actions')).opacity === '0'), "another picture's actions stay out of sight");
+    }
+    if (!room) {
+      // The owner's reaction stands on its picture's top-right corner, over its edge, clear of the actions.
+      const chip = pictures[1].querySelector('.message-reactions'), img = pictures[1].querySelector('img[data-attachment]').getBoundingClientRect();
+      const box = chip?.getBoundingClientRect(), actions = pictures[1].querySelector(':scope > .message-actions').getBoundingClientRect();
+      require(box && chip.textContent.includes('❤'), 'the reacted picture carries its reaction');
+      require(box.top < img.top && box.bottom > img.top && Math.abs(box.right - img.right) <= 2, `the reaction stands on the picture's top-right corner (${Math.round(box.right - img.right)} px)`);
+      require(box.right <= actions.left, 'the reaction never covers the actions');
+    }
+    return { check: name, pictures: measured };
+  }
+  if (name === 'picture-message-menu') {
+    const items = [...document.querySelectorAll('#app-popover [data-pick]')].filter(visible).map(item => `${item.dataset.pick}:${item.textContent.trim()}`);
+    require(items.join() === 'reply:回覆,copy:複製圖片', `the picture's menu offers Reply and 複製圖片 (${items})`);
+    require(visible(document.querySelector('#app-popover .menu-reactions')), "its reactions lead the menu, as a reply's do");
+    return { check: name, items };
+  }
+  if (name === 'picture-message-reply') {
+    const card = document.querySelector('.cmp-quote:not([hidden])'), quote = card?.querySelector('.message-quote.has-picture');
+    require(visible(quote), 'the composer quotes the picture');
+    const thumb = quote.querySelector('.quote-thumb'), author = quote.querySelector('.quote-author'), word = quote.querySelector('.quote-text');
+    require(thumb.src.startsWith('blob:') && thumb.naturalWidth > 0, "the quote shows the picture's own thumbnail");
+    require(author.textContent === '小晴' && word.textContent === '圖片', `who sent it and the word for a picture (${author.textContent} / ${word.textContent})`);
+    require(!card.textContent.includes('attachment:') && !card.textContent.includes('.png'), 'never the link or the file name');
+    const t = thumb.getBoundingClientRect(), a = author.getBoundingClientRect(), w = word.getBoundingClientRect();
+    require(Math.round(t.width) === 36 && Math.round(t.height) === 36, `a 36 px thumbnail (${Math.round(t.width)}x${Math.round(t.height)})`);
+    require(t.right <= a.left && t.right <= w.left && a.bottom <= w.top + 1, 'the thumbnail at the start, the author over the word');
+    require(Math.abs((t.top + t.bottom) / 2 - (a.top + w.bottom) / 2) <= 2, 'the thumbnail is centred on the two lines');
+    require(document.activeElement?.matches('.composer textarea'), 'the composer takes the focus, as after replying to words');
+    return { check: name };
+  }
   if (name === 'dataset-chart') {
     require(visible(document.querySelector('.ra-body .attachment-file[data-id]')), 'the chart has a stored file action');
     return {check:name};

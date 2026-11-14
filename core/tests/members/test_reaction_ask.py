@@ -293,6 +293,23 @@ async def test_each_message_of_the_member_is_analysed_on_its_own(setup, client):
     assert [row[1] for row in records(rig)] == sorted([f'{first}:reply', f'{second}:reply'])
 
 
+async def test_a_reaction_to_a_picture_the_member_sent_is_read_as_that_picture(setup, client):
+    # A picture a member sends is a message of its own (owner, 2026-11-14, R-UI-156): the member is told the owner reacted to
+    # the file it sent, by its name and type, never to the words of its reply.
+    rig, team_ = setup
+    one = member(team_)
+    turn_id = await reply_of(rig, client, one.id, '兩張辦公室的圖。')
+    rig.history.add_message(turn_id, 'media', json.dumps({'attachment': {'id': 'b' * 32 + '.png', 'name': 'office.png', 'mime': 'image/png'}}))
+    seq = max(item['seq'] for item in rig.history.messages([turn_id])[turn_id])
+    client.chats.append(live_said('喜歡這張嗎？要我再畫一張不同角度的？'))
+    await react(rig, turn_id, '❤️', who=one.id, key=str(seq))
+    await until(lambda: asks(rig) and asks(rig)[0].status == 'done')
+    note = client.chat_calls[-1]['messages'][-1]['content']
+    assert '❤️' in note and 'to this file you sent' in note and 'to this reply of yours' not in note
+    assert 'The file you sent, which they reacted to' in note and 'office.png (image/png)' in note and 'Your reply they reacted to' not in note
+    assert records(rig) == [('turn', f'{turn_id}:{seq}', '❤️')]
+
+
 # --- who is never analysed, and when --------------------------------------------------------------------------------
 
 
