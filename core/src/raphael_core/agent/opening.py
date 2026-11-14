@@ -420,3 +420,5 @@ class Opening:
     step: str  # "settings", "app", "learned", "domain", "model" (what found it; logged)
     # The name to teach Raphael when the opening worked; set for an address the model found.
     learn_as: str | None = None
+    # What to call it when saying it was opened: an app's name as the Start menu shows it, a site's name or address.
+    label: str = ""

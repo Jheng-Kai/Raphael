@@ -34,10 +34,13 @@ class Work:
     check_required: bool = False
     returned: asyncio.Future | None = field(default=None, repr=False)
     alive: Callable[[], bool] | None = field(default=None, repr=False)
+    # The state was read off the task that made this work, not said by the owner's Stop or a takeover that ran out.
+    inferred: bool = False
 
     def view(self):
         if (not self.alive() if self.alive else self.task.done()) and self.state == "running":
             self.state = "stopped" if self.task.cancelled() else "done"
+            self.inferred = True
         return {"id": self.id, "turn_id": self.turn_id, "state": self.state,
                 "tool": self.tool, "reason": self.reason, "request_id": self.request_id}
 
@@ -52,6 +55,11 @@ class ComputerWork:
             return None
         key = (scope, turn_id)
         work = self.items.get(key)
+        if work is not None and work.inferred and work.state in ("stopped", "done"):
+            # The call that made this work was cut short (a first call that waited for a sleeping computer, a restart)
+            # and a later call of the same turn is alive: the turn goes on, so its work does too. A stop the owner said
+            # (a takeover stopped or expired, `request`) is not inferred and stays.
+            work.task, work.state, work.inferred = task or asyncio.current_task(), "running", False
         if work is None:
             member, conversation = scope[1:3] if scope[0] == "turn" else scope[2:4]
             work = Work(secrets.token_urlsafe(18), target, scope, member, conversation, turn_id, task or asyncio.current_task())

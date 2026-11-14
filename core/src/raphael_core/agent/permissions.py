@@ -249,10 +249,11 @@ def qualifies(*, source: str, quick: bool, nested: bool, scope: str) -> bool:
 AT_THIS_COMPUTER = ("voice", "overlay", "app")
 
 
-def owner_pc(*, source: str, quick: bool, nested: bool) -> bool:
+def owner_pc(*, source: str, quick: bool, nested: bool, own_computer: bool = False) -> bool:
     """Whether a request may reach the owner's own PC: only a quick question asked at this computer, never one member
-    handed another (R-PC-01). The service's offer and the local tools' door ask this one question."""
-    return quick and not nested and source in AT_THIS_COMPUTER
+    handed another (R-PC-01), and never one that says the member's own computer is the one to use (`own_computer`,
+    `whose_computer`). The service's offer and the local tools' door ask this one question."""
+    return quick and not nested and not own_computer and source in AT_THIS_COMPUTER
 
 
 class PermissionCards:
