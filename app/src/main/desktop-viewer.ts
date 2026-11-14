@@ -13,7 +13,6 @@ import { cardFailure } from "./card";
 import { mountComputerLocation } from "./computer-location";
 import { mountComputerLifecycle } from "./computer-lifecycle";
 import { computerStateText } from './computer-state';
-import { forgetComputerRow, publishComputerRow, type ComputerRowFix, type ComputerRowModel } from './computer-row';
 
 export interface DesktopState {
   lifecycle?: "waking" | "updating" | "repairing";
@@ -22,8 +21,6 @@ export interface DesktopState {
   mode?: "shared" | "per-bot";
   idle_minutes?: number;
   repair_revision?: number;
-  /** A member's own tool woke this computer (R-COMP-WAKE-01): who, and for what. Absent when the owner started it. */
-  woken?: { member: number; name: string; reason: "page" | "command" | "other" };
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
   ready: boolean;
   image?: boolean;
@@ -41,7 +38,6 @@ export function isAsleep(state: DesktopState | undefined): boolean {
   return !!state && !state.lifecycle && (state.state === 'stopped' || state.state === 'missing' && state.image !== false)
     && state.error !== 'docker_stopped' && state.error !== 'remote_unavailable';
 }
-const WOKE_WORD = { page: "computer.woke.page", command: "computer.woke.command", other: "computer.woke.other" } as const;
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
 
 export function preparationHTML(state: DesktopState, face = ""): string {
@@ -66,7 +62,7 @@ export function preparationHTML(state: DesktopState, face = ""): string {
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
-  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; /** The panel shows the computer's row (Details), which keeps a small picture of the screen. */ rowShown?(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
+  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
   // The preview is one button that opens the larger view; the larger view fills the window and folds back
@@ -164,7 +160,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const pending = (): DesktopWork | undefined => state?.works?.find(work => work.state === "waiting_control");
   const waitingTurns = (): string => [...new Set((state?.works ?? []).filter(work => work.state === "waiting_control").map(work => work.turn_id))].sort((a,b) => a-b).join(",");
   const waitingRequests = (): string[] => (state?.works ?? []).filter(work => work.state === 'waiting_control').map(work => work.request_id || work.id);
-  const active = (): boolean => visible && (options.panelVisible() || !!options.rowShown?.() || !!options.timeline.querySelector("[data-card-desktop-screen], [data-card-screen]"));
+  const active = (): boolean => visible && (options.panelVisible() || !!options.timeline.querySelector("[data-card-desktop-screen], [data-card-screen]"));
   const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
   // The live view draws its screen to a picture only while this panel shows one (the stream then plays in a chat
   // card): a picture every few seconds is work a view that is watched live does not need.
@@ -187,27 +183,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const hour = new Date().getHours();
     return hour >= 6 && hour < 11 ? 'morning' : hour >= 11 && hour < 16 ? 'noon' : hour >= 16 && hour < 19 ? 'dusk' : hour >= 19 && hour < 22 ? 'evening' : 'night';
   };
-  /** What the panel's computer row says (computer-row.ts): asleep, connecting, or awake with the last picture of the screen; or why
-   *  this PC cannot give a computer, with the one action that fixes it. */
-  function rowOf(): ComputerRowModel | undefined {
-    if (!state) return undefined;
-    const base = { member: member() };
-    const trouble = (fix: ComputerRowFix): ComputerRowModel => ({ ...base, state: 'unavailable', problem: computerStateText(state), fix });
-    if (state.lifecycle) return { ...base, state: 'connecting' };
-    if (state.error === 'docker_stopped') return trouble('start');
-    if (state.error === 'remote_unavailable') return trouble('retry');
-    if (state.state === 'absent') return trouble(state.error === 'disabled' ? 'retry' : 'download');
-    // A missing image is a first start, not a fault: the same press prepares it.
-    if (isAsleep(state) || state.state === 'missing') return { ...base, state: 'asleep' };
-    if (state.state === 'starting' || state.state === 'building' || state.state === 'preparing') return { ...base, state: 'connecting' };
-    if (state.state === 'running') {
-      const woken = state.woken;
-      const note = woken ? t(WOKE_WORD[woken.reason] ?? WOKE_WORD.other, { p0: woken.name }) : undefined;
-      return connected || stalled ? { ...base, state: 'awake', picture: lastFrames.get(member()), ...(note ? { note } : {}) } : { ...base, state: 'connecting' };
-    }
-    return trouble('retry');
-  }
-
   function draw(): void {
     const inline = options.timeline.querySelector<HTMLElement>('[data-card-desktop-screen], [data-card-screen]');
     // A closed panel with no card on screen shows no face, and building one on every render is most of a draw.
@@ -217,8 +192,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
-    const row = rowOf();
-    if (row) publishComputerRow(row);
     paint(panel, "hidden", !visible || !state);
     // The computer carries no words, face or buttons until its screen is up: no caption under it.
     paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'hidden', true);
@@ -296,8 +269,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       image.toggleAttribute('data-own', !!ownWallpaper);
     };
     paintWallpaper(panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!);
-    // The small picture is the panel's computer row (Details) or a card in the conversation; the larger view and the Computer tab are the stream itself.
-    askFrames(!!running && connected && (!!inline || !!options.rowShown?.()) && !expanded && !owner && !pending());
+    // The small picture is a card in the conversation; the larger view and the Computer tab are the stream itself.
+    askFrames(!!running && connected && !!inline && !expanded && !owner && !pending());
     const picture = running && (!connected || inline && !expanded) ? lastFrames.get(member()) : undefined;
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
@@ -634,7 +607,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     refresh() {
       // Back to the conversation whose stream is still open: nothing to reconnect.
       if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; forgetComputerRow(member()); timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
     },
     sync() { if (!options.panelVisible()) location.hide(); timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     carry(before) { if (before.contains(frame)) parkFrame(); },

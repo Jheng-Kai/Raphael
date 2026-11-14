@@ -22,11 +22,11 @@ computer for a page read; and nothing counted the owner's open stream as activit
   never made) has been started; `VmTools._wake_notice` writes one line in that member's conversation (a notice, or the progress
   line where a task has no conversation), naming the member and why in the member's language: a page (any browser tool), a
   command (`vm_exec`) or using the computer (anything else): 「小晴為了開網頁喚醒了電腦」. No toast, no card. The same record
-  (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs, and the computer's row in the
-  member's panel shows the line where 已喚醒 stood. It is dropped when the computer sleeps or when the owner starts it (a press,
-  maintenance), so his own start leaves no line. Routines and background tasks run through the same call, so they follow the same
+  (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs (the member's panel showed it in its
+  computer row until 2026-11-14; the app no longer reads it, and the line in the conversation is the one notice). It is dropped when
+  the computer sleeps or when the owner starts it (a press, maintenance), so his own start leaves no line. Routines and background tasks run through the same call, so they follow the same
   rules (their line goes to their own conversation or progress). All fifteen interface languages: `_computer_words_data.py` for
-  the core and `computer.woke.*` in `app/src/main/i18n`.
+  the core (the app keeps no copy since 2026-11-14).
 - The owner watching counts. `DesktopViewer._monitor` marks the computer active every second while a view of it has a connected
   socket (a preview included: an open panel with the screen showing is watching), so the idle bound does not apply to it; an
   unwatched, quiet computer still sleeps at the bound.
@@ -34,11 +34,11 @@ Evidence: `tests/computer/test_wake.py`, `test_viewer.py::test_a_computer_the_ow
 `tests/agent/test_web_read_hint.py` (each was red before its change), and the look scenes below.
 
 ```powershell
-npm run look -- computer-wake-line member-panel-details-computer-awake member-panel-details-computer-awake-woken member-panel-details-computer-asleep member-panel-details-computer-awake-woken member-panel-computer-live computer-low-disk --theme both --width 1120,720,1920x1080
+npm run look -- computer-wake-line member-panel-details-no-computer-running member-panel-computer-live computer-low-disk --theme both --width 1120,720,1920x1080
 ```
 
-`computer-wake-line` is the conversation's line (one normal message, no toast, no alert); `member-panel-details-computer-awake-woken` is
-the row's line in the state's place (it wraps inside the row, it is not cut). Native, not run: a member's real browser_open on a
+`computer-wake-line` is the conversation's line (one normal message, no toast, no alert); `member-panel-details-no-computer-running`
+asserts Details carries no second copy of it. Native, not run: a member's real browser_open on a
 sleeping computer, and a real routine waking one.
 
 Layer 11 (a loaded PC, a panel that stays empty, shifted keys). Two scripts of the image are replaced by the copies in
@@ -1434,26 +1434,29 @@ preview opens and status reads never do. Looking at the panel never starts a com
 
 Offline regressions: `core/tests/computer/test_member_computer_access.py` and
 `core/tests/agent/test_member_computer_use.py`, plus the existing computer, agent and background suites.
-The UI side is R-PANEL-06 (the computer row) and R-COMP-QUIET-01 (nothing but handoff cards in the conversation).
+The UI side is R-PANEL-06 (the computer is the third tab only; Details has no computer row) and R-COMP-QUIET-01 (nothing but handoff cards in the conversation).
 
-## The computer row and the quiet thread (owner, 2026-11-11, after Grok Bot)
+## The computer is the third tab only, and the quiet thread (owner, 2026-11-14; the thread 2026-11-11, after Grok Bot)
 
 Grok Bot's panel has a computer row that reads Asleep, then Connecting, then a live picture about eight seconds later and
 Awake, and Asleep again a few minutes after the last use; a press opens a full-window view whose pill reads
 Watching / Take control and then You're in control / Stop; in the thread the Bot's computer use is two short bubbles
 and a quiet label naming the step; nothing asks for permission to have a computer.
 
-Raphael now: Details has one tinted row after the routines, 「{name}的電腦」, its state (休眠中 / 連線中 / 已喚醒) and
-a 72 x 45 screen at the right (dark with the monitor until a picture of the live screen is held) (`computer-row.ts`; the viewer publishes, `member-details.ts` draws). While Details is
-open and the computer is already running, the viewer opens its stream unseen (`rowShown`, the panel laid out off the
-window) and the stream's three-second pictures are the row's live picture; nothing is streamed for a sleeping computer
-and looking never starts one. A press fires `member-computer-open`: the page selects the Computer tab and presses the
-screen (`desktop.watch()`), so a sleeping or stopped computer starts and a running one opens large. A PC that cannot
-give a computer replaces the state and the screen by one line (the existing state sentence) and, where the app has
-one, a word: 下載 (no Docker Desktop, opens the download page) or 啟動 (stopped engine). An unreachable host or switched
-off computer tools has no action. An absent image is a first start, so the row reads asleep and the same press
-prepares it. The Computer tab, its host control and its maintenance menu stay as they were (their move to Settings is
-a decision for the owner, not made here).
+Raphael followed with the same row in Details on 2026-11-11, and removed it on 2026-11-14 (R-PANEL-06). The owner sent a
+picture of Raphael's Details (the routine, 對話, a row 「拉斐爾的電腦 休眠中」 with a small screen, 訊息平台): 「右邊這邊詳細資料裡面不用有電腦，
+不用跟 grokbot 一樣，因為我們電腦已經在上面的 tab 了，我們就固定在第三個 tab 裡面，有電腦就好了，其他地方可以不用」. So the computer
+lives in the third tab (電腦) only. Details holds the routines, for Raphael his conversations, and the chat platforms, for every
+member and in every state of the computer; no row, heading, state word, small screen or press for the computer. What went with
+it: `computer-row.ts` (the model the viewer published and the row drew), `rowShown` (the stream the viewer opened unseen while
+Details was open, so the row had a live picture), the `member-computer-open` event and the row's 下載 / 啟動 words, the `woken`
+note in the state's place and the `computer.row.*`, `computer.woke.*` and `desktop.event` words. A PC that cannot give a
+computer says so inside the Computer tab's screen as before (R-PANEL-03, R-PANEL-04); a member's own tool waking the computer
+is told by its one line in the conversation (R-COMP-WAKE-01). The core still reports `woken` in the viewer's status and the app
+no longer reads it. Not touched, because none of them is the panel's row: the conversation's computer cards
+(`computer-card.ts`, `desktop-timeline.ts`), the green dot on the header's conversation button while a computer is active, and
+Settings' list of always-allowed apps (`settings-view.ts::computerRows`). The Computer tab, its host control and its maintenance
+menu stay as they were.
 
 The larger view's pill: watching offers Take control; in control reads 你正在控制 with a quiet 停止 that hands the
 computer back through the same takeover (the sign-in request's button stays 我完成了). The pill is the only place that
@@ -1464,12 +1467,11 @@ The conversation shows no line or card for a running, finished or stopped comput
 (`desktop-timeline.ts`); only a handoff the owner must act on is a card.
 
 ```
-npm run look -- member-panel-details member-panel-details-computer-asleep member-panel-details-computer-connecting member-panel-details-computer-awake member-panel-details-computer-docker-missing member-panel-details-computer-docker-stopped member-panel-details-computer-remote member-panel-details-computer-open member-panel-details-computer-wake desktop-watch desktop-watch-owner takeover-bar desktop-panel chat-computer-takeover --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-details member-panel-details-no-computer-running member-panel-details-no-computer-asleep member-panel-details-no-computer-docker-stopped member-panel-details-no-computer-raphael member-panel-library-raphael member-panel-computer-live member-panel-computer-live-raphael member-panel-computer-asleep member-panel-computer-docker-stopped desktop-watch desktop-watch-owner takeover-bar desktop-panel chat-computer-takeover --theme both --width 1120,720,1920x1080
 ```
 
 Not built, needs a real engine: one computer with a screen per member (see the unit report and
-`bots/research/shared-computer-2026-11-09.md`); the live picture of the row against a real noVNC stream; the engine
-start from the 啟動 word on a PC with Docker Desktop stopped.
+`bots/research/shared-computer-2026-11-09.md`); the engine start on a PC with Docker Desktop stopped.
 
 ## Quiet, lazy startup
 
