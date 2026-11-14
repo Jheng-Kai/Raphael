@@ -15,7 +15,7 @@ from .test_vm import desktop, per_bot_desktop  # noqa: F401
 
 IMAGE = Path(vm_module.__file__).parent / 'image'
 screens = ModuleType('image_screens')
-helper = IMAGE / 'layer11/screens.py'
+helper = IMAGE / 'layer12/screens.py'
 exec(compile(helper.read_text(encoding='utf-8'), str(helper), 'exec'), screens.__dict__)
 
 
@@ -158,13 +158,15 @@ def test_tokens_expose_only_individual_screens(count, expected):
 def test_four_panels_have_independent_outputs_and_unique_launcher_plugins():
     commands = dict((path, (kind, values)) for path, kind, values in screens.panel_commands(4))
     assert commands['/panels'] == ('int', ['1', '2', '3', '4'])
-    assert '/panels/panel-1/plugin-ids' not in commands
+    # Panel 1's launchers are the image's own (its configuration file); its window list is written as every panel's.
+    assert '/plugins/plugin-1' not in commands and commands['/panels/panel-1/plugin-ids'] == ('int', ['1', '2', '3', '19'])
     for panel in range(1, 5):
         assert commands[f'/panels/panel-{panel}/output-name'] == ('string', [f'VNC-{panel - 1}'])
+        assert commands[f'/plugins/plugin-{18 + panel}'] == ('string', ['tasklist'])
         if panel == 1:
             continue
         ids = list(range(panel * 3 - 2, panel * 3 + 1))
-        assert commands[f'/panels/panel-{panel}/plugin-ids'] == ('int', list(map(str, ids)))
+        assert commands[f'/panels/panel-{panel}/plugin-ids'] == ('int', [*map(str, ids), str(18 + panel)])
         for plugin, item in zip(ids, ('browser.desktop', 'files.desktop', 'terminal.desktop')):
             assert commands[f'/plugins/plugin-{plugin}'] == ('string', ['launcher'])
             assert commands[f'/plugins/plugin-{plugin}/items'] == ('string', [item])
@@ -184,6 +186,7 @@ def test_what_a_panel_names_is_written_before_the_panel_and_the_list_of_panels_l
         named = paths.index(f'/panels/panel-{panel}/plugin-ids')
         for plugin in ids:
             assert paths.index(f'/plugins/plugin-{plugin}') < paths.index(f'/plugins/plugin-{plugin}/items') < named
+        assert paths.index(f'/plugins/plugin-{18 + panel}') < paths.index(f'/plugins/plugin-{18 + panel}/show-labels') < named
         assert all(paths.index(f'/panels/panel-{panel}/{name}') < named for name in ('position', 'size', 'length', 'length-adjust'))
         assert named < paths.index(f'/panels/panel-{panel}/output-name') < paths.index('/panels')
     assert sorted(paths) == sorted(set(paths))  # no property is written twice
@@ -656,8 +659,10 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
     ('9', ['VNC_PW=private'], False),
     ('10', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),     # released with 11: the computer without Firefox ESR
     ('10', ['VNC_PW=private'], False),
-    ('11', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),    # the current layer on another image is not a previous one
-    ('12', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
+    ('11', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),     # released with 12: the loaded PC's waits and whole panels
+    ('11', ['VNC_PW=private'], False),
+    ('12', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),    # the current layer on another image is not a previous one
+    ('13', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
 ])
 async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(per_bot_desktop, layer, env, recognised):
     # A member's own computer: on this branch the plain `desktop` is the six-screen shared one.
@@ -684,7 +689,7 @@ def test_image_installs_screen_views_and_preserves_the_single_token_port():
     assert 'install -d -o cua -g cua /home/cua/.config/xfce4/panel;' in dockerfile
     assert '[program:raphael-screens]' in dockerfile
     assert 'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' in dockerfile
-    assert 'org.raphael.computer.layer="11"' in dockerfile
+    assert 'org.raphael.computer.layer="12"' in dockerfile
     assert 'stopasgroup' not in dockerfile and 'killasgroup' not in dockerfile
     assert 'supervisor only restarts what exits; the helper ends its own children' in dockerfile
     assert 'Nothing may call supervisorctl stop or restart in a computer' in dockerfile
@@ -923,7 +928,8 @@ def test_simultaneous_view_exits_keep_boot_mark_unless_layout_is_lost(monkeypatc
     if layout_matches:
         screens.serve(2, screens.grid(2)[0])
         assert screens.READY.exists() and len(children) == 4
-        assert checks == [['xrandr', '--listmonitors']] * 2
+        # What the view loop asks of the layout; the window watch (image layer 12) asks the window manager besides.
+        assert [args for args in checks if args[0] != 'wmctrl'] == [['xrandr', '--listmonitors']] * 2
     else:
         with pytest.raises(RuntimeError, match='layout'):
             screens.serve(2, screens.grid(2)[0])

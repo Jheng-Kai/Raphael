@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v11"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v12"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -38,7 +38,7 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "11"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "12"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
 # waits for him and a recording are held until he says so): a lease nobody uses blocks every member (2026-11-14).
@@ -317,13 +317,13 @@ def known_previous(raw, target, owner):
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
         # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
-        # owner's own computer the day layer 8 came; layers 8, 9 and 10 kept that shape. A layer that is not named here is
+        # owner's own computer the day layer 8 came; layers 8 to 11 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it.
-        six = shared_upgrade and layer in ("5", "7", "8", "9", "10") and screens == ["RAPHAEL_SCREENS=6"]
-        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3, "10": 3}.get(layer)
+        six = shared_upgrade and layer in ("5", "7", "8", "9", "10", "11") and screens == ["RAPHAEL_SCREENS=6"]
+        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3, "10": 3, "11": 3}.get(layer)
         # Layer 5 was the first to say its screen count; the two before it had no such entry.
         if ((target.screens != 1 and not shared_upgrade) or memory is None
-                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9", "10") else [])
+                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9", "10", "11") else [])
                 or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
@@ -499,6 +499,33 @@ class LocalVm:
         result = await self.run_for(target, move_window_args(target, window_id))
         if result.code:
             raise VmError("window_move_failed")
+
+    async def restore_window(self, target, window_id):
+        """Bring a minimized window back to its screen (owner, 2026-11-14: he minimized his member's browser, and the member
+        went on working in it where nobody could see)."""
+        if type(window_id) is not int or window_id <= 0:
+            raise ValueError("Expected a positive window id")
+        result = await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-a", str(window_id)]))
+        if result.code:
+            raise VmError("window_restore_failed")
+
+    # Each command reads the browser's own list once and is ended by its own bounds (ten seconds a step); this is only the outer one.
+    browser_tabs_s = 45
+
+    async def browser_tabs(self, target, command, window_id, *args):
+        """The image's raphael-browser-tabs on one X window of the computer's own browser: what it answers, or VmError."""
+        if command not in ("list", "new", "show") or type(window_id) is not int or window_id <= 0:
+            raise ValueError("Expected list, new or show and a positive window id")
+        result = await self.run_for(target, exec_args(target, ["raphael-browser-tabs", command, str(window_id), *map(str, args)]),
+                                    timeout=self.browser_tabs_s)
+        try:
+            answer = json.loads(result.stdout) if not result.code and not result.truncated else None
+        except ValueError:
+            answer = None
+        if not isinstance(answer, dict):
+            logger.info("raphael-browser-tabs %s failed: %s", command, (result.stderr or "").strip()[-300:])
+            raise VmError("browser_tabs_failed")
+        return answer
 
     async def fit_window(self, target, window):
         from .seat_view import rectangle
