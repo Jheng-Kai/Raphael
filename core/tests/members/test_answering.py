@@ -299,8 +299,9 @@ async def test_member_exchange_returns_to_the_main_conversation_that_asked(setup
     assert AgentHistory(conn).list(member_id=one.id) == []
     [theirs] = [AgentHistory(conn).get(r[0]) for r in conn.execute("SELECT id FROM agent_turns WHERE member_id=? AND scope='exchange'", (one.id,))]
     assert theirs.conversation_id == rig.service.conversations.main(one.id)
-    # The question is the asker's record: the asked member's page stays what the owner said to it.
-    assert (await rig.call("agent.history.list", {"member_id": one.id, "conversation_id": theirs.conversation_id}))["turns"] == []
+    # Both sides keep the exchange (owner, 2026-11-14): the asked member's page holds the question it was asked.
+    [listed] = (await rig.call("agent.history.list", {"member_id": one.id, "conversation_id": theirs.conversation_id}))["turns"]
+    assert (listed["id"], listed["scope"], listed["peer_id"]) == (theirs.id, "exchange", 0)
     assert theirs.source_turn_id == selected[0]['id']
 
 
@@ -439,7 +440,7 @@ async def test_a_member_asks_another_and_only_those_two_threads_hold_it(setup, c
     assert (await rig.call("agent.history.search", {"query": "上季", "member_id": c.id}))["turns"] == []
 
 
-async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_its_work(setup, client, conn):
+async def test_a_consultation_is_kept_on_the_respondents_page_and_in_its_search(setup, client, conn):
     rig, team = setup
     a = member(team, name="小財務")
     b = member(team, name="小研究")
@@ -452,17 +453,18 @@ async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_i
     client.chats.append(live_said("上季營收兩百萬。"))
     client.chats.append(live_said("小研究說上季營收兩百萬。"))
     await typed(rig, "問小研究上季的數字", a.id)
-    # B's page holds what the owner said to B, and no record of a colleague's question.
-    [own] = (await rig.call("agent.history.list", {"member_id": b.id}))["turns"]
+    # B's page holds what the owner said to B and, newest first, the colleague's question it answered (owner, 2026-11-14).
+    received, own = (await rig.call("agent.history.list", {"member_id": b.id}))["turns"]
     assert own["scope"] == "private" and own["question"] == "記一下：上季營收兩百萬"
+    assert received["scope"] == "exchange" and received["peer_id"] == a.id and received["question"] == "上季的數字是多少？"
     # A's turn names what it asked and what came back, with no task behind a quick question.
     [mine] = (await rig.call("agent.history.list", {"member_id": a.id}))["turns"]
     [asked] = mine["handoffs"]
     assert (asked["mode"], asked["member_id"], asked["state"], asked["request"], asked["result"], asked["task_id"]) == (
         "consult", b.id, "done", "上季的數字是多少？", "上季營收兩百萬。", None)
-    # Pages and previews stay private; recall includes only B's own exchange.
+    # The sidebar preview stays what the owner said; recall includes only B's own exchange.
     main = rig.service.conversations.main(b.id)
-    assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": main}))["turns"] == [own]
+    assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": main}))["turns"] == [received, own]
     assert AgentHistory(conn).latest_by_member()[b.id].scope == "private"
     found = (await rig.call("agent.history.search", {"query": "上季的數字", "member_id": b.id}))["turns"]
     [exchange] = found
