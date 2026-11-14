@@ -792,6 +792,8 @@ asked member's task with its own notes and conversation, and a private chat turn
 comes back once with the answer. An entry of the shared file ends with whom the owner told it to and when, in every
 member's prompt (no page shows it, R-MEM-10); what the owner told one member stays its own until a colleague asks.
 
+Owner (2026-11-14): 「假設拉菲爾跟其他成員說話的話，其他每一個成員那邊應該都會有保留他跟拉菲爾的對話記錄才對，就兩邊應該都有，然後變成他們的上下文」. Each side keeps its own copy in its thread and later context; the receiver's context includes the received question and answer, and the asker's context includes the colleague's answer.
+
 ```powershell
 npm run look -- bot-ask-centred bot-message-from-centred bot-exchange-count bot-exchange-expanded --theme both --width 1120,720,1920x1080
 ```
@@ -1672,6 +1674,8 @@ npm run look -- handoff-group handoff-group-done handoff-group-many handoff-grou
 ## Conversation between members (2026-11-07)
 
 Since 2026-11-07 (owner, after Grok Bot's 「2 messages with Savio」) the line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, every exchange between the same members in the loaded thread (or room) oldest first under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason, and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
+
+For member-to-member exchanges, `receivedLineHTML` appears in the respondent's own thread for its received ask or consult handoff. Its completed exchange is part of that member's later conversation context, scoped to that member and conversation; the asker retains the colleague's answer in its source turn context. `bot-message-from-centred` exercises the ask_member/consult receipt in the respondent's thread.
 
 ```powershell
 npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080

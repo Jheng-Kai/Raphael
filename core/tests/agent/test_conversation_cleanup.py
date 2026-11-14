@@ -18,15 +18,14 @@ def exchange(history, **overrides):
     })
 
 
-def test_quick_exchange_never_appears_in_main(conn):
+def test_an_exchange_appears_only_in_its_received_conversation(conn):
     history, conversations = AgentHistory(conn), Conversations(conn)
     first = conversations.main()
     other = conversations.quick()
     turn = exchange(history, conversation_id=other)
     assert history.get(turn).conversation_id == other
     assert history.list(conversation_id=first, exchanges=True) == []
-    # A colleague's question is the asker's record: the asked member's page does not list it.
-    assert history.list(conversation_id=other, exchanges=True) == []
+    assert [item.id for item in history.list(conversation_id=other, exchanges=True)] == [turn]
     assert history.after(0, conversation_id=first, exchanges=True) == []
 
 
