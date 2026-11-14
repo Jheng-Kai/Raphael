@@ -269,26 +269,6 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         self._mirror(member_id)
         return skill
 
-    def revert_state(self, member_id: int, revision: str, *, expected_hash: str) -> None:
-        """Core-only metadata undo; documents must still match the restored revisions."""
-        self.check(member_id)
-        entry = next((item for item in self.homes.journal(member_id) if item["id"] == revision), None)
-        path = self.homes.safe(self.homes.state(member_id) / "skills.json")
-        if entry is None or entry.get("state") != "skills.json" or not entry.get("applied"):
-            raise HomeError("skill state revision does not exist")
-        if entry["after_hash"] != expected_hash or digest(path.read_bytes()) != expected_hash:
-            raise HomeError("skill state changed; read it again before reverting")
-        restored = json.loads(entry["before"] or "[]")
-        for skill in restored:
-            document = self._path(member_id, skill["id"])
-            if (digest(document.read_bytes()) if document.exists() else None) != skill["revision"]:
-                raise HomeError("restore the skill document revision first")
-        with self.conn:
-            self.conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
-            self.conn.executemany("INSERT INTO member_skills (id, member_id, name, description, enabled, source) VALUES (?, ?, ?, ?, ?, ?)",
-                                 [(skill["id"], member_id, stored_skill_name(skill["name"], skill.get("plugin")), skill["description"], skill["enabled"], skill["source"]) for skill in restored])
-        self._mirror(member_id, {s["id"]: {key: s.get(key) for key in ("provenance", "learned_at")} for s in restored})
-
     def update_skill(self, member_id: int, skill_id: int, enabled: object) -> dict:
         self.check(member_id)
         if type(enabled) is not bool:
