@@ -17,7 +17,7 @@
 .btn.cs-have:hover:not(:disabled), .btn.cs-have:active:not(:disabled) { background: transparent; color: var(--text); }
 .cs-have > .i { color: var(--text-3); }
 .cs-minis { display: inline-flex; align-items: center; }
-.cs-mini { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; margin-left: -6px; border-radius: var(--r-pill); background: var(--tile); box-shadow: 0 0 0 2px var(--float), inset 0 0 0 1px var(--tile-edge); color: var(--on-tile); color-scheme: light; overflow: hidden; }
+.cs-mini { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; margin-left: -6px; border-radius: var(--r-pill); background: var(--tile); box-shadow: 0 0 0 2px var(--dialog), inset 0 0 0 1px var(--tile-edge); color: var(--on-tile); color-scheme: light; overflow: hidden; }
 .cs-mini:first-child { margin-left: 0; }
 .cs-mini .mono { width: 16px; height: 16px; color: var(--on-tile); }
 .cs-mini .mono > .i { width: 16px; height: 16px; }
@@ -189,7 +189,7 @@
 .cs-scrim:not(.again) > .cs-dialog { animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .cs-scrim.leaving { animation: scrim-out 0.14s ease-in forwards; pointer-events: none; }
 .cs-scrim.leaving > .cs-dialog { animation: dialog-out 0.14s ease-in forwards; }
-.cs-dialog { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); width: min(440px, 100%); max-height: 100%; overflow-x: hidden; overflow-y: auto; padding: var(--sp-4); border-radius: var(--r-lg); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
+.cs-dialog { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--sp-3); width: min(440px, 100%); max-height: 100%; overflow-x: hidden; overflow-y: auto; padding: var(--sp-4); border-radius: var(--r-lg); background: var(--dialog); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
 .cs-dialog:focus { outline: none; }
 /* The sticky actions also cover the dialog's bottom padding, so a long list scrolls under them and not through the gap beneath. */
 .cs-dialog > .action-row.is-sticky { bottom: calc(var(--sp-4) * -1); margin-bottom: calc(var(--sp-4) * -1); padding-bottom: calc(var(--sp-3) + var(--sp-4)); }

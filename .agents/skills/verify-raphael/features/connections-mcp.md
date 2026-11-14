@@ -34,7 +34,7 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
   and at the right 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its switch and ⋯; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
   the 試用, sign-in and refresh buttons. After a sign-in from a page the page stays and shows the connected state.
-- The colour rule for everything that floats (R-FLOAT-01): `--float`, `--float-edge`, `--float-ctl`, `--float-hover`, `--float-sel`,
+- The colour rule for everything that floats (R-FLOAT-01, with the dialog layer `--dialog` of R-FLOAT-03): `--float`, `--float-edge`, `--float-ctl`, `--float-hover`, `--float-sel`,
   `--float-on-sel` in styles.css, one scope (`:where(.menu, .modal, .mb-dialog, ...)`) that points the ordinary tokens at them, and the
   `float-surface` check appended to the scenes of its consumers: delete question (`member-delete-ask`), a context menu
   (`context-menu-member`), the composer's model menu (`composer-model-small`, `composer-model-sources`), the member maker (`member-maker`), the
@@ -56,6 +56,19 @@ Marks and inner cards (2026-11-13):
   appended to every tab of Settings and to the dialogs, menus and popovers that hold cards, fields or rows (`FLOAT_CARD_SCENES` in
   `scenes/index.mjs`); it fails on a near-identical grey without an edge or a darker hole. The model chooser is one tone with a hairline
   between its columns and no light edge on the chosen row (`model-choices-answer`, `quick-model-menu`, `chooser-chatgpt-signed-out`).
+
+Three layers in every dialog (R-FLOAT-03, 2026-11-14, owner: 「它應該是三層顏色，最外層最深 ( dialog 外 )，再來是內層，再來是內容」):
+
+- The window under the scrim is the darkest, the dialog and its nav (`--dialog`: dark #121212 as Grok Bot's Settings, light #f5f5f5) the middle, and the cards
+  and groups on it (`--float`: dark #1f1f1f with a #2b2b2b hairline, light white with #e5e5e5) the lightest, in the same order of lightness in both themes.
+  Menus and popovers stand on `--float`. Settings' groups (`.slist`) and an app's 資訊 and 工具 boxes (`.cs-box`) are the cards; the 連結 buttons and
+  chips of the list are `--float-ctl` on the dialog itself. Grok Bot has the three layers only in Settings; its Connect Apps is one #1f1f1f surface
+  (`--dialog` is one token, so that can be restored in one line).
+- The `dialog-layers` check (`DIALOG_LAYER_SCENES` in `scenes/index.mjs`: `profile`, `appearance`, `models`, `usage`, `safety`, `connect-apps`,
+  `connect-apps-connected`, `connect-app-oauth`, `connect-app-connected`) reads the computed colours of the scrim over the page, the dialog, its nav and a
+  card (or, on the list that has none, a control) and requires outside < dialog < lightest in lightness in both themes. `float-surface` says which layer a
+  dialog, a menu and a popover stands on, and `float-cards` fails on a card that is not the card fill with a hairline on a dialog, and on the dialog's own
+  colour dug into a card. Palette contrast on `--dialog` is in `check-palette.mjs`.
 
 ```powershell
 npm run look -- connect-icons --theme both --width 1120,720,1920x1080

@@ -71,7 +71,11 @@
   --track: #e5e5e5; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.3);
   /* One rule for everything that floats (a dialog, a menu and its submenu, a popover, a floating card), after Grok Bot's: the surface, its edge,
      the fill of a control standing on it (a chip, a button), what a hovered or pressed row takes, and the chosen chip (owner, 2026-11-12). */
-  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #f0f0f0; --float-ctl-hover: #e6e6e6; --float-hover: #f2f2f2; --float-pressed: #e6e6e6;
+  /* Three layers in a dialog (owner, 2026-11-14): the window dimmed by --scrim is the outermost and darkest, the dialog itself (--dialog, its nav included) the
+     middle, and the cards and groups inside it (--float) the lightest. The light theme keeps the order of lightness: the outside is dimmed, the dialog a quiet
+     off-white, the cards white with a hairline. A menu, a popover and a tooltip are on --float too, told from a card by their edge and shadow. */
+  --dialog: #f5f5f5;
+  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #ececec; --float-ctl-hover: #e3e3e3; --float-hover: #eaeaea; --float-pressed: #e3e3e3;
   --float-ctl-edge: #e0e0e0; --float-sel: #0a0a0a; --float-on-sel: #ffffff;
   /* The white rounded tile an app's mark stands on in 連結應用程式 (Grok Bot's), the same in both themes: the marks are drawn for a white ground. */
   --tile: #ffffff; --on-tile: #0a0a0a; --tile-edge: rgba(0, 0, 0, 0.08);
@@ -122,9 +126,10 @@
   --ans-edge: #161616;
   --btn: #1f1f1f; --btn-edge: #2e2e2e; --key: #1f1f1f; --key-edge: #2e2e2e;
   --track: #333333; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.65);
-  /* Measured from Grok Bot's dark theme: the window is #0e0e0e and what floats over it #1f1f1f with a #353535 edge; a control on it is #282828,
-     a hovered row #292929, the chosen chip a light fill with dark words, and the dimmed window behind a dialog about #050505. */
-  --float: #1f1f1f; --float-edge: #353535; --float-ctl: #282828; --float-ctl-hover: #303030; --float-hover: #292929; --float-pressed: #303030;
+  /* Measured from Grok Bot's dark theme (Settings, 2026-11-14): the window under the scrim is #050505, the dialog and its nav #121212, the cards in it #1f1f1f with a
+     #2b2b2b edge; a menu is #1f1f1f with a #292929 edge, a control on a card #282828, a hovered row #292929, the chosen chip a light fill with dark words. */
+  --dialog: #121212;
+  --float: #1f1f1f; --float-edge: #2b2b2b; --float-ctl: #282828; --float-ctl-hover: #303030; --float-hover: #292929; --float-pressed: #303030;
   --float-ctl-edge: #282828; --float-sel: #f5f5f5; --float-on-sel: #0a0a0a;
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -478,7 +483,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 /* ---------- settings: a panel over the window ---------- */
 .modal-scrim { --modal-gap: 24px; --set-nav: 196px; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(var(--window-controls-height) + var(--modal-gap)) var(--modal-gap) var(--modal-gap); background: var(--scrim); }
-.modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
+.modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--dialog); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
 .modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: transparent; border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
 /* 連結應用程式 opens alone: one column, no list of Settings (R-UI-111). */
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
@@ -568,21 +573,23 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 }
 
 /* ---------- everything that floats: one rule (owner, 2026-11-12: 「我感覺可以把 dialog 都設計成這個顏色，他們感覺是有一套規則的」) ----------
-   A dialog, a menu and its submenu, a popover, a floating card and a tooltip stand on --float with a --float-edge line; what is on them (a chip, a
-   button, a field) is filled --float-ctl, and a hovered row takes --float-hover. An inner card (a settings group, a subscription, a provider) is not a
-   grey of its own (owner, 2026-11-13: 「他可能根本看不到他原本的背景」): it is the surface itself with a 1 px --float-edge hairline and its radius, as Grok Bot's
-   Skills and Information cards are, so `--panel`, which cards stand on, is the surface there and `--field`, which fields stand on, is the control fill.
+   Three layers in a dialog (owner, 2026-11-14: 「它應該是三層顏色，最外層最深 ( dialog 外 )，再來是內層，再來是內容」): outside it the window under --scrim, the
+   darkest; the dialog itself and its nav, `--dialog`, the middle; and the cards and groups on it, `--float` with a 1 px --float-edge hairline, the lightest.
+   A menu and its submenu, a popover, a floating card and a tooltip are on --float too (the card layer), lifted from what is under them by their edge and shadow.
+   What is on a surface (a chip, a button, a field) is filled --float-ctl, and a hovered row takes --float-hover. So `--panel`, which cards stand on, is --float
+   there, `--field`, which fields stand on, is the control fill, and `--content`, which a sticky bar stands on, is the dialog's own colour.
    The surfaces below say it once: inside any of them the ordinary tokens point at the floating ones, so a card or a control needs no rule of its own.
    The window, the sidebar, the pages, the thread and the composer keep their own colours; a toast is the inverse of the page and is not one of these. */
-:where(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .link-hover, .message-tooltip) {
+:where(.menu, .modal, .mb-dialog, .cs-dialog, .av-crop, .au-pop, .cb-card, .link-hover, .message-tooltip) {
   --btn: var(--float-ctl); --btn-edge: var(--float-ctl-edge); --btn-hover: var(--float-ctl-hover); --btn-pressed: var(--float-pressed);
   --key: var(--float-ctl); --key-edge: var(--float-ctl-edge);
   --hover: var(--float-hover); --pressed: var(--float-pressed); --edge: var(--float-edge); --line: var(--float-edge);
   --panel: var(--float); --surface-2: var(--float-ctl); --field: var(--float-ctl);
 }
-.modal { --content: var(--float); }
-/* The cards that were a recessed grey of their own (a template's rows, a review's box, a secret's row) are the surface with a hairline on a floating one. */
-:is(.menu, .modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card) :is(.tpl-card, .tpl-alert, .tpr-list, .tpr-box, .secret-row, .au-rows, .handoff-detail) { background: var(--panel); border: 1px solid var(--float-edge); }
+.modal { --content: var(--dialog); }
+/* The cards that were a recessed grey of their own (a template's rows, a review's box, a secret's row) and the boxes that had only a line (an app's information and tools)
+   are the card layer with a hairline on a floating surface. */
+:is(.menu, .modal, .mb-dialog, .cs-dialog, .av-crop, .au-pop, .cb-card) :is(.tpl-card, .tpl-alert, .tpr-list, .tpr-box, .secret-row, .au-rows, .handoff-detail, .cs-box) { background: var(--panel); border: 1px solid var(--float-edge); }
 
 /* ---------- menu, toast ---------- */
 /* A menu is only so wide, and never wider than the window: a longer label is cut, with its whole
