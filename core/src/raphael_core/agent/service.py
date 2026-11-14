@@ -474,6 +474,8 @@ class _Ask:
     # ledger, and its turn costs only what was added.
     cost_base: float = 0.0
     turn_id: int = 0
+    # Where an edited message stands: the id and time of the turn it replaces, which it takes over (`_ask`).
+    place: tuple[int, int] | None = None
     page_call: str | None = None
     recorded_cost: float = 0.0
     recorded_steps: int = 0
@@ -1135,6 +1137,7 @@ class AgentService:
         if quote is not None and params.get("source") not in (None, TYPED, VOICE):
             raise invalid_params("quotes are supported for composer requests")
         replacement = _opt_int(params, "replace_turn_id")
+        place = None
         if replacement is not None and not self._was_cancelled(session):
             if not text.strip() and not attachments:
                 raise invalid_params("a replacement must contain text or attachments")
@@ -1145,6 +1148,11 @@ class AgentService:
                     or old.source in ("member", "routine") or params.get("source") != "app"):
                 raise invalid_params("replace_turn_id must name a completed owner message in this thread")
             await self._history_retract({"session_id": old.session_id, "turn_id": replacement, "member_id": member_id})
+            # An edited message is the same message with new words: it takes the place of the one it replaces (its
+            # id and its time), so it stands where it stood among what came after it, never at the end of the
+            # thread. A turn that is still there (it was only withdrawn) leaves the new one to be written at the end.
+            if self._history.get(replacement) is None:
+                place = (replacement, old.created_at_ms)
         return await self.ask(
             session,
             text,
@@ -1157,6 +1165,7 @@ class AgentService:
             quick=quick,
             intent=intent,
             transcript_ms=params.get("transcript_ms"),
+            place=place,
         )
 
     def _destination(self, member_id: int, conversation_id: int | None, source: object, *, quick: bool) -> int:
@@ -1207,6 +1216,7 @@ class AgentService:
         transcript_ms: float | None = None,
         resumption: Resumption | None = None,
         intent: str | None = None,
+        place: tuple[int, int] | None = None,
     ) -> dict:
         """One request, as `agent.ask` answers it. `attachments` are the files handed with it
         (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), saved on typed admission; with
@@ -1244,6 +1254,7 @@ class AgentService:
             quick=quick,
             resumption=resumption,
             source_turn_id=resumption.turn_id if resumption is not None else None,
+            place=place,
         )
         if resumption is not None and resumption.report is not None:
             ask.steps.extend(resumption.report.steps)
@@ -5694,7 +5705,11 @@ class AgentService:
                 self._conversation_of(member, conversation_id).clear_summary()
                 with self._conn:
                     self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
+            forget = getattr(self._team, "forget_delivery", None)
             for turn in own:
+                # A turn written in its place (an edit) is told as finished again, not taken for the one that was.
+                if forget is not None and turn.id is not None:
+                    forget(turn.id)
                 self._turn_changed(turn.id or 0, member)
         return {"deleted": deleted}
 

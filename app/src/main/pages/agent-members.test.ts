@@ -678,7 +678,10 @@ describe("a sent message is edited in its own bubble (owner, 2026-11-14)", () =>
     expect(field.value).toBe("問題 31");
     expect(document.activeElement).toBe(field);
     expect([field.selectionStart, field.selectionEnd]).toEqual([field.value.length, field.value.length]);
-    expect(document.querySelector('[data-id="31"] .owner-message .bubble')).toBeNull();
+    // The bubble itself holds the words; nothing wraps it in another box, and Cancel and Send stand under it, outside.
+    expect(field.closest(".owner-message .bubble .message-text")).not.toBeNull();
+    expect(document.querySelector('[data-id="31"] .msg-editor')).toBeNull();
+    expect(field.closest(".bubble")!.querySelector(".btn")).toBeNull();
     expect(document.querySelector('[data-id="31"] [data-act="more-message"][data-owner-act]')).toBeNull();
     expect([...document.querySelectorAll('[data-id="31"] .msg-editor-actions .btn')].map(button => button.textContent)).toEqual(["取消", "送出"]);
     expect(composerInput.value).toBe("半個草稿");
@@ -719,9 +722,10 @@ describe("a sent message is edited in its own bubble (owner, 2026-11-14)", () =>
     expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(false);
     $('[data-act="edit-send"]').click(); await flush();
     expect(api.agentAskText).toHaveBeenCalledTimes(1);
-    // The old message leaves its place while its replacement is on its way: the thread never shows both.
+    // The edit stands in the message's place while it is on its way: the thread never shows both.
     expect(document.querySelector('[data-id="31"]')).toBeNull();
     expect(document.querySelectorAll(".is-pending").length).toBe(1);
+    expect($(".is-pending .message-text").textContent).toBe("again");
     finish(); await flush();
     agent.hide();
   });
@@ -817,7 +821,7 @@ test("editing a legacy attachment without a stored copy requires reattachment, w
   api.agentHistoryList.mockResolvedValue({ turns: [original] });
   const agent = mount(); await flush();
   pickMessage('[data-id="8"]', 'edit'); await flush();
-  expect($(".msg-editor .quote-text").textContent).toBe("Saved passage");
+  expect($("[data-msg-editor] .quote-text").textContent).toBe("Saved passage");
   expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(true);
   expect($("[data-missing]").textContent).toContain("original.pdf");
   $('[data-act="drop-edit-missing"]').click();
@@ -844,7 +848,7 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
     expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
     expect($<HTMLTextAreaElement>("[data-edit-input]").value).toBe("問題 8");
     expect(document.querySelector("[data-missing]")).toBeNull();
-    expect($(".msg-editor .quote-text").textContent).toBe("Saved passage");
+    expect($("[data-msg-editor] .quote-text").textContent).toBe("Saved passage");
     expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(false);
     $('[data-act="edit-send"]').click(); await flush();
   } else if (action === "cancel") {
@@ -1802,6 +1806,87 @@ test("a metadata-only reply update does not force latest again", async () => {
   expect($('.tn[data-id="31"]')).toBe(node);
   expect(write).not.toHaveBeenCalled();
   agent.hide();
+});
+
+/**
+ * The core as an edit meets it: it removes the message it replaces and writes the edit with that message's id and time
+ * (`place`), or, as a core that does not keep places does, at the end with the next id. The call lasts until the answer.
+ */
+function editingCore(initial: AgentTurn[], where: "in place" | "at the end") {
+  let rows = [...initial], newest = Math.max(...rows.map(item => item.id)), release!: () => void;
+  api.agentHistoryList.mockImplementation(async (q: { member_id?: number; limit?: number; after_id?: number; turn_ids?: number[] }) => {
+    if (q.member_id !== 3) return { turns: THREADS[q.member_id ?? 0] };
+    const sorted = [...rows].sort((a, b) => b.id - a.id);
+    if (q.after_id === undefined) return { turns: sorted.slice(0, q.limit) };
+    const ids = q.turn_ids ?? [], changed = sorted.filter(item => item.id > q.after_id! || ids.includes(item.id));
+    return { turns: changed, delta: true, removed_ids: ids.filter(id => !rows.some(item => item.id === id)), has_more: false, next_after_id: changed.length ? Math.max(...changed.map(item => item.id)) : q.after_id };
+  });
+  api.agentAskText.mockImplementation(async (text: string, _files: unknown, member: number, options: { requestId: string; replaceTurnId?: number }) => {
+    const old = rows.find(item => item.id === options.replaceTurnId);
+    if (old) { rows = rows.filter(item => item !== old); send({ type: "AgentTurn", turn_id: old.id, member_id: member }); }
+    const id = old && where === "in place" ? old.id : ++newest;
+    rows.push(turn(id, { member_id: member, question: text, session_id: options.requestId, status: "running", text: "", created_at_ms: old && where === "in place" ? old.created_at_ms : Date.now() }));
+    send({ type: "AgentTurn", turn_id: id, member_id: member });
+    await new Promise<void>(resolve => { release = resolve; });
+    Object.assign(rows.find(item => item.id === id)!, { status: "done", text: "new answer" });
+    send({ type: "AgentTurn", turn_id: id, member_id: member });
+  });
+  return { answer: () => release() };
+}
+const routineTurn = (id: number, question: string): AgentTurn => turn(id, { member_id: 3, source: "routine", route: "routine", prefix: "", question, text: `${question} done` });
+/** The lines of the thread, in order: a turn by its id, a message on its way as "pending". */
+const lineIds = (): string[] => [...document.querySelectorAll<HTMLElement>(".thread > .tn")].map(line => line.classList.contains("is-pending") ? "pending" : line.dataset.id ?? "?");
+const settle = async (): Promise<void> => { await new Promise(resolve => setTimeout(resolve, 600)); await flush(); };
+
+describe("an edited message stands where its message stood (owner, 2026-11-14)", () => {
+  test.each(["in place", "at the end"] as const)("a message with routine turns after it, edited against a core that writes %s: it never leaves its place before the edit is written, and never shows twice", async where => {
+    const core = editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" }), routineTurn(32, "7am"), routineTurn(33, "8am")], where);
+    const agent = mount(); await flush(); await pick(3);
+    expect(lineIds()).toEqual(["30", "31", "32", "33"]);
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "corrected");
+    $('[data-act="edit-send"]').click(); await flush();
+    // On its way: the edit stands where the message stood, with the routine turns after it, and nothing is waiting at the end.
+    expect(lineIds()).toEqual(["30", "pending", "32", "33"]);
+    expect($(".tn.is-pending .message-text").textContent).toBe("corrected");
+    await settle();
+    // The core has written it: the edit's own turn, where the message stood (a core that appends writes it at the end).
+    expect(lineIds()).toEqual(where === "in place" ? ["30", "31", "32", "33"] : ["30", "32", "33", "34"]);
+    expect(document.querySelectorAll(".is-pending").length).toBe(0);
+    expect([...document.querySelectorAll(".thread .owner-message .message-text")].filter(node => node.textContent === "corrected")).toHaveLength(1);
+    core.answer(); await flush(); await settle();
+    expect(document.querySelectorAll(".is-pending").length).toBe(0);
+    expect([...document.querySelectorAll(".thread .owner-message .message-text")].filter(node => node.textContent === "corrected")).toHaveLength(1);
+    expect(lineIds()).toEqual(where === "in place" ? ["30", "31", "32", "33"] : ["30", "32", "33", "34"]);
+    agent.hide();
+  });
+
+  test("the newest message, edited: its edit has its id and does not vanish while the member answers", async () => {
+    const core = editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" })], "in place");
+    const agent = mount(); await flush(); await pick(3);
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "corrected");
+    $('[data-act="edit-send"]').click(); await flush();
+    await settle();
+    // The member is answering: the message is on screen, once, with the new words.
+    expect(lineIds()).toEqual(["30", "31"]);
+    expect($('[data-id="31"] .owner-message .message-text').textContent).toBe("corrected");
+    core.answer(); await flush(); await settle();
+    expect($('[data-id="31"]').textContent).toContain("new answer");
+    agent.hide();
+  });
+
+  test("the reader stays where they are while an edit of an earlier message is on its way", async () => {
+    editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" }), routineTurn(32, "7am")], "in place");
+    const agent = mount(); await flush(); await pick(3);
+    const scroller = $(".ra-scroll");
+    scroller.scrollTop = 17;
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "corrected");
+    $('[data-act="edit-send"]').click(); await flush();
+    expect(scroller.scrollTop).toBe(17);
+    agent.hide();
+  });
 });
 
 // ---------- reordering the sidebar (R-SIDE-03) ----------

@@ -59,31 +59,63 @@ in the thread: exactly one, on the line that works with its words, none under th
 npm run look -- slime-one-working composer-stop-background composer-queued composer-send-while-working composer-stop-pending transcript-working running --theme both --width 1120,720,1920x1080
 ```
 
-## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
+## The owner edits a sent message in its own bubble, where it stands (owner, 2026-11-14, R-UI-148)
 
-Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
-Before, 編輯 in a message's ⋯ moved its words (and files and quote) into the composer, and sending replaced the message
-(`replace_turn_id`). Now the bubble itself becomes the editor (`message-edit.ts`, drawn by `turnHTML` while
-`TimelineState.editing` names the turn): a flat box as wide as the bubble's column (`.owner-message.is-editing`),
-its words in a field with the caret after them, 取消 and the primary 送出 at the right (`btn sm`). The composer keeps
-its draft. Only the place of editing changed: 送出 and Enter call the composer's `send` (`send(edit)` in `pages/agent.ts`), so
-the same `agent_ask_text` goes out with the edited words, the files and the quote of the original and `replaceTurnId`, and the
-core does to the history what it did. While it is on its way the old message leaves its place (it is retracted
-by the core) and the pending bubble shows as for any message; a failed send brings the editor back with the words as typed and
-says so. Escape leaves at once while the words are the original's, and goes through the app's cancel gesture once they
-changed (first press arms 取消, which shows Esc and 「再按一次取消」; the second within 1.5 s leaves). Shift+Enter is a new
-line. Files that are not stored any more show as chips with × and block 送出 until dropped, as in the composer. A group room has no edit.
-Not in the editor: attaching more files, removing the quote or a stored file (they stay as the message had them).
+Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」, then, on his build of 7231ae74:
+「我編輯的時候不用特別改那個 message bubble，用原本的 message bubble 下去編輯就好了。那你現在編輯完我傳送之後呢，它就不見了，訊息就不見了？」
+
+**The editor is the bubble.** Choosing 編輯 in a message's ⋯ keeps the bubble as it is (`.bubble` of the owner's message: its colour, shape, padding,
+type, width behaviour) and its words become a field in it (`message-edit.ts`, drawn by `turnHTML` while `TimelineState.editing` names the turn;
+`.msg-editor-input` takes the words' own size, `field-sizing: content`, up to ten lines then it scrolls), the caret after them. The bubble grows with
+the words, as the composer does. 取消 and the primary 送出 (`btn sm`, 30 px) stand under it at its right edge (`.msg-editor-under`), in no box. The
+composer keeps its draft. Enter and 送出 call the composer's `send` (`send(edit)` in `pages/agent.ts`), so the same `agent_ask_text` goes out with the
+edited words, the files and the quote of the original and `replaceTurnId`. A failed send brings the editor back with the words as typed and says so. Escape
+leaves at once while the words are the original's, and goes through the app's cancel gesture once they changed (first press arms 取消, which shows Esc and
+「再按一次取消」; the second within 1.5 s leaves). Shift+Enter is a new line. Files that are not stored any more show as chips with × (under the bubble) and
+block 送出 until dropped. A group room has no edit. Not in the editor: attaching more files, removing the quote or a stored file.
+
+**The edit stands where its message stood.** Found by reading, then by running the real core with a member, its own conversation id and routine turns
+newer than the owner's message: the core removed the message and wrote the edit at the end of the thread, and when the message was the newest the new row
+took the old row's id (the table reuses the id of a deleted last row), which the app hid by id until the member had finished answering, so the message
+vanished for the whole turn. Now `agent.ask` with `replace_turn_id` writes the edit with the id and `created_at_ms` of the turn it replaces (`place` in
+`AgentHistory.add`, `_Ask.place`), unless that row is still there (a message that only waited in the queue is withdrawn, not deleted: the edit is then
+written at the end as before). The app keeps the old message in its place while the edit is on its way (`Outgoing.replaces`, `lines()` in `pages/agent.ts`)
+and does not follow the reader to the end; `settlePending` takes a turn that names the request as the edit whatever its time. The retraction forgets the
+brain's resume session and the summary because they hold the old words, and `MembersService.forget_delivery` so the edit's "finished" is told again
+(its key is the id and the time, which the edit shares with the message).
+Unchecked: an edit sent while the member is working on a later message is steered into that work by the queue (as any message), and then stands in its
+place as a message without a reply of its own.
 
 ```powershell
-npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-sent chat actions message-hugs-bubble reaction-owner reaction-row composer-queued-withdraw --theme both --width 1120,720,1920x1080
+npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-sent message-edit-placed chat actions message-hugs-bubble reaction-owner reaction-row member-text --theme both --width 1120,720,1920x1080
 ```
 
-`message-edit-open` and `message-edit-long` (a message of several lines) assert the editor (focus and caret, no bubble or
-actions beside it, as wide as its column and ending where the bubble ended, every word in view, 取消 and a ready primary
-送出 of one height at the right edge, the composer empty); `message-edit-armed` is the first Escape on changed words (取消 armed,
-editor open); `message-edit-sent` types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`,
-no editor, one bubble with the new words.
+`message-edit-before` (a step of the scenes) records the sent bubble. `message-edit-open` and `message-edit-long` (a message of several lines) assert
+the editor against it: every colour, padding, type and radius of the bubble the same, its right edge and top where they were, a short message the same
+size (±2 px), the caret and focus, every word in view, no wrapper box, no pressable action beside it (their room is held, hidden and inert, so the bubble and a picture above it keep their size), 取消 and a ready primary 送出 of 30 px under the bubble and
+ending at its right edge, the composer empty; `message-edit-armed` is the first Escape on changed words (取消 armed, editor open); `message-edit-sent`
+types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`, one `.tn[data-id]` with the new words, nothing waiting.
+`message-edit-placed` runs a thread with the 07:00 and 08:00 routine turns after the message against the look mock, which now retracts and writes the
+edit as the core does: `message-edit-pending` (the edit stands first, above the routine turns, nothing at the end), `message-edit-written` (the same
+place with the member answering) and `message-edit-answered`.
+
+## A message with a picture keeps the bubble's own width (owner, 2026-11-14, R-UI-149)
+
+Owner, with a picture of a message that carried one screenshot: 「傳送圖片的時候，下面的 message bubble 不用跟它一樣的寬度了。它就是 Message Bubble，就是有 Message Bubble 自己的寬度」.
+The picture stood on top and the blue bubble under it was stretched to the picture's width (`.owner-message:has(.me-files) { width: min(420px, 78%) }`), so its
+words wrapped at 420 px and a long text was cut with 顯示全部 far earlier than without a picture. Now `.me-files` is 420 px (or the column when it is narrower)
+and the message is as wide as the wider of the picture and the bubble, both at its right edge: the bubble is as wide as the same words without a picture.
+The group room's messages and threads draw the same markup and follow.
+
+```powershell
+npm run look -- owner-picture-short owner-picture-long owner-picture-pending message-edit-picture message-edit-open room-files-sent chat --theme both --width 1120,720,1920x1080
+```
+
+`owner-picture-bubble` (the check of the first three, and of `message-edit-picture` with the editor open) draws the same words in a bubble without a picture in the
+same line, measures it and requires the bubble to be as wide (±1 px; ±2 px for the editor's field), the picture to keep its size (200 to 420 px), a short
+message's bubble not to equal the picture's width, a long one to be wider than the picture, and the bubble to stand under the picture at its right edge.
+`owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
+Enter, the call held), `message-edit-picture` the message open in its editor.
 
 ## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
