@@ -36,28 +36,27 @@ CAPS = ("change approach once", "at most once", "Do not try another", "after one
         "Only open a browser when the owner asks", "answer with what you have; name the gap")
 
 
-def every_prompt(language="en"):
+def every_prompt():
     """Every system prompt a brain reads: the chief's and a member's conversation (API, narrated, CLI) and their tasks."""
     return {
-        "chief": persona.system_prompt(language, "answer"),
-        "chief narrated": persona.system_prompt(language, "answer", narrated=True) + NARRATION_RULES,
-        "chief cli": persona.cli_system_prompt(language),
-        "member": persona.member_system_prompt(language, "answer", **FIELDS),
-        "member narrated": persona.member_system_prompt(language, "answer", narrated=True, **FIELDS) + NARRATION_RULES,
-        "member cli": persona.cli_system_prompt(language, **FIELDS),
-        "chief task": persona.worker_system_prompt(language, model_calls=20, tool_calls=40),
-        "member task": persona.member_worker_system_prompt(language, model_calls=20, tool_calls=40, **FIELDS),
-        "member cli task": persona.member_worker_system_prompt(language, model_calls=20, tool_calls=40, cli=True, **FIELDS),
+        "chief": persona.system_prompt("answer"),
+        "chief narrated": persona.system_prompt("answer", narrated=True) + NARRATION_RULES,
+        "chief cli": persona.cli_system_prompt(),
+        "member": persona.member_system_prompt("answer", **FIELDS),
+        "member narrated": persona.member_system_prompt("answer", narrated=True, **FIELDS) + NARRATION_RULES,
+        "member cli": persona.cli_system_prompt(**FIELDS),
+        "chief task": persona.worker_system_prompt(model_calls=20, tool_calls=40),
+        "member task": persona.member_worker_system_prompt(model_calls=20, tool_calls=40, **FIELDS),
+        "member cli task": persona.member_worker_system_prompt(model_calls=20, tool_calls=40, cli=True, **FIELDS),
     }
 
 
 # --- R-PERSIST-01: no caps, one shared rule ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("language", ["en", "zh-TW", "ja"])
 @pytest.mark.parametrize("path", list(every_prompt()))
-def test_every_prompt_carries_the_one_rule_and_none_of_the_caps(path, language):
-    prompt = every_prompt(language)[path]
+def test_every_prompt_carries_the_one_rule_and_none_of_the_caps(path):
+    prompt = every_prompt()[path]
     assert prompt.count(RULE) == 1, path
     assert "Ask the owner only for what only\nthey can give, or when the ways left cost far more than the result is worth" in prompt
     assert "your computer's browser when you have one" in prompt
@@ -67,11 +66,11 @@ def test_every_prompt_carries_the_one_rule_and_none_of_the_caps(path, language):
 
 def test_the_rule_is_said_once_in_the_shared_contract_and_the_diagnosis_cap_is_gone():
     assert RULE in DOCTRINE and "Diagnosis" not in ABOUT_INDEX and "10. Calendar" in ABOUT_INDEX
-    assert "When a tool fails, try another way" not in persona.worker_system_prompt("en", model_calls=1, tool_calls=1)
+    assert "When a tool fails, try another way" not in persona.worker_system_prompt(model_calls=1, tool_calls=1)
 
 
 def test_a_part_answer_looks_for_the_rest_first():
-    assert "look for the rest first; answer with what you have" in persona.system_prompt("en", "answer")
+    assert "look for the rest first; answer with what you have" in persona.system_prompt("answer")
 
 
 def test_the_data_floor_refusal_points_at_the_right_tools_and_no_longer_forbids_every_other_way():
@@ -327,7 +326,7 @@ def test_every_brain_reads_the_summary_as_background_with_its_tools_active():
     assert "your tools remain fully active), now with records folded since your last turn:\nSUMMARY TEXT" in resumed
     from raphael_core.agent.answers import build_user_message
     moment = {"date": "2026-11-14", "time": "14:44", "weekday": "Saturday", "utc_offset": "+08:00"}
-    api = build_user_message("Q", moment, [], [], "en", summary="SUMMARY TEXT")
+    api = build_user_message("Q", moment, [], [], summary="SUMMARY TEXT")
     assert f"{SUMMARY_HEADER}\n<summary>\nSUMMARY TEXT\n</summary>" in api
 
 
@@ -384,7 +383,7 @@ def test_a_consent_or_terms_step_in_front_of_a_page_asks_for_a_browser_though_it
 def test_the_narrated_turn_no_longer_forbids_the_members_own_browser():
     assert "Only open a browser" not in NARRATION_RULES and "show its link card" in NARRATION_RULES
     # What the contract says of a page a reader could not read stays: it goes to the member's own browser.
-    assert "Thin web_read pages escalate to this browser" in persona.system_prompt("en", "answer")
+    assert "Thin web_read pages escalate to this browser" in persona.system_prompt("answer")
 
 
 # --- R-PERSIST-07: a member sees its own connection restriction -------------------------------------------------------
