@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scene, member, room, wait, waitGone, click, type, key, check, hover } from "./steps.mjs";
+import { png } from "../media-fixture.mjs";
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
 
@@ -8,9 +9,21 @@ const turn = (member_id, extra = {}) => ({ id: 801 + member_id, member_id, conve
   session_id: "look-batch", created_at_ms: 1792807154000, question: "請整理這份資料。", route: "answer", source: "app",
   prefix: "", text: "好的。", status: "done", cost_usd: 0, steps: [], attachments: [],
   messages: [{seq: 1, kind: "reply", text: "好的。", at_ms: 1792807160000}], ...extra });
+// A picture asked for, a message sent while the member worked on it (the core's owner_input row), and the work going on
+// after it: the picture it made and the reply that answers that message (owner, 2026-11-14).
+const drawn = { id: `${"c".repeat(32)}.png`, name: "chart.png", mime: "image/png", size: 1727 };
+const steered = [
+  turn(1, { question: "請把開放日的公告做成一張海報。", text: "海報做好了，照你說的改用生成圖片。", messages: [
+    {seq: 1, kind: "progress", text: "先排版面。", at_ms: 1792807156000},
+    {seq: 2, kind: "media", text: JSON.stringify({attachment: drawn}), at_ms: 1792807170000},
+    {seq: 3, kind: "reply", text: "海報做好了，照你說的改用生成圖片。", at_ms: 1792807172000}] }),
+  turn(1, { id: 810, session_id: "look-steer", route: "owner_input", question: "生成一張圖片就好，不用自己排。", text: "", messages: [], created_at_ms: 1792807160000 }),
+];
 export default [
   scene("owner-addition", "An owner addition appears immediately beside continuing work and Stop", [member(1), type('.cmp-input', "也請保留原始檔案。"), key("Enter"), wait('.tn[data-id="901"] .owner-message'), waitGone('.tn[data-id="901"] .ra-face'), wait('.composer[data-task-state="running"]')],
     {running: true, runningMember: 1, ownerAddition: true}),
+  scene("owner-addition-answered", "A message sent while the work ran stands where it was sent, with what the work made after it and the reply below it", [member(1), wait('.tn[data-after="810"] img[data-attachment][src]'), check("owner-addition-in-place")],
+    {turns: steered, generatedFile: drawn, generatedData: png}),
   scene("composer-send-while-working", "Words in the field make the slot Send while work runs; message after message goes out at once and nothing stops", [member(1), wait('.composer[data-task-state="running"]'), check("composer-slot-stop"), type('.cmp-input', "第一則補充"), check("composer-slot-send"), click('.cmp-send'), wait('.tn[data-id="901"] .owner-message'), check("composer-slot-stop"), type('.cmp-input', "第二則補充"), key("Enter"), wait('.tn[data-id="902"] .owner-message'), type('.cmp-input', "第三則補充"), key("Enter"), wait('.tn[data-id="903"] .owner-message'), check("composer-slot-stop"), check("owner-additions-in-order")],
     {running: true, runningMember: 1, ownerAddition: true}),
   scene("composer-queued", "Queued bubbles retain sent order, real withdraw controls and one live presence below the newest", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-mark'), check("composer-queued")],

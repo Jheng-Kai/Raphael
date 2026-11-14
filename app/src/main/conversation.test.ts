@@ -98,6 +98,35 @@ describe("one thread", () => {
     expect(items.flatMap((item) => (item.kind === "turn" ? [[item.key, (item.together ?? []).map(t => t.id)]] : []))).toEqual([["turn:6", [5]]]);
   });
 
+  test("a message that joined running work stands inside its line where it was sent, and words with nothing after them stay below", () => {
+    const start = at("2026-10-20T09:00:00+08:00");
+    const said = (seq: number, minutes: number) => ({ seq, kind: "reply" as const, text: `Reply ${seq}`, at_ms: start + minutes * 60_000 });
+    const joined = (id: number, minutes: number, more: Partial<AgentTurn> = {}) =>
+      turn(id, "2026-10-20T09:00:00+08:00", { created_at_ms: start + minutes * 60_000, route: "owner_input", text: "", source: "app", ...more });
+    const lines = (turns: AgentTurn[]) => threadItems(turns, now).flatMap(item => item.kind === "turn" ? [[item.key, item.part ?? null]] : []);
+    const work = turn(1, "2026-10-20T09:00:00+08:00", { messages: [said(1, 1), said(2, 5), said(3, 9)] });
+    // Two messages joined the work: each stands between what the work said before it and what it said after.
+    expect(lines([joined(3, 6), work, joined(2, 3)])).toEqual([
+      ["turn:1", { until: start + 3 * 60_000 }],
+      ["turn:2", null],
+      ["turn:1:after:2", { from: start + 3 * 60_000, until: start + 6 * 60_000, after: 2 }],
+      ["turn:3", null],
+      ["turn:1:after:3", { from: start + 6 * 60_000, after: 3 }],
+    ]);
+    // A message the work has said nothing after yet (it is still being read) stays below the whole line.
+    expect(lines([work, joined(2, 3), joined(4, 10)]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:1:after:2", "turn:4"]);
+    // While the work runs, only something shown after the message (a reply, a file) breaks the line: its steps alone do not.
+    const step = { seq: 4, kind: "progress" as const, text: "Working", at_ms: start + 4 * 60_000 };
+    const running = { ...work, status: "running", messages: [said(1, 1), step] };
+    expect(lines([running, joined(2, 3)]).map(([key]) => key)).toEqual(["turn:1", "turn:2"]);
+    expect(lines([{ ...running, status: "done" }, joined(2, 3)]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:1:after:2"]);
+    // Queued words are a turn of their own, answered after the work: they never stand inside it, nor does a message after them.
+    expect(lines([work, joined(5, 2, { route: "answer", status: "queued" }), joined(6, 3)])).toEqual([["turn:1", null], ["turn:5", null], ["turn:6", null]]);
+    // A colleague's question is no work of the owner's to join.
+    const asked = turn(7, "2026-10-20T09:00:00+08:00", { source: "member", scope: "exchange", peer_id: 2, messages: [said(1, 1), said(2, 5)] });
+    expect(lines([asked, joined(8, 3)]).map(([key]) => key)).toEqual(["turn:7", "turn:8"]);
+  });
+
   test("a turn from a core that keeps no source is a spoken one", () => {
     const old = { ...turn(1, "2026-10-20T09:00:00+08:00") };
     delete old.source;
