@@ -211,7 +211,8 @@ used for external editor corrections. Core owns final term acceptance and opaque
 single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
 monitor's horizontal center, 16 px above its taskbar. It expires after five seconds
-without hover. The ordinary overlay remains click-through. Fixture pill evidence
+without hover. Its window never has a title bar, not even in its style, whatever tao rewrites
+(R-LEARN-WIN-01, `overlay/frame.rs`). The ordinary overlay remains click-through. Fixture pill evidence
 does not establish native hit-testing, positioning, paste or persistence.
 
 `stable-click` records the clicked view control and persistent content above it,
@@ -463,7 +464,8 @@ npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conve
 acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
 two Escape presses for a pending fake answer, a complete learned batch, five-second
 hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
-checks the learned window's NOACTIVATE style, rounded click region, click-through
+checks the learned window's NOACTIVATE style, that its window style has no title bar
+(R-LEARN-WIN-01: while shown, after Undo and after expiry), rounded click region, click-through
 expiry, active-monitor placement and foreground continuity. The passive learned
 window starts independently of the ordinary overlay, including native isolation.
 `voice-conversation` additionally verifies one Escape cancels a new native recording.
