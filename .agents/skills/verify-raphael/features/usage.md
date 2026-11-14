@@ -63,8 +63,9 @@ npm run look -- usage usage-owner usage-allowances-chatgpt usage-empty usage-ope
 rows are there, nothing of the old analytics is on the page and no refresh button or
 icon stands beside the tab's name or anywhere on it. `usage-empty` has no subscription and no spend.
 
-`usage-opens-quietly` opens Settings on 一般 and asserts the mock IPC saw exactly one
-`usage.allowances` at the opening; on the usage tab the cards are already there and nothing more
+`usage-opens-quietly` first asserts the app read `usage.allowances` once after it started, before
+Settings was ever opened (`usage-open-launch`, owner 2026-11-15); it then opens Settings on 一般 and
+asserts the mock IPC saw exactly one more at the opening; on the usage tab the cards are already there and nothing more
 was asked. It closes Settings, moves the fixture clock 31 s and reopens (`usage-open-same`: one more
 reading, and a MutationObserver on the allowances saw no change at all because the numbers were equal),
 then lowers a fixture number and reopens again (`usage-open-changed`: the same card now shows the new

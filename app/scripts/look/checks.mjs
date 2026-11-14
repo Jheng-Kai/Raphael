@@ -8604,6 +8604,19 @@ export function checkRendered(name, context = {}) {
       }
     };
     const watched = () => { const state = keep(); count(state, state.observer?.takeRecords() ?? []); return state; };
+    // The app reads them once after it starts, before Settings is ever opened (owner, 2026-11-15: 「在打開 app 的時候就跑一次，
+    // 之後才是每次設定的時候再跑一次」); every count after it is one more than the openings.
+    const launched = () => window.__lookUsageLaunch ?? 0;
+    if (stage === "launch") {
+      return (async () => {
+        for (let waited = 0; waited < 8000 && asked() < 1; waited += 50) await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 150));
+        require(!visible(document.querySelector('.modal-scrim [data-pane]')), "Settings has not been opened yet");
+        require(asked() === 1, `the allowances were read once after the app started, before Settings was opened (${asked()})`);
+        window.__lookUsageLaunch = asked();
+        return { check: name, asked: asked() };
+      })();
+    }
     if (stage === "general") {
       require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
       require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
@@ -8611,12 +8624,12 @@ export function checkRendered(name, context = {}) {
       // Settings asks at its opening, before its first tab is drawn; the account menu it was opened from asked on its own (api.ts ASKED_AGAIN: no earlier answer stands in for it).
       return (async () => {
         await new Promise(resolve => setTimeout(resolve, 150));
-        require(asked() === 1, `the allowances were asked for once, at the opening (${asked()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
+        require(asked() === launched() + 1, `the allowances were asked for once, at the opening (${asked() - launched()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
         return { check: name, asked: asked() };
       })();
     }
     if (stage === "arm") {
-      require(asked() === 1, `reaching the tab asks for nothing more (${asked()})`);
+      require(asked() === launched() + 1, `reaching the tab asks for nothing more (${asked() - launched()})`);
       const area = root(), card = area?.querySelector('.run-subscription');
       require(visible(area) && card && area.getAttribute('aria-busy') === 'false', "the numbers are on the tab as it opens, none being waited for");
       const state = keep();
@@ -8636,15 +8649,15 @@ export function checkRendered(name, context = {}) {
     return (async () => {
       // The reading has answered (the mock stamps the end of each call), and the page has had a moment to draw it.
       const answered = () => window.__look.calls.filter(call => call.method === "usage.allowances").every(call => call.t1 !== undefined);
-      for (let waited = 0; waited < 3000 && !(answered() && asked() >= (stage === "same" ? 2 : 3)); waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
+      for (let waited = 0; waited < 3000 && !(answered() && asked() - launched() >= (stage === "same" ? 2 : 3)); waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
       await new Promise(resolve => setTimeout(resolve, 150));
       const state = watched(), area = root();
       require(visible(area) && state.card && area.contains(state.card), "the card the numbers were shown in is still on the page");
       if (stage === "same") {
-        require(asked() === 2, `the next opening asked again (${asked()})`);
+        require(asked() - launched() === 2, `the next opening asked again (${asked() - launched()})`);
         require(state.touched === 0 && area.innerHTML === state.html, `a reading that found the same numbers touched nothing (${state.touched} changes)`);
       } else {
-        require(asked() === 3, `the opening after asked again (${asked()})`);
+        require(asked() - launched() === 3, `the opening after asked again (${asked() - launched()})`);
         require(state.card.textContent !== state.text && /\d+%/.test(state.card.textContent) && state.touched > 0, "the new number replaced the old in the same card");
         require(!state.busy && area.getAttribute('aria-busy') === 'false', "no busy state was drawn while it read");
       }
