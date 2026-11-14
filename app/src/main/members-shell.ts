@@ -47,6 +47,7 @@ import { movedGroup, movedMember, withoutPlaces } from "./member-order";
 import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
+import { lightClass, lightName, lightOf, strongest } from "./sidebar-light";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList, NewMember } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
 
@@ -251,8 +252,9 @@ export function createMembers(host: MembersHost): MembersShell {
     const m = member();
     // The header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
     patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span><span class="mb-pill-go" aria-hidden="true">${ico("right")}</span>`);
-    const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
-    patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
+    // One dot for all the other members, the strongest of their lights (sidebar-light.ts).
+    const light = strongest((list?.members ?? []).filter((other) => other.id !== current).map((other) => lightOf(other)));
+    patchHTML(picker, `<span>${esc(m.name)}</span>${light ? `<i class="mb-dot ${lightClass(light)}" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
   }
 
@@ -351,7 +353,7 @@ export function createMembers(host: MembersHost): MembersShell {
     const m = member();
     if (host.visible() && currentRoomId() === null) host.onReadThread?.(m);
     if (!host.visible() || !m.unread) return;
-    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null } : other)) };
+    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null, unread_kind: null } : other)) };
     column.draw();
     // Raphael's thread is told read as every member's is: the core also clears it when the viewing is told, but that is
     // sent once per visit and only after a roster read succeeded, so his boundary could outlive the visit it was shown in.
@@ -435,12 +437,15 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   picker.addEventListener("click", () => {
-    const people: Choice[] = orderedMembers(list).map((m) => ({
-      value: String(m.id),
-      label: m.name,
-      ...(memberRole(m) ? { detail: memberRole(m) } : {}),
-      ...(m.waiting ? { tag: t("members.waitingShort") } : m.unread ? { tag: t("members.unread") } : {}),
-    }));
+    const people: Choice[] = orderedMembers(list).map((m) => {
+      const light = lightOf(m, m.id === current);
+      return {
+        value: String(m.id),
+        label: m.name,
+        ...(memberRole(m) ? { detail: memberRole(m) } : {}),
+        ...(light ? { tag: lightName(light) } : {}),
+      };
+    });
     openMenu(picker, people, String(current), (value) => select(Number(value)), undefined, [
       { label: t("chat.searchAll"), icon: "search", run: () => column.openSearch(picker) },
       { label: t("rooms.title"), icon: "chat", run: () => { closeMenu(); void openRoomsMenu(picker); } },

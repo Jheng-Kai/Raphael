@@ -315,6 +315,29 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
+  // The one light of a row (sidebar-light.ts, owner 2026-11-14): `sidebarLights` maps a member id to what that member is in. A member that
+  // thinks has said nothing, so it has no news; one that waits for the owner has news too, which its orange question outranks.
+  if (variant.sidebarLights) {
+    const states = {
+      thinking: { activity: "thinking", activity_label: "思考中", unread: false, unread_kind: null, waiting: false },
+      message: { unread: true, unread_kind: "message" },
+      done: { unread: true, unread_kind: "done" },
+      failed: { unread: true, unread_kind: "failed" },
+      waiting: { waiting: true, activity: "blocked", activity_label: "等你回答", unread: true, unread_kind: "message" },
+    };
+    for (const [id, state] of Object.entries(variant.sidebarLights)) Object.assign(data.members.find(member => member.id === Number(id)), states[state]);
+    // What the scene's check expects, said here by the owner's rule and not read back from the app: thinking is no light, a question is orange.
+    data.expectedLights = { members: Object.fromEntries(data.members.map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
+  }
+  // The group chats of the same sidebar: room 1 has a message (the fixture's own), room 2 a meeting that ended, room 3 a question that waits.
+  if (variant.sidebarLightRooms) {
+    data.expectedLights ??= { members: {}, rooms: {} };
+    const next = Math.max(...data.messages.map(message => message.id)) + 1, spoken = { ...data.messages.find(message => message.member_id != null), status: "done" };
+    data.rooms.push({ ...structuredClone(data.rooms[1]), id: 3, name: "周會準備" });
+    data.rooms[1].unread_kind = "done";
+    data.messages.push({ ...spoken, id: next, room_id: 2, text: "會議結束，結論已整理好" }, { ...spoken, id: next + 1, room_id: 3, text: "要先確認預算嗎？" });
+    Object.assign(data.expectedLights.rooms, { 1: "message", 2: "done", 3: "waiting" });
+  }
   // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by his own setting): the core lists the pinned first, then by
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
   if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
@@ -1237,9 +1260,9 @@ export function installMock(fixture, config = {}, target = window) {
         } };
       }
       case "members.viewing": case "members.read": {
-        if (variant.unreadDivider) {
+        if (variant.unreadDivider || variant.sidebarLights) {
           const member = data.members.find(member => member.id === p.id);
-          if (member) Object.assign(member, { unread: false, unread_from: null });
+          if (member) Object.assign(member, { unread: false, unread_from: null, unread_kind: null });
         }
         return {};
       }
@@ -1579,8 +1602,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.list": return { rooms: data.rooms.map(room => {
         const messages = data.messages.filter(message => message.room_id === room.id && (message.member_id == null || message.status === "done" && message.text.trim() && !/^[(（]?\s*pass\s*[)）]?[.。]?$/i.test(message.text.trim()))).sort((a, b) => b.id - a.id);
         const latest = messages[0];
-        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
-          unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
+        const unread = messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0));
+        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: (!!variant.roomQuestion && room.id === 1) || (!!variant.sidebarLightRooms && room.id === 3),
+          unread, unread_kind: unread ? room.unread_kind ?? "message" : null };
       }) };
       case "rooms.react": {
         const message = data.messages.find(item=>item.id===p.message_id && item.room_id===p.room_id);

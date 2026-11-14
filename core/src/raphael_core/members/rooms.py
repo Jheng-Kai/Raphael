@@ -237,8 +237,17 @@ class RoomsService:
                 (visible := self._message(message))["status"] == "done" and not is_pass(visible["text"])
                 for message in self._conn.execute("SELECT * FROM room_messages WHERE room_id=? AND id>? AND member_id IS NOT NULL", (room["id"], room["read_message_id"]))
             )
+            # What the news is: a meeting that finished since the owner read is `done`, any other new words are a `message`.
+            room["unread_kind"] = None if not room["unread"] else "done" if self._meeting_ended(room["id"], room["read_message_id"]) else "message"
             rooms.append(room)
         return {"rooms": rooms}
+
+    def _meeting_ended(self, room_id, read_message_id):
+        """Whether a meeting of the room ended, with words in it the owner has not read."""
+        return self._conn.execute(
+            "SELECT 1 FROM room_exchanges e WHERE e.room_id=? AND e.meeting=1 AND e.state='done' AND EXISTS ("
+            "SELECT 1 FROM room_exchange_turns x JOIN room_messages m ON m.turn_id=x.turn_id"
+            " WHERE x.origin_message_id=e.origin_message_id AND m.id>?) LIMIT 1", (room_id, read_message_id)).fetchone() is not None
 
     async def _create(self, params):
         request_id = params.get("request_id")

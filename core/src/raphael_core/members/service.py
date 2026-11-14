@@ -6,10 +6,11 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
   in the language, his picture when the owner chose one: `avatar_rev` and `avatar_crop`), then every member
   in its place: `{id, name, role, personality, instructions, avatar,
-  avatar_rev?, cover?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
+  avatar_rev?, cover?, group_id, model, tools, position, created, unread, unread_from, unread_kind, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
   says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
-  its first unseen turn when known, and `waiting` that a
+  its first unseen turn when known, `unread_kind` what that news is (`message`, `done` for a task or a routine
+  that ended well, `failed` for work that went wrong; null when nothing is unread), and `waiting` that a
   question waits for the owner there. `groups` is `[{id, name, position, sources}]`.
 - `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?, greet?}` ->
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
@@ -65,7 +66,8 @@ completed with the report. It never uses the desktop (the worker has no tool for
 the owner at the overlay; every run counts toward the month's limit, as every task does.
 
 Unread. A turn written or completed in a thread that is not on screen (`members.viewing`) marks it
-unread, unless it is Raphael's reply heard on the voice overlay.
+unread, unless it is Raphael's reply heard on the voice overlay. A turn that is still running marks it only
+once it has sent a message: a member that is thinking has said nothing (owner, 2026-11-14).
 
 Waiting. A thread is waiting while a question for a yes waits in it: a turn with the status
 "confirm" (a question of the fast tier), or a question that a background task of that member waits
@@ -97,6 +99,7 @@ from ..agent.speaker import BUILTIN_TOOL_IDS, RAPHAEL_NAMES, Speaker, is_raphael
 from ..background.tasks import Refused
 from ..brain.settings import DEFAULTS, SettingsStore
 from ..clock import wall_clock_ms
+from ..home_digest import FAILED_TASKS, FAILED_TURNS
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
@@ -148,6 +151,15 @@ _TEMPLATE_PROMPT = with_ui_words({
 _SOURCE_LABEL = {"github": "GitHub", "notion": "Notion"}
 _COLON = with_ui_words({"zh-TW": "：", "en": ": ", "ja": "："})
 _ASCII_WORD = re.compile(r"[A-Za-z0-9 ._-]+")
+
+
+def unread_kind(turns: Sequence[tuple]) -> str:
+    """What the unseen news of a thread is, from its unseen turns as `(status, source, routine, task)`:
+    `failed` when work went wrong (a turn or a task ended in error, a limit or an interruption; an owner's
+    own no or stop is not one), else `done` when a task or a routine ended well, else `message`."""
+    failed = any(status in FAILED_TURNS or task in FAILED_TASKS for status, _source, _routine, task in turns)
+    done = any(status == "done" and (routine or source == "routine" or task == "done") for status, source, routine, task in turns)
+    return "failed" if failed else "done" if done else "message"
 
 
 def _rpc_error(error: MemberError) -> RpcError:
@@ -511,12 +523,39 @@ class MembersService:
                 self._deliver_turn(turn)
             if turn is None or (turn.source == "voice" and turn.member_id == 0) or turn.member_id == self._viewing:
                 return
+            if turn.status == "running" and not self._has_reply(turn):
+                return  # still thinking, nothing sent yet: the activity shows it, the list stays quiet
             was_unread = turn.member_id in self.store.unread()
             self.store.mark_unread(turn.member_id, turn_id)
             if not was_unread:
                 self._changed()
         except sqlite3.Error as exc:
             logger.warning("Could not mark a thread unread: %s", type(exc).__name__)
+
+    def _has_reply(self, turn: Turn) -> bool:
+        """Whether a turn that is still running has already sent the owner a message."""
+        return turn.id is not None and any(m["kind"] == "reply" for m in self._history.messages([turn.id]).get(turn.id, []))
+
+    def unread_kinds(self, unread: dict[int, int | None]) -> dict[int, str]:
+        """What the unseen news of each unread thread is, by member: `failed`, `done` (a task or a routine
+        ended) or `message` (see `unread_kind`). Only the turns from the first unseen one on are read."""
+        kinds: dict[int, str] = {}
+        for member_id, first in unread.items():
+            if first is None:
+                kinds[member_id] = "message"  # marked unread by hand: no turn is behind it
+                continue
+            try:
+                rows = self._conn.execute(
+                    "SELECT t.status, t.source, EXISTS(SELECT 1 FROM routine_runs r WHERE r.turn_id=t.id) AS routine,"
+                    " (SELECT w.state FROM worker_tasks w WHERE w.turn_id=t.id ORDER BY w.id DESC LIMIT 1) AS task"
+                    " FROM agent_turns t WHERE t.member_id=? AND t.scope='private' AND t.id>=? ORDER BY t.id DESC LIMIT 200",
+                    (member_id, first),
+                ).fetchall()
+            except sqlite3.Error as exc:
+                logger.warning("Could not read what is unread: %s", type(exc).__name__)
+                rows = []
+            kinds[member_id] = unread_kind([tuple(row) for row in rows])
+        return kinds
 
     def _deliver_turn(self, turn: Turn) -> None:
         kind = "needs_input" if turn.status == "confirm" else "finished" if turn.status == "done" else None
@@ -623,7 +662,8 @@ class MembersService:
     # --- views ---------------------------------------------------------------------------------------
 
     def _member_view(
-        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None
+        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None,
+        kinds: dict[int, str] | None = None,
     ) -> dict[str, Any]:
         last = latest.get(member.id)
         activity, activity_label = self.activity.describe(member.id, waiting, tasks=tasks)
@@ -643,6 +683,7 @@ class MembersService:
             "created": member.created_at_ms,
             "unread": member.id in unread,
             "unread_from": unread.get(member.id),
+            "unread_kind": (kinds or {}).get(member.id),
             "waiting": member.id in waiting,
             "activity": activity,
             "activity_label": activity_label,
@@ -658,7 +699,8 @@ class MembersService:
         return view
 
     def _raphael_view(
-        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None
+        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None,
+        kinds: dict[int, str] | None = None,
     ) -> dict[str, Any]:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
@@ -679,6 +721,7 @@ class MembersService:
             "created": 0,
             "unread": 0 in unread,
             "unread_from": unread.get(0),
+            "unread_kind": (kinds or {}).get(0),
             "waiting": 0 in waiting,
             "activity": activity,
             "activity_label": activity_label,
@@ -701,7 +744,8 @@ class MembersService:
         last = self._history.list(1, member_id=member.id)
         if last:
             latest[member.id] = last[0]
-        return self._member_view(member, self.store.unread_from(), self.waiting_members(), latest)
+        unread = self.store.unread_from()
+        return self._member_view(member, unread, self.waiting_members(), latest, kinds=self.unread_kinds({member.id: unread[member.id]} if member.id in unread else {}))
 
     def _ui_language(self, params: dict) -> str:
         language = params.get("ui_language")
@@ -937,8 +981,9 @@ class MembersService:
         roster = self.store.members()
         task_source = self.activity.task_batch_source
         tasks = task_source([0, *(m.id for m in roster)]) if task_source else None
-        members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None)]
-        members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None) for m in roster]
+        kinds = self.unread_kinds(unread)
+        members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None, kinds=kinds)]
+        members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None, kinds=kinds) for m in roster]
         return {"members": members, "groups": [group_view(g) for g in self.store.groups()],
                 "team_context": self.team_context(0, language)}
 

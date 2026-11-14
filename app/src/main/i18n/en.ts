@@ -1437,6 +1437,8 @@ export const en = {
   "reminder.waiting": "{p0} is waiting for you",
   "reminder.open": "Open",
   "members.unread": "New messages",
+  "members.lightDone": "Finished",
+  "members.lightFailed": "Needs a look",
   "members.pick": "Choose a member",
   "members.panel": "Member details",
   "members.close": "Close details",

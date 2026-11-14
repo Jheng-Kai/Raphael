@@ -2592,8 +2592,27 @@ export function checkRendered(name, context = {}) {
     require(changed < 0, `hover leaves all block geometry, text, icons, charts and inner colours unchanged: ${changed} ${JSON.stringify(normal.visual[changed])} -> ${JSON.stringify(hovered.visual[changed])}`);
     return {check:name, background:hovered.background, border:hovered.border};
   }
+  // The one light of a row (sidebar-light.ts, owner 2026-11-14), the same in every scene that draws the sidebar: a row has at most one dot, a dot is one
+  // still circle that names itself in one of the four lights and has no tooltip, and a member that is only thinking has none.
+  const sidebarLightRules = () => {
+    const nav = document.getElementById('nav'), lights = { 'is-wait': 'waiting', 'is-failed': 'failed', 'is-done': 'done', 'is-unread': 'message' };
+    for (const row of nav.querySelectorAll('.mb-row')) require(row.querySelectorAll('.mb-dot').length <= 1, 'a row has one light at most');
+    for (const dot of nav.querySelectorAll('.mb-dot')) {
+      const classes = Object.keys(lights).filter(item => dot.classList.contains(item));
+      require(classes.length === 1 && dot.dataset.light === lights[classes[0]], 'a dot wears the class of its one light');
+      require(dot.getAttribute('role') === 'img' && dot.getAttribute('aria-label')?.trim() && !dot.hasAttribute('title') && !dot.textContent, 'a dot names itself and has no tooltip');
+      const style = getComputedStyle(dot);
+      require(style.animationName === 'none' && !parseFloat(style.animationDuration), 'a dot never moves');
+      require(Math.abs(dot.offsetWidth - dot.offsetHeight) < 1 && dot.offsetWidth > 0, 'a dot is a circle');
+    }
+    for (const member of window.__look.data.members) {
+      if (member.activity !== 'thinking' || member.unread || member.waiting) continue;
+      for (const row of nav.querySelectorAll(`[data-member="${member.id}"]`)) require(!row.querySelector('.mb-dot'), `${member.name} only thinks and has no dot`);
+    }
+  };
   if (name === "sidebar-shell") {
     selection();
+    sidebarLightRules();
     const nav = document.getElementById("nav"), column = nav.querySelector(".mb-col"), main = document.getElementById("main");
     const compact = matchMedia("(max-width: 859px)").matches;
     require(document.querySelectorAll(".mb-col").length === 1 && column, "one global conversation list");
@@ -3263,6 +3282,49 @@ export function checkRendered(name, context = {}) {
     const time = row.querySelector('time');
     require(!time || time.dateTime === new Date(last.created).toISOString(), "that room's own row keeps its latest message time");
     return {check:name, preview:row.querySelector('.mb-row-p').textContent, datetime:time?.dateTime ?? null};
+  }
+  if (name === "sidebar-lights-quiet") {
+    // Thinking is no news: members that only think wear nothing, whatever their slime is doing.
+    const thinking = window.__look.data.members.filter(member => member.activity === 'thinking' && !member.unread && !member.waiting);
+    require(thinking.length >= 3, 'the scene has members that only think');
+    for (const member of thinking) {
+      const rows = [...document.querySelectorAll(`#nav [data-member="${member.id}"]`)];
+      require(rows.length >= 1 && rows.every(row => !row.querySelector('.mb-dot')), `${member.name} only thinks and has no dot`);
+    }
+    require(![...document.querySelectorAll('#nav .mb-col [data-member] .mb-dot')].length, 'no member row has any dot');
+    return { check: name, thinking: thinking.length };
+  }
+  if (name === "sidebar-lights" || name === "sidebar-lights-open") {
+    // Every row wears the light the scene's roster earns (`data.expectedLights`, said by the rule in mock-ipc.js), in the colour of its token, one size, still.
+    // After the owner has opened the white (2), the green (3) and the orange (5) rows, reading takes the first two and leaves the question.
+    const open = name === 'sidebar-lights-open', expected = open ? { members: { 1: null, 2: null, 3: null, 4: 'failed', 5: 'waiting', 6: null }, rooms: {} } : window.__look.data.expectedLights;
+    require(expected, 'the scene says which light each row earns');
+    const colour = token => { const probe = document.createElement('i'); probe.style.color = `var(${token})`; document.body.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; };
+    const tokens = { waiting: '--wait', failed: '--err', done: '--ok', message: '--text' };
+    // --pa-dot is set below the page, so it is measured where the row stands.
+    const sizeIn = row => { const probe = document.createElement('i'); probe.style.cssText = 'position:absolute;width:var(--pa-dot)'; row.append(probe); const value = probe.getBoundingClientRect().width; probe.remove(); return value; };
+    const seen = {};
+    const rows = [['member', expected.members], ['room', expected.rooms]];
+    for (const [kind, lights] of rows) for (const [id, light] of Object.entries(lights)) {
+      const stands = [...document.querySelectorAll(`#nav [data-${kind}="${id}"]`)].filter(row => row.matches('.mb-row, .mb-tile'));
+      require(stands.length >= 1, `${kind} ${id} has its row`);
+      for (const row of stands) {
+        // The conversation on screen has read what it shows, a waiting question apart.
+        const dots = [...row.querySelectorAll('.mb-dot')], earned = row.getAttribute('aria-current') === 'true' && light !== 'waiting' ? null : light;
+        if (!earned) { require(dots.length === 0, `${kind} ${id} has no dot`); continue; }
+        require(dots.length === 1 && visible(dots[0]), `${kind} ${id} has one visible dot`);
+        const dot = dots[0], rect = dot.getBoundingClientRect(), box = row.getBoundingClientRect();
+        require(dot.dataset.light === earned, `${kind} ${id} wears ${earned}, not ${dot.dataset.light}`);
+        require(getComputedStyle(dot).backgroundColor === colour(tokens[earned]), `${earned} is the colour of ${tokens[earned]}`);
+        const size = sizeIn(row); require(size > 0 && Math.abs(rect.width - size) < 0.6 && Math.abs(rect.height - size) < 0.6, `the dot keeps its size (${rect.width} of ${size})`);
+        require(rect.left >= box.left && rect.right <= box.right + 0.5 && rect.top >= box.top && rect.bottom <= box.bottom, 'the dot stands inside its row');
+        seen[earned] = getComputedStyle(dot).backgroundColor;
+      }
+    }
+    // Four lights, four colours: none stands for two.
+    require(new Set(Object.values(seen)).size === Object.keys(seen).length, 'the lights are told apart by colour');
+    require(open ? Object.keys(seen).sort().join() === 'failed,waiting' : Object.keys(seen).sort().join() === 'done,failed,message,waiting', `the lights drawn are the ones earned: ${Object.keys(seen)}`);
+    return { check: name, lights: Object.keys(seen) };
   }
   if (name === "sidebar-unread") {
     // The sidebar's rows show no time (R-UI-77): new messages keep their unread dot.
