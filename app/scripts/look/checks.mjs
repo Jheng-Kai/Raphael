@@ -9015,7 +9015,7 @@ export function checkRendered(name, context = {}) {
     require(visible(field) && visible(bubble) && message && message.classList.contains('is-editing'), 'the message is open as an editor');
     require(!turn.querySelector('.msg-editor') && !bubble.querySelector('.btn'), 'the bubble is not wrapped in another box and holds no button');
     require(document.activeElement === field && (name === "message-edit-armed" || field.selectionStart === field.value.length && field.selectionEnd === field.value.length), 'the field has the focus, the caret after its words');
-    require(!turn.querySelector('.owner-message .message-actions'), 'no actions beside the bubble while it is edited');
+    require(!turn.querySelector('.owner-message .message-actions:not([inert])') && [...turn.querySelectorAll('.owner-message .message-actions')].every(held => getComputedStyle(held).visibility === 'hidden'), 'no action can be pressed beside the bubble while it is edited (its room is held)');
     const before = window.__look.beforeBubble, b = bubble.getBoundingClientRect(), style = getComputedStyle(bubble), m = me.getBoundingClientRect();
     require(before, 'the sent bubble was measured before it opened');
     for (const [key, value] of Object.entries(before.style)) require(style[key] === value, `the editor is the bubble's own: ${key} is ${style[key]}, it was ${value}`);
