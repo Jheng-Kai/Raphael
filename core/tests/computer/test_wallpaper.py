@@ -1,101 +1,121 @@
 import runpy
 import ast
-import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-
-DESKTOP = Path(__file__).parents[2] / "src/raphael_core/computer/image/desktop"
-
-
-@pytest.mark.parametrize("hour,expected", [(0, "night"), (5, "night"), (6, "morning"), (10, "morning"), (11, "noon"), (15, "noon"), (16, "dusk"), (18, "dusk"), (19, "evening"), (21, "evening"), (22, "night"), (23, "night")])
-def test_wallpaper_follows_the_guest_local_hour(hour, expected):
-    choose = runpy.run_path(str(DESKTOP / "wallpaper.py"))["wallpaper_for_hour"]
-    assert choose(hour) == f"{expected}.svg"
+from raphael_core.computer import vm
 
 
-def test_wallpaper_assets_are_deterministic_and_shared_with_the_panel():
-    generate = runpy.run_path(str(DESKTOP / "wallpaper.py"))["wallpapers"]
-    assets = generate()
-    assert len(assets) == 5
-    for name, content in assets.items():
-        assert (DESKTOP / "wallpapers" / name).read_text(encoding="utf-8") == content
-        assert (DESKTOP.parents[5] / "app/public/wallpapers" / name).read_text(encoding="utf-8") == content
-        assert len(content.encode()) < 20000
+WALLPAPER = vm.WALLPAPER_FOLDER
+IMAGE = Path(vm.__file__).parent / "image"
+PUBLIC = Path(__file__).parents[3] / "app/public/wallpapers"
 
 
-@pytest.mark.parametrize("period", ["morning", "noon", "dusk", "evening", "night"])
-def test_original_slime_town_is_self_contained_and_sleeps_at_night(period):
-    module = runpy.run_path(str(DESKTOP / "wallpaper.py"))
-    content = module["wallpapers"]()[f"{period}.svg"]
-    root = ET.fromstring(content)
-    elements = list(root.iter())
-    paths = [element.get("d") for element in elements if element.tag.endswith("}path")]
-    assert module.get("CROWN") in paths and module.get("CROWN") is not None
-    eyes = module["SHUT_EYES"] if period == "night" else module["OPEN_EYES"]
-    assert paths.count(eyes) == 6
-    stars = [element for element in elements if element.tag.endswith("}circle") and element.get("fill") == "#fff"]
-    assert bool(stars) == (period in {"dusk", "evening", "night"})
-    allowed = {"svg", "defs", "linearGradient", "radialGradient", "stop", "path", "g", "circle", "ellipse", "rect"}
-    for element in elements:
-        assert element.tag.split("}")[-1] in allowed
-        assert not element.text or not element.text.strip()
-        assert not element.tail or not element.tail.strip()
-        for key, value in element.attrib.items():
-            assert "href" not in key
-            assert "url(" not in value or value.startswith("url(#") and value.endswith(")")
-    assert "random" not in module
+class Clock:
+    """`datetime` as the watcher reads it, stopped at one moment of the computer's own (TZ) clock."""
+
+    def __init__(self, moment):
+        self.moment = moment
+
+    def now(self):
+        return self.moment
 
 
-def test_an_owner_picture_replaces_the_hourly_choice(monkeypatch):
-    main = runpy.run_path(str(DESKTOP / "wallpaper.py"))["main"]
+def painted(monkeypatch, *argv, moment=None):
+    """What one pass of the watcher sets as the picture of the one workspace a computer has."""
+    main = runpy.run_path(str(WALLPAPER / "wallpaper.py"))["main"]
     process = main.__globals__["subprocess"]
     calls = []
-    picture = Path("/opt/raphael-desktop/wallpapers/own.jpg")
-    monkeypatch.setattr("sys.argv", ["wallpaper.py", "--image", str(picture)])
+    if moment is not None:
+        main.__globals__["datetime"] = Clock(moment)
+    monkeypatch.setattr("sys.argv", ["wallpaper.py", *argv])
     monkeypatch.setattr(process, "check_output", lambda *a, **kw: "/backdrop/screen0/monitor0/workspace0/last-image\n")
     monkeypatch.setattr(process, "run", lambda argv, **kw: calls.append(argv))
     main()
-    assert [argv[-1] for argv in calls if "/backdrop/screen0/monitor0/workspace0/last-image" in argv] == [str(picture)]
+    return [argv[-1] for argv in calls if "/backdrop/screen0/monitor0/workspace0/last-image" in argv]
+
+
+@pytest.mark.parametrize("time,expected", [("05:59", "night.jpg"), ("06:00", "day.jpg"), ("17:59", "day.jpg"), ("18:00", "night.jpg")])
+def test_the_default_picture_turns_at_six_and_at_eighteen_by_the_computers_clock(monkeypatch, time, expected):
+    hour, minute = map(int, time.split(":"))
+    assert painted(monkeypatch, moment=datetime(2026, 11, 14, hour, minute)) == [str(WALLPAPER / "wallpapers" / expected)]
+    choose = runpy.run_path(str(WALLPAPER / "wallpaper.py"))["wallpaper_for_hour"]
+    assert [choose(hour) for hour in range(24)] == ["night.jpg"] * 6 + ["day.jpg"] * 12 + ["night.jpg"] * 6
+
+
+def jpeg_size(data):
+    """Width and height from a JPEG's frame header."""
+    index = 2
+    while index < len(data):
+        marker, length = data[index + 1], int.from_bytes(data[index + 2:index + 4], "big")
+        if marker in (0xC0, 0xC1, 0xC2):
+            return int.from_bytes(data[index + 7:index + 9], "big"), int.from_bytes(data[index + 5:index + 7], "big")
+        index += 2 + length
+    raise AssertionError("no frame header")
+
+
+def test_the_two_default_pictures_are_screen_shaped_jpegs_the_preview_shows_byte_for_byte():
+    assert sorted(path.name for path in (WALLPAPER / "wallpapers").iterdir()) == ["day.jpg", "night.jpg"]
+    assert sorted(path.name for path in PUBLIC.iterdir()) == ["day.jpg", "night.jpg"]
+    for name in ("day.jpg", "night.jpg"):
+        data = (WALLPAPER / "wallpapers" / name).read_bytes()
+        assert data[:3] == b"\xff\xd8\xff" and len(data) < 200_000
+        width, height = jpeg_size(data)
+        # The computer zooms it to fill each 1280x900 screen from its centre: at this shape nothing is cut off.
+        assert width >= 1280 and height >= 900 and abs(width / height - 1280 / 900) < .005
+        assert (PUBLIC / name).read_bytes() == data
+
+
+def test_the_watcher_and_its_pictures_stay_out_of_what_the_image_build_copies():
+    # Any change to a file the image's build copies makes a PC that built the layer before download Chrome again.
+    assert not WALLPAPER.resolve().is_relative_to(IMAGE.resolve())
+    assert (WALLPAPER / "wallpaper.py").is_file()
+
+
+def test_an_owner_picture_replaces_the_hourly_choice(monkeypatch):
+    picture = Path("/opt/raphael-desktop/wallpapers/own.jpg")
+    for hour in (5, 12):
+        assert painted(monkeypatch, "--image", str(picture), moment=datetime(2026, 11, 14, hour)) == [str(picture)]
 
 
 def test_the_session_starts_no_watcher_of_its_own():
-    # A watcher started with the session ran beside the core's and put the town back over the owner's picture; one
+    # A watcher started with the session ran beside the core's and put the default picture back over the owner's; one
     # that was already running made the core leave it. The core is the one place a watcher starts.
-    script = (DESKTOP / "prepare-desktop").read_text(encoding="utf-8")
+    script = (IMAGE / "desktop/prepare-desktop").read_text(encoding="utf-8")
     commands = [line for line in script.splitlines() if line.strip() and not line.lstrip().startswith("#")]
     assert commands == ["set -eu", "xfconf-query -c xfce4-session -p /general/SaveOnExit -n -t bool -s false"]
     assert script.startswith("#!/bin/sh\n") and "\r" not in script
 
 
 def test_startup_sets_the_wallpaper_even_before_xfce_has_a_last_image(monkeypatch):
-    apply = runpy.run_path(str(DESKTOP / "wallpaper.py"))["apply_wallpaper"]
+    apply = runpy.run_path(str(WALLPAPER / "wallpaper.py"))["apply_wallpaper"]
     process = apply.__globals__["subprocess"]
     calls = []
     monkeypatch.setattr(process, "check_output", lambda *a, **kw: "/backdrop/screen0/monitor0/workspace0/image-style\n")
     monkeypatch.setattr(process, "run", lambda argv, **kw: calls.append(argv))
-    apply(Path("/opt/raphael-desktop/wallpapers/night.svg"))
-    assert any("/backdrop/screen0/monitor0/workspace0/last-image" in argv and argv[-1] == str(Path("/opt/raphael-desktop/wallpapers/night.svg")) and "string" in argv for argv in calls)
+    apply(Path("/opt/raphael-desktop/wallpapers/night.jpg"))
+    assert any("/backdrop/screen0/monitor0/workspace0/last-image" in argv and argv[-1] == str(Path("/opt/raphael-desktop/wallpapers/night.jpg")) and "string" in argv for argv in calls)
     assert any("/backdrop/screen0/monitor0/workspace0/image-style" in argv and argv[-1] == "5" for argv in calls)
 
 
 def test_startup_retries_when_the_desktop_channel_is_not_ready(monkeypatch):
-    apply = runpy.run_path(str(DESKTOP / "wallpaper.py"))["apply_wallpaper"]
+    apply = runpy.run_path(str(WALLPAPER / "wallpaper.py"))["apply_wallpaper"]
     process = apply.__globals__["subprocess"]
     monkeypatch.setattr(process, "check_output", lambda *a, **kw: "")
     with pytest.raises(process.SubprocessError):
-        apply(Path("/opt/raphael-desktop/wallpapers/night.svg"))
+        apply(Path("/opt/raphael-desktop/wallpapers/night.jpg"))
 
 
 def test_timer_leaves_unchanged_workspaces_alone_and_paints_a_late_monitor(monkeypatch):
-    apply = runpy.run_path(str(DESKTOP / "wallpaper.py"))["apply_wallpaper"]
+    apply = runpy.run_path(str(WALLPAPER / "wallpaper.py"))["apply_wallpaper"]
     process = apply.__globals__["subprocess"]
     properties = ["/backdrop/screen0/monitor0/workspace0/image-style"]
     calls = []
     monkeypatch.setattr(process, "check_output", lambda *a, **kw: "\n".join(properties))
     monkeypatch.setattr(process, "run", lambda argv, **kw: calls.append(argv))
-    path = Path("/opt/raphael-desktop/wallpapers/night.svg")
+    path = Path("/opt/raphael-desktop/wallpapers/night.jpg")
     applied = apply(path, {})
     assert len(calls) == 2
     applied = apply(path, applied)
@@ -104,7 +124,7 @@ def test_timer_leaves_unchanged_workspaces_alone_and_paints_a_late_monitor(monke
     applied = apply(path, applied)
     assert len(calls) == 4
     assert all("/monitor1/" in argv[4] for argv in calls[2:])
-    apply(path.with_name("morning.svg"), applied)
+    apply(path.with_name("day.jpg"), applied)
     assert len(calls) == 8
 
 
@@ -115,15 +135,15 @@ def test_packaging_collects_the_python_watcher_and_nested_wallpapers():
                    and node.args and ast.literal_eval(node.args[0]) == 'raphael_core.computer')
     options = {keyword.arg: ast.literal_eval(keyword.value) for keyword in collect.keywords}
     assert options.get('include_py_files') is True
-    assert {'image/**/*', 'driver_schemas.json'} <= set(options['includes'])
+    assert {'image/**/*', 'wallpaper/**/*', 'driver_schemas.json'} <= set(options['includes'])
 
 
 def test_startup_creates_the_image_style_when_only_last_image_exists(monkeypatch):
-    apply = runpy.run_path(str(DESKTOP / 'wallpaper.py'))['apply_wallpaper']
+    apply = runpy.run_path(str(WALLPAPER / 'wallpaper.py'))['apply_wallpaper']
     process = apply.__globals__['subprocess']
     calls = []
     monkeypatch.setattr(process, 'check_output', lambda *a, **kw: '/backdrop/screen0/monitor0/workspace0/last-image\n')
     monkeypatch.setattr(process, 'run', lambda argv, **kw: calls.append(argv))
-    apply(Path('/opt/raphael-desktop/wallpapers/night.svg'))
+    apply(Path('/opt/raphael-desktop/wallpapers/night.jpg'))
     style = next(argv for argv in calls if argv[4].endswith('/image-style'))
     assert style[-1] == '5' and style[5:9] == ['-n', '-t', 'int', '-s']

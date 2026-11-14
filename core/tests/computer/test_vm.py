@@ -166,6 +166,10 @@ async def test_start_installs_the_decorative_wallpaper_once_per_start_and_target
     assert len(copies) == 2
     assert any(Path(args[1]).name == 'wallpaper.py' and args[-1] == target.name + ':/opt/raphael-desktop/wallpaper.py' for args in copies)
     assert any(Path(args[1]).name == 'wallpapers' and args[-1] == target.name + ':/opt/raphael-desktop/' for args in copies)
+    # The copy carries the shipped watcher and both default pictures: a new picture needs no new image.
+    folder = next(Path(args[1]) for args in copies if Path(args[1]).name == 'wallpapers')
+    assert sorted(path.name for path in folder.iterdir()) == ['day.jpg', 'night.jpg']
+    assert next(Path(args[1]) for args in copies if Path(args[1]).name == 'wallpaper.py').read_text(encoding='utf-8').count('"day.jpg", "night.jpg"') == 1
     watcher = [(args, options) for args, options in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args]
     assert len(watcher) == 1
     script = watcher[0][0][-1]
