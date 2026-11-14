@@ -723,12 +723,12 @@ describe("a connected row and the back chevron", () => {
 
   test("a row is one button: the pointer and one hover fill over the whole row, with 連結 or its switch on it, in the connected list and the main view alike", () => {
     // One fill over the whole row (owner, 2026-11-14), 8 px of padding given back by the margin so the mark stays on the content's edge.
-    expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer;\s*padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*calc\(var\(--sp-2\) \* -1\);\s*border-radius:\s*var\(--r-md\)/);
+    expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer;\s*padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*0;\s*border-radius:\s*var\(--r-md\)/);
     expect(rule(".cs-card:hover, .cs-linked:hover")).toMatch(/background:\s*var\(--float-hover\)/);
     expect(rule(".cs-card:has(> .btn.cs-main:active), .cs-linked:has(> .btn.cs-main:active)")).toMatch(/background:\s*var\(--pressed\)/);
     expect(rule(".cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled)")).toMatch(/background:\s*transparent/);
-    // The list gives the fill room, so its corners are never cut square.
-    expect(rule(".cs-results")).toMatch(/padding-inline:\s*var\(--sp-2\)/);
+    // The fill stays inside the row's own box, so the list never cuts its corners square; the heads stand on the marks' line.
+    expect(rule(".cs-sec-head")).toMatch(/padding-inline:\s*var\(--sp-2\)/);
   });
 
   test("the back chevron is the dialog ✕'s own control: 36 px, round, bare, with an 18 px glyph", () => {
