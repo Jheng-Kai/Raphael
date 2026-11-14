@@ -124,6 +124,37 @@ async def test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model
     assert records(rig) == [('turn', f'{turn_id}:reply', '👎')]
 
 
+@pytest.mark.parametrize('window,named', [('zh-TW', 'Traditional Chinese as written in Taiwan'), ('en', 'English'), ('ja', 'Japanese')])
+async def test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches(setup, client, window, named):
+    # Owner, 2026-11-14: 紫苑, a Japanese teacher, asked what was wrong in Japanese because her conversation is full of it.
+    rig, team_ = setup
+    one = member(team_, name='紫苑', role='日本語の先生', instructions='日本語を教える。例文と練習問題は日本語で。')
+    client.chats.append(live_said('日本語の例文です。'))
+    turn_id = (await rig.call('agent.ask', {'session_id': 's1', 'text': '例文をください', 'ui_language': window, 'source': 'app',
+                                              'member_id': one.id}))['turn_id']
+    calls = len(client.chat_calls)
+    client.chats.append(live_said('(pass)'))
+    await react(rig, turn_id, '👎', who=one.id)
+    await until(lambda: len(client.chat_calls) == calls + 1)
+    system = client.chat_calls[-1]['messages'][0]['content']
+    # The window's language is told by name, and what the member's persona says of Japanese is read before it.
+    assert f'in {named}' in system and "the owner's language, whatever language you teach or the conversation holds" in system
+    assert system.index('日本語を教える') < system.index('whatever language you teach')
+    # The rule that lets a persona choose its language is not part of this prompt; it would hand the question back to Japanese.
+    from raphael_core.agent.persona import REPLY_LANGUAGE
+    assert REPLY_LANGUAGE not in system
+
+
+def test_an_ordinary_reply_is_in_the_language_of_the_owners_message_not_of_the_lesson():
+    from raphael_core.agent.persona import REPLY_LANGUAGE
+    # The old rule followed "the owner's message or established conversation", and a conversation full of Japanese lessons won.
+    assert "established conversation" not in REPLY_LANGUAGE
+    assert "answer in the language of the owner's latest message, not a lesson's" in REPLY_LANGUAGE
+    # What a persona or the owner's instructions say stays first, and the window's language still chooses no speech.
+    assert REPLY_LANGUAGE.startswith("Use the language specified in your own persona and the owner's instructions")
+    assert "The interface language never selects your speaking language" in REPLY_LANGUAGE
+
+
 async def test_a_positive_reaction_may_get_a_few_words_when_the_member_finds_them_right(setup, client):
     rig, team_ = setup
     one = member(team_)

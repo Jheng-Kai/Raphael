@@ -188,7 +188,7 @@ async def test_the_report_language_follows_the_owner_request_not_the_interface(m
     assert (done["prefix"], done["text"]) == ("Notice", "已整理完畢。")
     system, user = rig.client.chat_calls[0]["messages"][:2]
     assert "請整理這段內容。" in user["content"]
-    assert "Otherwise follow the language of the owner's message or established conversation" in system["content"]
+    assert "Otherwise answer in the language of the owner's latest message, not a lesson's" in system["content"]
     assert "Reply ONLY in" not in system["content"]
 
 

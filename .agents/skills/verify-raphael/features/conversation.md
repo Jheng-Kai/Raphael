@@ -2467,10 +2467,10 @@ links (AccuWeather's `…/taichung-city/315040/weather-forecast/315040`, NVIDIA'
 - **Pointing.** `mountChartHover` (report view): `.rc-tip` in the app's float, crosshair and points
   on lines, the column on columns, the row on bars, the part on a pie; arrow keys on the focused
   plot (`role="img"`, named with every value) do the same.
-- **The secret check.** `memory/scan.py` `_readable`: words and numbers joined by `/ - _`, with at
-  least one slash, are a path, not a key (a value joined by `_` alone, such as
-  `tests/test_chat_setup_share.py`'s synthetic credential, stays a key); card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
-  files and integrity hashes are not read as keys, embedded text is decoded and read.
+- **The secret check.** Since the same day's second refusal (R-SECRET-01) nothing is a key for how it looks:
+  `memory/scan.py` `find_secret` finds credentials and payment secrets only (see "Only credentials are secret"
+  below); card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
+  files and integrity hashes are set aside, embedded text is decoded and read.
 - **HTML pages** get the app's theme words (`pages.py THEME`, `page-theme.test.ts` keeps them equal
   to styles.css) and may load chart libraries from the three CDNs; `connect-src` stays `'none'`.
 
@@ -2494,11 +2494,33 @@ report scenes are the consumers of the shared report body (its grid and contents
 
 Tests: core `tests/agent/test_pages.py` (the dashboard kept, every chart refusal, the links,
 pictures, libraries and times that are not secrets, the keys still refused, the theme words);
-`tests/memory/test_scan.py` (readable paths, keys in links, millisecond times);
+`tests/memory/test_scan.py` (addresses, IDs and hashes that are not secrets, credentials in links, millisecond times);
 `app/src/main/report-chart.test.ts` (ticks, labels, tiles, every chart kind, colours, the arrow
 keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attributes).
 Native boundary: a real Raphael turn on a real model building the page and the routine is proven
 in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
+
+## Only credentials and payment secrets are secret (owner, 2026-11-14)
+
+R-SECRET-01, R-PAGE-05, R-REACT-01. The member 紫苑 (a Japanese teacher) built N1 study pages three times and `show_page`
+refused each, because `find_secret` read an NHK news address (`news.web.nhk/newsweb/na/nd-20261114de75840`) as a token; the
+owner then said the lock was far too tight: only passwords, keys, tokens, card numbers and PINs and bank accounts are secret.
+
+- **What is secret** (`memory/scan.py`): the known key shapes; a value given to a word for a key or a token; the value of a word
+  for a password, PIN, one-time code or CVV; a card number (Luhn); an IBAN (check digits) or the digits a word for a bank account
+  gives its number to. **What is not**: an address, an ID or a number inside one, a hash, a file name, article text, a national ID
+  number, a Chinese or Japanese sentence about a password. No string is a key for its look.
+- **Where it applies**: memory writes and the prompt-time check, `show_page` and `update_page` (title, html, fallback, tool data),
+  report text, summary and links, notes, skills and tool transcripts (`redact_secrets` → `scan.redact`), screen teaching, a
+  template's findings, the owner-private team report. The guard against steering a model (`find_injection`) is for a memory's write
+  and read only; since this rule it lets a link with a query string and a plain picture through. Unchanged: the gate on a recipe that
+  is passed on (`template_author.py PRIVATE`), a skill folder's secret-looking file names, the vault.
+- **Check**: `pytest core/tests/memory/test_scan.py core/tests/agent/test_pages.py` (the NHK addresses, every other address shape, the
+  credentials that stay refused, a page of the owner's N1 study content through `show_page` end to end and a report with the same
+  links). Native boundary: a real member turn on a real model writing a page with news links.
+- **Language of a reaction's question** (R-REACT-01): `reaction_prompt` names the window's language and puts the task after the
+  persona; `test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches` reads the system prompt of a
+  Japanese-teaching member. Not proved: a real model choosing the language.
 
 ## Pages that read as documents, as Grok Bot's do (owner, 2026-11-14)
 

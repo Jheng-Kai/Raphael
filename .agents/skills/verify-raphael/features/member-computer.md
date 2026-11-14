@@ -1470,6 +1470,15 @@ whenever computer tools are on and Docker Desktop is installed (or a remote host
 no VM tool and leaves the owner's own desktop tool on offer (`has_own_computer` is false there). The first real call
 may start Docker Desktop on this PC for any member; a remote host never does.
 
+The computer is not a connection (owner, 2026-11-14: 紫苑's `members.tools` was `["web_search","web_read","weather","local_time","50a816b0b31c"]`;
+it said it would use its own computer to read a page and could not). A computer tool's key is `mcp:computer-<id>/<tool>`, and
+`Speaker.uses_plugin` read that as a connection the owner had not chosen. It now lets every computer tool through, so a member's
+list of tools, set or empty, never takes its computer: `core/tests/computer/test_member_computer_access.py`
+(`test_a_member_with_a_list_of_chosen_tools_keeps_its_own_computer`, `test_the_tools_a_member_with_a_list_sees_are_the_tools_it_can_call`).
+There is no per-member off switch to migrate (the list had no place for the computer), so nothing is migrated. A member on a PC
+with no computer is offered none, and its prompt says that with no computer tool listed it says so plainly and promises none
+(`test_a_member_without_a_computer_is_offered_none_and_told_not_to_promise_one`).
+
 What stays exactly as it was: sandbox gestures pass the screening and need the lease; `fill_login`, `fill_contact`,
 `fill_card` and `dataset` still obey the safety rules and the mode (`fill_card` is T3); the worker still cannot
 drive the owner's own desktop (`ToolGate.check(worker=True)`); payment holds, takeover, the owner's hold and a

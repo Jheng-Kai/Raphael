@@ -839,7 +839,7 @@ async def test_an_answer_follows_owner_words_instead_of_the_ui_language(rig, cli
     assert result["prefix"] == "解" and result["text"] == "It is 14:05."
     system = client.json_calls[0]["system"]
     assert "Reply ONLY in" not in system
-    assert "Otherwise follow the language of the owner's message or established conversation" in system
+    assert "Otherwise answer in the language of the owner's latest message, not a lesson's" in system
     assert "The interface language never selects your speaking language" in system
 
 

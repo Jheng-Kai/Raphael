@@ -38,10 +38,7 @@ _LOCK_WAIT_S = 30.0
 
 def redact_secrets(text: str) -> str:
     """Preserve Markdown and ordinary facts, masking only credential-shaped content."""
-    for pattern in (*scan._TOKEN_SHAPES, scan._SECRET_VALUE, scan._SECRET_GIVEN, scan._TAIWAN_ID, scan._IBAN):
-        text = pattern.sub("[redacted]", text)
-    text = scan._LONG_RUN.sub(lambda match: "[redacted]" if scan._looks_random(match[0]) else match[0], text)
-    return scan._CARD.sub(lambda match: "[redacted]" if scan.find_secret(match[0]) else match[0], text)
+    return scan.redact(text)
 
 
 class HomeError(ValueError):

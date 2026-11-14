@@ -99,14 +99,60 @@ def test_ordinary_links_pictures_libraries_and_numbers_are_not_secrets(conn, htm
 
 
 @pytest.mark.parametrize("html", [
-    "<a href='https://api.example.com/v1/Q7x9Lm2Pz8Rt4Kw6Vb3Nc5Jd1Hf0Gs7Ya2Ue/forecast'>x</a>",
+    "<a href='https://maps.example.com/api?key=AIzaSyA1234567890abcdefghijklmnopqrstu'>x</a>",
     '<object data="data:text/plain;base64,cGFzc3dvcmQgaXMgaHVudGVy"></object>',  # "password is hunter"
     "<p>sk-or-v1-8f3a9c0d2b7e4f1a6c5d8e9f0a1b2c3d</p>",
-], ids=["key-in-a-link", "secret-in-an-embedded-text", "token"])
+    "<p>token: ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8</p>",
+    "<script>const api_key = 'a1B2c3D4e5F6g7H8';</script>",
+    "<p>卡號 4111 1111 1111 1111</p>",
+    "<p>IBAN GB82 WEST 1234 5698 7654 32</p>",
+], ids=["key-in-a-link", "secret-in-an-embedded-text", "token", "labelled-token", "labelled-key", "card", "iban"])
 def test_a_secret_in_a_link_or_an_embedded_text_is_still_refused(conn, html):
     with pytest.raises(PageError) as error:
         stored(conn, html=html)
     assert error.value.kind == "secret"
+
+
+# The owner's study pages for the member 紫苑 were refused three times (2026-11-14): an ordinary news address, whose last
+# path piece mixes letters and digits, read as a key. Only credentials are secret; an address, an ID inside one, an article,
+# a hash, a file name and a person's ID number are content.
+NHK_LINKS = (
+    "https://news.web.nhk/newsweb/na/nd-20261114de75840",
+    "https://news.web.nhk/news/easy/20261112de74710/20261112de74710.html",
+    "https://www3.nhk.or.jp/news/html/20261114/k10014999991000.html?utm_source=raphael&ref=n1",
+    "https://api.example.com/v1/Q7x9Lm2Pz8Rt4Kw6Vb3Nc5Jd1Hf0Gs7Ya2Ue/forecast",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG",
+    "https://example.com/file-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.pdf",
+)
+N1_PAGE = ("<h1>N1 読解 2026-11-14</h1><p>今日のニュース：<a href='{0}'>新幹線の運行について</a> / "
+           "<a href='{1}'>やさしいニュース</a></p><p>パスワードは大切です。暗証番号4桁を入力してください。身分證 A123456789 は例です。"
+           "</p><ul>{2}</ul>")
+
+
+@pytest.mark.parametrize("link", NHK_LINKS, ids=[f"link-{n}" for n in range(len(NHK_LINKS))])
+def test_an_ordinary_address_is_content_whatever_its_path_looks_like(conn, link):
+    html = f"<a href='{link}'>source</a><p>{link}</p>"
+    assert stored(conn, html=html, fallback_text=link)["html"] == html
+
+
+async def test_the_owners_n1_study_page_is_shown_end_to_end(make_rig, client):
+    rig = make_rig()
+    html = N1_PAGE.format(NHK_LINKS[0], NHK_LINKS[1], "".join(f"<li><a href='{link}'>{link}</a></li>" for link in NHK_LINKS))
+    client.chats = [chat("", ("show_page", {"title": "N1 読解", "html": html, "fallback_text": "N1 reading: " + NHK_LINKS[0]})),
+                    chat('{"text":"Ready."}')]
+    await typed(rig)
+    [turn] = await rig.turns()
+    [page] = turn["pages"]
+    assert page["title"] == "N1 読解" and page["kind"] == "page"
+    assert rig.service.pages.store.get(page["id"])["html"] == html
+
+
+def test_a_report_with_the_owners_news_links_is_accepted():
+    from raphael_core.agent.report_page import checked_report
+    kept = checked_report({"sections": [{"kind": "table", "columns": ["記事", "リンク"], "rows": [
+        {"cells": ["新幹線", {"text": "NHK", "url": NHK_LINKS[0]}]}, {"cells": ["やさしい", {"text": "NHK EASY", "url": NHK_LINKS[1]}]}]}]},
+        exists=lambda member_id: False, as_of_ms=1794240000000)
+    assert [row["cells"][1]["url"] for row in kept["sections"][0]["rows"]] == list(NHK_LINKS[:2])
 
 
 def test_updates_keep_only_ten_revisions_and_refuse_secrets_atomically(conn):
@@ -665,7 +711,7 @@ def _link(url):
     (_link("https:///nowhere"), "cells[1].url must be a plain https link"),
     (_link("https://example.com/a b"), "cells[1].url must be a plain https link"),
     (_link("https://example.com/" + "a" * 2100), "cells[1].url exceeds 2048 characters"),
-    (_link("https://api.example.com/v1/Q7x9Lm2Pz8Rt4Kw6Vb3Nc5Jd1Hf0Gs7Ya2Ue/forecast"), "url contains a secret"),
+    (_link("https://maps.example.com/api?key=AIzaSyA1234567890abcdefghijklmnopqrstu"), "url contains a secret"),
     (_table([{"cells": ["a", {"url": "https://example.com/"}]}]), "cells[1].text must be text"),
     (_table([{"cells": ["a", {"text": "Map"}]}]), "cells[1].url must be an https link"),
     (_table([{"cells": ["a", "x" * 161]}]), "cells[1] exceeds 160 characters"),
