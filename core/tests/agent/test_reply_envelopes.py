@@ -24,6 +24,20 @@ def test_shared_parser_accepts_plain_code_and_unwraps_nested_reply_words(plain):
     assert reply.messages == ["Gmail needs a connection."]
 
 
+@pytest.mark.parametrize("plain", [False, True])
+def test_the_rest_of_the_reply_object_written_into_its_words_is_never_shown(plain):
+    from raphael_core.agent.answers import parse_reply
+    words = "The draft is ready.\n\nShall we plan the video next?"
+    tail = json.dumps({"messages": [words], "memory": [], "need": ""})[1:]
+    leaked = {"text": words + '",' + tail, "detail": "", "messages": [words + '",' + tail], "memory": [], "need": {"search": ""}}
+    reply = parse_reply(leaked, "en", plain=plain, long=True)
+    assert reply.text == words
+    assert all('"messages"' not in message and "\\n" not in message for message in reply.messages)
+    # Words that only quote such fields, or carry more after them, stay as they were written.
+    for authored in ('Write it as {"text":"hi","messages":["hi"]} and send it.', 'It ends with ","memory":[]} then more words'):
+        assert parse_reply({"text": authored, "messages": [authored]}, "en", plain=plain, long=True).text == authored
+
+
 @pytest.mark.parametrize("route", ["normal", "quick", "resumed", "failure"])
 @pytest.mark.parametrize("fenced", [False, True])
 @pytest.mark.parametrize("authored", [False, True], ids=["reply", "authored-json"])

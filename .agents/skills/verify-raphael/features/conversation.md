@@ -42,6 +42,8 @@ react, thread and reply beside it, the words keeping their own row. Vitest: `pag
 - **A note to itself is no reply (R-TEXT-05).** In a Chinese, Japanese or Korean conversation, English planning that leads a reply
   (`brain/reasoning.py::split_notes`) is taken off in the CLI loop (`_publish`, `_unthought`) and where every reply is stored
   (`AgentService._message`). Tests: `core/tests/agent/test_output_hygiene.py`.
+- **No reply fields in the words (R-TEXT-09).** A reply whose words end with the rest of its own object (`","messages":[…],"memory":[],"need":""}`), as a ChatGPT
+  sign-in model wrote on 2026-11-14, is shown without it; authored JSON stays. Core-only: `core/tests/agent/test_reply_envelopes.py`.
 - **The outermost frame wins (R-TEXT-06).** `parse_reply` takes the 《答。…》 frame off the whole authored message before it is cut into
   pieces; `plain_replies` (core) and `plainReplies` (`app/src/shared/anime.ts`) open a line only where none is open.
 - **No pointer to `detail` (R-TEXT-07).** The conversation folds `detail` away, so `parse_reply` takes 「見 detail」 out and says what
