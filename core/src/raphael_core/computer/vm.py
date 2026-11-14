@@ -104,12 +104,25 @@ class Docker:
             raise ValueError("Computer host must be a simple SSH config alias")
         return [docker_cli(), *(["--host", f"ssh://{self.alias}"] if self.alias else []), *args]
 
-    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None):
+    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None, input=None):
+        """`input`, when given, is written to the command's stdin and closed (`docker exec -i`): a file's text travels
+        there, never on the command line, which Windows holds to 32,767 characters."""
         from .desktop_host import NO_WINDOW
         process = await asyncio.create_subprocess_exec(
-            *self.argv(args), stdin=asyncio.subprocess.DEVNULL, creationflags=NO_WINDOW,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            *self.argv(args), stdin=asyncio.subprocess.DEVNULL if input is None else asyncio.subprocess.PIPE,
+            creationflags=NO_WINDOW, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
+
+        async def feed():
+            if input is None:
+                return
+            try:
+                process.stdin.write(input)
+                await process.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # The command ended without reading all of it; its exit code says why.
+            finally:
+                process.stdin.close()
 
         async def drain(stream):
             kept, size = bytearray(), 0
@@ -130,7 +143,7 @@ class Docker:
 
         try:
             async with asyncio.timeout(timeout):
-                out, err = await asyncio.gather(drain(process.stdout), drain(process.stderr))
+                out, err, _ = await asyncio.gather(drain(process.stdout), drain(process.stderr), feed())
                 await process.wait()
             return Result(process.returncode, out[0], err[0], out[1] or err[1])
         finally:
@@ -1344,6 +1357,26 @@ print(base64.b64encode(data).decode())
             return base64.b64decode(result.stdout.strip(), validate=True)
         except ValueError:
             raise VmError("file_unavailable") from None
+
+    async def file_request(self, target, request, *, answer_bytes=0):
+        """One request to the guest's file helper (`files_guest.py`) for a member's file tools: `read` (a path's kind,
+        size, sha256 and first `limit` bytes) or `write` (a whole file, only over what the caller last saw). The request
+        and the file's bytes go over stdin; `answer_bytes` is how many file bytes the answer may carry."""
+        from . import files_guest
+        source = Path(files_guest.__file__).read_text(encoding="utf-8")
+        payload = json.dumps({**request, "roots": [GUEST, SHARED]}).encode("utf-8")
+        args = exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "55", "/opt/venv/bin/python", "-c", source],
+                         interactive=True)
+        result = await self.run_for(target, args, timeout=60, limit=answer_bytes * 4 // 3 + 65_536, input=payload)
+        if result.code or result.truncated:
+            raise VmError("file_unavailable")
+        try:
+            answer = json.loads(result.stdout)
+        except ValueError:
+            raise VmError("file_unavailable") from None
+        if not isinstance(answer, dict):
+            raise VmError("file_unavailable")
+        return answer
 
     async def sweep(self):
         minutes = 15 if self.settings is None else self.settings.get("computer_vm_idle_minutes")

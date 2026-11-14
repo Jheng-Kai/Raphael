@@ -1170,6 +1170,7 @@ export const th = {
   "history.sentTo": "ถึง {p0}",
   "history.003": "คัดลอก",
   "chat.copy": "คัดลอก",
+  "chat.copyImage": "คัดลอกรูปภาพ",
   "setup.copy": "คัดลอก",
   "history.005": "<div class=\"hdetail\"{p0}><h4>ข้อความถอดเสียงดิบ</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>ประวัติ</h1></div>",

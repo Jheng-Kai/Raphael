@@ -64,7 +64,8 @@ from ..failures import Failure
 from ..agent.gate import ToolGate
 from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
-from ..agent.plugins import MAX_ARGUMENT_CHARS, PluginResult
+from ..agent.plugins import PluginResult
+from ..worker.guards import argument_limit
 from ..brain.prompt_cache import cache_options
 from ..agent.steps import reason_of
 from ..agent.policy import Action, Approval, NotApproved, Tier, UnknownTool
@@ -86,6 +87,7 @@ from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
+from ..services.file_reader import read_window
 from ..services.urls import SeenUrls
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
@@ -762,7 +764,7 @@ class TaskRun:
         self._check(tool=True, paid=paying)
         self.tool_calls += 1
         began = time.perf_counter()
-        if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > MAX_ARGUMENT_CHARS:
+        if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > argument_limit(name):
             # Not a tool the task was given: nothing to call, and nothing to audit.
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
             if ref is None:
@@ -1309,10 +1311,13 @@ class TaskRun:
             return ToolResult("read_attachment", False, None, "bad_arguments")
         question = arguments.get("question")
         question = question.strip() if isinstance(question, str) and question.strip() else ""
+        window = read_window(arguments)
+        if window is None:
+            return ToolResult("read_attachment", False, None, "bad_arguments")
         attachment = self.attachments[index - 1]
         return await self._guarded(
             self._tools.read_attachment(
-                attachment, question or "What does this file hold?", self.ledger, number=index
+                attachment, question or "What does this file hold?", self.ledger, number=index, **window
             )
         )
 

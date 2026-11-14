@@ -37,11 +37,13 @@ async def test_a_chip_only_pasted_article_reaches_the_member_and_the_real_attach
     result = await rig.call("agent.ask", request)
     assert result["text"] == "Received the pasted article"
     prompt = client.chat_calls[0]["messages"][1]["content"]
-    assert "Sample pasted article." in prompt
+    # Too long to paste: the member is told it is a file of 10000 lines and reads it with the tool.
+    assert "Not pasted" in prompt and '"lines": 10000' in prompt and "Sample pasted article." not in prompt
     assert '<tool_result untrusted="true"' in prompt
     attachment = from_wire(request["attachments"])[0]
     read = await Tools(object()).read_attachment(attachment, "", Ledger(SpendTracker(rig.conn)))
-    assert read.ok and read.untrusted and "Sample pasted article." in read.data["text"]
+    assert read.ok and read.untrusted and "     1\tSample pasted article." in read.data["text"]
+    assert read.data["next_offset"] == 2001 and "offset 2001" in read.data["note"]
 
 
 def assert_article(prompt):
@@ -107,7 +109,7 @@ async def test_html_is_read_as_its_source_not_as_a_readable_page():
 
 async def test_local_text_reader_needs_no_service_or_model(conn):
     result = await Tools(object()).read_attachment(checked("a.md", "text/markdown", b"# Local words"), "Read", Ledger(SpendTracker(conn)))
-    assert result.ok and result.untrusted and result.data["text"] == "# Local words"
+    assert result.ok and result.untrusted and result.data["text"] == "     1\t# Local words"
 
 
 @pytest.mark.parametrize("name,mime", [("note.txt", "text/plain"), ("note.md", "text/markdown"),
@@ -123,7 +125,7 @@ def test_attached_instructions_cannot_close_the_untrusted_wrapper_and_size_is_bo
     prompt = text_context([checked("notes.txt", "text/plain", data)])
     assert prompt.count("</tool_result>") == 1
     assert "<question>" not in prompt
-    assert "bytes were cut" in prompt and "cut_short=true" not in prompt
+    assert "Not pasted" in prompt and "cut_short=true" not in prompt
     assert len(prompt[prompt.index("<tool_result"):]) <= 24000
     assert len(prompt) <= 40000
 
@@ -148,17 +150,19 @@ def test_normal_article_exceeds_old_reader_budget_without_being_cut():
 
 
 def test_each_inline_file_and_the_combined_message_have_separate_budgets():
-    files = [checked(f"article-{n}.txt", "text/plain", (f"START_{n}" + "x" * 50000 + f"END_{n}").encode()) for n in range(4)]
+    files = [checked(f"article-{n}.txt", "text/plain", (f"START_{n}" + "x" * 15000 + f"END_{n}").encode()) for n in range(4)]
     prompt = text_context(files)
     assert len(prompt) <= 40000
     blocks = prompt.split('<tool_result untrusted="true"')[1:]
     assert len(blocks) == 4
-    assert len(blocks[0]) > 23000
     for number, block in enumerate(blocks):
         assert len('<tool_result untrusted="true"' + block.rstrip()) <= 24000
-        # The start of the file, verbatim; the end is cut and the note says how much.
-        assert f'START_{number}' in block and f"END_{number}" not in block
-        assert "bytes were cut" in block and "cut_short=true" not in block
+        assert "cut_short=true" not in block
+    # What the combined message carries is pasted whole; what it cannot is a file to read, never a start of it.
+    assert all(f"START_{n}" in blocks[n] and f"END_{n}" in blocks[n] for n in (0, 1))
+    for number in (2, 3):
+        assert f"START_{number}" not in blocks[number] and "Not pasted" in blocks[number]
+        assert f"read_attachment (index {number + 1}, offset 1)" in blocks[number]
 
 
 def test_small_files_do_not_reduce_a_normal_articles_budget():

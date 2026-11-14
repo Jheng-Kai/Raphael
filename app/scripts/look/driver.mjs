@@ -690,6 +690,16 @@ export async function perform(page, step, evidenceDirectory) {
       await page.evaluate(({ name, args }) => { window.__look[name](...args); }, { name: step.name, args: step.args ?? [] });
       await new Promise(resolve => setTimeout(resolve, step.wait ?? 500));
       return { action: "look-call", name: step.name };
+    // The mouse's side button (back or forward), pressed and let go as a mouse does, over the window's top bar where
+    // nothing is a control: the step comes from the window's own history (nav-input.ts), never from the browser's.
+    case "side-button": {
+      const at = await page.evaluate(() => ({ x: Math.round(window.innerWidth / 2), y: 6 }));
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down({ button: step.button });
+      await page.mouse.up({ button: step.button });
+      await new Promise(resolve => setTimeout(resolve, step.wait ?? 450));
+      return { action: "side-button", button: step.button };
+    }
     // The models of the CLI held back by the mock (`codexLate`) arrive now.
     case "codex-arrives": await page.evaluate(() => { window.__look.codexArrives(); }); break;
     // The sign-in console of a CLI ended (cli-signin.ts): `done`, or `stopped` as when its window was closed first.

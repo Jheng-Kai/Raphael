@@ -77,7 +77,7 @@
      middle, and the cards and groups inside it (--float) the lightest. The light theme keeps the order of lightness: the outside is dimmed, the dialog a quiet
      off-white, the cards white with a hairline. A menu, a popover and a tooltip are on --float too, told from a card by their edge and shadow. */
   --dialog: #f5f5f5;
-  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #ececec; --float-ctl-hover: #e3e3e3; --float-ctl-raised: #d6d6d6; --float-hover: #eaeaea; --float-pressed: #e3e3e3;
+  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #ececec; --float-ctl-hover: #e3e3e3; --float-ctl-raised: #d6d6d6; --float-ctl-raised-hover: #c8c8c8; --float-ctl-raised-press: #bcbcbc; --float-hover: #eaeaea; --float-pressed: #e3e3e3;
   --float-ctl-edge: #e0e0e0; --float-sel: #0a0a0a; --float-on-sel: #ffffff;
   /* The white rounded tile an app's mark stands on in 連結應用程式 (Grok Bot's), the same in both themes: the marks are drawn for a white ground. */
   --tile: #ffffff; --on-tile: #0a0a0a; --tile-edge: rgba(0, 0, 0, 0.08);
@@ -132,7 +132,7 @@
   /* Measured from Grok Bot's dark theme (Settings, 2026-11-14): the window under the scrim is #050505, the dialog and its nav #121212, the cards in it #1f1f1f with a
      #2b2b2b edge; a menu is #1f1f1f with a #292929 edge, a control on a card #282828, a hovered row #292929, the chosen chip a light fill with dark words. */
   --dialog: #121212;
-  --float: #1f1f1f; --float-edge: #2b2b2b; --float-ctl: #282828; --float-ctl-hover: #303030; --float-ctl-raised: #3d3d3d; --float-hover: #292929; --float-pressed: #303030;
+  --float: #1f1f1f; --float-edge: #2b2b2b; --float-ctl: #282828; --float-ctl-hover: #303030; --float-ctl-raised: #3d3d3d; --float-ctl-raised-hover: #4a4a4a; --float-ctl-raised-press: #575757; --float-hover: #292929; --float-pressed: #303030;
   --float-ctl-edge: #282828; --float-sel: #f5f5f5; --float-on-sel: #0a0a0a;
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -301,6 +301,12 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--r-pill); background: var(--text-2); transition: transform 0.16s ease, background 0.16s; }
 .tg[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
 .tg[aria-checked="true"]::after { transform: translateX(16px); background: var(--on-accent); }
+/* A switch answers the pointer on its own, also where it stands on a lit row (owner, 2026-11-14: 「hover 時還是有一些特效…
+   不然現在根本不知道有沒有按到按鈕」): off, its rim and knob brighten; on, its colour does. */
+.tg:hover:not(:disabled):not([aria-checked="true"]) { border-color: var(--text-2); }
+.tg:hover:not(:disabled):not([aria-checked="true"])::after { background: var(--text); }
+.tg[aria-checked="true"]:hover:not(:disabled) { filter: brightness(0.9); }
+:root[data-theme="dark"] .tg[aria-checked="true"]:hover:not(:disabled) { filter: brightness(1.12); }
 /* Some on, some off (the switch of a whole list): the knob stays in the middle, in the accent, on an accent border. */
 .tg[aria-checked="mixed"] { background: var(--accent-soft); border-color: var(--accent-text); }
 .tg[aria-checked="mixed"]::after { transform: translateX(8px); background: var(--accent-text); }

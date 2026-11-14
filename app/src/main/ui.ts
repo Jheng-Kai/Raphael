@@ -1086,10 +1086,10 @@ function resetCopyButton(button: HTMLElement): void {
   copyFeedback.delete(button);
 }
 
-/** Copy feedback belongs to the pressed control and never shifts its neighbours. */
-export async function copyButton(button: HTMLElement, text: string): Promise<boolean> {
+/** Copy feedback belongs to the pressed control and never shifts its neighbours. `copy` is the words, or what puts something else (a picture) on the clipboard. */
+export async function copyButton(button: HTMLElement, copy: string | (() => Promise<void>)): Promise<boolean> {
   const press = (copyPresses.get(button) ?? 0) + 1; copyPresses.set(button, press);
-  try { await copyText(text); }
+  try { await (typeof copy === "string" ? copyText(copy) : copy()); }
   catch { if (copyPresses.get(button) === press) resetCopyButton(button); toaster.info(t("ui.002")); return false; }
   if (copyPresses.get(button) !== press) return true;
   let state = copyFeedback.get(button);

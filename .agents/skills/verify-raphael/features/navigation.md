@@ -89,3 +89,18 @@ then run one at a time (`app/src/main/startup-reads.ts`, R-START-02). Scene: `st
 and fails if `models.catalog` or `brains.cli` began while `members.list` or `rooms.list` was still waiting for its answer, if those two
 overlapped, or if a first-view read was never asked for. The roster carries no pictures (`members.picture`, R-START-06): the look mock
 still inlines `avatar_url`, so the picture path is covered by vitest, not by look.
+
+## Every view is a step back (owner, 2026-11-14)
+
+R-NAV-03: the mouse's side buttons and Alt+Left / Alt+Right walk through every view the owner went into: conversations and groups,
+an older conversation, a page open in the thread's place, the member settings page with its tabs and a skill's or a command's page,
+each tab of Settings with the models sub-tab and the provider and service dialogs, and Connect Apps' connected list and app pages.
+Back in Settings walks the opened tabs first and closes Settings last; the page under it never moves. The history (nav-history.ts)
+looks at the window after each press and key (nav-input.ts), after each `go` and before each step; each surface only names its view
+(`navView`) and comes back from that name (`showNavView`). An on-screen way back (`data-nav-back`, Escape) that lands on the place
+before is that step back, so the arrow and the side button share one history. The look steps press the real mouse's back and
+forward buttons (`sideButton`).
+
+```powershell
+npm run look -- nav-steps-member-settings nav-steps-skill-arrow nav-steps-settings nav-steps-conversations --theme both --width 1120,720,1920x1080
+```

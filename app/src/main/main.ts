@@ -22,8 +22,8 @@ import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
 import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
-import { Navigation, type Place, samePage } from "./nav-history";
-import { installNavInput } from "./nav-input";
+import { Navigation, type Place } from "./nav-history";
+import { installNavInput, installNavNotes } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
 import { emblemTextureArrived, loadAvatar } from "./avatar";
@@ -229,41 +229,53 @@ watchChipRows(document.body);
     void api.agentPageShown(shown).catch(() => {});
   }
 
-  /** Where the window is: the page, the settings panel if it is open over it and the day the history shows. Null before the first page. */
+  /**
+   * Where the window is: the page and what it shows inside (the conversation, an open page, a member's settings and the
+   * view in them), the settings panel and the view in its tab if it is open over it, and the day the history shows. Null
+   * before the first page.
+   */
   function where(): Place | null {
     if (!current) return null;
     const place: Place = { page: current };
-    if (settingsOpen) place.pane = settings.pane();
+    if (settingsOpen) {
+      place.pane = settings.pane();
+      const inside = settings.navView();
+      if (inside) place.paneView = inside;
+    }
     if (current === "dictation") place.tab = dictation.tab();
-    const settingsMember = current === "agent" ? agent.settingsOf() : null;
-    if (settingsMember !== null) place.member = settingsMember;
+    const view = current === "agent" ? agent.navView() : "";
+    if (view) place.view = view;
     const day = current === "dictation" && dictation.tab() === "history" ? history.day() : null;
     if (day !== null) place.day = day;
     return place;
   }
 
   /**
-   * What the mouse's side buttons and Alt+Left / Alt+Right walk through. A change the person makes
-   * is a `go`, which records it; a step shows a place again and records nothing.
+   * What the mouse's side buttons and Alt+Left / Alt+Right walk through: every view the person went into (owner,
+   * 2026-11-14), noted after each press, after each `go` and before each step; a step shows a place again and records
+   * nothing.
    */
   const navigation = new Navigation({
     inGuide: () => !guide.hidden,
     where,
     show(place) {
       const here = where();
-      // Back from the settings panel only closes it: the page under it is on screen already.
-      if (!here || !samePage(here, place)) {
+      // Back from the settings panel, or within a page, only changes what is over or inside it: the page is on screen already.
+      if (!here || here.page !== place.page || here.tab !== place.tab || here.day !== place.day) {
         if (place.page === "dictation" && place.tab) dictation.setTab(place.tab, false);
         if (place.tab === "history" || place.page === "history") history.setDay(place.day ?? null);
         showPage(place.page);
       }
-      // A step to or from a member's settings page opens or closes it, never recording another step.
-      if (place.page === "agent") agent.showSettings(place.member ?? null);
-      if (place.pane !== undefined) openSettings(place.pane);
-      else closeSettings();
+      if (place.page === "agent") agent.showNavView(place.view ?? "");
+      if (place.pane !== undefined) {
+        openSettings(place.pane);
+        settings.showNavView(place.pane, place.paneView ?? "");
+      } else closeSettings();
+      tellAgentPage();
     },
   });
   installNavInput(window, (step) => navigation.step(step));
+  installNavNotes(window, (back) => navigation.heard(back));
 
   /**
    * Goes to a page, or opens the settings panel over the one on screen (at the tab `arg` names, if

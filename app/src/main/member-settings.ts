@@ -50,6 +50,10 @@ export interface MemberSettings {
   draw(): void;
   /** What the member has (skills, commands, tools) is read again. */
   refresh(): void;
+  /** The view on screen in words the way back keeps: the tab (`skills`), and a skill's or a command's page in it (`skills/skill:4`). */
+  navView(): string;
+  /** Shows the view `navView` named, as the presses that lead there do. */
+  showNavView(key: string): void;
 }
 
 type View = { kind: "main" } | { kind: "skill"; id: number } | { kind: "command"; id: number | null };
@@ -89,7 +93,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.dataset.memberSettings = "";
   // The way back stays at the page's top left, on the cover and over a view's heading (owner, 2026-11-11).
   el.innerHTML =
-    `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back"', "ms-back")}</div>` +
+    `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back" data-nav-back', "ms-back")}</div>` +
     `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
   const backButton = el.querySelector<HTMLElement>('[data-ms="back"]')!;
   const scroll = el.querySelector<HTMLElement>(".ms-scroll")!;
@@ -659,5 +663,35 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     },
     draw,
     refresh() { void load(); },
+    navView() {
+      if (view.kind === "skill") return `${category}/skill:${view.id}`;
+      if (view.kind === "command") return `${category}/command:${view.id ?? "new"}`;
+      return category;
+    },
+    showNavView(key) {
+      const [tab, inner = ""] = key.split("/");
+      const next = CATEGORIES.find(item => item.id === tab)?.id ?? CATEGORIES[0].id;
+      const skill = /^skill:(\d+)$/.exec(inner), made = /^command:(\d+|new)$/.exec(inner);
+      if (skill) {
+        category = next;
+        if (view.kind !== "skill" || view.id !== Number(skill[1])) void openSkill(Number(skill[1]));
+        return;
+      }
+      if (made) {
+        const found = made[1] === "new" ? null : Array.isArray(commands) ? commands.find(item => item.id === Number(made[1])) : undefined;
+        // A command that is gone (or not read yet) leaves the tab it is in.
+        if (found !== undefined) {
+          category = next;
+          command = found ? { id: found.id, name: found.name, description: found.description, template: found.template } : { id: null, name: "", description: "", template: "" };
+          view = { kind: "command", id: found ? found.id : null };
+          draw(); scroll.scrollTop = 0;
+          return;
+        }
+      }
+      if (view.kind === "main" && category === next) return;
+      category = next;
+      view = { kind: "main" };
+      draw(); scroll.scrollTop = 0;
+    },
   };
 }

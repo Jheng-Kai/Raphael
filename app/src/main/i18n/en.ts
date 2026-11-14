@@ -1026,6 +1026,7 @@ export const en = {
   "agent.stopping": "Stopping…",
   "agent.rerun": "Run again",
   "chat.copy": "Copy",
+  "chat.copyImage": "Copy image",
   "chat.send": "Send",
   "chat.edit": "Edit",
   "chat.sendNow": "Send now",

@@ -1,5 +1,37 @@
 # Conversation
 
+## A picture a member sends is a message (owner, 2026-11-14, R-UI-156)
+
+Owner: 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」. A member's pictures (a media message whose
+`{attachment}` is a stored image, `mediaPicture` in `picture-message.ts`; two drawn pictures before the words of a reply, say) stood above its
+reply with nothing beside them. Now each picture is a message of its own (`artifactHTML` in `timeline.ts`, `.chat-message[data-picture]` keyed
+by the media message's `seq`): the very row of a reply stands beside it (`messageActionsHTML`: react, reply and ⋯, bare, 28 px, shown on
+hover or focus, centred on it), its own reaction stands on its top-right corner, a right click opens its ⋯. The picture keeps its own shape
+(`width: auto` on its image), so the actions stand against what is seen and never across an empty band. Its ⋯ is a reply's menu (its
+reactions first) with 回覆 and 複製圖片; 複製圖片 puts the picture itself on the clipboard (`copyPicture`: the stored copy through
+`attachments.get`, PNG as it is and any other image drawn once to PNG, one `ClipboardItem` handed over at the press). Reply quotes it as a link
+to its stored file, `[name](attachment:<id>)` (no interface words reach the member; the core already reads that form), which `quoteHTML` draws
+as the picture's 36 px thumbnail, the author and 「圖片」, in the composer and in the sent bubble; the quote finds its picture again. A reaction
+to it names its `seq`: the core takes a media message's reaction (`set_reaction`) and tells the member it was the file it sent, by name and
+type (`_ask_about_reaction`). In a group room (and a side thread) the picture of a member's room message stands with that room message's own
+row (`pictureActionsHTML`): its Copy is 複製圖片 (`copy-picture`), react, thread and reply act on the room message. A video, a document and an
+older URL card are unchanged; there is no save, since the app has no save path for a stored file (opening one is `attachment-open`).
+
+```powershell
+npm run look -- picture-message picture-message-menu picture-message-reply room-picture-message generated-image message-hugs-bubble reaction-row room-text --theme both --width 1120,720,1920x1080
+```
+
+`picture-message` (a square and a landscape picture before the reply, the landscape one with ❤️) asserts both pictures carry the reply's
+actions in its order and drawn as its buttons (28 px, same colours), each picture box keeps the picture's own shape, the actions stand 0 to
+8 px from the picture and are centred on it, and the reaction stands on the picture's corner clear of them; `picture-message-hover` (a step of
+the scene, with the reply scrolled into view) points at the landscape picture and requires its actions shown beside its ❤️ and the
+other's hidden. `picture-message-menu` opens the picture's ⋯:
+回覆 and 複製圖片 under the reactions. `picture-message-reply` presses Reply: the composer's quote shows the loaded thumbnail, 小晴 and 圖片,
+never the link or the file name, and the composer has the focus. `room-picture-message` hovers the picture of a room message: copy-picture,
+react, thread and reply beside it, the words keeping their own row. Vitest: `pages/agent-picture-message.test.ts` (the page),
+`group-picture-message.test.ts` (the room), `picture-message.test.ts` (quote, clipboard). Core: `tests/agent/test_emoji_reactions.py`,
+`tests/members/test_reaction_ask.py`. Not covered offline: the native clipboard of WebView2 (that a pasted picture arrives in another program).
+
 ## Words meant for the model stay out of what the owner reads (owner, 2026-11-14)
 
 - **A page shown is no question (R-PAGE-09).** A task that shows an HTML page (`show_page`) goes on: the page is already a card in
@@ -10,6 +42,8 @@
 - **A note to itself is no reply (R-TEXT-05).** In a Chinese, Japanese or Korean conversation, English planning that leads a reply
   (`brain/reasoning.py::split_notes`) is taken off in the CLI loop (`_publish`, `_unthought`) and where every reply is stored
   (`AgentService._message`). Tests: `core/tests/agent/test_output_hygiene.py`.
+- **No reply fields in the words (R-TEXT-09).** A reply whose words end with the rest of its own object (`","messages":[…],"memory":[],"need":""}`), as a ChatGPT
+  sign-in model wrote on 2026-11-14, is shown without it; authored JSON stays. Core-only: `core/tests/agent/test_reply_envelopes.py`.
 - **The outermost frame wins (R-TEXT-06).** `parse_reply` takes the 《答。…》 frame off the whole authored message before it is cut into
   pieces; `plain_replies` (core) and `plainReplies` (`app/src/shared/anime.ts`) open a line only where none is open.
 - **No pointer to `detail` (R-TEXT-07).** The conversation folds `detail` away, so `parse_reply` takes 「見 detail」 out and says what
@@ -18,7 +52,7 @@
   look scene `computer-wake-line` asserts one such line and no reply of the member's.
 - **A data-floor refusal does not end the turn (R-FLOOR-04).** The model is told up to three times, and answers with what it can.
 
-## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02)
+## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02, R-ATTACH-RAW-03)
 
 Owner: 「傳送檔案不是會傳送原始檔嗎? 應該要是 raw data 才對」. A member (a Japanese teacher) was given an `.html` file to copy
 its design and received only the page's visible text: `services/file_reader.py` (`read_text`) ran `.html` through a text
@@ -27,10 +61,14 @@ extension set, `text/*`, JSON, XML, YAML, JavaScript) is read as its source, cha
 `read_text`: the inline context of an API or CLI turn (`agent/service.py`, the background worker's `_prompts`) and the
 `read_attachment` tool. In the inline context a line of facts is followed by the raw text (never inside a JSON string, so no
 quote or line end is escaped), inside the same untrusted wrapper; the prompt's own delimiter tags are neutralized. A file over
-the limit gives its start and a note beside it with the file's bytes, the bytes shown, the bytes cut and the stored path
-(`cut_note`); a CLI brain opens that stored path with its own file tools and finds the original file. Images, PDF, Office
+the limit is not pasted (R-ATTACH-RAW-02): the facts line (`lines`, `pasted: false`) and a note (`reference_note`) name
+`read_attachment (index N, offset 1)` and the stored path; a CLI brain opens that path with its own Read. `read_attachment`
+reads a text file like Claude Code's Read (R-ATTACH-RAW-03, `read_lines`): `offset` (1-based line) and `limit`, 2000 lines by
+default, `cat -n` numbering, a line over 2000 characters cut with a note (base64 inside it shown as a marker first), a
+60,000-character cap per call, and `next_offset` with a note when there is more. Images, PDF, Office
 documents and media keep their readers. Offline evidence: `core/tests/agent/test_raw_attachments.py` (API and CLI brains,
-every text type, cut, encodings), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
+every text type), `core/tests/agent/test_attachment_read_on.py` (a 100 KB embedded font, long lines, paging, edges, the tool
+call), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
 Not covered: a real model's use of the source, a native attach in the running app.
 
 ```powershell
@@ -1665,7 +1703,7 @@ Unverified by definition: a real model choosing the new fields, and a real Teleg
 ## Owner input (2026-11-01)
 
 ```powershell
-npm run look -- owner-addition --theme both --width 1120,720,1920x1080
+npm run look -- owner-addition owner-addition-answered composer-send-while-working --theme both --width 1120,720,1920x1080
 ```
 
 An owner message in an active private conversation is an ordinary owner bubble and
@@ -1677,6 +1715,17 @@ call to Raphael's tools, or, when no call follows, in the next turn that resumes
 existing native session (see Durable owner inbox). Background tasks use the same
 inbox inside the worker process, through internal task.steer admission.
 Accepted owner-only history rows use owner_input and render no empty member reply.
+Such a row stands where it was sent, inside the line of the work it joined (R-QUEUE-09,
+conversation.ts threadItems): the work's line breaks at the row's time into stretches
+(`TurnPart`), what the work said before it above and what it made or said after it,
+the reply included, below; the turn's question opens its first stretch and only the last
+holds its cards, work, slime and after-lines. Each stretch is a `.tn` with the turn's
+`data-id`, the later ones with `data-after` naming the owner row and standing under it at
+the turn's inner spacing, as a reply under its question. A row the running work has shown
+nothing after yet (no reply or file; its steps alone do not count), and queued words, stay
+below the whole line. On 2026-11-14 the
+owner's mid-work message (read by Claude Code at its next tool result) stood last, under
+the reply that answered it. `owner-addition-answered` checks the finished order.
 CLI handoffs preserve accepted input in their saved continuation.
 Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
@@ -1695,7 +1744,7 @@ Offline contracts: core/tests/agent/test_steering.py,
 core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
 core/tests/background/test_steering.py, core/tests/messaging/test_outgoing_files.py,
 core/tests/agent/test_scrub.py.
-Selected real-entry scene: owner-addition, both themes, 1120, 720 and 1920x1080.
+Selected real-entry scenes: owner-addition, owner-addition-answered and composer-send-while-working, both themes, 1120, 720 and 1920x1080.
 Fake Telegram and fake CLI are not live or native acceptance.
 
 
@@ -1743,6 +1792,11 @@ R-CLI-10: a fresh native session's first message (`agent/cli/context.py` `fresh_
 fixed 16,000 characters. The request, file names, additions, note and records are never cut and overflow only when they
 alone outgrow the window; the rest is filled with memory and team sections, the summary, the owner's own recent words and
 then recent turns, newest first. Covered offline by `core/tests/agent/test_cli_context.py`.
+
+R-CLI-11: a subscription CLI waits for one call to our MCP tools as long as the loop gives a call in flight (2 hours:
+Claude Code `MCP_TOOL_TIMEOUT`, Codex `tool_timeout_sec`), not the vendors' 60 s, and each MCP call is recorded under the
+server's, endpoint's and request's ids so `/mcp` and `/computer` never overwrite each other's tool events. Covered offline
+by `core/tests/agent/test_cli_brains.py` and `core/tests/agent/test_cli_mcp.py`. Core-only change: no visual scene.
 ## Background app discovery (2026-11-01)
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract

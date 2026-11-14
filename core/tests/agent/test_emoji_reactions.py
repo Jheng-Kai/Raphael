@@ -74,3 +74,20 @@ def test_unicode_17_additions_are_emoji_but_unassigned_neighbors_are_not(conn, m
     for code in (0x1F6D9, 0x1FA8B, 0x1FAC7, 0x1FAC9, 0x1FAEB):
         with pytest.raises(RpcError):
             set_reaction(conn, {'message_key': 'reply', 'emoji': chr(code), 'active': True}, **scope)
+
+
+def test_a_picture_the_member_sent_takes_a_reaction_as_its_replies_do_and_a_work_line_does_not(conn):
+    # A picture a member sends is a message of its own (owner, 2026-11-14, R-UI-156): its media message takes the owner's
+    # reaction by its number, as a reply does; a line of work (progress, an event) is still no message to react to.
+    history = AgentHistory(conn)
+    turn_id = history.add(session_id='picture', question='Draw two offices', route='answer', prefix='', text='Here they are.', status='done')
+    picture = '{"attachment": {"id": "' + 'b' * 32 + '.png", "name": "office.png", "mime": "image/png"}}'
+    history.add_message(turn_id, 'media', picture)
+    history.add_message(turn_id, 'progress', 'Drawing the second one')
+    history.add_message(turn_id, 'reply', 'Here they are.')
+    assert set_reaction(conn, {'message_key': '1', 'emoji': '❤️', 'active': True}, turn_id=turn_id) == '❤️'
+    assert set_reaction(conn, {'message_key': '3', 'emoji': '👍', 'active': True}, turn_id=turn_id) == '👍'
+    assert [tuple(row) for row in conn.execute('SELECT message_key,emoji FROM message_reactions ORDER BY message_key')] == [('1', '❤️'), ('3', '👍')]
+    for key in ('2', '4'):
+        with pytest.raises(RpcError, match='reaction must identify a message'):
+            set_reaction(conn, {'message_key': key, 'emoji': '👍', 'active': True}, turn_id=turn_id)

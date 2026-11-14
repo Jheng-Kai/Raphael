@@ -1170,6 +1170,7 @@ export const ptBR = {
   "history.sentTo": "Para {p0}",
   "history.003": "Copiar",
   "chat.copy": "Copiar",
+  "chat.copyImage": "Copiar imagem",
   "setup.copy": "Copiar",
   "history.005": "<div class=\"hdetail\"{p0}><h4>Transcrição original</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>Histórico</h1></div>",

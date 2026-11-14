@@ -1766,7 +1766,7 @@ export function checkRendered(name, context = {}) {
       require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
       require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');
       require(document.querySelectorAll('mark.is-current').length === 1, 'one exact word is the current target');
-      require(getComputedStyle(document.querySelector('mark.is-current')).outlineStyle !== 'none', 'current target differs by outline as well as contrast');
+      { const current = getComputedStyle(document.querySelector('mark.is-current')), page = getComputedStyle(pane.querySelector('.thread') ?? pane); require(current.outlineStyle === 'none' && current.textDecorationLine === 'none', `the current target has no frame and no underline (${current.outlineStyle}, ${current.textDecorationLine})`); require(current.backgroundColor === page.color || current.backgroundColor !== getComputedStyle(document.querySelector('mark[data-find-match]:not(.is-current)') ?? document.body).backgroundColor, `the current target is the words in reverse (${current.backgroundColor})`); }
       require([...document.querySelectorAll('mark[data-find-match]:not(.is-current)')].every(el=>getComputedStyle(el).textDecorationStyle==='dotted'), 'other exact matches remain visible even on owner bubbles');
       require(pane.querySelectorAll('button').length === 3, 'real previous, next and close controls');
     }
@@ -1994,6 +1994,73 @@ export function checkRendered(name, context = {}) {
     require(name !== 'generated-image' || element.naturalWidth > 0, 'the image decoded');
     require(name !== 'generated-video' || element.controls && element.readyState >= 1, 'the existing video player has playable metadata');
     return {check:name,id:element.dataset.attachment};
+  }
+  if (name === 'picture-message' || name === 'picture-message-hover' || name === 'picture-message-room') {
+    // R-UI-156: a picture a member sent is a message: the actions of the message (a reply's, or the room message's) beside it,
+    // drawn as beside words, standing against the picture itself and centred on it, as they stand against a bubble.
+    const room = name === 'picture-message-room';
+    const pictures = [...document.querySelectorAll(room ? '[data-room-message="2"] .chat-message[data-picture]' : '.tn[data-id="822"] .chat-message[data-picture]')];
+    require(pictures.length === (room ? 1 : 2), `${room ? 'one picture' : 'two pictures'} stand as messages (${pictures.length})`);
+    const words = document.querySelector(room ? '[data-room-message="2"] .chat-message[data-room-part]' : '.tn[data-id="822"] .chat-message[data-reply]');
+    const acts = message => [...message.querySelectorAll(':scope > .message-actions > button')].map(button => button.dataset.roomAct ?? button.dataset.act);
+    const expected = room ? ['copy-picture', 'react-message', 'thread', 'reply'] : acts(words);
+    if (!room) require(expected.join() === 'react-message,reply-message,more-message', `the reply's own actions are react, reply and ⋯ (${expected})`);
+    else require(acts(words).join() === 'copy-message,react-message,thread,reply', `the room message's words keep their own actions (${acts(words)})`);
+    // Each button is drawn as the same button beside the words: size, colours, frame and corner.
+    const style = button => { const s = getComputedStyle(button), box = button.getBoundingClientRect(); return [Math.round(box.width), Math.round(box.height), s.color, s.backgroundColor, s.borderTopWidth, s.borderRadius].join(' '); };
+    const same = act => words.querySelector(`:scope > .message-actions > button[data-act="${act}"], :scope > .message-actions > button[data-room-act="${act}"]`) ?? words.querySelector(':scope > .message-actions > button[data-act="copy-message"]');
+    const measured = pictures.map(message => {
+      const img = message.querySelector(':scope > .attachment-image .attachment-picture img[data-attachment]'), actions = message.querySelector(':scope > .message-actions');
+      require(img && img.src.startsWith('blob:') && img.naturalWidth > 0, 'the picture is loaded from its stored copy');
+      require(acts(message).join() === expected.join(), `the picture has the same actions in the same order (${acts(message)})`);
+      for (const button of actions.querySelectorAll('button')) {
+        const act = button.dataset.roomAct ?? button.dataset.act;
+        require(Math.round(button.getBoundingClientRect().height) === 28, `each action is the 28 px tall bare button (${Math.round(button.getBoundingClientRect().height)})`);
+        require(style(button) === style(same(act)), `${act} is drawn as beside the words (${style(button)} vs ${style(same(act))})`);
+      }
+      const p = img.getBoundingClientRect(), a = actions.getBoundingClientRect();
+      // The picture's box is the picture: actions never stand across an empty band of a box wider than what is seen.
+      require(Math.abs(p.width / p.height - img.naturalWidth / img.naturalHeight) < 0.02, `the picture keeps its own shape (${Math.round(p.width)}x${Math.round(p.height)} for ${img.naturalWidth}x${img.naturalHeight})`);
+      require(p.height <= 301 && p.width > 120, `the picture is shown at a readable size (${Math.round(p.width)}x${Math.round(p.height)})`);
+      require(a.left - p.right >= 0 && a.left - p.right <= 8, `the actions stand against the picture (${Math.round(a.left - p.right)} px away)`);
+      require(Math.abs((a.top + a.bottom) / 2 - (p.top + p.bottom) / 2) <= 1, 'the actions are centred on the picture, as on a bubble');
+      require(a.right <= message.closest('.tn').getBoundingClientRect().right + 1, 'the actions stay inside the column');
+      return { picture: [Math.round(p.width), Math.round(p.height)], gap: Math.round(a.left - p.right), opacity: getComputedStyle(actions).opacity };
+    });
+    if (name !== 'picture-message') {
+      const hovered = document.querySelector('.chat-message[data-picture]:hover');
+      require(hovered && getComputedStyle(hovered.querySelector(':scope > .message-actions')).opacity === '1', 'pointing at the picture shows its actions');
+      require(pictures.filter(message => message !== hovered).every(message => getComputedStyle(message.querySelector(':scope > .message-actions')).opacity === '0'), "another picture's actions stay out of sight");
+    }
+    if (!room) {
+      // The owner's reaction stands on its picture's top-right corner, over its edge, clear of the actions.
+      const chip = pictures[1].querySelector('.message-reactions'), img = pictures[1].querySelector('img[data-attachment]').getBoundingClientRect();
+      const box = chip?.getBoundingClientRect(), actions = pictures[1].querySelector(':scope > .message-actions').getBoundingClientRect();
+      require(box && chip.textContent.includes('❤'), 'the reacted picture carries its reaction');
+      require(box.top < img.top && box.bottom > img.top && Math.abs(box.right - img.right) <= 2, `the reaction stands on the picture's top-right corner (${Math.round(box.right - img.right)} px)`);
+      require(box.right <= actions.left, 'the reaction never covers the actions');
+    }
+    return { check: name, pictures: measured };
+  }
+  if (name === 'picture-message-menu') {
+    const items = [...document.querySelectorAll('#app-popover [data-pick]')].filter(visible).map(item => `${item.dataset.pick}:${item.textContent.trim()}`);
+    require(items.join() === 'reply:回覆,copy:複製圖片', `the picture's menu offers Reply and 複製圖片 (${items})`);
+    require(visible(document.querySelector('#app-popover .menu-reactions')), "its reactions lead the menu, as a reply's do");
+    return { check: name, items };
+  }
+  if (name === 'picture-message-reply') {
+    const card = document.querySelector('.cmp-quote:not([hidden])'), quote = card?.querySelector('.message-quote.has-picture');
+    require(visible(quote), 'the composer quotes the picture');
+    const thumb = quote.querySelector('.quote-thumb'), author = quote.querySelector('.quote-author'), word = quote.querySelector('.quote-text');
+    require(thumb.src.startsWith('blob:') && thumb.naturalWidth > 0, "the quote shows the picture's own thumbnail");
+    require(author.textContent === '小晴' && word.textContent === '圖片', `who sent it and the word for a picture (${author.textContent} / ${word.textContent})`);
+    require(!card.textContent.includes('attachment:') && !card.textContent.includes('.png'), 'never the link or the file name');
+    const t = thumb.getBoundingClientRect(), a = author.getBoundingClientRect(), w = word.getBoundingClientRect();
+    require(Math.round(t.width) === 36 && Math.round(t.height) === 36, `a 36 px thumbnail (${Math.round(t.width)}x${Math.round(t.height)})`);
+    require(t.right <= a.left && t.right <= w.left && a.bottom <= w.top + 1, 'the thumbnail at the start, the author over the word');
+    require(Math.abs((t.top + t.bottom) / 2 - (a.top + w.bottom) / 2) <= 2, 'the thumbnail is centred on the two lines');
+    require(document.activeElement?.matches('.composer textarea'), 'the composer takes the focus, as after replying to words');
+    return { check: name };
   }
   if (name === 'dataset-chart') {
     require(visible(document.querySelector('.ra-body .attachment-file[data-id]')), 'the chart has a stored file action');
@@ -3269,6 +3336,23 @@ export function checkRendered(name, context = {}) {
     const newest = document.querySelector('.tn[data-id="903"]');
     require(presence.length === 1 && presence[0].getBoundingClientRect().top >= newest.getBoundingClientRect().bottom, "live work stays under the newest addition");
     return {check:name,at};
+  }
+  if (name === "owner-addition-in-place") {
+    // The question, the message sent while the member worked, then the picture and the reply made after it (R-QUEUE-09).
+    const lines = [...document.querySelectorAll('.thread > li.tn')];
+    const asked = lines.findIndex(line => line.matches('[data-id="802"]:not([data-after])') && line.querySelector('.owner-message'));
+    const steer = lines.findIndex(line => line.matches('[data-id="810"]') && line.querySelector('.owner-message'));
+    const answer = lines.findIndex(line => line.matches('[data-id="802"][data-after="810"]'));
+    require(asked >= 0 && steer === asked + 1 && answer === steer + 1 && answer === lines.length - 1, `question, message, then the answer as the last line: ${[asked, steer, answer, lines.length]}`);
+    require(!lines[asked].querySelector('.ra') && lines[steer].classList.contains('is-owner-only'), "nothing was said before the message, so the two owner bubbles stand together");
+    const bubble = lines[steer].querySelector('.owner-message').getBoundingClientRect();
+    const picture = lines[answer].querySelector('img[data-attachment]'), reply = lines[answer].querySelector('.chat-message[data-reply]');
+    require(visible(picture) && visible(reply) && picture.getBoundingClientRect().top >= bubble.bottom && reply.getBoundingClientRect().top >= picture.getBoundingClientRect().bottom, "the picture and the reply stand under the message");
+    // As a reply stands under its question: the turn's own inner spacing, not the space between turns.
+    const under = lines[answer].getBoundingClientRect().top - lines[steer].getBoundingClientRect().bottom, inner = parseFloat(getComputedStyle(lines[answer]).rowGap);
+    require(Math.abs(under - inner) <= 1, `the answer stands ${under}px under the message, a turn's inner ${inner}px`);
+    require(document.querySelectorAll('.thread .owner-message').length === 2 && !lines[answer].querySelector('.owner-message'), "each owner message once, none repeated in the answer");
+    return {check:name,lines:lines.length};
   }
   if (name === "link-chips") {
     // As inline source chips: each link once, in the words, with no row of cards under the reply.
@@ -7568,6 +7652,15 @@ export function checkRendered(name, context = {}) {
     require(box.left >= list.left && box.right <= list.right && parseFloat(style.borderTopLeftRadius) >= 6, `the fill's corners are round and inside the list, never cut square (${Math.round(box.left)} against ${Math.round(list.left)})`);
     return { check: name };
   }
+  if (name === "app-connect-hover") {
+    // Owner, 2026-11-14: the button on a lit row answers the pointer on its own, a shade past the row's own step.
+    const modal = connectModal(), button = modal.querySelector('.cs-card .cs-connect:not(.pri):hover'), row = button?.closest('.cs-card');
+    require(button && visible(button) && row.matches(':hover'), "連結 is under the pointer, on its lit row");
+    const fill = getComputedStyle(button).backgroundColor;
+    require(fill === colourOf('backgroundColor', '--float-ctl-raised-hover'), `連結 under the pointer takes the next shade (${fill})`);
+    require(fill !== colourOf('backgroundColor', '--float-ctl-raised') && fill !== getComputedStyle(row).backgroundColor, "it differs from the row's lit step and from the row itself");
+    return { check: name };
+  }
   if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {
     const modal = connectModal(), page = modal.querySelector('.cs-page'), back = page.querySelector('[data-conn="back"]'), close = modal.querySelector('.modal-x');
     require(visible(page) && !page.querySelector('.cs-top') && visible(back) && back.tagName === 'BUTTON', "an app's page has a bare back chevron and no title row");
@@ -8494,6 +8587,56 @@ export function checkRendered(name, context = {}) {
     require(Number(caption.textContent.match(/\d+/)[0]) > 0, "native progress advances beyond the initial zero");
     require(!document.body.textContent.includes("Transcribing") && !document.body.textContent.includes("\u8f49\u9304\u4e2d"), "elapsed-time captions are absent");
     return { check: name, caption: caption.textContent };
+  }
+  // Where a step of the side buttons landed (R-NAV-03): every view the owner went into is one step.
+  if (name.startsWith("nav-ms-")) {
+    const want = name.slice("nav-ms-".length), pane = document.querySelector(".ms-pane");
+    require(visible(pane), "the member's settings page is still on screen");
+    const open = pane.querySelector('.ms-nav [data-cat][aria-current="page"]')?.dataset.cat;
+    if (want === "skill") require(pane.dataset.view === "skill" && visible(pane.querySelector("#ms-skill-text")), `the skill's own page is back (${pane.dataset.view})`);
+    else {
+      require(pane.dataset.view === "main", `the tab itself, not a skill's page (${pane.dataset.view})`);
+      require(open === want, `the ${want} tab is the open one (${open})`);
+    }
+    return { check: name, open, view: pane.dataset.view };
+  }
+  if (name.startsWith("nav-conversation-")) {
+    const id = name.slice("nav-conversation-".length);
+    require(!visible(document.querySelector(".ms-pane")), "the settings page is gone");
+    require(visible(document.querySelector(".page-agent .mb-chat .composer")), "the conversation is on screen");
+    const current = document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member;
+    require(current === id, `member ${id}'s conversation is the open one (${current})`);
+    return { check: name, current };
+  }
+  if (name.startsWith("nav-settings-")) {
+    const want = name.slice("nav-settings-".length), scrim = document.querySelector('.modal-scrim[data-page="settings"]');
+    if (want === "closed") {
+      require(!scrim || scrim.hidden || !document.documentElement.dataset.windowModal, "the settings are closed");
+      require(visible(document.querySelector(".page-agent .mb-chat .composer")), "the page under them is on screen");
+      return { check: name };
+    }
+    require(document.documentElement.dataset.windowModal === "true" && visible(scrim.querySelector(".modal")), "the settings are still open");
+    const open = scrim.querySelector('.modal-nav [data-pane][aria-current="page"]')?.dataset.pane;
+    require(open === want, `the ${want} tab is the open one (${open})`);
+    return { check: name, open };
+  }
+  // R-UI-157: the skill's row is lit as one under the pointer, its switch on the fill.
+  if (name === "member-settings-row-lit") {
+    const open = document.querySelector('.ms-pane [data-ms="skill-open"]'), row = open.closest('.ms-row'), toggle = row.querySelector(':scope > .tg');
+    const fill = getComputedStyle(row).backgroundColor, own = getComputedStyle(open).backgroundColor;
+    require(open.matches(':hover'), 'the pointer is on the skill');
+    require(!/rgba\(0, 0, 0, 0\)|transparent/.test(fill), `the row is lit (${fill})`);
+    require(/rgba\(0, 0, 0, 0\)|transparent/.test(own), `the button has no fill of its own over the row's (${own})`);
+    const box = row.getBoundingClientRect(), knob = toggle.getBoundingClientRect();
+    require(knob.left >= box.left && knob.right <= box.right && knob.top >= box.top && knob.bottom <= box.bottom, 'the switch stands inside the lit row');
+    return { check: name, fill };
+  }
+  if (name === "member-settings-switch-hover") {
+    const toggle = document.querySelector('.ms-pane [data-ms="skill-toggle"][aria-checked="true"]'), row = toggle.closest('.ms-row');
+    require(toggle.matches(':hover') && row.matches(':hover'), 'the pointer is on the switch, inside its row');
+    require(/brightness/.test(getComputedStyle(toggle).filter), `the switch answers the pointer (${getComputedStyle(toggle).filter})`);
+    require(!/rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(row).backgroundColor), 'its row is lit around it');
+    return { check: name };
   }
   if (name.startsWith("member-settings-place-")) {
     const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll');

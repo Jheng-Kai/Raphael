@@ -416,16 +416,16 @@ test("the settings page folds the details panel away at any width, and leaving i
   await openDetails();
   const panel = document.querySelector<HTMLElement>(".mb-det")!;
   expect(panel.hidden).toBe(false);
-  agent.showSettings(3); await flush();
+  agent.showNavView("m:3>s:tools"); await flush();
   await vi.waitFor(() => expect(panel.hidden).toBe(true));
   expect(document.querySelector<HTMLElement>("[data-member-settings]")!.hidden).toBe(false);
-  agent.showSettings(null); await flush();
+  agent.showNavView("m:3"); await flush();
   await vi.waitFor(() => expect(panel.hidden).toBe(false));
   // A panel that was closed stays closed after the page.
   $('[data-det="close"]').click(); await flush();
   await vi.waitFor(() => expect(panel.hidden).toBe(true));
-  agent.showSettings(3); await flush();
-  agent.showSettings(null); await flush();
+  agent.showNavView("m:3>s:tools"); await flush();
+  agent.showNavView("m:3"); await flush();
   expect(panel.hidden).toBe(true);
   agent.hide();
 });
@@ -441,7 +441,7 @@ test("a closed details panel reads nothing while work runs, and the settings pag
   // The panel no longer counts skills or commands: those are the settings page's.
   await openDetails();
   expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
-  agent.showSettings(3); await flush();
+  agent.showNavView("m:3>s:tools"); await flush();
   // The page holds no memory to read (owner, 2026-11-11), only what the member has.
   expect(read()).not.toContain("memory.get");
   expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
@@ -456,7 +456,7 @@ test("a restarted core receives the current viewing even with an unchanged roste
   expect(api.membersList).toHaveBeenCalledTimes(1);
   expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
   // The open settings page reads what the member has again for the restarted core.
-  agent.showSettings(3); await flush();
+  agent.showNavView("m:3>s:tools"); await flush();
   api.membersSkillsList.mockClear();
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   await vi.waitFor(() => expect(api.membersSkillsList).toHaveBeenCalledWith(3));
@@ -1031,7 +1031,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   await flush();
   await pick(3);
   await openDetails();
-  agent.showSettings(3);
+  agent.showNavView("m:3>s:tools");
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };
@@ -1052,7 +1052,7 @@ test("a memory change reads nothing and shows nothing on the member's page", asy
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
-  agent.showSettings(3); await flush();
+  agent.showNavView("m:3>s:tools"); await flush();
   api.core.mockClear(); api.membersSkillsList.mockClear();
   for (const event of [{ member_id: 4, space: "own" }, { member_id: 3, space: "own" }, { member_id: 0, space: "shared" }] as const) {
     send({ type: "MemoryChanged", ...event });
@@ -1587,7 +1587,7 @@ describe("the details panel", () => {
     await flush();
     await pick(3);
     if ($(".mb-det").hidden) $(".conversation-trigger").click();
-    agent.showSettings(3);
+    agent.showNavView("m:3>s:tools");
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),

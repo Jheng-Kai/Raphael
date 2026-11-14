@@ -393,9 +393,32 @@ def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool
     return {"prefix": default_prefix, "text": text, "messages": parts}
 
 
+_PROTOCOL_KEYS = frozenset({"prefix", "text", "messages", "detail", "memory", "need"})
+_TAIL_START = re.compile(r'"\s*,\s*"(?:' + "|".join(sorted(_PROTOCOL_KEYS)) + r')"\s*:')
+_OBJECT_OPEN = re.compile(r'\{\s*"(?:' + "|".join(sorted(_PROTOCOL_KEYS)) + r')"\s*:')
+
+
+def _without_protocol_tail(text: str) -> str:
+    """Words without the rest of the reply object that a model wrote into them. Live (2026-11-14, a ChatGPT sign-in model):
+    a valid reply whose `text` ended `…畫面？","messages":["…"],"memory":[],"need":""}`, and the conversation showed the
+    fields, its escaped line breaks as `nn`. Only a tail that is itself the rest of a reply object, of the reply's own
+    fields and nothing after it, whose opening brace is not in the words, is taken off: an object written whole in the
+    words ("Here is the result: {"text": …}"), other authored JSON and quotes stay words."""
+    for match in _TAIL_START.finditer(text):
+        if _OBJECT_OPEN.search(text, 0, match.start()):
+            continue
+        try:
+            rest = json.loads('{"_":0' + text[match.start() + 1:], strict=False)
+        except ValueError:
+            continue
+        if isinstance(rest, dict) and set(rest) - {"_"} <= _PROTOCOL_KEYS:
+            return text[:match.start()].rstrip()
+    return text
+
+
 def _reply_words(value: Any) -> str:
     """Unwrap a mistakenly nested envelope without consuming ordinary authored JSON or code."""
-    body = _one_line_text(value)
+    body = _without_protocol_tail(_one_line_text(value))
     for _ in range(4):
         try:
             nested = json.loads(body)

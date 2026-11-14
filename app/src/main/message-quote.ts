@@ -1,13 +1,19 @@
 import { t } from "./i18n";
+import { quotedPicture } from "./picture-message";
 import type { MessageQuote } from "./types";
 import { esc, ico } from "./ui";
 
 export const QUOTE_MAX_CHARS = 20_000;
 
-/** The same bounded visual excerpt in a sent bubble and in its editable draft. */
+/**
+ * The same bounded visual excerpt in a sent bubble and in its editable draft. A quoted picture (its words are only the link
+ * to its stored file, pictureQuote) shows its thumbnail and the word for a picture, never the link (R-UI-156).
+ */
 export function quoteHTML(quote: MessageQuote, jump = false): string {
   const tag = jump ? 'button type="button" data-act="jump-quote"' : "span";
-  return `<${tag} class="message-quote"><span class="quote-author">${esc(quote.author)}</span><span class="quote-text">${esc(quote.text)}</span></${jump ? "button" : "span"}>`;
+  const picture = quotedPicture(quote.text);
+  const shown = picture ? `<img class="quote-thumb" data-attachment="${esc(picture.id)}" alt=""><span class="quote-text">${esc(t("chat.image"))}</span>` : `<span class="quote-text">${esc(quote.text)}</span>`;
+  return `<${tag} class="message-quote${picture ? " has-picture" : ""}"><span class="quote-author">${esc(quote.author)}</span>${shown}</${jump ? "button" : "span"}>`;
 }
 
 /** A selection can quote exactly one message; toolbar/composer selections are never eligible. */

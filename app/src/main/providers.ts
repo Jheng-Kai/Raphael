@@ -71,7 +71,7 @@ function directoryHTML(v: ProvidersView): string {
     }).join("") + `</div></section>` : "";
   }).join("");
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close"')}</div>` +
+    `<div class="cs-dlg-head"><h2 id="pv-title">${esc(t("providers.add"))}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div>` +
     `<p class="note">${esc(t("providers.choose"))}</p>${fieldHTML(t("providers.searchKinds"), v.kindQuery ?? "", { id: "pv-kind-search", icon: "search" })}` +
     `<div class="pv-directory">${groups || `<p class="note" role="status">${esc(t("providers.noMatches"))}</p>`}</div><p class="pv-results note" role="status">${esc(t("providers.results", { p0: count }))}</p></div></div>`;
 }
@@ -104,7 +104,7 @@ function dialogHTML(v: ProvidersView): string {
     return `<div class="pv-field"><label class="pv-label" for="${esc(inputId(v, field))}">${esc(title)}</label><div class="svc-line">${control}</div></div>`;
   }).join("");
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:${esc(v.adding ? "add" : v.open.id ?? kind.kind)}"><div class="cs-dialog pv-dialog pv-editor${v.adding ? " pv-catalog" : ""}" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
-    `<div class="cs-dlg-head"><span class="ic">${providerMark(kind.kind)}</span><h2 id="pv-title">${esc(provider?.name ?? kind.name)}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close"')}</div><div class="pv-body"><div class="pv-setup">` +
+    `<div class="cs-dlg-head"><span class="ic">${providerMark(kind.kind)}</span><h2 id="pv-title">${esc(provider?.name ?? kind.name)}</h2><span class="sp"></span>${iconButton("x", t("providers.close"), ' data-pv="close" data-k="pv-close" data-nav-back')}</div><div class="pv-body"><div class="pv-setup">` +
     (kind.local_context_hint ? `<p class="note">${esc(t("providers.contextHint"))}</p>` : "") +
     fields + (kind.docs_url ? btn(esc(t("providers.getKey")), "", ` data-pv="docs" data-k="pv-docs"${disabled}`) : "") +
     (provider && allowsMultiple(kind) ? btn(esc(t("providers.another")), "", ` data-pv="another" data-k="pv-another"${disabled}`) : "") + (v.error ? `<p class="note" role="alert">${esc(errorText(v.error))}</p>` : "") +
@@ -114,7 +114,7 @@ function dialogHTML(v: ProvidersView): string {
     `<div class="pv-feedback">${feedbackHTML(v)}</div>` +
     `<div class="pv-footer">` +
     (v.open.id ? btn(esc(t(v.confirming ? "providers.confirmRemove" : "providers.remove")), "danger", ` data-pv="remove" data-k="pv-remove"${disabled}`) :
-      btn(`${ico("left")}${esc(t("providers.back"))}`, "", ` data-pv="back" data-k="pv-back"${disabled}`)) +
+      btn(`${ico("left")}${esc(t("providers.back"))}`, "", ` data-pv="back" data-k="pv-back" data-nav-back${disabled}`)) +
     `<div class="pv-footer-actions">${btn(esc(t("providers.test")), "", ` data-pv="test" data-k="pv-test"${v.busy || !v.open.id || v.dirty ? " disabled" : ""}`)}` +
     btn(esc(t("providers.save")), "pri", ` data-pv="save" data-k="pv-save"${v.busy || !v.canSave ? " disabled" : ""}`) + `</div></div></div></div>`;
 }
@@ -453,6 +453,20 @@ export function createProviders(host: ProvidersHost) {
         event.preventDefault(); void save(); return true;
       }
       return false;
+    },
+    /** The dialog on screen in words the way back keeps: the list of kinds (`pv:dir`) or one provider (`pv:openai:4`, `pv:openai:new`). */
+    navView(): string {
+      if (state.open) return `pv:${state.open.kind}:${state.open.id ?? "new"}`;
+      return state.adding ? "pv:dir" : "";
+    },
+    /** Shows the dialog `navView` named, or closes it for "". */
+    showNavView(key: string): void {
+      if (!key) { if (state.open || state.adding) close(); return; }
+      if (key === "pv:dir") { if (!state.adding || state.open) directory(); return; }
+      const found = /^pv:([^:]+):(.+)$/.exec(key);
+      if (!found) return;
+      const id = found[2] === "new" ? null : found[2];
+      if (state.open?.kind !== found[1] || state.open.id !== id) show(found[1], id);
     },
     reset(): void {
       stopOutside?.(); stopOutside = null;

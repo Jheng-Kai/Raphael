@@ -1025,6 +1025,7 @@ export const zhTW = {
   "agent.stopping": "正在停止…",
   "agent.rerun": "重新執行",
   "chat.copy": "複製",
+  "chat.copyImage": "複製圖片",
   "chat.send": "送出",
   "chat.edit": "編輯",
   "chat.sendNow": "立即送出",

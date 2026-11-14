@@ -6,7 +6,8 @@ import { messageHTML, replyContentHTML } from "./message-content";
 import { mountRichContent } from "./message-rich";
 import { createAttachmentMedia } from "./attachment-media";
 import { patchThread } from "./thread-diff";
-import { conversationCardsHTML, messageActionsHTML, filesHTML } from "./timeline";
+import { conversationCardsHTML, messageActionsHTML, filesHTML, pictureActionsHTML } from "./timeline";
+import { copyPicture, pictureIdAt } from "./picture-message";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { mountOwnerQuestions } from "./owner-questions";
 import { createBackgroundQuestions } from "./background-questions";
@@ -36,7 +37,7 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
     const actions = messageActionsHTML(message.created, false, undefined, false, reactionControlHTML());
     const body = message.member_id === null
       ? `<div class="me"><div class="chat-message owner-message">${withReactions(`${filesHTML(message.attachments)}<div class="bubble"><div class="message-text">${messageHTML(message.text, "", false)}</div></div>`, message.reactions)}${actions}</div></div>`
-      : `<div class="ra"><span class="ra-face"${member ? ` data-tooltip="${esc(member.name)}"` : ""}>${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${withReactions(`${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}`, message.reactions)}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name) : ""}</div></div>`;
+      : `<div class="ra"><span class="ra-face"${member ? ` data-tooltip="${esc(member.name)}"` : ""}>${member ? faceHTML(member, 28) : ""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name ?? t("rooms.owner"))}</b><div class="chat-message">${withReactions(`${filesHTML(message.attachments)}${replyContentHTML(message.text, "", message.status === "running")}`, message.reactions)}${actions}</div>${message.turn ? conversationCardsHTML(message.turn, member?.name, pictureActionsHTML(actions)) : ""}</div></div>`;
     return `<li class="tn" data-side-message="${message.id}">${body}</li>`;
   };
   const refresh = async (): Promise<void> => {
@@ -78,10 +79,16 @@ export async function openRoomThread(host: HTMLElement, app: AppContext, roomId:
     return message ? { reactions: message.reactions ?? [], react: (emoji, active) => api.core("rooms.react", { room_id: roomId, message_id: message.id, emoji, active }) } : null;
   }, () => { void refresh().catch(error => toaster.info(describeError(error))); }, error => toaster.info(describeError(error)));
   pane.addEventListener("click", event => {
-    const button = (event.target as Element).closest<HTMLElement>('[data-act="copy-message"], [data-act="attachment-open"]');
+    const button = (event.target as Element).closest<HTMLElement>('[data-act="copy-message"], [data-act="copy-picture"], [data-act="attachment-open"]');
     if (!button) return;
     event.stopPropagation();
     if (button.dataset.act === "attachment-open") { void api.openAttachment(button.dataset.id ?? "").catch(error => toaster.info(describeError(error))); return; }
+    // A member's picture is copied as the picture itself (R-UI-156).
+    if (button.dataset.act === "copy-picture") {
+      const picture = pictureIdAt(button);
+      if (picture) void copyButton(button, () => copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id: picture }))).catch(error => toaster.info(describeError(error)));
+      return;
+    }
     const message = messages.find(message => message.id === Number(button.closest<HTMLElement>('[data-side-message]')?.dataset.sideMessage));
     if (message) void copyButton(button, message.text).catch(error => toaster.info(describeError(error)));
   });

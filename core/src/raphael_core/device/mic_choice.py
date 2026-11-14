@@ -10,9 +10,12 @@ Pure logic with no audio in it; `audio.py` feeds it the microphones PortAudio li
 * The choice does not move while it stays there. It moves when the microphone it is on goes away,
   or when another external microphone is plugged in (one the previous look did not list). It never
   moves because of a sound level, the order PortAudio lists them in, or the Windows default.
-* A microphone that has been heard once is not left because it is quiet now: a headset with a noise
-  gate or a muted boom returns digital silence until someone speaks. Only a microphone that has
-  never been heard is replaced for being silent, by the next one in this order.
+* Nothing that happens at the start of a recording moves it: a headset with a noise gate or a muted
+  boom returns digital silence until someone speaks, and nobody speaks in the first moment
+  (owner, 2026-11-14: the start of every recording sent automatic from his quiet headset to the
+  laptop's array, and it jumped between the two). Only a microphone that gave digital silence for two
+  whole recordings in a row (each of `SILENT_RECORDING_S` or more) and was never heard is tried after
+  the others, until it is heard or plugged in again.
 
 Windows (MME) numbers microphones that share a name, 「麥克風 (3- HyperX Cloud II Core Wi」, and the
 number changes with the port or after a replug, so a microphone is known by its name without it.
@@ -34,6 +37,10 @@ _BUILT_IN = re.compile(
     r"array|麥克風排列|麥克風陣列|麦克风阵列|マイク\s*アレイ|마이크\s*배열|matrice|matriz de micr"
     r"|mikrofonarray|built[\s-]*in|integrated|internal|內建|内置|内蔵"
 )
+# How long a recording must be for its silence to say anything about the microphone, and how many silent
+# recordings in a row pass one over.
+SILENT_RECORDING_S = 2.0
+SILENT_RECORDINGS = 2
 # 「麥克風 (3- HyperX Cloud II Core Wi」: the number Windows puts in front of a duplicate name.
 _ORDINAL = re.compile(r"\(\s*\d+\s*-\s*")
 
@@ -61,13 +68,14 @@ def is_built_in(name: str) -> bool:
 
 
 class AutomaticMicrophone:
-    """What automatic remembers between looks at the microphones: whom it is on, who was heard."""
+    """What automatic remembers between looks at the microphones: whom it is on, who was heard, who gave nothing."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._seen: set[str] | None = None  # the keys the previous look listed; None before any
         self._preferred: str | None = None  # the key of the external microphone it is on
         self._heard: set[str] = set()
+        self._silent: dict[str, int] = {}  # silent whole recordings in a row, by key
 
     def rank(self, devices: Iterable[M]) -> list[M]:
         """The usable microphones, the one automatic uses first.
@@ -86,6 +94,8 @@ class AutomaticMicrophone:
             first_look = self._seen is None
             self._seen = set(usable)
             self._heard &= set(usable)
+            # A microphone that went away, or came back, is a new one: its silent recordings are forgotten.
+            self._silent = {key: count for key, count in self._silent.items() if key in usable and key not in new}
             arrived = [external[key] for key in external if key in new]
             if arrived and not first_look:
                 self._preferred = device_key(max(arrived, key=lambda d: d.index).name)
@@ -94,7 +104,10 @@ class AutomaticMicrophone:
             preferred = self._preferred
         ordered = [external[preferred]] if preferred in external else []
         ordered += [d for key, d in external.items() if key != preferred]
-        return ordered + built_in
+        ordered += built_in
+        with self._lock:
+            passed = {key for key, count in self._silent.items() if count >= SILENT_RECORDINGS}
+        return [d for d in ordered if device_key(d.name) not in passed] + [d for d in ordered if device_key(d.name) in passed]
 
     @staticmethod
     def _first_external(external: dict[str, M]) -> str | None:
@@ -111,3 +124,17 @@ class AutomaticMicrophone:
     def was_heard(self, name: str) -> bool:
         with self._lock:
             return device_key(name) in self._heard
+
+    def recorded(self, name: str, *, loud: bool, seconds: float) -> bool:
+        """A recording on this microphone ended: it gave sound (`loud`) or digital silence for `seconds`. Answers
+        whether this recording made it one that is tried after the others."""
+        key = device_key(name)
+        with self._lock:
+            if loud:
+                self._heard.add(key)
+                self._silent.pop(key, None)
+                return False
+            if key in self._heard or seconds < SILENT_RECORDING_S:
+                return False
+            self._silent[key] = self._silent.get(key, 0) + 1
+            return self._silent[key] == SILENT_RECORDINGS

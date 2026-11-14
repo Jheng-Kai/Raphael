@@ -31,7 +31,9 @@
 /* The row is one surface with its switch inside it (Grok Bot's Upcoming rows): under the pointer the whole row lights,
    never the words alone with the switch left outside (owner, 2026-11-09). */
 .mb-routine-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; padding-right: var(--sp-2); border-radius: var(--r-md); }
-.mb-routine-row:has(> .mb-rt:hover) { background: var(--hover); }
+/* Lit wherever the pointer is on the row, its switch included: one control to the eye (R-UI-157). */
+.mb-routine-row:hover { background: var(--hover); }
+.mb-routine-row:has(> .mb-rt:active:not(:disabled)) { background: var(--pressed); }
 .mb-routine-row > .mb-rt { flex: 1; min-width: 0; }
 .mb-det .mb-routine-row > .mb-rt.btn:hover:not(:disabled) { background: transparent; }
 .mb-routine-row > .mb-tool { flex: none; opacity: 0; }

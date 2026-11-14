@@ -73,8 +73,11 @@ details-commands, details-notify, raphael-skills, member-edit, speaker-draft-mem
 speaker-draft-chief, member-draft-switch and primary-contact-set.
 
 ```powershell
-npm run look -- member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
+npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
+
+R-UI-157 (2026-11-14): a skill's row, and every member settings row that opens something, is lit as one under the pointer with its
+switch on the fill; the details panel's routine rows too. The look audit fails a row whose button lights alone beside its switch.
 
 ## No member voices (owner decision, 2026-11-10)
 

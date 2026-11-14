@@ -1026,6 +1026,7 @@ export const ja = {
   "agent.stopping": "停止しています…",
   "agent.rerun": "もう一度実行",
   "chat.copy": "コピー",
+  "chat.copyImage": "画像をコピー",
   "chat.send": "送信",
   "chat.edit": "編集",
   "chat.sendNow": "今すぐ送信",

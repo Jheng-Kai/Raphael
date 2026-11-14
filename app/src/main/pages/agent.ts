@@ -63,6 +63,7 @@ import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
+import { copyPicture, mediaPicture, pictureQuote } from "../picture-message";
 import { ReplyPacing } from "../reply-pacing";
 import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
@@ -122,7 +123,7 @@ import type { PageArgument, AgentQuestion, AgentTurn, AppContext, CliBrainId, Gr
 import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
-import { createRoomPane } from "../group-chats";
+import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
 import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
@@ -246,7 +247,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; showSettings(id: number | null): void } {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; navView(): string; showNavView(key: string): void } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -839,6 +840,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     quoteCard.hidden = !composerQuote;
     quoteCard.innerHTML = composerQuote ? quoteHTML(composerQuote) +
       iconButton("x", t("chat.removeQuote"), ' data-act="remove-quote"').replace(" title=", " data-tooltip=") : "";
+    // A quoted picture shows its own thumbnail, from the copy the thread already loaded (R-UI-156).
+    if (quoteCard.querySelector("img[data-attachment]")) attachmentMedia.sync();
   }
 
   /** A draft card with a thumbnail or type icon, size and a remove button. */
@@ -991,10 +994,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
-            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}:${state.editing.text}` : ""],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
+            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}:${state.editing.text}` : "",
+            item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}` : ""],
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together, part: item.part }));
         })(), turnId: item.turn.id },
-    );
+    // A stretch of a turn with nothing in it yet (owner messages that joined its work, threadItems) has no line.
+    ).filter(line => line.html !== "");
     renderedTurns.retain(new Set(out.map(line => line.key)));
     const boundary = unreadFrom;
     if (boundary !== null) {
@@ -1800,8 +1805,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
     revealWork: id => {
       state.thinkingOpen.set(id, true);
-      // Search opens this body in place; acknowledge that state without replacing its marks or face.
-      const line = lines().find(line => line.turnId === id), node = thread.querySelector(`.tn[data-id="${id}"]`);
+      // Search opens this body in place; acknowledge that state without replacing its marks or face. The body is in the
+      // turn's last line: owner messages that joined its work break it into several (threadItems).
+      const shown = lines().filter(line => line.turnId === id), drawn = thread.querySelectorAll(`.tn[data-id="${id}"]`);
+      const line = shown[shown.length - 1], node = drawn[drawn.length - 1];
       if (line && node) drawnHTML.set(node, threadLineIdentity(line.html));
     },
     changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
@@ -2038,7 +2045,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) void load(false);
   }
 
-  function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean } | null {
+  function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean; picture?: TurnAttachment } | null {
     const id = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id);
     const turn = turns.find(item => item.id === id);
     const key = control.closest<HTMLElement>("[data-message]")?.dataset.message;
@@ -2047,6 +2054,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const message = turn.messages?.find(item => String(item.seq) === key);
     if (key !== "reply" && !message) return null;
     if (message?.kind === "media") {
+      // A picture the member sent is quoted as a link to its stored file, and copied as the picture itself (R-UI-156).
+      const picture = mediaPicture(message.text);
+      if (picture) return { turn, key, text: pictureQuote(picture), markdown: false, picture };
       const media = parseMediaPayload(message.text);
       return { turn, key, text: media ? [media.title, media.description, media.url].filter(Boolean).join("\n") : message.text, markdown: false };
     }
@@ -2061,7 +2071,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
     if (!source && !pending) return;
-    try { await copyButton(control, source ? messagePlainText(source.text, source.markdown) : pending!.text); }
+    const picture = source?.picture;
+    try { await copyButton(control, picture ? () => copyPicture(() => api.core<{ mime: string; data: string }>("attachments.get", { id: picture.id })) : source ? messagePlainText(source.text, source.markdown) : pending!.text); }
     catch (err) { toaster.info(describeError(err)); }
   }
 
@@ -2087,7 +2098,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const message = control.closest<HTMLElement>(".chat-message");
     const items: Parameters<typeof openActions>[1][number][] = [];
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
-    items.push({ id: "copy", label: t("chat.copy"), icon: "copy" });
+    items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
     // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
@@ -2842,7 +2853,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!quote) return;
     const member = memberId(), conversation = conversationId();
     const source = (): AgentTurn | undefined => [...turns].sort((a,b) => b.id-a.id).find(turn => turn.id < quotedAt &&
-      [messagePlainText(turn.question), ...plainReplies((turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.text)).map(text => messagePlainText(text, true, composioAction(turn))), messagePlainText(turn.text, true, composioAction(turn))].some(text => text.includes(quote.text)));
+      [messagePlainText(turn.question), ...plainReplies((turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.text)).map(text => messagePlainText(text, true, composioAction(turn))), messagePlainText(turn.text, true, composioAction(turn)),
+        ...(turn.messages ?? []).flatMap(message => { const picture = message.kind === "media" ? mediaPicture(message.text) : null; return picture ? [pictureQuote(picture)] : []; })].some(text => text.includes(quote.text)));
     let target = source();
     while (!target && canLoadEarlier) {
       const before = oldestId(turns), page = await api.agentHistoryList({member_id:member,conversation_id:conversation,before_id:before,limit:PAGE_SIZE});
@@ -2971,13 +2983,71 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     }).catch(error => toaster.info(describeError(error)));
   });
 
+  // ---------- the way back (nav-history.ts) ----------
+
+  /** The titles of the pages opened here, so a step forward can open one again with its name. */
+  const pageTitles = new Map<string, string>();
+  /** The conversation a member's thread shows when it is not the newest one, which is the one a member opens at. */
+  const conversationStep = (): string => {
+    const chosen = conversationId(), newest = newestConversation(conversationCache.get(memberId()) ?? []);
+    return chosen !== undefined && newest && chosen !== newest.id ? `:c:${chosen}` : "";
+  };
+  /**
+   * What the page shows, in words the history keeps (a group `r:5`; a member's thread `m:3`, with `:c:17` for an older
+   * conversation; then `>s:` and the view of the member's settings page, or `>p:` and a page open in the thread's place).
+   */
+  function navView(): string {
+    const room = currentRoomId();
+    let key = room !== null ? `r:${room}` : `m:${memberId()}${conversationStep()}`;
+    if (room === null && members.settings.isOpen()) key += `>s:${members.settings.navView()}`;
+    const page = room !== null ? roomPane.page() : pagesHost.shown();
+    if (page) {
+      pageTitles.set(page.id, page.title);
+      key += `>p:${page.id}`;
+    }
+    return key;
+  }
+  /** Puts the page back at a view `navView` named. A step takes the ways a press takes, so each view comes in as it does then. */
+  function showNavView(key: string): void {
+    const [chat = "", ...layers] = key.split(">");
+    const settingsView = layers.find(layer => layer.startsWith("s:"))?.slice(2);
+    const pageId = layers.find(layer => layer.startsWith("p:"))?.slice(2);
+    const room = /^r:(\d+)$/.exec(chat), thread = /^m:(\d+)(?::c:(\d+))?$/.exec(chat);
+    if (room) {
+      // A room opened by the step reads its thread first: its page comes back with the next step, within the room.
+      if (currentRoomId() !== Number(room[1])) { void openGroupChat(Number(room[1])); return; }
+      const open = roomPane.page();
+      if (pageId !== undefined && open?.id !== pageId) roomPane.showPage(pageId, pageTitles.get(pageId) ?? "");
+      else if (pageId === undefined && open) roomPane.closePage();
+      return;
+    }
+    if (!thread) return;
+    const member = Number(thread[1]);
+    const conversation = thread[2] !== undefined ? Number(thread[2]) : newestConversation(conversationCache.get(member) ?? [])?.id;
+    if (conversation !== undefined && (member !== memberId() || conversation !== conversationId() || currentRoomId() !== null)) openConversation(member, conversation);
+    else if (member !== memberId() || currentRoomId() !== null) members.select(member);
+    // The member's settings page opens and closes as its gear and its arrow do (show), keeping the thread's place.
+    if (settingsView !== undefined && !members.settings.isOpen()) {
+      chatPlace = !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
+      members.openSettings();
+    } else if (settingsView === undefined && members.settings.isOpen()) {
+      members.closeSettings();
+      restoreChatPlace();
+    }
+    if (settingsView !== undefined) members.settings.showNavView(settingsView);
+    const shown = pagesHost.shown();
+    if (pageId !== undefined && shown?.id !== pageId) void pagesHost.show(pageId, pageTitles.get(pageId) ?? "", () => {});
+    else if (pageId === undefined && shown) pagesHost.close();
+  }
+
   return {
     id: "agent",
     el,
     sidebar: members.column,
     loadSidebar: () => members.load(),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
-    showSettings(id) { if (id !== null && id === members.current()) members.openSettings(); else members.closeSettings(); },
+    navView,
+    showNavView,
     show(arg) {
       const wasVisible = visible;
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.

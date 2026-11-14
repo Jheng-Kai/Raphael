@@ -9,7 +9,7 @@ import hmac
 import json
 import secrets
 
-from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
+from ..worker.guards import argument_limit, canonical
 
 MAX_BODY = 1024 * 1024
 VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
@@ -19,6 +19,10 @@ class RaphaelMcp:
     def __init__(self, definitions, execute):
         self.definitions, self.execute = definitions, execute
         self.token = secrets.token_urlsafe(32)
+        # A request's id is only its endpoint's own count, and /mcp and /computer both count from 1 (as does a CLI that
+        # started again in the same turn): a call is recorded under this server's, the endpoint's and the request's ids,
+        # or one tool's record replaced another's (owner's data, 2026-11-14: a picture's result over a command's).
+        self._calls = secrets.token_hex(4)
         self.server = None
         self.url = ""
         self.computer_url = ""
@@ -129,10 +133,10 @@ class RaphaelMcp:
                     "inputSchema": item.get("parameters", {"type": "object"})} for item in tools.values()]}}
         if method == "tools/call" and isinstance(params.get("name"), str) and params["name"] in tools:
             args = params.get("arguments", {})
-            if not isinstance(args, dict) or len(canonical(args)) > MAX_ARGUMENT_CHARS:
+            if not isinstance(args, dict) or len(canonical(args)) > argument_limit(params["name"]):
                 return {"error": {"code": -32602, "message": "Invalid arguments"}}
             try:
-                result = await self.execute(str(packet["id"]), params["name"], args)
+                result = await self.execute(f"{'computer' if computer else 'raphael'}-{self._calls}-{packet['id']}", params["name"], args)
             except Exception as exc:
                 from ..failures import classify
                 failure = classify(exc)

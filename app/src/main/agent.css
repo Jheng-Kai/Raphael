@@ -162,6 +162,9 @@
 /* a turn: the person on the right, Raphael on the left */
 .tn { display: flex; flex-direction: column; gap: var(--pa-gap-in); }
 .thread > .tn.is-owner-only + .tn.is-owner-only { margin-top: calc(var(--sp-1) - var(--pa-gap)); }
+/* What the work made after an owner message that joined it (threadItems, R-QUEUE-09) answers that message: it stands
+   under it as a turn's reply stands under its question. */
+.thread > .tn.is-owner-only + .tn[data-after] { margin-top: calc(var(--pa-gap-in) - var(--pa-gap)); }
 .tn.is-owner-only > .ra:not(:has(.live-presence, .conversation-card, .chat-message, .work-section, .turn-question)) { display: none; }
 .queued-mark { color: var(--text-3); font: var(--fs-2xs)/1.4 var(--ui); margin-inline-end: var(--sp-2); }
 .message-actions:has(.queued-mark) { opacity: 1; }
@@ -247,6 +250,10 @@
 button.message-quote { width: 100%; text-align: start; background: none; cursor: pointer; }
 .quote-author { display: block; color: var(--accent-text); font-weight: var(--weight-semibold); }
 .quote-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A quoted picture: its thumbnail at the start, beside the author and the word for a picture (R-UI-156). */
+.message-quote.has-picture { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-2); align-items: center; }
+.message-quote.has-picture > :is(.quote-author, .quote-text) { grid-column: 2; }
+.quote-thumb { grid-column: 1; grid-row: 1 / span 2; display: block; width: 36px; height: 36px; object-fit: cover; border-radius: var(--r-sm); background: var(--surface-2); }
 .cmp-quote { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }
 .cmp-quote > .message-quote { flex: 1; margin: 0; }
 .cmp-quote > .btn { flex: none; }
@@ -587,6 +594,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .attachment-image, .attachment-video { overflow: hidden; border-radius: var(--r-lg); }
 .btn.attachment-picture { display: block; width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; border-radius: var(--r-lg); overflow: hidden; }
 .attachment-picture img { display: block; width: 100%; max-height: 300px; object-fit: contain; }
+/* A member's picture is a message of its own (R-UI-156): the picture keeps its own shape, so the actions beside it stand against
+   what is seen, as they stand against a bubble, never across an empty band of a box wider than the picture. */
+.chat-message[data-picture] .attachment-picture img { width: auto; max-width: 100%; }
+/* Its reaction stands on the picture's top-right corner, over its edge: the frame lets it out (the picture's button keeps the corners). */
+.chat-message[data-picture] .attachment-image { overflow: visible; }
 .attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
 .btn.attachment-open { position: absolute; top: 6px; right: 6px; width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
@@ -763,7 +775,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-find-count { flex: 0 0 max(13ch, 8em); text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ra-find .btn { flex: none; }
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
-.thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
+/* The match being shown is the words in reverse, no frame and no underline (owner, 2026-11-14: 「不用有現在這個外框 有反色就好」). */
+.thread mark.is-current { outline: none; text-decoration: none; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
 /* Reactions stand on the first bubble's top-right corner, as Grok Bot's (the owner's, on the left), over its top edge. They are drawn inside the bubble (withReactions), so cards, a sign-in button or a failure row under it never
    take them from it. Their outer edge is the bubble's own, so they reach neither the hover actions nor past the bubble's scroll width.

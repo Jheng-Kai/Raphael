@@ -209,7 +209,7 @@ export function canTurnOn(kind: Capability, status: ServicesStatus | null, brain
 const capIcon = (icon: IconName, size = ""): string => `<span class="ic svc-ic${size ? " " + size : ""}" aria-hidden="true">${ico(icon)}</span>`;
 
 /** The dialog's close button, the same in both of its views. */
-const closeButton = (): string => iconButton("x", t("common.close"), ' data-svc="close" data-k="svc-close"');
+const closeButton = (): string => iconButton("x", t("common.close"), ' data-svc="close" data-k="svc-close" data-nav-back');
 
 /** One row of the list, the same markup as 「連接」: the name opens the capability's dialog, the switch is its own. */
 function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: BrainSettings | null): string {
@@ -304,7 +304,7 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
   const on = isOn(entry.kind, status, brain);
   const head =
     `<div class="cs-dlg-head sub">` +
-    iconButton("left", t("conn.back"), ' data-svc="back" data-k="svc-back"') +
+    iconButton("left", t("conn.back"), ' data-svc="back" data-k="svc-back" data-nav-back') +
     `<h2 class="cs-dlg-name" id="svc-dlg-title">${esc(name)}</h2>` +
     closeButton() +
     `</div>`;
@@ -382,6 +382,10 @@ export interface ServicesPanel {
   /** The 看圖片 picker chose `id` ("" is 「與回答相同」). */
   chooseVision(id: string): Promise<void>;
   reset(): void;
+  /** The dialog on screen in words the way back keeps: its capability, and the service shown in it (`search:brave`); "" for none. */
+  navView(): string;
+  /** Shows the dialog `navView` named, or closes it for "". */
+  showNavView(key: string): void;
 }
 
 /** Focuses the element `selector` names, if the page is there (not in a test without one). */
@@ -665,5 +669,15 @@ export function createServices(host: ServicesHost): ServicesPanel {
     closing = false;
   }
 
-  return { view, load, click, key, chooseVision, reset, openRepair: openDialog };
+  /** A dialog on its way out is gone already, as the press that closed it meant. */
+  const navView = (): string => (open && !closing ? `${open.kind}${open.service ? `:${open.service}` : ""}` : "");
+  function showNavView(key: string): void {
+    if (!key) { closeDialog(); return; }
+    const at = key.indexOf(":");
+    const kind = (at < 0 ? key : key.slice(0, at)) as Capability, service = at < 0 ? null : key.slice(at + 1);
+    if (!open || closing || open.kind !== kind) openDialog(kind, service);
+    else if (service !== open.service) { if (service) showService(service); else showList(); }
+  }
+
+  return { view, load, click, key, chooseVision, reset, openRepair: openDialog, navView, showNavView };
 }

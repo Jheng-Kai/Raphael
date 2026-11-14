@@ -13,6 +13,13 @@ from raphael_core.worker.guards import (
 
 def test_the_worker_and_the_core_refuse_arguments_of_the_same_size():
     assert MAX_ARGUMENT_CHARS == CORE_MAX_ARGUMENT_CHARS
+    from raphael_core.agent.plugins import FILE_ARGUMENT_CHARS, FILE_ARGUMENT_NAMES
+    assert guards.FILE_ARGUMENT_CHARS == FILE_ARGUMENT_CHARS
+    assert guards.FILE_ARGUMENT_TOOLS == {"computer__" + name for name in FILE_ARGUMENT_NAMES}
+    # Only a computer's whole-file tools, whose text goes over stdin, take more than a command does.
+    assert guards.argument_limit("computer__write_file") == guards.argument_limit("computer__edit_file") == FILE_ARGUMENT_CHARS
+    for name in ("computer__vm_exec", "write_file", "fs__write_file", "use_tool", None):
+        assert guards.argument_limit(name) == MAX_ARGUMENT_CHARS
 
 
 def test_a_short_text_is_not_touched():

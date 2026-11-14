@@ -28,6 +28,26 @@ async def test_http_mcp_requires_bearer_and_runs_only_offered_tools():
     assert server.closed
 
 
+async def test_the_same_request_number_on_both_endpoints_and_on_a_new_server_is_a_different_call():
+    identifiers = []
+
+    async def execute(identifier, name, args):
+        identifiers.append(identifier)
+        return ToolOutcome(True, content="ok")
+
+    tools = [{"type": "function", "function": {"name": name, "description": name, "parameters": {"type": "object"}}}
+             for name in ("image_generate", "computer__vm_exec")]
+    for _ in range(2):
+        async with RaphaelMcp(lambda: tools, execute) as server:
+            headers = {"Authorization": "Bearer " + server.token}
+            async with httpx.AsyncClient() as client:
+                for url, name in ((server.url, "image_generate"), (server.computer_url, "computer__vm_exec")):
+                    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": {}}}
+                    assert (await client.post(url, headers=headers, json=body)).json()["result"]["isError"] is False
+    assert len(identifiers) == 4 and len(set(identifiers)) == 4
+    assert identifiers[0].startswith("raphael-") and identifiers[1].startswith("computer-")
+
+
 async def test_official_mcp_client_can_initialize_list_and_call():
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client

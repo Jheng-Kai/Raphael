@@ -502,6 +502,17 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
     }
   }
+  // R-UI-157: a row that opens something and holds a switch is one control to the eye (owner, 2026-11-14, a second time
+  // after Connect Apps): under the pointer the fill is the row's and the switch stands on it. A fill on the row's button
+  // alone, with the switch beside it, fails on every scene that shows such a row.
+  const lit = fill => !!fill && !/^(?:transparent|none|rgba\(0, 0, 0, 0\))$/.test(fill.value.trim());
+  for (const row of doc.body.querySelectorAll('*')) {
+    const main = [...row.children].find(child => child.matches('button.btn:not(.tg):not(.icon)'));
+    const toggle = main && [...row.children].find(child => child.matches('.tg'));
+    if (!toggle || !visible(row) || !visible(main) || !visible(toggle) || !onScreen(row)) continue;
+    if (lit(hovered.get(main)?.fill) && !lit(hovered.get(row)?.fill))
+      productRules.push({ ...describe(main), rule: 'R-UI-157', reason: `The row's button lights alone under the pointer, its switch outside the fill (${hovered.get(main).fill.selector.trim()})` });
+  }
   // R-UI-53: a hover fill keeps its words off its edges. Measured at rest, so every row of every scene counts.
   const HOVER_TEXT_GAP = 6, HOVER_ROW_MIN = 80;
   for (const [element, { fill }] of hovered) {

@@ -32,7 +32,8 @@ import { mountStageDrop } from "./attachments";
 import { openMediaLightbox } from "./media-lightbox";
 import { keepReadingPlace } from "./reading-place";
 import { createBackgroundQuestions } from "./background-questions";
-import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
+import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, pictureActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
+import { copyPicture, pictureIdAt } from "./picture-message";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "./owner-questions";
 import { mountPendingQuestions } from "./pending-questions";
@@ -494,7 +495,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',reactionControlHTML() + iconButton("chat", t("rooms.thread"), ` data-room-act="thread" data-message="${m.id}"`).replace(" title=", " data-tooltip=") + (!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const metadata = (m.reply_count ? `<button type="button" class="btn sm room-thread-chip" data-room-act="thread" data-message="${m.id}">${esc(t("rooms.threadCount", { p0: m.reply_count }))}</button>` : "");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${withReactions(`${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}`, m.reactions)}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${index===0?withReactions(quoted(replyContentHTML(part,"",m.status==="running"),reply),m.reactions):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${withReactions(`${words?"":reply}${filesHTML(m.attachments)}${words?`<div class="bubble">${reply}<div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}`, m.reactions)}${actions}${metadata}</div></div>`:`<div class="ra"><span class="ra-face"${member?` data-tooltip="${esc(member.name)}"`:""}>${member?faceHTML(member,30):""}</span><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${index===0?withReactions(quoted(replyContentHTML(part,"",m.status==="running"),reply),m.reactions):replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions+metadata:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title"), pictureActionsHTML(actions)) : ""}</div></div>`}</li>`;
     }), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     renderedMessages.retain(new Set(grouped.map(({entry}) => entryKey(entry))));
     const changed = patchThread(thread, wanted, drawn, {
@@ -564,7 +565,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   }
   function close():void{if(!opened)return;closeSideThread?.();closeSideThread=undefined;if(meetingPanel?.isConnected)closeMenu();finder.close(false);saveRoomDraft();composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
-  el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
+  el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-picture","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="private-work") openMemberThread(_app,Number(target.dataset.member),Number(target.dataset.turn));
     else if(act==="peer-chat"){peer?.close();peer=openPeerChat(el,target,()=>handoffs,(id,fallback)=>{const member=person(id)??{id,name:id===0?t("agent.title"):fallback};return{name:member.name||fallback,face:faceHTML(member,28),accent:nameAccent(member)};},()=>{peer=null;});}
     else if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
@@ -599,6 +600,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     })();
     else if(act==="cancel-reply"){replyTo=undefined;draw();composer.input.focus();}
     else if(act==="copy-message"){const m=messages.find(m=>m.id===Number(target.closest<HTMLElement>('[data-room-message]')?.dataset.roomMessage));if(m)void copyButton(target, messagePlainText(m.member_id===null?m.text:plainReplies(replyMessages(m.text)).join("\n\n"),m.member_id!==null)).catch(error=>toaster.info(describeError(error)));}
+    // A member's picture is copied as the picture itself (R-UI-156).
+    else if(act==="copy-picture"){const id=pictureIdAt(target);if(id)void copyButton(target, () => copyPicture(() => api.core<{mime:string;data:string}>("attachments.get", {id}))).catch(error=>toaster.info(describeError(error)));}
     else if(act==="copy-code")void copyButton(target, target.closest('.message-code')?.querySelector('code')?.textContent??"").catch(error=>toaster.info(describeError(error)));
     else if(act==="attachment-image"){const src=attachmentMedia.source(target);if(src)openMediaLightbox(target,src);}
     else if(act==="attachment-open")void api.openAttachment(target.dataset.id??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
@@ -618,7 +621,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(true,false); if (!event || event.type !== "WorkerChanged" || event.state === "waiting") void questions.load(); }, 300);
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
-  return {el,close,refresh,async open(id:number){
+  return {el,close,refresh,
+    /** The page open in the room's thread place, for the way back (nav-history.ts), and how a step opens or puts one away. */
+    page:()=>pagesHost.shown(),showPage:(id:string,title:string)=>void pagesHost.show(id,title,()=>{}),closePage:()=>pagesHost.close(),
+    async open(id:number){
     closeSideThread?.(); closeSideThread = undefined;
     if (meetingPanel?.isConnected) closeMenu();
     meetingRow.hidden = true;

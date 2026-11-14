@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Exercise the real page and member shell; only the native IPC boundary is mocked.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { AgentTurn, AppContext, MainEvent, Member } from "../types";
+import type { AgentTurn, AppContext, MainEvent, Member, TurnMessage } from "../types";
 
 const api = vi.hoisted(() => Object.fromEntries([
   "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentVoiceComposed", "agentStop", "agentSendNow", "cancelSession", "workerCancel",
@@ -285,6 +285,41 @@ test("a single live presence stays below additions without changing on an unchan
  expect(lines[lines.length-1]?.contains(presence)).toBe(true);
  await refresh({type:"AgentTurn",turn_id:12,member_id:0});
  expect($(".thread .live-presence")).toBe(presence);
+});
+
+test("a message sent while the work runs stands where it was sent and the reply that answers it follows", async () => {
+ const start = Date.now();
+ const said = (seq: number, kind: TurnMessage["kind"], text: string, after: number): TurnMessage => ({ seq, kind, text, at_ms: start + after });
+ const before = [said(1, "progress", "Laying out the poster", 1000), said(2, "reply", "A first layout is ready.", 2000)];
+ const file = said(3, "media", JSON.stringify({ attachment: { id: `${"a".repeat(32)}.txt`, name: "poster-notes.txt", mime: "text/plain", size: 7 } }), 6000);
+ const addition = live({ id: 12, session_id: "steered-12", route: "owner_input", status: "done", question: "Generate a picture instead", text: "", created_at_ms: start + 3000 });
+ const thread = () => $(".thread").textContent ?? "";
+ const inOrder = (...words: string[]) => {
+  const at = words.map(word => thread().indexOf(word));
+  expect(at.every(index => index >= 0), `${words.join(" < ")} in ${thread()}`).toBe(true);
+  expect(at, words.join(" < ")).toEqual([...at].sort((a, b) => a - b));
+ };
+ turns = [live({ question: "Make a poster for the open day", messages: before }), addition];
+ mount(); await flush();
+ inOrder("Make a poster for the open day", "A first layout is ready.", "Generate a picture instead");
+ // The work goes on after reading the message: what it makes now comes under the message, not above it.
+ turns = [live({ question: "Make a poster for the open day", messages: [...before, file] }), addition];
+ await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
+ inOrder("Make a poster for the open day", "A first layout is ready.", "Generate a picture instead", "poster-notes.txt");
+ expect(document.querySelectorAll(".thread .live-presence")).toHaveLength(1);
+ // Finished, the reply answers the message above it: the owner's words are not left last and unanswered.
+ const reply = "Made as a generated picture, as you asked.";
+ turns = [live({ question: "Make a poster for the open day", status: "done", text: reply, messages: [...before, file, said(4, "reply", reply, 9000)] }), addition];
+ await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
+ await vi.advanceTimersByTimeAsync(5000); await flush();
+ inOrder("Make a poster for the open day", "A first layout is ready.", "Generate a picture instead", "poster-notes.txt", reply);
+ const last = [...document.querySelectorAll(".thread > li")].pop()!;
+ expect(last.querySelector(".owner-message")).toBeNull();
+ expect(last.textContent).toContain(reply);
+ // The owner's message keeps its own line and actions, and the question its own.
+ expect($('.tn[data-id="12"] .owner-message').textContent).toContain("Generate a picture instead");
+ expect(document.querySelectorAll('.thread .owner-message')).toHaveLength(2);
+ expect(thread().split(reply)).toHaveLength(2);
 });
 
 test("messages before the first announcement share one presence below the newest bubble", async () => {
