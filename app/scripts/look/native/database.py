@@ -112,7 +112,7 @@ elif operation == "windows":
         user.GetWindowRect(hwnd, ctypes.byref(rect))
         region = gdi.CreateRectRgn(0, 0, 0, 0)
         shape = user.GetWindowRgn(hwnd, region)
-        windows.append({"title": title.value, "style": user.GetWindowLongW(hwnd, -20),
+        windows.append({"title": title.value, "style": user.GetWindowLongW(hwnd, -20), "frame": user.GetWindowLongW(hwnd, -16) & 0xFFFFFFFF,
                         "rect": [rect.left, rect.top, rect.right, rect.bottom],
                         "rounded": bool(shape and not gdi.PtInRegion(region, 0, 0) and gdi.PtInRegion(region, (rect.right-rect.left)//2, (rect.bottom-rect.top)//2))})
         gdi.DeleteObject(region)
