@@ -1337,7 +1337,6 @@ export const zhTW = {
   "skills.learned": "自行學會",
   "skills.imported": "匯入",
   "skills.owner": "主人提供",
-  "skills.undo": "復原上次變更",
   "skills.instructions": "技能內容",
   "skills.save": "儲存技能",
   "mem.save": "儲存",

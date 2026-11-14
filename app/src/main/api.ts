@@ -642,7 +642,7 @@ export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_
 export const keepAwakeSet = (enabled: boolean): Promise<boolean> => invoke("schedule_keep_awake_set", { enabled });
 // Member profile resources use the same member boundary as conversations.
 const skillScope = (memberId: number): { member_id: number; shared?: boolean } => memberId === -1 ? { member_id: 0, shared: true } : { member_id: memberId };
-export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; undo?: string | null }> => core("members.skills.list", { ...skillScope(memberId) });
+export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[] }> => core("members.skills.list", { ...skillScope(memberId) });
 export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { ...skillScope(memberId), source });
 export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { ...skillScope(memberId), id, enabled });
 /** A skill and its whole Markdown document, for its page (one that is switched off too). */

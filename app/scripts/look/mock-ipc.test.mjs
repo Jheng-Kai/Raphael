@@ -215,6 +215,21 @@ describe("shared look IPC boundary", () => {
     expect(roster.members.find(member => member.id === 3).model).toBe('cli:claude:haiku');
     expect((await invoke('brains.cli')).clis.find(cli => cli.id === 'codex').models.some(model => model.name === 'GPT-6.1 Sol')).toBe(true);
   });
+  it("holds fifteen members in three folders and numbers a place the way the core does (sidebarDrag)", async () => {
+    const target = {}; installMock(fixture, { fixture: { sidebarDrag: true } }, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke('core_call', { method, params });
+    const roster = await call('members.list');
+    expect(roster.members.filter(member => member.id)).toHaveLength(15);
+    expect(roster.groups.map(group => group.id)).toEqual([1, 2, 3]);
+    expect([1, 2, 3, null].map(group => roster.members.filter(member => member.id && member.group_id === group).length)).toEqual([5, 5, 3, 2]);
+    // One member into the second place among all of them: the others are numbered again from 0, Raphael is none of them.
+    await call('members.update', { id: 5, position: 1 });
+    const moved = await call('members.list');
+    expect(moved.members.map(member => member.id).slice(0, 5)).toEqual([0, 1, 5, 2, 3]);
+    expect(moved.members.filter(member => member.id).map(member => member.position)).toEqual(Array.from({ length: 15 }, (_, place) => place));
+    await call('groups.update', { id: 3, position: 0 });
+    expect((await call('members.list')).groups.map(group => [group.id, group.position])).toEqual([[3, 0], [1, 1], [2, 2]]);
+  });
   it("the plain usage page reads only allowances, as the shell allows, and the month's spend stays the ledger's", async () => {
     const target = {};
     const state = installMock(fixture, {}, target);

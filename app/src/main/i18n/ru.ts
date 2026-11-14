@@ -1578,7 +1578,6 @@ export const ru = {
   "skills.learned": "Изучено самостоятельно",
   "skills.imported": "Импортировано",
   "skills.owner": "От владельца",
-  "skills.undo": "Отменить последнее изменение",
   "skills.instructions": "Инструкции навыка",
   "skills.save": "Сохранить навык",
   "members.more": "Параметры {p0}",

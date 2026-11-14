@@ -1578,7 +1578,6 @@ export const th = {
   "skills.learned": "เรียนรู้ด้วยตนเอง",
   "skills.imported": "นำเข้าแล้ว",
   "skills.owner": "จากเจ้าของ",
-  "skills.undo": "เลิกทำการเปลี่ยนแปลงล่าสุด",
   "skills.instructions": "คำแนะนำทักษะ",
   "skills.save": "บันทึกทักษะ",
   "members.more": "ตัวเลือกของ {p0}",

@@ -1338,7 +1338,6 @@ export const ja = {
   "skills.learned": "自分で習得",
   "skills.imported": "インポート",
   "skills.owner": "オーナー提供",
-  "skills.undo": "前の変更を元に戻す",
   "skills.instructions": "スキルの内容",
   "skills.save": "スキルを保存",
   "mem.save": "保存",
