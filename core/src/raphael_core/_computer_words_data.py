@@ -1,8 +1,8 @@
 """Fixed UI translations of the line that says a member woke the computer (computer/vm_tools.py, R-COMP-WAKE-01).
 
 Each English source maps to its twelve translations, in the order of `ui_words.NEW_LANGUAGES`; the catalogue test in
-tests/agent/test_ui_languages.py holds them to the same format fields as their source. The app's own copy of the same
-three sentences is `computer.woke.*` in app/src/main/i18n.
+tests/agent/test_ui_languages.py holds them to the same format fields as their source. The app keeps no copy of them: the
+line is written into the conversation by the core alone.
 """
 
 _ORDER = ("zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr")

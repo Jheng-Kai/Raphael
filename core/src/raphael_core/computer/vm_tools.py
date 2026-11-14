@@ -68,7 +68,7 @@ ENGINE_STARTING = with_ui_words({
 
 # The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01, owner, 2026-11-14: the
 # computer wakes when a member decides a task needs it, or when he starts it, and never silently). One quiet line in the
-# conversation, naming the member and why; no toast. The app's row reads the same three reasons from `woken`.
+# conversation, naming the member and why; no toast. The status's `woken` is no longer read by the app (R-PANEL-06).
 WOKE = {reason: with_ui_words(table) for reason, table in {
     "page": {"zh-TW": "{who}為了開網頁喚醒了電腦", "ja": "{who}がウェブページを開くためにコンピューターを起こしました",
              "en": "{who} woke the computer to open a web page"},
