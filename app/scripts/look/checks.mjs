@@ -520,10 +520,12 @@ export function checkRendered(name, context = {}) {
       const style = getComputedStyle(button), box = button.getBoundingClientRect();
       require(parseFloat(style.borderRadius) >= box.width / 2 - 0.5 && Math.abs(box.width - box.height) < 1 && style.backgroundColor !== 'rgba(0, 0, 0, 0)', `the buttons on the window's edges are soft round buttons (${button.getAttribute('aria-label') ?? button.dataset.act})`);
     }
+    // The computer lives in the third tab only (owner, 2026-11-14): no Details view of any member has a row, heading, press or screen for it.
+    if (tab === 'details') require(!panel.querySelector('.mb-tab-body [class*="computer"], .mb-tab-body [data-det^="computer"], .mb-tab-body [data-k*="computer"], .mb-tab-body [data-computer-thumb]') && ![...panel.querySelectorAll('.mb-tab-body .mb-dh')].some(node => node.textContent === '電腦'), 'Details has no computer row, heading or screen: the computer is the third tab');
     if (tab === 'details') for (const section of panel.querySelectorAll('.mb-tab-body > section')) {
-      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-rts, .conversation-rows, .mb-computer, :scope > .mp-empty');
+      const head = section.querySelector(':scope > .mb-dh'), list = section.querySelector('.mb-rts, .conversation-rows, :scope > .mp-empty');
       if (!visible(head) || !visible(list)) continue;
-      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-rt, .conversation-open, .mb-computer-row');
+      const pad = node => node ? parseFloat(getComputedStyle(node).paddingLeft) : 0, row = list.querySelector('.mb-rt, .conversation-open');
       const inner = list.getBoundingClientRect().left + pad(list) + pad(row), start = head.getBoundingClientRect().left + pad(head);
       require(Math.abs(inner - start) <= 1 && getComputedStyle(list).backgroundColor !== 'rgba(0, 0, 0, 0)', `a panel heading starts where the text of its tinted list starts (${Math.round(start)} vs ${Math.round(inner)})`);
     }
@@ -552,34 +554,16 @@ export function checkRendered(name, context = {}) {
       const wanted = underControls ? controls.left - 14 : listBox.right;
       require(Math.abs(closeRight - wanted) <= 2, `close stands ${underControls ? "14 px before the window's buttons" : "on the content's right edge"} (${Math.round(closeRight)} vs ${Math.round(wanted)})`);
       require(Math.abs((tabBar.left + tabBar.right) / 2 - (listBox.left + listBox.right) / 2) < 1, 'the tabs sit in the middle of the content');
-      require(['mb-panel-routines', 'mb-panel-computer', 'mb-panel-suggest'].join() === [...panel.querySelectorAll('.mb-tab-body > section')].map(section => section.className).join(), 'the computer is one row after the routines and before the bots');
+      require(['mb-panel-routines', 'mb-panel-suggest'].join() === [...panel.querySelectorAll('.mb-tab-body > section')].map(section => section.className).join(), 'a member\'s Details holds the routines and the chat platforms');
     } else if (name === 'member-panel-details-empty') {
       require(!panel.querySelector('.mb-panel-tasks') && panel.querySelector('.mb-panel-routines .mp-empty'), 'an empty Details is one quiet routine line and no work list');
-    } else if (name.startsWith('member-panel-details-computer-')) {
-      // The computer is one quiet row for every member (owner, 2026-11-11): its state in a word or two and a small screen at its right;
-      // a PC that cannot give one says so in that row with the one action that fixes it. Nothing asks whether the member may have it.
-      const kind = name.slice('member-panel-details-computer-'.length), section = panel.querySelector('.mb-panel-computer'), box = section.querySelector('.mb-computer');
-      const open = box.querySelector('[data-det="computer-open"]'), word = box.querySelector('.mb-computer-state'), thumb = box.querySelector('[data-computer-thumb]'), fix = box.querySelector('[data-det="computer-fix"]');
-      const expected = { asleep: ['asleep', '休眠中'], connecting: ['connecting', '連線中'], awake: ['awake', '已喚醒'], 'awake-woken': ['awake', '小晴為了開網頁喚醒了電腦'], 'docker-missing': ['unavailable', '這台電腦尚未安裝 Docker Desktop'],
-        'docker-stopped': ['unavailable', '這台電腦的 Docker Desktop 沒有在執行'], remote: ['unavailable', '無法連線至 studio-mini，請檢查電腦位置'] }[kind];
-      require(visible(box) && box.dataset.computerState === expected[0] && word.textContent === expected[1], `the row reads ${expected[1]} (${box.dataset.computerState}: ${word.textContent})`);
-      require(box.querySelectorAll('button').length === (fix ? 2 : 1) && /的電腦$/.test(open.querySelector('b').textContent), 'one press opens it, and only an unavailable PC adds its one fix');
-      if (expected[0] === 'unavailable') {
-        require(!thumb, 'a PC that cannot give a computer draws no screen');
-        require(kind === 'remote' ? !fix : visible(fix) && fix.textContent === (kind === 'docker-missing' ? '下載' : '啟動'), 'the one action that fixes it is a word beside the line');
-      } else {
-        require(!fix && visible(thumb), 'a computer that can be had draws its small screen and no fix');
-        const screen = thumb.getBoundingClientRect(), row = open.getBoundingClientRect();
-        require(Math.abs(screen.width - 72) <= 1 && Math.abs(screen.height - 45) <= 1 && screen.right <= row.right - 8 && screen.right >= row.right - 14, `the small screen stands at the row's right edge (${screen.width}x${screen.height})`);
-        require(thumb.dataset.thumb === (expected[0] === 'awake' ? 'live' : 'idle') && (expected[0] !== 'awake' || /^data:image\/jpeg/.test(thumb.querySelector('.mb-computer-shot')?.getAttribute('src') ?? '')), 'the awake row shows the last picture of the screen, the others a dark screen with the monitor');
-      }
-      // The same row as a routine's: its title and sentence in the same type, the tinted list at the same inset, the heading where the text begins.
-      const title = open.querySelector('b'), routineTitle = panel.querySelector('.mb-rt-main b'), routineSentence = panel.querySelector('.mb-rt-main span');
-      if (routineTitle) require(getComputedStyle(title).fontSize === getComputedStyle(routineTitle).fontSize && getComputedStyle(title).fontWeight === getComputedStyle(routineTitle).fontWeight && getComputedStyle(word).fontSize === getComputedStyle(routineSentence).fontSize, 'the computer row is set in the type of a routine row');
-      require(!/允許|授權|撤銷|收回|映像|主機|開始使用/.test(panel.querySelector('.mb-tab-body').textContent.replace(expected[1], '')), 'the panel asks nothing about having a computer and says nothing of engines, images or hosts beyond the one line');
-      const wide = box.getBoundingClientRect(), list = panel.querySelector('.mb-rts');
-      if (list) require(Math.abs(wide.left - list.getBoundingClientRect().left) <= 1 && Math.abs(wide.right - list.getBoundingClientRect().right) <= 1, 'the row is as wide as the routine list');
-      require(panel.scrollWidth <= panel.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, 'the row does not overflow the panel');
+    } else if (name.startsWith('member-panel-details-no-computer-')) {
+      // The computer lives in the third tab only (owner, 2026-11-14), whatever its state and whoever the member: Details has its routines, for Raphael
+      // his conversations, and the chat platforms, and nothing else. The tab itself stays.
+      const raphael = name.endsWith('-raphael'), body = panel.querySelector('.mb-tab-body');
+      require([...body.querySelectorAll(':scope > section')].map(section => section.className).join() === (raphael ? 'mb-panel-routines,,mb-panel-suggest' : 'mb-panel-routines,mb-panel-suggest'), `Details holds the routines${raphael ? ', the conversations' : ''} and the chat platforms (${[...body.querySelectorAll(':scope > section')].map(section => section.className)})`);
+      require(!!panel.querySelector('[data-slot="conversations"]') === raphael, 'only Raphael has the conversation section');
+      require(!!panel.querySelector('.mb-tabs [data-tab="computer"]'), 'the third tab, the computer, is still there');
     } else if (/^member-panel-library(?:-pages|-media|-files|-long)?$/.test(name)) {
       // The Library, as Grok Bot's (owner, 2026-11-12): chips for the kinds there are, a quiet label per recency group and each
       // group's items in one rounded card of one-line rows (a 20 px mark and the title). No links, no times, never a 「顯示更多」.

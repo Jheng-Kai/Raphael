@@ -6,10 +6,9 @@ import { mountDesktopViewer, preparationHTML, type DesktopState } from "./deskto
 import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
 import { computerStateText } from './computer-state';
-import { computerRowOf, forgetComputerRow } from './computer-row';
 const running: DesktopState = { state:"running", ready:true, control:"member" };
 const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
-let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false, rowOpen = false;
+let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false;
 const flush = async (): Promise<void> => { for (let i=0; i<30; i++) await Promise.resolve(); };
 const panel = (): HTMLElement => host.querySelector('.desktop-panel')!;
 const frame = (): HTMLIFrameElement => host.querySelector('iframe')!;
@@ -119,12 +118,12 @@ test('a teaching trial cannot send into another conversation while handback is p
 });
 function message(state: string, extra = {}): void { window.dispatchEvent(new MessageEvent('message', {source:frame().contentWindow, origin:'http://127.0.0.1:5000', data:{type:'raphael-desktop', state, ...extra}})); }
 beforeEach(() => {
-  vi.useFakeTimers(); vi.resetAllMocks(); setLocale('zh-TW'); member=1; panelOpen=false; rowOpen=false; forgetComputerRow(1); forgetComputerRow(2);
+  vi.useFakeTimers(); vi.resetAllMocks(); setLocale('zh-TW'); member=1; panelOpen=false;
   api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
   api.desktopStatus.mockResolvedValue(running); api.desktopRenew.mockResolvedValue(running); api.desktopClose.mockResolvedValue({});
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
   host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
-  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,rowShown:()=>rowOpen,trySkill:trySent,changed:waitChanged});
+  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,trySkill:trySent,changed:waitChanged});
 });
 afterEach(async()=>{mounted.hide();await flush();document.body.replaceChildren();vi.useRealTimers();});
 
@@ -907,52 +906,16 @@ test('a stream that ends before it ever showed the screen, or says it cannot rea
   expect(api.desktopOpen).toHaveBeenCalledTimes(2);
 });
 
-test('the computer row follows asleep, connecting and awake, and holds the last picture of the screen', async () => {
-  const states: DesktopState[] = [{ state:'stopped', ready:false, control:'member' }, { state:'starting', ready:false, control:'member' }];
-  api.desktopStatus.mockResolvedValue(states[0]); panelOpen=false; rowOpen=true; mounted.show(); await flush();
-  expect(computerRowOf(1)).toMatchObject({ member:1, state:'asleep' });
-  api.desktopStatus.mockResolvedValue(states[1]); await vi.advanceTimersByTimeAsync(2000); await flush();
-  expect(computerRowOf(1)?.state).toBe('connecting');
-  // Running, the stream opens unseen so the row has a picture; it reads connecting until the screen is up.
-  api.desktopStatus.mockResolvedValue(running); await vi.advanceTimersByTimeAsync(2000); await flush();
-  expect(computerRowOf(1)?.state).toBe('connecting'); expect(frame()).not.toBeNull();
-  message('connected'); expect(computerRowOf(1)).toMatchObject({ state:'awake' });
-  expect(computerRowOf(1)?.picture).toBeUndefined();
-  message('frame', { image:'data:image/jpeg;base64,AAAA' }); expect(computerRowOf(1)?.picture).toBe('data:image/jpeg;base64,AAAA');
+test('a running computer is not streamed while its Computer tab is closed: Details carries no computer', async () => {
+  // Owner, 2026-11-14: the computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
+  api.desktopStatus.mockResolvedValue(running); mounted.show(); await vi.advanceTimersByTimeAsync(2000); await flush();
+  expect(api.desktopOpen).not.toHaveBeenCalled(); expect(host.querySelector('iframe')).toBeNull();
 });
 
-test('the row names the member whose own tool woke the computer, and the reason, in its state line', async () => {
-  rowOpen=true; panelOpen=false;
-  api.desktopStatus.mockResolvedValue({ ...running, woken: { member: 2, name: 'Mei', reason: 'command' } }); mounted.show(); await flush();
-  message('connected');
-  expect(computerRowOf(1)).toMatchObject({ state:'awake', note: t('computer.woke.command', { p0:'Mei' }) });
-  expect(computerRowOf(1)?.note).toContain('Mei');
-  // The owner's own start leaves no record: the row says awake and nothing else.
-  api.desktopStatus.mockResolvedValue(running); mounted.refresh(); await vi.advanceTimersByTimeAsync(10_000); await flush();
-  expect(computerRowOf(1)?.note).toBeUndefined();
-});
-
-test('a PC that cannot give a computer says so in the row with the one action that fixes it', async () => {
-  rowOpen=true;
-  const cases: [Partial<DesktopState>, string, string | undefined][] = [
-    [{ state:'absent', error:'docker_missing' }, 'unavailable', 'download'],
-    [{ state:'unavailable', error:'docker_stopped' }, 'unavailable', 'start'],
-    [{ state:'unavailable', error:'remote_unavailable', host:'studio' }, 'unavailable', 'retry'],
-    [{ state:'absent', error:'disabled' }, 'unavailable', 'retry'],
-    // A missing image is a first start, not a fault: the row is asleep and the same press prepares it.
-    [{ state:'missing', image:false }, 'asleep', undefined],
-  ];
-  for (const [partial, state, fix] of cases) {
-    api.desktopStatus.mockResolvedValue({ ready:false, control:'member', ...partial } as DesktopState); mounted.refresh(); mounted.show(); await flush();
-    expect(computerRowOf(1)?.state, JSON.stringify(partial)).toBe(state); expect(computerRowOf(1)?.fix, JSON.stringify(partial)).toBe(fix);
-  }
+test('watching wakes a sleeping computer and opens a running one large, the way the Computer tab does', async () => {
+  api.desktopStatus.mockResolvedValue({ state:'stopped', ready:false, control:'member' }); mounted.show(); await flush();
   expect(api.desktopOpen).not.toHaveBeenCalled();
-});
-
-test('pressing the row wakes a sleeping computer and opens a running one large, the way the Computer tab does', async () => {
-  api.desktopStatus.mockResolvedValue({ state:'stopped', ready:false, control:'member' }); rowOpen=true; mounted.show(); await flush();
-  expect(api.desktopOpen).not.toHaveBeenCalled();
-  rowOpen=false; panelOpen=true; mounted.watch(); await flush();
+  panelOpen=true; mounted.watch(); await flush();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);
   api.desktopStatus.mockResolvedValue(running); await vi.advanceTimersByTimeAsync(2000); await flush(); message('connected');
   mounted.watch(); await flush();
