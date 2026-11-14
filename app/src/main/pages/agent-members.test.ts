@@ -24,7 +24,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   membersViewing: vi.fn(),
   membersToolChoices: vi.fn(),
   membersSkillsList: vi.fn(), membersCommandsList: vi.fn(),
-  membersUpdate: vi.fn(),
+  membersUpdate: vi.fn(), groupsUpdate: vi.fn(),
   membersCreate: vi.fn(),
   membersGreet: vi.fn(async () => ({ turn_id: 99 })),
   membersDelete: vi.fn(),
@@ -48,6 +48,7 @@ import { createAgent } from "./agent";
 import { openGroupChat } from "../group-chats";
 import { closeMenu } from "../ui";
 import { resetAsks } from "../chat-ask";
+import { describeError } from "../format";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -1801,4 +1802,146 @@ test("a metadata-only reply update does not force latest again", async () => {
   expect($('.tn[data-id="31"]')).toBe(node);
   expect(write).not.toHaveBeenCalled();
   agent.hide();
+});
+
+// ---------- reordering the sidebar (R-SIDE-03) ----------
+
+describe("a row or a folder dropped on the sidebar", () => {
+  const FOLDERS: MembersList = {
+    members: [member(0, { name: "拉斐爾" }), member(3, { group_id: 1, position: 0 }), member(4, { group_id: 1, position: 1 }), member(5, { group_id: 1, position: 2 }), member(6, { group_id: 2, position: 2 }), member(7, { position: 4 })],
+    groups: [{ id: 1, name: "學習", position: 0, sources: [] }, { id: 2, name: "工作", position: 1, sources: [] }],
+  };
+  let core: MembersList;
+  const order = (folder: number): number[] => [...document.querySelectorAll<HTMLElement>(`.mb-col .mb-sec[data-group="${folder}"] [data-member-item]`)].map(row => Number(row.dataset.memberItem));
+  const folders = (): string[] => [...document.querySelectorAll<HTMLElement>('.mb-col .mb-sec[data-group]:not([data-group="none"]):not([data-group="hidden"])')].map(section => section.dataset.group!);
+  /** What the core does to a place: members/store.py `_move`. */
+  const move = <T extends { id: number; position: number }>(items: T[], id: number, position: number): void => {
+    const rest = items.filter(item => item.id !== id).sort((a, b) => a.position - b.position || a.id - b.id);
+    rest.splice(Math.min(position, rest.length), 0, items.find(item => item.id === id)!);
+    rest.forEach((item, place) => { item.position = place; });
+  };
+  const place = (element: Element, top: number, height: number): void => {
+    (element as HTMLElement).getBoundingClientRect = () => ({ top, bottom: top + height, height, left: 0, right: 240, width: 240, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  };
+  /** The rows and folders where the window would draw them: a heading 30 px high, then each row 40 px under the one before. */
+  const lay = (): Map<Element, number> => {
+    const tops = new Map<Element, number>();
+    let top = 100;
+    for (const section of document.querySelectorAll('.mb-col .mb-sec[data-group]')) {
+      const rows = [...section.querySelectorAll('[data-member-item]')];
+      place(section, top, 30 + 40 * rows.length);
+      tops.set(section, top);
+      for (const [index, row] of rows.entries()) { place(row, top + 30 + 40 * index, 40); tops.set(row, top + 30 + 40 * index); }
+      top += 30 + 40 * rows.length + 10;
+    }
+    return tops;
+  };
+  /** The pointer takes `source` and lets go over the upper half of `destination`. */
+  const drop = (source: string, destination: string): void => {
+    const tops = lay(), target = $(destination);
+    $(source).dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
+    const clientY = tops.get(target)! + 3;
+    target.dispatchEvent(new MouseEvent("dragover", { bubbles: true, cancelable: true, clientY }));
+    target.dispatchEvent(new MouseEvent("drop", { bubbles: true, cancelable: true, clientY }));
+  };
+  const asked = (method: string): number => api.core.mock.calls.filter(([name]) => name === method).length;
+
+  beforeEach(() => {
+    core = structuredClone(FOLDERS);
+    api.membersList.mockImplementation(async () => structuredClone(core));
+    api.membersUpdate.mockImplementation(async (id: number, patch: { group_id?: number | null; position?: number }) => {
+      const found = core.members.find(item => item.id === id)!;
+      if (patch.group_id !== undefined) found.group_id = patch.group_id;
+      if (patch.position !== undefined) move(core.members.filter(item => item.id !== 0), id, patch.position);
+      core.members.sort((a, b) => a.id === 0 ? -1 : b.id === 0 ? 1 : a.position - b.position || a.id - b.id);
+      return { member: found };
+    });
+    api.groupsUpdate.mockImplementation(async (id: number, patch: { position: number }) => {
+      move(core.groups, id, patch.position);
+      core.groups.sort((a, b) => a.position - b.position);
+      return { group: core.groups.find(group => group.id === id) };
+    });
+  });
+
+  test("stands where it was dropped at once, is saved with one request, and the answer that confirms it draws nothing", async () => {
+    let answer!: () => void;
+    const held = api.membersUpdate.getMockImplementation()! as (...args: unknown[]) => Promise<unknown>;
+    api.membersUpdate.mockImplementation((...args: unknown[]) => new Promise(resolve => { answer = () => resolve(held(...args)); }));
+    const agent = mount(); await flush();
+    const rows = Object.fromEntries([3, 4, 5, 6].map(id => [id, $(`.mb-col [data-member-item="${id}"]`)]));
+    const faces = Object.fromEntries([3, 4, 5].map(id => [id, $(`.mb-col [data-member-item="${id}"] svg.slime`)]));
+    const listReads = api.membersList.mock.calls.length, libraryReads = asked("members.library");
+    drop('.mb-col [data-member-item="3"]', '.mb-col [data-group="1"] [data-member-item="5"]');
+    // Before the core has heard anything.
+    expect(order(1)).toEqual([4, 3, 5]);
+    await flush();
+    expect(api.membersUpdate).toHaveBeenCalledTimes(1);
+    expect(api.membersUpdate).toHaveBeenCalledWith(3, { position: 1 });
+    for (const id of [4, 5]) expect($(`.mb-col [data-member-item="${id}"]`)).toBe(rows[id]);
+    // The core's own change event arrives before its answer: it is not read over the move.
+    send({ type: "MembersChanged" }); await flush();
+    expect(api.membersList.mock.calls.length).toBe(listReads);
+    expect(order(1)).toEqual([4, 3, 5]);
+    answer(); await flush();
+    expect(api.membersList.mock.calls.length).toBe(listReads + 1);
+    send({ type: "MembersChanged" }); await flush();
+    expect(order(1)).toEqual([4, 3, 5]);
+    for (const id of [3, 4, 5, 6]) expect($(`.mb-col [data-member-item="${id}"]`)).toBe(rows[id]);
+    for (const id of [3, 4, 5]) expect($(`.mb-col [data-member-item="${id}"] svg.slime`)).toBe(faces[id]);
+    // The panel's Library was not read again, and the one request is all the core was asked to save.
+    expect(asked("members.library")).toBe(libraryReads);
+    expect(api.membersUpdate).toHaveBeenCalledTimes(1);
+    agent.hide();
+  });
+
+  test("into another folder keeps its face and every other row, and sends its folder and place together", async () => {
+    const agent = mount(); await flush();
+    const others = Object.fromEntries([3, 4, 6].map(id => [id, $(`.mb-col [data-member-item="${id}"]`)]));
+    const face = $(`.mb-col [data-member-item="5"] svg.slime`);
+    drop('.mb-col [data-member-item="5"]', '.mb-col [data-group="2"] [data-member-item="6"]');
+    expect(order(1)).toEqual([3, 4]);
+    expect(order(2)).toEqual([5, 6]);
+    expect($(`.mb-col [data-group="2"] [data-member-item="5"] svg.slime`)).toBe(face);
+    await flush();
+    expect(api.membersUpdate).toHaveBeenCalledTimes(1);
+    expect(api.membersUpdate).toHaveBeenCalledWith(5, { group_id: 2, position: 2 });
+    for (const id of [3, 4, 6]) expect($(`.mb-col [data-member-item="${id}"]`)).toBe(others[id]);
+    expect(order(2)).toEqual([5, 6]);
+    agent.hide();
+  });
+
+  test("a save that fails puts the row back, says why, and reads the core again", async () => {
+    api.membersUpdate.mockRejectedValue(new Error("the core is busy"));
+    const agent = mount(); await flush();
+    const reads = api.membersList.mock.calls.length;
+    drop('.mb-col [data-member-item="3"]', '.mb-col [data-group="1"] [data-member-item="5"]');
+    expect(order(1)).toEqual([4, 3, 5]);
+    await flush();
+    expect(order(1)).toEqual([3, 4, 5]);
+    expect(document.body.textContent).toContain(describeError(new Error("the core is busy")));
+    expect(api.membersList.mock.calls.length).toBe(reads + 1);
+    agent.hide();
+  });
+
+  test("a folder dropped before another stands there at once and is saved with one request", async () => {
+    const agent = mount(); await flush();
+    const rows = [3, 4, 5, 6].map(id => $(`.mb-col [data-member-item="${id}"]`));
+    drop('.mb-col [data-group="2"] .mb-gname', '.mb-col [data-group="1"]');
+    expect(folders()).toEqual(["2", "1"]);
+    await flush();
+    expect(api.groupsUpdate).toHaveBeenCalledTimes(1);
+    expect(api.groupsUpdate).toHaveBeenCalledWith(2, { position: 0 });
+    expect(folders()).toEqual(["2", "1"]);
+    expect([3, 4, 5, 6].map(id => $(`.mb-col [data-member-item="${id}"]`))).toEqual(rows);
+    agent.hide();
+  });
+
+  test("a row let go where it stands asks nothing", async () => {
+    const agent = mount(); await flush();
+    drop('.mb-col [data-member-item="3"]', '.mb-col [data-group="1"] [data-member-item="4"]');
+    await flush();
+    expect(api.membersUpdate).not.toHaveBeenCalled();
+    expect(order(1)).toEqual([3, 4, 5]);
+    agent.hide();
+  });
 });
