@@ -149,12 +149,13 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
 # thirty-three tools read as its same opening words and not one said what it did (a member sent PowerShell to its
 # Linux shell). How to work on the computer (look before acting, where files are kept) is in the member's
 # instructions once (agent/persona.py), not on every tool.
-VM_CONTRACT = (
-    "VM sandbox: no per-action approval; owner control blocks all calls. Before sending a message/email, "
-    "publishing/posting, deleting outside the workspace, or paying/buying, call approve (CLI) or the API "
-    "harness equivalent and wait for the owner's yes for the exact action/target. If unavailable, denied "
-    "or expired, stop. Sandbox success is not approval."
-)
+# The outward-action rule is said whole once, in the shared contract every prompt carries (agent/persona.py: no
+# per-action approval in the sandbox, nothing while the owner holds control, approve or the API equivalent for the
+# exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, as Claude Code keeps
+# a tool's description about the tool and its policy in the system prompt: the 350 characters it was, on 34 listed
+# tools, were about 1,560 tokens more in every request of a member with a computer (measured 2026-11-14).
+VM_CONTRACT = ("Outward acts (send a message, post, delete outside the workspace, pay) need the owner's yes for the exact "
+               "act first (approve on CLI); sandbox success is not approval.")
 # Named: "files shared" beside vm_exec's "your own files are in /home/cua/workspace" read as two things.
 SHARED_CONTRACT = (" Shared with other members, a screen each: /home/cua/workspace, the clipboard and sign-ins."
                    " The shell has no screen here; open a window with launch_app.")

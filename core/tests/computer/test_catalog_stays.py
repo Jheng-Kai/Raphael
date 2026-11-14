@@ -113,5 +113,7 @@ async def test_every_computer_tool_says_what_it_is_for_first_and_is_read_whole(c
     assert len(openings) == len(shown)
     # Shown whole, their length is the core's to keep: the whole computer, in every request of every member.
     # Measured 2026-11-13: 17.8 thousand characters in all (18.4 at a seat); the longest is the shell's, 1304 at a seat.
-    assert sum(map(len, shown.values())) <= 19_500
+    # 2026-11-14: the outward-action rule is one sentence on each tool and whole in the shared contract once: 10.0
+    # thousand (10.6 at a seat). The ceiling keeps the room the file tools need and no more.
+    assert sum(map(len, shown.values())) <= 14_000
     assert max(map(len, shown.values())) <= 1_400

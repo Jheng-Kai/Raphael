@@ -1070,10 +1070,10 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
             continue
-        for clause in ("no per-action approval", "owner control blocks all calls",
-                       "sending a message/email", "publishing/posting", "outside the workspace",
-                       "paying/buying", "call approve", "API harness", "owner's yes",
-                       "unavailable, denied or expired", "Sandbox success is not approval"):
+        # One sentence on each tool; the whole rule is in the shared contract once
+        # (agent/test_persona.py::test_all_system_contracts_require_owner_approval_for_outward_vm_actions).
+        for clause in ("Outward acts", "send a message", "post", "outside the workspace", "pay",
+                       "owner's yes for the exact act first", "approve on CLI", "sandbox success is not approval"):
             assert clause in description
 
 
