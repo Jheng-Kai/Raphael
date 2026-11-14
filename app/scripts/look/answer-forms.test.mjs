@@ -109,7 +109,7 @@ it("a question's answer button stands at the field height and shares the field's
 });
 
 it("a page open in the conversation's place is the whole area: the panel folded, the page's pill, Share, no dialog (2026-11-11, 2026-11-14)", () => {
-  // The × once stood outside a dialog's page (2026-11-11); the page now replaces the conversation, the header's arrow goes back, and (R-PAGE-06)
+  // The × once stood outside a dialog's page (2026-11-11); the page now replaces the conversation, the header's arrow goes back, and (R-PAGE-08)
   // it takes the whole area beside the sidebar with the page's own pill in the header's centre and Share at its right.
   const browser = new Window(), doc = browser.document;
   doc.body.innerHTML = '<div class="page-agent"><div class="mb-det" hidden></div><section class="mb-chat"><div class="mb-head"><span class="mb-head-l"><button class="icon back" data-page-back aria-label="返回"><svg></svg></button></span>' +

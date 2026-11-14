@@ -576,7 +576,7 @@ export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.ope
  */
 export const reportSave = (id: string, html: string): Promise<ReportSaved> => invoke("report_save", { id, html });
 /**
- * Saves an HTML page as a file (Share, R-PAGE-06). The core builds the file from the page it keeps (`pages.export`) and
+ * Saves an HTML page as a file (Share, R-PAGE-08). The core builds the file from the page it keeps (`pages.export`) and
  * ignores any `html`, so the window gives none: the shell takes the same command a report's file does.
  */
 export const pageSave = (id: string): Promise<ReportSaved> => invoke("report_save", { id, html: "" });

@@ -2,7 +2,7 @@
    dialog，然後可能左上角會變成返回上頁」). The thread stays laid out under it, hidden, so its place and its scroll are as they
    were when the owner goes back; the composer stays below, so a change can be asked for where the page is read. There is no
    scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`).
-   Since 2026-11-14 (R-PAGE-06; owner, with a page opened from Grok Bot's Library) the page is the whole area right of the sidebar:
+   Since 2026-11-14 (R-PAGE-08; owner, with a page opened from Grok Bot's Library) the page is the whole area right of the sidebar:
    the details panel is folded while it stands, the header's centre is the page's own pill, Share is at the right, and the area
    scrolls as one with no frame around the page. */
 .ra-stage.is-page { --pgv-w: calc(40 * var(--sp-6)); }

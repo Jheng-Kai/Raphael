@@ -86,7 +86,7 @@ test("a wheel turned over the header moves the thread under it, or the report op
   expect([thread.scrollTop, report.scrollTop]).toEqual([500, 600]);
 });
 
-test("a wheel turned over the header moves an HTML page's area too, which scrolls as a whole (R-PAGE-06)", () => {
+test("a wheel turned over the header moves an HTML page's area too, which scrolls as a whole (R-PAGE-08)", () => {
   document.body.innerHTML = '<section><header class="mb-head"></header><div class="ra-stage is-page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-page"></div></div></div></section>';
   const head = document.querySelector<HTMLElement>(".mb-head")!, stage = document.querySelector<HTMLElement>(".ra-stage")!;
   const thread = document.querySelector<HTMLElement>(".ra-scroll")!, area = document.querySelector<HTMLElement>(".pgv-page")!;

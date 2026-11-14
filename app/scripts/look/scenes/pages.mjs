@@ -1,4 +1,4 @@
-import { scene, check, click, focus, frameExpect, frameScroll, hover, key, lookCall, member, room, scroll, type, wait } from "./steps.mjs";
+import { scene, check, click, focus, frameCheck, frameExpect, frameScroll, hover, key, lookCall, member, room, scroll, type, wait } from "./steps.mjs";
 
 const shown = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 // A page in a card is only a preview (inert): the owner presses the card and the page opens in the conversation's place, where it
@@ -18,6 +18,13 @@ const pressNews = click('[data-panel-file="page:page-news"]');
 const pressReport = click('[data-panel-file="page:page-report"]');
 const dashboardLink = '.pg-link[data-page="page-dashboard"]', dashboardFixture = { dashboardTurn: true };
 const dashboard = [member(0), wait(dashboardLink), click(dashboardLink), wait(".pgv:not([hidden]) .rs-tiles")];
+// A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list), and an HTML page that writes no style of its own (R-PAGE-06).
+const document_ = [member(1), wait(".pg-link"), click(".pg-link"), wait(".pgv:not([hidden]) .rp-table")];
+const documentFixture = { documentTurn: true };
+const dropdown = "[data-report-filter]";
+const pick = value => click(`.menu .menu-choice[data-value="${value}"]`);
+const baseOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "table" }, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { action: "frame-wait", selector: ".kpis" }];
+const baseFixture = { baseTurn: true, pageBase: true };
 
 export default [
   scene("page-product", "A member shows a product page as a card: its title row and the top of the page, clipped, nothing in it to press", [...shown, check("page-card")], { pageTurn: true }),
@@ -61,7 +68,7 @@ export default [
   scene("page-report-share", "Share saves the report as a file and says where it went, and the report stays open", [...report, ...share, check("page-report-shared")], { reportTurn: true }),
   { ...scene("page-report-file", "The saved file opened on its own: the same page in its reader's theme, with nothing of the app", [...report, ...share, { action: "saved-file" }, check("page-report-file")], { reportTurn: true }), file: true },
   { ...scene("page-report-file-team", "The file's contents take its reader to the team, drawn for the width it is read at", [...report, ...share, { action: "saved-file" }, click('.rp-toc a[href="#rp-s2"]'), check("page-report-file-team")], { reportTurn: true }), file: true },
-  // A page of the Library opens as the page itself (owner, 2026-11-14; R-PAGE-06: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面，然後它有一個share的鍵」):
+  // A page of the Library opens as the page itself (owner, 2026-11-14; R-PAGE-08: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面，然後它有一個share的鍵」):
   // the details panel folds, the header's centre is the page's pill, Share is at the right, the whole area scrolls; the arrow puts the Library
   // and the thread back where they were.
   scene("page-library-open", "A page pressed in the Library opens itself, whole, in the area beside the sidebar: the panel folded, the page's pill, Share, no frame", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), check("page-library-open")], libraryFixture),
@@ -78,5 +85,14 @@ export default [
   scene("page-dashboard-projects", "Projects by status and owner as stacked columns with their totals; pointing at one shows who has how many", [...dashboard, { ...scroll('[data-report-chart="5"]'), block: "center" }, hover('[data-report-chart="5"] .rc-band[data-i="2"]'), wait(".rc-tip"), check("page-dashboard-projects")], dashboardFixture),
   scene("page-dashboard-lines", "Investments as lines from one start, with a gap on a closed day; pointing shows each line's value on that day", [...dashboard, { ...scroll('[data-report-chart="6"]'), block: "center" }, hover('[data-report-chart="6"] .rc-plot'), wait(".rc-tip"), check("page-dashboard-lines")], dashboardFixture),
   scene("page-dashboard-lower", "The lower half: a ring of parts beside its names and shares, bars across, and the members' routines", [...dashboard, { ...scroll('[data-report-chart="8"]'), block: "center" }, check("page-dashboard-lower")], dashboardFixture),
+  // A document, as Grok Bot's pages are (owner, 2026-11-14: 「你也可以看到 grokBots 跟我們實質性的差距…他們內部的 page，我覺得他們做得非常的好」): a large
+  // title and one line of summary, a box that lists the sections, a note with an icon, a dropdown and tabs over a wide table with figures
+  // at the right and a column of links.
+  scene("page-document", "A document-style report: a large title, a one-line summary, a boxed list of its sections, a note, then a table with a dropdown, tabs, figures at the right and links", [...document_, check("page-document")], documentFixture),
+  scene("page-document-menu", "The dropdown over the table opens its values, 全部 and each area, hanging from the dropdown", [...document_, { ...scroll(".rp-table-box"), block: "start" }, click(dropdown), wait(".menu"), check("page-document-menu")], documentFixture),
+  scene("page-document-filter", "A chosen area and a tab leave only the row they share; the dropdown says the area and the tab is the one chosen", [...document_, { ...scroll(".rp-table-box"), block: "start" }, click(dropdown), wait(".menu"), pick("原宿"), click('.rp-table-box [data-report-tab="g0"]'), check("page-document-filter")], documentFixture),
+  scene("page-base", "An HTML page with no style of its own is drawn by the app's base style: a 32 px title, a boxed list, a note, tiles, tabs, a lined table with figures at the right, cards, a quote and code", [...baseOpen, frameCheck("page-base"), check("page-base")], baseFixture),
+  scene("page-base-table", "The same page read down to its table: tabs as quiet words with the chosen one bold, a header row, hairlines, figures at the right, links in the theme's blue", [...baseOpen, frameCheck("page-base"), frameScroll(560), check("page-base")], baseFixture),
+  scene("page-base-end", "The same page read to its end: cards in a grid, a quote with its rule, code, a list and a muted line", [...baseOpen, frameCheck("page-base"), frameScroll(1800), check("page-base")], baseFixture),
   { ...scene("page-dashboard-file", "The overview saved as a file and opened on its own: the same tiles and charts, with nothing that runs", [...dashboard, ...share, { action: "saved-file" }, check("page-dashboard-file")], dashboardFixture), file: true },
 ];

@@ -130,7 +130,7 @@ export interface PagesHost {
   /** The page open now, an HTML page or a report. */
   shown(): { id: string; kind: "page" | "report" } | null;
   /**
-   * Opens page `id` whole, from wherever its card stands in the thread (the Library's press, R-PAGE-06): the view stands at
+   * Opens page `id` whole, from wherever its card stands in the thread (the Library's press, R-PAGE-08): the view stands at
    * once with the page's title, and the page takes its place when its card is in the thread and ready. `done` runs once the
    * page is put away, however it was. Answers whether the page opened; a page whose card never came or that cannot be
    * read leaves nothing open (and `done` has run).
@@ -395,7 +395,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       return;
     }
     if (data.raphaelPage !== 1) return;
-    // The area scrolls, not the page (R-PAGE-06): where the owner reads is kept from the area's own scroll (`expand`).
+    // The area scrolls, not the page (R-PAGE-08): where the owner reads is kept from the area's own scroll (`expand`).
     if (data.type === "scroll" || loading) return;
     if (data.type === "height") { heard(live, data.height); applyHeight(live); }
     else if (data.type === "send" && placeText(live, data.text)) post(live, { raphaelPage: 1, type: "result", status: "placed" });
@@ -404,7 +404,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     else if (data.type === "escape" && live.expanded && pressOf(live.frame) !== "none" && !cancelGesture().hasTarget()) pageView?.close();
   });
 
-  /** Share (R-PAGE-06): the page saved as one HTML file, which the core builds of the page it keeps (`pages.export`: no text of
+  /** Share (R-PAGE-08): the page saved as one HTML file, which the core builds of the page it keeps (`pages.export`: no text of
    *  the window's goes into it), in the owner's output folder or Downloads, shown selected there, and a word of where it went. */
   let sharing = false;
   async function share(live: Live): Promise<void> {

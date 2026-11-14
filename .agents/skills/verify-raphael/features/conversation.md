@@ -2101,7 +2101,7 @@ was put away: the member's reply ends the thread and nothing opens again (the ju
 A page open in the conversation's place (R-PAGE-03, owner, 2026-11-11: 「我要的不是像是這樣子會出現一個 dialog…直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺…左上角會變成返回上頁」), replacing the dialog a page
 had until then ("a page made larger"; the judge's earlier notes on that dialog, its three-quarter height, its doubled title and the × outside its corner, no longer apply): pressing a page's card, an HTML page's or a report's, in a member's conversation or a room, puts the page where the
 thread was (`.ra-stage.is-page`, `page-view.ts`, `page-view.css`). The thread stays laid out under it, `visibility: hidden`, so its place is kept; the composer
-stays below. Since 2026-11-14 (R-PAGE-06) the page is the whole area beside the sidebar (the details panel folds while it stands and comes back with it): the header's centre
+stays below. Since 2026-11-14 (R-PAGE-08) the page is the whole area beside the sidebar (the details panel folds while it stands and comes back with it): the header's centre
 is the page's own pill (its mark and title; a room keeps its heading) in place of the member's pill, and its tools hold the one Share button on a report and on an HTML page (the member's share waits). The way back is the round arrow at the
 header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
 (the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
@@ -2116,7 +2116,7 @@ sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `
 Checks: page-inplace (also under the names page-expanded, page-opened-whole and page-library-open) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
 surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's width against `--pgv-w` and the area's gutters, no frame (no corner, edge or clip), the area scrolling, nothing covered by the composer; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
 
-A page opened from the member's Library (R-PAGE-06, owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它有一個share的鍵」, after Grok Bot's Library, whose page row opens the page and not the thread at its reply): the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
+A page opened from the member's Library (R-PAGE-08, owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它有一個share的鍵」, after Grok Bot's Library, whose page row opens the page and not the thread at its reply): the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
 a page of an older conversation opens that conversation quietly (no turn marked) and the arrow brings back the one that was open, the thread where it was (`TranscriptWindow.snapshot` / `restore`, the scroll) and the panel on its Library tab (`members.foldForPage` / `unfoldAfterPage`, which every open page uses, so a press on the card folds the panel too).
 The scenes use the fixture's `libraryPages` (the Library lists the page scenes' pages) and `libraryOlder` (those pages belong to an older conversation of the member): `page-library-open` (HTML page, whole, panel folded), `page-library-scrolled` (the area scrolls as one), `page-library-report`, `page-library-back` (the arrow: the Library tab, the thread read higher up exactly where it was, the same frame, no reload: `page-library-kept` on top of `page-inplace-kept`),
 `page-library-esc` (Escape does the same), `page-library-older` (`page-library-older-open` / `-kept`: the page's own conversation under it, then the one that was open) and `page-library-share` (`page-library-shared`: one `report_save` with the page's id and no text, a word of where it went, the page still open). The file itself is the core's (`page_file` in `core/src/raphael_core/agent/pages.py`, tested in core/tests/agent/test_pages.py); a look cannot open it, as the core is not there.
@@ -2325,6 +2325,56 @@ pictures, libraries and times that are not secrets, the keys still refused, the 
 keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attributes).
 Native boundary: a real Raphael turn on a real model building the page and the routine is proven
 in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
+
+## Pages that read as documents, as Grok Bot's do (owner, 2026-11-14)
+
+R-PAGE-06, R-PAGE-07. The owner put Grok Bot's page beside ours (a Tokyo list: a 32 px title, one line of summary, an
+「On this page」 box, a blue note with an icon, a dropdown 「區域」 and category tabs over a wide table with figures at the right
+and a column of links) and said the gap is real (「你也可以看到 grokBots 跟我們實質性的差距…他們內部的 page，我覺得他們做得非常的好」).
+Two halves of the page's own drawing changed; how a page opens and its frame did not (another change).
+
+- **HTML pages.** Core `agent/page_style.py` `BASE`, injected by `pages.document` after the theme's words and before the page's own
+  style, for the pages a member writes (not a plugin's). Type (15 px on 1.6; h1 32, h2 22, h3 17), the root at most 1120 px and
+  centred with a gutter, tables (header on the surface, hairlines, round corners, `.num` at the right; under 720 px the table scrolls
+  inside itself), links, code, quotes, lists, plain controls; the classes `.callout` (`.info` `.warn` `.ok`), `.toc`, `.chips`,
+  `.cards`, `.kpis`. All of it in `:where()`, so a page's own rule wins; only the theme's words; no address. The tool names the
+  classes in one clause.
+- **Reports.** `summary` (one line under the title, in place of the date and the promise of recorded facts, which stay the default);
+  the contents as a box with a list (`.rp-toc`, a column beside a 960 px page); a `callout` section (`.rp-note`, tone and icon from
+  the icon set's `alert`, `success`, `info`); table cells that are `{text, url}` links (`a.rp-link`, https only, opened by
+  `open_external_url`), a table `filter` (a `.sel` dropdown, `openMenu`, with the group tabs through `showRows`), columns of figures
+  at the right (`data-num`) and of short words on one line (`data-short`); 100 rows and 160 characters a cell. The saved file has
+  neither dropdown nor tabs, and its links stay links (core `checked_file` takes an https `href` and `rel`).
+- **Tool words.** About 25 words on show_page for the base classes and in REPORT's description for the new fields; the lengths the
+  checker already refuses on left the schema, and the three copies of the status words became one, so the default prompt's budget
+  (`test_management_discovery.py`) holds.
+
+How to get to it: in a member's conversation, ask for a list or comparison with filters (the member gives `report` with `summary`,
+`callout`, a table with `filter` and link cells, or an `html` page that uses the base classes); press the page card.
+
+```powershell
+npm run look -- page-document page-document-menu page-document-filter page-base page-base-table page-base-end --theme both --width 1120,720,1920x1080
+```
+
+page-document checks the large title (31.9 px, 26.4 under 640), the summary in the text's colour with no promise, the contents box (a
+list down the page, a box as wide as the page, or the column beside a 960 px page), three notes in three tone colours with the
+heading in the tone, a dropdown named 區域 and eight tabs, two columns of figures at the right, twelve links in the theme's blue
+underlined, nothing wider than the page; page-document-menu the nine values hanging from the dropdown, whole on screen;
+page-document-filter one row left by 原宿 and 經典名勝 and the tab chosen. page-base runs `frame-check` (`checkFrame`, inside the
+page's own frame) for the measures of the base style in the frame's theme: the page's colours, 15/24 type, the sizes of h1 to h3 and
+the page's own h3 winning, a 660 px line, a table with its outline, header and rows, `.num` at the right, links, the notes' tint
+and marks, the boxed list, tabs, cards in as many columns as fit, tiles, quote and code, and a table that is a block that scrolls
+at 720 px or less; page-base-table and page-base-end read the same page down to its table and to its end. Their pages come from
+the core itself (`runner.mjs pageBaseDocuments` calls `agent.pages.document` for each theme), so a scene sees what the owner's
+page gets. Compare page-document at 1920 with Grok Bot's picture: title, summary, box, note, dropdown, tabs and table in the same
+order, and compare the page-document note with the findings callout (`page-report`), the dropdown with the connection page's
+`.sel`, and the link colour with the conversation's.
+
+Tests: core `tests/agent/test_pages.py` (the base style's order, selectors, words and measures; the classes the tool names; the
+summary, callout, links, filter and limits, every refusal; the file's links); `app/src/main/report-page.test.ts` (summary, box,
+notes, figures, links, dropdown, file) and `page-theme.test.ts` (the base style reads only the theme's words). Native boundary: a
+real member turn on a real model writing such a page is not proven here (no model call was made); the fixture draws the pages the
+checker keeps.
 
 ## Diagnostic credential security (2026-11-05)
 

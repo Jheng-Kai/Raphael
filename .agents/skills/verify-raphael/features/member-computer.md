@@ -625,7 +625,7 @@ member-panel-work.ts now draws the same:
   for the look audit's language check (`.lib-title`).
 - Everything at once up to the core's bound of 100, scrolling inside the panel; there is no 「顯示更多」 (owner, 2026-11-08).
   The empty and failed sentences are unchanged, and now stand under the four chips.
-- A press opens a picture in the lightbox, a page itself, whole, in the area beside the sidebar (R-PAGE-06, 2026-11-14: it was the reply that published the page, where the card still had to be pressed; see Conversation), an attachment with `open_attachment`, and a
+- A press opens a picture in the lightbox, a page itself, whole, in the area beside the sidebar (R-PAGE-08, 2026-11-14: it was the reply that published the page, where the card still had to be pressed; see Conversation), an attachment with `open_attachment`, and a
   delivered file with the `open_library_file` command, which hands the member id and the Library handle to
   `members.library_file` (never a path, never `computer.team_file`).
 

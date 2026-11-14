@@ -56,7 +56,7 @@ const REFRESH_DELAY_MS = 300;
 
 export interface MembersHost {
   onOpenConversation?(member: number, conversation: number, turn?: number): void;
-  /** A page of the open member's Library was pressed: it opens itself in the area beside the sidebar (R-PAGE-06). */
+  /** A page of the open member's Library was pressed: it opens itself in the area beside the sidebar (R-PAGE-08). */
   onOpenPage?(member: number, page: { id: string; title: string; conversation?: number; turn: number }): void;
   /** The conversation open with this member, undefined for their default. */
   conversationOf?(member: number): number | undefined;
@@ -83,7 +83,7 @@ export interface MembersShell {
   openSettings(): void;
   /** Leaves the settings page for the conversation and puts the details panel back as it was. */
   closeSettings(): void;
-  /** An open page takes the whole area (R-PAGE-06): the details panel folds away, remembered as it stood. */
+  /** An open page takes the whole area (R-PAGE-08): the details panel folds away, remembered as it stood. */
   foldForPage(): void;
   /** The page is put away: the panel comes back as it stood, on the tab it was on, if it stood open. */
   unfoldAfterPage(): void;
@@ -146,7 +146,7 @@ export function createMembers(host: MembersHost): MembersShell {
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
   /** Whether the details panel was open when the settings page folded it away; null while the page is closed. */
   let panelBeforeSettings: boolean | null = null;
-  /** The same for an open page (R-PAGE-06): whether the panel stood open and on which tab; null while no page is open. */
+  /** The same for an open page (R-PAGE-08): whether the panel stood open and on which tab; null while no page is open. */
   let panelBeforePage: { open: boolean; tab: DetailsTab } | null = null;
   let stopLeaving: (() => void) | null = null;
   let panelRead = false;

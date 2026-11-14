@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as api from "./api";
 import { mountPages, pageCardsHTML } from "./page-card";
+import { t } from "./i18n";
 import { mountPageView } from "./page-view";
 import { FILE_POLICY, fileStyle, halves, layoutTeam, mountReportView, reportFile, reportHTML, themeWords, type TeamLayout } from "./report-page";
 import type { AgentTurn, PageCard, Report, ReportEdge, ReportNode, ReportSection } from "./types";
@@ -41,6 +42,22 @@ const dashboard: Report = {
     { kind: "chart", title: "比例", type: "pie", labels: ["是", "否"], series: [{ values: [1, 3] }] },
   ],
 };
+// A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list): a summary line, a note, a table with a dropdown, a column of
+// figures and a column of links.
+const document_: Report = {
+  as_of: "2026-11-14T00:00:00Z",
+  summary: "46 個景點 <b>、39 間餐廳，用篩選慢慢挑。",
+  sections: [
+    { kind: "callout", tone: "info", heading: "說明", text: "住在大塚。價格只列有來源支持的 <i>。" },
+    { kind: "table", title: "景點／體驗", filter: "區域", columns: ["名稱", "區域", "價格", "連結"], rows: [
+      { cells: ["淺草寺", "淺草", "—", { text: "地圖", url: "https://www.google.com/maps/search/?api=1&query=%E6%B7%BA%E8%8D%89%E5%AF%BA" }], group: "經典名勝" },
+      { cells: ["晴空塔", "押上", "NT$ 700", { text: "官網", url: "https://www.tokyo-skytree.jp/cn_t/" }], group: "展望台" },
+      { cells: ["明治神宮", "原宿", "免費", { text: "地圖", url: "https://www.google.com/maps/search/?api=1&query=Meiji+Jingu" }], group: "經典名勝" },
+      { cells: ["表參道", "原宿", "1,200", { text: "地圖", url: "https://www.google.com/maps/search/?api=1&query=Omotesando" }], group: "街區" }] },
+    { kind: "callout", tone: "warn", text: "營業時間出發前請再確認。" },
+    { kind: "callout", tone: "ok", heading: "已排除", text: "牛肉餐廳。" },
+  ],
+};
 const page: PageCard = { id: "r1", title: "團隊總覽報告", rev: 1, height: 320, source: "html", server: null, fallback: "", kind: "report" };
 const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -55,6 +72,123 @@ test("a report says when its data is from, that it holds only recorded facts, an
   expect(doc.querySelector(".rp-sub")!.textContent).toMatch(/^資料截至 \d{4}\/\d\d\/\d\d \d\d:\d\d · 只寫有紀錄的事實$/);
   expect(doc.querySelectorAll("script, img, b > script, i")).toHaveLength(0);
   expect(doc.querySelector(".rp-callout")!.textContent).toContain("有 2 件在等你 <b>");
+});
+
+test("the member's summary replaces the date and the promise of recorded facts, and stays one escaped line", () => {
+  const doc = document.createElement("div");
+  doc.innerHTML = reportHTML("東京", document_, people);
+  const sub = doc.querySelector<HTMLElement>(".rp-sub")!;
+  expect(sub.textContent).toBe("46 個景點 <b>、39 間餐廳，用篩選慢慢挑。");
+  expect(sub.classList.contains("is-summary") && sub.querySelector("b") === null).toBe(true);
+  expect(doc.textContent).not.toContain("只寫有紀錄的事實");
+  // Without one, the page says what it always did.
+  doc.innerHTML = reportHTML("東京", { ...document_, summary: undefined }, people);
+  expect(doc.querySelector(".rp-sub")!.textContent).toMatch(/^資料截至 .* · 只寫有紀錄的事實$/);
+  expect(doc.querySelector(".rp-sub")!.classList.contains("is-summary")).toBe(false);
+});
+
+test("the contents are a box with 「本頁內容」 over a list of the sections", () => {
+  const doc = document.createElement("div");
+  doc.innerHTML = reportHTML("報告", report, people);
+  const box = doc.querySelector<HTMLElement>("nav.rp-toc")!;
+  expect(box.getAttribute("aria-label")).toBe("本頁內容");
+  expect(box.querySelector(".rp-toc-h")!.textContent).toBe("本頁內容");
+  expect([...box.querySelectorAll("ul > li > a")].map(link => link.textContent)).toEqual(["重點發現", "總覽表", "分工與協作"]);
+  expect(box.querySelector(".rp-toc-h")!.nextElementSibling!.tagName).toBe("UL");
+});
+
+test("a note is its tone's own icon, an optional heading and its words, escaped", () => {
+  const doc = document.createElement("div");
+  doc.innerHTML = reportHTML("東京", document_, people);
+  const notes = [...doc.querySelectorAll<HTMLElement>(".rp-note")];
+  expect(notes.map(note => note.dataset.tone)).toEqual(["info", "warn", "ok"]);
+  expect(notes.map(note => note.querySelector("b")?.textContent ?? null)).toEqual(["說明", null, "已排除"]);
+  expect(notes[0]!.querySelector("p")!.textContent).toBe("住在大塚。價格只列有來源支持的 <i>。");
+  expect(notes[0]!.querySelector("i")).toBeNull();
+  expect(new Set(notes.map(note => note.querySelector("svg")!.innerHTML)).size).toBe(3);
+});
+
+test("a column of figures is set at the right, and the names, a dash and words keep their side", () => {
+  const doc = document.createElement("div");
+  doc.innerHTML = reportHTML("東京", document_, people);
+  // 價格 holds 「免費」, so it is not a column of figures.
+  expect([...doc.querySelectorAll(".rp-table th")].map(th => th.hasAttribute("data-num"))).toEqual([false, false, false, false]);
+  const table = document_.sections[1]!;
+  if (table.kind !== "table") throw new Error("a table");
+  const prices = ["—", "NT$ 700", "+3.5%", "1,200"];
+  const figures: Report = { ...document_, sections: [{ ...table, rows: table.rows.map((row, at) => ({ ...row, cells: [row.cells[0]!, row.cells[1]!, prices[at]!, row.cells[3]!] })) }] };
+  doc.innerHTML = reportHTML("東京", figures, people);
+  expect([...doc.querySelectorAll(".rp-table th")].map(th => th.hasAttribute("data-num"))).toEqual([false, false, true, false]);
+  expect([...doc.querySelectorAll("tbody tr")].map(row => row.children[2]!.hasAttribute("data-num"))).toEqual([true, true, true, true]);
+  expect(doc.querySelectorAll("[data-num] a")).toHaveLength(0);
+});
+
+test("a link cell is a link to its https address, escaped, and it opens in the owner's browser, never in the window", async () => {
+  const opened = vi.spyOn(api, "openExternalUrl").mockResolvedValue(undefined);
+  vi.spyOn(api, "reportOpen").mockResolvedValue({ kind: "report", title: "東京", rev: 1, report: document_ });
+  const { stage, thread } = conversation();
+  thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
+  await flush();
+  const view = stage.querySelector<HTMLElement>(".rp-view")!;
+  const links = [...view.querySelectorAll<HTMLAnchorElement>("td a.rp-link")];
+  expect(links.map(link => link.textContent)).toEqual(["地圖", "官網", "地圖", "地圖"]);
+  expect(links[0]!.getAttribute("href")).toBe("https://www.google.com/maps/search/?api=1&query=%E6%B7%BA%E8%8D%89%E5%AF%BA");
+  expect(links.every(link => link.rel === "noopener noreferrer" && link.hasAttribute("data-report-link"))).toBe(true);
+  const press = new MouseEvent("click", { bubbles: true, cancelable: true });
+  links[1]!.dispatchEvent(press);
+  expect(press.defaultPrevented).toBe(true);
+  expect(opened).toHaveBeenCalledExactlyOnceWith("https://www.tokyo-skytree.jp/cn_t/");
+  // A link that cannot be opened says so.
+  opened.mockRejectedValueOnce(new Error("no"));
+  links[0]!.click();
+  await flush();
+  expect(lastToast()).toBe(t("page.failed"));
+});
+
+test("a dropdown over a column shows only the rows of the value chosen, with the tabs, and says so when none are left", async () => {
+  vi.spyOn(api, "reportOpen").mockResolvedValue({ kind: "report", title: "東京", rev: 1, report: document_ });
+  const { stage, thread } = conversation();
+  thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
+  await flush();
+  const view = stage.querySelector<HTMLElement>(".rp-view")!;
+  const button = view.querySelector<HTMLButtonElement>("button.sel[data-report-filter]")!;
+  expect(view.querySelector(".rp-filter-l")!.textContent).toBe("區域");
+  expect(button.getAttribute("aria-label")).toBe("區域");
+  expect(button.textContent).toBe("全部");
+  const rows = (): boolean[] => [...view.querySelectorAll<HTMLTableRowElement>(".rp-table tbody tr:not(.rp-none)")].map(row => row.hidden === true);
+  button.click();
+  const choices = [...document.querySelectorAll<HTMLButtonElement>(".menu .menu-choice")];
+  expect(choices.map(choice => choice.dataset.value)).toEqual(["", "淺草", "押上", "原宿"]);
+  choices[3]!.click();
+  expect(rows()).toEqual([true, true, false, false]);
+  expect(button.textContent).toBe("原宿");
+  // With a tab as well: 經典名勝 and 原宿 leave one row; 展望台 and 原宿 leave none, and the table says so.
+  view.querySelector<HTMLButtonElement>('[data-report-tab="g0"]')!.click();
+  expect(rows()).toEqual([true, true, false, true]);
+  view.querySelector<HTMLButtonElement>('[data-report-tab="g1"]')!.click();
+  expect(rows()).toEqual([true, true, true, true]);
+  expect(view.querySelector(".rp-none td")!.textContent).toBe(t("conn.noMatch"));
+  expect(view.querySelector(".rp-none td")!.getAttribute("colspan")).toBe("4");
+  view.querySelector<HTMLButtonElement>('[data-report-tab="all"]')!.click();
+  expect(rows()).toEqual([true, true, false, false]);
+  expect(view.querySelector(".rp-none")).toBeNull();
+  // 全部 brings every row back.
+  button.click();
+  document.querySelectorAll<HTMLButtonElement>(".menu .menu-choice")[0]!.click();
+  expect(rows()).toEqual([false, false, false, false]);
+});
+
+test("a filter needs two values to be a choice, and a file, which runs nothing, has none", () => {
+  const doc = document.createElement("div");
+  const table = document_.sections[1]!;
+  if (table.kind !== "table") throw new Error("a table");
+  const one: Report = { ...document_, sections: [{ ...table, rows: [{ cells: ["a", "x", "1", "z"] }, { cells: ["b", "x", "2", "z"] }] }] };
+  doc.innerHTML = reportHTML("東京", one, people);
+  expect(doc.querySelector("[data-report-filter], .rp-filter")).toBeNull();
+  doc.innerHTML = reportHTML("東京", document_, people, { font: "12px sans-serif" });
+  expect(doc.querySelector("[data-report-filter], .rp-filter, button")).toBeNull();
+  // Its links still go away to their https address.
+  expect([...doc.querySelectorAll("td a")].map(link => link.getAttribute("href")!.startsWith("https://"))).toEqual([true, true, true, true]);
 });
 
 test("the contents list each titled section, and a section without a title stays out of it", () => {
@@ -305,14 +439,15 @@ test("every element and attribute of a file is one the core takes, under the sam
   expect(tags.has("svg") && attributes.has("viewbox")).toBe(true);
   expect(core).toContain(`FILE_POLICY = "${FILE_POLICY}"`);
   // The team report and a daily overview with tiles and every kind of chart (R-PAGE-04).
-  for (const shown of [report, dashboard]) {
+  for (const shown of [report, dashboard, document_]) {
     const file = reportFile("報告", shown, people, look);
     expect(core).toContain(file.match(/<meta name="viewport"[^>]*>/)![0]);
     const drawn = [...new DOMParser().parseFromString(file, "text/html").body.querySelectorAll("*")];
     expect(drawn.map(element => element.tagName.toLowerCase()).filter(tag => !tags.has(tag))).toEqual([]);
     expect(drawn.flatMap(element => [...element.attributes].map(attribute => attribute.name.toLowerCase()))
       .filter(name => !attributes.has(name) && !/^data-[a-z0-9-]+$/.test(name))).toEqual([]);
-    expect(drawn.flatMap(element => (element.hasAttribute("href") ? [element.getAttribute("href")!] : [])).every(href => href.startsWith("#"))).toBe(true);
+    // A link goes within the page, or away to an https address a table's link cell names (R-PAGE-06).
+    expect(drawn.flatMap(element => (element.hasAttribute("href") ? [element.getAttribute("href")!] : [])).every(href => href.startsWith("#") || href.startsWith("https://"))).toBe(true);
   }
   expect(reportFile("報告", dashboard, people, look)).toContain('class="rc-part"');
 });

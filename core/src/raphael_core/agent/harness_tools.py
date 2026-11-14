@@ -72,42 +72,48 @@ CALENDAR_FIELDS = {
 }
 
 
-_STATUS = {"type": "string", "enum": list(REPORT_STATUSES),
-           "description": "pending: ready, not started; waiting: on the owner."}
-_LABEL = {"type": "string", "maxLength": 12, "description": "Your own word for the status, owner's language."}
-# A report page (agent/report_page.py): the app draws it, so the schema only says what goes where.
+# What a status or its label means is said once, in REPORT's words: each copy here is repeated in every place a status goes.
+_STATUS = {"type": "string", "enum": list(REPORT_STATUSES)}
+_LABEL = {"type": "string", "maxLength": 12}
+# A report page (agent/report_page.py): the app draws it, so the schema only says what goes where. The lengths are the checker's
+# (its refusal says what to shorten): they are not repeated here, where each costs the default prompt a few words.
 REPORT = {
     "type": "object",
     "description": "A designed report or dashboard instead of html, drawn by the app; titled sections are listed in its "
-                   "contents. findings: optional callout (one summary box), items with a status. table: columns; rows of one "
-                   "cell per column, optional group (tabs over the table), member_id (colours the first cell), status (a last "
-                   "column). team: nodes (member_id, owner true, or a name; note: their part in a few words), edges (from, to, "
-                   "label: what passes), notes (label, text: overlaps, gaps). text: one paragraph. stats: tiles (name, value, "
-                   "unit, delta such as +1.2%, note, trend: recent numbers). chart: type line or area (over time; null is a "
-                   "gap), bar, stacked (counts by status and owner), hbar (a ranking), pie or donut (one series); labels, one "
-                   "per value; series: values, name, member_id. A dashboard opens with one stats section, then its charts.",
-    "properties": {"sections": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": {
-        "kind": {"type": "string", "enum": ["findings", "table", "team", "text", "stats", "chart"]},
+                   "contents. summary: one line under the title. findings: optional callout (one summary box), items with a "
+                   "status (pending: ready, not started; waiting: on the owner; label: your own word for it). callout: tone info, "
+                   "warn or ok; heading; text. table: columns; rows of one cell per column (text, or "
+                   "{text, url} for a link), optional group (tabs over the table), member_id (colours the first cell), status (a "
+                   "last column); filter: a column's name, for a dropdown. team: nodes (member_id, owner true, or a name; note: "
+                   "their part in a few words), edges (from, to, label: what passes), notes (label, text: overlaps, gaps). text: "
+                   "one paragraph. stats: tiles (name, value, unit, delta such as +1.2%, note, trend: recent numbers). chart: "
+                   "type line or area (over time; null is a gap), bar, stacked (counts by status and owner), hbar (a ranking), "
+                   "pie or donut (one series); labels, one per value; series: values, name, member_id. A dashboard opens with "
+                   "one stats section, then its charts.",
+    "properties": {"summary": {"type": "string"}, "sections": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": {
+        "kind": {"type": "string", "enum": ["findings", "table", "team", "text", "stats", "chart", "callout"]},
         "title": {"type": "string", "maxLength": 40},
         "span": {"enum": ["half"]},
-        "callout": {"type": "string", "maxLength": 400},
+        "callout": {"type": "string"},
+        "tone": {"enum": ["info", "warn", "ok"]},
+        "heading": {"type": "string"},
         "items": {"type": "array", "maxItems": 12, "items": {"type": "object", "properties": {
-            "title": {"type": "string", "maxLength": 80}, "text": {"type": "string", "maxLength": 300},
+            "title": {"type": "string", "maxLength": 80}, "text": {"type": "string"},
             "status": _STATUS, "label": _LABEL}, "required": ["title"]}},
-        "columns": {"type": "array", "maxItems": 6, "items": {"type": "string", "maxLength": 24}},
-        "rows": {"type": "array", "maxItems": 40, "items": {"type": "object", "properties": {
-            "cells": {"type": "array", "items": {"type": "string", "maxLength": 120}}, "group": {"type": "string", "maxLength": 24},
-            "member_id": {"type": "integer"}, "status": _STATUS, "label": _LABEL}, "required": ["cells"]}},
-        "status_title": {"type": "string", "maxLength": 12},
+        "columns": {"type": "array", "maxItems": 6, "items": {"type": "string"}},
+        "rows": {"type": "array", "maxItems": 100, "items": {"type": "object", "properties": {
+            "cells": {"type": "array", "items": {"type": ["string", "object"], "properties": {"text": {"type": "string"}, "url": {"type": "string"}}}},
+            "group": {"type": "string"}, "member_id": {"type": "integer"}, "status": _STATUS, "label": _LABEL}, "required": ["cells"]}},
+        "status_title": {"type": "string"},
+        "filter": {"type": "string"},
         "nodes": {"type": "array", "maxItems": 12, "items": {"type": "object", "properties": {
-            "id": {"type": "string", "maxLength": 24}, "member_id": {"type": "integer"}, "owner": {"type": "boolean"},
+            "id": {"type": "string"}, "member_id": {"type": "integer"}, "owner": {"type": "boolean"},
             "name": {"type": "string", "maxLength": 24}, "note": {"type": "string", "maxLength": 40}}, "required": ["id"]}},
         "edges": {"type": "array", "maxItems": 24, "items": {"type": "object", "properties": {
             "from": {"type": "string"}, "to": {"type": "string"}, "label": {"type": "string", "maxLength": 16}}, "required": ["from", "to"]}},
         "notes": {"type": "array", "maxItems": 6, "items": {"type": "object", "properties": {
-            "label": {"type": "string", "maxLength": 12}, "text": {"type": "string", "maxLength": 300}}, "required": ["label", "text"]}},
-        "text": {"type": "string", "maxLength": 1200},
-        # The new kinds' lengths are the checker's (report_page.py): its refusal says what to shorten.
+            "label": {"type": "string"}, "text": {"type": "string"}}, "required": ["label", "text"]}},
+        "text": {"type": "string"},
         "tiles": {"type": "array", "maxItems": 6, "items": {"type": "object", "properties": {
             "name": {"type": "string"}, "value": {"type": "string"}, "unit": {"type": "string"}, "delta": {"type": "string"},
             "note": {"type": "string"}, "trend": {"type": "array", "items": {"type": "number"}},
@@ -133,7 +139,8 @@ DEFINITIONS = {
         "of report or html. Prefer plain text or a table for a simple answer. report: the app draws it, opened from a link "
         "card; it shows when its data is from and that it states only recorded facts, so write only what your tools and "
         "colleagues returned, leaving out the unknown. html: a fragment or document, at most 256 KB UTF-8, no secrets, run in "
-        "a sandbox without fetch or server forms. window.raphael.send(text) asks the owner's next message to be text; "
+        "a sandbox without fetch or server forms, styled by the app (type, tables, links; classes .callout .info .warn .ok, "
+        ".toc, .chips, .cards, .kpis, .num on figures). window.raphael.send(text) asks the owner's next message to be text; "
         "window.raphael.open(url) asks to open an HTTPS link. Theme CSS variables: --bg, --surface, --fg, --muted, --line, "
         "--accent, --ok, --warn, --err, --chart-1 to 8, --font. External assets (chart libraries too): cdnjs.cloudflare.com, "
         "cdn.jsdelivr.net, unpkg.com, Google Fonts. Returns page_id; update_page replaces it in place.",

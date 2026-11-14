@@ -11,16 +11,19 @@ with tabs, and a team diagram: members as boxes with their colour, labelled arro
 Shared, a report is a file of the app's own drawing (2026-11-10): see `checked_file` below.
 Since 2026-11-14 (the owner's daily overview, in place of the old home) a report also holds tiles of figures (`stats`) and
 charts of every common kind (`chart`), drawn by app/src/main/report-chart.ts, and a section may stand at half the width.
+Also since 2026-11-14 (the owner, after Grok Bot's pages: a summary line under the title, a box that lists the sections, a note
+with an icon, a dropdown over a table and a column of links): `summary`, the `callout` section, a table's link cells and `filter`.
 """
 
 import html as html_lib
 import math
 import re
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from .pages import PageError, checked_text
 
-KINDS = ("findings", "table", "team", "text", "stats", "chart")
+KINDS = ("findings", "table", "team", "text", "stats", "chart", "callout")
 STATUSES = ("running", "done", "pending", "waiting", "blocked", "paused", "failed")
 # The charts the app draws (app/src/main/report-chart.ts): lines and areas over time, columns side by side or stacked, bars
 # across for long names, and parts of one whole.
@@ -31,6 +34,8 @@ PARTS = ("stacked", "hbar", "pie", "donut")
 # than a report; a section may take half the page's width beside another where the page is wide enough.
 SECTIONS_MAX = 12
 SPANS = ("half",)
+# A callout's tone: a tint of the theme's own colour (info is blue, warn amber, ok green).
+TONES = ("info", "warn", "ok")
 NODE_ID = re.compile(r"[A-Za-z0-9_-]{1,24}")
 
 # Characters, not bytes: what fits the design. Each also passes the secret scan.
@@ -42,8 +47,14 @@ ITEM_TEXT = 300
 LABEL = 12
 COLUMNS = 6
 COLUMN = 24
-ROWS = 40
-CELL = 120
+ROWS = 100
+CELL = 160
+# What a table's dropdown holds: more values than this is a column to read, not to choose from.
+FILTER_VALUES = 24
+URL = 2048
+SUMMARY = 160
+CALLOUT_TEXT = 600
+HEADING = 24
 GROUP = 24
 NODES = 12
 NODE_NAME = 24
@@ -72,13 +83,13 @@ CHART_NOTE = 160
 VALUE_MAX = 1e15
 
 
-def _text(value, where, limit, *, required=False):
-    """Trimmed text of at most `limit` characters; empty is allowed unless required."""
+def _text(value, where, limit, *, required=False, line=None):
+    """Trimmed text of at most `limit` characters; empty is allowed unless required. Short text is one line (`line`)."""
     if value is None and not required:
         return ""
     if not isinstance(value, str):
         raise PageError("bad_arguments", f"{where} must be text")
-    value = " ".join(value.split()) if limit <= CELL else value.strip()
+    value = " ".join(value.split()) if (limit <= 120 if line is None else line) else value.strip()
     if required and not value:
         raise PageError("bad_arguments", f"{where} must be nonempty text")
     if len(value) > limit:
@@ -133,6 +144,40 @@ def _findings(section, where, exists):
     return {**({"callout": callout} if callout else {}), "items": items}
 
 
+def _away(value):
+    """Whether `value` is an https address to follow: a host, no password, no space or quote or bracket in it."""
+    try:
+        link = urlsplit(value)
+        return (link.scheme == "https" and bool(link.hostname) and link.port != 0 and link.username is None and link.password is None
+                and len(value) <= URL and not re.search(r"[\s<>\"'`\\]", value))
+    except ValueError:
+        return False
+
+
+def _url(value, where):
+    """An https link, kept whole: the app opens it in the owner's browser. It is read for secrets like all the page's text
+    (a key in a link is refused, an ordinary address with words and numbers in its path is not: R-PAGE-05)."""
+    if not isinstance(value, str) or not value.strip():
+        raise PageError("bad_arguments", f"{where} must be an https link")
+    value = value.strip()
+    if len(value) > URL:
+        raise PageError("too_large", f"{where} exceeds {URL} characters; use a shorter link")
+    if not _away(value):
+        raise PageError("bad_arguments", f"{where} must be a plain https link (https://example.com/page), with no password in it")
+    return checked_text(value, where, URL * 4)
+
+
+def _cell(cell, where):
+    """A cell is text, or a link {text, url}."""
+    if isinstance(cell, dict):
+        return {"text": _text(cell.get("text"), f"{where}.text", CELL, required=True, line=True), "url": _url(cell.get("url"), f"{where}.url")}
+    return _text(cell, where, CELL, line=True)
+
+
+def _words(cell):
+    return cell["text"] if isinstance(cell, dict) else cell
+
+
 def _table(section, where, exists):
     columns = section.get("columns")
     if not isinstance(columns, list) or not 1 <= len(columns) <= COLUMNS:
@@ -144,14 +189,24 @@ def _table(section, where, exists):
         cells = row.get("cells")
         if not isinstance(cells, list) or len(cells) != len(columns):
             raise PageError("bad_arguments", f"{at}.cells must have one value for each of the {len(columns)} columns")
-        value = {"cells": [_text(cell, f"{at}.cells[{n}]", CELL) for n, cell in enumerate(cells)]}
+        value = {"cells": [_cell(cell, f"{at}.cells[{n}]") for n, cell in enumerate(cells)]}
         if group := _text(row.get("group"), f"{at}.group", GROUP):
             value["group"] = group
         if row.get("member_id") is not None:
             value["member_id"] = _member(row.get("member_id"), f"{at}.member_id", exists)
         rows.append({**value, **_status(row, at)})
     status_title = _text(section.get("status_title"), f"{where}.status_title", LABEL)
-    return {"columns": columns, "rows": rows, **({"status_title": status_title} if status_title else {})}
+    # A dropdown over one column's values, which the app draws by itself: the column's name stands over it.
+    chosen = _text(section.get("filter"), f"{where}.filter", COLUMN)
+    if chosen:
+        if chosen not in columns:
+            raise PageError("bad_arguments", f"{where}.filter must be the name of one column: {', '.join(columns)}")
+        values = {_words(row["cells"][columns.index(chosen)]) for row in rows} - {""}
+        if len(values) > FILTER_VALUES:
+            raise PageError("too_large", f"{where}.filter column {chosen} has {len(values)} different values; a dropdown takes at most "
+                                         f"{FILTER_VALUES}. Filter a column with fewer, or leave filter out")
+    return {"columns": columns, "rows": rows, **({"status_title": status_title} if status_title else {}),
+            **({"filter": chosen} if chosen else {})}
 
 
 def _team(section, where, exists):
@@ -195,6 +250,16 @@ def _team(section, where, exists):
 
 def _plain(section, where, exists):
     return {"text": _text(section.get("text"), f"{where}.text", TEXT, required=True)}
+
+
+def _callout(section, where, exists):
+    """A note in a tone, with an icon and an optional heading of its own (`title` is the section's heading in the contents)."""
+    tone = section.get("tone", "info")
+    if tone not in TONES:
+        raise PageError("bad_arguments", f"{where}.tone must be one of {', '.join(TONES)}")
+    heading = _text(section.get("heading"), f"{where}.heading", HEADING)
+    return {"tone": tone, **({"heading": heading} if heading else {}),
+            "text": _text(section.get("text"), f"{where}.text", CALLOUT_TEXT, required=True)}
 
 
 def _number(value, where, *, gap=False, parts=False):
@@ -261,7 +326,8 @@ def _chart(section, where, exists):
     return {"type": kind, "labels": labels, "series": kept, **extra}
 
 
-_CHECK = {"findings": _findings, "table": _table, "team": _team, "text": _plain, "stats": _stats, "chart": _chart}
+_CHECK = {"findings": _findings, "table": _table, "team": _team, "text": _plain, "stats": _stats, "chart": _chart,
+          "callout": _callout}
 
 
 def checked_report(value, *, exists, as_of_ms):
@@ -284,7 +350,10 @@ def checked_report(value, *, exists, as_of_ms):
     # A time as text: thirteen digits of milliseconds pass the card-number check one time in ten, and the kept content is
     # scanned for secrets as a whole.
     as_of = datetime.fromtimestamp(as_of_ms / 1000, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return {"as_of": as_of, "sections": sections}
+    # The line under the title. Left out, the page says when its data is from and that it states recorded facts only; given, it
+    # says what the member says (the owner, 2026-11-14: a one-line summary, as Grok Bot's pages have).
+    summary = _text(value.get("summary"), "report.summary", SUMMARY, line=True)
+    return {"as_of": as_of, **({"summary": summary} if summary else {}), "sections": sections}
 
 
 def _who(node, names):
@@ -302,7 +371,8 @@ def report_html(title, report, names):
     """A plain rendition of the same facts. `names(member_id)` gives a member's current name."""
     e = html_lib.escape
     status = lambda entry: f" [{e(entry.get('label') or entry['status'])}]" if entry.get("status") else ""
-    parts = [f"<h1>{e(title)}</h1>"]
+    cell = lambda value: f'<a href="{e(value["url"])}">{e(value["text"])}</a>' if isinstance(value, dict) else e(value)
+    parts = [f"<h1>{e(title)}</h1>"] + ([f"<p>{e(report['summary'])}</p>"] if report.get("summary") else [])
     for section in report["sections"]:
         if section.get("title"):
             parts.append(f"<h2>{e(section['title'])}</h2>")
@@ -313,7 +383,7 @@ def report_html(title, report, names):
                                           + "</li>" for item in section["items"]) + "</ul>")
         elif section["kind"] == "table":
             head = "".join(f"<th>{e(name)}</th>" for name in section["columns"])
-            rows = "".join("<tr>" + "".join(f"<td>{e(cell)}</td>" for cell in row["cells"]) + f"<td>{status(row).strip()}</td></tr>"
+            rows = "".join("<tr>" + "".join(f"<td>{cell(value)}</td>" for value in row["cells"]) + f"<td>{status(row).strip()}</td></tr>"
                            for row in section["rows"])
             parts.append(f"<table><tr>{head}<th></th></tr>{rows}</table>")
         elif section["kind"] == "team":
@@ -337,6 +407,8 @@ def report_html(title, report, names):
                 + "</tr>" for n, label in enumerate(section["labels"]))
             unit = f"<p>{e(section['unit'])}</p>" if section.get("unit") else ""
             parts.append(f"{unit}<table><tr>{head}</tr>{rows}</table>" + (f"<p>{e(section['note'])}</p>" if section.get("note") else ""))
+        elif section["kind"] == "callout":
+            parts.append(f"<p>{'<b>' + e(section['heading']) + '</b> ' if section.get('heading') else ''}{e(section['text'])}</p>")
         else:
             parts.append("".join(f"<p>{e(line)}</p>" for line in section["text"].split("\n") if line.strip()))
     return "\n".join(parts)
@@ -344,9 +416,11 @@ def report_html(title, report, names):
 
 def report_fallback(title, report):
     """At most 1500 characters the card can say when the page cannot be drawn: the title and the first findings."""
-    lines = [title]
+    lines = [title, *filter(None, [report.get("summary")])]
     for section in report["sections"]:
-        if section["kind"] == "findings":
+        if section["kind"] == "callout":
+            lines.append(section["text"])
+        elif section["kind"] == "findings":
             lines.extend(filter(None, [section.get("callout")]))
             lines.extend(item["title"] for item in section["items"])
         elif section["kind"] == "stats":
@@ -369,7 +443,7 @@ _FILE_HEAD = re.compile(
 # The page's own elements, then the drawing's: the team's arrows and the app's line icons (icon-set.ts).
 _FILE_TAGS = frozenset("html head title body article header h1 h2 p nav a span div section ul li b small "
                        "table thead tbody tr th td dl dt dd svg defs marker path circle ellipse line rect".split())
-_FILE_ATTRIBUTES = frozenset("lang class id href style role aria-label aria-hidden scope width height viewbox preserveaspectratio d "
+_FILE_ATTRIBUTES = frozenset("lang class id href rel style role aria-label aria-hidden scope width height viewbox preserveaspectratio d "
                              "marker-end refx refy markerwidth markerheight orient cx cy r rx ry x y x1 y1 x2 y2".split())
 _VALUE = r"(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+)"
 _TAG = re.compile(rf"<(/?)([A-Za-z][A-Za-z0-9]*)((?:\s+[^\s\"'=<>/]+(?:\s*=\s*{_VALUE})?)*)\s*/?>")
@@ -399,8 +473,10 @@ def checked_file(text):
             name, value = attribute[1].lower(), (attribute[2] or "").strip("\"'")
             if name not in _FILE_ATTRIBUTES and not re.fullmatch(r"data-[a-z0-9-]+", name):
                 raise PageError("bad_arguments", f"the file may not hold the attribute {name[:24]}")
-            if name == "href" and not value.startswith("#"):
-                raise PageError("bad_arguments", "a link in the file goes within the page")
+            # A link goes within the page, or away to an https address a table's link cell names: it loads nothing, the reader
+            # follows it. Anything else (a script, a file, plain http) is not in the drawing.
+            if name == "href" and not (value.startswith("#") or _away(html_lib.unescape(value))):
+                raise PageError("bad_arguments", "a link in the file goes within the page, or to an https address")
         end = tag.end()
     if "<" in rest[end:]:
         raise PageError("bad_arguments", "the file holds only the report's own drawing")

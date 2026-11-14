@@ -5,7 +5,7 @@
 // is the round arrow at the header's top left (Escape goes back too); nothing about the page is a dialog, and no scrim.
 // What the member answers to a message written while a page is open shows under the page: a line while it works, then
 // the first words of its reply, which the arrow brings in full.
-// Since 2026-11-14 (R-PAGE-06; owner, with a page opened from Grok Bot's Library: 「它會直接打開那個檔案本身…然後它有一個share的鍵」) the open
+// Since 2026-11-14 (R-PAGE-08; owner, with a page opened from Grok Bot's Library: 「它會直接打開那個檔案本身…然後它有一個share的鍵」) the open
 // page is the whole area right of the sidebar, as Grok Bot's: the header's centre becomes the page's own pill (its mark and
 // title) while it stands, its Share button is at the right, and the area scrolls as one.
 import "./page-view.css";
@@ -60,7 +60,7 @@ export function tellPage(id: string | null): Promise<void> | null {
 
 const clip = (text: string): string => text.replace(/\s+/g, " ").trim().slice(0, 240);
 
-/** What an open page takes from the window and gives back: the details panel folds while it stands (R-PAGE-06). */
+/** What an open page takes from the window and gives back: the details panel folds while it stands (R-PAGE-08). */
 export interface PageShell { fold(): void; unfold(): void }
 
 export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {

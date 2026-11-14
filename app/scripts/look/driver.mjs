@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
-import { checkRendered } from "./checks.mjs";
+import { checkFrame, checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
@@ -517,12 +517,14 @@ export async function perform(page, step, evidenceDirectory) {
       await new Promise(resolve => setTimeout(resolve, 500));
       break;
     }
+    // What the frame itself shows, which the app cannot read: a check of checks.mjs `checkFrame` runs inside it (a page's own style, R-PAGE-06).
+    case "frame-check": return (await waitForPageFrame(page)).evaluate(checkFrame, step.name);
     case "frame-expect": {
       const deadline = Date.now() + 8000;
       for (;;) {
         const frames = page.frames().filter(item => item !== page.mainFrame() && item.url().startsWith("data:text/html"));
         const seen = frames.length === 1 ? await frames[0].evaluate(() => ({ text: document.body.innerText, y: Math.round(scrollY), room: Math.max(0, document.documentElement.scrollHeight - innerHeight) })).catch(() => null) : null;
-        // The whole area scrolls, not the page (R-PAGE-06): where it is read is how far the area is scrolled.
+        // The whole area scrolls, not the page (R-PAGE-08): where it is read is how far the area is scrolled.
         const area = await page.evaluate(() => { const box = document.querySelector(".pgv-page"); return box ? { y: Math.round(box.scrollTop), room: Math.max(0, box.scrollHeight - box.clientHeight) } : null; });
         if (seen && area) Object.assign(seen, area);
         // A page that fits its place cannot be read lower down: it is asked to be only as far down as it can be.

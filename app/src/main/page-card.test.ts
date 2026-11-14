@@ -466,7 +466,7 @@ test("a changed page that cannot be read stays as it was, and one that never say
   expect(next.contentWindow!.postMessage).not.toHaveBeenCalled();
 });
 
-// Share (R-PAGE-06): one button at the header's right on every page; the core builds the file of the page it keeps.
+// Share (R-PAGE-08): one button at the header's right on every page; the core builds the file of the page it keeps.
 test("an HTML page has Share at the header's right: it saves the page by its id, with no text of the window's, and says where it went", async () => {
   const { thread, frame } = mount();
   await flush();
@@ -510,7 +510,7 @@ test("a plugin's page, which needs its host to work, has no Share: a file does n
   back().click();
 });
 
-// The Library's press (R-PAGE-06): the page opens from wherever its card stands in the thread.
+// The Library's press (R-PAGE-08): the page opens from wherever its card stands in the thread.
 test("a page asked for by its id opens whole once its card has read the page, and the view stands at once", async () => {
   const { thread, pages, frame, stage, shell } = mount();
   const done = vi.fn();

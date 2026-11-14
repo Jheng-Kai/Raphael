@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 from ..clock import wall_clock_ms
 from ..memory.scan import find_secret
 from ..protocol import INTERNAL_ERROR, NOT_FOUND, RpcError, invalid_params
+from .page_style import BASE
 
 HTML_BYTES = 256 * 1024
 MCP_MIME = "text/html;profile=mcp-app"
@@ -135,7 +136,7 @@ THEME = {
 FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
 
 
-# A page open in the whole area is as tall as its content (up to 20000 px, R-PAGE-06): the area scrolls, the frame does not.
+# A page open in the whole area is as tall as its content (up to 20000 px, R-PAGE-08): the area scrolls, the frame does not.
 _HELPER = """<script>
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -181,13 +182,16 @@ def document(page, theme):
         if content == before:
             break
     variables = ";".join(f"--{key}:{value}" for key, value in {**THEME[theme], "font": FONT}.items())
+    # The app's base style (page_style.py) for the pages a member writes, ahead of the page's own, which wins over it; a
+    # plugin's page comes with its own design and is left as it is.
+    base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            "body{background:var(--bg);color:var(--fg);font-family:var(--font)}</style>" + _HELPER + content)
+            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + _HELPER + content)
 
 
 def page_file(page):
-    """An HTML page as one file the owner can pass on (R-PAGE-06): the stored page as `document()` draws it, without the
+    """An HTML page as one file the owner can pass on (R-PAGE-08): the stored page as `document()` draws it, without the
     helper that talks to the window, in its reader's own theme (the dark words stand under `prefers-color-scheme`), and
     with the page's own policy first in its head: the same sources, no connection, no form, no frame. The sandbox of that
     policy is a header's alone, and a meta element cannot carry it."""

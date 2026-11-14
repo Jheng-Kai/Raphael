@@ -655,7 +655,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  // An open page takes the whole area, so the details panel folds while it stands and comes back with it (R-PAGE-06).
+  // An open page takes the whole area, so the details panel folds while it stands and comes back with it (R-PAGE-08).
   const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }),
     shell: { fold: () => members.foldForPage(), unfold: () => members.unfoldAfterPage() } });
   mountOwnerQuestions(thread, () => { void load(false); });
@@ -2736,7 +2736,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   /**
-   * A page of the Library opens as the page itself (R-PAGE-06; owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」):
+   * A page of the Library opens as the page itself (R-PAGE-08; owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」):
    * the details panel folds, the page's view stands at once and the page takes its place when its card is drawn in the
    * thread (its turn is read quietly, in its own conversation if that is another). The card is still the page's one home
    * (its frame, revisions and what the member is told it is called), so what stands behind the view is the thread, hidden.

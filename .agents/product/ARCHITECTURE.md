@@ -91,7 +91,7 @@ with no tag in it), names the file after the stored title, writes it exclusively
 owner_output_folder or else Downloads, and returns where; the shell selects it in File Explorer.
 No page host, frame, migration or model tool is added (R-PAGE-01; core/tests/agent/test_pages.py).
 
-An HTML page is shared the same way (2026-11-14, R-PAGE-06) with the opposite split: the window gives
+An HTML page is shared the same way (2026-11-14, R-PAGE-08) with the opposite split: the window gives
 the page id and no text (`pageSave` sends the same command an empty `html`, which the core ignores for a
 page), and the core builds the file itself from the page it stores (`pages.py page_file`: `document()`
 without the helper script that talks to the window, the dark theme's words under

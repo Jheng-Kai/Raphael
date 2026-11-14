@@ -5911,7 +5911,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, cards: heights.length, card: heights[0], peek };
   }
   // A page opens in the conversation's place (owner, 2026-11-11: 「直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺，它不會再
-  // 打開一個 dialog，然後可能左上角會變成返回上頁」), and since 2026-11-14 (R-PAGE-06: 「它會直接打開那個檔案本身…然後它有一個share的鍵」) as the whole
+  // 打開一個 dialog，然後可能左上角會變成返回上頁」), and since 2026-11-14 (R-PAGE-08: 「它會直接打開那個檔案本身…然後它有一個share的鍵」) as the whole
   // area right of the sidebar: the details panel folded, the header's centre the page's own pill, Share at the right, the whole area scrolling with
   // no frame around the page, the thread hidden under it, the composer below, the way back the round arrow at the header's top left, and no
   // dialog, scrim or × anywhere.
@@ -5935,7 +5935,7 @@ export function checkRendered(name, context = {}) {
     const search = pane.querySelector('.mb-head [data-act="search"]');
     require(!search || !visible(search), "the thread's search waits where the arrow stands");
     require(!pane.querySelector(":scope > .ra-find") || !visible(pane.querySelector(":scope > .ra-find")), "and so does its bar");
-    // The details panel is folded: the page has the whole area right of the sidebar (R-PAGE-06).
+    // The details panel is folded: the page has the whole area right of the sidebar (R-PAGE-08).
     const panel = document.querySelector(".page-agent .mb-det");
     require(!panel || panel.hidden || !visible(panel), "the details panel is folded while the page stands");
     // The header's centre is the page's own pill, as Grok Bot's; the member's pill comes back with the thread.
@@ -6000,7 +6000,7 @@ export function checkRendered(name, context = {}) {
       require(frame === was.frame && frame.hasAttribute("inert"), "the card holds the same frame as before, inert again");
       require(was.loads === 0, `the page did not reload: ${was.loads} loads`);
     }
-    // A page opened from the Library puts the Library back as it found it (R-PAGE-06): the panel on its tab, the page's row in it.
+    // A page opened from the Library puts the Library back as it found it (R-PAGE-08): the panel on its tab, the page's row in it.
     if (name === "page-library-kept") {
       const panel = document.querySelector(".page-agent .mb-det");
       require(panel && !panel.hidden && visible(panel) && panel.dataset.detailsTab === "library", `the panel is back on its Library tab: ${panel?.dataset.detailsTab}`);
@@ -6013,7 +6013,7 @@ export function checkRendered(name, context = {}) {
     require(![...document.querySelectorAll(".mb-scrim, .mb-dialog")].some(layer => !layer.closest("[hidden]")), "no dialog was ever opened");
     return { check: name, moved: was ? Math.round(offset - was.offset) : null, moveBefore: typeof Element.prototype.moveBefore === "function" };
   }
-  // What a page opened from the Library is, of either kind: the panel folded, the page's pill and Share (R-PAGE-06).
+  // What a page opened from the Library is, of either kind: the panel folded, the page's pill and Share (R-PAGE-08).
   if (name === "page-library-chrome") {
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
     require(stage.classList.contains("is-page"), "a page stands in the thread's place");
@@ -6204,6 +6204,80 @@ export function checkRendered(name, context = {}) {
     require(asked.length === 1 && JSON.stringify(asked[0]).includes("把輕量後背包加入購物車"), "only the owner's send submits the placed text once");
     require(![...document.querySelectorAll('.cmp-page-note')].some(visible), "the submitted draft no longer shows a page note");
     return { check: name };
+  }
+  if (name.startsWith("page-document")) {
+    // A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list; report-page.ts): a large title, one line of summary, a box that
+    // lists the sections, notes with an icon, tables with a dropdown, tabs, figures at the right and a column of links.
+    const view = document.querySelector(".page-agent .rp-view");
+    require(view && visible(view), "the document is open in the conversation's place");
+    const scroller = view.querySelector(":scope > .rp-scroll"), doc = view.querySelector(".rp-doc");
+    require(scroller.scrollWidth <= scroller.clientWidth + 1, "nothing runs out sideways");
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    const tokens = dark ? { link: "rgb(122, 174, 245)", text: "rgb(245, 245, 245)" } : { link: "rgb(31, 99, 209)", text: "rgb(10, 10, 10)" };
+    const column = scroller.clientWidth - parseFloat(getComputedStyle(scroller).paddingLeft) - parseFloat(getComputedStyle(scroller).paddingRight);
+    const title = view.querySelector(".rp-title");
+    require(title.textContent === "東京行程候選清單" && Math.abs(parseFloat(getComputedStyle(title).fontSize) - (column <= 640 ? 26.4 : 31.9)) < 0.2, `a large title: ${getComputedStyle(title).fontSize} in ${Math.round(column)} px`);
+    const sub = view.querySelector(".rp-sub");
+    require(sub.classList.contains("is-summary") && sub.textContent === "46 個景點、39 間餐廳、15 間咖啡甜點、11 個購物點，用篩選慢慢挑。", "one line of the member's summary under the title");
+    require(!doc.textContent.includes("只寫有紀錄的事實") && getComputedStyle(sub).color === tokens.text, "it takes the place of the promise, in the text's own colour");
+    // The contents are a box with a list in it (a column of its own beside a page 960 px wide).
+    const toc = view.querySelector("nav.rp-toc"), links = [...toc.querySelectorAll("ul > li > a")];
+    require(links.map(link => link.textContent).join("|") === "景點／體驗|餐廳|參考來源" && toc.querySelector(".rp-toc-h")?.textContent === "本頁內容", "the box says 本頁內容 over three sections");
+    require(links.every((link, index) => index === 0 || link.getBoundingClientRect().top > links[index - 1].getBoundingClientRect().bottom - 2), "a list down the page, not a row of chips");
+    const aside = getComputedStyle(toc).position === "sticky", box = toc.getBoundingClientRect(), body = view.querySelector(".rp-body").getBoundingClientRect();
+    if (aside) require(box.left >= body.right, "beside the page it is its own column");
+    else {
+      require(parseFloat(getComputedStyle(toc).borderTopLeftRadius) >= 12 && getComputedStyle(toc).boxShadow !== "none" && getComputedStyle(toc).paddingLeft !== "0px", "above the page it is a box");
+      require(box.bottom <= body.top && Math.abs(box.width - doc.getBoundingClientRect().width) <= 1, `a box as wide as the page, above its sections: ${Math.round(box.width)} and ${Math.round(doc.getBoundingClientRect().width)}`);
+    }
+    // Notes: an icon and a heading in the tone's colour on a tint of it; the three tones are three colours.
+    const notes = [...view.querySelectorAll(".rp-note")];
+    require(notes.map(note => note.dataset.tone).join() === "info,warn,ok" && notes.every(visible), "three notes: info, warn and ok");
+    const tones = notes.map(note => getComputedStyle(note.querySelector(":scope > svg.i")).color);
+    require(new Set(tones).size === 3 && tones[0] === tokens.link, `each tone is its own colour, info the link's blue: ${tones}`);
+    require(getComputedStyle(notes[0].querySelector("b")).color === tones[0] && getComputedStyle(notes[0]).backgroundColor !== "rgba(0, 0, 0, 0)", "the heading takes the tone's colour on a tint of it");
+    require(notes.every(note => note.getBoundingClientRect().width >= body.width - 1), "a note is as wide as the page's sections");
+    // The first table: a dropdown with its label, tabs for its groups, figures at the right, a link on every row.
+    const table = view.querySelector(".rp-sec[data-kind=table] .rp-table-box"), grid = table.querySelector("table");
+    const dropdown = table.querySelector(".rp-filter button.sel[data-report-filter]");
+    require(dropdown && table.querySelector(".rp-filter-l")?.textContent === "區域" && dropdown.getAttribute("aria-label") === "區域", "a dropdown named 區域");
+    require(table.querySelectorAll('.tabs [role="tab"]').length === 8 && table.querySelectorAll("tbody tr").length >= 1, "tabs for the groups, and the rows");
+    const figures = [...grid.querySelectorAll("th[data-num]")];
+    require(figures.map(head => head.textContent).join("|") === "門票（日圓）|從大塚（分）", `two columns of figures: ${figures.map(head => head.textContent)}`);
+    if (getComputedStyle(grid).display !== "block" && grid.getBoundingClientRect().width > 560) {
+      require(figures.every(head => ["right", "end"].includes(getComputedStyle(head).textAlign)) && [...grid.querySelectorAll("td[data-num]")].every(cell => ["right", "end"].includes(getComputedStyle(cell).textAlign)), "figures are set at the right");
+    }
+    const anchors = [...grid.querySelectorAll("td a.rp-link")];
+    require(anchors.length === 12 && anchors.every(anchor => anchor.href.startsWith("https://") && getComputedStyle(anchor).color === tokens.link && getComputedStyle(anchor).textDecorationLine === "underline"), "twelve links, in the link's blue and underlined");
+    require(grid.getBoundingClientRect().right <= table.getBoundingClientRect().right + 1, "the table stays inside the page");
+    if (name === "page-document-menu") {
+      const menu = document.querySelector(".menu");
+      require(menu && visible(menu), "the dropdown's values are open");
+      const values = [...menu.querySelectorAll(".menu-choice")].map(item => item.dataset.value);
+      require(values.length === 9 && values[0] === "" && values.includes("原宿"), `全部 and the eight areas: ${values}`);
+      const at = menu.getBoundingClientRect(), from = dropdown.getBoundingClientRect();
+      require(at.left >= 0 && at.right <= innerWidth && at.bottom <= innerHeight + 1 && Math.abs(at.left - from.left) <= 8, "the menu hangs from the dropdown and is whole on screen");
+      return { check: name, values: values.length };
+    }
+    if (name === "page-document-filter") {
+      const shown = [...grid.querySelectorAll("tbody tr")].filter(row => !row.hidden).map(row => row.firstElementChild.textContent);
+      require(shown.join("|") === "明治神宮 Meiji Jingu" && dropdown.textContent === "原宿", `one row of 原宿 in 經典名勝: ${shown}`);
+      require(table.querySelector('.tabs [aria-selected="true"]')?.dataset.reportTab === "g0" && !grid.querySelector(".rp-none"), "the tab is the one chosen");
+      return { check: name };
+    }
+    require(table.querySelector('.tabs [aria-selected="true"]')?.dataset.reportTab === "all" && dropdown.textContent === "全部", "it opens on every row");
+    const calls = window.__look.calls.filter(call => call.command === "report_save");
+    require(calls.length === 0, "nothing is saved by looking");
+    return { check: name, column: Math.round(column), aside };
+  }
+  if (name === "page-base") {
+    // An HTML page that writes no style of its own, opened in the conversation's place: its frame is the composer's column (the frame's own
+    // measures are `checkFrame`).
+    const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe");
+    require(stage.classList.contains("is-page") && frame && visible(frame), "the page is open in the conversation's place");
+    const composer = stage.querySelector(".ra-dock .composer").getBoundingClientRect(), box = frame.getBoundingClientRect();
+    require(Math.abs(box.left - composer.left) <= 2 && Math.abs(box.right - composer.right) <= 2 && box.height > 300, `as wide as the composer: ${Math.round(box.width)} and ${Math.round(composer.width)}`);
+    return { check: name, width: Math.round(box.width) };
   }
   if (name.startsWith("page-dashboard")) {
     // Raphael's daily overview (owner, 2026-11-14; report-chart.ts): today's figures and every kind of chart on one report,
@@ -9246,4 +9320,52 @@ export function checkRendered(name, context = {}) {
     return { check: name, editor: Math.round(b.width), height: Math.round(b.height), words: field.value.length };
   }
   throw new Error(`Unknown rendered check: ${name}`);
+}
+
+/**
+ * Browser assertions run inside a page frame (the `frame-check` step): a member's HTML page is another origin, so the app's own checks
+ * cannot read it. Self-contained, as `checkRendered` is: it is sent to the frame as text.
+ */
+export function checkFrame(name) {
+  const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  const style = (selector, pseudo) => getComputedStyle(document.querySelector(selector), pseudo);
+  const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
+  // The words of the theme the page is given (core agent/pages.py THEME), as colours.
+  const words = dark ? { bg: "rgb(10, 10, 10)", fg: "rgb(245, 245, 245)", surface: "rgb(22, 22, 22)", muted: "rgb(153, 153, 153)", link: "rgb(122, 174, 245)", line: "rgb(38, 38, 38)" }
+    : { bg: "rgb(255, 255, 255)", fg: "rgb(10, 10, 10)", surface: "rgb(247, 247, 247)", muted: "rgb(89, 89, 89)", link: "rgb(31, 99, 209)", line: "rgb(235, 235, 235)" };
+  if (name === "page-base") {
+    // An HTML page that writes no style of its own is drawn by the app's base style (core agent/page_style.py, R-PAGE-06): the owner's
+    // Grok Bot page, in type, table, note, contents box, tabs, cards and figures; and its one rule of its own (h3) wins over it.
+    const body = style("body");
+    require(body.backgroundColor === words.bg && body.color === words.fg, `the theme's page: ${body.color} on ${body.backgroundColor}`);
+    require(body.lineHeight === "24px" && body.fontSize === "15px", `readable type, 15 px on 1.6: ${body.fontSize} / ${body.lineHeight}`);
+    require(style("h1").fontSize === "32px" && style("h1").fontWeight === "600" && style("h2").fontSize === "22px", `a 32 px title and 22 px sections: ${style("h1").fontSize}, ${style("h2").fontSize}`);
+    require(style("h3").fontSize === "19px", `the page's own rule wins over the base's 17 px: ${style("h3").fontSize}`);
+    require(style("p").maxWidth === "660px", `a line stays readable: ${style("p").maxWidth}`);
+    require(document.documentElement.getBoundingClientRect().width <= 1120.5 && document.documentElement.scrollWidth <= innerWidth + 1, "a sensible width, nothing runs out sideways");
+    const table = style("table"), head = style("th"), cell = style("td");
+    require(table.borderTopWidth === "1px" && table.borderTopColor === words.line && table.borderTopLeftRadius === "12px", "a table with a hairline outline and round corners");
+    require(head.backgroundColor === words.surface && head.fontWeight === "600" && cell.borderBottomWidth === "1px", "a header row on the surface, hairlines between rows");
+    const narrow = innerWidth <= 720;
+    require(table.display === (narrow ? "block" : "table") && (!narrow || table.overflowX === "auto"), `${narrow ? "scrolls inside itself" : "fills the page"} at ${innerWidth} px: ${table.display}`);
+    const numbers = [...document.querySelectorAll(".num")];
+    require(numbers.length === 12 && numbers.every(item => ["right", "end"].includes(getComputedStyle(item).textAlign)), "figures marked num are set at the right, head and cells");
+    require(style("td.num").fontVariantNumeric.includes("tabular-nums"), "figures line up");
+    require(style("td a").color === words.link && style("td a").textDecorationLine === "underline", "links are the theme's blue");
+    const info = style(".callout.info");
+    require(info.borderTopLeftRadius === "12px" && info.backgroundColor !== "rgba(0, 0, 0, 0)" && info.backgroundColor !== words.surface, `a note on a tint: ${info.backgroundColor}`);
+    require(style(".callout.info strong").color === words.link && style(".callout.info", "::before").content === '"i"' && style(".callout.warn", "::before").content === '"!"', "info's mark is an i in the link's blue and warn's a !");
+    require(style(".callout.warn", "::before").color !== style(".callout.info", "::before").color, "warn is not info's colour");
+    const toc = style(".toc"), items = [...document.querySelectorAll(".toc li a")];
+    require(toc.borderTopWidth === "1px" && toc.borderTopLeftRadius === "12px" && items.length === 3 && items.every(link => getComputedStyle(link).fontWeight === "600"), "a boxed 「本頁內容」 list");
+    require(items.every((link, index) => index === 0 || link.getBoundingClientRect().top > items[index - 1].getBoundingClientRect().bottom - 2), "its entries are one under another");
+    const on = style(".chips .on"), other = style(".chips button:not(.on)");
+    require(style(".chips").display === "flex" && on.fontWeight === "600" && on.borderBottomColor === words.fg && other.color === words.muted && other.backgroundColor === "rgba(0, 0, 0, 0)", "tabs: the chosen word bold and underlined, the others quiet and flat");
+    const cards = style(".cards"), tracks = cards.gridTemplateColumns.split(" ").length, room = document.querySelector(".cards").getBoundingClientRect().width;
+    require(cards.display === "grid" && tracks === Math.max(1, Math.min(3, Math.floor((room + 16) / 256))) && style(".cards > div").backgroundColor === words.surface, `cards in a grid that fills the width: ${tracks} columns in ${Math.round(room)} px`);
+    require(style(".kpis b").fontSize === "28px" && style(".kpis").display === "grid", "figures in tiles of large numbers");
+    require(style("blockquote").borderInlineStartWidth === "3px" && style("code").backgroundColor === words.surface, "a quote with its rule, code on the surface");
+    return { check: name, dark, width: innerWidth, table: table.display, tracks };
+  }
+  throw new Error(`Unknown frame check: ${name}`);
 }
