@@ -2109,6 +2109,8 @@ Checks: page-inplace (also under the names page-expanded and page-opened-whole) 
 surface, the pill still saying whose conversation it is, the title, the page's width against the composer's, the composer below; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
 `answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
 `updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
+The voice flyer is the one stage child a page does not put away (R-VC-04; `voice-over-page-listening`, `-hearing`, `-gone`, see
+[Dictation](dictation.md)): Raphael stays in front of the page, above the composer, while the owner is heard.
 
 A page in the conversation is a card of one fixed height, not the page shown whole (R-PAGE-02, owner, 2026-11-11: 「如果你現在在畫面裡面顯示…會變成一個超長一段…你點開了之後，它才會展開全部」; Grok Bot's Page card is a title and Open). Before: the whole page (the owner's
 daily-news page, about 470 px wide and more than 700 px tall) stood inside the card with its own scrollbar and working buttons, so one

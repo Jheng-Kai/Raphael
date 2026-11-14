@@ -1,5 +1,28 @@
 # Dictation
 
+## Raphael stays in front of an open page while he is heard (2026-11-14)
+
+Owner, 2026-11-14: with 每日總覽, an HTML page, open in Raphael's conversation, pressing the app's own voice button showed
+nothing (「那個拉菲爾大師會被 HTML 擋在後面，所以我們看不到我們到底有沒有在說話…他永遠是最前面的」). The indicator is the voice
+mode's flyer (`voice-mode.ts`, `.ra-flyer`), a child of the conversation's stage; `page-view.css` set every stage child but
+the thread, the page and the composer to `display: none` while a page stands (`.ra-stage.is-page`), so it was never drawn,
+and the thread's own "hearing" line is hidden with the thread. R-VC-04: the flyer is the child that stays, in front of the
+page and above the composer, takes no pointer over a page, is held there after the recording while the words are heard
+(`VoiceMode.hold`, the emblem turning as the corner's does) and leaves with them.
+
+```powershell
+npm run look -- voice-over-page-listening voice-over-page-hearing voice-over-page-gone voice-flyer-emblem page-inplace --theme both --width 1120,720,1920x1080
+```
+
+The three `voice-over-page-*` scenes open the news page in a member's conversation (`ownerVoice: "pending"`: the mock core
+says listening, then processing, and no turn comes) and check, at the listening and the hearing step, that the flyer is
+drawn at 132 px, centred in the stage, inside it and over the page, clear of the composer, that with the flyer made
+hit-testable for a moment `document.elementFromPoint` at its centre and four points of its ring is the flyer, that it takes
+no pointer (the page's frame is what a pointer over it reaches), that the thread and its hearing line are hidden under the
+page, and that the composer says recording, then ack; the last scene ends the dictation and requires the flyer gone, the
+button its own again and the page still open. The page's own scrolling is `page-collapsed-press` and `page-inplace`'s.
+Not proved here: the real microphone, the real recognizer and the owner's page.
+
 ## The dictionary on every dictation, and learning that fires (2026-11-14)
 
 Owner, 2026-11-14: 「像是 grokbot 他從來沒有根據我們的字典去做修正…自動儲存到字典的那個功能…好像一次都沒有」.
