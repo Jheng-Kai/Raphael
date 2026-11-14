@@ -65,6 +65,49 @@ def test_a_read_only_operation_leaves_no_checkpoint_and_changes_can_be_reviewed_
     assert len(result["restored"]) == 2 and file.read_text() == "before" and not (team / "new.txt").exists()
 
 
+def test_each_changed_file_says_whether_it_is_new_gone_or_changed_and_counts_only_lines_it_could_compare(tmp_path):
+    # Owner, 2026-11-14: a card said 53 files with +0 -0. A picture or a file past the twentieth has no text to count, and is
+    # reported as new, gone or changed with no counts at all, never as zero lines.
+    root = tmp_path / "workspace"; root.mkdir()
+    (root / "edit.txt").write_text("one\ntwo\nthree\n")
+    (root / "gone.txt").write_text("old\n")
+    (root / "same-bytes.bin").write_bytes(b"\0\1\2")
+    store = CheckpointStore(tmp_path / "archive", [root])
+    store.begin(member=2, turn=7)
+    (root / "edit.txt").write_text("one\nTWO\nthree\nfour\n")
+    (root / "gone.txt").unlink()
+    (root / "new.txt").write_text("a\nb\n")
+    (root / "same-bytes.bin").write_bytes(b"\0\1\2\3")
+    (root / "picture.png").write_bytes(b"\x89PNG\0\0")
+    files = {Path(file["path"]).name: file for file in store.list(member=2)[0]["files"]}
+    assert (files["edit.txt"]["change"], files["edit.txt"]["added"], files["edit.txt"]["removed"]) == ("changed", 2, 1)
+    assert (files["gone.txt"]["change"], files["gone.txt"]["added"], files["gone.txt"]["removed"]) == ("removed", 0, 1)
+    assert (files["new.txt"]["change"], files["new.txt"]["added"], files["new.txt"]["removed"]) == ("added", 2, 0)
+    for name, change in (("same-bytes.bin", "changed"), ("picture.png", "added")):
+        assert (files[name]["change"], files[name]["added"], files[name]["removed"], files[name]["diff"]) == (change, None, None, "")
+
+
+def test_a_long_change_is_counted_whole_while_only_its_first_part_is_kept_to_read(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    (root / "log.txt").write_text("")
+    store = CheckpointStore(tmp_path / "archive", [root])
+    store.begin(member=2, turn=7)
+    (root / "log.txt").write_text("".join(f"line number {number}\n" for number in range(3000)))
+    file = store.list(member=2)[0]["files"][0]
+    assert len(file["diff"]) == 12000 and file["added"] == 3000 and file["removed"] == 0
+
+
+def test_more_than_twenty_files_still_list_each_one_with_a_plain_kind(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    store = CheckpointStore(tmp_path / "archive", [root])
+    store.begin(member=2, turn=7)
+    for number in range(53):
+        (root / f"file-{number:02d}.txt").write_text("text\n")
+    files = store.list(member=2)[0]["files"]
+    assert len(files) == 53 and {file["change"] for file in files} == {"added"}
+    assert sum(file["added"] is None for file in files) == 33 and all(file["diff"] == "" for file in files if file["added"] is None)
+
+
 def test_restore_preserves_later_owner_changes_and_refuses_another_member(tmp_path):
     root = tmp_path / "workspace"; root.mkdir()
     file = root / "a.txt"; file.write_text("original")

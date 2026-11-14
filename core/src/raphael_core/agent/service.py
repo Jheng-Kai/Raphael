@@ -878,6 +878,7 @@ class AgentService:
         self._inflight_members: dict[str, int] = {}
         self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
         self._owner_loops = {}
+        self._interrupted: set[str] = set()
         from .inbox import AgentInbox
         self._inbox = AgentInbox(conn, self._history, now_ms)
         self._inbox.recover()
@@ -925,6 +926,7 @@ class AgentService:
             "agent.history.clear": self._history_clear,
             "agent.history.retract": self._history_retract,
             "agent.history.stop": self._history_stop,
+            "agent.history.send_now": self._history_send_now,
             "agent.history.delete": self._history_delete,
             "conversations.list": self._conversations_list,
             "quota.list": self._quota_list,
@@ -1428,7 +1430,9 @@ class AgentService:
                     else:
                         result = await self._run_ask(ask)
                         turn = self._history.get(turn_id)
-                        outcome = 'cancelled' if self._was_cancelled(ask.session_id) else 'failed' if turn and turn.status in ('error','expired') else 'completed'
+                        outcome = ('cancelled' if self._was_cancelled(ask.session_id) or ask.session_id in self._interrupted
+                                   else 'failed' if turn and turn.status in ('error','expired') else 'completed')
+                        self._interrupted.discard(ask.session_id)
                         self._inbox.settle(turn_id, outcome)
                     turn = self._history.get(turn_id)
                     if turn and turn.status == 'queued' and self._was_cancelled(ask.session_id):
@@ -5362,6 +5366,41 @@ class AgentService:
         if self._background:
             await self._background.cancel_session(session)
         return {'stopped':True, **({'returned': returned} if returned else {})}
+
+    async def _history_send_now(self, params):
+        """「立即送出」: a message that waits its turn is read now. It goes to the front of its conversation's inbox and the
+        work in that conversation is ended as Stop ends it (its words kept, its question denied), without the memory that
+        would refuse the next request, so the drain starts the message as its own turn. A Codex turn is told to stop
+        (`turn/interrupt`); a Claude Code or Antigravity child is ended and its native session is resumed by that turn; an
+        API loop's task is cancelled. Whatever the stopped work had started is never run again. Private conversations only."""
+        member = self._member_param(params)
+        turn_id = _opt_int(params, 'turn_id')
+        session = _str(params, 'session_id')
+        row = self._inbox.get(turn_id) if turn_id is not None else self._conn.execute(
+            "SELECT * FROM agent_inbox WHERE request_id=? AND member_id=? AND state IN ('queued','steering') ORDER BY seq", (session, member)).fetchone()
+        turn = self._history.get(row['turn_id']) if row is not None else None
+        if row is None or turn is None or turn.scope != 'private' or row['member_id'] != member or row['request_id'] != session:
+            raise invalid_params('send now must identify a message of this private conversation')
+        scope = (member, row['conversation_id'])
+        if row['state'] == 'steering':
+            # Handed to the running work but not read by its model: it is taken back and goes first as its own turn.
+            active = self._owner_loops.get(scope)
+            if active is None or active.owner_input.consumed(row['turn_id']):
+                return {'sent': False}
+            active.owner_input.withdraw(row['turn_id'])
+            self._inbox.requeue(row['turn_id'])
+        elif row['state'] != 'queued':
+            return {'sent': False}
+        self._inbox.promote(row['turn_id'])
+        running = [(name, task) for name, task in self._inflight.items() if self._inflight_scopes.get(name) == scope and not task.done()]
+        for name, _ in running:
+            self._interrupted.add(name)
+            self.stop_session(name)
+        await asyncio.gather(*(task for _, task in running), return_exceptions=True)
+        await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
+        self._turn_changed(row['turn_id'], member)
+        self._start_drain(scope)
+        return {'sent': True, 'stopped': bool(running)}
 
     def _withdraw_admission(self, turn_id, scope):
         self._queued_asks.pop(turn_id, None)

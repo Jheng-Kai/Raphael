@@ -255,6 +255,13 @@ export const agentRetract = (sessionId: string, memberId: number, turnId?: numbe
   invoke("agent_retract", { sessionId, memberId, ...(turnId !== undefined ? { turnId } : {}) });
 /** Stop one typed task tree while retaining completed actions and history. */
 export const agentStop = (sessionId: string, memberId: number): Promise<{stopped: boolean; returned?: {session_id: string; text: string; attachments?: import("./types").TurnAttachment[]; quote?: import("./types").MessageQuote}[]}> => core("agent.history.stop", {session_id:sessionId,member_id:memberId});
+/**
+ * 「立即送出」: a queued message of this private conversation is read now. The core puts it first and ends the work that is
+ * running (as Stop does, its words kept), and the message starts as its own turn. `sent` is false when the message was
+ * already read or already started.
+ */
+export const agentSendNow = (sessionId: string, memberId: number, turnId: number): Promise<{sent: boolean; stopped?: boolean}> =>
+  core("agent.history.send_now", {session_id: sessionId, member_id: memberId, turn_id: turnId});
 /** The YES/NO question that waits for an answer now, if one does. */
 export const agentQuestionOpen = (): Promise<AgentQuestion | null> => invoke("agent_question_open");
 /**
@@ -494,7 +501,9 @@ export const integrationsInventory = (): Promise<AppsInventory> => core("integra
 
 // ---------- messaging apps ----------
 export const messagingCall = <T>(kind: "telegram" | "slack" | "discord", method: string, params?: object): Promise<T> => core(`messaging.${kind}.${method}`, params);
-export interface FileCheckpoint { id: string; turn: number; created: number; state: string; partial?: boolean; uncovered?: string[]; review_token?: string; files: { path: string; diff: string }[] }
+/** One changed file. `added` and `removed` are lines, and are missing where the core could not compare text (a picture, a large file, past the twentieth file). */
+export interface CheckpointFile { path: string; diff: string; change?: "added" | "removed" | "changed"; added?: number | null; removed?: number | null }
+export interface FileCheckpoint { id: string; turn: number; created: number; state: string; partial?: boolean; uncovered?: string[]; review_token?: string; files: CheckpointFile[] }
 export const computerCheckpoints = (member_id: number): Promise<{ checkpoints: FileCheckpoint[]; busy: boolean; confirmation_required?: boolean; coverage_warning?: boolean }> => core("computer.checkpoints", { member_id, action: "list" });
 export const computerRestore = (member_id: number, id: string, confirmed = true, review_token?: string): Promise<{ restored: string[]; skipped: string[] }> => core("computer.checkpoints", { member_id, action: "restore", id, confirmed, ...(review_token ? { review_token } : {}) });
 
