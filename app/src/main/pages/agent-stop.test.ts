@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AgentTurn, AppContext, MainEvent, Member } from "../types";
 
 const api = vi.hoisted(() => Object.fromEntries([
-  "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentVoiceComposed", "agentStop", "cancelSession", "workerCancel",
+  "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentVoiceComposed", "agentStop", "agentSendNow", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
   "membersGreet",
@@ -250,6 +250,29 @@ test("Stop targets the running turn and appends every queued draft after current
  expect(field.value).toBe("Already typed\n\nSecond\n\nThird");
  expect(document.querySelector('.cmp-file')?.textContent).toContain("example.txt");
  expect(api.core).toHaveBeenCalledWith("attachments.get", {id:"stored-example"});
+});
+
+test("a queued message offers 立即送出 between Copy and Cancel and sends it by turn, while a running one does not", async () => {
+ turns=[live({question:"Original request"}),live({id:12,session_id:"queued-b",status:"queued",question:"Second",text:"",messages:[]})];
+ api.agentSendNow.mockImplementation(async (session: string) => {
+   turns = turns.map(turn => turn.session_id === "reply-11" ? { ...turn, status: "denied" } : turn.session_id === session ? { ...turn, status: "running" } : turn);
+   return { sent: true, stopped: true };
+ });
+ mount();await flush();
+ const menu=async (id:number)=>{ $(`.tn[data-id="${id}"] [data-act="more-message"]`).click(); await flush(); return [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item=>item.dataset.pick); };
+ const queued=await menu(12);
+ expect(queued).toEqual(expect.arrayContaining(["copy","send-now","cancel"]));
+ expect(queued.indexOf("send-now")).toBeGreaterThan(queued.indexOf("copy"));
+ expect(queued.indexOf("send-now")).toBeLessThan(queued.indexOf("cancel"));
+ expect($("#app-popover [data-pick=\"send-now\"]").textContent).toContain("立即送出");
+ $("#app-popover [data-pick=\"send-now\"]").click();await flush();
+ expect(api.agentSendNow).toHaveBeenCalledTimes(1);
+ expect(api.agentSendNow).toHaveBeenCalledWith("queued-b",0,12);
+ expect(api.agentStop).not.toHaveBeenCalled();
+ expect(api.core).not.toHaveBeenCalledWith("agent.history.retract",expect.anything());
+ // The running message's own menu has no send now: nothing waits there.
+ const running=await menu(11);
+ expect(running).not.toContain("send-now");
 });
 
 test("a single live presence stays below additions without changing on an unchanged refresh", async () => {

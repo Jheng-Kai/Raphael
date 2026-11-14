@@ -1303,6 +1303,7 @@ export const id = {
   "agent.rerun": "Jalankan lagi",
   "chat.send": "Kirim",
   "chat.edit": "Sunting",
+  "chat.sendNow": "Kirim sekarang",
   "cal.edit": "Sunting",
   "members.profile.editResource": "Sunting",
   "chat.quote": "Kutip",

@@ -1025,6 +1025,7 @@ export const ja = {
   "chat.copy": "コピー",
   "chat.send": "送信",
   "chat.edit": "編集",
+  "chat.sendNow": "今すぐ送信",
   "chat.quote": "引用",
   "chat.you": "あなた",
   "chat.removeQuote": "引用を削除",

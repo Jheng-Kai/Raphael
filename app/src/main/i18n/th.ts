@@ -1303,6 +1303,7 @@ export const th = {
   "agent.rerun": "เรียกใช้อีกครั้ง",
   "chat.send": "ส่ง",
   "chat.edit": "แก้ไข",
+  "chat.sendNow": "ส่งทันที",
   "cal.edit": "แก้ไข",
   "members.profile.editResource": "แก้ไข",
   "chat.quote": "อ้างอิง",

@@ -1303,6 +1303,7 @@ export const ko = {
   "agent.rerun": "다시 실행",
   "chat.send": "보내기",
   "chat.edit": "편집",
+  "chat.sendNow": "지금 보내기",
   "cal.edit": "편집",
   "members.profile.editResource": "편집",
   "chat.quote": "인용",

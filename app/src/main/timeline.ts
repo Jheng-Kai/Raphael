@@ -635,7 +635,7 @@ export function messageActionsHTML(_time: number, regenerate = false, owner?: "e
     (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
-    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
+    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""}${queued ? ' data-queued="true"' : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true, latestFailure = false): string {

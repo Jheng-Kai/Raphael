@@ -3101,6 +3101,28 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name,place};
   }
+  if (name === "composer-queued-sendnow-menu") {
+    const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => `${node.dataset.pick}:${node.textContent.trim()}`);
+    require(labels.filter(item => item.startsWith("send-now:")).length === 1 && labels.some(item => item.startsWith("send-now:") && item.endsWith(":立即送出")),
+      `a queued bubble's menu offers 立即送出 once: ${labels}`);
+    const order = labels.map(item => item.split(":")[0]);
+    require(order.indexOf("send-now") > order.indexOf("copy") && order.indexOf("send-now") < order.indexOf("cancel"), `send now sits between copy and cancel: ${order}`);
+    const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
+    require(new Set(icons).size === icons.length, "each menu action has its own icon");
+    require(!document.querySelector('.tn[data-id="902"]'), "only the one queued bubble exists");
+    return {check: name, labels};
+  }
+  if (name === "composer-queued-sendnow") {
+    const calls = window.__look.calls, sent = calls.filter(call => call.method === "agent.history.send_now");
+    require(sent.length === 1 && sent[0].params.turn_id === 901 && sent[0].params.member_id === 1 && sent[0].params.session_id, "send now names the queued message once");
+    require(!calls.some(call => call.command === "agent_retract" || call.method === "agent.history.stop" || call.method === "worker.cancel"), "send now withdraws nothing and is not a Stop");
+    const bubble = document.querySelector('.tn[data-id="901"]');
+    require(bubble && !bubble.querySelector('.queued-mark') && bubble.dataset.status !== "queued", "the message is no longer queued");
+    require(bubble.querySelector('.message-text').textContent.trim() === "第二個範例請求", "the message keeps its words");
+    require(!document.querySelector('.tn[data-status="queued"]'), "nothing is left queued");
+    require(document.querySelector('.cmp-input').value === "", "the field was not given words back");
+    return {check: name, status: bubble.dataset.status};
+  }
   if (name === "composer-queued" || name === "composer-queued-withdraw" || name === "composer-queued-stop" || name === "room-send-while-working") {
     const calls = window.__look.calls;
     if (name === "composer-queued") {

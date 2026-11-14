@@ -1303,6 +1303,7 @@ export const ru = {
   "agent.rerun": "Запустить снова",
   "chat.send": "Отправить",
   "chat.edit": "Изменить",
+  "chat.sendNow": "Отправить сейчас",
   "cal.edit": "Изменить",
   "members.profile.editResource": "Изменить",
   "chat.quote": "Цитировать",

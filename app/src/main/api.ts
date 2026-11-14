@@ -255,6 +255,13 @@ export const agentRetract = (sessionId: string, memberId: number, turnId?: numbe
   invoke("agent_retract", { sessionId, memberId, ...(turnId !== undefined ? { turnId } : {}) });
 /** Stop one typed task tree while retaining completed actions and history. */
 export const agentStop = (sessionId: string, memberId: number): Promise<{stopped: boolean; returned?: {session_id: string; text: string; attachments?: import("./types").TurnAttachment[]; quote?: import("./types").MessageQuote}[]}> => core("agent.history.stop", {session_id:sessionId,member_id:memberId});
+/**
+ * 「立即送出」: a queued message of this private conversation is read now. The core puts it first and ends the work that is
+ * running (as Stop does, its words kept), and the message starts as its own turn. `sent` is false when the message was
+ * already read or already started.
+ */
+export const agentSendNow = (sessionId: string, memberId: number, turnId: number): Promise<{sent: boolean; stopped?: boolean}> =>
+  core("agent.history.send_now", {session_id: sessionId, member_id: memberId, turn_id: turnId});
 /** The YES/NO question that waits for an answer now, if one does. */
 export const agentQuestionOpen = (): Promise<AgentQuestion | null> => invoke("agent_question_open");
 /**

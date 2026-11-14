@@ -628,6 +628,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
   window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
+  const sendingNow = new Set<number>();
   /** Messages sent again from their editor, until the history drops them for their replacements. */
   const replaced = new Set<number>();
   /** The owner's message open as an editor (`state.editing` draws it): the thread it belongs to and what it carries, as the composer would. */
@@ -2051,6 +2052,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
     if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
+    // A message that waits its turn can be read now: the running work ends as Stop ends it and the message starts (R-QUEUE-05).
+    if (ownerAct === "cancel" && control.dataset.queued === "true") items.push({ id: "send-now", label: t("chat.sendNow"), icon: "send" });
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
@@ -2058,6 +2061,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       else if (pick === "reply") replyMessage(control);
       else if (pick === "edit") void editMessage(control);
       else if (pick === "cancel") void cancelMessage(control);
+      else if (pick === "send-now") void sendNow(control);
       else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
     }, reactions && source ? { html: menuReactionsHTML(reactions), onPick: lead => {
       const react = (emoji: string): void => {
@@ -2283,6 +2287,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       members.changed();
     } catch (err) { toaster.info(describeError(err)); }
     finally { retracting.delete(session); }
+  }
+
+  /** 「立即送出」 on a queued bubble: the core ends the work in progress and starts this message; the thread then follows the turns. */
+  async function sendNow(control: HTMLElement): Promise<void> {
+    const turn = messageSource(control)?.turn;
+    if (!turn?.session_id || turn.status !== "queued" || sendingNow.has(turn.id)) return;
+    const member = memberId();
+    sendingNow.add(turn.id);
+    try {
+      await api.agentSendNow(turn.session_id, member, turn.id);
+      if (visible && memberId() === member) await load(false); else members.changed();
+    } catch (err) { toaster.info(describeError(err)); }
+    finally { sendingNow.delete(turn.id); }
   }
 
   /** Connect or Cancel on a connector card. The core answers at once and tells each new state (`AgentTurn`). */
