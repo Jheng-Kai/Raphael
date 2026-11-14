@@ -172,6 +172,7 @@ _QUESTIONS = (
     "computer_confirm_click",
     "computer_confirm_keys",
     "computer_confirm_step",
+    "which_computer",
 )
 # The one fixed line that names the owner: the owner chose its words (the step is theirs).
 _ADDRESSES_THE_OWNER = ("computer_handoff",)
