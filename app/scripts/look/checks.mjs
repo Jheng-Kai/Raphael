@@ -2104,9 +2104,7 @@ export function checkRendered(name, context = {}) {
   if (name.startsWith("missing-")) {
     const noteScope = name === 'missing-vision' ? '#svc-dialog .missing-note' : name === 'missing-search' ? '.turn-prerequisites .missing-note' : '.missing-note';
     const note = [...document.querySelectorAll(noteScope)].find(visible);
-    if (name === 'missing-onboarding-repair') {
-      require(visible(document.querySelector('[data-act="rerun-guide"]')), 'repair reaches the existing Start tour action');
-    } else if (name === 'missing-provider-repair') {
+    if (name === 'missing-provider-repair') {
       require(visible(document.querySelector('#pv-dialog')), 'provider repair opens the existing provider card');
       require(document.activeElement === document.querySelector('#pv-dialog [data-pv="replace"]'), 'provider repair focuses its credential action');
     } else if (name === 'missing-card-repair') {
@@ -3411,7 +3409,10 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (["settings-owner", "settings-tools", "settings-draft-grouped"].includes(name)) {
-    if (name === 'settings-owner') require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !document.querySelector('[data-mem-space], [data-pane="memory"]'), "the owner's profile stands, no tab of Settings shows memory (owner, 2026-11-11), and no weather city is asked for");
+    if (name === 'settings-owner') {
+      require(visible(document.querySelector('[data-owner="owner_name"]')) && !document.querySelector('#agent-city') && !document.querySelector('[data-mem-space], [data-pane="memory"]'), "the owner's profile stands, no tab of Settings shows memory (owner, 2026-11-11), and no weather city is asked for");
+      require(!document.querySelector('[data-act="rerun-guide"]') && ![...document.querySelectorAll('.modal-body button, .modal-body h2')].some(el => /導覽/.test(el.textContent)), "General has no way back into the guide (owner, 2026-11-14)");
+    }
     else if (name === 'settings-tools') require(document.querySelector('[data-pane="tools"]')?.getAttribute('aria-current') === 'page' && !document.querySelector('[data-pane="agent"]'), "legacy agent pane resolves to Tools");
     else if (name === 'settings-draft-grouped') require(!!document.querySelector('.ms-pane .ms-list [data-ms="draft"]') && document.querySelectorAll('.ms-pane [data-ms="draft"]').length === 1, 'the draft switch is one row of the page, in the list with the group');
     return {check:name};
@@ -3636,7 +3637,7 @@ export function checkRendered(name, context = {}) {
     const pill = document.querySelector('.ob-actions > .btn.pri'), box = pill.getBoundingClientRect();
     // The guide keeps its own wide pills instead of the shared button height.
     require(box.width >= 240 && box.height >= 40 && parseFloat(getComputedStyle(pill).borderTopLeftRadius) >= box.height / 2 - 1, "the one button is a wide pill");
-    // The welcome's one pill is 360 px wide, or what a narrow card leaves it, on a first run and on a rerun alike.
+    // The welcome's one pill is 360 px wide, or what a narrow card leaves it.
     const foot = document.querySelector('.ob-foot'), footStyle = getComputedStyle(foot), room = foot.getBoundingClientRect().width - parseFloat(footStyle.paddingLeft) - parseFloat(footStyle.paddingRight);
     require(Math.abs(box.width - Math.min(360, room)) <= 1, `the welcome's pill is 360 px wide, or its room (${Math.round(box.width)} px of ${Math.round(Math.min(360, room))})`);
     require(!document.querySelector('.ob-foot .ob-pair'), "the welcome's row is its own, not a step's pair");
@@ -3723,15 +3724,6 @@ export function checkRendered(name, context = {}) {
       require(parseFloat(style.borderTopLeftRadius) >= back.getBoundingClientRect().height / 2 - 1, "the ring follows the circle");
     }
     return { check: name };
-  }
-  if (name === "onboarding-rerun") {
-    // The guide opened again from Settings: its welcome is the first run's own, the one wide pill and nothing beside it, no × to
-    // leave by (owner, 2026-11-14: 「第一頁應該只會有開始就好了」). The later pages keep their pair.
-    require(visible(document.querySelector('.ob-emblem canvas.ob-emb')) && document.querySelector('.ob-col > h2.ob-wordmark'), "the welcome is on screen");
-    require(!document.querySelector('.ob-foot .ob-pair, .ob-foot [data-ob="back"], .ob-foot .btn.icon'), "the welcome's row is its own: no pair, no way back, no ×");
-    const buttons = [...document.querySelectorAll('.ob-foot .btn')];
-    require(buttons.length === 1 && buttons[0].dataset.ob === "next" && buttons[0].textContent.trim().length > 0, "the foot holds the one worded pill and nothing else");
-    return { check: name, pill: Math.round(buttons[0].getBoundingClientRect().width) };
   }
   if (name === "onboarding-tools" || name === "onboarding-services" || name === "onboarding-abilities") {
     // Each first-run choice is one calm centred column in one card of a designed size: a title with two small slimes
