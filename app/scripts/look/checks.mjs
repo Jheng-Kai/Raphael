@@ -7014,6 +7014,25 @@ export function checkRendered(name, context = {}) {
     require(switchBox.left - box.right >= 8, `the fill stops 8 px or more before the switch (${switchBox.left - box.right})`);
     return { check: name, rows: rows.length };
   }
+  if (name === "owner-list") {
+    // The owner's own list of 2026-11-14: the seven apps of his picture, all on, under no heading, with no app's page over them.
+    const modal = connectModal(), list = modal.querySelector('.cs-connected'), rows = [...(list?.querySelectorAll('.cs-linked') ?? [])];
+    require(visible(list) && !modal.querySelector('.cs-page') && list.querySelector('.cs-top-t')?.textContent === '已連結', "the connected list is on screen, under its own title, and no app's page is over it");
+    require(!list.querySelector('.cs-sec-head'), "the list has no section heading");
+    const names = rows.map(row => row.querySelector('.nm').textContent).sort().join(',');
+    require(names === ['Gmail', 'GitHub', 'Google Calendar', 'Google Drive', 'Hugging Face', 'Mobbin MCP', 'Notion'].sort().join(','), `the rows are the seven apps of his picture (${names})`);
+    require(rows.every(row => row.querySelector('[role="switch"]').getAttribute('aria-checked') === 'true' && visible(row.querySelector('.ds')) && visible(row.querySelector('.cs-tile'))), "every row has its tile, its line and a switch that is on");
+    return { check: name, rows: rows.length };
+  }
+  if (name === "app-state-press") {
+    // 「✓ 已連結」 of the one view's row: under the pointer, the pointer says it can be pressed, and what a press lands on is the row.
+    const modal = connectModal(), state = modal.querySelector('.cs-card .cs-state'), card = state?.closest('.cs-card');
+    require(state && visible(state) && state.textContent.includes('已連結'), "a connected row of the one view says 已連結");
+    require(getComputedStyle(state).cursor === 'pointer' && card.querySelector('[data-conn="open-store"]'), "the words have the pointer, and the row has the page to open");
+    const box = state.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    require(hit && card.contains(hit) && !hit.closest('[data-conn="join"]'), "a press on the words lands in the row, not on another control");
+    return { check: name };
+  }
   if (name === "app-row-hover") {
     const modal = connectModal(), row = modal.querySelector('.cs-card .cs-main:hover');
     require(row && visible(row), "a row of the main view is under the pointer");
