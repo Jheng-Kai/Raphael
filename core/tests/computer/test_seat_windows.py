@@ -2,8 +2,6 @@
 panel, the Browser icon is a dock's, no marker page stays on screen, members use tabs, and a window stays inside its
 screen above the panel. The image's scripts are read and run here without Docker; the members' tools against fakes."""
 
-from importlib.machinery import SourceFileLoader
-from importlib.util import module_from_spec, spec_from_loader
 import json
 from pathlib import Path
 import re
@@ -23,24 +21,16 @@ LAYER = IMAGE / "layer12"
 
 
 def load(name, path):
-    loader = SourceFileLoader(name, str(path))
-    found = module_from_spec(spec_from_loader(name, loader))
-    loader.exec_module(found)
+    """The image's script run from its text: an import would write bytecode into the image's build context, which every
+    other test that reads that folder (and the image build) refuses (test_screens.py, test_computer_acceptance.py)."""
+    found = ModuleType(name)
+    found.__file__ = str(path)
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), found.__dict__)
     return found
 
 
-screens = ModuleType("layer12_screens")
-exec(compile((LAYER / "screens.py").read_text(encoding="utf-8"), str(LAYER / "screens.py"), "exec"), screens.__dict__)
+screens = load("layer12_screens", LAYER / "screens.py")
 tabs_helper = load("layer12_browser_tabs", LAYER / "raphael-browser-tabs")
-
-
-@pytest.fixture(scope="module", autouse=True)
-def image_build_context_stays_without_bytecode():
-    yield
-    for folder in IMAGE.rglob("__pycache__"):
-        for file in folder.iterdir():
-            file.unlink()
-        folder.rmdir()
 
 
 def test_layer_twelve_is_the_last_step_and_writes_over_what_earlier_steps_installed():
