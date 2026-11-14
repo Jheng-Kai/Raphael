@@ -1,5 +1,26 @@
 # Dictation
 
+## Automatic microphone picks the headset and stays on it (2026-11-14)
+
+Owner, 2026-11-14, with a picture of the microphone menu (自動偵測（目前：麥克風排列）, 麥克風 (3- HyperX Cloud II Core Wi…),
+立體聲混音, 麥克風排列): wearing a HyperX wireless headset, automatic kept jumping between it and the laptop's array.
+The root cause was in `core/src/raphael_core/device/audio.py`: automatic opened PortAudio's default, the Sound Mapper
+(whichever device Windows calls the default), and when its first 0.3 s was digitally silent `_find_live_input` took the
+first live input of PortAudio's own order, Stereo Mix included (it is live whenever anything plays), with the "last good"
+microphone remembered by a name whose 「3- 」 Windows renumbers. Which of the headset, Stereo Mix and the array won
+depended on what was playing and what was listed first. R-MIC-AUTO-01 and R-MIC-AUTO-02: the order and its memory are
+`device/mic_choice.py` (an attached microphone before a built-in array, never a loopback, the same one while it is plugged
+in, a new attached one takes over, one that was heard is not left for being quiet), used by `audio.py`'s
+`_pick_device`, `_find_live_input` and `automatic_device_name` (the menu's 「目前」 label).
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; .\.venv\Scripts\python.exe -m pytest tests/device -q
+```
+
+No scene changes: the menu's words are the same. Not proved here: the owner's real headset (no audio device is opened in a
+test); he checks that automatic shows and stays on 麥克風 (… HyperX …) with the headset on, and moves to 麥克風排列 only
+when it is unplugged.
+
 ## Raphael stays in front of an open page while he is heard (2026-11-14)
 
 Owner, 2026-11-14: with 每日總覽, an HTML page, open in Raphael's conversation, pressing the app's own voice button showed
