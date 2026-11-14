@@ -93,7 +93,7 @@ describe("a conversation's header is the window's top row", () => {
     expect(conversations).toMatch(/\.mb-chat \.ra-scroll \{[^}]*mask-image: linear-gradient\(to bottom, transparent calc\(var\(--row-lead\) - 36px\), var\(--text\) var\(--row-lead\)\);[^}]*padding-top: var\(--row-lead\);/);
     expect(report).toMatch(/\.rp-scroll \{[^}]*padding: var\(--pa-top\) var\(--pa-dock-x\) 0;[^}]*mask-image: linear-gradient\(to bottom, transparent calc\(var\(--pa-top\) - 36px\), var\(--text\) var\(--pa-top\)\)/);
     // An open page is the whole area under the row and scrolls as one, as the thread does (R-PAGE-08).
-    expect(pages).toMatch(/\.pgv-page \{[^}]*overflow-y: auto;[^}]*padding: var\(--row-lead\) var\(--pa-dock-x\) var\(--sp-4\);[^}]*mask-image: linear-gradient\(to bottom, transparent calc\(var\(--row-lead\) - 36px\), var\(--text\) var\(--row-lead\)\);/);
+    expect(pages).toMatch(/\.pgv-page \{[^}]*overflow-y: auto;[^}]*padding: var\(--row-lead\) 0 0;[^}]*mask-image: linear-gradient\(to bottom, transparent calc\(var\(--row-lead\) - 36px\), var\(--text\) var\(--row-lead\)\);/);
   });
 
   test("the tools end short of the window's buttons, and go to their pane's edge where the details panel or a side thread stands beside them", () => {

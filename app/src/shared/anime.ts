@@ -23,7 +23,9 @@ const OPENING = new RegExp(`^《(?:${PREFIXES.join("|")})[。.：:]\\s*`, "iu");
 /**
  * The messages of one of Raphael's replies without his 《prefix。…》. The core writes a long reply as
  * several messages of one line: the first opens it with 《prefix。 and the last before the next opening
- * closes it with 》. Anything else, a 》 that ends a book's title included, is kept as it is.
+ * closes it with 》. Anything else, a 》 that ends a book's title included, is kept as it is. A 《prefix。 that starts a piece
+ * while the line is still open (the piece before it does not end with 》) is the line's own words, a quoted example: the
+ * outermost line wins (R-TEXT-06).
  */
 export function plainReplies(texts: readonly string[]): string[] {
   const plain = texts.map(replyBody);
@@ -34,6 +36,7 @@ export function plainReplies(texts: readonly string[]): string[] {
   plain.forEach((text, index) => {
     const opening = OPENING.exec(text.trimStart());
     if (!opening) return;
+    if (open >= 0 && index > open && !plain[index - 1]!.trimEnd().endsWith("》")) return;
     close(index - 1);
     open = index;
     plain[index] = text.trimStart().slice(opening[0].length);

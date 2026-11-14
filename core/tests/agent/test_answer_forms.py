@@ -10,10 +10,10 @@ from raphael_core.messaging.words import compose
 @pytest.mark.parametrize("language", persona.LANGUAGES)
 def test_forms_schema_reaches_api_cli_and_background_prompts(language):
     member = dict(name="Member", role="Assistant", instructions="", personality="")
-    prompts = [persona.system_prompt(language, "answer"), persona.cli_system_prompt(language),
-               persona.member_system_prompt(language, "answer", **member), persona.cli_system_prompt(language, **member),
-               persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
-               persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10)]
+    prompts = [persona.system_prompt("answer"), persona.cli_system_prompt(),
+               persona.member_system_prompt("answer", **member), persona.cli_system_prompt(**member),
+               persona.worker_system_prompt(model_calls=5, tool_calls=10),
+               persona.member_worker_system_prompt(**member, model_calls=5, tool_calls=10)]
     for prompt in prompts:
         for word in ("```forecast", "```board", "```chart", '"days"', '"columns"', '"series"', "show_page only"):
             assert word in prompt

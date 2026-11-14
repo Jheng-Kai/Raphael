@@ -8,7 +8,7 @@ def event_text(text):
         event = json.loads(text)
     except (ValueError, TypeError):
         return text
-    if not isinstance(event, dict) or event.get("type") not in ("routine", "calendar", "meeting", "skill_learned", "job_set", "renamed"):
+    if not isinstance(event, dict) or event.get("type") not in ("routine", "calendar", "meeting", "skill_learned", "job_set", "renamed", "computer_woke"):
         if isinstance(event, dict) and event.get("type") == "action":
             return ""
         return text

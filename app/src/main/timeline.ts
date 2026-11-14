@@ -115,7 +115,7 @@ const REASONS: Record<string, MessageKey> = {
   error: "agent.reason.error",
 };
 /** The states of a task that did not finish: it can be run again. */
-const RERUNNABLE: ReadonlySet<string> = new Set(["interrupted", "cancelled", "limit", "failed"]);
+export const RERUNNABLE: ReadonlySet<string> = new Set(["interrupted", "cancelled", "limit", "failed"]);
 const TASK_ENDS: Record<string, MessageKey> = {
   cancelled: "agent.taskCancelled",
   limit: "agent.taskLimit",
@@ -1036,6 +1036,15 @@ function renamedEvent(text: string): { name: string; words: string } | null {
   catch { return null; }
 }
 
+/**
+ * The words of the quiet line a member's own tool leaves when it wakes the sleeping computer (the core's `computer_woke` event,
+ * R-COMP-WAKE-01), or null. It is a line of the conversation like a rename, never a reply of the member's (R-TEXT-08).
+ */
+function computerWokeEvent(text: string): string | null {
+  try { const event = JSON.parse(text); return event?.type === "computer_woke" && typeof event.text === "string" && event.text.trim() ? event.text.trim() : null; }
+  catch { return null; }
+}
+
 function turnEventsHTML(turn: AgentTurn, look: TurnLook): string {
   return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
     name: look.memberName?.(task.member_id) || task.member_name })));
@@ -1061,12 +1070,13 @@ function publicEventsHTML(turn: AgentTurn, conversation: boolean, place: "inline
     if (plainLine(message.text) === plainLine(turn.text) || turn.messages?.some(reply => reply.kind === "reply" && plainLine(reply.text) === plainLine(message.text))) continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
     const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text), job = jobSetEvent(message.text), renamed = renamedEvent(message.text);
-    if ((!!meeting || !!skill || !!job || !!renamed) !== conversation) continue;
-    // A new member's job and its new name stand among the replies where they happened; the rest follow the reply.
-    if (conversation && (!!job || !!renamed) !== (place === "inline")) continue;
-    if (renamed) {
-      const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}"><p class="bot-renamed" role="status">${esc(renamed.words)}</p></div>`;
-      groups.push({kind: `renamed:${message.seq}`, lines: [line], names: new Map(), seq: message.seq});
+    const woke = computerWokeEvent(message.text);
+    if ((!!meeting || !!skill || !!job || !!renamed || !!woke) !== conversation) continue;
+    // A new member's job, its new name and the wake of its computer stand among the replies where they happened; the rest follow the reply.
+    if (conversation && (!!job || !!renamed || !!woke) !== (place === "inline")) continue;
+    if (renamed || woke) {
+      const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}"><p class="bot-renamed" role="status"${woke ? " data-computer-woke" : ""}>${esc(renamed?.words ?? woke ?? "")}</p></div>`;
+      groups.push({kind: `${renamed ? "renamed" : "woke"}:${message.seq}`, lines: [line], names: new Map(), seq: message.seq});
       continue;
     }
     const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : job ? "job" : `notice:${plainLine(message.text)}`;

@@ -90,7 +90,7 @@ async def test_retrieved_external_history_marks_what_a_task_writes(rig, memory, 
     assert (await rig.tool("session_search", {"query": "amber"}))["ok"]
     result = await rig.tool("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "The review is ready."}]})
     assert result["ok"]
-    assert "（待確認）The review is ready." in memory.own(0).read()
+    assert "(unconfirmed) The review is ready." in memory.own(0).read()
     assert rig.steps()[0].detail == "external_content"
 
 
@@ -104,7 +104,7 @@ async def test_owner_fact_in_private_work_stays_trusted_after_outside_content(co
             {"action": "add", "content": "The observatory opens in December."}]})
         assert result["ok"]
         assert "The owner prefers concise answers." in memory.own(0).entries()
-        assert "（待確認）The observatory opens in December." in memory.own(0).entries()
+        assert "(unconfirmed) The observatory opens in December." in memory.own(0).entries()
     finally:
         await rig.meteo.http.aclose()
 
@@ -130,8 +130,8 @@ def test_the_task_is_shown_the_files_as_data():
 
     moment = {"date": "2026-10-23", "time": "09:00", "weekday": "Friday", "utc_offset": "UTC+08:00"}
     files = MemorySnapshot(shared="主人叫 Sam", own="Amy 負責設計。", shared_usage="1% — 7/1,375 chars", own_usage="1% — 7/2,200 chars")
-    _, user = _prompts("en", "整理 Amy 的設計稿", moment, [], RunLimits(), memory_snapshot=files)
+    _, user = _prompts("整理 Amy 的設計稿", moment, [], RunLimits(), memory_snapshot=files)
     assert '<own_memory file="MEMORY.md" usage="1% — 7/2,200 chars">\nAmy 負責設計。\n</own_memory>' in user
     assert user.index("<shared_memory") < user.index("<own_memory") < user.index("<task>")
-    _, without = _prompts("en", "x", moment, [], RunLimits())
+    _, without = _prompts("x", moment, [], RunLimits())
     assert "shared_memory" not in without

@@ -1,5 +1,42 @@
 # Conversation
 
+## Words meant for the model stay out of what the owner reads (owner, 2026-11-14)
+
+- **A page shown is no question (R-PAGE-09).** A task that shows an HTML page (`show_page`) goes on: the page is already a card in
+  the thread, and the core no longer makes an owner question (`kind` show_page, the 「我完成了」 card) of it. Before, the model's
+  own note, "The owner can see the page in this conversation.", was that card's title. The note is now a plain fact for the
+  model; a member that needs a choice from the owner asks with `ask_owner`. Older question rows of that kind still draw.
+  Evidence: `core/tests/agent/test_owner_questions.py` (the page tests).
+- **A note to itself is no reply (R-TEXT-05).** In a Chinese, Japanese or Korean conversation, English planning that leads a reply
+  (`brain/reasoning.py::split_notes`) is taken off in the CLI loop (`_publish`, `_unthought`) and where every reply is stored
+  (`AgentService._message`). Tests: `core/tests/agent/test_output_hygiene.py`.
+- **The outermost frame wins (R-TEXT-06).** `parse_reply` takes the 《答。…》 frame off the whole authored message before it is cut into
+  pieces; `plain_replies` (core) and `plainReplies` (`app/src/shared/anime.ts`) open a line only where none is open.
+- **No pointer to `detail` (R-TEXT-07).** The conversation folds `detail` away, so `parse_reply` takes 「見 detail」 out and says what
+  the field held in the reply.
+- **The wake line is an event, not a reply (R-TEXT-08).** `computer_woke` is drawn by `publicEventsHTML` as `.bot-renamed[data-computer-woke]`;
+  look scene `computer-wake-line` asserts one such line and no reply of the member's.
+- **A data-floor refusal does not end the turn (R-FLOOR-04).** The model is told up to three times, and answers with what it can.
+
+## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02)
+
+Owner: 「傳送檔案不是會傳送原始檔嗎? 應該要是 raw data 才對」. A member (a Japanese teacher) was given an `.html` file to copy
+its design and received only the page's visible text: `services/file_reader.py` (`read_text`) ran `.html` through a text
+extractor and `agent/attachment_inputs.py` (`text_context`) wrapped the result in JSON. Now a text file (`is_text`: the
+extension set, `text/*`, JSON, XML, YAML, JavaScript) is read as its source, character for character, by every consumer of
+`read_text`: the inline context of an API or CLI turn (`agent/service.py`, the background worker's `_prompts`) and the
+`read_attachment` tool. In the inline context a line of facts is followed by the raw text (never inside a JSON string, so no
+quote or line end is escaped), inside the same untrusted wrapper; the prompt's own delimiter tags are neutralized. A file over
+the limit gives its start and a note beside it with the file's bytes, the bytes shown, the bytes cut and the stored path
+(`cut_note`); a CLI brain opens that stored path with its own file tools and finds the original file. Images, PDF, Office
+documents and media keep their readers. Offline evidence: `core/tests/agent/test_raw_attachments.py` (API and CLI brains,
+every text type, cut, encodings), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
+Not covered: a real model's use of the source, a native attach in the running app.
+
+```powershell
+node scripts\verify.mjs --contract
+```
+
 ## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
 
 Owner, with a picture of a card titled 「工作結果」, a green 「● 完成」, 「53 個檔案變更 +0 −0」, 「顯示內容」, 「還原檔案」 and 「查看」:
@@ -24,6 +61,37 @@ npm run look -- card-task-result card-task-few card-task-many card-task-new card
 files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-restored` (「已復原 1 個檔案的變更」, one button) assert no pill or dot, none of the old words, one-line rows with their
 state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
 `npm run verify -- --contract` after a change to the file list the core sends.
+
+## A sign-in the CLI refused is mended once for every routine (2026-11-14, R-CLI-SIGNIN-03)
+
+Routine runs that would start on a CLI that has just refused its sign-in end unstarted with the same sentence and the same
+turn failure `cause`, so the one button of R-CLI-SIGNIN-02 stands under each of them (the newest answered reply of its
+conversation). A sign-in finished from that button under a task's reply (a routine's run) runs the failed task again through
+the core (`signinRetry` in `cli-signin.ts`) in place of asking the routine's title as a question. The scenes
+`chat-cli-expired` and `chat-cli-signin-flow` still stand for the button; the retry choice is covered by
+`cli-signin.test.ts`, and the native sign-in console and a real routine are unverified offline.
+
+## What a program writes by itself is not the member's work (owner, 2026-11-14, R-CARD-18, R-CARD-19)
+
+Owner, with a picture of the card 「Added 110 files」 under a member that was asked to read email (`verified_contents.json`,
+`summarizer_gemma4_*_solution_config.binarypb`, under 「Workspace / member-b17ef6d19…」, with 「Undo these changes」):
+「看個 email 怎麼會改了一百多個檔案」, and 「Open file changes」 listed them only after a long wait.
+Cause, as far as the code shows (the owner's volume was not read; the files are named by the picture only) (core `computer/checkpoints.py`): a turn's checkpoint is the workspace as it was at the turn's first command, and the card is the
+difference to the folder now, so anything that appears in `/home/cua/workspace` meanwhile counts as the member's. Only the names in
+`EXCLUDED` (`.browser-profiles`, `.cache`, ...) were left out, by folder name; the browser's own files lay under another name:
+`member-<16 hex>` is the folder the carry-over (`carry.py`, run by the member's first browser use) makes for an older computer's home
+that no member record names, and a Chrome user-data directory (component updater, on-device models, extension manifests) in it, or
+anywhere else outside `.browser-profiles`, was counted file by file. The view was slow because the live walk hashed every such file and
+the change list read both sides of the first twenty files whole (models of tens of MiB) to learn they were not text.
+Now: `checkpoints.py` does not walk a browser's user-data directory (found by its marker files), `PROGRAM_FOLDERS` and lock files, and
+`_changes` also drops them from a checkpoint kept before (and `restore` never undoes them); a folder carried in whole in the window
+(`.raphael-carried-member`, 16 bytes) is not listed; text is read only for small text files (R-CARD-19), and a closed window is compared once.
+No image change, no UI change: a turn with only such files has no card. Not covered here: a real Chrome run on a computer.
+
+```powershell
+python -m pytest tests/computer/test_checkpoints.py tests/computer/test_checkpoint_revision.py   # from core/, PYTHONPATH=src
+npm run verify -- --contract                                                                      # from app/
+```
 
 ## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
 
@@ -2231,7 +2299,7 @@ stays below. Since 2026-11-14 (R-PAGE-08) the page is the whole area beside the 
 is the page's own pill (its mark and title; a room keeps its heading) in place of the member's pill, and its tools hold the one Share button on a report and on an HTML page (the member's share waits). The way back is the round arrow at the
 header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
 (the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
-has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page as wide as the area allows up to `--pgv-w` (1280 px) between the thread's gutters, its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
+has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page edge to edge (R-PAGE-10: the whole view's width, no margin, frame or width cap; the area ends where the composer's row begins), its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
 its own heading, its column and its contents. The same frame is moved there and back (no reload with `moveBefore`; the scene
 `page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading (how far the area was scrolled) is kept for the next opening. A page the member
 changes (`update_page`) loads beside the one on screen, says how tall it is while it loads and replaces it once drawn, the area keeping its scroll: the
@@ -2240,7 +2308,7 @@ What the member answers to a message written under the page shows under the page
 the first words of its reply as one line (page-inplace-answered); the whole reply is in the thread, one press of the arrow away. The window tells the core which page is open before it
 sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `window.__look.viewing`), and the core's context says "the page the owner is looking at now: page_id=…" so "here" means it.
 Checks: page-inplace (also under the names page-expanded, page-opened-whole and page-library-open) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
-surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's width against `--pgv-w` and the area's gutters, no frame (no corner, edge or clip), the area scrolling, nothing covered by the composer; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's frame against the view's left and right edges (within 1 px, to the window's right edge) and the area's bottom against the composer's row, with no part of the composer over the page, no frame (no corner, edge or clip), the area scrolling, nothing covered by the composer; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
 
 A page opened from the member's Library (R-PAGE-08, owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它有一個share的鍵」, after Grok Bot's Library, whose page row opens the page and not the thread at its reply): the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
 a page of an older conversation opens that conversation quietly (no turn marked) and the arrow brings back the one that was open, the thread where it was (`TranscriptWindow.snapshot` / `restore`, the scroll) and the panel on its Library tab (`members.foldForPage` / `unfoldAfterPage`, which every open page uses, so a press on the card folds the panel too).
@@ -2248,6 +2316,8 @@ The scenes use the fixture's `libraryPages` (the Library lists the page scenes' 
 `page-library-esc` (Escape does the same), `page-library-older` (`page-library-older-open` / `-kept`: the page's own conversation under it, then the one that was open) and `page-library-share` (`page-library-shared`: one `report_save` with the page's id and no text, a word of where it went, the page still open). The file itself is the core's (`page_file` in `core/src/raphael_core/agent/pages.py`, tested in core/tests/agent/test_pages.py); a look cannot open it, as the core is not there.
 `answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
 `updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
+An open page is edge to edge (R-PAGE-10, owner, 2026-11-14, with a picture of the page in a centred 1280 px frame between two dark margins: it should open as an HTML file does in Chrome, as Grok Bot's pages do): `.pgv` takes back the pane's side padding (`--row-edge`; a room's pane has none) and `.pgv-page` has no side or bottom padding and no width cap, so the iframe spans the view and the page's own background reaches the sidebar and the window's right edge. The composer is kept (R-PAGE-03: a change is asked for under the page) and its row is reserved, so the area ends where the composer begins and no page content is ever under it; only the top keeps the header's slim band, the page fading under it. A report's background fills the view the same way, its column keeping `--pa-colw`. `page-inplace`, `page-base` and `page-report-open` assert the frame's and the report's left and right edges against the view's (1 px), the window's right edge, the area's bottom against the composer's row and that the composer overlaps nothing of the page; `answer-forms.test.mjs` refuses a page with margins and a page that runs under the composer. Run `page-inplace page-inplace-room page-base page-library-open page-report page-dashboard` at 1120, 720 and 1920x1080 in both themes.
+
 The voice flyer is the one stage child a page does not put away (R-VC-04; `voice-over-page-listening`, `-hearing`, `-gone`, see
 [Dictation](dictation.md)): Raphael stays in front of the page, above the composer, while the owner is heard.
 
@@ -2419,10 +2489,10 @@ links (AccuWeather's `…/taichung-city/315040/weather-forecast/315040`, NVIDIA'
 - **Pointing.** `mountChartHover` (report view): `.rc-tip` in the app's float, crosshair and points
   on lines, the column on columns, the row on bars, the part on a pie; arrow keys on the focused
   plot (`role="img"`, named with every value) do the same.
-- **The secret check.** `memory/scan.py` `_readable`: words and numbers joined by `/ - _`, with at
-  least one slash, are a path, not a key (a value joined by `_` alone, such as
-  `tests/test_chat_setup_share.py`'s synthetic credential, stays a key); card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
-  files and integrity hashes are not read as keys, embedded text is decoded and read.
+- **The secret check.** Since the same day's second refusal (R-SECRET-01) nothing is a key for how it looks:
+  `memory/scan.py` `find_secret` finds credentials and payment secrets only (see "Only credentials are secret"
+  below); card numbers begin with 2–6. `agent/pages.py` `_readings`: embedded binary
+  files and integrity hashes are set aside, embedded text is decoded and read.
 - **HTML pages** get the app's theme words (`pages.py THEME`, `page-theme.test.ts` keeps them equal
   to styles.css) and may load chart libraries from the three CDNs; `connect-src` stays `'none'`.
 
@@ -2446,11 +2516,33 @@ report scenes are the consumers of the shared report body (its grid and contents
 
 Tests: core `tests/agent/test_pages.py` (the dashboard kept, every chart refusal, the links,
 pictures, libraries and times that are not secrets, the keys still refused, the theme words);
-`tests/memory/test_scan.py` (readable paths, keys in links, millisecond times);
+`tests/memory/test_scan.py` (addresses, IDs and hashes that are not secrets, credentials in links, millisecond times);
 `app/src/main/report-chart.test.ts` (ticks, labels, tiles, every chart kind, colours, the arrow
 keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attributes).
 Native boundary: a real Raphael turn on a real model building the page and the routine is proven
 in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
+
+## Only credentials and payment secrets are secret (owner, 2026-11-14)
+
+R-SECRET-01, R-PAGE-05, R-REACT-01. The member 紫苑 (a Japanese teacher) built N1 study pages three times and `show_page`
+refused each, because `find_secret` read an NHK news address (`news.web.nhk/newsweb/na/nd-20261114de75840`) as a token; the
+owner then said the lock was far too tight: only passwords, keys, tokens, card numbers and PINs and bank accounts are secret.
+
+- **What is secret** (`memory/scan.py`): the known key shapes; a value given to a word for a key or a token; the value of a word
+  for a password, PIN, one-time code or CVV; a card number (Luhn); an IBAN (check digits) or the digits a word for a bank account
+  gives its number to. **What is not**: an address, an ID or a number inside one, a hash, a file name, article text, a national ID
+  number, a Chinese or Japanese sentence about a password. No string is a key for its look.
+- **Where it applies**: memory writes and the prompt-time check, `show_page` and `update_page` (title, html, fallback, tool data),
+  report text, summary and links, notes, skills and tool transcripts (`redact_secrets` → `scan.redact`), screen teaching, a
+  template's findings, the owner-private team report. The guard against steering a model (`find_injection`) is for a memory's write
+  and read only; since this rule it lets a link with a query string and a plain picture through. Unchanged: the gate on a recipe that
+  is passed on (`template_author.py PRIVATE`), a skill folder's secret-looking file names, the vault.
+- **Check**: `pytest core/tests/memory/test_scan.py core/tests/agent/test_pages.py` (the NHK addresses, every other address shape, the
+  credentials that stay refused, a page of the owner's N1 study content through `show_page` end to end and a report with the same
+  links). Native boundary: a real member turn on a real model writing a page with news links.
+- **Language of a reaction's question** (R-REACT-01): `reaction_prompt` names the window's language and puts the task after the
+  persona; `test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches` reads the system prompt of a
+  Japanese-teaching member. Not proved: a real model choosing the language.
 
 ## Pages that read as documents, as Grok Bot's do (owner, 2026-11-14)
 
@@ -2570,7 +2662,12 @@ Migration 71 changes the account and pairing anchors from secret-card ids to tur
 R-AG-LANG-01: UI locale selects fixed app labels/notices only. All authored replies, progress,
 thinking, greetings, reports, recaps and routines follow the speaker's own profile/instructions,
 otherwise the owner's words or conversation. API, CLI, background/routine reports, greetings and
-public narration share this policy. Chinese prose without kana follows the owner's Chinese script
+public narration share this policy. Since 2026-11-14 (owner: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到
+system prompt，什麼事都不會發生」, R-LANG-01 to R-LANG-04) the interface language reaches no model at all: no
+prompt builder takes a language, the "Interface locale" line and the configured reply language line are gone, the
+reply schema offers fixed kinds (`REPLY_KINDS`) the app shows as the interface's prefix, and what is still chosen
+per language for a model (Raphael's name in the roster, a weather place name, 「看這個」, the memory host's mark) is
+read from the conversation's own words (`conversation_language`). Chinese prose without kana follows the owner's Chinese script
 chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chinese`), never
 ui_language; kana, code and English stay unchanged. The configured voice language remains
 independent, including Japanese rendering on a Japanese interface.

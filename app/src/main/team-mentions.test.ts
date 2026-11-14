@@ -80,6 +80,16 @@ test("a typo or swapped letters still find the app or member, the plain matches 
   expect(rows()).toEqual(["Notion"]); // two letters are typed right: no near misses
 });
 
+test("an app in the @ menu wears the mark the connected list draws for it: its own logo, never a plug", () => {
+  // Owner, 2026-11-14: Outlook had its logo in the connected list and a plug in the @ menu. One source draws both.
+  const roster = { ...list, team_context: { apps: [{ id: "composio:outlook", name: "Outlook", state: "ready", logo: "https://logos.composio.dev/api/outlook" }] } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: roster }));
+  input.value = "@outl"; input.setSelectionRange(5, 5); input.dispatchEvent(new Event("input", { bubbles: true }));
+  const row = document.querySelector<HTMLElement>('#app-popover [data-value="Outlook"]')!;
+  expect(row.querySelector("img.logo")?.getAttribute("src")).toBe("https://logos.composio.dev/api/outlook");
+  expect(row.innerHTML).not.toContain("i-plug");
+});
+
 test("a recalled message ending in an @ is not typing: it opens no menu", () => {
   bindTeamMentions(input, () => ({ list }));
   input.value = "ask @小"; input.setSelectionRange(5, 5);

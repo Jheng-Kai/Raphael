@@ -1,5 +1,11 @@
 # Connections and MCP
 
+## A connector's argument shape, and a failure repeated (2026-11-14)
+
+Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a
+connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind
+`bad_arguments`), as is a server's own refusal of arguments. A connected app's call that has failed twice with the same error is not made a third time: the model is told what it said, the shape and to try another way, and the run goes on (only its step budget ends it). No scene draws either; the refusal is a tool result inside the run.
+
 ## Connect apps as Grok Bot's, one view (2026-11-12): read this first
 
 This section supersedes every later paragraph that speaks of the 已連結 and 商店 tabs, the tab counts, the pager of 18-card pages,
@@ -818,3 +824,12 @@ secret/test/enable ordering and local reconnect), and
 core/tests/evaluate/test_guardian.py (scenario intent reaches the shared snapshot,
 recorded creates without side effects and approval pause/resume). No UI changes;
 look, judge, native providers and live models are outside this offline repair.
+
+## One button per row, one way back, one mark, a search that finds the name (2026-11-14, R-UI-154, R-UI-155, R-APPS-SEARCH-01, R-APPS-MARK-01)
+
+A row of Connect Apps is one button with 連結, 「✓ 已連結」 or its switch on its fill, whose round corners the list never cuts; the connected
+list's chevron and title are one back button; a search orders apps by how well their names answer it; the @ menu draws the logo the list draws.
+
+```powershell
+npm run look -- connect-apps-back-title connect-apps-back-title-press connect-apps-row-hover connect-apps-connected-hover connect-apps-connected-rows --theme both --width 1120,720,1920x1080
+```

@@ -17,7 +17,7 @@ READ_INSTEAD = (" To read a skill's own files (a page template, data) use skill_
 WRITE_REFUSAL = (
     "Commands, scripts and file tools cannot write Raphael's own data, database, credentials or core files. "
     "To change a skill use skill_manage; to change members, connections or settings use the member, connection or "
-    "settings management tools instead (the owner approves their card). Do not try another command or path."
+    "settings management tools instead (the owner approves their card)."
     + READ_INSTEAD
 )
 READ_CONSENT = ("Reading Raphael's own data requires the owner's consent for this call. Use management tools when possible."

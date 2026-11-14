@@ -34,8 +34,9 @@ class PageError(Exception):
 
 
 # What an embedded file or a library's fingerprint holds is content, not a credential: a picture's or a font's bytes in
-# base64 and a script's integrity hash read as long random runs. A text file (an SVG, JSON, plain text) is decoded and
-# read like the rest of the page; a binary one is not read.
+# base64 and a script's integrity hash are set aside, so that no run of them can pass for a key's shape. A text file (an
+# SVG, JSON, plain text) is decoded and read like the rest of the page; a binary one is not read. Only credentials and
+# payment secrets are refused on a page (`memory/scan.py`): an address, an article or an ID is content (owner, 2026-11-14).
 _EMBEDDED = re.compile(r"data:([\w.+-]+/[\w.+-]+)?((?:;[\w.+-]+=[\w.+-]+)*);base64,([A-Za-z0-9+/=\s]+)", re.I)
 _TEXT_FILES = re.compile(r"text/[\w.+-]+|image/svg\+xml|application/(?:json|xml|javascript|ld\+json)", re.I)
 _INTEGRITY = re.compile(r"\bsha(?:256|384|512)-[A-Za-z0-9+/]{40,}={0,2}")

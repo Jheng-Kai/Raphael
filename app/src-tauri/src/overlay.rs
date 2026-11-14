@@ -26,6 +26,7 @@
 //! display turning off and on, the session locking, sleep, the webview's GPU process exiting), so
 //! that an emblem that nobody saw in a window that was in sight can be put next to it.
 
+mod frame;
 pub(crate) mod mouse;
 mod screen;
 mod sight;
@@ -983,7 +984,8 @@ fn passive_ex_style(style: isize) -> isize {
 /// Gives the window [`passive_ex_style`]. tao already makes a window that is not `focusable`
 /// `WS_EX_NOACTIVATE`, but it rebuilds the whole extended style from its own flags whenever one
 /// of them changes (and when the size does), which drops the tool window style, so this is done
-/// again after every such change, and it makes sure of `WS_EX_NOACTIVATE` once more.
+/// again after every such change, and it makes sure of `WS_EX_NOACTIVATE` once more. It also
+/// takes the title bar out of the window's style for good (see [`frame`]).
 ///
 /// The change is made on the main thread, which owns the window: from any other thread
 /// `SetWindowLongPtrW` would wait for the main thread, and that is a deadlock waiting to happen.
@@ -1001,7 +1003,11 @@ pub(crate) fn apply_passive_style(window: &WebviewWindow) {
     let change = window.run_on_main_thread(move || {
         // SAFETY: `hwnd` is the overlay window, which lives as long as the app, and this runs on
         // the thread that owns it.
-        unsafe { restore_passive_style(HWND(hwnd as *mut _)) };
+        unsafe {
+            restore_passive_style(HWND(hwnd as *mut _));
+            // tao's rebuild of the style puts a title bar back each time; the window has none.
+            frame::keep_bare(HWND(hwnd as *mut _));
+        }
     });
     if let Err(err) = change {
         log::warn!("could not keep the overlay out of Alt+Tab and out of focus: {err}");
@@ -1561,6 +1567,53 @@ mod tests {
                 "{method} must place the window and keep it in sight"
             );
         }
+    }
+
+    #[test]
+    fn every_passive_window_is_kept_bare_after_each_style_change() {
+        // The overlay and the learned-word pill flip a tao flag whenever the pointer enters or
+        // leaves one of their buttons, and tao writes a title bar into the style each time.
+        let source = include_str!("overlay.rs").replace("\r\n", "\n");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let apply = production
+            .split("pub(crate) fn apply_passive_style(window: &WebviewWindow) {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap();
+        assert!(apply.contains("frame::keep_bare("));
+        // The click-through change (mouse.rs) and the pill's own set-up and layout (learned.rs)
+        // all run it after the change.
+        let mouse = include_str!("overlay/mouse.rs").replace("\r\n", "\n");
+        let on = mouse
+            .split("window.set_ignore_cursor_events(!on)")
+            .nth(1)
+            .unwrap();
+        assert!(
+            on.split("Err(error)")
+                .next()
+                .unwrap()
+                .contains("apply_passive_style(&window)")
+        );
+        let learned = include_str!("learned.rs").replace("\r\n", "\n");
+        let start = learned.split("pub fn start(").nth(1).unwrap();
+        let start = start.split("\npub fn ").next().unwrap();
+        assert!(start.contains(".decorations(false)"));
+        assert!(
+            start.find(".build()?").unwrap()
+                < start
+                    .find("crate::overlay::apply_passive_style(&window)")
+                    .unwrap(),
+            "the pill's window is made bare right after it is built"
+        );
+        let layout = learned.split("pub fn learned_layout(").nth(1).unwrap();
+        let layout = layout.split("\n}\n").next().unwrap();
+        assert!(
+            layout.find(".set_size(").unwrap()
+                < layout
+                    .find("crate::overlay::apply_passive_style(&window)")
+                    .unwrap(),
+            "a resize rebuilds the style, so the window is made bare again after it"
+        );
     }
 
     #[cfg(windows)]

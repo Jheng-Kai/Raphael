@@ -42,6 +42,7 @@ turns stay until the user clears them (`clear`). Nothing here logs a question or
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -93,6 +94,9 @@ class Turn:
     # For a turn that did not finish, what it already did (`steps.work_summary`); set where the model
     # reads the turn (`AgentHistory.with_work`), empty otherwise.
     work: str = ""
+    # For an answered turn that ended on a failed call with a reply saying it could not go on (`gave_up_words`): the calls
+    # that failed, set where the model reads it (`AgentHistory.with_work`), empty otherwise.
+    stopped: str = ""
     reactions: dict = field(default_factory=dict)
     card_outcomes: list[str] = field(default_factory=list)
     failure: dict | None = None
@@ -107,6 +111,28 @@ def is_unfinished(turn: Turn) -> bool:
         and turn.source not in ("routine", "member")
         and turn.route not in ("routine", "exchange")
     )
+
+
+# What a reply says when it could not do what was asked (R-PERSIST-05, owner, 2026-11-14: a member's 「我無法讀到」 of one
+# day was read back every later day as a fact, and it stopped trying). Only a short reply counts, and only with the turn's
+# last call failed (`with_work`): a delivered answer that mentions a limit is an answer.
+_COULD_NOT = re.compile(
+    r"無法|无法|沒辦法|没办法|沒法|没法|不能|做不到|未能|讀不到|读不到|打不開|打不开|拿不到|取得不了|失敗|失败"
+    r"|できません|できなかった|読めません|読めなかった|開けません|失敗しました"
+    r"|\bcould(?:n['’]t| not)\b|\bcan(?:['’]t|not)\b|\bunable to\b|\bwas(?:n['’]t| not) able\b|\bfailed to\b",
+    re.IGNORECASE,
+)
+GAVE_UP_CHARS = 800
+STOPPED_CHARS = 200
+# The reasons of a step the owner or a safety rule decided (`steps.REASONS`).
+_DECIDED = frozenset(("denied", "declined", "forbidden", "cancelled", "presence_required", "private_chat_only"))
+
+
+def gave_up_words(turn: Turn) -> bool:
+    """Whether an answered turn's reply is a short one that says it could not go on. Exchanges keep their own words."""
+    said = "\n".join(turn.messages) if turn.messages else (turn.text or "")
+    return (turn.status == "done" and turn.route != "exchange" and len(said) <= GAVE_UP_CHARS
+            and bool(_COULD_NOT.search(said)))
 
 
 def is_readable(turn: Turn) -> bool:
@@ -590,10 +616,21 @@ class AgentHistory:
         without it every step counts as a change, since a step not known to only read may have changed
         something."""
         waiting = [turn for turn in turns if turn.id is not None and is_unfinished(turn)]
-        if waiting:
-            steps = self.steps(turn.id for turn in waiting)
+        # An answer that said it could not go on, right after a call that failed, did not finish either (R-PERSIST-05):
+        # the next turn reads which calls failed, never the "I cannot" as a settled fact.
+        gave_up = [turn for turn in turns if turn.id is not None and gave_up_words(turn)]
+        if waiting or gave_up:
+            steps = self.steps(turn.id for turn in waiting + gave_up)
             for turn in waiting:
                 turn.work = work_summary(steps.get(turn.id, []), changes or _anything)
+            for turn in gave_up:
+                calls = [step for step in steps.get(turn.id, []) if step.kind != "model"]
+                # What the owner or a rule said no to stays a no: such a turn is read as it was.
+                decided = any(step.reason in _DECIDED or step.outcome == "cancelled" for step in calls)
+                if calls and calls[-1].outcome != "ok" and not decided:
+                    failed = dict.fromkeys(f"{step.tool} ({step.reason or step.outcome})" for step in calls if step.outcome != "ok")
+                    turn.stopped = ", ".join(failed)[:STOPPED_CHARS]
+                    turn.work = work_summary(calls, changes or _anything)
         return turns
 
     def after(

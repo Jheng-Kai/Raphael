@@ -52,7 +52,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..agent.plugins import MAX_ARGUMENT_CHARS, PluginResult, PluginTool, clean_arguments, tool_key
+from ..agent.plugins import (
+    MAX_ARGUMENT_CHARS, PluginResult, PluginTool, clean_arguments, shape_advice, shape_problem, tool_key,
+)
 from ..agent.policy import PLUGIN_PREFIX, Tier
 from ..clock import wall_clock_ms
 from ..protocol import INTERNAL_ERROR, RpcError, invalid_params
@@ -710,6 +712,8 @@ class IntegrationsService:
                 "state": app_state(enabled=entry.enabled, status=status, error=error, tools=len(ready), waiting=waiting),
                 "services": services, "source": entry.kind,
                 "accounts": [{"id": a["id"], "status": a["status"], "label": a.get("label", "")} for a in entry.accounts],
+                # The app's own mark, so every place that names it (the @ menu, the list, a card) draws the same one.
+                **({"logo": entry.logo} if getattr(entry, "logo", "") else {}),
                 **({"last_used_at": entry.last_used_at} if entry.last_used_at else {})}
 
     async def _inventory(self, params: dict) -> dict:
@@ -923,6 +927,10 @@ class IntegrationsService:
             return end("blocked", PluginResult(False, "blocked"))
         if server.managed_by and not self.managed.allow_call(server.id, tool.name, arguments, approver):
             return end("blocked", PluginResult(False, "blocked"))
+        # A call that cannot be right from its top level alone is not sent: the model is told the shape that fits, so the
+        # service's allowance is not spent on trying again and again (R-TOOL-01).
+        if (problem := shape_problem(tool.name, tool.input_schema, arguments)) is not None:
+            return end("error", PluginResult(False, "bad_arguments", problem))
         # A pool is passed on only when there is one: a connector of a test may not know it.
         kept = {} if pool is None else {"pool": pool}
         try:
@@ -964,6 +972,10 @@ class IntegrationsService:
                 except OSError as exc:
                     logger.warning("Could not save the plugins: %s", type(exc).__name__)
         if outcome.is_error:
+            # A server that says the arguments did not fit is answered with what it said and the shape that fits (R-TOOL-01).
+            fitted = outcome.fresh or {t.name: t for t in outcome.listed or []}.get(tool.name) or tool
+            if (advice := shape_advice(tool.name, fitted.input_schema, outcome.text)) is not None:
+                return end("error", PluginResult(False, "bad_arguments", advice))
             result = PluginResult(False, "tool_error", outcome.text, outcome.truncated,
                                   page=getattr(outcome, "page", None), mcp_result=getattr(outcome, "mcp_result", None))
             return end("error", result)

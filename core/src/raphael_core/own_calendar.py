@@ -295,8 +295,14 @@ class OwnCalendar:
         else:
             last = _when(args["end"], zone)
             last = last if isinstance(last, str) else _local_date(last, zone)
-        if last < first or (date.fromisoformat(last) - date.fromisoformat(first)).days >= LIST_MAX_DAYS:
+        if last < first:
             raise CalendarError("bad_range")
+        # A longer period is read for its first LIST_MAX_DAYS days and says so, with what it did not read (R-CAL-09): a call
+        # that only said "bad_range" failed six times in the owner's use and told the model nothing it could mend at once.
+        latest = (date.fromisoformat(first) + timedelta(days=LIST_MAX_DAYS - 1)).isoformat()
+        asked_end = last
+        if last > latest:
+            last = latest
         start_ms, end_ms = _midnight(first, zone), _midnight(last, zone, 1)
         if self.shown is None:
             items = [own_item(event, zone) for event in self.store.between(start_ms, end_ms, zone)]
@@ -304,6 +310,11 @@ class OwnCalendar:
             items = await self.shown(start_ms, end_ms, zone)
         listed = {"now": _iso(now, zone), "today": today, "start": first, "end": last,
                   "items": [self._listed(item, zone) for item in items]}
+        if asked_end != last:
+            more = (date.fromisoformat(last) + timedelta(days=1)).isoformat()
+            listed["cut"] = {"limit_days": LIST_MAX_DAYS, "asked_end": asked_end, "read": f"{first} to {last}",
+                             "note": f"The period was longer than {LIST_MAX_DAYS} days: only {first} to {last} is listed. "
+                                     f"For the rest ask again from {more}."}
         # No Google entry means none only when this says connected: a model must not report "nothing" for what it could not read.
         return {**listed, "google": await self.google_state()} if self.google_state else listed
 

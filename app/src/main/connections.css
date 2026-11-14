@@ -64,8 +64,9 @@
 .cs-tile.lg { width: 56px; height: 56px; border-radius: var(--r-lg); }
 .cs-tile.lg .mono { width: 32px; height: 32px; }
 .cs-tile.lg .mono > .i { width: 20px; height: 20px; }
-:root[data-theme="dark"] .cs-tile .logo-art .lg-d { display: none; }
-:root[data-theme="dark"] .cs-tile .logo-art .lg-l, :root[data-theme="dark"] .cs-tile .logo-art .lg-l:has(+ .lg-d) { display: block; }
+/* The connected chip's small marks stand on the same white disc (owner, 2026-11-14: GitHub's white twin vanished there). */
+:root[data-theme="dark"] :is(.cs-tile, .cs-mini) .logo-art .lg-d { display: none; }
+:root[data-theme="dark"] :is(.cs-tile, .cs-mini) .logo-art .lg-l, :root[data-theme="dark"] :is(.cs-tile, .cs-mini) .logo-art .lg-l:has(+ .lg-d) { display: block; }
 
 /* Sections: a small name, 查看全部 at the right, then the apps in two columns. A row is the tile and the name, and at the right 「連結」 or 「✓ 已連結」. */
 .cs-sec { margin-top: var(--sp-5); }
@@ -91,18 +92,24 @@
 .cs-main .ds .st { font-size: var(--fs-2xs); }
 .btn.cs-connect { flex: none; padding-inline: var(--sp-4); border-radius: var(--r-pill); border-color: transparent; font-size: var(--fs-sm); }
 .btn.cs-connect.pri { border-color: var(--accent); }
+/* On a row under the pointer the row's fill is the control colour itself, so 連結 steps up a shade to stay a button (owner, 2026-11-14). */
+.cs-card:hover .btn.cs-connect:not(.pri) { background: var(--float-ctl-raised); }
 /* Connected: quiet words with a check, and no button. */
 .cs-state { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; }
 .cs-state > .i { color: var(--ok); }
 .cs-linked > .tg { flex: none; }
-/* A row of this view says it can be pressed, the connected list's and the main view's alike: the pointer, and under it the hover fill of the
-   floating surface, 8 px clear of the words (R-UI-53). The left padding is cancelled by the margin, so the tile stays on the content's edge; on the right
-   the fill stops at the gap before the switch or 連結, and runs under a connected app's 「✓ 已連結」, which is part of the button. */
-.cs-linked, .cs-card { cursor: pointer; }
-.cs-card .btn.cs-main:hover > .cs-state { color: var(--text-2); }
-.cs-card .btn.cs-main, .cs-linked .btn.cs-main { padding-inline: var(--sp-2); margin-inline: calc(var(--sp-2) * -1) 0; }
-.cs-card .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled) { background: var(--float-hover); }
-.cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled) { background: var(--pressed); }
+/* A row of this view is one button, the connected list's and the main view's alike (owner, 2026-11-14: 「就是一個 button 只是上面會有
+   connect 的 button 而已 不要分開來」): the pointer, and under it one hover fill of the floating surface over the whole row, 8 px clear of the
+   words (R-UI-53), with 連結, 「✓ 已連結」 or the switch standing on it. The padding is given back by the margin, so the tile stays on the
+   content's edge, and the fill's corners stay round. */
+.cs-linked, .cs-card { cursor: pointer; padding-inline: var(--sp-2); margin-inline: 0; border-radius: var(--r-md); }
+.cs-card:hover, .cs-linked:hover { background: var(--float-hover); }
+.cs-card:has(> .btn.cs-main:active), .cs-linked:has(> .btn.cs-main:active) { background: var(--pressed); }
+.cs-card:hover .cs-state { color: var(--text-2); }
+.cs-card .btn.cs-main, .cs-linked .btn.cs-main { padding-inline: 0; margin-inline: 0; }
+/* A section's head stands on the marks' line, 8 px in as the rows' padding puts them. */
+.cs-sec-head { padding-inline: var(--sp-2); }
+.cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled) { background: transparent; }
 
 /* An app's page: a bare back chevron at the top left (the dialog's own ✕ is at the other corner), the mark on a white tile with the name beside
    it and what can be done at the right, a paragraph on the app, then bordered cards of what is known of it. */
@@ -112,6 +119,13 @@
 .cs .btn.icon.cs-back .i { width: 18px; height: 18px; }
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
 .cs-connected > .cs-top > .btn.icon.cs-back { margin: 0 0 0 -9px; }
+/* The connected list's chevron and title are one button, its hover fill under both; the glyph stays on the content's edge. */
+/* Drawn as the 「N 個已連結 >」 chip it came from (owner, 2026-11-14): no fill, its words brighten under the pointer, a quiet chevron. */
+.cs .btn.cs-back-title { display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; height: var(--h-ctl); margin: 0; padding: 0 var(--sp-2) 0 0; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-2); font: inherit; }
+.cs .btn.cs-back-title:is(:hover, :active):not(:disabled) { background: transparent; color: var(--text); }
+.cs .btn.cs-back-title .i { flex: none; width: 18px; height: 18px; color: var(--text-3); }
+.cs .btn.cs-back-title:hover .i { color: var(--text); }
+.cs .btn.cs-back-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-head { display: flex; align-items: center; gap: var(--sp-3); }
 .cs-head h2.big { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .cs-join { display: flex; align-items: center; gap: var(--sp-2); flex: none; }

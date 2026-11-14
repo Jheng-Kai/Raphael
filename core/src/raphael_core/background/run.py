@@ -48,6 +48,7 @@ Nothing here logs an argument, a result or what the task is about.
 
 import asyncio
 from ..computer.local_tools import command_context, run_context, is_local
+import hashlib
 import json
 import logging
 import sqlite3
@@ -77,6 +78,7 @@ from ..brain.openrouter import OpenRouterError, TextCompletion
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..brain.textnorm import public_line
+from ..conversation_language import chat_language
 from ..brain.pricing import builtin_catalog
 from ..computer.vm_catalog import NOTICES
 from ..brain.spend import SpendTracker
@@ -175,6 +177,10 @@ async def summary_reply(client: ModelProvider, model: str, *, system: str, user:
         if memory is client or memory.model_for(model) == client.model_for(model):
             raise
     return await client.chat_text(**call)
+
+
+# The same call of a connected app that has failed this many times in a row with the same error is not made again.
+REPEAT_REFUSED_AT = 2
 
 
 def _outcome_of(result: PluginResult) -> str:
@@ -318,6 +324,8 @@ class TaskRun:
         # The files of the task, by number from 1, and the addresses it has seen (see the module).
         self.attachments = list(attachments)
         self.seen_urls = SeenUrls([request])
+        # The task's own words: a tool that names something per language names it in theirs, never the interface's.
+        self._request = request
         self.tool_allowed = lambda _key: True
         self.task_id = task_id
         self.language = language
@@ -333,6 +341,9 @@ class TaskRun:
         # The tools of the run that went through, and the last call of a tool that was refused with nothing after it
         # that went through: how a routine's run is told to have ended well or not (`routine_outcome`).
         self.succeeded: set[str] = set()
+        # A connected app's call (tool, arguments) -> the digest of the error it last failed with and how many times in a row.
+        self._failed_calls: dict[tuple[str, str], tuple[str, int]] = {}
+        self._failures_told: dict[tuple[str, str], str] = {}
         self.last_refused: tuple[str, str] | None = None
         self.cancelled = False
         self.timed_out = False
@@ -765,8 +776,11 @@ class TaskRun:
             return _refused()
         sent: int | None = None
         detail: str | None = None
-        if ref.kind == MCP:
+        if ref.kind == MCP and (said := self._repeat_refusal(ref, arguments, name)) is not None:
+            reply, outcome, tier = {"ok": False, "kind": "repeat_failed", "content": "", "instruction": said, "truncated": False}, "blocked", None
+        elif ref.kind == MCP:
             reply, outcome, tier, sent = await self._plugin(ref, arguments, name, call_id)
+            self._note_failure(ref, arguments, reply)
             if reply.get("billing"):
                 detail = json.dumps(reply["billing"])
                 self.ledger.include_media(reply["billing"])
@@ -819,6 +833,43 @@ class TaskRun:
             if missing:
                 self._artifact({"missing": missing.wire()})
         return reply
+
+    @staticmethod
+    def _call_key(ref: ToolRef, arguments: dict) -> tuple[str, str]:
+        return ref.key, hashlib.sha256(json.dumps(arguments, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+
+    def _note_failure(self, ref: ToolRef, arguments: dict, reply: dict) -> None:
+        """What a connected app's call failed with, to know the same call again (`_repeat_refusal`). Only a failure that is
+        the same on every try counts (the service's own error, or arguments that do not fit); a wait, a timeout, a missing
+        yes or a lost connection is tried again as often as the model likes."""
+        key = self._call_key(ref, arguments)
+        if reply.get("ok") or reply.get("kind") not in ("tool_error", "bad_arguments"):
+            self._failed_calls.pop(key, None)
+            return
+        said = hashlib.sha256(str(reply.get("instruction") or reply.get("content") or "").encode("utf-8")).hexdigest()
+        before, count = self._failed_calls.get(key, ("", 0))
+        self._failed_calls[key] = (said, count + 1 if before == said else 1)
+        self._failures_told[key] = (reply.get("instruction") or reply.get("content") or "")
+
+    def _repeat_refusal(self, ref: ToolRef, arguments: dict, alias: str) -> str | None:
+        """Why the same call is not made again: it failed twice in a row with the same error. The model is told what that error
+        was, the shape the tool takes, and to find another way (R-TOOL-02). The run goes on: only the task's own budget ends it, and
+        a refused repeat is counted in it like any call."""
+        key = self._call_key(ref, arguments)
+        failed = self._failed_calls.get(key)
+        if failed is None or failed[1] < REPEAT_REFUSED_AT:
+            return None
+        from ..agent.plugins import argument_shape
+        try:
+            offered = self._gate.plugins.offered() if self._gate.plugins is not None else []
+        except Exception:  # a hub that cannot say: the shape is left out, the rest is told
+            offered = []
+        shape = argument_shape(next((tool.schema for tool in offered if tool.key == ref.key), {}))
+        error = " ".join(str(self._failures_told.get(key, "")).split())[:300]
+        return (f"{alias} was not called again: this exact call (the same arguments) has already failed {failed[1]} times with the "
+                f"same error, so a third try would fail the same way. It said: {error or 'an error'}. "
+                + (f"The top-level arguments of {alias} are: {shape}. " if shape else "")
+                + "Try a different way: other arguments, another tool, or another source. Do not give up while another way is open.")
 
     def _note_result(self, ref: ToolRef, reply: dict) -> None:
         """What the run did with its tools, for the judgement of how it ended (`routine_outcome`): the tools that
@@ -971,6 +1022,7 @@ class TaskRun:
             "kind": result.kind,
             "content": text,
             "truncated": cut or result.truncated,
+            **({"instruction": result.text} if result.kind == "bad_arguments" and result.text else {}),
             **({"blocks": result.blocks} if result.blocks else {}),
             **({"billing": result.billing} if result.billing else {}),
         }
@@ -1208,7 +1260,7 @@ class TaskRun:
             if name == "weather":
                 city = arguments.get("city")
                 city = city.strip() if isinstance(city, str) and city.strip() else self._city()
-                return await self._guarded(self._tools.weather(city, self.language))
+                return await self._guarded(self._tools.weather(city, chat_language(self._request, city)))
             if name == "web_search":
                 query = arguments.get("query")
                 if not isinstance(query, str) or not query.strip():

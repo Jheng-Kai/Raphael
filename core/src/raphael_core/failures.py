@@ -504,4 +504,26 @@ def tool_failure(kind, content="", *, record=True):
     return classify({"kind": kind, "message": content or kind or "unknown"}, record=record)
 
 
-CORRECTIVE_NOTE = "The last tool failed. Read its reason, run self_check once if useful, then use a different approach at most once or report the exact blocker. Never claim success without evidence or bypass an owner denial."
+# What a turn about to end right after a failed call is told before it may (R-PERSIST-03, owner, 2026-11-14: members gave up
+# after one failure). A list of facts, never a count of how many ways to try: what failed, which of the tools it was
+# offered it has not called, and to take the next plausible way. Hermes keeps a model on its tools the same way.
+CORRECTIVE_NOTE = "<harness_note>A call failed in this turn. Before you finish, take the next plausible way, or say why none fits."
+LEDGER_FAILED = 6
+LEDGER_UNTRIED = 40
+
+
+def failure_ledger(failed, untried):
+    """The note for a turn whose calls failed: `failed` holds (tool, kind) in the order they failed (no kind where the
+    harness told the model in words what to do instead), `untried` the names of the offered tools it has not called. The
+    tool names and kinds are the harness's own words, held short."""
+    seen = list(dict.fromkeys(f"{redact(tool, limit=80)} ({redact(kind, limit=40)})" if kind else redact(tool, limit=80)
+                              for tool, kind in failed))
+    lines = [CORRECTIVE_NOTE]
+    if seen:
+        lines.append("Failed: " + ", ".join(seen[-LEDGER_FAILED:]) + ".")
+    untried = list(untried)
+    if untried:
+        more = len(untried) - LEDGER_UNTRIED
+        lines.append("Offered and not tried yet: " + ", ".join(untried[:LEDGER_UNTRIED]) + (f", and {more} more" if more > 0 else "") + ".")
+    lines.append("Ask the owner only for what only they can give. Never claim success without evidence.</harness_note>")
+    return "\n".join(lines)

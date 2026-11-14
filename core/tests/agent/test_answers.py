@@ -101,17 +101,17 @@ async def test_the_model_is_asked_for_json_with_a_little_reasoning(voice, client
     call = client.json_calls[0]
     assert call["model"] == "openai/gpt-6-luna"
     assert call["fallbacks"] == []  # the owner's brain answers as itself, never a fallback model
-    assert call["system"] == persona.system_prompt("zh-TW", "answer") + answers_module.MESSAGE_RULES
+    assert call["system"] == persona.system_prompt("answer") + answers_module.MESSAGE_RULES
     assert call["schema_name"] == "raphael_reply"
     assert call["reasoning_effort"] == "none"
     assert call["max_tokens"] == REPLY_MAX_TOKENS
     assert call["timeout_s"] > 0
 
 
-@pytest.mark.parametrize("language", persona.LANGUAGES)
-def test_the_schema_offers_the_prefixes_of_the_language_and_requires_every_field(language):
-    schema = reply_schema(language)
-    assert schema["properties"]["prefix"]["enum"] == list(persona.PREFIXES[language])
+def test_the_schema_offers_the_fixed_reply_kinds_and_requires_every_field():
+    # Owner, 2026-11-14: the interface language goes to no model, a reply schema included.
+    schema = reply_schema()
+    assert schema["properties"]["prefix"]["enum"] == list(persona.REPLY_KINDS)
     assert schema["properties"]["text"] == {"type": "string"}
     assert schema["properties"]["detail"] == {"type": "string"}
     assert schema["required"] == ["prefix", "text", "detail"]
@@ -122,7 +122,7 @@ def test_the_schema_offers_the_prefixes_of_the_language_and_requires_every_field
 async def test_the_system_prompt_is_the_one_of_the_route(voice, client, ledger, route):
     client.replies.append(completion(spoken()))
     await reply(voice, ledger, route=route, language="ja")
-    assert client.json_calls[0]["system"] == persona.system_prompt("ja", route) + answers_module.MESSAGE_RULES
+    assert client.json_calls[0]["system"] == persona.system_prompt(route) + answers_module.MESSAGE_RULES
 
 
 async def test_the_fast_voice_answer_keeps_raphaels_owner_instructions(voice, client, ledger):

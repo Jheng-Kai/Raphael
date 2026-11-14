@@ -45,7 +45,7 @@ async def test_a_log_written_after_outside_content_is_marked_and_read_back_as_un
     memory, _ = growing
     assert memory.log_memory(2, {"body": "The page says the review passed."}, untrusted=True).ok
     found = memory.session_search(2, "review")
-    assert found.untrusted and "（待確認）" in found.data["hits"][0]["text"]
+    assert found.untrusted and "(unconfirmed) " in found.data["hits"][0]["text"]
     assert memory.recall_result(2, "review")[1] is True
     assert memory.log_memory(3, {"body": "The review passed."}).ok
     assert not memory.session_search(3, "review").untrusted
@@ -243,7 +243,7 @@ async def test_owner_fact_and_web_fact_in_one_batch_have_separate_trust(growing)
         {"action": "add", "content": "The observatory opens in December."},
     ]}, untrusted=True, owner_text="I prefer concise answers. Please check the observatory website.")
     assert result.ok
-    assert memory.own(2).entries() == ["The owner prefers concise answers.", "（待確認）The observatory opens in December."]
+    assert memory.own(2).entries() == ["The owner prefers concise answers.", "(unconfirmed) The observatory opens in December."]
 
 
 async def test_searching_own_clean_history_does_not_taint_the_next_note(growing, history):
@@ -296,7 +296,7 @@ async def test_unrelated_or_negated_owner_words_cannot_confirm_a_note(growing, o
     memory, _ = growing
     result = memory.update_memory(2, {"operations": [{"action": "add", "content": "The owner prefers concise answers."}]},
                                   untrusted=True, owner_text=owner_text)
-    assert result.ok and memory.own(2).entries() == ["（待確認）The owner prefers concise answers."]
+    assert result.ok and memory.own(2).entries() == ["(unconfirmed) The owner prefers concise answers."]
 
 
 async def test_a_model_cannot_confirm_an_existing_claim_without_the_owners_words(growing):
@@ -305,9 +305,9 @@ async def test_a_model_cannot_confirm_an_existing_claim_without_the_owners_words
     args = {"operations": [{"action": "add", "content": claim}]}
     assert memory.update_memory(2, args, untrusted=True).ok
     assert memory.update_memory(2, args).ok
-    assert memory.own(2).entries() == ["（待確認）" + claim]
-    assert not memory.update_memory(2, {"operations": [{"action": "replace", "old_text": "（待確認）" + claim, "content": claim}]}).ok
-    assert memory.own(2).entries() == ["（待確認）" + claim]
+    assert memory.own(2).entries() == ["(unconfirmed) " + claim]
+    assert not memory.update_memory(2, {"operations": [{"action": "replace", "old_text": "(unconfirmed) " + claim, "content": claim}]}).ok
+    assert memory.own(2).entries() == ["(unconfirmed) " + claim]
     assert memory.update_memory(2, args, untrusted=True, owner_text="I prefer amber notebooks.").ok
     assert memory.own(2).entries() == [claim]
 
@@ -318,7 +318,7 @@ async def test_moving_a_claim_to_shared_memory_does_not_confirm_it(growing):
     operations = [{"action": "add", "content": claim}]
     assert memory.update_memory(2, {"operations": operations}, untrusted=True).ok
     assert memory.update_memory(2, {"target": "user", "operations": operations}).ok
-    assert memory.shared.entries()[0].startswith("（待確認）" + claim)
+    assert memory.shared.entries()[0].startswith("(unconfirmed) " + claim)
 
 
 async def test_removing_then_adding_a_claim_in_one_batch_does_not_confirm_it(growing):
@@ -327,4 +327,4 @@ async def test_removing_then_adding_a_claim_in_one_batch_does_not_confirm_it(gro
     assert memory.update_memory(2, {"operations": [{"action": "add", "content": claim}]}, untrusted=True).ok
     assert memory.update_memory(2, {"operations": [
         {"action": "remove", "old_text": claim}, {"action": "add", "content": claim}]}).ok
-    assert memory.own(2).entries() == ["（待確認）" + claim]
+    assert memory.own(2).entries() == ["(unconfirmed) " + claim]

@@ -59,7 +59,7 @@ async def test_the_owner_can_confirm_a_claim_in_the_existing_document_editor(mem
     claim = "The owner prefers amber notebooks."
     assert memory.update_memory(0, {"operations": [{"action": "add", "content": claim}]}, untrusted=True).ok
     view = await memory._get({})
-    assert view["text"].startswith("（待確認）")
+    assert view["text"].startswith("(unconfirmed) ")
     saved = await memory._update({"text": claim, "revision": view["revision"]})
     assert saved["text"].strip() == claim
 

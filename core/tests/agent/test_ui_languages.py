@@ -33,21 +33,22 @@ def test_locale_aliases(value, expected):
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_locale_reaches_all_brain_paths_without_overriding_owner_language(language):
+def test_every_locale_has_fixed_copy_and_no_brain_path_names_it(language):
+    # Owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」. The prompts take no
+    # language at all; the locale keeps its fixed copy (names, labels, prefixes) for the window.
     member = dict(name="Test assistant", role="Assistant", instructions="Answer in the owner's language.")
     prompts = [
-        persona.system_prompt(language, "answer"),
-        persona.worker_system_prompt(language, model_calls=2, tool_calls=3),
-        persona.cli_system_prompt(language),
-        persona.cli_system_prompt(language, **member),
-        persona.member_system_prompt(language, "answer", **member),
-        persona.member_worker_system_prompt(language, **member, model_calls=2, tool_calls=3),
-        computer_prompt(language),
+        persona.system_prompt("answer"),
+        persona.worker_system_prompt(model_calls=2, tool_calls=3),
+        persona.cli_system_prompt(),
+        persona.cli_system_prompt(**member),
+        persona.member_system_prompt("answer", **member),
+        persona.member_worker_system_prompt(**member, model_calls=2, tool_calls=3),
+        computer_prompt(),
     ]
     for prompt in prompts:
         assert persona.REPLY_LANGUAGE in prompt
-        assert f"Interface locale: {language} " in prompt
-        assert "This selects fixed UI labels only." in prompt
+        assert "Interface locale" not in prompt
     assert RAPHAEL_NAMES[language]
     assert persona.ACTIVITY_LABELS[language]["working"]
     assert len(persona.PREFIXES[language]) == 5

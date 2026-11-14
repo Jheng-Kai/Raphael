@@ -85,6 +85,33 @@ async def test_learning_distinguishes_creation_content_and_reference_updates_fro
     assert len(events()) == 3
 
 
+async def test_a_skill_learned_hours_after_its_turn_is_a_line_in_it_and_not_that_turn_arriving_again(rig):
+    """R-SKILL-12: five turns of 2026-11-06 to 11-09 were answered in seconds to a minute, and 5 to 35 hours later a review
+    wrote a skill line into them; the line told the app the turn had arrived (a "finished" notice and an unread light)."""
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from raphael_core.app import App
+
+    member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
+    service = rig.service
+    done = service._history.add(session_id="skills", question="Learn", route="answer", prefix="", text="Done.", status="done", member_id=member)
+    running = service._history.add(session_id="skills", question="Learn", route="answer", prefix="", text="", status="running", member_id=member)
+    skill = service.learn_skill(member, {"text": DOCUMENT}, done)
+    [late] = [params for method, params in rig.notes if method == "agent.turn" and params["turn_id"] == done]
+    assert late == {"turn_id": done, "member_id": member, "activity_only": True}
+    assert [json.loads(m["text"])["type"] for m in service._history.messages([done])[done] if m["kind"] == "event"] == ["skill_learned"]
+    # The app takes an activity_only turn as a change to draw, never as news in its thread.
+    app = SimpleNamespace(members=Mock(), rooms=Mock(), notify=Mock())
+    App._agent_notice(app, "agent.turn", late)
+    app.members.turn_arrived.assert_not_called()
+    app.notify.assert_called_once()
+    # A turn that is still under way, whose own work learned the skill, is arriving as before.
+    rig.notes.clear()
+    service.learn_skill(member, {"id": skill["id"], "expected_hash": skill["revision"], "text": DOCUMENT.replace("Check the", "Verify the")}, running)
+    [now] = [params for method, params in rig.notes if method == "agent.turn" and params["turn_id"] == running]
+    assert now == {"turn_id": running, "member_id": member}
+
+
 async def test_newline_normalization_and_learning_provenance_alone_do_not_make_a_skill_event(rig):
     cap = rig.service.capabilities
     skill = cap.keep_skill(0, "owner/repository", DOCUMENT.replace("\n", "\r\n"))

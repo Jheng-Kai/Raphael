@@ -73,6 +73,18 @@ watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
 常被聽成 in the Dictionary row (`dictionary.list` `heard`), and a replacement rule when the same pair is seen again.
 
+Follow-up from the owner's 113 dictations of the same day (R-DICT-SPELL-02, R-DICT-HINT-01, R-LEARN-FORM-01,
+R-DICT-KANA-01), all core text steps proved by pytest, none by the app:
+
+- The respelling never turns 「SpaceX」 into 「Space」 (a longer word that holds a dictionary word is right), keeps a
+  plural's ending (「grokbots」), and respells a real word such as 「Cloud」 only where a rule or a correction's form is
+  on record. A form seen once is evidence for it, though it is no rule yet: the Dictionary row still shows it under
+  常被聽成, and `dictionary.misheard` stays empty until the pair is seen twice.
+- The cleanup prompt lists a dictionary word with Chinese characters for a Chinese transcript only when a form it is
+  heard as is in it, so 「讀寫」 and 「本地端」 are not offered words one character away. The phrase list is unchanged.
+- A Chinese text with one or two stray kana is converted to the chosen script, in the transcript and after cleanup;
+  Japanese (a tenth hiragana, three at least) stays as it is.
+
 Proof, in this order:
 
 ```powershell
@@ -199,7 +211,8 @@ used for external editor corrections. Core owns final term acceptance and opaque
 single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
 monitor's horizontal center, 16 px above its taskbar. It expires after five seconds
-without hover. The ordinary overlay remains click-through. Fixture pill evidence
+without hover. Its window never has a title bar, not even in its style, whatever tao rewrites
+(R-LEARN-WIN-01, `overlay/frame.rs`). The ordinary overlay remains click-through. Fixture pill evidence
 does not establish native hit-testing, positioning, paste or persistence.
 
 `stable-click` records the clicked view control and persistent content above it,
@@ -451,7 +464,8 @@ npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conve
 acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
 two Escape presses for a pending fake answer, a complete learned batch, five-second
 hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
-checks the learned window's NOACTIVATE style, rounded click region, click-through
+checks the learned window's NOACTIVATE style, that its window style has no title bar
+(R-LEARN-WIN-01: while shown, after Undo and after expiry), rounded click region, click-through
 expiry, active-monitor placement and foreground continuity. The passive learned
 window starts independently of the ordinary overlay, including native isolation.
 `voice-conversation` additionally verifies one Escape cancels a new native recording.

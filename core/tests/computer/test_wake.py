@@ -30,13 +30,14 @@ async def sleeping(desktop, tmp_path):
 
 async def test_a_members_tool_that_wakes_the_computer_says_who_and_why_once(desktop, tmp_path):
     vm, hub, runtime, target = await sleeping(desktop, tmp_path)
-    notices, progress = [], []
-    with vm_scope(("turn", 1, 1), notice=notices.append, progress=progress.append, language="zh-TW"):
+    lines, notices, progress = [], [], []
+    with vm_scope(("turn", 1, 1), woke=lines.append, notice=notices.append, progress=progress.append, language="zh-TW"):
         result = await hub.call(named(hub, "vm_exec").key, {"command": "ls"}, approver="auto")
-        assert result.ok and notices == ["小晴為了執行指令喚醒了電腦"]
+        assert result.ok and lines == ["小晴為了執行指令喚醒了電腦"]
         # The computer is awake now: a second call starts nothing and says nothing.
         again = await hub.call(named(hub, "vm_exec").key, {"command": "ls"}, approver="auto")
-    assert again.ok and notices == ["小晴為了執行指令喚醒了電腦"] and progress == []
+    # The quiet line is its own channel: never the notice channel a member's own words (a question to the owner) go through (R-TEXT-08).
+    assert again.ok and lines == ["小晴為了執行指令喚醒了電腦"] and notices == [] and progress == []
     assert vm.woken[target.state_key] == {"member": 1, "name": "小晴", "reason": "command"}
     assert sum(args[0] == "start" for args, _ in runtime.calls) == 1
 
@@ -52,7 +53,7 @@ async def test_a_task_without_a_notice_channel_says_it_in_its_progress_line(desk
 async def test_the_owners_own_start_is_silent_and_clears_the_last_wake(desktop, tmp_path):
     vm, hub, runtime, target = await sleeping(desktop, tmp_path)
     notices = []
-    with vm_scope(("turn", 1, 1), notice=notices.append, language="en"):
+    with vm_scope(("turn", 1, 1), woke=notices.append, language="en"):
         await hub.call(named(hub, "get_desktop_state").key, {}, approver="auto")
     assert target.state_key in vm.woken
     runtime.raw["State"]["Running"] = False
@@ -64,7 +65,7 @@ async def test_the_owners_own_start_is_silent_and_clears_the_last_wake(desktop, 
 
 async def test_a_computer_that_sleeps_forgets_who_woke_it(desktop, tmp_path):
     vm, hub, _, target = await sleeping(desktop, tmp_path)
-    with vm_scope(("turn", 1, 1), notice=lambda text: None, language="en"):
+    with vm_scope(("turn", 1, 1), woke=lambda text: None, language="en"):
         await hub.call(named(hub, "get_desktop_state").key, {}, approver="auto")
     assert target.state_key in vm.woken
     await vm.stop(target)
@@ -89,7 +90,7 @@ def test_the_wake_line_is_written_in_every_interface_language(language):
 async def test_reading_a_page_never_wakes_a_sleeping_computer(desktop, tmp_path):
     vm, hub, runtime, _ = await sleeping(desktop, tmp_path)
     hub.bind_computer_gate(type("Gate", (), {"call_plugin": staticmethod(lambda *a, **k: pytest.fail("the gate was used"))}))
-    with vm_scope(("turn", 1, 1), notice=lambda text: pytest.fail("a read said it woke the computer"), language="en"):
+    with vm_scope(("turn", 1, 1), woke=lambda text: pytest.fail("a read said it woke the computer"), language="en"):
         result = await hub.rendered_read("https://news.example/item")
     assert (result.ok, result.kind) == (False, "computer_asleep")
     assert not any(args[0] in ("start", "run") for args, _ in runtime.calls)

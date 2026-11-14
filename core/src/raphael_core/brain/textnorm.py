@@ -46,8 +46,11 @@ _CJK = _in_blocks(
     (0xF900, 0xFAFF),  # CJK Compatibility Ideographs
 )
 
-# A sentence whose CJK characters are at least this many percent hiragana is Japanese.
+# A sentence whose CJK characters are at least this many percent hiragana is Japanese, if it has at
+# least this many hiragana. Speech-to-text and the cleanup model leave a stray kana in Chinese now
+# and then (「这个の功能」): one or two are no Japanese, and the Chinese around them is converted.
 _JAPANESE_PERCENT = 10
+_JAPANESE_MIN_HIRAGANA = 3
 
 # What may not stand next to a rule's text when that text starts or ends with one of them.
 _ASCII_LETTERS_AND_DIGITS = string.ascii_letters + string.digits
@@ -77,15 +80,16 @@ def _checked_variant(chinese: str | None) -> str | None:
 
 
 def _is_japanese(sentence: str) -> bool:
-    """Whether at least 10 % of the sentence's CJK characters are hiragana.
+    """Whether at least 10 % of the text's CJK characters are hiragana, and at least three of them.
 
-    Japanese grammar always brings hiragana. A katakana name inside a Chinese sentence does not,
-    and neither does a sentence of kanji alone, which therefore counts as Chinese. Without any
+    Japanese grammar always brings hiragana, and more than a couple. A katakana name inside a
+    Chinese sentence does not bring any, and neither does a sentence of kanji alone, which
+    therefore counts as Chinese; nor do one or two stray hiragana in Chinese text. Without
     hiragana a sentence is never Japanese, even when it has no CJK characters to measure.
     """
     hiragana = len(_HIRAGANA.findall(sentence))
     cjk = len(_CJK.findall(sentence))
-    return hiragana > 0 and hiragana * 100 >= _JAPANESE_PERCENT * cjk
+    return hiragana >= _JAPANESE_MIN_HIRAGANA and hiragana * 100 >= _JAPANESE_PERCENT * cjk
 
 
 def to_taiwan_traditional(text: str) -> str:
@@ -387,29 +391,55 @@ def _in_cjk_text(text: str, start: int, end: int) -> bool:
 _MIN_RESPELLED_LETTERS = 5
 
 
-def _spelled_as(
-    group: list[re.Match[str]], gaps: list[str], targets: dict[str, str]
-) -> str | None:
-    """The dictionary word that `group`, one to three Latin words of a text with `gaps` between
+def _spelled_as(texts: list[str], gaps: list[str], targets: dict[str, str]) -> str | None:
+    """The dictionary word that `texts`, one to three Latin words of a text with `gaps` between
     them, writes in other letter case or split apart (see `respell_dictionary_words`)."""
     from .mishearing import _LATIN_FUNCTION_WORDS
 
-    word = targets.get("".join(token.group().casefold() for token in group))
+    word = targets.get("".join(text.casefold() for text in texts))
     if word is None:
         return None
     parts = word.split()
-    if len(parts) == len(group):
+    if len(parts) == len(texts):
         # The same words in other letter case: only spaces between them.
         same = all(_WORD_GAP.fullmatch(gap) for gap in gaps) and all(
-            token.group().casefold() == part.casefold()
-            for token, part in zip(group, parts, strict=True)
+            text.casefold() == part.casefold() for text, part in zip(texts, parts, strict=True)
         )
         return word if same else None
     if len(parts) == 1 and all(_SPLIT_GAP.fullmatch(gap) for gap in gaps) and not any(
-        token.group().casefold() in _LATIN_FUNCTION_WORDS for token in group
+        text.casefold() in _LATIN_FUNCTION_WORDS for text in texts
     ):
         return word
     return None
+
+
+# The plural endings a dictionary word takes ("grokbots"), and the letters its own spelling must
+# have: a word of two letters plus an "s" is too often another word.
+_PLURAL_ENDINGS = ("es", "s")
+_MIN_PLURAL_STEM_LETTERS = 3
+
+
+def _plural_of(texts: list[str], gaps: list[str], targets: dict[str, str]) -> str | None:
+    """The dictionary word that `texts` writes as a plural ("Grokbots" for 「grokbot」): the word
+    as the dictionary spells it, and the ending as it was written. The ending is lower case; a
+    text that is a word of the dictionary itself is no plural (that is `_spelled_as`)."""
+    if "".join(text.casefold() for text in texts) in targets:
+        return None
+    last = texts[-1]
+    for ending in _PLURAL_ENDINGS:
+        stem = last[: -len(ending)]
+        if last.endswith(ending) and len(_compact_key(stem)) >= _MIN_PLURAL_STEM_LETTERS:
+            word = _spelled_as([*texts[:-1], stem], gaps, targets)
+            if word is not None:
+                return word + ending
+    return None
+
+
+def _recorded_misheard(texts: list[str], recorded: dict[str, tuple[str, int]]) -> str | None:
+    """The dictionary word that `texts` is a recorded misheard form of (`recorded`: the compact
+    form, to its word and how many Latin words the form has)."""
+    found = recorded.get(_compact_key("".join(texts)))
+    return found[0] if found is not None and found[1] == len(texts) else None
 
 
 def _misspelt_name(
@@ -439,7 +469,41 @@ def _misspelt_name(
     return None
 
 
-def respell_dictionary_words(text: str, words: Sequence[str]) -> str:
+# A recorded form is respelled only from this many letters: shorter ones ("box", "bus") are words
+# of the language more often than a misheard name.
+_MIN_RECORDED_LETTERS = 4
+
+
+def _recorded_forms(
+    forms: Sequence[tuple[str, str]], targets: dict[str, str]
+) -> dict[str, tuple[str, int]]:
+    """The Latin forms of `(misheard, word)` pairs that `respell_dictionary_words` takes as
+    evidence: of a word of the dictionary, four letters or more, no word of the dictionary itself,
+    and spelled or sounding like the word (`mishearing.may_become_rule`, which also keeps out a
+    function word). Each form by its compact text, with its word and its number of Latin words."""
+    from .mishearing import _is_cjk, may_become_rule
+
+    spelled = {_compact_key(word): word for word in targets.values()}
+    recorded: dict[str, tuple[str, int]] = {}
+    for form, word in forms:
+        form = " ".join(form.split())
+        key = _compact_key(form)
+        count = len(_LATIN_TOKEN.findall(form))
+        if (
+            _compact_key(word) in spelled
+            and len(key) >= _MIN_RECORDED_LETTERS
+            and key not in targets
+            and not any(_is_cjk(char) for char in form)
+            and 0 < count <= _MAX_SPLIT
+            and may_become_rule(word, form)
+        ):
+            recorded.setdefault(key, (spelled[_compact_key(word)], count))
+    return recorded
+
+
+def respell_dictionary_words(
+    text: str, words: Sequence[str], forms: Sequence[tuple[str, str]] = ()
+) -> str:
     """`text` with each Latin word of the dictionary written as the dictionary spells it, inside
     Chinese or Japanese text, where the text has it in other letter case ("Grokbot" for
     「grokbot」, "github" for 「GitHub」), split apart ("Grok Bot", "open-router"), or misspelt the
@@ -454,6 +518,13 @@ def respell_dictionary_words(text: str, words: Sequence[str]) -> str:
     words belong to the sentence ("Space" is not "space"), so nothing there changes. A split word is
     joined only from words that are no function words ("type less" stays). Words of the dictionary
     come first in the order given: an earlier one wins a text that two of them spell alike.
+
+    A plural of a word keeps its ending ("Grokbots" is 「grokbots」). A longer word that merely
+    holds the dictionary word ("SpaceX" for "Space") is never a misspelling of it. A misspelling
+    that is a real word ("Cloud" for "Claude") is only respelled where it is on record: `forms`
+    are `(misheard, word)` pairs, the rules of the dictionary and what its corrections saved
+    (`DictionaryStore.hint_forms`), and a form of four letters or more that sounds or is spelled
+    like its word is taken as evidence.
     """
     from .mishearing import _is_cjk
 
@@ -464,6 +535,7 @@ def respell_dictionary_words(text: str, words: Sequence[str]) -> str:
             targets.setdefault(_compact_key(word), word)
     if not targets:
         return text
+    recorded = _recorded_forms(forms, targets)
     tokens = list(_LATIN_TOKEN.finditer(text))
     pieces: list[str] = []
     copied = index = 0
@@ -474,7 +546,13 @@ def respell_dictionary_words(text: str, words: Sequence[str]) -> str:
             gaps = [text[a.end() : b.start()] for a, b in zip(group, group[1:], strict=False)]
             start, end = group[0].start(), group[-1].end()
             span = text[start:end]
-            word = _spelled_as(group, gaps, targets) or _misspelt_name(group, gaps, span, targets)
+            texts = [token.group() for token in group]
+            word = (
+                _spelled_as(texts, gaps, targets)
+                or _plural_of(texts, gaps, targets)
+                or _recorded_misheard(texts, recorded)
+                or _misspelt_name(group, gaps, span, targets)
+            )
             if word is None or span == word:
                 continue
             if _in_cjk_text(text, start, end):
@@ -522,9 +600,10 @@ def finish_cleaned_text(
     The model is told to write Traditional Chinese with Taiwan usage, so only what it left in
     Simplified Chinese is converted (`convert_leftover_simplified`): s2twp over the whole reply
     would turn its 只要 into 隻要. OpenCC would also corrupt the kanji of a Japanese text (学校
-    into 學校), so a reply with any hiragana is not converted at all, only given the replacements.
-    That gate is on the whole reply, a step beyond the sentence-by-sentence rule of
-    `to_taiwan_traditional`. A text that fell back to the raw speech-to-text result is already
+    into 學校), so a reply that is Japanese (`_is_japanese`: a tenth hiragana, three at least) is
+    not converted at all, only given the replacements. That gate is on the whole reply, a step
+    beyond the sentence-by-sentence rule of `to_taiwan_traditional`. A Chinese reply with a stray
+    kana or two is converted like any other. A text that fell back to the raw speech-to-text result is already
     normalized and must not go through this: a second pass could repeat a replacement.
 
     `chinese` is the variant the model was told to write: zh-TW as above, zh-HK and yue-HK the
@@ -532,7 +611,7 @@ def finish_cleaned_text(
     (`convert_leftover_traditional`), and None for no conversion.
     """
     chinese = _checked_variant(chinese)
-    if chinese is not None and not _HIRAGANA.search(text):
+    if chinese is not None and not _is_japanese(text):
         if chinese == "zh-CN":
             text = convert_leftover_traditional(text)
         else:

@@ -165,7 +165,7 @@ async def test_web_search_does_not_mark_the_owners_current_preference(rig, clien
     client.replies.append(reply("Checked.", prefix="Answer", memory=[
         note("The owner prefers concise answers."), note("The observatory opens in December.")]))
     await rig.ask("I prefer concise answers. Please check the observatory website.", language="en")
-    assert memory.own(0).entries() == ["The owner prefers concise answers.", "（待確認）The observatory opens in December."]
+    assert memory.own(0).entries() == ["The owner prefers concise answers.", "(unconfirmed) The observatory opens in December."]
 
 
 async def test_a_turn_after_a_web_search_changes_nothing_the_owner_confirmed(rig, client, memory):

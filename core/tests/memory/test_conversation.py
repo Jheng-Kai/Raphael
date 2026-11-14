@@ -227,7 +227,7 @@ MOMENT = {"date": "2026-10-22", "time": "21:40", "weekday": "Thursday", "utc_off
 def prompt_of(conversation, question="please retry"):
     """What a model is shown of the conversation, with the next question: the words it reads."""
     context = conversation.context()
-    return build_user_message(question, MOMENT, context.turns, [], "en", summary=context.summary)
+    return build_user_message(question, MOMENT, context.turns, [], summary=context.summary)
 
 
 def tool_step(tool, server="Notion", outcome="ok", reason=None):

@@ -37,12 +37,12 @@ REMOVED = (
 def prompts(language="en"):
     """Every system prompt a member (and the chief's tasks) is read by, on every path."""
     return {
-        "reply": persona.member_system_prompt(language, "answer", **FIELDS),
-        "narrated reply": persona.member_system_prompt(language, "answer", narrated=True, **FIELDS),
-        "cli conversation": persona.cli_system_prompt(language, **FIELDS),
-        "task": persona.member_worker_system_prompt(language, model_calls=20, tool_calls=40, **FIELDS),
-        "cli task": persona.member_worker_system_prompt(language, model_calls=20, tool_calls=40, cli=True, **FIELDS),
-        "chief's task": persona.worker_system_prompt(language, model_calls=20, tool_calls=40),
+        "reply": persona.member_system_prompt("answer", **FIELDS),
+        "narrated reply": persona.member_system_prompt("answer", narrated=True, **FIELDS),
+        "cli conversation": persona.cli_system_prompt(**FIELDS),
+        "task": persona.member_worker_system_prompt(model_calls=20, tool_calls=40, **FIELDS),
+        "cli task": persona.member_worker_system_prompt(model_calls=20, tool_calls=40, cli=True, **FIELDS),
+        "chief's task": persona.worker_system_prompt(model_calls=20, tool_calls=40),
     }
 
 
@@ -87,7 +87,9 @@ def test_the_words_that_taught_the_boilerplate_are_gone(path):
 
 
 def test_a_gap_is_named_once_and_only_when_it_matters_for_every_speaker():
-    assert "answer with what you have; name the gap once, at the end, only if it matters" in persona.system_prompt("en", "answer")
+    # The rest is looked for first (R-PERSIST-01); a gap left is named once.
+    assert ("look for the rest first; answer with what you have and name a gap left once, at the end, only if it matters"
+            in persona.system_prompt("answer"))
 
 
 @pytest.mark.parametrize("path", ["task", "cli task", "chief's task"])
@@ -108,8 +110,8 @@ def test_a_task_reports_what_it_made_by_its_title_and_what_is_not_done_once():
 
 def test_the_chiefs_conversation_prompt_is_not_given_the_members_block():
     # Raphael's own prompt is held to a size budget (tests/members/test_management_discovery.py): it keeps its short line.
-    assert "Doing the owner's work" not in persona.system_prompt("en", "answer")
-    assert "Doing the owner's work" not in persona.cli_system_prompt("en")
+    assert "Doing the owner's work" not in persona.system_prompt("answer")
+    assert "Doing the owner's work" not in persona.cli_system_prompt()
 
 
 # --- a member remembers the pages it made -----------------------------------------------------------------------------------
@@ -146,7 +148,7 @@ def test_the_prompt_of_the_members_next_task_names_the_page_it_made_that_morning
     made = turn(history, member_id=3, source="routine")
     make_page(conn, made, html=HTML, rev=2, changed=NOW_MS + 60_000)
     context = Conversation(conn, None, now_ms=lambda: NOW_MS, member_id=3).context()
-    _, user = _prompts("en", "What was the title of the page you made today?", {}, context.turns, RunLimits(),
+    _, user = _prompts("What was the title of the page you made today?", {}, context.turns, RunLimits(),
                        speaker=Speaker(id=3, **FIELDS))
     assert 'Page card for "N1 reading: a news piece" (page_id=page-1)' in user
     assert f"revision 2, made {moment()}, changed {moment(NOW_MS + 60_000)}" in user

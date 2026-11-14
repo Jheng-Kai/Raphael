@@ -112,7 +112,7 @@ class Growth:
             return ToolResult("memory_log", False, None, "bad_arguments")
         body = redact_secrets(body.strip())
         if untrusted:
-            body = self._mark() + body
+            body = self._mark(self._written_in(body)) + body
         day = datetime.fromtimestamp(self._now_ms() / 1000).date().isoformat()
         relative = f"memory/log/{day}.md"
         try:

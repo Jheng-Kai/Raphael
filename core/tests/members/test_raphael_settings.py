@@ -116,7 +116,7 @@ async def test_settings_survive_database_reopen_and_drive_the_worker_prompt(rig,
         assert settings.get("raphael_notify") is True and settings.get("raphael_draft_first") is False
     finally:
         reopened.close()
-    prompt, _ = _prompts("en", "Synthetic task", {}, [], RunLimits(), speaker=rig.service.speaker(0))
+    prompt, _ = _prompts("Synthetic task", {}, [], RunLimits(), speaker=rig.service.speaker(0))
     assert "PATIENT-PERSONALITY" in prompt and "OWNER-INSTRUCTION" in prompt
 
 

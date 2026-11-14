@@ -109,7 +109,8 @@ def test_a_run_is_done_only_when_it_did_its_work():
 
 async def test_a_run_whose_last_step_was_refused_is_failed_with_its_reason_whatever_it_reported(make_rig, conn):
     rig = make_rig()
-    rig.client.replies = [turn("", [use("nothing_like_it", {}, "c1")]), report("Everything is fine.")]
+    # After the note of what failed and what it has not tried (R-PERSIST-03), it says the same again.
+    rig.client.replies = [turn("", [use("nothing_like_it", {}, "c1")]), report("Everything is fine."), report("Everything is fine.")]
     task_id = routine_run(rig)
     task = await ended(rig, task_id)
     assert (task.state, task.reason) == ("failed", "routine_refused")
@@ -152,7 +153,7 @@ async def test_a_run_set_to_make_a_page_is_done_only_when_the_page_exists(make_r
 
 async def test_work_that_is_no_routine_is_judged_as_before(make_rig):
     rig = make_rig()
-    rig.client.replies = [turn("", [use("nothing_like_it", {}, "c1")]), report("Everything is fine.")]
+    rig.client.replies = [turn("", [use("nothing_like_it", {}, "c1")]), report("Everything is fine."), report("Everything is fine.")]
     task_id = rig.submit("Check the team")
     assert (await ended(rig, task_id)).state == "done"
 

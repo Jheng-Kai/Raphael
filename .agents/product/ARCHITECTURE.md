@@ -561,6 +561,14 @@ screen by turns (`computer.vm_tools`): a bounded wait with one progress line, th
 who holds it; commands never take the screen. Assigned work (`handoff`) survives the owner
 speaking in a room; only the owner's stop ends it.
 
+Nothing counts how many ways a turn or a task may try (R-PERSIST-01 to 08, 2026-11-14). A failed call
+reaches every brain through one text (`worker.loop.failure_text`): refused only for the owner's and
+the safety rules' decisions, otherwise its own cause and that another way may work. A turn about to end
+on a failed call is sent one note of what failed and what it has not called (`failures.failure_ledger`;
+twice in a background run, with each tool's first failure for a CLI brain); the guardrails stay the
+only thing that ends a task nobody is in. A failed page read is read once more by the next reader the
+owner set up (`ServiceHub.read`): a service, never a model, and never one he did not set up.
+
 ## Shared cancellation boundary (owner round 3)
 
 Main, room and desktop surfaces register visible task targets with the same

@@ -1041,20 +1041,20 @@ class FakeClient:
 
 async def test_run_case_sends_the_real_prompt_and_checks_the_reply():
     case = make_case(
-        input="拉菲爾老師你好",
-        dictionary=["拉斐爾"],
-        must_contain=["拉斐爾"],
+        input="我用歐噴 router 傳訊息",
+        dictionary=["OpenRouter"],
+        must_contain=["OpenRouter"],
     )
-    client = FakeClient(["拉斐爾老師你好。"])
+    client = FakeClient(["我用 OpenRouter 傳訊息。"])
     outcome = await eval_cleanup.run_case(client, "vendor/model", case)
     (call,) = client.calls
     assert call["model"] == "vendor/model" and call["fallbacks"] == []
-    assert "- 拉斐爾" in call["system"], "the dictionary is in the prompt"
-    assert call["user"] == "<transcript>\n拉菲爾老師你好\n</transcript>"
+    assert "- OpenRouter" in call["system"], "the dictionary is in the prompt"
+    assert call["user"] == "<transcript>\n我用歐噴 router 傳訊息\n</transcript>"
     assert call["schema"] == eval_cleanup.CLEANUP_SCHEMA
-    assert outcome.text == "拉斐爾老師你好。" and outcome.failures == []
+    assert outcome.text == "我用 OpenRouter 傳訊息。" and outcome.failures == []
     assert outcome.cost_usd == 0.000125 and outcome.latency_ms == 420 and outcome.error is None
-    assert call["max_tokens"] == brain_cleanup.max_tokens_for("拉菲爾老師你好")
+    assert call["max_tokens"] == brain_cleanup.max_tokens_for("我用歐噴 router 傳訊息")
 
 
 async def test_run_case_sends_the_transcript_as_heard_like_the_app_does():
@@ -1279,7 +1279,7 @@ def test_cleanup_main_with_the_real_client_sends_what_the_app_sends(tmp_path):
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        reply = {"text": "拉斐爾老師你好。"}
+        reply = {"text": "我用 OpenRouter 傳訊息。"}
         return httpx.Response(
             200,
             json={
@@ -1293,7 +1293,7 @@ def test_cleanup_main_with_the_real_client_sends_what_the_app_sends(tmp_path):
     store.set("sk-secret-key")
     cases = case_file(
         tmp_path,
-        '{"id": "d", "input": "拉菲爾老師你好", "dictionary": ["拉斐爾"], "must_contain": ["拉斐爾"]}',
+        '{"id": "d", "input": "我用歐噴 router 傳訊息", "dictionary": ["OpenRouter"], "must_contain": ["OpenRouter"]}',
     )
     report = tmp_path / "report.md"
 
@@ -1308,9 +1308,9 @@ def test_cleanup_main_with_the_real_client_sends_what_the_app_sends(tmp_path):
     body = json.loads(request.content)
     assert request.headers["Authorization"] == "Bearer sk-secret-key"
     assert body["model"] == "vendor/a" and "models" not in body, "no fallback models"
-    assert "- 拉斐爾" in body["messages"][0]["content"]
-    assert body["messages"][1]["content"] == "<transcript>\n拉菲爾老師你好\n</transcript>"
+    assert "- OpenRouter" in body["messages"][0]["content"]
+    assert body["messages"][1]["content"] == "<transcript>\n我用歐噴 router 傳訊息\n</transcript>"
     assert body["response_format"]["json_schema"]["strict"] is True
     text = report.read_text(encoding="utf-8")
-    assert "拉斐爾老師你好。" in text and "0.000020" in text and "通過" in text
+    assert "我用 OpenRouter 傳訊息。" in text and "0.000020" in text and "通過" in text
     assert "sk-secret-key" not in text
