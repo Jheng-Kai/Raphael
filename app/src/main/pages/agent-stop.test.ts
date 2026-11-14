@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AgentTurn, AppContext, MainEvent, Member } from "../types";
 
 const api = vi.hoisted(() => Object.fromEntries([
-  "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentVoiceComposed", "agentStop", "cancelSession", "workerCancel",
+  "agentHistoryList", "agentQuestionOpen", "agentAskText", "agentVoice", "agentVoiceComposed", "agentStop", "agentSendNow", "cancelSession", "workerCancel",
   "membersList", "membersPresets", "membersRead", "membersViewing", "membersToolChoices", "toolsetsList",
   "routinesList", "modelsCatalog", "providersList", "brainsCli", "core", "roomsList", "statusGet",
   "membersGreet",
@@ -250,6 +250,30 @@ test("Stop targets the running turn and appends every queued draft after current
  expect(field.value).toBe("Already typed\n\nSecond\n\nThird");
  expect(document.querySelector('.cmp-file')?.textContent).toContain("example.txt");
  expect(api.core).toHaveBeenCalledWith("attachments.get", {id:"stored-example"});
+});
+
+test("a queued message shows 立即送出 in sight beside 排隊中, not in its menu, and sends it by turn, while a running one has none", async () => {
+ turns=[live({question:"Original request"}),live({id:12,session_id:"queued-b",status:"queued",question:"Second",text:"",messages:[]})];
+ api.agentSendNow.mockImplementation(async (session: string) => {
+   turns = turns.map(turn => turn.session_id === "reply-11" ? { ...turn, status: "denied" } : turn.session_id === session ? { ...turn, status: "running" } : turn);
+   return { sent: true, stopped: true };
+ });
+ mount();await flush();
+ const menu=async (id:number)=>{ $(`.tn[data-id="${id}"] [data-act="more-message"]`).click(); await flush(); return [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item=>item.dataset.pick); };
+ const button=$('.tn[data-id="12"] .message-actions [data-act="send-now"]');
+ expect(button.textContent).toContain("立即送出");
+ expect(button.previousElementSibling?.classList.contains("queued-mark")).toBe(true);
+ const queued=await menu(12);
+ expect(queued).toEqual(expect.arrayContaining(["copy","cancel"]));
+ expect(queued).not.toContain("send-now");
+ document.body.click();await flush();
+ button.click();await flush();
+ expect(api.agentSendNow).toHaveBeenCalledTimes(1);
+ expect(api.agentSendNow).toHaveBeenCalledWith("queued-b",0,12);
+ expect(api.agentStop).not.toHaveBeenCalled();
+ expect(api.core).not.toHaveBeenCalledWith("agent.history.retract",expect.anything());
+ // The running message has no send now: nothing waits there.
+ expect(document.querySelector('.tn[data-id="11"] [data-act="send-now"]')).toBeNull();
 });
 
 test("a single live presence stays below additions without changing on an unchanged refresh", async () => {
@@ -515,4 +539,65 @@ test("a failed typed send restores the exact draft and clears the failure on suc
  input.dispatchEvent(new Event("input", {bubbles:true}));
  $(".cmp-send").click(); await flush();
  expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();
+});
+
+// One member shows at most one working slime in its conversation (owner, 2026-11-14, R-SLIME-03).
+const presences = () => [...document.querySelectorAll<HTMLElement>(".thread .live-presence")];
+const at = (id: number, more: Partial<AgentTurn> = {}) => live({ id, session_id: `slime-${id}`, created_at_ms: 1_000_000 + id * 1000, question: `Request ${id}`, ...more });
+const task = (id: number, more: Partial<NonNullable<AgentTurn["task"]>> = {}) => ({ id, state: "running", started_at_ms: 1, finished_at_ms: null, ...more }) as AgentTurn["task"];
+const reply = (text: string) => [{ seq: 1, kind: "reply" as const, text, at_ms: 1_000_000 }];
+
+test("a reply that handed work to the background shows one slime, on the task line", async () => {
+  turns = [at(21, { status: "done", text: "Queued in the background", messages: reply("Queued in the background"), task: task(7, { progress: "Starting the research" }) })];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("21");
+  expect(presences()[0]!.querySelector(".live-action")?.textContent).toBe("Starting the research");
+});
+
+test("a turn that is running without a task shows one slime", async () => {
+  turns = [at(22)];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("22");
+});
+
+test("two background tasks of one member show one slime, on the newest", async () => {
+  turns = [at(23, { status: "done", text: "First", messages: reply("First"), task: task(8, { progress: "The older task" }) }),
+    at(24, { status: "done", text: "Second", messages: reply("Second"), task: task(9, { progress: "The newer task" }) })];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("24");
+  expect(presences()[0]!.querySelector(".live-action")?.textContent).toBe("The newer task");
+  // A refresh that changes nothing keeps that very slime.
+  const stands = presences()[0]!;
+  await refresh({ type: "AgentTurn", turn_id: 24, member_id: 0 });
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]).toBe(stands);
+});
+
+test("a task line with words wins over a face that only waits, as in the owner's picture", async () => {
+  turns = [at(25, { status: "done", text: "Queued in the background", messages: reply("Queued in the background"), task: task(10, { state: "waiting", waiting_owner: 1 }) }),
+    at(26, { status: "done", text: "", messages: [], task: task(11, { progress: "Checking the sandbox" }) })];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("26");
+  expect(presences()[0]!.querySelector(".live-action")?.textContent).toBe("Checking the sandbox");
+  // Once the working task is over, the waiting turn's own face comes back: it is the only one left.
+  turns = [turns[0]!, { ...turns[1]!, task: task(11, { state: "done", finished_at_ms: 2 }) }];
+  await refresh({ type: "AgentTurn", turn_id: 26, member_id: 0 });
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("25");
+});
+
+test("a message just sent takes the one slime from a task that waits", async () => {
+  turns = [at(27, { status: "done", text: "Waiting", messages: reply("Waiting"), task: task(12, { state: "waiting", waiting_owner: 1 }) })];
+  api.agentAskText.mockReturnValue(new Promise(() => {}));
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  $<HTMLTextAreaElement>(".cmp-input").value = "One more thing";
+  $(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await flush();
+  expect(presences()).toHaveLength(1);
+  expect($(".thread > li:last-child").contains(presences()[0]!)).toBe(true);
 });

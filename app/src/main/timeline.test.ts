@@ -51,6 +51,11 @@ test("queued owner bubbles show a muted mark and withdraw instead of edit or liv
   expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
   expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).not.toBeNull();
   expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();
+  // Only a message that waits its turn can be sent now (R-QUEUE-05): the menu reads this mark.
+  expect(document.querySelector('button[data-act="more-message"][data-queued="true"]')).not.toBeNull();
+  document.body.innerHTML = turnHTML(turn(92, { status: "running", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
+  expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).not.toBeNull();
+  expect(document.querySelector('[data-queued]')).toBeNull();
 });
 
 test("a pending permission card replaces duplicate running and waiting task controls", () => {

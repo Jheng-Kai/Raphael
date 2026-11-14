@@ -1316,7 +1316,7 @@ it("waits for the card's takeover to become interactive in the larger view and r
 });
 
 it("dispatches task room, file-view and restore assertions through the shared rendered check", () => {
-  const browser = new Window(); browser.document.body.innerHTML='<section data-task-result="950">+1 −1</section><section class="desktop-checkpoints"></section>';
+  const browser = new Window(); browser.document.body.innerHTML='<section data-task-result="950">+1 −1</section><section data-task-result="980"><b class="card-title">已復原 1 個檔案的變更</b><footer class="card-actions"><button>開啟檔案變更</button></footer></section><section class="desktop-checkpoints"></section>';
   browser.document.querySelector('.desktop-checkpoints').getBoundingClientRect=()=>({width:300,height:300});
   browser.__look={calls:[{method:'computer.checkpoints',params:{action:'restore',review_token:'a'.repeat(64)}}]};
   const previous={document:globalThis.document,window:globalThis.window}; globalThis.document=browser.document; globalThis.window=browser;

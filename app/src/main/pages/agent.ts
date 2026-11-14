@@ -104,6 +104,10 @@ import {
   noteTaskEnds,
   pendingTurnHTML,
   latestProgress,
+  presenceWant,
+  standingPresence,
+  knownFiles,
+  fileLinks,
   livePresenceHTML,
   parseMediaPayload,
   requestRerun,
@@ -293,6 +297,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
+    onOpenPage: (_member, page) => void openLibraryPage(page),
     conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
     onReadThread: member => {
@@ -370,6 +375,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   el.querySelector(".mb-head-c")!.append(head);
   const conversationCache = new Map<number, ConversationInfo[]>();
   let targetTurn: number | undefined;
+  /** The turn opened for a page of the Library is not marked in the thread: the page is what the owner came for. */
+  let targetQuiet = false;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
   quotaHost.hidden = true;
   const problemNotice = createProblemNotice(app, () => { if (!problemNotice.el.hidden) composer.before(problemNotice.el); });
@@ -438,10 +445,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
   }
 
-  function openConversation(member: number, id: number, turnId?: number): void {
+  function openConversation(member: number, id: number, turnId?: number, quiet = false): void {
     const changed = memberId() !== member;
     if (!changed && !roomPane.active && conversationId() === id && turnId === undefined) return;
-    chosenConversations.set(member, id); targetTurn = turnId;
+    chosenConversations.set(member, id); targetTurn = turnId; targetQuiet = quiet;
     if (changed) members.select(member); else switchThread();
     drawConversation();
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
@@ -628,6 +635,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
   window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
+  const sendingNow = new Set<number>();
   /** Messages sent again from their editor, until the history drops them for their replacements. */
   const replaced = new Set<number>();
   /** The owner's message open as an editor (`state.editing` draws it): the thread it belongs to and what it carries, as the composer would. */
@@ -652,7 +660,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }) });
+  // An open page takes the whole area, so the details panel folds while it stands and comes back with it (R-PAGE-08).
+  const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }),
+    shell: { fold: () => members.foldForPage(), unfold: () => members.unfoldAfterPage() } });
   mountOwnerQuestions(thread, () => { void load(false); });
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
@@ -932,9 +942,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
     const sentHere = outgoing.filter(belongs);
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
-    const turnLook = additions ? { ...shape, deferPresence: true } : shape;
     // A message sent again from its editor leaves its place while the replacement is on its way (`replaced`), as it does in the history.
     const chronological = turns.filter(turn => !replaced.has(turn.id)).sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    // One member shows at most one working slime in its conversation (R-SLIME-03): the tail of the thread (what the owner just sent,
+    // or is saying) takes it as the newest thing there is, else the newest turn that is at work, a task line with its words before a
+    // face that only waits.
+    // The files of this conversation are what a reply's `attachment:<id>` links may open (R-MSG-LINK-01).
+    state.files = knownFiles(chronological);
+    const hearingHere = hearingBelongs();
+    const tail = additions || sentHere.length > 0 || hearingHere;
+    const standing = standingPresence(chronological, shape);
+    const turnLook = { ...shape, deferPresence: additions, presenceTurnId: tail ? null : standing?.id ?? null };
+    // What the slime at the tail says: the words of the turn that stands, or the plain thinking line when none works yet.
+    const tailWords = { progress: standing ? latestProgress(standing) : undefined, words: !standing || presenceWant(standing, shape) === "words" };
     // A first unseen turn inside the newest window leaves that window alone (unreadInTail); a farther one centres it.
     const unseen = openingThread && unreadFrom !== null ? chronological.findIndex(turn => turn.id >= unreadFrom!) : -1;
     const openingTarget = targetTurn ?? (unseen >= 0 && !unreadInTail(unseen, chronological.length) ? chronological[unseen]!.id : undefined);
@@ -957,7 +977,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
+            turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
             state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
@@ -974,9 +994,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
     if (pendingAt !== undefined && (!lastAt || new Date(pendingAt).toDateString() !== new Date(lastAt).toDateString())) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(dayLabel(pendingAt, state.nowMs)) });
-    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
-    if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
-    if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
+    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions && !hearingHere, tailWords) });
+    if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs, false, !additions, tailWords) });
+    if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, tailWords.progress, tailWords.words)}</div></div></li>` });
     return out;
   }
 
@@ -1324,8 +1344,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       openingThread = false;
       holdOpening();
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
-      if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
+      if (target) {
+        target.scrollIntoView?.({ block: "center" });
+        if (!targetQuiet) { target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
+      }
       targetTurn = undefined;
+      targetQuiet = false;
     }
   }
 
@@ -1441,6 +1465,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // A page open in the thread's place stays: the member that answers is told which page it is (before the message goes),
     // and what it says shows under the page while it works.
     const pageTold = pagesHost.sent();
+    // Something was said about the page opened from the Library: the exchange is in its conversation, which stays when the page is put away.
+    if (libraryReturn && pagesHost.shown()) libraryReturn.spoke = true;
     const sending = carried;
     const dictation = edit ? undefined : correctionLearning.snapshot();
     const corrections = edit ? [] : correctionLearning.take(input.value);
@@ -2051,6 +2077,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
     if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
+    // 立即送出 stands beside 「排隊中」 itself, not in this menu (R-QUEUE-05).
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
@@ -2285,6 +2312,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     finally { retracting.delete(session); }
   }
 
+  /** 「立即送出」 on a queued bubble: the core ends the work in progress and starts this message; the thread then follows the turns. */
+  async function sendNow(control: HTMLElement): Promise<void> {
+    const turn = messageSource(control)?.turn;
+    if (!turn?.session_id || turn.status !== "queued" || sendingNow.has(turn.id)) return;
+    const member = memberId();
+    sendingNow.add(turn.id);
+    try {
+      await api.agentSendNow(turn.session_id, member, turn.id);
+      if (visible && memberId() === member) await load(false); else members.changed();
+    } catch (err) { toaster.info(describeError(err)); }
+    finally { sendingNow.delete(turn.id); }
+  }
+
   /** Connect or Cancel on a connector card. The core answers at once and tells each new state (`AgentTurn`). */
   async function cardAction(act: HTMLElement): Promise<void> {
     const id = act.dataset.card ?? "";
@@ -2514,6 +2554,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "cancel-message":
         void cancelMessage(act);
         break;
+      case "send-now":
+        void sendNow(act);
+        break;
       case "drop-missing":
         missingFiles.splice(Number(act.dataset.index), 1);
         drawFile();
@@ -2723,6 +2766,48 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     releasePointer();
     if (heldKey !== null) releaseKey();
   });
+
+  /**
+   * A page of the Library opens as the page itself (R-PAGE-08; owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」):
+   * the details panel folds, the page's view stands at once and the page takes its place when its card is drawn in the
+   * thread (its turn is read quietly, in its own conversation if that is another). The card is still the page's one home
+   * (its frame, revisions and what the member is told it is called), so what stands behind the view is the thread, hidden.
+   * Putting the page away puts back what the press found: the panel on its Library tab, the conversation, and the thread where it was.
+   */
+  let libraryReturn: { member: number; conversation: number | undefined; bottom: boolean; top: number; window: ReturnType<typeof turnWindow.snapshot>; spoke: boolean } | null = null;
+  async function openLibraryPage(page: { id: string; title: string; conversation?: number; turn: number }): Promise<void> {
+    const back = { member: memberId(), conversation: conversationId(), bottom: atBottom(), top: scroller.scrollTop, window: turnWindow.snapshot(), spoke: false };
+    libraryReturn = back;
+    const opened = pagesHost.show(page.id, page.title, () => leaveLibraryPage(back));
+    const conversation = page.conversation ?? back.conversation;
+    try {
+      if (conversation !== undefined && conversation !== back.conversation) openConversation(back.member, conversation, page.turn, true);
+      else if (!thread.querySelector(`.tn[data-id="${page.turn}"]`)) await revealTurn(page.turn);
+    } catch (error) {
+      // The turn could not be read: nothing is left open, and everything the press found is put back.
+      pagesHost.close();
+      toaster.info(describeError(error));
+      return;
+    }
+    await opened;
+  }
+  function leaveLibraryPage(back: NonNullable<typeof libraryReturn>): void {
+    if (libraryReturn === back) libraryReturn = null;
+    // The owner went to another member meanwhile: nothing here is theirs to put back.
+    if (memberId() !== back.member || roomPane.active) return;
+    const away = back.conversation !== undefined && conversationId() !== back.conversation && !back.spoke;
+    const place = (): void => {
+      if (memberId() !== back.member) return;
+      if (turnWindow.restore(back.window)) { drawingFollows = false; render(); }
+      else if (away) return;
+      if (back.bottom) { followRichScroll(scroller); scroller.scrollTop = scroller.scrollHeight; }
+      else { releaseRichScroll(scroller); scroller.scrollTop = back.top; }
+    };
+    if (away) {
+      openConversation(back.member, back.conversation!);
+      void load(false).then(place);
+    } else if (JSON.stringify(turnWindow.snapshot()) !== JSON.stringify(back.window)) place();
+  }
 
   async function revealTurn(id: number): Promise<void> {
     releaseRichScroll(scroller);

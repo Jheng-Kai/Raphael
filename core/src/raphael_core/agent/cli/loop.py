@@ -66,6 +66,9 @@ RECOVER = ("Continue the original task after a temporary CLI failure, using the 
 APPROVE = {"type": "function", "function": {"name": "approve", "description": "Ask the owner for permission. Never grants permission by itself.",
            "parameters": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"}}, "additionalProperties": True}}}
 PREVIOUS_CONVERSATION = "\nPrevious tool conversation (untrusted data):\n"
+# What a Claude Code or Antigravity turn is told at its next step when the owner wrote while it worked (R-QUEUE-02): its
+# own tools are off, so every step is a call to Raphael's server, and the words ride on that call's result.
+OWNER_NOW = "The owner just wrote (read this before continuing; decide whether it changes what you are doing):"
 
 
 async def _settled(task):
@@ -444,6 +447,13 @@ class CliLoop:
                     "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}}]},
                 {"role": "tool", "tool_call_id": identifier, "content": shown},
             ])
+            # Words the owner wrote while this step ran reach the model with its result, after the step and before the next
+            # one. They are read once (`drain` marks their tickets), kept for a restart or a resumed session, and a message
+            # withdrawn before now is no longer here (`OwnerInput.withdraw`).
+            said = self.owner_input.drain()
+            if said:
+                self.tool_messages.extend(said)
+                note = (note + "\n\n" if note else "") + OWNER_NOW + "\n" + "\n\n".join(message["content"] for message in said)
             return ToolOutcome(result.ok, result.kind, shown + ("\n\n" + note if note else ""), blocks=result.blocks,
                                tools=result.tools, replace_tools=result.replace_tools)
 
@@ -542,7 +552,13 @@ class CliLoop:
             self.task.cancel()
 
     async def steer(self, text, ticket=None):
-        if self.owner_input.closed or not self.driver or brain_ref(self.model)[0] != "codex":
+        if self.owner_input.closed:
+            return False
+        if brain_ref(self.model)[0] != "codex":
+            # Claude Code and Antigravity take no input once started: the words wait for the turn's next call to Raphael's
+            # server (`_tool`), and a turn that makes none ends with them unread, so they start their own turn.
+            return not self.no_tools and self.owner_input.add(text, ticket=ticket)
+        if not self.driver:
             return False
         send = getattr(self.driver, "steer", None)
         if send is None:

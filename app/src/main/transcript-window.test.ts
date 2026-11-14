@@ -83,3 +83,19 @@ test("prepends preserve keys and arrivals do not evict a reader in an older wind
   expect(window.select([...arrived, ...Array.from({length:150},(_,index)=>({id:String(310+index)}))], key, true)).toHaveLength(100);
   expect(window.after).toBe(0);
 });
+
+test("a window is put back as it was after another turn was revealed, and not into turns that are not there (a page opened from the Library)", () => {
+  const window = new TranscriptWindow(); window.select(items, key, true);
+  const was = window.snapshot();
+  const mounted = window.select(items, key).map(key);
+  // A page's turn far above is revealed for a while; the window moves to it.
+  expect(window.focus("4")).toBe(true);
+  expect(window.select(items, key).map(key)).not.toEqual(mounted);
+  expect(window.restore(was)).toBe(true);
+  expect(window.select(items, key).map(key)).toEqual(mounted);
+  // Another conversation's turns hold none of its keys: it stays as it is.
+  window.reset();
+  window.select([{ id: "x1" }, { id: "x2" }], key, true);
+  expect(window.restore(was)).toBe(false);
+  expect(window.select([{ id: "x1" }, { id: "x2" }], key).map(key)).toEqual(["x1", "x2"]);
+});

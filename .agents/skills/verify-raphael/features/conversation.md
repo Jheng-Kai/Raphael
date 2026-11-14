@@ -18,6 +18,65 @@
   look scene `computer-wake-line` asserts one such line and no reply of the member's.
 - **A data-floor refusal does not end the turn (R-FLOOR-03).** The model is told up to three times, and answers with what it can.
 
+## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
+
+Owner, with a picture of a card titled 「工作結果」, a green 「● 完成」, 「53 個檔案變更 +0 −0」, 「顯示內容」, 「還原檔案」 and 「查看」:
+「這個卡片的部分，你可以看一下 grokbot 是怎麼做的，因為我不記得他們會有那個完成的點點。然後這個工作結果我也不知道是在幹嘛，你可能要看一下，去幫我調整一下 card 的 UI/UX」.
+What the card is: a member that ran commands on its computer (workspace or team folder) gets a file checkpoint at the start of the turn
+(`vm_tools._checkpoint`); when the turn's background task finishes (`task.state === "done"`) and files differ from the checkpoint, the thread draws
+`taskResultHTML` (`task-result.ts`) under it, private conversations and rooms alike. 還原檔案 put the files back to the checkpoint. Grok Bot has no such
+card: what a bot makes is a named file with its size and no state, and the card of its results came from the Cursor deck (`Done`, files changed with +/−).
+The count was wrong for files with nothing to count (R-CARD-16: the core compared text for the first twenty files only, and for no picture or document).
+
+Now (`task-result.ts`, `card.css` `.task-result`, core `checkpoints.py` `_view`): no pill and no dot. The title is 「改了 N 個檔案」 (「新增了」 when all are new, 「刪除了」 when all
+are gone, 「已復原 N 個檔案的變更」 once undone). Below it a well of rows: the name, its folder quiet, and at the right 「新增」, 「刪除」, `+12 −3` or 「已修改」. Five rows show, the rest fold under
+「還有 N 個檔案」; a text file opens under its row. Buttons: the primary 開啟檔案變更 (opens the member's computer panel on 檔案變更, all of that member's changes) and 復原這些變更, which asks in
+a dialog first (「復原這些變更？」, what comes back, what is kept) unless the mode is 全部允許, then toasts how many came back and were kept. An undo that fails says
+「沒能復原這些變更，請再試一次。」 beside 重試. Routine and background turns keep the card: the checkpoint is their only undo.
+
+```powershell
+npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+```
+
+`card-task-few` (four files, a text file opened under its row), `card-task-many` (53 files with nothing to count: five rows and 「還有 48 個檔案」, no +0 −0), `card-task-new` (only new
+files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-restored` (「已復原 1 個檔案的變更」, one button) assert no pill or dot, none of the old words, one-line rows with their
+state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
+`npm run verify -- --contract` after a change to the file list the core sends.
+
+## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
+
+Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with
+`[已查核的部分紀錄](attachment:4e43d6d3fd9d47fab8b552f849c3c48b.md)` as written: a model links the file it delivered by its stored id
+(the core already reads that form, members/library.py), and the renderer (`message-content.ts`) only knew `http(s)` targets, so the
+whole link showed as text. Now `[words](attachment:<id>)` is the file's chip (the `fileChipHTML` of the team folder's files, inline in the
+words) that opens that file through `attachment-open` when the id is a file of the conversation (`knownFiles` in `timeline.ts`:
+what the owner attached, what a member delivered in a media message, over every turn, put in `TimelineState.files` by `lines()`);
+any other `attachment:` target is its words alone, and a renderer that is not given the files (a group, search, copy) shows
+the words alone. `message-attachment-link` mirrors the picture (the file's card, the routine line, the message with a known link and a
+link to a file no turn holds) and presses the chip: no raw target in the words, one chip with its words standing in the line, the
+file card above, and one `open_attachment` call with that id. Not covered: the native open of the file itself.
+
+```powershell
+npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
+```
+
+## One member, one working slime (owner, 2026-11-14, R-SLIME-03)
+
+Owner, with a picture of a reply that queued research in the background (an empty slime under the reply, a task line with the
+slime and its progress words under that): 「這邊為什麼會有兩個史萊姆？理論上它不管怎麼樣都只會有一個史萊姆在運作才對，你可能確定一下」.
+A reply and the task it handed to the background are separate turns of one conversation, each of which drew its own working slime
+(`turnHTML`): the earlier one waited (a task or card waiting on the owner), so its face had no words, and the newer task line worked.
+`standingPresence` (timeline.ts) now decides for the whole thread, in `lines()` of `pages/agent.ts`: the newest turn that works
+stands (a task line with progress words wins over a face that only waits), every other turn draws none (`TurnLook.presenceTurnId`),
+and what the owner has just sent or is saying is newer than all of them and takes the slime under the newest bubble, with the working
+turn's words. `slime-one-working` mirrors the picture (a reply, a task that waits, a task that works) and counts the working slimes
+in the thread: exactly one, on the line that works with its words, none under the reply. Before the fix the same scene drew two
+(2 lines, 2 moving). A group's thinking lines are per member and per message and are not part of this rule.
+
+```powershell
+npm run look -- slime-one-working composer-stop-background composer-queued composer-send-while-working composer-stop-pending transcript-working running --theme both --width 1120,720,1920x1080
+```
+
 ## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
 
 Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
@@ -1057,7 +1116,7 @@ existing retract-and-restore behavior after the second Escape.
 ```powershell
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
-npm run look -- page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update page-library-open page-library-scrolled page-library-report page-library-back page-library-esc page-library-older page-library-share --theme both --width 1120,720,1920x1080
 npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
 
@@ -1529,9 +1588,11 @@ npm run look -- owner-addition --theme both --width 1120,720,1920x1080
 
 An owner message in an active private conversation is an ordinary owner bubble and
 enters the same loop as a user-role message at its next step, after the complete
-tool batch. Stop alone cancels the work. The inbox seals atomically at the final
-reply; a later message starts a new turn. CLI brains finish their current turn and
-resume the existing native session with the addition. Background tasks use the same
+tool batch. Stop, or 「立即送出」 on a queued message, cancels the work. The inbox seals
+atomically at the final reply; a later message starts a new turn. Codex takes the addition
+natively (turn/steer); Claude Code and Antigravity read it with the result of their next
+call to Raphael's tools, or, when no call follows, in the next turn that resumes the
+existing native session (see Durable owner inbox). Background tasks use the same
 inbox inside the worker process, through internal task.steer admission.
 Accepted owner-only history rows use owner_input and render no empty member reply.
 CLI handoffs preserve accepted input in their saved continuation.
@@ -1927,10 +1988,35 @@ Keep R-PERF-02's existing 120ms/12% limits and R-UI-71's stable node identity.
 Compare queued withdraw/action rows with owner-addition and the existing pending
 Stop scenes at matching dimensions. See core/tests/agent/test_inbox*.py,
 test_steering.py, test_cli_steering.py and app/src/main/pages/agent-stop.test.ts.
-Claude and Antigravity input during a turn is unmeasured, so it waits for the
-next turn in FIFO order.
+Codex takes input during a turn through turn/steer. Claude Code and Antigravity
+cannot (their stream-json input is one message), but their built-in tools are off, so
+every step they take is a call to Raphael's own tools: a message said meanwhile
+(no files, nothing queued before it) rides on the result of the next such call under
+one label, "The owner just wrote (read this before continuing; decide whether it
+changes what you are doing):", so the model reads it and decides what to do with its
+work, as Claude Code does. It is read once (marked steered, kept in the turn's
+records), and withdrawing it first removes it from the pending note. A turn that
+makes no further call before it ends leaves the message unread; it then starts the
+next turn in FIFO order, as before.
+
+Owner, 2026-11-14: 「我可能傳一封訊息給一個成員，然後突然想到還有另外一件事，所以我又在後面
+queue 了一個新的訊息。…理論上你應該要跟 claude code 設計的一樣，我們可以自己選擇立即送出，就會直接
+打斷目前的工作，然後加上這個 context，或者是另外一個就是，claude 它會自己判斷它什麼時候該加進來。」
+Both halves are built: the model takes a new message at its next step, and 「立即送出」 on a
+queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu:
+「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣」) interrupts the work now. R-QUEUE-05:
+`agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
+running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
+Antigravity child is ended and the next turn resumes its stored native session; an API loop's
+task is cancelled). The interrupted turn ends cancelled with its words kept, and pending
+confirmation cards of that conversation are denied, as Stop does. A message with files is
+started as its own turn this way too (it never steers). Rooms keep a new exchange per message.
+A message already steered and read, or already started, is not sent again (`sent: false`).
+Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read
+shows as sent, not queued, so it has no 「立即送出」; Stop returns it to the field, and the
+messages with files or behind another queued one show 「排隊中」 and offer it.
 ```powershell
-npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
+npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
 
 ### Request ID reuse after settlement (2026-11-03)
@@ -2127,20 +2213,25 @@ was put away: the member's reply ends the thread and nothing opens again (the ju
 A page open in the conversation's place (R-PAGE-03, owner, 2026-11-11: 「我要的不是像是這樣子會出現一個 dialog…直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺…左上角會變成返回上頁」), replacing the dialog a page
 had until then ("a page made larger"; the judge's earlier notes on that dialog, its three-quarter height, its doubled title and the × outside its corner, no longer apply): pressing a page's card, an HTML page's or a report's, in a member's conversation or a room, puts the page where the
 thread was (`.ra-stage.is-page`, `page-view.ts`, `page-view.css`). The thread stays laid out under it, `visibility: hidden`, so its place is kept; the composer
-stays below; the header keeps the conversation's pill and its share (a report hides the header's share: it has its own). The way back is the round arrow at the
+stays below. Since 2026-11-14 (R-PAGE-08) the page is the whole area beside the sidebar (the details panel folds while it stands and comes back with it): the header's centre
+is the page's own pill (its mark and title; a room keeps its heading) in place of the member's pill, and its tools hold the one Share button on a report and on an HTML page (the member's share waits). The way back is the round arrow at the
 header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
 (the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
-has it; the composer's draft is never touched. An HTML page has a title row (its title, once) and the page, rounded, no border, as wide as the composer's
-column (a room's is inset by its own padding), filling the height between the header and the composer, scrolling inside; there is no dialog, scrim or ×. A report is the same place with
-its own heading, its Share at the top right and nothing else over it. The same frame is moved there and back (no reload with `moveBefore`; the scene
-`page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading is kept for the next opening. A page the member
-changes (`update_page`) loads beside the one on screen, is sent back to where the owner was reading (the page's helper reports `scroll` and obeys `scroll-to`) and replaces it once drawn: the
+has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page as wide as the area allows up to `--pgv-w` (1280 px) between the thread's gutters, its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
+its own heading, its column and its contents. The same frame is moved there and back (no reload with `moveBefore`; the scene
+`page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading (how far the area was scrolled) is kept for the next opening. A page the member
+changes (`update_page`) loads beside the one on screen, says how tall it is while it loads and replaces it once drawn, the area keeping its scroll: the
 `page-watch` sampler of page-inplace-update and page-inplace-room-update proves one visible page at every frame and the view never shut, and `page-inplace-updated` that the conversation still holds one card, now at the next revision.
 What the member answers to a message written under the page shows under the page and nowhere else (the calm thread): its working line while it works (page-inplace-working), then
 the first words of its reply as one line (page-inplace-answered); the whole reply is in the thread, one press of the arrow away. The window tells the core which page is open before it
 sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `window.__look.viewing`), and the core's context says "the page the owner is looking at now: page_id=…" so "here" means it.
-Checks: page-inplace (also under the names page-expanded and page-opened-whole) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
-surface, the pill still saying whose conversation it is, the title, the page's width against the composer's, the composer below; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+Checks: page-inplace (also under the names page-expanded, page-opened-whole and page-library-open) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
+surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's width against `--pgv-w` and the area's gutters, no frame (no corner, edge or clip), the area scrolling, nothing covered by the composer; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+
+A page opened from the member's Library (R-PAGE-08, owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它有一個share的鍵」, after Grok Bot's Library, whose page row opens the page and not the thread at its reply): the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
+a page of an older conversation opens that conversation quietly (no turn marked) and the arrow brings back the one that was open, the thread where it was (`TranscriptWindow.snapshot` / `restore`, the scroll) and the panel on its Library tab (`members.foldForPage` / `unfoldAfterPage`, which every open page uses, so a press on the card folds the panel too).
+The scenes use the fixture's `libraryPages` (the Library lists the page scenes' pages) and `libraryOlder` (those pages belong to an older conversation of the member): `page-library-open` (HTML page, whole, panel folded), `page-library-scrolled` (the area scrolls as one), `page-library-report`, `page-library-back` (the arrow: the Library tab, the thread read higher up exactly where it was, the same frame, no reload: `page-library-kept` on top of `page-inplace-kept`),
+`page-library-esc` (Escape does the same), `page-library-older` (`page-library-older-open` / `-kept`: the page's own conversation under it, then the one that was open) and `page-library-share` (`page-library-shared`: one `report_save` with the page's id and no text, a word of where it went, the page still open). The file itself is the core's (`page_file` in `core/src/raphael_core/agent/pages.py`, tested in core/tests/agent/test_pages.py); a look cannot open it, as the core is not there.
 `answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
 `updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
 The voice flyer is the one stage child a page does not put away (R-VC-04; `voice-over-page-listening`, `-hearing`, `-gone`, see

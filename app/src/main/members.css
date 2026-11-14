@@ -85,8 +85,11 @@
 .mb-row-p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-row-pv); line-height: 1.45; color: var(--text-3); }
 .mb-row-p.is-wait { color: var(--rg-ink); }
 .mb-dot { display: block; flex: none; width: var(--pa-dot); height: var(--pa-dot); border-radius: var(--r-pill); }
-.mb-dot.is-wait { background: var(--rg-btn); }
-.mb-dot.is-unread { background: var(--accent-text); }
+/* One still dot per row (sidebar-light.ts): orange waits for the owner, red went wrong, green ended well, the text colour is a new message. It never moves. */
+.mb-dot.is-wait { background: var(--wait); }
+.mb-dot.is-failed { background: var(--err); }
+.mb-dot.is-done { background: var(--ok); }
+.mb-dot.is-unread { background: var(--text); }
 /* its 「more」 shows under the pointer; the row makes room for it */
 :is(.page-agent, .side) .mb-item .btn.mb-more { position: absolute; top: 50%; right: 4px; width: var(--pa-more); min-height: var(--pa-more); margin-top: calc(var(--pa-more) / -2); border-radius: var(--r-sm); opacity: 0; }
 :is(.page-agent, .side) .mb-item:hover .btn.mb-more, :is(.page-agent, .side) .mb-item .btn.mb-more:focus-visible, :is(.page-agent, .side) .mb-item .btn.mb-more[aria-expanded="true"] { opacity: 1; }
