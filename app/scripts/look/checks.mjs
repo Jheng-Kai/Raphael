@@ -6283,6 +6283,19 @@ export function checkRendered(name, context = {}) {
   // area right of the sidebar: the details panel folded, the header's centre the page's own pill, Share at the right, the whole area scrolling with
   // no frame around the page, the thread hidden under it, the composer below, the way back the round arrow at the header's top left, and no
   // dialog, scrim or × anywhere.
+  // R-PAGE-11 (owner, 2026-11-14: 「這邊不要因為底下有那個輸入框就卡在那裡，它應該要是全螢幕的輸入框，感覺像是放在這個 HTML 或者是 page 上面的感覺」): an
+  // open page, an HTML page's area or a report's, runs to the window's foot and the composer floats over it at its own place, on its own
+  // surface, with no band behind it; the dock around the composer takes no pointer, so everything but the composer is the page's.
+  const pageUnderComposer = (stage, area) => {
+    const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
+    const areaBox = area.getBoundingClientRect(), stageBox = stage.getBoundingClientRect(), dockBox = dock.getBoundingClientRect(), composerBox = composer.getBoundingClientRect();
+    require(Math.abs(areaBox.bottom - stageBox.bottom) <= 1 && Math.abs(areaBox.bottom - innerHeight) <= 1, `the page runs to the window's foot, under the composer: ${Math.round(areaBox.bottom)} of ${innerHeight}`);
+    require(composerBox.top > areaBox.top && composerBox.bottom <= areaBox.bottom + 0.5 && composerBox.left >= areaBox.left - 0.5 && composerBox.right <= areaBox.right + 0.5 && dockBox.bottom <= areaBox.bottom + 1, "the composer stands over the page");
+    const band = getComputedStyle(dock), surface = getComputedStyle(composer);
+    require(/^(transparent|rgba\(\d+, \d+, \d+, 0\))$/.test(band.backgroundColor) && band.backgroundImage === "none" && band.pointerEvents === "none", `no band behind the composer: ${band.backgroundColor}, ${band.backgroundImage}, pointer ${band.pointerEvents}`);
+    require(/^rgb\(/.test(surface.backgroundColor) && parseFloat(surface.borderTopWidth) >= 1 && surface.boxShadow !== "none" && surface.pointerEvents !== "none", `the composer floats on its own surface and takes the pointer: ${surface.backgroundColor}, ${surface.boxShadow}`);
+    return { areaBox, dockBox, composerBox };
+  };
   if (name === "page-inplace" || name === "page-opened-whole" || name === "page-expanded" || name === "page-library-open") {
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
     const view = stage.querySelector(":scope > .pgv"), area = view?.querySelector(".pgv-page"), box = area?.querySelector(".pgv-frame-box"), frame = box?.querySelector("iframe");
@@ -6328,10 +6341,10 @@ export function checkRendered(name, context = {}) {
     const memberShare = pane.querySelector('.mb-head [data-act="share-member"]');
     require(!memberShare || !visible(memberShare), "the member's share waits while a page stands in the thread's place");
     // The area, since R-PAGE-10 (owner, 2026-11-14: the page as Chrome shows a file): the whole view right of the sidebar to the window's right edge,
-    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. It ends where the composer's row
-    // begins, so no part of the page is ever under the composer.
+    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. Since R-PAGE-11 it runs to the
+    // window's foot and the composer floats over it.
     const areaBox = area.getBoundingClientRect(), shown = box.getBoundingClientRect(), side = document.querySelector("#nav")?.getBoundingClientRect();
-    const frameBox = frame.getBoundingClientRect(), dockBox = dock.getBoundingClientRect(), composerBox = composer.getBoundingClientRect();
+    const frameBox = frame.getBoundingClientRect();
     require((!side || areaBox.left >= side.right - 1) && Math.abs(areaBox.left - paneBox.left) <= 1 && Math.abs(areaBox.right - paneBox.right) <= 1, `the area is the whole view beside the sidebar: ${Math.round(areaBox.left)}-${Math.round(areaBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
     require(Math.abs(frameBox.left - paneBox.left) <= 1 && Math.abs(frameBox.right - paneBox.right) <= 1 && Math.abs(shown.left - frameBox.left) <= 1 && Math.abs(shown.right - frameBox.right) <= 1, `the page spans the full width of the view, no margin either side: ${Math.round(frameBox.left)}-${Math.round(frameBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
     require(Math.abs(frameBox.right - innerWidth) <= 1, `and reaches the window's right edge: ${Math.round(frameBox.right)} of ${innerWidth}`);
@@ -6340,11 +6353,9 @@ export function checkRendered(name, context = {}) {
     require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0 && parseFloat(areaStyle.paddingBottom) === 0, "the area has no side or bottom padding");
     require(areaStyle.overflowY === "auto" && area.contains(box), "the whole area scrolls");
     require(shown.height >= area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom) - 1, `the page is at least as tall as the area: ${Math.round(shown.height)}`);
-    // It reaches the bottom of its view (the composer's row stands below it), and nothing of the composer is over it.
-    require(Math.abs(areaBox.bottom - dockBox.top) <= 1, `the page reaches the composer's row, with no strip between: ${Math.round(areaBox.bottom)} against ${Math.round(dockBox.top)}`);
-    const over = (one, two) => one.left < two.right - 0.5 && two.left < one.right - 0.5 && one.top < two.bottom - 0.5 && two.top < one.bottom - 0.5;
-    const visibleFrame = { left: frameBox.left, right: frameBox.right, top: Math.max(frameBox.top, areaBox.top), bottom: Math.min(frameBox.bottom, areaBox.bottom) };
-    require(!over(visibleFrame, composerBox) && !over(visibleFrame, dockBox) && areaBox.bottom <= dockBox.top + 1, "no part of the composer overlaps the page");
+    // It runs to the window's foot with the composer standing over it, and at rest the page itself is drawn under the composer.
+    const { composerBox } = pageUnderComposer(stage, area);
+    if (area.scrollTop === 0) require(frameBox.bottom >= areaBox.bottom - 1 && frameBox.top < composerBox.top, `the page is drawn under the composer, to the window's foot: ${Math.round(frameBox.bottom)} of ${Math.round(areaBox.bottom)}`);
     require(!view.querySelector(".pgv-title"), "the title is the pill's, not a line of the page");
     require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
@@ -6507,8 +6518,11 @@ export function checkRendered(name, context = {}) {
     require(stage.classList.contains("is-page") && !view.hidden, "the page stays open while the member answers");
     require(visible(status) && !status.hidden, "something shows under the page");
     const line = status.firstElementChild.getBoundingClientRect(), column = dock.querySelector(".composer").getBoundingClientRect();
-    const row = status.getBoundingClientRect();
-    require(row.top >= box.getBoundingClientRect().bottom - 1 && row.bottom <= dock.getBoundingClientRect().top + 1, "it stands between the page and the composer");
+    // The page runs under the composer (R-PAGE-11), so the line floats with it: just over the composer, over the page, on the composer's surface.
+    const { areaBox } = pageUnderComposer(stage, box);
+    require(line.bottom <= column.top - 2 && column.top - line.bottom <= 24 && line.top >= areaBox.top && line.bottom <= areaBox.bottom, `it stands just over the composer, over the page: ${Math.round(line.bottom)} against ${Math.round(column.top)}`);
+    const card = getComputedStyle(status.firstElementChild);
+    require(/^rgb\(/.test(card.backgroundColor) && parseFloat(card.borderTopWidth) >= 1 && getComputedStyle(status).pointerEvents === "none", `on its own surface, taking no pointer from the page: ${card.backgroundColor}`);
     require(line.left >= column.left - 1 && line.right <= column.right + 1 && line.height <= 40, `one line in the column: ${Math.round(line.height)} px`);
     require(!view.querySelector("button, .btn"), "no button for it, no sentence that explains it");
     if (name === "page-inplace-working") {
@@ -6527,6 +6541,37 @@ export function checkRendered(name, context = {}) {
     const said = [...pane.querySelectorAll(".ra-scroll .message-text")].some(text => text.textContent.includes("好了，最後一題改成問今天的新聞"));
     require(said, "the whole reply is in the thread behind it");
     return { check: name };
+  }
+  // Read to its end (R-PAGE-11): the page, an HTML page or a report, in a conversation or a room, ran under the floating composer, and its
+  // last line now stands clear above the composer and the answer line over it, with no more than a gap's room past it. Only the composer
+  // takes the pointer: beside it and under it a press is the page's.
+  if (name === "page-under-composer") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
+    const view = stage.querySelector(":scope > .pgv"), report = stage.dataset.pageKind === "report", dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
+    const area = view && (report ? view.querySelector(".rp-scroll") : view.querySelector(".pgv-page"));
+    require(stage.classList.contains("is-page") && !view.hidden && area, "a page stands in the conversation's place");
+    const { areaBox, dockBox, composerBox } = pageUnderComposer(stage, area);
+    require(area.scrollHeight - area.scrollTop - area.clientHeight <= 1, `the page is read to its end: ${Math.round(area.scrollTop)} of ${area.scrollHeight - area.clientHeight}`);
+    const line = view.querySelector(".pgv-status:not([hidden]) > *"), say = line && visible(line) ? line.getBoundingClientRect() : null;
+    const floor = Math.min(composerBox.top, say?.top ?? Infinity);
+    // The page's own last line: an HTML page's is where the page it holds ends (the height it says), a report's its last section's foot.
+    const box = view.querySelector(".pgv-frame-box");
+    const end = report ? Math.max(...[...view.querySelectorAll(".rp-body > .rp-sec")].filter(visible).map(section => section.getBoundingClientRect().bottom))
+      : box.getBoundingClientRect().top + parseFloat(box.style.getPropertyValue("--pgv-h"));
+    require(Number.isFinite(end) && end <= floor - 4, `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
+    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section).
+    const room = report ? 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")) + 48 : 48;
+    if (area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
+    // A press on the composer is the composer's; beside it and under it, the page's (an HTML page's frame, or the report).
+    const middle = document.elementFromPoint((composerBox.left + composerBox.right) / 2, composerBox.top + 12);
+    require(middle && composer.contains(middle), `a press on the composer is the composer's: ${middle?.className || middle?.tagName}`);
+    const under = document.elementFromPoint((composerBox.left + composerBox.right) / 2, (composerBox.bottom + dockBox.bottom) / 2);
+    require(under && area.contains(under) && !dock.contains(under), `under the composer a press is the page's: ${under?.className || under?.tagName}`);
+    if (composerBox.left - areaBox.left >= 16) {
+      const beside = document.elementFromPoint((areaBox.left + composerBox.left) / 2, (composerBox.top + composerBox.bottom) / 2);
+      require(beside && area.contains(beside) && !dock.contains(beside), `beside the composer a press is the page's: ${beside?.className || beside?.tagName}`);
+    }
+    return { check: name, end: Math.round(end), floor: Math.round(floor), gap: Math.round(floor - end), scrolled: Math.round(area.scrollTop) };
   }
   // Escape goes back, and a draft in the composer is neither lost nor cleared by it.
   if (name === "page-inplace-escaped") {
@@ -6648,9 +6693,10 @@ export function checkRendered(name, context = {}) {
     // (its own style, page_style.py, keeps the lines readable inside it; the frame's own measures are `checkFrame`).
     const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe"), area = stage.querySelector(".pgv-page");
     require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
-    const pane = stage.parentElement.getBoundingClientRect(), box = frame.getBoundingClientRect(), dock = stage.querySelector(":scope > .ra-dock").getBoundingClientRect();
+    const pane = stage.parentElement.getBoundingClientRect(), box = frame.getBoundingClientRect();
     require(Math.abs(box.left - pane.left) <= 1 && Math.abs(box.right - pane.right) <= 1 && box.height > 300, `the page spans the full width of the view: ${Math.round(box.left)}-${Math.round(box.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
-    require(area.getBoundingClientRect().bottom <= dock.top + 1, "and ends where the composer begins");
+    // And runs under the composer to the window's foot (R-PAGE-11).
+    pageUnderComposer(stage, area);
     return { check: name, width: Math.round(box.width) };
   }
   if (name.startsWith("page-dashboard")) {
@@ -6841,8 +6887,7 @@ export function checkRendered(name, context = {}) {
     require(!memberShare || !visible(memberShare), "the member's share waits: one button in that place");
     require(getComputedStyle(scroller).visibility === "hidden", "the thread is out of sight under it");
     const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
-    require(composer && visible(composer), "the member's composer stays below the report");
-    require(view.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top + 1, "the report ends where the composer begins");
+    require(composer && visible(composer), "the member's composer stays over the report");
     // The report stands for the thread: its column starts and ends where the composer does, and so do its tools (R-UI-45,
     // the judge on the first Share run: the × ended past the composer at every width).
     const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect();
@@ -6851,7 +6896,10 @@ export function checkRendered(name, context = {}) {
     // R-PAGE-10: the report's background fills the whole view beside the sidebar to the window's edge; only its column keeps a readable width.
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible).getBoundingClientRect(), fill = page.getBoundingClientRect(), viewBox = view.getBoundingClientRect();
     require(Math.abs(fill.left - pane.left) <= 1 && Math.abs(fill.right - pane.right) <= 1 && Math.abs(viewBox.left - pane.left) <= 1 && Math.abs(viewBox.right - pane.right) <= 1, `the report fills the full width of the view: ${Math.round(fill.left)}-${Math.round(fill.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
-    require(Math.abs(fill.right - innerWidth) <= 1 && fill.bottom <= dock.getBoundingClientRect().top + 1 && !(fill.bottom > composer.getBoundingClientRect().top + 0.5), "to the window's right edge, and no part of it is under the composer");
+    require(Math.abs(fill.right - innerWidth) <= 1, "to the window's right edge");
+    // R-PAGE-11: the report runs under the composer to the window's foot, its background the view's, and the composer floats over it.
+    pageUnderComposer(stage, page);
+    require(Math.abs(viewBox.bottom - fill.bottom) <= 1, "the report's background reaches the window's foot with it");
     require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
     require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
     if (name === "page-report-open") {

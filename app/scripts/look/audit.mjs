@@ -73,6 +73,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // scrolls under it and fades there. What has scrolled under the row is covered on purpose; a control of the row itself is not.
     const row = top.closest?.('[data-window-drag]');
     if (row && !row.contains(element)) return null;
+    // R-PAGE-11: an open page runs under the composer, which floats over it at the window's foot; the page scrolls its last line clear
+    // above it. What has scrolled under the composer's row is covered on purpose, as under the top row; a control of the row itself is not.
+    const foot = top.closest?.('.ra-stage.is-page > .ra-dock');
+    if (foot && !foot.contains(element)) return null;
     const layer = fixedLayer(top);
     return layer && !layer.contains(element) ? null : top;
   };
