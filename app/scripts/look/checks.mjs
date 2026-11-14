@@ -1223,7 +1223,7 @@ export function checkRendered(name, context = {}) {
     const screen = name === 'desktop-boot-inline' ? document.querySelector('[data-card-desktop-screen], [data-card-screen]') : panel.querySelector('.desktop-screen');
     const wallpaper = screen.querySelector('.desktop-wallpaper');
     require(visible(wallpaper), 'the full wallpaper fills the screen');
-    require(getComputedStyle(wallpaper).objectPosition === '50% 100%', 'the slimes at the bottom stay in view');
+    require(getComputedStyle(wallpaper).objectPosition === '50% 50%', 'the picture is centred as the computer zooms it');
     require(getComputedStyle(wallpaper).opacity === '1' && getComputedStyle(screen.querySelector('.desktop-placeholder')).backgroundColor === 'rgba(0, 0, 0, 0)', 'nothing dims the picture');
     // No status pill, stage, face or progress: a getting-ready computer is the wallpaper alone, and its state stays in data.
     requireBareScreen(screen, 'the booting screen');
@@ -1234,7 +1234,7 @@ export function checkRendered(name, context = {}) {
     }
     const box = screen.getBoundingClientRect();
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
-    if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
+    if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.jpg`, 'the fixed fixture hour selects its expected picture');
     return {check:name};
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}

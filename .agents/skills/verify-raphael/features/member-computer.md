@@ -172,6 +172,50 @@ The new sentence has its translations in all fifteen interface languages (`_ui_w
 once-per-episode rule and the read-only, ask-before-delete behaviour are unchanged. The `computer-low-disk` scene's sample
 reply still shows the folder-listing sentence.
 
+## The default picture: light by day, dark by night (owner, 2026-11-14)
+
+R-UI-92 (rewritten), R-UI-95, R-COMP-PICTURE-01, R-COMP-3-04. The slime town of five periods is gone. The default
+picture of a computer and of every preview is one of two original abstract pictures drawn for Raphael (no characters):
+`day.jpg`, the light one, from 06:00 to 17:59 and `night.jpg`, the dark one, from 18:00 to 05:59. Both are 1495x1052
+JPEGs (quality 92, about 70 KB each), the screen's shape within half a percent, so the computer's zoom (xfdesktop
+`image-style` 5) and the preview's `object-fit: cover; object-position: center` fill a 1280x900 screen and cut off at
+most a pixel.
+
+One clock. The computer's watcher (`wallpaper.py --watch`, every 30 s) reads the computer's own clock, and the computer
+runs with `TZ` set to the owner's zone: the zone the window sends with `members.viewing` (its `Intl` zone), which
+`HomeOverview.note_timezone` keeps and `vm.refresh_timezone` / `_reconcile_timezone` give the container. The preview
+(`defaultWallpaper` in `desktop-viewer.ts`) reads the window's own clock, whose zone is that same `Intl` zone. The
+picture is part of the draw signature, so an open panel turns at 18:00 on its next poll without being opened again.
+Until the window has said a zone the core's computers run in UTC (`timezone_name(None)`); it says one as soon as a
+conversation is open.
+
+Where the files are. `core/src/raphael_core/computer/wallpaper/` holds `wallpaper.py` and `wallpapers/day.jpg` and
+`wallpapers/night.jpg`. `LocalVm._wallpaper` copies the script and the folder into `/opt/raphael-desktop/` at every start
+(each copy within 2 s, all of it within 5 s), so a new picture needs no image layer; `app/public/wallpapers/` holds the
+same bytes for the preview and the look transport, and PyInstaller collects `wallpaper/**/*`. The folder is outside
+`image/` on purpose. Every file the image's build copies is part of its cache key: a change to `image/desktop/` would make
+a PC that built layer 11 (or 12, whose step says `desktop/` stays byte for byte) download Chrome and every package again.
+So `image/desktop/wallpaper.py` and its five SVGs stay as layer 11 built them and nothing reads them (the core writes the
+new script over the image's copy at every start); they can go when a layer rebuilds from the base anyway. And `image/**`
+is `text eol=lf` in `.gitattributes`, which would rewrite a JPEG's bytes.
+
+The owner's own picture (`computer-wallpaper.jpg`, R-UI-95) is untouched and still wins at every hour.
+
+Tests: `core/tests/computer/test_wallpaper.py` runs the watcher's own pass with its clock stopped at 05:59, 06:00, 17:59
+and 18:00, checks every hour, the two JPEGs' shape, that the preview's bytes are the same, and that the folder is outside
+`image/`; `test_vm.py::test_start_installs_the_decorative_wallpaper_once_per_start_and_target` checks that the copy carries
+both pictures; `desktop-viewer.test.ts` checks the same four minutes on the panel (Asia/Taipei, as `vitest.config.ts`
+sets) and an open panel turning at 18:00. `npm run verify -- --computer` reads `last-image` for `day.jpg` or `night.jpg`
+once its own picture is put aside (measured colours across the middle at 1280x900: 95 by day, 28 by night; it asks 12).
+
+```powershell
+npm run look -- desktop-wallpaper-day desktop-wallpaper-night desktop-viewer desktop-viewer-night desktop-starting desktop-boot-inline desktop-boot-card desktop-own-wallpaper desktop-own-wallpaper-card panel-off --theme both --width 1120,720,1920x1080
+```
+
+`desktop-wallpaper-day` and `-night` fix 06:00 and 18:00, the first minute of each, and check the source and the
+centred zoom; `desktop-viewer-night` opens the larger view at 22:00 over the synthetic stream, which draws the same
+picture. Offline look evidence does not prove the picture in a real computer.
+
 ## One foot under the larger view's screen (owner, 2026-11-13)
 
 R-PANEL-08. The owner's picture after a failed demonstration: the red line began at the window's edge
@@ -249,7 +293,7 @@ start of a running computer. A start confirmed within the last 45 seconds is ans
 from memory and looks at nothing, the picture included (R-COMP-PERF-01). With the loader
 installed the desktop's own default drawing renders too, so "many colours" alone does
 not prove the town: the acceptance also reads `last-image` and requires one of the five
-town files.
+town files (`day.jpg` or `night.jpg` since 2026-11-14, the default picture section).
 
 The keys. `xfconf-query -c xfce4-keyboard-shortcuts -l -v` on layer 5 listed every XFCE
 default under `/xfwm4/custom` and `/commands/custom`, with four workspaces. The session
@@ -1047,6 +1091,7 @@ in this offline-only brief, with no UI consistency comparison implied.
 
 ## Slime town and computer preparation (2026-11-03)
 
+The town was replaced on 2026-11-14 by two pictures (the default picture section); what follows on preparation holds.
 R-UI-92/93/94 replace the monochrome artwork and preparation stage-list assertions
 only. The existing hour boundaries, five filenames, XFCE watcher, start/repair
 controls, leases and single carried iframe remain authoritative. The approved
@@ -1056,7 +1101,7 @@ asset folders through wallpaper.py --generate. The byte ceiling is 20,000, with
 the largest current SVG approximately 15,000 bytes. No embedded/external images,
 text, scripts, CSS or modern SVG features are shipped.
 
-Preparation keeps the running preview's aspect ratio and bottom-aligned picture.
+Preparation keeps the running preview's aspect ratio and its picture (centred since 2026-11-14).
 The member's shared face has local working motion at 64px (96px expanded), with
 Raphael's emblem retained. The frame-token translucent pill holds only the
 current localized stage, a real percent when supplied and the first-build line
@@ -1086,10 +1131,10 @@ animation, and samples the actual CSS fade at 0/120/240ms under normal motion.
 Selected matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-day desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
-Compare the full-size preparation and town-period images and the preview/emblem
+Compare the full-size preparation and day and night images and the preview/emblem
 with the shared member-header face. Offline look evidence does not prove the
 XFCE loader or guest timezone.
 
@@ -1113,9 +1158,9 @@ the owned stream, releases its current nonce once and retains the conversation
 position. Refreshes with unchanged data preserve nodes, animation, focus, menus
 and scroll (R-UI-71); action menus use ui.ts dismissal/anchor behavior (R-UI-73).
 
-The original generated monochrome wallpapers are shared by the guest, off preview
-and fixture RFB transport. wallpaper.py proves each hour's selection and generated
-asset bytes. Since layer 6 the 30-second timer is the one watcher the core starts when
+The default pictures (two since 2026-11-14, R-UI-92) are shared by the guest, off preview
+and fixture RFB transport. The wallpaper tests prove each hour's selection and that the
+guest and the preview carry the same bytes. Since layer 6 the 30-second timer is the one watcher the core starts when
 the computer is ready (`LocalVm._wallpaper`), under the existing guest TZ; the session's
 `prepare-desktop` starts none (R-COMP-PICTURE-01).
 Unchanged workspaces get no writes; late monitors are initialized on the next tick.

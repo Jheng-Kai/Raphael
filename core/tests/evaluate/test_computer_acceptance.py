@@ -534,17 +534,18 @@ async def test_computer_block_prints_duration_including_stop_even_when_start_fai
     assert float(lines[-1].split(": ")[1].removesuffix(" s")) >= 0
 
 
-def test_the_desktop_picture_verdict_tells_the_picture_the_town_and_a_flat_colour_apart():
+def test_the_desktop_picture_verdict_tells_the_owner_picture_the_default_and_a_flat_colour_apart():
     teal, orange, navy = acceptance.TEAL, acceptance.ORANGE, bytes((47, 33, 21))
     picture = [teal] * 640 + [orange] * 640
     flat = [navy] * 1280
-    town = [bytes((value % 256, 40, 90)) for value in range(0, 1280 * 3, 3)]
+    # The night picture across the middle: a soft dark gradient, a few dozen colours along a row.
+    default = [bytes((18 + value // 64, 18 + value // 64, 24 + value // 64)) for value in range(1280)]
     # The owner's picture: shown only when both halves are its colours.
     assert acceptance.desktop_shows(picture, picture * 2, True)[0]
     assert not acceptance.desktop_shows(flat, flat * 2, True)[0]
-    assert not acceptance.desktop_shows(town, town * 2, True)[0]
-    # No picture: the town is many colours; the flat colour layer 5 showed is not a town, nor is a picture left up.
-    assert acceptance.desktop_shows(town, town * 2, False)[0]
+    assert not acceptance.desktop_shows(default, default * 2, True)[0]
+    # No picture: the default is many colours; the flat colour layer 5 showed is not it, nor is a picture left up.
+    assert acceptance.desktop_shows(default, default * 2, False)[0]
     assert not acceptance.desktop_shows(flat, flat * 2, False) [0]
     assert not acceptance.desktop_shows(picture, picture * 2, False)[0]
     assert acceptance.desktop_shows(flat, flat * 2, False)[1] == (0.0, 0.0, 1)
@@ -629,7 +630,11 @@ async def test_owner_guard_accepts_product_exec_and_exact_recovery_filter(tmp_pa
     runner.containers[target.name] = raw_container(target.name, machine.owner)
     await guard(vm.exec_args(target, ["test", "-f", vm.SCREENS_READY]))
     await guard(vm.exec_args(target, ["true"], detached=True))
-    await guard(["cp", str(acceptance.IMAGE_FOLDER / "desktop/wallpaper.py"), target.name + ":/opt/raphael-desktop/wallpaper.py"])
+    await guard(["cp", str(vm.WALLPAPER_FOLDER / "wallpaper.py"), target.name + ":/opt/raphael-desktop/wallpaper.py"])
+    await guard(["cp", str(vm.WALLPAPER_FOLDER / "wallpapers"), target.name + ":/opt/raphael-desktop/"])
+    # What the image's build folder holds is never the product's copy (image/desktop/ stays as the last layer built it).
+    with pytest.raises(AssertionError, match="Expected product wallpaper copy only"):
+        await guard(["cp", str(acceptance.IMAGE_FOLDER / "desktop/wallpaper.py"), target.name + ":/opt/raphael-desktop/wallpaper.py"])
     await guard(["ps", "-a", "--filter", f"label={guard.label}", "--format", "{{.Names}}"])
     for command in ("stop", "start", "restart", "rm"):
         await guard([command, *( ["--time", "10"] if command == "restart" else []), target.name])

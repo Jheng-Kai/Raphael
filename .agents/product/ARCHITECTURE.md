@@ -718,7 +718,12 @@ found the computer ready, ends any `wallpaper.py --watch` and starts its own, wi
 owner's JPEG when there is one; the session's `prepare-desktop` no longer starts a
 watcher, and the image carries `librsvg2-common` so the town's SVG is drawn (its build
 checks for the loader). What was started is remembered per computer together with the
-picture's time and size, and forgotten when the computer stops or is restarted. The
+picture's time and size, and forgotten when the computer stops or is restarted.
+Since 2026-11-14 (R-UI-92) the default picture is two JPEGs, `day.jpg` and `night.jpg`, and
+the watcher that chooses between them by the hour comes with them from
+`core/src/raphael_core/computer/wallpaper/`, outside the image's build context: what the build
+copies (`image/desktop/` with the town's files) stays as layer 11 built it, so a PC that built
+that layer downloads nothing again for a new picture. The
 helper `screens.py`, for any number of screens and before the ready mark, sets one
 workspace and unbinds the keys that act on the whole desktop (and, with more than one
 screen, those that reach every screen or start a program), after waiting for the session
