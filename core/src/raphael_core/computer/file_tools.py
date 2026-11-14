@@ -1,4 +1,4 @@
-"""A member's file tools on its own computer, as Claude Code's Edit, Write, Glob and Grep.
+"""A member's file tools on its own computer, as Claude Code's Read, Edit, Write, Glob and Grep.
 
 Owner, 2026-11-14: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member changed its files
 through `vm_exec` (`sed`, heredocs): nothing checked that the text it replaced was the text it had read, and a whole
@@ -14,10 +14,18 @@ import base64
 import hashlib
 import posixpath
 import re
+from contextvars import ContextVar
 from collections import OrderedDict
 
 from ..agent.plugins import PluginResult
+from ..services.attachments import Attachment, sniff_ok
+from ..services.file_reader import decoded as decoded_text
+from ..services.lines import read_lines
 from .vm import GUEST, VmError, exec_args
+
+# How the model of the call that reads an image takes it: (whether it reads images itself, what describes them when it
+# does not: the owner's vision service). Unset, a picture goes to the model as a computer's screenshot does.
+SEE = ContextVar("computer_file_images", default=None)
 
 # The largest file edit_file changes in place: its text travels to the core and back.
 MAX_EDIT_BYTES = 10 * 1024 * 1024
@@ -25,6 +33,13 @@ MAX_EDIT_BYTES = 10 * 1024 * 1024
 QUOTE_CHARS = 400
 # How many runs (turns and tasks) keep what they read: a run that ended long ago has nothing to edit.
 KEPT_RUNS = 64
+# What read_file takes from the computer in one read: the text from the line asked for on (the rest of the file is
+# only counted), or a whole picture or PDF. A picture is held to what every model's API takes.
+READ_BYTES = 2 * 1024 * 1024
+IMAGE_BYTES = 5 * 1024 * 1024
+PDF_BYTES = 20 * 1024 * 1024
+PDF_PAGES = 20
+IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 # Glob's and Grep's bounds, as Claude Code's: 100 files a glob, 250 entries a search page unless head_limit says.
 GLOB_LIMIT = 100
 HEAD_LIMIT = 250
@@ -35,6 +50,18 @@ SEARCH_SECONDS = 55
 # and git's own. Given after the member's glob, so they win (ripgrep lets the later glob decide).
 SKIPPED = (".git", ".browser-profiles", ".raphael-checkpoints", ".raphael-jobs")
 
+READ_FILE = {
+    "description": "Read a file in your computer, as Claude Code's Read: path absolute or relative to /home/cua/workspace. "
+                   "Text comes as numbered lines (cat -n: the number and a tab are not part of the line), 2000 from offset "
+                   "(a line, from 1) unless limit says fewer; a line over 2000 characters is cut, and when there is more "
+                   "the result says the offset to go on from. A picture comes back as an image; a PDF as the text of its "
+                   "pages (pages, e.g. \"1-5\", at most 20 a call). Read a file before you edit_file or write_file it.",
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "offset": {"type": "integer", "minimum": 1},
+        "limit": {"type": "integer", "minimum": 1},
+        "pages": {"type": "string", "pattern": "^[0-9]{1,5}(-[0-9]{1,5})?$"}},
+        "required": ["path"], "additionalProperties": False}}
 WRITE_FILE = {
     "description": "Write a whole file in your computer, as Claude Code's Write: path absolute or relative to "
                    "/home/cua/workspace; missing folders are made. A file that exists must have been read with read_file "
@@ -58,9 +85,9 @@ EDIT_FILE = {
 
 GLOB = {
     "description": "Find files in your computer by name, as Claude Code's Glob: pattern is a glob such as **/*.py or "
-                   "src/**/*.{ts,tsx} (gitignore style: one without / matches at any depth), under path (a folder, "
-                   "absolute or relative to /home/cua/workspace; the workspace by default). Newest first, 100 at most. "
-                   "Hidden files are listed; .gitignore'd files and " + ", ".join(SKIPPED) + " are skipped.",
+                   "src/**/*.{ts,tsx} (gitignore style: one without / matches at any depth), under path (a folder; the "
+                   "workspace by default). Newest first, 100 at most. Lists hidden files; skips .gitignore'd ones, .git "
+                   "and the computer's own .browser-profiles and .raphael-* folders.",
     "parameters": {"type": "object", "properties": {
         "pattern": {"type": "string", "minLength": 1, "maxLength": 1000},
         "path": {"type": "string", "minLength": 1, "maxLength": 4096}},
@@ -72,8 +99,7 @@ GREP = {
                    "or type (e.g. py) picks files; -i ignores case; multiline lets . match newlines. output_mode: "
                    "files_with_matches (default: paths, newest first), content (matching lines; -n line numbers, on by "
                    "default; -A, -B, -C or context lines around them) or count. head_limit (default 250, 0 for all) and "
-                   "offset page the results. Searches hidden files; skips .gitignore'd ones and " + ", ".join(SKIPPED) +
-                   ". Use it rather than grep or rg in vm_exec.",
+                   "offset page the results. Skips what glob skips. Use it rather than grep or rg in vm_exec.",
     "parameters": {"type": "object", "properties": {
         "pattern": {"type": "string", "minLength": 1, "maxLength": 4000},
         "path": {"type": "string", "minLength": 1, "maxLength": 4096},
@@ -86,8 +112,8 @@ GREP = {
         "head_limit": {"type": "integer", "minimum": 0}, "offset": {"type": "integer", "minimum": 0}},
         "required": ["pattern"], "additionalProperties": False}}
 
-DEFINITIONS = {"write_file": WRITE_FILE, "edit_file": EDIT_FILE, "glob": GLOB, "grep": GREP}
-FILE_READS = frozenset({"glob", "grep"})
+DEFINITIONS = {"read_file": READ_FILE, "write_file": WRITE_FILE, "edit_file": EDIT_FILE, "glob": GLOB, "grep": GREP}
+FILE_READS = frozenset({"read_file", "glob", "grep"})
 FILE_WRITES = frozenset({"write_file", "edit_file"})
 FILE_TOOLS = FILE_READS | FILE_WRITES
 
@@ -105,6 +131,8 @@ EXISTS = "Cannot create new file - file already exists."
 NOT_TEXT = ("This file is not text in UTF-8 or UTF-16, so edit_file cannot change it in place. Use vm_exec with a "
             "program that understands its format.")
 TOO_LARGE = "This file is {size:,} bytes; edit_file changes files of at most 10 MiB. Use vm_exec for a larger one."
+BINARY = ("This file is not text, a picture or a PDF ({size:,} bytes), so read_file cannot show it. Use vm_exec with a "
+          "program that understands its format.")
 NOT_A_FILE = {"directory": "This path is a folder, not a file.",
               "link": "This path is a link. Use the path it points to.",
               "other": "This path is not a regular file."}
@@ -222,9 +250,110 @@ class Files:
     def __init__(self, vm, target, reads, run, checkpoint):
         self.vm, self.target, self.reads, self.run, self.checkpoint = vm, target, reads, run, checkpoint
 
-    async def look(self, path, limit=0):
-        return await self.vm.file_request(self.target, {"action": "read", "path": path, "limit": limit},
+    async def look(self, path, limit=0, line=1):
+        return await self.vm.file_request(self.target, {"action": "read", "path": path, "limit": limit, "line": line},
                                           answer_bytes=limit)
+
+    def _missing(self, answer):
+        near = answer.get("near") or []
+        return PluginResult(False, "file_missing", MISSING + (f" Names near it: {', '.join(near)}." if near else ""))
+
+    async def read_file(self, arguments):
+        """Claude Code's Read on a file of the computer. A read of a file, whole or a part, is what lets this run change
+        it (`edit_file`, `write_file`): what it saw is the file's sha256."""
+        path = guest_path(arguments["path"])
+        extension = posixpath.splitext(path)[1].lower()
+        whole = IMAGE_BYTES if extension in IMAGES else PDF_BYTES if extension == ".pdf" else 0
+        offset = arguments.get("offset", 1)
+        answer = await self.look(path, whole or READ_BYTES, 1 if whole else offset)
+        if "error" in answer:
+            return _guest_failure(answer)
+        if not answer["exists"]:
+            return self._missing(answer)
+        if answer["kind"] == "directory":
+            names = answer.get("names") or []
+            return PluginResult(False, "not_a_file", "This path is a folder, not a file. Use glob to list it" +
+                                (f"; its first names: {', '.join(names)}." if names else "."))
+        if answer["kind"] != "file":
+            return PluginResult(False, "not_a_file", NOT_A_FILE.get(answer["kind"], NOT_A_FILE["other"]))
+        data = base64.b64decode(answer["data"], validate=True)
+        mime = IMAGES.get(extension)
+        if mime is None and answer.get("start_line", 1) == 1:
+            mime = next((kind for kind in dict.fromkeys(IMAGES.values()) if sniff_ok(kind, data)), None)
+            if (mime or data.startswith(b"%PDF-")) and answer.get("cut"):
+                # A picture or a PDF with a name that did not say so: it is read whole, not from a line on.
+                answer = await self.look(path, IMAGE_BYTES if mime else PDF_BYTES)
+                if "error" in answer or answer.get("kind") != "file":
+                    return PluginResult(False, "file_unavailable", "The file changed while it was read. Read it again.")
+                data = base64.b64decode(answer["data"], validate=True)
+        if mime and sniff_ok(mime, data):
+            result = await self._picture(path, mime, data, answer)
+        elif extension == ".pdf" or data.startswith(b"%PDF-"):
+            result = await self._pdf(path, data, answer, arguments.get("pages"))
+        else:
+            result = self._text(data, answer, offset, arguments.get("limit"))
+        if result.ok:
+            self.reads.saw(self.run, path, answer["sha256"])
+        return result
+
+    def _text(self, data, answer, offset, limit):
+        cut = answer.get("cut", False)
+        if cut and b"\n" in data:
+            data = data[:data.rindex(b"\n") + 1]  # the last line whole, or not at all
+        found = decoded_text(data, partial=cut)
+        if found is None:
+            return PluginResult(False, "not_text", BINARY.format(size=answer["size"]))
+        lines = read_lines(found[0], offset=offset, limit=limit, first=answer.get("start_line") or offset,
+                           total=answer.get("total_lines"), partial=cut)
+        body = lines["text"]
+        if lines.get("note"):
+            body = (body + "\n" if body else "") + lines["note"]
+        return PluginResult(True, text=body)
+
+    async def _picture(self, path, mime, data, answer):
+        if answer["size"] > IMAGE_BYTES:
+            return PluginResult(False, "too_large", f"This picture is {answer['size']:,} bytes; read_file shows pictures of "
+                                                    "at most 5 MiB. Make a smaller copy with vm_exec and read that.")
+        words = f"Picture {path} ({mime}, {answer['size']:,} bytes)."
+        see = SEE.get()
+        if see is not None and not see[0]():
+            # A model that does not read images is told what the owner's vision service sees in it.
+            ok, text, kind = await see[1]([Attachment(posixpath.basename(path), mime, data)])
+            if not ok:
+                return PluginResult(False, kind or "vision_unavailable",
+                                    words + " Your model does not read pictures, and the picture reader could not read it.")
+            return PluginResult(True, text=f"{words} What the picture reader sees in it:\n{text}")
+        return PluginResult(True, text=words + " It is attached as an image.",
+                            blocks=[{"type": "image", "data": base64.b64encode(data).decode(), "mimeType": mime}])
+
+    async def _pdf(self, path, data, answer, pages):
+        import asyncio
+        from ..services.common import ServiceError
+        from ..services.pdf import page_texts
+        if answer["size"] > PDF_BYTES:
+            return PluginResult(False, "too_large", f"This PDF is {answer['size']:,} bytes; read_file reads PDFs of at most "
+                                                    "20 MiB. Use vm_exec (pdftotext, python3) for a larger one.")
+        try:
+            count, texts, unread = await asyncio.to_thread(page_texts, data)
+        except ServiceError as error:
+            words = {"encrypted": "This PDF is locked with a password."}.get(error.kind, "This PDF could not be read.")
+            return PluginResult(False, "bad_pdf" if error.kind != "encrypted" else "encrypted", words)
+        first, _, last = (pages or "1").partition("-")
+        first = max(1, int(first))
+        last = int(last) if last else (first if pages else max(1, min(count, PDF_PAGES)))
+        if last < first or last - first + 1 > PDF_PAGES:
+            return PluginResult(False, "bad_arguments", f"Give pages as a range of at most {PDF_PAGES}, such as \"1-20\".")
+        chosen = [(number, text) for number, text in texts if first <= number <= last]
+        parts = [f"[Page {number}]\n{text}" for number, text in chosen]
+        missing = [number for number in unread if first <= number <= last]
+        if missing:
+            parts.append(f"[Pages with no text layer (scans) in this range: {', '.join(map(str, missing))}.]")
+        if not parts:
+            parts.append(f"[The PDF has {count} pages; there is no page {first}.]" if first > count else "[No text in these pages.]")
+        if last < count:
+            parts.append(f"[Pages {first}-{last} of {count} are shown. Read on with read_file (pages \"{last + 1}-"
+                         f"{min(count, last + PDF_PAGES)}\").]")
+        return PluginResult(True, text=f"PDF {path}, {count} pages.\n" + "\n\n".join(parts))
 
     def current(self, path, answer):
         """Refused unless this run read the file as it is now."""
@@ -277,8 +406,7 @@ class Files:
                 return _guest_failure(answer)
             if not answer["exists"]:
                 if old:
-                    near = answer.get("near") or []
-                    return PluginResult(False, "file_missing", MISSING + (f" Names near it: {', '.join(near)}." if near else ""))
+                    return self._missing(answer)
                 # Claude Code's Edit makes a new file from an empty old_string.
                 written, failed = await self.put(path, new.encode("utf-8"), "absent")
                 return _guest_failure(failed) if failed else PluginResult(True, text=f"File created successfully at: {path}")
@@ -459,6 +587,8 @@ async def call(vm, target, name, arguments, reads, run, checkpoint):
     if name == "grep":
         return await grep_files(vm, target, arguments)
     files = Files(vm, target, reads, run, checkpoint)
+    if name == "read_file":
+        return await files.read_file(arguments)
     if name == "write_file":
         return await files.write_file(arguments)
     if name == "edit_file":

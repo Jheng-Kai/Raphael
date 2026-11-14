@@ -116,9 +116,41 @@ def digest_of(folder, name, limit):
     return digest.hexdigest(), bytes(head)
 
 
+def scan(folder, name, limit, line):
+    """One pass over a file: its sha256 and how many lines it has, and up to `limit` of its bytes from the start of line
+    `line` on (`cut` when there were more). A file in UTF-16 is given from its start, its lines uncounted: a line end is
+    two bytes there."""
+    fd = folder.open(name, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    digest, head, newlines, last, seen, cut, wide = hashlib.sha256(), bytearray(), 0, b"", 1, False, None
+    with os.fdopen(fd, "rb") as stream:
+        while chunk := stream.read(CHUNK):
+            if wide is None:
+                wide = chunk.startswith((b"\xff\xfe", b"\xfe\xff"))
+                line = 1 if wide else line
+            digest.update(chunk)
+            start, position = 0, -1
+            while seen < line:
+                position = chunk.find(b"\n", position + 1)
+                if position < 0:
+                    start = len(chunk)
+                    break
+                seen += 1
+                start = position + 1
+            if seen >= line:
+                piece = chunk[start:]
+                room = max(0, limit - len(head))
+                head.extend(piece[:room])
+                cut = cut or len(piece) > room
+            newlines += chunk.count(b"\n")
+            last = chunk[-1:]
+    return {"sha256": digest.hexdigest(), "data": base64.b64encode(head).decode(), "cut": cut,
+            "start_line": line if seen >= line else None,
+            "total_lines": None if wide else newlines + (1 if last and last != b"\n" else 0)}
+
+
 def read(request):
-    """What is at a path: a missing file says which names near it exist; a file gives its size, its sha256 and its
-    first `limit` bytes; a folder its first names."""
+    """What is at a path: a missing file says which names near it exist; a file gives its size, its sha256, its number
+    of lines and up to `limit` of its bytes from line `line` on; a folder its first names."""
     try:
         folder, name = locate(request["path"], request["roots"])
     except FileNotFoundError:
@@ -137,8 +169,7 @@ def read(request):
         if kind == "directory":
             answer["names"] = sorted(os.listdir(request["path"]))[:50]
         if kind == "file":
-            answer["sha256"], head = digest_of(folder, name, int(request.get("limit", 0)))
-            answer["data"] = base64.b64encode(head).decode()
+            answer.update(scan(folder, name, int(request.get("limit", 0)), max(1, int(request.get("line", 1)))))
         return answer
     finally:
         folder.close()

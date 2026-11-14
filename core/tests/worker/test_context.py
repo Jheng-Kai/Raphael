@@ -447,7 +447,8 @@ async def test_when_the_summary_call_fails_a_static_summary_keeps_the_work_and_t
     keeper.saw(total_tokens(messages), messages)
     await keeper.fit(messages)
     assert len(calls) == 1
-    assert "name=Alice" in messages[1]["content"] and "path=f200" in messages[1]["content"]
+    # A computer's read_file has a line of its own ("read f200"); any other tool shows its first arguments.
+    assert "name=Alice" in messages[1]["content"] and "read f200" in messages[1]["content"]
     # After the pause it is tried again, and the ladder climbs.
     now[0] += context_module.SUMMARY_PAUSES_S[0] + 1
     messages.extend(rounds(60, start=300))

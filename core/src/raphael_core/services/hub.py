@@ -211,6 +211,10 @@ class ServiceHub:
         # The sole registry is extended by its owner, not by this service layer.
         return self._text(key) if key in DEFAULTS else ""
 
+    def reads_images(self, model: str) -> bool | None:
+        """Whether `model` reads images, as OpenRouter's list says; None when the list does not know it."""
+        return self._sees(model)
+
     def _sees(self, model: str) -> bool | None:
         try:
             entries = None if self._models is None else self._models()

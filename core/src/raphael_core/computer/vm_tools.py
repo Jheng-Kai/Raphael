@@ -128,10 +128,12 @@ ENGINE_FAILURES = {
 
 
 @contextmanager
-def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, woke=None, language="en"):
+def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, woke=None, language="en", see=None):
     """`notice` is something the owner has to answer (the disk is nearly full), said as the member's own words; `woke` is
-    the quiet line that a start by the member's own tool leaves, which is nothing the member said."""
+    the quiet line that a start by the member's own tool leaves, which is nothing the member said. `see` is how a picture
+    read_file finds reaches the model: (whether it reads pictures, what describes one when it does not)."""
     token = _SCOPE.set(owner)
+    seeing = file_tools.SEE.set(see)
     turn = _TURN.set((turn_id, private, task))
     note = _NOTE.set((progress, language))
     public_notice = _NOTICE.set(notice)
@@ -144,6 +146,7 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
         _NOTE.reset(note)
         _NOTICE.reset(public_notice)
         _WOKE.reset(public_woke)
+        file_tools.SEE.reset(seeing)
 
 
 # A computer tool's description is shown to a model whole (PluginTool.whole) and says what the tool is for first.
@@ -173,7 +176,7 @@ RUN_STEPS = {"description": "Perform 1–10 short driver actions, then return on
             "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
         "required": ["steps", "observation"], "additionalProperties": False}}
 
-EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it. " + VM_CONTRACT,
+EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for programs, never to fetch a page in place of opening it in the browser. For files use read_file, grep, glob, edit_file and write_file, not cat, find, sed or heredocs. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it. " + VM_CONTRACT,
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
@@ -654,7 +657,9 @@ class VmTools:
                 result.text = self.logins.redact(identifier, result.text)
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
-        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or result.blocks:
+        # A picture read from a file is no picture of the screen: the private-page rules are about the screen.
+        screen_picture = bool(result.blocks) and not (key in self.tools and self.tools[key].name in FILE_TOOLS)
+        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or screen_picture:
             if picture_target != self.vm.target(member):
                 return PluginResult(False, "computer_changed")
             private_after = await self._private_picture(picture_target, arguments)

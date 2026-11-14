@@ -111,6 +111,14 @@ def _read(data: bytes) -> _Pages:
         raise ServiceError("bad_pdf") from None
 
 
+def page_texts(data: bytes) -> tuple[int, list[tuple[int, str]], list[int]]:
+    """The PDF `data` page by page, from its text layer only (pypdf, at no cost): the number of pages, (page, text) for
+    each page with text, and the pages without (scans). For a member's `read_file`; run it on a worker thread.
+    ServiceError "bad_pdf" or "encrypted"."""
+    found = _read(data)
+    return found.count, found.texts, sorted({*found.unread, *(number for number, _ in found.scans)})
+
+
 def page_count(data: bytes) -> int:
     """The number of pages of the PDF `data`; 0 when pypdf cannot say."""
     try:
