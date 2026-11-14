@@ -16,7 +16,7 @@ import * as api from "./api";
 import { t } from "./i18n";
 import {
   chooserSources, effortOf, effortSliderHTML, modelPickerHTML, modelPickerSelection, modelRefWith, moveEffortSlider, orderedEfforts, pickerModelsFor, buttonFaceHTML,
-  sourceMarkHTML, concreteModel, chooserPrice, splitEffort, usableFor, reasonText, fitFor, effortText, type ChooserSource, type ModelPickerLook,
+  sourceMarkHTML, concreteModel, chooserPrice, splitEffort, usableFor, reasonText, fitFor, effortText, refsOf, type ChooserSource, type ModelPickerLook,
 } from "./model-picker";
 import { knownCatalog, knownClis, rememberCatalog, rememberClis } from "./brain-lists";
 import { RAPHAEL_ID } from "./members";
@@ -100,7 +100,9 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   /** What the owner starred in Settings, in the order they did, of what can answer now. */
   function starred(): CatalogModel[] {
     const all = pickerModelsFor(look());
-    return favorites.flatMap(id => all.filter(row => row.id === id && usableFor(row, "answer")));
+    // A model starred under an alias (Claude Code's `opus`) is starred once, whatever the ref it was saved under.
+    const seen = new Set<string>();
+    return favorites.flatMap(id => all.filter(row => refsOf(row).includes(id) && usableFor(row, "answer"))).filter(row => !seen.has(row.id) && !!seen.add(row.id));
   }
 
   /** The rail: only what can answer now, since signing in and adding a source belong to Settings. */
