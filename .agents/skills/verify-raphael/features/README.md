@@ -260,7 +260,7 @@ the account menu's 行事曆 owns calendar navigation. Owner avatar upload reuse
 existing picker/crop component and presets; footer and owner messages share identity.
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
-sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-metrics, sidebar-search, sidebar-search-rail, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
+sidebar-unread, sidebar-drawer, sidebar-air, sidebar-air-foot, sidebar-rail-menu, sidebar-drag-row, sidebar-reorder-members, sidebar-reorder-across, sidebar-reorder-folder, sidebar-metrics, sidebar-search, sidebar-search-rail, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-upload, sidebar-owner-crop, sidebar-owner-crop-held, chat, details, profile, plugins-installed,
 the calendar scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --contract`, then the selected look matrix and inspect every
