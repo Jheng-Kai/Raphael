@@ -195,6 +195,11 @@ def turn_text(turn: Turn, *, detail: bool, untrusted: bool = False) -> str:
     if detail and longer and longer != said and not unfinished:
         cut = longer if len(longer) <= DETAIL_CHARS else longer[:DETAIL_CHARS].rstrip() + "…"
         lines += "\n" + labelled_lines(f"{speaker} (detail)", cut)
+    for exchange in turn.colleague_answers:
+        answer = (exchange.detail or exchange.text or exchange.prefix).strip()
+        if answer:
+            cut = answer if len(answer) <= 600 else answer[:600].rstrip() + "…"
+            lines += "\n" + labelled_lines("Other member's answer", cut)
     from ..agent.reactions import reaction_context
     from ..agent.card_context import outcomes_text, source_text
     return source_text(turn.source) + lines + reaction_context(turn.reactions) + outcomes_text(turn.card_outcomes)
@@ -402,7 +407,7 @@ class Conversation:
 
     def _read(self) -> list[Turn]:
         """Every turn of the thread, oldest first, whatever its status."""
-        return self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id())
+        return self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id(), exchanges=True)
 
     def _worked(self, turns: list[Turn]) -> list[Turn]:
         """`turns`, each one that did not finish told what it already did (only the turns that are

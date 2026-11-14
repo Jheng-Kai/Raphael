@@ -334,7 +334,7 @@ class RpcDriver:
             async def team_state():
                 roster = await self.app.call("members.list", {})
                 for member in roster["members"]:
-                    for field in ("waiting", "unread", "unread_from", "preview", "last_at", "activity", "activity_label"):
+                    for field in ("waiting", "unread", "unread_from", "unread_kind", "preview", "last_at", "activity", "activity_label"):
                         member.pop(field, None)
                 return roster
 
@@ -831,10 +831,12 @@ class RpcDriver:
             reasons.append('source_event_missing')
         elif not any(event['state'] == 'done' and event['work_turn_id'] in {row['id'] for row in answered} for event in events):
             reasons.append('task_link_missing')
-        # A question between members is the asker's record: the asked member's page stays clean.
+        # The receiver keeps its own exchange row, scoped to the member it belongs to.
         theirs = (await self.app.call('agent.history.list', {'member_id': marketing}))['turns']
-        if any(turn['scope'] == 'exchange' and turn['peer_id'] == mail for turn in theirs):
-            reasons.append('question_on_both_sides')
+        received = [turn for turn in theirs if turn['scope'] == 'exchange' and turn['peer_id'] == mail]
+        if not any('新品代號' in turn['question'] and code in (turn['text'] or '') + (turn.get('detail') or '')
+                   for turn in received):
+            reasons.append('received_exchange_missing')
         return reasons, {**result, 'viewer': mail}
 
     async def memory_scenario(self):

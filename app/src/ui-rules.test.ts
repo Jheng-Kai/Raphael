@@ -34,7 +34,7 @@ const i18nFiles = mainFiles.filter((f) => f.includes(`${sep}i18n${sep}`) && !f.e
 test("every button and every menu row takes its height from the shared controls, never a number of its own", () => {
   // Rows and tiles built from a button (a list row, a card, a day of the calendar, an emoji) and the round edge controls
   // keep their own sizes. Frozen: it may shrink, never grow.
-  const TILES = /\.(?:conversation-latest|peer-latest|peer-close|draft-av-btn|attachment-file|reaction|au-day-num|cal-more|gr|cs-open|cs-main|conversation-trigger|ho-event|ho-stat|lib-row|ms-open|tpr-row|mb-fold-head|mb-panel-row|mb-chat-choice|mb-rt|mb-computer-row|question-choices|question-answer-line|mc-source|ghost|owner-photo|pv-create|mb-tool|mb-more|mb-avbtn|sidebar-toggle|cmp-pair|cmp-attach|ra-tool|au-members|au-month-grid|ob-foot|room-row)\b|::(?:before|after)/;
+  const TILES = /\.(?:conversation-latest|peer-latest|peer-close|draft-av-btn|attachment-file|reaction|au-day-num|cal-more|gr|cs-open|cs-main|conversation-trigger|ho-event|ho-stat|lib-row|ms-open|tpr-row|mb-fold-head|mb-panel-row|mb-chat-choice|mb-rt|question-choices|question-answer-line|mc-source|ghost|owner-photo|pv-create|mb-tool|mb-more|mb-avbtn|sidebar-toggle|cmp-pair|cmp-attach|ra-tool|au-members|au-month-grid|ob-foot|room-row)\b|::(?:before|after)/;
   // The guide's `.ob-foot` keeps its own wide pills.
   const bad: string[] = [];
   for (const file of mainFiles.filter((f) => f.endsWith(".css"))) {

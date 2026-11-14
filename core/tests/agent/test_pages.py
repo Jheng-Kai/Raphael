@@ -6,6 +6,7 @@ Only in-process MCP fixtures and a loopback test listener are used. No provider 
 import asyncio
 import json
 import re
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
@@ -13,7 +14,7 @@ from mcp.server.mcpserver import MCPServer
 
 from raphael_core.agent.harness_tools import definitions_for, tool
 from raphael_core.agent.history import AgentHistory
-from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains
+from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains, page_csp, page_file
 from raphael_core.agent.permissions import PermissionCards
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.report_page import FILE_POLICY, file_name
@@ -179,6 +180,57 @@ async def test_host_headers_tokens_host_validation_theme_and_deleted_pages(conn)
         assert (await fetch(url)).startswith("HTTP/1.1 404")
     finally:
         await host.aclose()
+
+
+def test_a_page_the_member_writes_gets_the_apps_base_style_under_its_own_rules(conn):
+    """R-PAGE-06: the pages came out uneven because the app gave a page only its colours. Its base style comes first and
+    speaks at the lowest specificity, so a rule the page writes for the same thing wins; a plugin's page is left alone."""
+    from raphael_core.agent.page_style import BASE
+    from raphael_core.agent.pages import document
+    page = stored(conn, html="<style>h1{font-size:20px}</style><h1>Mine</h1>")
+    written = document(page, "dark")
+    assert BASE in written and written.index(BASE) < written.index("<h1>Mine</h1>")
+    # The page's own style is after the base, and the theme's words are before it: the base reads them.
+    assert written.index("--bg:#0a0a0a") < written.index(BASE) < written.index("<style>h1{font-size:20px}")
+    assert BASE not in document({**page, "source": "mcp"}, "dark")
+
+
+def test_the_base_style_is_all_low_specificity_theme_words_and_loads_nothing():
+    from raphael_core.agent.page_style import BASE
+    from raphael_core.agent.pages import FONT, THEME
+    # Every selector stands in :where() (a pseudo-element follows it), so no rule of the base outranks a page's own.
+    rules = re.sub(r"@(?:media|supports)[^{]*\{", "", BASE)
+    def top_level(text):
+        depth, part = 0, ""
+        for char in text:
+            depth += (char == "(") - (char == ")")
+            if char == "," and not depth:
+                yield part
+                part = ""
+            else:
+                part += char
+        yield part
+    selectors = [part for chunk in rules.split("}") if "{" in chunk for part in top_level(chunk.split("{")[0])]
+    assert selectors and all(part.strip().startswith(":where(") for part in selectors), [p for p in selectors if not p.strip().startswith(":where(")]
+    # It speaks in the theme's words, the face and its own tone; nothing else is read by name.
+    words = set(THEME["light"]) | {"font", "tone", "pg-max", "pg-gutter"}
+    assert set(re.findall(r"var\(--([\w-]+)", BASE)) <= words
+    assert THEME["light"].keys() == THEME["dark"].keys() and FONT
+    # The page's policy loads nothing it names: no address, no import, no picture, no font file.
+    assert not re.search(r"url\(|@import|@font-face|https?:|//", BASE, re.I)
+    # The measures the owner named (his Grok Bot picture): a 32 px title, a table with hairlines, right-aligned figures.
+    assert ":where(h1){margin-top:0;font-size:32px" in BASE and "line-height:1.6" in BASE
+    assert ":where(.num){text-align:end" in BASE and "overflow-x:auto" in BASE
+
+
+def test_the_classes_the_tool_names_are_in_the_base_style():
+    from raphael_core.agent.harness_tools import DEFINITIONS, SHOW_PAGE
+    from raphael_core.agent.page_style import BASE
+    told = re.search(r"styled by the app \(([^)]*)\)", DEFINITIONS[SHOW_PAGE]["description"])[1]
+    classes = re.findall(r"\.([a-z]+)", told)
+    assert set(classes) == {"callout", "info", "warn", "ok", "toc", "chips", "cards", "kpis", "num"}
+    for name in classes:
+        assert f".{name}" in BASE, name
 
 
 async def test_restart_preserves_page_and_rotates_token(tmp_path):
@@ -570,6 +622,80 @@ def test_a_chart_or_tiles_that_break_the_format_are_refused_with_what_to_fix(rep
     assert words in str(refused.value)
 
 
+# The owner's Tokyo list on Grok Bot (2026-11-14): a summary line, a note with an icon, a dropdown over a table whose last column is links.
+DOCUMENT = {"summary": "46 spots, 39 restaurants: pick with the filters.", "sections": [
+    {"kind": "callout", "tone": "info", "heading": "Note", "text": "Staying in Otsuka. Prices are only what the sources give."},
+    {"kind": "table", "title": "Spots", "filter": "Area", "columns": ["Name", "Area", "Price", "Link"],
+     "rows": [{"cells": ["Senso-ji", "Asakusa", "-", {"text": "Map", "url": "https://www.google.com/maps/search/?api=1&query=%E6%B7%BA%E8%8D%89%E5%AF%BA"}],
+               "group": "Classic"},
+              {"cells": ["Skytree", "Oshiage", "NT$ 700", {"text": "Site", "url": "https://www.tokyo-skytree.jp/cn_t/"}], "group": "View"}]},
+]}
+
+
+def test_a_summary_a_callout_link_cells_and_a_filter_are_kept_and_drawn_in_the_plain_rendition():
+    from raphael_core.agent.report_page import checked_report, report_fallback, report_html
+    kept = checked_report(DOCUMENT, exists=lambda member_id: False, as_of_ms=1794240000000)
+    assert kept["summary"] == DOCUMENT["summary"]
+    assert kept["sections"][0] == {"kind": "callout", "tone": "info", "heading": "Note", "text": DOCUMENT["sections"][0]["text"]}
+    table = kept["sections"][1]
+    assert table["filter"] == "Area" and table["rows"][0]["cells"][3] == {"text": "Map", "url": DOCUMENT["sections"][1]["rows"][0]["cells"][3]["url"]}
+    html = report_html("Tokyo", kept, lambda member_id: "")
+    assert html.startswith("<h1>Tokyo</h1>\n<p>46 spots") and "<p><b>Note</b> Staying in Otsuka" in html
+    assert '<td><a href="https://www.tokyo-skytree.jp/cn_t/">Site</a></td>' in html and "&amp;query=" in html
+    assert report_fallback("Tokyo", kept).split("\n")[:3] == ["Tokyo", DOCUMENT["summary"], DOCUMENT["sections"][0]["text"]]
+    # Without a summary the page keeps saying when its data is from and that it states recorded facts only (R-PAGE-01).
+    assert "summary" not in checked_report(REPORT, exists=lambda member_id: member_id == 0, as_of_ms=1794240000000)
+    # A callout's tone is info unless the member says warn or ok.
+    plain = checked_report({"sections": [{"kind": "callout", "text": "Heads up"}]}, exists=lambda member_id: False, as_of_ms=1794240000000)
+    assert plain["sections"][0] == {"kind": "callout", "tone": "info", "text": "Heads up"}
+
+
+def _table(rows=None, **changes):
+    return {"sections": [{"kind": "table", "columns": ["Name", "Area"], "rows": rows or [{"cells": ["a", "x"]}, {"cells": ["b", "y"]}], **changes}]}
+
+
+def _link(url):
+    return _table([{"cells": ["a", {"text": "Map", "url": url}]}])
+
+
+@pytest.mark.parametrize("report,words", [
+    (_link("http://example.com/map"), "cells[1].url must be a plain https link"),
+    (_link("javascript:alert(1)"), "cells[1].url must be a plain https link"),
+    (_link("https://user:pass@example.com/"), "cells[1].url must be a plain https link"),
+    (_link("https:///nowhere"), "cells[1].url must be a plain https link"),
+    (_link("https://example.com/a b"), "cells[1].url must be a plain https link"),
+    (_link("https://example.com/" + "a" * 2100), "cells[1].url exceeds 2048 characters"),
+    (_link("https://api.example.com/v1/Q7x9Lm2Pz8Rt4Kw6Vb3Nc5Jd1Hf0Gs7Ya2Ue/forecast"), "url contains a secret"),
+    (_table([{"cells": ["a", {"url": "https://example.com/"}]}]), "cells[1].text must be text"),
+    (_table([{"cells": ["a", {"text": "Map"}]}]), "cells[1].url must be an https link"),
+    (_table([{"cells": ["a", "x" * 161]}]), "cells[1] exceeds 160 characters"),
+    (_table([{"cells": ["a", "x"]}] * 101), "rows has more than 100 entries"),
+    (_table(filter="Colour"), "filter must be the name of one column: Name, Area"),
+    (_table([{"cells": [f"n{n}", f"area{n}"]} for n in range(25)], filter="Area"), "filter column Area has 25 different values"),
+    ({"summary": "x" * 161, "sections": [{"kind": "text", "text": "x"}]}, "report.summary exceeds 160 characters"),
+    ({"summary": "the password is hunter2", "sections": [{"kind": "text", "text": "x"}]}, "report.summary contains a secret"),
+    ({"sections": [{"kind": "callout", "tone": "danger", "text": "x"}]}, "tone must be one of info, warn, ok"),
+    ({"sections": [{"kind": "callout", "tone": "ok"}]}, "text must be text"),
+    ({"sections": [{"kind": "callout", "text": "x" * 601}]}, "text exceeds 600 characters"),
+], ids=["http", "script", "password", "no-host", "space", "long-link", "key-in-link", "link-no-text", "link-no-url", "long-cell", "rows",
+        "filter-unknown", "filter-many", "long-summary", "secret-summary", "tone", "callout-no-text", "long-callout"])
+def test_a_link_cell_filter_summary_or_callout_that_breaks_the_format_is_refused_with_what_to_fix(report, words):
+    from raphael_core.agent.report_page import checked_report
+    with pytest.raises(PageError) as refused:
+        checked_report(report, exists=lambda member_id: False, as_of_ms=1794240000000)
+    assert words in str(refused.value) and "hunter2" not in str(refused.value)
+
+
+def test_a_hundred_rows_of_a_hundred_and_sixty_characters_and_every_ordinary_link_are_kept():
+    from raphael_core.agent.report_page import checked_report
+    rows = [{"cells": [f"Place {n} " + "あ" * 140, {"text": "地圖", "url": f"https://www.google.com/maps/search/?api=1&query=Tokyo+Place+{n}"}]}
+            for n in range(100)]
+    kept = checked_report({"sections": [{"kind": "table", "columns": ["Name", "Link"], "rows": rows}]},
+                          exists=lambda member_id: False, as_of_ms=1794240000000)
+    assert len(kept["sections"][0]["rows"]) == 100
+    assert kept["sections"][0]["rows"][0]["cells"][0].endswith("あ" * 140) and len(kept["sections"][0]["rows"][0]["cells"][0]) == 148
+
+
 def test_a_report_time_never_reads_as_a_card_number():
     from raphael_core.agent.report_page import checked_report
     from raphael_core.memory.scan import _luhn, find_secret
@@ -652,7 +778,10 @@ async def test_a_shared_report_is_saved_as_its_file_in_the_output_folder_else_do
     _file(DRAWING + "<script>alert(1)</script>"),
     _file(DRAWING + '<div onclick="alert(1)">x</div>'),
     _file(DRAWING + '<svg><path d="M0 0" onload="alert(1)"/></svg>'),
-    _file(DRAWING + '<a href="https://example.com/">away</a>'),
+    _file(DRAWING + '<a href="http://example.com/">away</a>'),
+    _file(DRAWING + '<a href="javascript:alert(1)">away</a>'),
+    _file(DRAWING + '<a href="https://user:pass@example.com/">away</a>'),
+    _file(DRAWING + '<a href="https://example.com/" target="_blank">away</a>'),
     _file(DRAWING + '<meta http-equiv="refresh" content="0;url=https://example.com/">'),
     _file(DRAWING + '<img src="https://example.com/x.png">'),
     _file(DRAWING + "<!-- a comment -->"),
@@ -661,7 +790,8 @@ async def test_a_shared_report_is_saved_as_its_file_in_the_output_folder_else_do
     _file(DRAWING + "<p>" + "x" * (2 * 1024 * 1024) + "</p>"),
     "",
     None,
-], ids=["policy", "no-viewport", "no-head", "script", "handler", "svg-handler", "link-away", "refresh", "image", "comment",
+], ids=["policy", "no-viewport", "no-head", "script", "handler", "svg-handler", "http-link", "script-link", "password-link", "target",
+        "refresh", "image", "comment",
         "style-markup", "two-styles", "too-large", "empty", "missing"])
 async def test_a_report_file_where_anything_could_run_or_load_is_refused_and_nothing_written(make_rig, client, tmp_path, html):
     rig = make_rig()
@@ -672,16 +802,78 @@ async def test_a_report_file_where_anything_could_run_or_load_is_refused_and_not
     assert list(tmp_path.iterdir()) == []
 
 
-async def test_only_a_report_is_saved_as_a_file(make_rig, tmp_path):
+async def test_a_table_link_goes_into_the_file_as_an_https_link_and_nothing_else_leaves_the_page(make_rig, client, tmp_path):
     rig = make_rig()
-    page = stored(rig.conn)
+    page = await _shown_report(rig, client)
+    link = '<a class="rp-link" href="https://www.google.com/maps/search/?api=1&amp;query=%E6%B7%BA%E8%8D%89%E5%AF%BA" rel="noopener noreferrer">地圖</a>'
+    saved = await rig.call("pages.export", {"id": page, "html": _file(DRAWING + link), "downloads": str(tmp_path)})
+    assert "query=%E6%B7%BA" in (tmp_path / "Team report.html").read_text("utf-8") and saved["place"] == "downloads"
+
+
+async def test_a_page_the_core_cannot_find_or_a_plugins_page_is_not_saved_as_a_file(make_rig, tmp_path):
+    rig = make_rig()
+    plugin = stored(rig.conn, source="mcp", server="demo", tool="show")
     with pytest.raises(RpcError) as error:
-        await rig.call("pages.export", {"id": page["id"], "html": _file(), "downloads": str(tmp_path)})
-    assert error.value.data == {"kind": "not_report"}
+        await rig.call("pages.export", {"id": plugin["id"], "html": _file(), "downloads": str(tmp_path)})
+    assert error.value.data == {"kind": "not_shareable"}
     with pytest.raises(RpcError) as error:
         await rig.call("pages.export", {"id": "missing", "html": _file(), "downloads": str(tmp_path)})
     assert error.value.data == {"kind": "page_gone"}
     assert list(tmp_path.iterdir()) == []
+
+
+# --- an HTML page shared as a file (pages.page_file, pages.export; R-PAGE-08) ----------------------------
+
+def _page_file(**overrides):
+    return page_file({"title": "Product", "html": "<button>Choose</button>", "source": "html", "network": {}, **overrides})
+
+
+def test_an_html_page_file_is_the_page_without_the_window_helper_under_the_pages_own_policy():
+    text = _page_file(html="<h1>Hello</h1><script>document.title = 'x'</script>")
+    # The page itself, and the theme words every page has, in both themes.
+    assert "<h1>Hello</h1><script>document.title = 'x'</script>" in text and "<title>Product</title>" in text
+    assert "--bg:#ffffff" in text and "@media (prefers-color-scheme:dark){:root{--bg:#0a0a0a" in text
+    # Nothing that speaks to the window: the helper is not in the file.
+    assert "parent.postMessage" not in text and "window.raphael" not in text
+    # The page's policy stands first in its head: the same sources, no connection, no form, no frame; no sandbox (a header's).
+    head = text.index("<meta http-equiv=\"Content-Security-Policy\"")
+    assert head < text.index("<title>") < text.index("<h1>")
+    policy = re.search(r'content="([^"]+)"', text[head:])[1].replace("&#x27;", "'")
+    assert policy == "; ".join(part for part in page_csp({"source": "html", "network": {}}).split("; ") if not part.startswith("sandbox"))
+    for wanted in ("default-src 'none'", "connect-src 'none'", "form-action 'none'", "frame-src 'none'", "base-uri 'none'"):
+        assert wanted in policy
+    assert "sandbox" not in policy and "https://cdnjs.cloudflare.com" in policy
+    assert text.index('<meta charset="utf-8">') < head
+
+
+async def test_a_shared_html_page_is_saved_from_what_is_stored_never_from_text_the_window_gives(make_rig, tmp_path):
+    rig = make_rig()
+    page = stored(rig.conn, title="Tokyo: a/b", html="<h1>Tokyo</h1>")
+    downloads = tmp_path / "Downloads"
+    saved = await rig.call("pages.export", {"id": page["id"], "html": "<script>alert(1)</script>", "downloads": str(downloads)})
+    assert saved == {"path": str(downloads / "Tokyo a b.html"), "place": "downloads", "folder": "Downloads"}
+    written = (downloads / "Tokyo a b.html").read_text("utf-8")
+    assert "<h1>Tokyo</h1>" in written and "alert(1)" not in written and "parent.postMessage" not in written
+    # With no `html` at all, as the window sends it for a page, and again: never over another file.
+    again = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
+    assert again["path"] == str(downloads / "Tokyo a b (2).html")
+    # The owner's output folder first.
+    rig.settings.set("owner_output_folder", str(tmp_path / "Out"))
+    chosen = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
+    assert chosen == {"path": str(tmp_path / "Out" / "Tokyo a b.html"), "place": "output", "folder": "Out"}
+
+
+async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_stops_the_file(make_rig, tmp_path):
+    rig = make_rig()
+    page = stored(rig.conn, html="<p>first</p>")
+    PageStore(rig.conn).update(page["id"], "<p>second</p>")
+    saved = await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
+    assert "<p>second</p>" in Path(saved["path"]).read_text(encoding="utf-8")
+    # A page that the scanner would not take is not written as a file either, even if it got into the store.
+    rig.conn.execute("UPDATE pages SET html=? WHERE id=?", ("<p>sk-ant-api03-" + "a1B2c3D4" * 8 + "</p>", page["id"]))
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
+    assert error.value.code == INVALID_PARAMS and len(list(tmp_path.iterdir())) == 1
 
 
 @pytest.mark.parametrize("title,name", [

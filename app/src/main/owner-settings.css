@@ -9,7 +9,7 @@
 @media (prefers-reduced-motion: reduce) { .owner-photo-edit { transition: none; } }
 .owner-profile label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); font-size: var(--fs-sm); }
 /* On the section's card the fields keep the page's own ground, so they read as fields. */
-.owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--content); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
+.owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--field, var(--content)); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
 .owner-profile textarea { resize: vertical; min-height: 110px; }
 /* The output folder: the button names the folder; its whole path stands under the row's name. */
 .output-path { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }

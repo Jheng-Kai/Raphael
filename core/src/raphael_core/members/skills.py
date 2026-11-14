@@ -173,65 +173,6 @@ class GrowingSkills:
         self._mirror(member_id, {skill["id"]: {"provenance": provenance, "learned_at": learned_at}})
         return self._skill(member_id, skill["id"])
 
-    def undo_revision(self, member_id):
-        """The latest metadata snapshot is the single undo boundary, including deletion."""
-        entries = [item for item in self.homes.journal(member_id) if item.get("state") == "skills.json" and item.get("applied")]
-        return entries[-1]["id"] if entries and entries[-1].get("before") is not None else None
-
-    def undo_skills(self, member_id, revision):
-        self.check(member_id)
-        if not revision or revision != self.undo_revision(member_id):
-            raise HomeError("skill revision is no longer current")
-        entries = self.homes.journal(member_id)
-        entry = next(item for item in entries if item["id"] == revision)
-        state = self.homes.safe(self.homes.state(member_id) / "skills.json")
-        if digest(state.read_bytes()) != entry["after_hash"]:
-            raise HomeError("skill state changed; read it again before reverting")
-        current_hashes = {}
-        for skill in json.loads(state.read_text(encoding="utf-8")):
-            current_hashes[f"skills/{skill['id']}/SKILL.md"] = skill["revision"]
-            current_hashes.update(skill.get("references", {}))
-            if self.reference_hashes(member_id, skill["id"]) != skill.get("references", {}):
-                raise HomeError("skill references changed; read them again before reverting")
-        for relative, expected in current_hashes.items():
-            path = self.homes.path(member_id, relative)
-            current = digest(path.read_bytes()) if path.exists() else None
-            if current != expected:
-                raise HomeError("skill document changed; read it again before reverting")
-        restored = json.loads(entry["before"])
-        documents = {}
-        for skill in restored:
-            wanted = {f"skills/{skill['id']}/SKILL.md": skill["revision"], **skill.get("references", {})}
-            for relative, expected in wanted.items():
-                path = self.homes.path(member_id, relative)
-                current = path.read_bytes().decode("utf-8") if path.exists() else None
-                if relative not in current_hashes:
-                    latest = next((item for item in reversed(entries) if item.get("path") == relative and item.get("applied")), None)
-                    expected_current = latest["after_hash"] if latest else None
-                    if digest(None if current is None else current.encode("utf-8")) != expected_current:
-                        raise HomeError("skill document changed; read it again before reverting")
-                    current_hashes[relative] = expected_current
-                if digest(None if current is None else current.encode("utf-8")) == expected:
-                    documents[relative] = current
-                    continue
-                previous = next((item["before"] for item in reversed(entries) if item.get("path") == relative
-                                 and item.get("before_hash") == expected and item.get("applied")), None)
-                if previous is None:
-                    raise HomeError("skill document revision is unavailable")
-                documents[relative] = previous
-        current_paths = {f"skills/{s['id']}/SKILL.md" for s in self.owned_skills(member_id)}
-        for skill in self.owned_skills(member_id):
-            current_paths.update(self.reference_hashes(member_id, skill["id"]))
-        for relative in current_paths - documents.keys():
-            self.homes.delete(member_id, relative, expected_hash=current_hashes[relative])
-        for relative, text in documents.items():
-            self.homes.write(member_id, relative, text, expected_hash=current_hashes[relative])
-        with self.conn:
-            self.conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
-            self.conn.executemany("INSERT INTO member_skills(id,member_id,name,description,enabled,source) VALUES (?,?,?,?,?,?)",
-                                 [(s["id"], member_id, stored_skill_name(s["name"], s.get("plugin")), s["description"], s["enabled"], s["source"]) for s in restored])
-        self._mirror(member_id, {s["id"]: {key: s.get(key) for key in ("provenance", "learned_at")} for s in restored})
-
     def reference_hashes(self, member_id, identifier):
         folder = self._path(member_id, identifier).parent / "references"
         owner = self.skill_owner(member_id, identifier)

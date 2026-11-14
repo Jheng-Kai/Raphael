@@ -198,9 +198,15 @@ upload and crop an image; the resulting face appears on the footer and outgoing 
 npm run look -- profile appearance appearance-menu appearance-keyboard models dictation tools safety about theme-clarity --theme both --width 1120,720
 npm run look -- sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner foot-account-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
 npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
-npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
+npm run look -- chatgpt-signed-out chatgpt-signed-in chooser-chatgpt-signed-out chooser-chatgpt-signed-in chooser-claude-models chooser-claude-older cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
 npm run look -- model-choices-answer model-choices-cleanup model-choices-stt model-choices-local model-choices-local-selected --theme both --width 1120,720,1920x1080
 ```
+
+Claude Code's tab of the chooser (`chooser-claude-models`, R-MODEL-04) lists what Claude Code
+says and knows: its own four first, in its order, then the older models its program still runs,
+each name with its version and each row the exact model id (`cli:claude:claude-opus-5-5`), made
+and sized as a Codex row (`chooser-claude-style`); `chooser-claude-older` scrolls to the oldest. Inspect that every name is whole at 720 wide.
+The fixture is the shape of the core's answer, with aliases on the four current rows.
 
 Keep pane/theme PNGs; inspect wrapping, focus, scroll access, active selections and
 dropdown/popover contrast. Use `--locale en` and `--locale ja` for translation work;

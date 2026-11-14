@@ -23,7 +23,7 @@ const ratio = (a, b) => {
   if (!Number.isFinite(result)) throw new Error(`Invalid contrast pair: ${a}, ${b}`);
   return result;
 };
-const surfaces = ["side", "content", "panel", "surface-2", "menu", "btn", "key", "hover", "pressed", "selected", "accent-soft", "float", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"];
+const surfaces = ["side", "content", "panel", "surface-2", "menu", "btn", "key", "hover", "pressed", "selected", "accent-soft", "float", "dialog", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"];
 const report = {};
 for (const [theme, palette] of Object.entries({ light, dark })) {
   const contrast = {};
@@ -41,20 +41,28 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   contrast.captionClose = +ratio(palette["on-close"], palette.close).toFixed(2);
   if (contrast.captionClose < 4.5) process.exitCode = 1;
   // The delete dialog's Delete button (members.css `.mb-delete`): white words on the app's solid red, and the red against the dialog's surface.
-  contrast.deleteButton = { words: contrast.captionClose, onPanel: +ratio(palette.close, palette.panel).toFixed(2), onFloat: +ratio(palette.close, palette.float).toFixed(2) };
-  if (contrast.deleteButton.onPanel < 3 || contrast.deleteButton.onFloat < 3) process.exitCode = 1;
+  contrast.deleteButton = { words: contrast.captionClose, onPanel: +ratio(palette.close, palette.panel).toFixed(2), onFloat: +ratio(palette.close, palette.float).toFixed(2), onDialog: +ratio(palette.close, palette.dialog).toFixed(2) };
+  if (contrast.deleteButton.onPanel < 3 || contrast.deleteButton.onFloat < 3 || contrast.deleteButton.onDialog < 3) process.exitCode = 1;
   if (Math.min(...Object.values(contrast.toast)) < 4.5) process.exitCode = 1;
-  contrast.destructive = Object.fromEntries(["panel", "btn", "menu", "float", "float-ctl", "danger-hover", "danger-pressed"].map(surface => [surface, +ratio(palette.err, palette[surface]).toFixed(2)]));
+  contrast.destructive = Object.fromEntries(["panel", "btn", "menu", "float", "dialog", "float-ctl", "danger-hover", "danger-pressed"].map(surface => [surface, +ratio(palette.err, palette[surface]).toFixed(2)]));
   if (Object.values(contrast.destructive).some(value => value < 4.5)) process.exitCode = 1;
-  for (const token of ["hover", "pressed", "hover-edge", "scroll-hover", "toast-hover", "float", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"]) {
+  for (const token of ["hover", "pressed", "hover-edge", "scroll-hover", "toast-hover", "float", "dialog", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed"]) {
     const channels = palette[token].slice(1).match(/../g).map(value => parseInt(value, 16));
     if (Math.max(...channels) - Math.min(...channels) > 12) throw new Error(`Non-neutral interaction token: ${theme}/${token}`);
   }
+  // The three layers of a dialog (owner, 2026-11-14) rise in lightness in both themes: the window under the scrim, then the dialog, then the cards on it.
+  const alpha = Number(palette.scrim.match(/rgba\(0, 0, 0, ([\d.]+)\)/)[1]);
+  const dim = (hex) => "#" + hex.slice(1).match(/../g).map((x) => Math.round(parseInt(x, 16) * (1 - alpha)).toString(16).padStart(2, "0")).join("");
+  contrast.layers = { outside: dim(palette.content), dialog: palette.dialog, card: palette.float };
+  if (!(luminance(contrast.layers.outside) < luminance(palette.dialog) && luminance(palette.dialog) < luminance(palette.float))) process.exitCode = 1;
   contrast.chosenChip = +ratio(palette["float-on-sel"], palette["float-sel"]).toFixed(2);
   if (contrast.chosenChip < 4.5) process.exitCode = 1;
   // The status colours are read on a floating surface and on the control standing on it (a connected app's 「已連結」, an error under a field in a dialog).
-  contrast.status = Object.fromEntries(["ok", "warn", "err"].map(name => [name, Object.fromEntries(["float", "float-ctl"].map(surface => [surface, +ratio(palette[name], palette[surface]).toFixed(2)]))]));
+  contrast.status = Object.fromEntries(["ok", "warn", "err"].map(name => [name, Object.fromEntries(["float", "dialog", "float-ctl"].map(surface => [surface, +ratio(palette[name], palette[surface]).toFixed(2)]))]));
   if (Object.values(contrast.status).some(on => Object.values(on).some(value => value < 4.5))) process.exitCode = 1;
+  // The lights of a sidebar row (sidebar-light.ts) are read on every surface a row stands on, selected, hovered and pressed too.
+  contrast.sidebarLights = Object.fromEntries(["wait", "err", "ok", "text"].map(name => [name, Math.min(...["side", "content", "panel", "hover", "pressed", "selected"].map(surface => +ratio(palette[name], palette[surface]).toFixed(2)))]));
+  if (Object.values(contrast.sidebarLights).some(value => value < 3)) process.exitCode = 1;
   contrast.sendIcon = Object.fromEntries(["panel", "hover", "pressed"].map(surface => [surface, +ratio(palette["accent-icon"], palette[surface]).toFixed(2)]));
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
   contrast.computerActive = Object.fromEntries(["side", "content", "hover", "pressed"].map(surface => [surface, +ratio(palette["computer-active"], palette[surface]).toFixed(2)]));

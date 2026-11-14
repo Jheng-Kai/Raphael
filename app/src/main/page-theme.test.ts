@@ -25,3 +25,15 @@ test("an HTML page gets the window's own theme words and chart colours, in both 
   const face = pages.match(/FONT = '([^']+)'/)![1]!.split(",");
   expect(face).toEqual(light.ui!.split(",").map(name => name.trim()));
 });
+
+test("the base style of an HTML page reads only the theme words the page is given, so it follows the owner's theme in both", () => {
+  const base = readFileSync(resolve(import.meta.dirname, "../../../core/src/raphael_core/agent/page_style.py"), "utf8");
+  const given = new Set([...pages.match(/zip\(\(([^)]*)\)/)![1]!.match(/"[^"]+"/g)!.map(word => word.slice(1, -1)), "font"]);
+  const read = new Set([...base.matchAll(/var\(--([\w-]+)/g)].map(match => match[1]!));
+  // `tone` and the page's two measures are the base's own, set in it.
+  const own = new Set(["tone", "pg-max", "pg-gutter"]);
+  expect([...read].filter(word => !given.has(word) && !own.has(word))).toEqual([]);
+  for (const word of own) expect(base, word).toContain(`--${word}:`);
+  // The words it leans on most: a heading in the text colour, a hairline in the line colour, a table's header on the surface.
+  for (const word of ["fg", "fg-2", "muted", "line", "surface", "link", "warn", "ok", "bg"]) expect(read.has(word), word).toBe(true);
+});

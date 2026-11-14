@@ -1,5 +1,39 @@
 # Conversation
 
+## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
+
+Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with
+`[已查核的部分紀錄](attachment:4e43d6d3fd9d47fab8b552f849c3c48b.md)` as written: a model links the file it delivered by its stored id
+(the core already reads that form, members/library.py), and the renderer (`message-content.ts`) only knew `http(s)` targets, so the
+whole link showed as text. Now `[words](attachment:<id>)` is the file's chip (the `fileChipHTML` of the team folder's files, inline in the
+words) that opens that file through `attachment-open` when the id is a file of the conversation (`knownFiles` in `timeline.ts`:
+what the owner attached, what a member delivered in a media message, over every turn, put in `TimelineState.files` by `lines()`);
+any other `attachment:` target is its words alone, and a renderer that is not given the files (a group, search, copy) shows
+the words alone. `message-attachment-link` mirrors the picture (the file's card, the routine line, the message with a known link and a
+link to a file no turn holds) and presses the chip: no raw target in the words, one chip with its words standing in the line, the
+file card above, and one `open_attachment` call with that id. Not covered: the native open of the file itself.
+
+```powershell
+npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
+```
+
+## One member, one working slime (owner, 2026-11-14, R-SLIME-03)
+
+Owner, with a picture of a reply that queued research in the background (an empty slime under the reply, a task line with the
+slime and its progress words under that): 「這邊為什麼會有兩個史萊姆？理論上它不管怎麼樣都只會有一個史萊姆在運作才對，你可能確定一下」.
+A reply and the task it handed to the background are separate turns of one conversation, each of which drew its own working slime
+(`turnHTML`): the earlier one waited (a task or card waiting on the owner), so its face had no words, and the newer task line worked.
+`standingPresence` (timeline.ts) now decides for the whole thread, in `lines()` of `pages/agent.ts`: the newest turn that works
+stands (a task line with progress words wins over a face that only waits), every other turn draws none (`TurnLook.presenceTurnId`),
+and what the owner has just sent or is saying is newer than all of them and takes the slime under the newest bubble, with the working
+turn's words. `slime-one-working` mirrors the picture (a reply, a task that waits, a task that works) and counts the working slimes
+in the thread: exactly one, on the line that works with its words, none under the reply. Before the fix the same scene drew two
+(2 lines, 2 moving). A group's thinking lines are per member and per message and are not part of this rule.
+
+```powershell
+npm run look -- slime-one-working composer-stop-background composer-queued composer-send-while-working composer-stop-pending transcript-working running --theme both --width 1120,720,1920x1080
+```
+
 ## The owner edits a sent message in its own bubble, where it stands (owner, 2026-11-14, R-UI-148)
 
 Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」, then, on his build of 7231ae74:
@@ -212,18 +246,26 @@ the newest of whatever a core lists. Scenes: `reaction-row` (reply), `reaction-o
 `reaction-signin` (a failed sign-in reply with 重新登入 under it), `room-thread-open` and
 `room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check; `reaction-replaced`
 (another emoji replaces the one given, and the open bar presses only that one), `reaction-taken-back` (the
-same emoji again leaves no chip) and `reaction-ask` (a 👎 makes the member ask what was wrong). Private
+same emoji again leaves no chip), `reaction-thinking` (a 👍 shows the member's usual presence at once, with no message), `reaction-silent` (the member decides that no words are needed: the presence goes and nothing is left), `reaction-ask` (a 👎 shows the presence, then the member asks what was wrong) and `reaction-changed` (another emoji ends the analysis under way: one presence, never two). Private
 model context and room transcripts label reactions as metadata, never approval or
 instructions. No reaction answers a permission, owner question or draft.
 
-Most reactions get no words. A negative one (👎 and the angry, unamused, rolling-eyed, facepalm, cross and pile
-emoji of `agent/reaction_asks.py`) to a member's own finished reply, left standing 4 seconds, makes that member
-ask once what was wrong: a normal turn of the member's own on its own model, with no owner message above it
-(the thread shows only the member's question), no tool and no other model; Raphael does the same. In a group room
-only the author of the reacted message asks, in the same thread. Nothing is asked for 👍 ❤️ 😂 🎉 or any other
-positive emoji, for one taken back or changed within the 4 seconds, for the owner's own message, or twice for
-one message. The mock core of `look` adds that turn for `reaction-ask`; the model path is the tests of
-`core/tests/members/test_reaction_ask.py`, with fake models only.
+Every reaction is analysed, at once (R-REACT-01, owner 2026-11-14: no 4 second wait, no fixed list of emoji; Grok
+shows 「思考中」 for each). A reaction to a member's own finished reply (Raphael's too) starts that member's own turn
+(`agent/reaction_asks.py`, `AgentService._ask_about_reaction`) on its own model with no tool and no other model, and
+no owner message above it. The thread shows the member's usual presence under the reply while it thinks. The member's
+own model reads the emoji, its reply and the few turns before, as data, and either says one or two sentences (ask
+what was wrong, a few words, the obvious next step) or answers exactly `(pass)`, the group rooms' own pass: then the
+turn is taken out of the thread and nothing is left (no message, card, failure or notice). Each reaction is one model
+call. A reaction taken back, or changed to another emoji, while its turn runs ends that turn (the new emoji starts its
+own); the owner writing in the conversation ends it too. The same emoji on the same message is analysed once; another
+emoji is a new reaction. A member working for the owner starts none (skipped, not queued, and not recorded). Never
+analysed: the owner's own message, a member's answer to a reaction, a quick conversation, an unfinished reply. In a
+group room only the author of the reacted message thinks, in the same thread, and what it makes is no discussion of
+the room. The mock core of `look` simulates the member's decision for `reaction-thinking`, `reaction-silent`,
+`reaction-ask` and `reaction-changed` (`reactionAsk`: "silent" or "words", ended by `reactionEnds`); the model path is
+the tests of `core/tests/members/test_reaction_ask.py`, with fake models only. Not proved by either: a real model
+choosing well between words and a pass.
 
 Room action rows open a side thread. The main room keeps only an N-reply chip under
 the root; rooms.messages defaults to the main thread. The existing room worker and
@@ -247,7 +289,7 @@ Voice memos and manual read-aloud were removed on 2026-11-07 and every other voi
 above): no reply carries a Play/Pause control or transcript, and nothing speaks.
 
 ```powershell
-npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-replaced reaction-taken-back reaction-ask reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-replaced reaction-taken-back reaction-thinking reaction-silent reaction-ask reaction-changed reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every
@@ -824,6 +866,8 @@ asked member's task with its own notes and conversation, and a private chat turn
 comes back once with the answer. An entry of the shared file ends with whom the owner told it to and when, in every
 member's prompt (no page shows it, R-MEM-10); what the owner told one member stays its own until a colleague asks.
 
+Owner (2026-11-14): 「假設拉菲爾跟其他成員說話的話，其他每一個成員那邊應該都會有保留他跟拉菲爾的對話記錄才對，就兩邊應該都有，然後變成他們的上下文」. Each side keeps its own copy in its thread and later context; the receiver's context includes the received question and answer, and the asker's context includes the colleague's answer.
+
 ```powershell
 npm run look -- bot-ask-centred bot-message-from-centred bot-exchange-count bot-exchange-expanded --theme both --width 1120,720,1920x1080
 ```
@@ -1061,9 +1105,13 @@ existing retract-and-restore behavior after the second Escape.
 ```powershell
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
-npm run look -- page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update --theme both --width 1120,720,1920x1080
-npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
+npm run look -- page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update page-library-open page-library-scrolled page-library-report page-library-back page-library-esc page-library-older page-library-share --theme both --width 1120,720,1920x1080
+npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
+
+R-MODEL-05: a member saved with Claude Code's alias (`cli:claude:haiku`) reads the model the alias is
+(`composer-model-alias`: 「Claude Haiku 5.5」 on the button, its exact row checked in the Claude Code list, no row for
+the alias) and keeps the alias in its settings.
 
 R-UI-47: successful conversation deletion invalidates its outstanding history load
 and reloads the member's server-selected default before requesting history. The
@@ -1447,7 +1495,7 @@ form. Installation dependencies and file repair steps without an app setting hav
 no settings button. Local services remain in Settings > Raphael > Services.
 A store card opens the Composio form; the native Google client needs an administrator.
 
-npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-search missing-search-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
+npm run look -- missing-card missing-card-repair missing-search missing-search-repair missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
 
 Run both themes at 1120,720,1920x1080. Also cover desktop-absent,
 desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,
@@ -1704,6 +1752,8 @@ npm run look -- handoff-group handoff-group-done handoff-group-many handoff-grou
 ## Conversation between members (2026-11-07)
 
 Since 2026-11-07 (owner, after Grok Bot's 「2 messages with Savio」) the line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, every exchange between the same members in the loaded thread (or room) oldest first under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason, and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
+
+For member-to-member exchanges, `receivedLineHTML` appears in the respondent's own thread for its received ask or consult handoff. Its completed exchange is part of that member's later conversation context, scoped to that member and conversation; the asker retains the colleague's answer in its source turn context. `bot-message-from-centred` exercises the ask_member/consult receipt in the respondent's thread.
 
 ```powershell
 npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080
@@ -2125,22 +2175,29 @@ was put away: the member's reply ends the thread and nothing opens again (the ju
 A page open in the conversation's place (R-PAGE-03, owner, 2026-11-11: 「我要的不是像是這樣子會出現一個 dialog…直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺…左上角會變成返回上頁」), replacing the dialog a page
 had until then ("a page made larger"; the judge's earlier notes on that dialog, its three-quarter height, its doubled title and the × outside its corner, no longer apply): pressing a page's card, an HTML page's or a report's, in a member's conversation or a room, puts the page where the
 thread was (`.ra-stage.is-page`, `page-view.ts`, `page-view.css`). The thread stays laid out under it, `visibility: hidden`, so its place is kept; the composer
-stays below; the header keeps the conversation's pill and its share (a report hides the header's share: it has its own). The way back is the round arrow at the
+stays below. Since 2026-11-14 (R-PAGE-08) the page is the whole area beside the sidebar (the details panel folds while it stands and comes back with it): the header's centre
+is the page's own pill (its mark and title; a room keeps its heading) in place of the member's pill, and its tools hold the one Share button on a report and on an HTML page (the member's share waits). The way back is the round arrow at the
 header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
 (the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
-has it; the composer's draft is never touched. An HTML page has a title row (its title, once) and the page, rounded, no border, as wide as the composer's
-column (a room's is inset by its own padding), filling the height between the header and the composer, scrolling inside; there is no dialog, scrim or ×. A report is the same place with
-its own heading, its Share at the top right and nothing else over it. The same frame is moved there and back (no reload with `moveBefore`; the scene
-`page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading is kept for the next opening. A page the member
-changes (`update_page`) loads beside the one on screen, is sent back to where the owner was reading (the page's helper reports `scroll` and obeys `scroll-to`) and replaces it once drawn: the
+has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page as wide as the area allows up to `--pgv-w` (1280 px) between the thread's gutters, its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
+its own heading, its column and its contents. The same frame is moved there and back (no reload with `moveBefore`; the scene
+`page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading (how far the area was scrolled) is kept for the next opening. A page the member
+changes (`update_page`) loads beside the one on screen, says how tall it is while it loads and replaces it once drawn, the area keeping its scroll: the
 `page-watch` sampler of page-inplace-update and page-inplace-room-update proves one visible page at every frame and the view never shut, and `page-inplace-updated` that the conversation still holds one card, now at the next revision.
 What the member answers to a message written under the page shows under the page and nowhere else (the calm thread): its working line while it works (page-inplace-working), then
 the first words of its reply as one line (page-inplace-answered); the whole reply is in the thread, one press of the arrow away. The window tells the core which page is open before it
 sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `window.__look.viewing`), and the core's context says "the page the owner is looking at now: page_id=…" so "here" means it.
-Checks: page-inplace (also under the names page-expanded and page-opened-whole) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
-surface, the pill still saying whose conversation it is, the title, the page's width against the composer's, the composer below; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+Checks: page-inplace (also under the names page-expanded, page-opened-whole and page-library-open) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
+surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's width against `--pgv-w` and the area's gutters, no frame (no corner, edge or clip), the area scrolling, nothing covered by the composer; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+
+A page opened from the member's Library (R-PAGE-08, owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它有一個share的鍵」, after Grok Bot's Library, whose page row opens the page and not the thread at its reply): the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
+a page of an older conversation opens that conversation quietly (no turn marked) and the arrow brings back the one that was open, the thread where it was (`TranscriptWindow.snapshot` / `restore`, the scroll) and the panel on its Library tab (`members.foldForPage` / `unfoldAfterPage`, which every open page uses, so a press on the card folds the panel too).
+The scenes use the fixture's `libraryPages` (the Library lists the page scenes' pages) and `libraryOlder` (those pages belong to an older conversation of the member): `page-library-open` (HTML page, whole, panel folded), `page-library-scrolled` (the area scrolls as one), `page-library-report`, `page-library-back` (the arrow: the Library tab, the thread read higher up exactly where it was, the same frame, no reload: `page-library-kept` on top of `page-inplace-kept`),
+`page-library-esc` (Escape does the same), `page-library-older` (`page-library-older-open` / `-kept`: the page's own conversation under it, then the one that was open) and `page-library-share` (`page-library-shared`: one `report_save` with the page's id and no text, a word of where it went, the page still open). The file itself is the core's (`page_file` in `core/src/raphael_core/agent/pages.py`, tested in core/tests/agent/test_pages.py); a look cannot open it, as the core is not there.
 `answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
 `updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
+The voice flyer is the one stage child a page does not put away (R-VC-04; `voice-over-page-listening`, `-hearing`, `-gone`, see
+[Dictation](dictation.md)): Raphael stays in front of the page, above the composer, while the owner is heard.
 
 A page in the conversation is a card of one fixed height, not the page shown whole (R-PAGE-02, owner, 2026-11-11: 「如果你現在在畫面裡面顯示…會變成一個超長一段…你點開了之後，它才會展開全部」; Grok Bot's Page card is a title and Open). Before: the whole page (the owner's
 daily-news page, about 470 px wide and more than 700 px tall) stood inside the card with its own scrollbar and working buttons, so one
@@ -2342,6 +2399,56 @@ pictures, libraries and times that are not secrets, the keys still refused, the 
 keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attributes).
 Native boundary: a real Raphael turn on a real model building the page and the routine is proven
 in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
+
+## Pages that read as documents, as Grok Bot's do (owner, 2026-11-14)
+
+R-PAGE-06, R-PAGE-07. The owner put Grok Bot's page beside ours (a Tokyo list: a 32 px title, one line of summary, an
+「On this page」 box, a blue note with an icon, a dropdown 「區域」 and category tabs over a wide table with figures at the right
+and a column of links) and said the gap is real (「你也可以看到 grokBots 跟我們實質性的差距…他們內部的 page，我覺得他們做得非常的好」).
+Two halves of the page's own drawing changed; how a page opens and its frame did not (another change).
+
+- **HTML pages.** Core `agent/page_style.py` `BASE`, injected by `pages.document` after the theme's words and before the page's own
+  style, for the pages a member writes (not a plugin's). Type (15 px on 1.6; h1 32, h2 22, h3 17), the root at most 1120 px and
+  centred with a gutter, tables (header on the surface, hairlines, round corners, `.num` at the right; under 720 px the table scrolls
+  inside itself), links, code, quotes, lists, plain controls; the classes `.callout` (`.info` `.warn` `.ok`), `.toc`, `.chips`,
+  `.cards`, `.kpis`. All of it in `:where()`, so a page's own rule wins; only the theme's words; no address. The tool names the
+  classes in one clause.
+- **Reports.** `summary` (one line under the title, in place of the date and the promise of recorded facts, which stay the default);
+  the contents as a box with a list (`.rp-toc`, a column beside a 960 px page); a `callout` section (`.rp-note`, tone and icon from
+  the icon set's `alert`, `success`, `info`); table cells that are `{text, url}` links (`a.rp-link`, https only, opened by
+  `open_external_url`), a table `filter` (a `.sel` dropdown, `openMenu`, with the group tabs through `showRows`), columns of figures
+  at the right (`data-num`) and of short words on one line (`data-short`); 100 rows and 160 characters a cell. The saved file has
+  neither dropdown nor tabs, and its links stay links (core `checked_file` takes an https `href` and `rel`).
+- **Tool words.** About 25 words on show_page for the base classes and in REPORT's description for the new fields; the lengths the
+  checker already refuses on left the schema, and the three copies of the status words became one, so the default prompt's budget
+  (`test_management_discovery.py`) holds.
+
+How to get to it: in a member's conversation, ask for a list or comparison with filters (the member gives `report` with `summary`,
+`callout`, a table with `filter` and link cells, or an `html` page that uses the base classes); press the page card.
+
+```powershell
+npm run look -- page-document page-document-menu page-document-filter page-base page-base-table page-base-end --theme both --width 1120,720,1920x1080
+```
+
+page-document checks the large title (31.9 px, 26.4 under 640), the summary in the text's colour with no promise, the contents box (a
+list down the page, a box as wide as the page, or the column beside a 960 px page), three notes in three tone colours with the
+heading in the tone, a dropdown named 區域 and eight tabs, two columns of figures at the right, twelve links in the theme's blue
+underlined, nothing wider than the page; page-document-menu the nine values hanging from the dropdown, whole on screen;
+page-document-filter one row left by 原宿 and 經典名勝 and the tab chosen. page-base runs `frame-check` (`checkFrame`, inside the
+page's own frame) for the measures of the base style in the frame's theme: the page's colours, 15/24 type, the sizes of h1 to h3 and
+the page's own h3 winning, a 660 px line, a table with its outline, header and rows, `.num` at the right, links, the notes' tint
+and marks, the boxed list, tabs, cards in as many columns as fit, tiles, quote and code, and a table that is a block that scrolls
+at 720 px or less; page-base-table and page-base-end read the same page down to its table and to its end. Their pages come from
+the core itself (`runner.mjs pageBaseDocuments` calls `agent.pages.document` for each theme), so a scene sees what the owner's
+page gets. Compare page-document at 1920 with Grok Bot's picture: title, summary, box, note, dropdown, tabs and table in the same
+order, and compare the page-document note with the findings callout (`page-report`), the dropdown with the connection page's
+`.sel`, and the link colour with the conversation's.
+
+Tests: core `tests/agent/test_pages.py` (the base style's order, selectors, words and measures; the classes the tool names; the
+summary, callout, links, filter and limits, every refusal; the file's links); `app/src/main/report-page.test.ts` (summary, box,
+notes, figures, links, dropdown, file) and `page-theme.test.ts` (the base style reads only the theme's words). Native boundary: a
+real member turn on a real model writing such a page is not proven here (no model call was made); the fixture draws the pages the
+checker keeps.
 
 ## Diagnostic credential security (2026-11-05)
 

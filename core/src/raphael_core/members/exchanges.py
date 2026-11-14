@@ -44,6 +44,9 @@ _STALLED = ('limit_time', 'timeout')
 _NAMED = KINDS - {'timeout', 'unknown'}
 # Why an exchange stopped, when that is not a failure: the owner's Stop or new message, and the bound on colleague chatter.
 _NOT_FAILURES = ('owner', 'interjection', 'reply_budget')
+# An exchange that is the member's own turn about the owner's reaction to one of its messages (`RoomsService._ask_about_reaction`):
+# made on a member's message, never on the owner's, and neither a meeting nor a digest. It is no part of a discussion.
+_REACTION = "(e.meeting=0 AND EXISTS(SELECT 1 FROM room_messages o WHERE o.id=e.origin_message_id AND o.member_id IS NOT NULL))"
 logger = logging.getLogger(__name__)
 
 
@@ -136,8 +139,34 @@ class RoomExchanges:
         row = self.conn.execute("SELECT * FROM room_exchanges WHERE origin_message_id = ?", (origin,)).fetchone()
         return Exchange(**dict(row)) if row else None
 
+    def is_reaction(self, origin):
+        return self.conn.execute(f"SELECT 1 FROM room_exchanges e WHERE e.origin_message_id=? AND {_REACTION}", (origin,)).fetchone() is not None
+
+    def discussing(self, room_id, thread_id):
+        """Whether the thread is being discussed: an exchange of the owner's message, a meeting or a digest is under way in it.
+        What a member says about a reaction is no discussion."""
+        return self.conn.execute(f"SELECT 1 FROM room_exchanges e JOIN room_messages m ON m.id=e.origin_message_id "
+                                 f"WHERE e.room_id=? AND m.thread_id=? AND e.state IN ('queued','running') AND NOT {_REACTION}",
+                                 (room_id, thread_id)).fetchone() is not None
+
+    def forget_reaction(self, origin, *, analysed=False):
+        """Take what a member's turn about a reaction made out of the thread: its message and turn, and its exchange. Unless
+        `analysed`, the reaction was not analysed, and the same emoji given again is."""
+        emoji = self.rooms._reaction_runs.pop(origin, None)
+        turns = [row[0] for row in self.conn.execute("SELECT turn_id FROM room_exchange_turns WHERE origin_message_id=?", (origin,))]
+        with self.conn:
+            for turn_id in turns:
+                self.conn.execute("DELETE FROM room_messages WHERE turn_id=?", (turn_id,))
+                self.conn.execute("DELETE FROM room_exchange_turns WHERE turn_id=?", (turn_id,))
+            self.conn.execute("DELETE FROM room_exchanges WHERE origin_message_id=?", (origin,))
+        for turn_id in turns:
+            self.rooms._history.delete(turn_id)
+        if emoji and not analysed:
+            self.rooms._reaction_asks.release('room', (origin,), emoji)
+
     def latest(self, room_id, thread_id=None):
-        row = self.conn.execute("SELECT * FROM room_exchanges WHERE room_id = ? "
+        # A member's words about a reaction are no discussion: they are neither the thread's meeting nor what the room is busy with.
+        row = self.conn.execute(f"SELECT * FROM room_exchanges e WHERE room_id = ? AND NOT {_REACTION} "
                                 "AND (? IS NULL OR origin_message_id IN (SELECT id FROM room_messages WHERE thread_id=?)) "
                                 "ORDER BY (state IN ('queued','running')) DESC, origin_message_id DESC LIMIT 1", (room_id,thread_id,thread_id)).fetchone()
         if not row:
@@ -332,10 +361,10 @@ class RoomExchanges:
 
     def stop(self, room_id, thread_id=None):
         with self.conn:
-            self.conn.execute("UPDATE room_reply_intents SET state='blocked', reason='owner' WHERE state IN ('queued','running') "
-                              "AND origin_message_id IN (SELECT e.origin_message_id FROM room_exchanges e JOIN room_messages m ON m.id=e.origin_message_id WHERE e.room_id=? AND (? IS NULL OR m.thread_id=?))", (room_id,thread_id,thread_id))
-            self.conn.execute("UPDATE room_exchanges SET stop_requested = 1, pending = '[]', reason = 'owner' "
-                              "WHERE room_id = ? AND state IN ('queued','running') AND (? IS NULL OR origin_message_id IN (SELECT id FROM room_messages WHERE thread_id=?))", (room_id,thread_id,thread_id))
+            self.conn.execute(f"UPDATE room_reply_intents SET state='blocked', reason='owner' WHERE state IN ('queued','running') "
+                              f"AND origin_message_id IN (SELECT e.origin_message_id FROM room_exchanges e JOIN room_messages m ON m.id=e.origin_message_id WHERE e.room_id=? AND (? IS NULL OR m.thread_id=?) AND NOT {_REACTION})", (room_id,thread_id,thread_id))
+            self.conn.execute(f"UPDATE room_exchanges AS e SET stop_requested = 1, pending = '[]', reason = 'owner' "
+                              f"WHERE room_id = ? AND state IN ('queued','running') AND NOT {_REACTION} AND (? IS NULL OR origin_message_id IN (SELECT id FROM room_messages WHERE thread_id=?))", (room_id,thread_id,thread_id))
 
     def digest(self, room_id, message_id, language='en'):
         """One report/post can request one digest round, never an owner interjection."""
@@ -353,6 +382,7 @@ class RoomExchanges:
 
     def _settle(self, exchange, room):
         active = False
+        reaction = self.is_reaction(exchange.origin_message_id)
         for row in self.conn.execute("SELECT * FROM room_exchange_turns WHERE origin_message_id=? AND state='running'",
                                      (exchange.origin_message_id,)).fetchall():
             turn = self.rooms._history.get(row['turn_id'])
@@ -376,7 +406,7 @@ class RoomExchanges:
                 # Only the kind: the provider's or the CLI's own words stay with the task's private record.
                 logger.warning('Room reply did not finish: room=%s member=%s reason=%s', room['id'], row['member_id'], failure)
             recipients = []
-            if not failure and message['kind'] != 'wrapup' and not exchange.stop_requested and not is_pass(projected['text']):
+            if not failure and not reaction and message['kind'] != 'wrapup' and not exchange.stop_requested and not is_pass(projected['text']):
                 for recipient in self.rooms._targets(room, projected['text']):
                     if recipient == row['member_id']:
                         continue
@@ -398,13 +428,22 @@ class RoomExchanges:
                     self.conn.execute("INSERT INTO room_member_cursor VALUES (?,?,?,?) ON CONFLICT(room_id,thread_id,member_id) "
                         "DO UPDATE SET seen_message_id=MAX(seen_message_id,excluded.seen_message_id)",
                         (room['id'],message['thread_id'],row['member_id'],row['seen_through']))
-                if failure and message and not self.conn.execute('SELECT 1 FROM room_reply_intents WHERE turn_id=?',(row['turn_id'],)).fetchone():
+                if failure and message and not reaction and not self.conn.execute('SELECT 1 FROM room_reply_intents WHERE turn_id=?',(row['turn_id'],)).fetchone():
                     self.conn.execute("INSERT INTO room_reply_intents(origin_message_id,source_message_id,recipient_id,recipient_name,state,reason,turn_id) "
                         "VALUES (?,?,?,?,'blocked',?,?)", (exchange.origin_message_id,message['id'],row['member_id'],self.name(row['member_id']),failure,row['turn_id']))
             if turn:
                 current = self.get(exchange.origin_message_id)
                 self.update(exchange.origin_message_id,cost=current.cost+turn.cost_usd,
                             spoken=json.dumps(sorted(set(json.loads(current.spoken)) | {row['member_id']})))
+            if reaction:
+                # Its words, if it said any, stay in the thread. A pass leaves nothing, and a failure leaves nothing and
+                # counts for no analysis: the owner asked for no card, and the same emoji given again is analysed.
+                said = bool(projected) and not failure and not is_pass(projected['text'])
+                if said:
+                    self.rooms._reaction_runs.pop(exchange.origin_message_id, None)
+                    continue
+                self.forget_reaction(exchange.origin_message_id, analysed=not failure)
+                return True  # the exchange is gone: there is nothing left to drive
         self.update(exchange.origin_message_id,active_turn=None)
         return active
 
@@ -425,6 +464,9 @@ class RoomExchanges:
                 exchange = self.get(exchange.origin_message_id)
                 thread = self.conn.execute('SELECT thread_id FROM room_messages WHERE id=?', (exchange.origin_message_id,)).fetchone()[0]
                 if (tripped := self.breaker(room_id, thread)) is not None:
+                    if self.is_reaction(exchange.origin_message_id):
+                        self.forget_reaction(exchange.origin_message_id)  # a reaction never opens the circuit, nor says that it is open
+                        continue
                     # A run of failures of one cause: no one is asked again until the owner writes here. The room says so once.
                     self.block(exchange.origin_message_id, tripped[2], room)
                     self.update(exchange.origin_message_id, state='stopped', pending='[]', reason='circuit_open')
@@ -433,6 +475,9 @@ class RoomExchanges:
                 cap = float(self.rooms._settings.get('worker_cost_cap_usd'))
                 reason = ('membership' if room['membership_state'] != 'ready' else exchange.reason if exchange.stop_requested
                           else 'cost' if exchange.cost >= cap or self.spend.is_over(self.rooms._settings.get('monthly_limit_usd')) else '')
+                if reason and self.is_reaction(exchange.origin_message_id):
+                    self.forget_reaction(exchange.origin_message_id)
+                    continue
                 if reason:
                     self.block(exchange.origin_message_id,reason,room)
                     self.update(exchange.origin_message_id,state='stopped',pending='[]',reason=reason)

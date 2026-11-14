@@ -1,9 +1,17 @@
 /* A page in the conversation's place (page-view.ts; owner, 2026-11-11: 「直接顯示在對話裡…就是內部顯示器的感覺，它不會再打開一個
    dialog，然後可能左上角會變成返回上頁」). The thread stays laid out under it, hidden, so its place and its scroll are as they
    were when the owner goes back; the composer stays below, so a change can be asked for where the page is read. There is no
-   scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`). */
+   scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`).
+   Since 2026-11-14 (R-PAGE-08; owner, with a page opened from Grok Bot's Library) the page is the whole area right of the sidebar:
+   the details panel is folded while it stands, the header's centre is the page's own pill, Share is at the right, and the area
+   scrolls as one with no frame around the page. */
+.ra-stage.is-page { --pgv-w: calc(40 * var(--sp-6)); }
 .ra-stage.is-page { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
-.ra-stage.is-page > :not(.ra-scroll, .pgv, .ra-dock) { display: none; }
+/* The voice flyer is the one thing that stays beside them: the thread's own "hearing" line is hidden with the thread, so it is the
+   only sign left that the owner is heard (voice-mode.ts; owner, 2026-11-14). It stands over the page, takes no pointer there (the
+   page scrolls and its buttons work under it; the composer's button and Escape end the recording) and is gone when it ends. */
+.ra-stage.is-page > :not(.ra-scroll, .pgv, .ra-dock, .ra-flyer) { display: none; }
+.ra-stage.is-page > .ra-flyer { pointer-events: none; cursor: default; }
 .ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }
 /* The member's face while it works is drawn apart from its line (as slimes are), so it would show through the hidden thread: its line is
    the one under the page. */
@@ -13,6 +21,7 @@
 .pgv { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; background: var(--content); }
 .pgv[hidden] { display: none; }
 .pgv-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.pgv-body > .pgv-page { height: 100%; }
 
 /* While a page stands there the thread's own tools wait: the arrow stands where the search did (a room's search, at the
    right, keeps its place so nothing moves), and the search bar the thread would have under the header is put away. */
@@ -26,13 +35,26 @@
 .mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="share-member"] { display: none; }
 .mb-chat:has(> .ra-stage.is-page) .mb-head .ra-tools:has(> [data-page-act]) [data-room-search] { display: none; }
 
-/* An HTML page: its title in sight, then the page itself, as wide as the composer (the thread's column), its corners
-   rounded and nothing around it. It fills what the thread filled and scrolls inside, as the page was made to. */
-.pgv-page { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); min-height: 0; padding: var(--pa-top) var(--pa-dock-x) var(--sp-2); }
-.pgv-page > * { width: 100%; max-width: var(--pa-colw); margin-inline: auto; }
-.pgv-title { margin: 0 auto; padding: var(--sp-2) 0 var(--sp-3); overflow: hidden; font: var(--weight-medium) var(--fs-md)/1.4 var(--ui); text-overflow: ellipsis; white-space: nowrap; }
-.pgv-frame-box { position: relative; min-height: 0; overflow: hidden; border-radius: var(--r-lg); background: var(--content); }
+/* An HTML page: the whole area under the header, scrolling as one (owner, 2026-11-14: 「它會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」). The
+   page is as wide as the area allows up to `--pgv-w`, between the same gutters as the thread, and has no frame or corner of its
+   own: its iframe is as tall as the page says (the page's own height messages), at least as tall as the area, so a page made to
+   fill a screen fills it and a longer one is read by scrolling the area. It fades out under the header as the thread does. */
+.pgv-page { min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding: var(--row-lead) var(--pa-dock-x) var(--sp-4); scroll-padding-top: var(--row-lead); mask-image: linear-gradient(to bottom, transparent calc(var(--row-lead) - 36px), var(--text) var(--row-lead)); }
+.pgv-page::-webkit-scrollbar { display: none; }
+.pgv-page:focus { outline: none; }
+.pgv-frame-box { position: relative; width: 100%; max-width: var(--pgv-w); height: max(var(--pgv-h, 320px), 100%); margin-inline: auto; }
 .pgv-frame-box > .pg-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* The header's centre, while a page stands: its mark and its title as one soft pill, as Grok Bot's (the member's pill is put away
+   and comes back with the thread). It is no control: the page's way out is the arrow. */
+.pgv-pill { display: none; align-items: center; justify-content: center; gap: var(--sp-2); width: fit-content; max-width: min(360px, 100%); height: 40px; margin: 6px auto 0; padding: 0 var(--sp-4); border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); font-size: var(--pa-pill-fs); font-weight: var(--weight-semibold); line-height: 1.5; }
+.pgv-pill > .i { flex: none; width: 18px; height: 18px; color: var(--text-2); }
+.pgv-pill-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb-chat:has(> .ra-stage.is-page) .pgv-pill:not([hidden]) { display: flex; }
+.mb-chat:has(> .ra-stage.is-page) .mb-head-c > .conversation-head { display: none; }
+/* A long title is cut by the pill, never into the arrow or Share: both sides of the row keep what they hold (the right one also what
+   the window's buttons reserve), the pill gets the rest and stays in the middle (the judge on page-inplace at 720: 5 px between the pill and Share). */
+.page-agent .mb-chat:has(> .ra-stage.is-page) > .mb-head:has(> .mb-head-c) { grid-template-columns: minmax(auto, 1fr) minmax(0, auto) minmax(auto, 1fr); }
 
 /* A room's thread and composer are inset by the room's own padding too (automations.css), so its page, its report and
    the line under them are: all start and end where the room's composer does. */

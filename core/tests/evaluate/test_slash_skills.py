@@ -62,8 +62,7 @@ async def test_namespaces_keep_plugin_collisions_and_member_scope_distinct(tmp_p
         assert cap.expand(other, "/field-notes:review input") == "/field-notes:review input"
         cap.delete_skill(0, second["id"])
         assert cap.expand(0, "/unknown input") == "/unknown input"
-        cap.undo_skills(0, cap.undo_revision(0))
-        assert len(cap.skills(0)) == 2 and "DESK-9104" in cap.read_skill(0, "desk-notes:review")
+        assert len(cap.skills(0)) == 1 and cap.read_skill(0, "desk-notes:review") is None
     finally:
         await owner.aclose()
 

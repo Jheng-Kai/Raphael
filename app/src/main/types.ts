@@ -146,6 +146,8 @@ export interface CliModel {
   id: string;
   name: string;
   provider?: string;
+  /** What the CLI also takes for this model and a member may have been saved with: Claude Code's `opus` is its newest Opus. */
+  aliases?: string[];
   effort_models?: Record<string, string>;
   description?: string;
   is_default?: boolean;
@@ -158,6 +160,7 @@ export interface CatalogModel {
   per_image?: number | null;
   per_request?: number | null;
   image_output_per_mtok?: number | null;
+  aliases?: string[];
   effort_models?: Record<string, string>;
   description?: string;
   is_default?: boolean;
@@ -413,7 +416,9 @@ export interface PageCard {
 /** A report page's content as the core keeps it (core agent/report_page.py): every value is plain text. */
 export type ReportStatus = "running" | "done" | "pending" | "waiting" | "blocked" | "paused" | "failed";
 export interface ReportItem { title: string; text?: string; status?: ReportStatus; label?: string }
-export interface ReportRow { cells: string[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
+/** A table cell: its words, or a link (an https address the owner's browser opens). */
+export type ReportCell = string | { text: string; url: string };
+export interface ReportRow { cells: ReportCell[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
 export interface ReportNode { id: string; member_id?: number; owner?: true; name?: string; note?: string }
 export interface ReportEdge { from: string; to: string; label?: string }
 /** A figure on a tile: what it is, its value as written, its unit, its change ("+1.35%"), a few words, its recent values. */
@@ -425,13 +430,16 @@ export type ReportChart = { kind: "chart"; title?: string; span?: "half"; type: 
 export type ReportStats = { kind: "stats"; title?: string; span?: "half"; tiles: ReportTile[] };
 export type ReportSection = (
   | { kind: "findings"; title?: string; callout?: string; items: ReportItem[] }
-  | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string }
+  | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string; filter?: string }
   | { kind: "team"; title?: string; nodes: ReportNode[]; edges: ReportEdge[]; notes?: { label: string; text: string }[] }
   | { kind: "text"; title?: string; text: string }
+  | { kind: "callout"; title?: string; tone: ReportTone; heading?: string; text: string }
   | ReportStats
   | ReportChart
 ) & { span?: "half" };
-export interface Report { as_of: string; sections: ReportSection[] }
+export type ReportTone = "info" | "warn" | "ok";
+/** `summary`: the member's one line under the title, in place of the date and the promise of recorded facts. */
+export interface Report { as_of: string; summary?: string; sections: ReportSection[] }
 export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
 /** Where a report's file went (`report_save`): the owner's output folder, by its name, or Downloads. */
 export interface ReportSaved { place: "output" | "downloads"; folder: string }
@@ -1003,6 +1011,8 @@ export interface Member {
   created: number;
   unread: boolean;
   unread_from?: number | null;
+  /** What the unseen news is: a message, a task or routine that ended well, or work that went wrong (null: none). */
+  unread_kind?: "message" | "done" | "failed" | null;
   waiting: boolean;
   activity?: string;
   activity_label?: string;
@@ -1105,7 +1115,7 @@ export interface RoutineRun {
   status: string; turn_id: number | null; summary: string; cost: number;
 }
 export interface Room {
-  preview?: string; preview_member_id?: number | null; last_at?: number | null; unread?: boolean; waiting?: boolean; pinned?: boolean; hidden?: boolean;
+  preview?: string; preview_member_id?: number | null; last_at?: number | null; unread?: boolean; unread_kind?: "message" | "done" | null; waiting?: boolean; pinned?: boolean; hidden?: boolean;
   id: number; name: string; group_id: number | null; created: number;
   is_team: number; member_ids: number[]; default_responder?: string;
   membership_state?: "ready" | "needs_adjustment";
@@ -1260,8 +1270,6 @@ export interface AppContext {
   cleared: Cleared;
   /** Closes the settings panel (it opens with `go("settings")`). */
   closeSettings(): void;
-  /** Opens the first-run guide again over the window (the settings close first); it does not clear `onboarded`. */
-  rerunGuide(): void;
 }
 
 // ---------- connections (the plugins of the core and the store) ----------

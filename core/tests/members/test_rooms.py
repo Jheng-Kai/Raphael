@@ -70,6 +70,29 @@ async def test_sidebar_room_summary_read_position_and_actions_persist(rig, rooms
     assert len(rig.notes) == count
 
 
+async def test_a_room_says_what_its_news_is_and_a_finished_meeting_is_done(rig, rooms):
+    room = await create(rig, [0])
+    await rig.call("rooms.send", {"room_id": room["id"], "text": "Let us meet", "request_id": "news-kind"})
+    turn_id = rig.background.attached[-1][1]
+    AgentHistory(rig.conn).resolve(turn_id, prefix="", text="I think so too.", status="done")
+    rooms.turn_arrived(turn_id)
+    await rooms.wait_idle()
+    listed = (await rig.call("rooms.list", {}))["rooms"][0]
+    assert listed["unread"] and listed["unread_kind"] == "message"  # new words are a message
+    origin = rig.conn.execute("SELECT origin_message_id FROM room_exchanges WHERE room_id=?", (room["id"],)).fetchone()[0]
+    with rig.conn:
+        rig.conn.execute("UPDATE room_exchanges SET meeting=1, state='running' WHERE origin_message_id=?", (origin,))
+        rig.conn.execute("INSERT OR IGNORE INTO room_exchange_turns(origin_message_id, turn_id, member_id, round, seen_through, state)"
+                         " VALUES (?,?,0,0,?, 'done')", (origin, turn_id, origin))
+    assert (await rig.call("rooms.list", {}))["rooms"][0]["unread_kind"] == "message"  # a meeting that goes on is still words
+    with rig.conn:
+        rig.conn.execute("UPDATE room_exchanges SET state='done' WHERE origin_message_id=?", (origin,))
+    assert (await rig.call("rooms.list", {}))["rooms"][0]["unread_kind"] == "done"
+    await rig.call("rooms.update", {"room_id": room["id"], "read": True})
+    after = (await rig.call("rooms.list", {}))["rooms"][0]
+    assert not after["unread"] and after["unread_kind"] is None
+
+
 @pytest.mark.parametrize("key", ["read", "hidden", "pinned"])
 async def test_sidebar_room_actions_reject_non_boolean_flags(rig, rooms, key):
     room = await create(rig, [0])

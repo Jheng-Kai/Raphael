@@ -96,6 +96,7 @@ class Turn:
     reactions: dict = field(default_factory=dict)
     card_outcomes: list[str] = field(default_factory=list)
     failure: dict | None = None
+    colleague_answers: list[Turn] = field(default_factory=list, repr=False)
 
 
 def is_unfinished(turn: Turn) -> bool:
@@ -167,9 +168,8 @@ def _to_turn(row: sqlite3.Row) -> Turn:
 # A member's exchanges with colleagues: what another member asked it (`ask_member`) or handed it (`handoff`), kept
 # outside its private conversations. Room work stays in rooms.
 _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
-# What its own page lists of them: work handed to it, since that is where it does the work. A question is the asker's
-# record alone (`_colleague_events`): a member the owner never spoke to would otherwise fill up with other members' talk.
-_HANDED = _EXCHANGES + " AND (session_id GLOB 'handoff:[0-9]*' OR EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work'))"
+# Each side keeps its own copy: `member_id` scopes these exchanges to the member whose thread is read.
+_OWN_EXCHANGES = _EXCHANGES
 # The turns the model reads as the conversation (`is_readable`), as SQL.
 _READABLE = (
     f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"
@@ -183,7 +183,7 @@ def _anything(step: Step) -> bool:
 
 def _thread(member_id: int, conversation_id: int | None, exchanges: bool) -> tuple[str, list[object]]:
     """The conditions of a member's thread as its chat lists it, and their params."""
-    scopes = f"(scope = 'private' OR ({_HANDED}))" if exchanges else "scope = 'private'"
+    scopes = f"(scope = 'private' OR ({_OWN_EXCHANGES}))" if exchanges else "scope = 'private'"
     where, params = f"{scopes} AND status != 'withdrawn' AND member_id = ?", [member_id]
     if conversation_id is not None:
         where += " AND conversation_id = ?"
@@ -204,7 +204,7 @@ def _filters(
         where += " AND t.member_id = ?"
         params.append(member_id)
     if conversation_id is not None:
-        where += " AND (t.conversation_id = ? OR t.scope = 'exchange')"
+        where += " AND t.conversation_id = ?"
         params.append(conversation_id)
     if since_ms is not None:
         where += " AND t.created_at_ms >= ?"
@@ -426,10 +426,12 @@ class AgentHistory:
         from .reactions import private_reactions
         from .card_context import card_outcomes
         outcomes = card_outcomes(self._conn, (turn.id for turn in turns), self._now_ms())
+        asked = self.asked_from(turn.id for turn in turns if turn.id is not None)
         for turn in turns:
             turn.card_outcomes = outcomes.get(turn.id, [])
             turn.reactions = private_reactions(self._conn, turn.id)
             turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, []) if not (m["kind"] == "event" and is_action(m["text"]))]
+            turn.colleague_answers = [exchange for exchange in asked.get(turn.id, []) if exchange.status == "done"]
         return turns
 
     def messages(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
@@ -517,7 +519,7 @@ class AgentHistory:
     ) -> list[Turn]:
         """The thread of `member_id`, newest first. `before_id` keeps the turns made before that
         one: the cursor for the next page. With `exchanges`, what colleagues asked or handed the
-        member (`_HANDED`) is among them, where it came."""
+        member's own received exchanges are among them, where they came."""
         where, params = _thread(member_id, conversation_id, exchanges)
         if before_id is not None:
             where += " AND id < ?"
@@ -570,7 +572,7 @@ class AgentHistory:
         them, in their place (`is_unfinished`), each told what it already did (`with_work`)."""
         if count <= 0:
             return []
-        condition = "" if conversation_id is None else " AND (conversation_id = ? OR scope = 'exchange')"
+        condition = "" if conversation_id is None else " AND conversation_id = ?"
         from .card_context import CARD_TURNS_SQL
         said = _READABLE if unfinished else "status = 'done'"
         said = f"({said} OR id IN ({CARD_TURNS_SQL}))"

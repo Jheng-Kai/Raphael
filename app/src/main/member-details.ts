@@ -1,4 +1,4 @@
-// The landing view holds routines and conversations, the member's computer (one quiet row), its bots and its library. Everything
+// The landing view holds routines and conversations, its bots and its library; the computer is the third tab only (owner, 2026-11-14). Everything
 // the owner changes about a member lives on the member settings page (member-settings.ts), which the gear opens in the
 // main area where the conversation is.
 
@@ -24,7 +24,6 @@ import { LIBRARY_LIMIT, panelLibraryHTML, readPanelWork, type LibraryFilter, typ
 import { tabs } from './ui';
 import { describeError } from "./format";
 import { askInChat, askPending, onAskPending } from "./chat-ask";
-import { computerRowHTML, computerRowOf, onComputerRow } from "./computer-row";
 import { type Messaging, type MessagingKind, chatChannelsHTML, createMemberChannel, createRaphaelChannel } from "./messaging";
 
 export type DetailsTab = "details" | "library" | "computer";
@@ -43,6 +42,8 @@ export interface DetailsHost {
   openSettings?(): void;
   openConversation?(member: number, conversation: number): void;
   openTurn?(member: number, conversation: number | undefined, turn: number): void;
+  /** A page of the Library was pressed: it opens itself, whole, in the area beside the sidebar (R-PAGE-08). */
+  openPage?(page: { id: string; title: string; conversation?: number; turn: number }): void;
   /** The conversation open with this member, undefined for their default. */
   conversationOf?(member: number): number | undefined;
 }
@@ -181,7 +182,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
   // A press the member is working on draws its button busy; the end of it frees the button (chat-ask.ts).
   onAskPending(() => { if (!el.hidden) draw(); });
-  onComputerRow(() => { if (!el.hidden && tab === "details") draw(); });
 
   function draw(): void {
     if (el.hidden) return;
@@ -192,8 +192,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const signature = JSON.stringify([stableMember(member), face, host.list()?.groups, routines, work, workFailed, tab, libraryFilter, getLocale(), !!host.openConversation, host.conversationOf?.(member.id),
       // The bot cards redraw on their own state.
       tab === "details" ? channelViews(member.id).map(([kind, view]) => [kind, { ...view, token: "" }]) : null,
-      // The computer's row: its state word and the last picture of its screen.
-      tab === "details" ? computerRowOf(member.id) ?? null : null,
       (["setup-telegram", "setup-slack", "setup-discord"] as const).map((intent) => askPending(member.id, intent))]);
     if (drawn === signature) return;
     drawn = signature;
@@ -218,14 +216,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         conversationHost.remove();
         patchHTML(body, `<section class="mb-panel-routines" data-k="panel-routines"></section>` +
           (chief ? `<section><div class="mb-dh"><span data-panel-conversations-heading>${esc(t('members.panelConversations'))}</span></div><div data-slot="conversations" data-k="panel-conversations"></div></section>` : "") +
-          `<section class="mb-panel-computer" data-k="panel-computer"></section>` +
           `<section class="mb-panel-suggest" data-k="panel-suggest"></section>`);
       }
       // The skeleton is kept across draws, so its heading follows a language change here.
       const heading = body.querySelector<HTMLElement>('[data-panel-conversations-heading]');
       if (heading && heading.textContent !== t('members.panelConversations')) heading.textContent = t('members.panelConversations');
       patchHTML(body.querySelector('.mb-panel-routines')!, routinesHTML());
-      patchHTML(body.querySelector('.mb-panel-computer')!, computerRowHTML(computerRowOf(member.id), member.name));
       const suggest = body.querySelector<HTMLElement>('.mb-panel-suggest');
       if (suggest) patchHTML(suggest, suggestHTML());
     } else if (tab === 'library') {
@@ -263,14 +259,19 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (filter) { libraryFilter = filter.dataset.libFilter as LibraryFilter; draw(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
-      // A deliverable opens as it was handed over: a picture large, a page at the reply that published it, a link in the
+      // A deliverable opens as it was handed over: a picture large, a page itself, whole (R-PAGE-08), a link in the
       // browser, an attachment or a delivered file with the computer's own program.
       const file = work?.files.find(file => file.id === fileButton.dataset.panelFile);
       const unavailable = (): void => { toaster.info(t('agent.fileUnavailable')); };
       const picture = fileButton.querySelector<HTMLImageElement>('img[src]');
       if (!file) return;
       if (file.kind === 'image' && picture) openMediaLightbox(fileButton, picture.src);
-      else if (file.kind === 'page' && file.turn_id) host.openTurn?.(host.member().id, file.conversation_id ?? undefined, file.turn_id);
+      // A page opens as the page itself (R-PAGE-08): the area beside the sidebar shows it whole, as Grok Bot's Library does.
+      else if (file.kind === 'page' && file.turn_id) {
+        const page = { id: file.id.replace(/^page:/, ''), title: file.title, conversation: file.conversation_id ?? undefined, turn: file.turn_id };
+        if (host.openPage) host.openPage(page);
+        else host.openTurn?.(host.member().id, page.conversation, page.turn);
+      }
       else if (file.kind === 'link' && file.url) void api.openExternalUrl(file.url).catch(unavailable);
       else if (file.attachment_id) void api.openAttachment(file.attachment_id).catch(unavailable);
       else void api.openLibraryFile(host.member().id, file.id).catch(unavailable);
@@ -287,12 +288,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         break;
       case "setup": askInChat(member.id, act.dataset.intent as api.AskIntent); break;
       case "gear": host.openSettings?.(); break;
-      // The computer is one press: asleep it wakes, awake it opens large (agent.ts), and a PC with no engine starts or downloads it.
-      case "computer-open": el.dispatchEvent(new CustomEvent("member-computer-open", { bubbles: true })); break;
-      case "computer-fix":
-        if (act.dataset.fix === "download") void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(() => { toaster.info(t("desktop.unavailable")); });
-        else el.dispatchEvent(new CustomEvent("member-computer-open", { bubbles: true }));
-        break;
       case "avatar":
         openMemberAvatarMenu(act, member, host.update);
         break;

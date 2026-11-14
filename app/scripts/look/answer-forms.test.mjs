@@ -108,34 +108,53 @@ it("a question's answer button stands at the field height and shares the field's
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("a page open in the conversation's place has the arrow at the header's top left, the composer's column and no dialog (2026-11-11)", () => {
-  // The × once stood outside a dialog's page (2026-11-11); the page now replaces the conversation and the header's arrow goes back.
+it("a page open in the conversation's place is the whole area: the panel folded, the page's pill, Share, no dialog (2026-11-11, 2026-11-14)", () => {
+  // The × once stood outside a dialog's page (2026-11-11); the page now replaces the conversation, the header's arrow goes back, and (R-PAGE-08)
+  // it takes the whole area beside the sidebar with the page's own pill in the header's centre and Share at its right.
   const browser = new Window(), doc = browser.document;
-  doc.body.innerHTML = '<div class="page-agent"><section class="mb-chat"><div class="mb-head"><span class="mb-head-l"><button class="icon" data-page-back aria-label="返回"><svg></svg></button></span>' +
-    '<span class="conversation-trigger"><span class="mb-pill">小晴</span></span></div>' +
-    '<div class="ra-stage is-page" data-page-kind="page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-body"><div class="pgv-page"><h2 class="pgv-title">輕量後背包</h2><div class="pgv-frame-box"><iframe class="pg-frame"></iframe></div></div></div><div class="pgv-status" hidden></div></div>' +
+  doc.body.innerHTML = '<div class="page-agent"><div class="mb-det" hidden></div><section class="mb-chat"><div class="mb-head"><span class="mb-head-l"><button class="icon back" data-page-back aria-label="返回"><svg></svg></button></span>' +
+    '<span class="mb-head-c"><span class="conversation-head" hidden><span class="mb-pill">小晴</span></span><span class="pgv-pill"><svg class="i"></svg>輕量後背包</span></span>' +
+    '<div class="ra-tools"><button class="icon share" data-page-act aria-label="存成檔案"><svg></svg></button></div></div>' +
+    '<div class="ra-stage is-page" data-page-kind="page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-body"><div class="pgv-page"><div class="pgv-frame-box"><iframe class="pg-frame"></iframe></div></div></div><div class="pgv-status" hidden></div></div>' +
     '<div class="ra-dock"><div class="composer"></div></div></div><section class="pg-card"><b class="card-title">輕量後背包</b></section></section></div>';
   const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
-  const places = { "mb-head": rect(300, 20, 1100, 60), icon: rect(310, 22, 346, 58), "mb-pill": rect(600, 22, 700, 58), "pgv-title": rect(340, 70, 700, 100), "composer": rect(340, 800, 1060, 880),
-    "pgv-frame-box": rect(340, 110, 1060, 780), "pg-frame": rect(340, 110, 1060, 780), "ra-dock": rect(300, 790, 1100, 890) };
+  const places = { "mb-chat": rect(280, 0, 1080, 900), "mb-head": rect(280, 0, 1080, 60), "icon back": rect(290, 12, 326, 48), "icon share": rect(1000, 12, 1036, 48), "pgv-pill": rect(540, 20, 820, 60),
+    "pgv-page": rect(280, 0, 1080, 790), "pgv-frame-box": rect(296, 60, 1064, 790), "pg-frame": rect(296, 60, 1064, 790), "composer": rect(300, 800, 1060, 880), "ra-dock": rect(280, 790, 1080, 890) };
   for (const element of doc.querySelectorAll('*')) {
     element.checkVisibility = () => true;
     element.getBoundingClientRect = () => places[element.className || element.tagName.toLowerCase()] ?? rect(0, 0, 10, 10);
   }
+  doc.querySelector(".conversation-head").checkVisibility = () => false;
   vi.stubGlobal('document', doc);
   vi.stubGlobal('innerHeight', 900); vi.stubGlobal('innerWidth', 1100);
-  vi.stubGlobal('getComputedStyle', element => ({ visibility: element.className === "ra-scroll" ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "16px" : "999px", borderTopWidth: "0px", backgroundColor: "rgb(31, 31, 31)", getPropertyValue: () => "" }));
+  vi.stubGlobal('getComputedStyle', element => ({ visibility: element.className === "ra-scroll" ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "0px" : "999px", borderTopWidth: "0px",
+    backgroundColor: "rgb(31, 31, 31)", overflow: "visible", overflowY: "auto", boxShadow: "none", marginLeft: "0px", paddingLeft: element.className === "pgv-page" ? "16px" : "0px", paddingRight: element.className === "pgv-page" ? "16px" : "0px",
+    paddingTop: "60px", paddingBottom: "16px", getPropertyValue: name => name === "--sp-6" ? "32px" : "" }));
   try {
-    expect(checkRendered('page-inplace').width).toBe(720);
-    // A dialog over the page, the arrow far from the header's left, a page narrower than the composer's column: each is refused.
+    expect(checkRendered('page-inplace').width).toBe(768);
+    // A dialog over the page, the arrow far from the header's left, the panel still open, the member's pill still there, no Share,
+    // a page narrower than the area allows, a title line in the page: each is refused.
     doc.body.insertAdjacentHTML("beforeend", '<div class="mb-scrim"></div>');
     expect(() => checkRendered('page-inplace')).toThrow(/no dialog, no scrim and no ×/);
     doc.querySelector(".mb-scrim").remove();
-    places.icon = rect(700, 22, 736, 58);
+    places["icon back"] = rect(700, 12, 736, 48);
     expect(() => checkRendered('page-inplace')).toThrow(/at the header's top left/);
-    places.icon = rect(310, 22, 346, 58);
-    places["pgv-frame-box"] = rect(380, 110, 1020, 780);
-    expect(() => checkRendered('page-inplace')).toThrow(/as wide as the composer/);
+    places["icon back"] = rect(290, 12, 326, 48);
+    doc.querySelector(".mb-det").hidden = false;
+    expect(() => checkRendered('page-inplace')).toThrow(/details panel is folded/);
+    doc.querySelector(".mb-det").hidden = true;
+    doc.querySelector(".conversation-head").checkVisibility = () => true;
+    expect(() => checkRendered('page-inplace')).toThrow(/member's pill gives way/);
+    doc.querySelector(".conversation-head").checkVisibility = () => false;
+    const share = doc.querySelector("[data-page-act]");
+    share.removeAttribute("data-page-act");
+    expect(() => checkRendered('page-inplace')).toThrow(/Share leads the header's tools/);
+    share.setAttribute("data-page-act", "");
+    places["pgv-frame-box"] = rect(380, 60, 1000, 790);
+    expect(() => checkRendered('page-inplace')).toThrow(/as wide as the area allows/);
+    places["pgv-frame-box"] = rect(296, 60, 1064, 790);
+    doc.body.querySelector(".pgv-page").insertAdjacentHTML("afterbegin", '<h2 class="pgv-title">輕量後背包</h2>');
+    expect(() => checkRendered('page-inplace')).toThrow(/title is the pill's/);
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 

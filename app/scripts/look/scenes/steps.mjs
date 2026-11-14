@@ -2,7 +2,9 @@ export const stableClick = (selector, then = []) => ({ action: "stable-click", s
 export const click = selector => ({ action: "click", selector });
 export const hover = selector => ({ action: "hover", selector });
 /** A real press at a fraction (x, y) of the element, then the page `expect` names must be on screen. */
-export const pressAt = (selector, x, y, expect) => ({ action: "click-position", selector, x, y, expect });
+export const pressAt = (selector, x, y, expect, contains) => ({ action: "click-position", selector, x, y, expect, ...(contains ? { contains } : {}) });
+// A press that the core's events straddle: the button goes down on `selector`, `events` arrive and the page draws what they bring, the button comes up.
+export const pressThrough = (selector, x, y, events, expect, contains) => ({ action: "press-through", selector, x, y, events, expect, ...(contains ? { contains } : {}) });
 export const hold = (selector, ms = 500) => ({ action: "hold", selector, ms });
 // A press on `selector` moved `dx` px across and let go there (a pane's edge resizes it, edge-drag.ts). `wide`: only on a desktop-width window, where the list is not a drawer.
 export const drag = (selector, dx, options = {}) => ({ action: "drag", selector, dx, ...options });
@@ -25,6 +27,8 @@ export const lookCall = (name, ...args) => ({ action: "look-call", name, args })
 // A page open in the conversation's place: wheel over it, and what it must show once it has (frame-expect: its words, how far down it is).
 export const frameScroll = deltaY => ({ action: "frame-scroll", deltaY });
 export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", ...(text ? { text } : {}), ...(scrollAtLeast !== undefined ? { scrollAtLeast } : {}) });
+// What the page's own frame shows: a check run inside it (checks.mjs `checkFrame`).
+export const frameCheck = name => ({ action: "frame-check", name });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });

@@ -698,8 +698,20 @@ describe("a connected row and the back chevron", () => {
     expect(groupPage("ab12")).toBe(appPage("notion"));
   });
 
+  test("the words 「✓ 已連結」 of a connected row in the one view open the app's page too: the whole row is pressable, 連結 alone does something else", () => {
+    const card = cardOf("notion");
+    const state = card.querySelector(".cs-state")!;
+    expect(state.closest("[data-conn]")).toBeNull(); // no control of its own: the row's handler takes the press
+    expect(state.closest(".cs-card")).toBe(card);
+    expect(rule(".cs-card .cs-state:hover")).toMatch(/color:/);
+    // an app that is not connected: 連結 still joins, and the rest of its row opens the page
+    const linear = cardOf("linear");
+    expect(linear.querySelector(".cs-connect")!.closest("[data-conn]")!.getAttribute("data-conn")).toBe("join");
+    expect(linear.querySelector(".cs-main")!.getAttribute("data-conn")).toBe("open-store");
+  });
+
   test("a row says it can be pressed: the pointer over the whole row, and a hover fill of the floating surface clear of its words, in the connected list and the main view alike", () => {
-    expect(rule(".cs-linked")).toMatch(/cursor:\s*pointer/);
+    expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer/);
     expect(rule(".cs-card .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled)")).toMatch(/background:\s*var\(--float-hover\)/);
     expect(rule(".cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled)")).toMatch(/background:\s*var\(--pressed\)/);
     // 8 px of padding all round the words (R-UI-53), cancelled on the left by the margin so the mark stays on the content's edge.
@@ -1323,6 +1335,15 @@ describe("what the dialog does", () => {
     expect((c.view().catalog as StoreService[]).map(s => s.id)).toEqual(CATALOG.map(s => s.id));
   });
 
+  test("a press on 「✓ 已連結」 in a row of the one view opens that app's page", async () => {
+    const c = createConnections(host);
+    await c.load();
+    const state = dom(connectionsHTML(c.view())).querySelector(".cs-card .cs-state")!;
+    expect(c.click(state)).toBe(true);
+    expect(c.view().open).toMatchObject({ kind: "app" });
+    expect(c.view().open!.id).toBe(state.closest(".cs-card")!.querySelector(".cs-main")!.getAttribute("data-id"));
+  });
+
   test("a press on a connected row (its button, its mark, name or line, or the row itself) opens the app's page, and a press on the switch only turns the app off or on", async () => {
     const c = createConnections(host);
     await c.load();
@@ -1341,6 +1362,75 @@ describe("what the dialog does", () => {
     expect(c.view().open).toBeNull();
     await settle();
     expect(api.integrationsSetEnabled).toHaveBeenCalledWith("ab12", false);
+  });
+
+  test("a reading that finds nothing new touches nothing, so a press that is on its way to a row is not lost, and one that finds something draws", async () => {
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("connected"));
+    host.redraw.mockClear();
+    // The core says the connections changed (it does after every tool call of every member) and nothing on the list is different.
+    api.toolsetsList.mockClear();
+    c.followEvent({ type: "ConnectionsChanged" });
+    await settle();
+    expect(api.toolsetsList, "it did read").toHaveBeenCalledTimes(1);
+    expect(host.redraw, "the page stands as it is").not.toHaveBeenCalled();
+    // The same on an app's page, and on the one view.
+    c.click(button("open", { id: "ab12" }));
+    host.redraw.mockClear();
+    c.followEvent({ type: "ConnectionsChanged" });
+    await settle();
+    expect(host.redraw).not.toHaveBeenCalled();
+    c.click(button("back")); c.click(button("back"));
+    host.redraw.mockClear();
+    c.followEvent({ type: "ConnectionsChanged" });
+    await settle();
+    expect(host.redraw).not.toHaveBeenCalled();
+    // A reading that finds something (the count moved) draws, once.
+    api.integrationsInventory.mockResolvedValue(inventoryOf([app("cu1", "Files", { tools: 1 })]));
+    c.followEvent({ type: "ConnectionsChanged" });
+    await settle();
+    expect(host.redraw).toHaveBeenCalledTimes(1);
+  });
+
+  test("the tools of an app that arrive after the owner stepped back to the list leave the list as it is, and draw on the page they belong to", async () => {
+    const composio = { id: "composio:gmail", kind: "composio", name: "Gmail", description: "", logo: "", status: "ACTIVE", enabled: true, accounts: [{ id: "a1", status: "ACTIVE" }], enabled_tools: ["GMAIL_FETCH_EMAILS"], disabled_tools: [] };
+    api.connectorsStatus.mockResolvedValue({ connectors: [composio], composio_configured: true, google_configured: false });
+    let arrive: (value: { items: unknown[] }) => void = () => {};
+    api.connectorsTools.mockImplementation(() => new Promise((resolve) => { arrive = resolve; }));
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("connected"));
+    c.click(button("open", { id: "composio:gmail" })); // the tools are asked for, and are slow
+    c.click(button("back"));
+    host.redraw.mockClear();
+    arrive({ items: [{ slug: "GMAIL_FETCH_EMAILS", name: "搜尋郵件", description: "", kind: "read", enabled: true }] });
+    await settle();
+    expect(host.redraw, "the list the owner is on is not drawn again for tools it does not show").not.toHaveBeenCalled();
+    // the same reading, with the page open, draws it
+    api.connectorsTools.mockImplementation(() => Promise.resolve({ items: [{ slug: "GMAIL_FETCH_EMAILS", name: "搜尋郵件", description: "", kind: "read", enabled: true }, { slug: "GMAIL_CREATE_DRAFT", name: "撰寫草稿", description: "", kind: "write", enabled: true }] }));
+    host.redraw.mockClear();
+    c.click(button("open", { id: "composio:gmail" }));
+    await settle();
+    expect(host.redraw).toHaveBeenCalled();
+    expect(dom(connectionsHTML(c.view())).querySelector(".cs-page .cs-tools")).not.toBeNull();
+  });
+
+  test("a switch that was turned draws again once it is done, even when the reading after it finds nothing else", async () => {
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    c.click(button("connected"));
+    host.redraw.mockClear();
+    c.click(button("enable", { id: "ab12" }));
+    expect(c.view().busy.has("ab12")).toBe(true); // drawn waiting
+    await settle();
+    expect(c.view().busy.size).toBe(0);
+    // the last draw is after the wait ended: the switch is not left disabled on the page
+    expect(host.redraw.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(connectionsHTML(c.view())).not.toMatch(/data-id="ab12"[^>]*disabled/);
   });
 
   test("opens the list of the connected from the chip, opens a page from a row, and steps back one view at a time", async () => {

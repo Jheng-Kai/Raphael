@@ -497,19 +497,21 @@ export async function drive(name, context) {
       }
       throw new Error(`No free model on OpenRouter answered: ${JSON.stringify(outcomes)}`);
     }
-    const prefer = { claude: /haiku$/, codex: /luna$/, gemini: /flash/ };
+    const prefer = { claude: /haiku/, codex: /luna$/, gemini: /flash/ };
     for (const id of ["claude", "codex", "gemini"]) {
       let cli;
       for (let i = 0; i < 300; i++) {
         cli = (await context.rpc("brains.cli", {})).clis.find(row => row.id === id);
-        if (!cli?.available || (cli.models.length && (id !== "claude" || cli.models.length !== 4))) break;
+        // Claude Code's list first has aliases (until the CLI has answered), then the exact models it runs.
+        if (!cli?.available || (cli.models.length && (id !== "claude" || cli.models[0].id.startsWith("cli:claude:claude-")))) break;
         await pause(200);
       }
       if (!cli?.available) { outcomes.push({ source: id, status: "not available", installed: cli?.installed, logged_in: cli?.logged_in, disconnected: cli?.disconnected }); continue; }
       if (id === "claude") {
         result.claudeModels = cli.models.map(model => `${model.id} [${model.reasoning_efforts?.join(",")}]`);
-        const fable = cli.models.find(model => model.id === "cli:claude:fable");
+        const fable = cli.models.find(model => model.aliases?.includes("fable"));
         if (!fable || !fable.reasoning_efforts?.includes("xhigh") || !fable.reasoning_efforts?.includes("max")) throw new Error(`Claude's list is not the CLI's: ${result.claudeModels}`);
+        if (!cli.models.every(model => /\d/.test(model.name) && model.id.startsWith("cli:claude:claude-"))) throw new Error(`A Claude model has no version or no exact id: ${result.claudeModels}`);
       }
       const model = cli.models.find(row => prefer[id].test(row.id)) ?? cli.models.at(-1);
       const effort = model.reasoning_efforts?.includes("low") ? "low" : "";

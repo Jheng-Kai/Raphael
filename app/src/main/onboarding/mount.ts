@@ -25,7 +25,7 @@ import { createServices, servicesHTML as abilityRowsHTML } from "../services";
 import type { AppContext, BrainSettings, MainEvent, ModelCatalog, StoreService } from "../types";
 import { actionRow, closeMenu, esc, iconButton, openMenuOnArrow, toaster } from "../ui";
 import { SERVICES_WAIT_MS, mergeServices, within } from "./helpers";
-import { type FlowState, type Mode, initialState, isLast, reduce } from "./flow";
+import { type FlowState, initialState, isLast, reduce } from "./flow";
 import {
   type ComposioView, DEMOS, abilitiesHTML, demoAsk, demoReply, emptyComposioView, servicesHTML, servicesListHTML, toolsHTML, toolsListHTML, welcomeHTML,
 } from "./screens";
@@ -40,7 +40,6 @@ export interface GuideResult {
 }
 
 export interface GuideOptions {
-  mode: Mode;
   onDone: (result: GuideResult) => void;
 }
 
@@ -55,8 +54,7 @@ function focusSelector(host: HTMLElement): string {
 }
 
 export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: AppContext): void {
-  const mode = options.mode;
-  let flow: FlowState = initialState(mode);
+  let flow: FlowState = initialState();
   let finishing = false;
   let destroyed = false;
   /** Every listener on the root ends with the guide: a guide opened again on the same root is a new one. */
@@ -169,15 +167,15 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
    * 「改成集中在中間這邊好不好？然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」; a left and a right
    * button at all since 「我要的是左右 button」 that afternoon, and one row since 「上下堆疊會造成我們畫面有些空間比較緊」). Neither
    * has words, so each is named for assistive tech and in its tooltip. The last step's way on is a check: it finishes, and
-   * nothing comes after it. The welcome has nowhere to go back to and is its one wide pill alone, on a first run and on a
-   * rerun from the settings alike (owner, 2026-11-14: 「第一頁應該只會有開始就好了」).
+   * nothing comes after it. The welcome has nowhere to go back to and is its one wide pill alone (owner, 2026-11-14:
+   * 「第一頁應該只會有開始就好了」).
    */
   function footHTML(): string {
     const next = ` data-ob="next"${finishing ? " disabled" : ""}`;
     if (flow.step === "welcome") {
       return actionRow({ cls: "ob-actions", primary: { label: esc(t("onboarding.start")), attrs: next } });
     }
-    const last = isLast(flow), label = last ? (mode === "rerun" ? "onboarding.finishRerun" : "onboarding.finish") : "onboarding.next";
+    const last = isLast(flow), label = last ? "onboarding.finish" : "onboarding.next";
     return `<div class="action-row ob-actions ob-pair">` +
       iconButton("play", t("onboarding.back"), ' data-ob="back"', "ob-prev ob-tri") +
       iconButton(last ? "check" : "play", t(label), next, `pri ob-go${last ? "" : " ob-tri"}`) + `</div>`;
@@ -317,15 +315,13 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   async function finish(): Promise<void> {
     finishing = true;
     paintFoot();
-    if (mode === "first") {
-      try {
-        await app.setDevice({ onboarded: true });
-      } catch (err) {
-        toaster.info(describeError(err));
-        finishing = false;
-        paintFoot();
-        return;
-      }
+    try {
+      await app.setDevice({ onboarded: true });
+    } catch (err) {
+      toaster.info(describeError(err));
+      finishing = false;
+      paintFoot();
+      return;
     }
     leave({ finished: true });
   }

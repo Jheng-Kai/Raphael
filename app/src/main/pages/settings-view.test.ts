@@ -328,19 +328,13 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
-  test("General groups its sections: you, appearance, Raphael and the guide, the bots live elsewhere", () => {
+  test("General groups its sections: you, appearance and Raphael, the bots live elsewhere, and no way back into the guide", () => {
     const html = tab("general");
     expect(html).not.toContain("data-msg-section");
-    expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title"), "啟動"]);
-    // The tour is one button, named for what it does, with no row repeating the name.
-    expect(html).toMatch(/<button[^>]*data-act="rerun-guide"[^>]*>導覽<\/button>/);
+    expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title")]);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
-  });
-
-  test("starts the guide again with a real bordered button, not a switch or a link", () => {
-    const html = tab("general");
-    expect(html).toMatch(/<button type="button" class="btn"[^>]*data-act="rerun-guide"/);
-    expect(html.match(/data-act="rerun-guide"/g)).toHaveLength(1);
+    // The guide is the first run's only (owner, 2026-11-14: 「把設定裡面的導覽拿掉」).
+    expect(html).not.toContain("導覽");
   });
 
   test("offers light, dark, or as Windows is, in that order", () => {

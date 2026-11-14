@@ -7,6 +7,14 @@ import asyncio
 from raphael_core.agent.cli.models import claude_cli_models, claude_models, claude_rows, agy_models, codex_models
 from raphael_core.agent.cli.discovery import brain_ref, brain_effort
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def no_program_read(monkeypatch):
+    """The fake CLIs here are Python scripts: there is no program file of the CLI's to read its registry from."""
+    monkeypatch.setattr("raphael_core.agent.cli.models.claude_registry", lambda command: [])
+
 
 def test_quick_effort_uses_cached_supported_levels_and_driver_mapping(tmp_path):
     from raphael_core.agent.cli.discovery import CliBrains
@@ -48,14 +56,14 @@ CLAUDE_INITIALIZE = [
 
 def test_claude_lists_what_the_cli_says_and_each_model_its_own_depths():
     models = claude_rows(CLAUDE_INITIALIZE, {})
-    assert [m["id"] for m in models] == ["cli:claude:opus", "cli:claude:fable", "cli:claude:claude-haiku-4-5-20251001"]
+    assert [m["id"] for m in models] == ["cli:claude:claude-opus-5-5", "cli:claude:claude-fable-5-1", "cli:claude:claude-haiku-4-5-20251001"]
     assert models[0]["name"] == "Claude Opus 5.5" and models[0]["is_default"] and not models[1]["is_default"]
     assert models[1]["reasoning_efforts"] == ["low", "medium", "high", "xhigh", "max"] and models[1]["default_effort"] == "high"
     assert models[2]["reasoning_efforts"] == [] and models[2]["default_effort"] is None
 
 
 def test_the_owner_default_in_their_settings_wins_over_the_cli_default():
-    assert next(m for m in claude_rows(CLAUDE_INITIALIZE, {"model": "fable"}) if m["is_default"])["id"] == "cli:claude:fable"
+    assert next(m for m in claude_rows(CLAUDE_INITIALIZE, {"model": "fable"}) if m["is_default"])["id"] == "cli:claude:claude-fable-5-1"
 
 
 def _fake_claude(tmp_path, body):
@@ -73,7 +81,7 @@ print(json.dumps({"type": "system", "subtype": "init"}))
 print(json.dumps({"type": "control_response", "response": {"subtype": "success", "response": {"models": json.loads(%r)}}}), flush=True)
 ''' % json.dumps(CLAUDE_INITIALIZE))
     models = await claude_cli_models(command, {**__import__("os").environ}, tmp_path)
-    assert [m["id"] for m in models][:2] == ["cli:claude:opus", "cli:claude:fable"]
+    assert [m["id"] for m in models][:2] == ["cli:claude:claude-opus-5-5", "cli:claude:claude-fable-5-1"]
 
 
 async def test_the_claude_models_arrive_in_the_list_and_a_silent_cli_leaves_the_known_ones(tmp_path):
@@ -93,7 +101,7 @@ print(json.dumps({"type": "control_response", "response": {"subtype": "success",
         assert [m["id"] for m in before["models"]][0] == "cli:claude:opus" and len(before["models"]) == 4
         await brains._model_refresh
         after = next(c for c in (await brains.list())["clis"] if c["id"] == "claude")
-        assert [m["id"] for m in after["models"]] == ["cli:claude:opus", "cli:claude:fable", "cli:claude:claude-haiku-4-5-20251001"]
+        assert [m["id"] for m in after["models"]] == ["cli:claude:claude-opus-5-5", "cli:claude:claude-fable-5-1", "cli:claude:claude-haiku-4-5-20251001"]
         assert brains.model_name("cli:claude:fable?effort=max") == "Claude Fable 5.1"
         assert brains.model_name("cli:claude:unknown") == "Claude Code"
         assert brains.model_name("openai/gpt") is None

@@ -494,7 +494,8 @@ def test_the_launcher_waits_for_the_window_by_the_clock_and_then_says_how_long(a
     if shell is None:
         pytest.skip("An installed POSIX shell is required for the launcher's wait test")
     loop = launcher[launcher.index("new=\nattempt=0"):launcher.index("# The browser opens a new window beside its first")]
-    loop = re.sub(r"(deadline=\$\(\( \$\(date \+%s\) \+ )60", r"\g<1>2", loop)
+    # The launcher's deadline is in whole seconds (`date +%s`): a wait of N seconds ends after N-1 to N, so 3 here waits at least 2.
+    loop = re.sub(r"(deadline=\$\(\( \$\(date \+%s\) \+ )60", r"\g<1>3", loop)
     count = (tmp_path / "looks").as_posix()
     after = 10**6 if appears_after is None else appears_after
     script = f'''set -eu
@@ -517,10 +518,11 @@ wmctrl() {{
     took = time.monotonic() - began
     if appears_after is None:
         assert result.returncode == 1 and "no browser window appeared within 60 seconds" in result.stderr
-        assert 1.5 <= took < 20, took  # by the clock: two seconds here, however many looks that took
+        assert 2 <= took < 20, took  # by the clock: three seconds here, however many looks that took
     else:
         assert result.returncode == 0 and result.stdout.strip() == "found 0x5", result
-        assert took < 2
+        # It stops at the look that finds the window, counted rather than timed: a loaded CI runner took 8.8 s over one look.
+        assert int((tmp_path / "looks").read_text()) == after + 1
 
 
 @pytest.mark.parametrize("late", [False, True])

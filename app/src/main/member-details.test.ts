@@ -29,7 +29,6 @@ const api = vi.hoisted(() => ({
 vi.mock("./api", () => api);
 
 import { createDetails } from "./member-details";
-import { forgetComputerRow, publishComputerRow } from "./computer-row";
 import { setAvatar } from "./avatar";
 import { setLocale, t } from "./i18n";
 
@@ -69,7 +68,6 @@ beforeEach(() => {
   setAvatar(null);
   setLocale('zh-TW');
   current = 3;
-  for (const id of [0, 3, 4]) forgetComputerRow(id);
   for (const fn of Object.values(api)) fn.mockReset();
   api.routinesList.mockResolvedValue({ routines: [ROUTINE] });
   api.routineRuns.mockResolvedValue({ runs: [] });
@@ -107,6 +105,25 @@ describe("a member's panel", () => {
     resolve({files:[{id:'stale',title:'Stale file',name:'Stale file',kind:'file',at_ms:1,day:'1970-01-01'}],has_more:false}); await flush();
     expect(panel.el.textContent).not.toContain('Stale file');
     expect(panel.el.querySelector('.mb-tab-body .mp-empty')?.textContent).toBe(t('members.panelNoFiles'));
+  });
+  test('a press on a page of the Library opens the page itself, whole, by its id and in its own conversation, and only a host that cannot goes to its reply', async () => {
+    const files = [
+      { id: 'page:abc', title: 'Tokyo list', name: 'Tokyo list', kind: 'page', at_ms: Date.now(), day: '2026-11-14', turn_id: 41, conversation_id: 12 },
+      { id: 'page:def', title: 'No conversation', name: 'No conversation', kind: 'page', at_ms: Date.now() - 1000, day: '2026-11-14', turn_id: 42 },
+    ];
+    api.core.mockImplementation(async method => method === 'members.library' ? { files, has_more: false } : {});
+    const panel = mount(); await flush();
+    const openPage = vi.fn(), openTurn = vi.fn();
+    host.openPage = openPage; host.openTurn = openTurn;
+    panel.select('library'); await flush();
+    panel.el.querySelector<HTMLElement>('[data-panel-file="page:abc"]')!.click();
+    panel.el.querySelector<HTMLElement>('[data-panel-file="page:def"]')!.click();
+    expect(openPage.mock.calls).toEqual([[{ id: 'abc', title: 'Tokyo list', conversation: 12, turn: 41 }], [{ id: 'def', title: 'No conversation', conversation: undefined, turn: 42 }]]);
+    expect(openTurn).not.toHaveBeenCalled();
+    // A host that cannot open a page itself still takes the owner to the reply that holds its card.
+    host.openPage = undefined;
+    panel.el.querySelector<HTMLElement>('[data-panel-file="page:abc"]')!.click();
+    expect(openTurn).toHaveBeenCalledExactlyOnceWith(3, 12, 41);
   });
   test("Raphael's face follows the current custom avatar on redraw", async () => {
     current=0; const panel=mount(); await flush();
@@ -345,48 +362,23 @@ describe("primary changes do not add face badges", () => {
   });
 });
 
-describe("the computer row", () => {
-  const row = (panel: ReturnType<typeof mount>): HTMLElement | null => panel.el.querySelector<HTMLElement>('.mb-panel-computer .mb-computer');
-  test("every member has one, after the routines and before the bots, asking nothing", async () => {
+describe("the computer lives in its own tab only", () => {
+  // Owner, 2026-11-14: 「右邊這邊詳細資料裡面不用有電腦…我們就固定在第三個 tab 裡面，有電腦就好了」.
+  test("Details has no computer row, heading or press, for any member", async () => {
     for (const id of [3, 0]) {
       current = id; const panel = mount(); await flush();
       const sections = [...panel.el.querySelectorAll('.mb-tab-body > section')].map(section => section.className);
-      expect(sections.indexOf('mb-panel-routines')).toBeLessThan(sections.indexOf('mb-panel-computer'));
-      expect(sections.indexOf('mb-panel-computer')).toBeLessThan(sections.indexOf('mb-panel-suggest'));
-      expect(row(panel)!.querySelectorAll('button')).toHaveLength(1);
-      expect(row(panel)!.textContent).toContain(t('desktop.event', { p0: LIST.members.find(m => m.id === id)!.name }));
-      expect(panel.el.textContent).not.toMatch(/允許|授權|撤銷|Docker|映像/);
+      expect(sections).toEqual(id === 0 ? ['mb-panel-routines', '', 'mb-panel-suggest'] : ['mb-panel-routines', 'mb-panel-suggest']);
+      const body = panel.el.querySelector('.mb-tab-body')!;
+      expect(body.querySelector('[class*="computer"], [data-det^="computer"], [data-k*="computer"], [data-computer-thumb]')).toBeNull();
+      expect([...body.querySelectorAll('.mb-dh')].map(head => head.textContent)).not.toContain(t('members.panelTab.computer'));
       document.body.innerHTML = "";
     }
   });
-  test("it says asleep, connecting or awake in a word or two, with the last picture of the screen when awake", async () => {
+  test("the third tab still opens the computer", async () => {
     const panel = mount(); await flush();
-    const state = () => row(panel)!.querySelector('.mb-computer-state')!.textContent;
-    expect(state()).toBe('');
-    publishComputerRow({ member: 3, state: 'asleep' }); expect(state()).toBe(t('computer.row.asleep'));
-    expect(row(panel)!.querySelector('[data-computer-thumb]')!.getAttribute('data-thumb')).toBe('idle');
-    publishComputerRow({ member: 3, state: 'connecting' }); expect(state()).toBe(t('computer.row.connecting'));
-    publishComputerRow({ member: 3, state: 'awake', picture: 'data:image/jpeg;base64,AAAA' }); expect(state()).toBe(t('computer.row.awake'));
-    expect(row(panel)!.querySelector('[data-computer-thumb]')!.getAttribute('data-thumb')).toBe('live');
-    expect(row(panel)!.querySelector('.mb-computer-shot')!.getAttribute('src')).toBe('data:image/jpeg;base64,AAAA');
-    publishComputerRow({ member: 4, state: 'asleep' }); expect(state()).toBe(t('computer.row.awake'));
-    publishComputerRow({ member: 3, state: 'awake', picture: 'data:image/jpeg;base64,AAAA', note: t('computer.woke.page', { p0: 'Mei' }) });
-    expect(state()).toBe(t('computer.woke.page', { p0: 'Mei' }));
-    publishComputerRow({ member: 3, state: 'asleep', note: 'stale' }); expect(state()).toBe(t('computer.row.asleep'));
-  });
-  test("pressing it asks the shell to open the computer, and a PC without an engine says so with its one action", async () => {
-    api.openExternalUrl.mockResolvedValue(undefined);
-    const panel = mount(); await flush();
-    const opened = vi.fn(); panel.el.addEventListener('member-computer-open', opened);
-    publishComputerRow({ member: 3, state: 'asleep' });
-    row(panel)!.querySelector<HTMLElement>('[data-det="computer-open"]')!.click(); expect(opened).toHaveBeenCalledTimes(1);
-    publishComputerRow({ member: 3, state: 'unavailable', problem: t('desktop.dockerMissing'), fix: 'download' });
-    expect(row(panel)!.textContent).toContain(t('desktop.dockerMissing')); expect(row(panel)!.querySelector('[data-computer-thumb]')).toBeNull();
-    row(panel)!.querySelector<HTMLElement>('[data-det="computer-fix"]')!.click();
-    expect(api.openExternalUrl).toHaveBeenCalledWith('https://www.docker.com/products/docker-desktop/'); expect(opened).toHaveBeenCalledTimes(1);
-    publishComputerRow({ member: 3, state: 'unavailable', problem: t('desktop.dockerStopped'), fix: 'start' });
-    row(panel)!.querySelector<HTMLElement>('[data-det="computer-fix"]')!.click(); expect(opened).toHaveBeenCalledTimes(2);
-    publishComputerRow({ member: 3, state: 'unavailable', problem: t('desktop.unavailable'), fix: 'retry' });
-    expect(row(panel)!.querySelector('[data-det="computer-fix"]')).toBeNull();
+    expect([...panel.el.querySelectorAll<HTMLElement>('[data-det="tab"]')].map(tab => tab.dataset.tab)).toEqual(['details', 'library', 'computer']);
+    panel.el.querySelector<HTMLElement>('[data-det="tab"][data-tab="computer"]')!.click();
+    expect(panel.el.dataset.detailsTab).toBe('computer');
   });
 });

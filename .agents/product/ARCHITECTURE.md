@@ -91,6 +91,14 @@ with no tag in it), names the file after the stored title, writes it exclusively
 owner_output_folder or else Downloads, and returns where; the shell selects it in File Explorer.
 No page host, frame, migration or model tool is added (R-PAGE-01; core/tests/agent/test_pages.py).
 
+An HTML page is shared the same way (2026-11-14, R-PAGE-08) with the opposite split: the window gives
+the page id and no text (`pageSave` sends the same command an empty `html`, which the core ignores for a
+page), and the core builds the file itself from the page it stores (`pages.py page_file`: `document()`
+without the helper script that talks to the window, the dark theme's words under
+`prefers-color-scheme`, and a meta policy equal to the page's own header policy minus its sandbox),
+runs the same secret scan on it and writes it by the same `save_file`. A plugin's page is not
+saved: it works only through its host.
+
 ## No voice output (2026-11-10)
 
 The app speaks nothing: no text-to-speech service, spoken Alt+Space answer, generated
@@ -111,13 +119,15 @@ reuses room_threads/thread_id, the existing worker and its isolated transcript.
 
 Migration 82 (2026-11-14) makes the message the primary key of both reaction tables, so a
 message carries one reaction (R-REACT-01), and adds `reaction_asks`, the once-only record of
-the messages whose negative reaction a member already asked about. `set_reaction` replaces in
-one write and returns what the message carries; `agent/reaction_asks.py` waits 4 seconds on the
-latest reaction of each message and then asks the service that owns the message to start the
-ask: `AgentService._ask_about_reaction` (a turn of source `reaction`, written like a greeting
-with no owner message, on the member's own model with no tool and no fallback) or
-`RoomsService._ask_about_reaction` (a one-turn room exchange for the message's author). Only
-these two ever read a reaction to start work, and neither treats it as approval.
+what was analysed; migration 83 keys it by kind, message and emoji. `set_reaction` replaces in
+one write and returns what the message carries; `agent/reaction_asks.py` keeps the record and
+starts, at once, the analysis of every reaction (ending the one under way for that message)
+through the service that owns the message: `AgentService._ask_about_reaction` (a turn of source
+`reaction`, written like a greeting with no owner message, on the member's own model with no tool
+and no fallback; it answers with words or a pass, and a pass takes the turn out of the thread) or
+`RoomsService._ask_about_reaction` (a one-turn room exchange for the message's author, which the
+room's discussion logic ignores: `latest`, Stop and the circuit breaker). Only these two ever read
+a reaction to start work, and neither treats it as approval.
 
 slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
 room origins at both tool and service boundaries. Discovered Slack sends obey the
@@ -1154,4 +1164,4 @@ telling the window with `providers.changed`. Members carry pictures by revision:
 A member's computer needs no grant (2026-11-11, R-COMP-ACCESS-01). `computer/grants.py`, `request_computer`, the grant card, the panel's take-back button and `computer.revoke` are gone;
 `VmTools.offered_for` offers every member its computer's tools whenever computer tools are on and a catalog exists for its target, and `LocalVm.full_permission()` (the 全部允許 mode) is all
 that is left of the old check, for the checkpoint restore's confirmation. The table `computer_grants` (migration 45) stays in the schema, unread and unwritten, with its member-delete trigger.
-The panel's computer row (R-PANEL-06) reads the viewer's state through `computer-row.ts`; the viewer publishes it and the details view draws it.
+The computer lives in the member panel's third tab only (R-PANEL-06, owner 2026-11-14): the Details tab has no computer row, so the viewer publishes nothing to it and streams only for the Computer tab, the larger view and a conversation card.
