@@ -135,6 +135,24 @@ def test_resumed_context_includes_only_unseen_turns_and_changed_memory():
     assert "New memory" in prompt and "Old memory" not in prompt
 
 
+async def test_a_resumed_cli_session_receives_a_new_exchange_note(monkeypatch, tmp_path):
+    async def play(loop, attempt):
+        yield Event("session", "native-session")
+        yield Event("final", "I will remember the answer.")
+
+    exchange_note = "(Between assistants)\nrequesting assistant: Weather?\nresponding assistant: Rain tomorrow."
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude", owner_text="Remember the forecast.",
+        resume_user="<question>Remember the forecast.</question>", context_turns=[(6, exchange_note)], turn_id=7)
+    rig.loop.sessions.put(5, rig.loop.model, "native-session", 7)
+    rig.loop.sessions.put_context(5, rig.loop.model, "native-session",
+        {"turn": 5, "sections": {}, "tokens": 1000, "estimated_tokens": 0, "window": 100000}, 7)
+
+    await rig.loop.run()
+
+    assert rig.calls[0]["session"] == "native-session"
+    assert "Rain tomorrow." in rig.calls[0]["user"]
+
+
 @pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
 @pytest.mark.parametrize("fails_again", [False, True])
 async def test_overflow_keeps_explicit_owner_request_after_action(monkeypatch, tmp_path, brain, fails_again):
