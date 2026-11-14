@@ -1030,8 +1030,12 @@ existing retract-and-restore behavior after the second Escape.
 npm run look -- esc-main-armed esc-member-armed esc-recording-cancel composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
 npm run look -- page-product page-buy page-expand page-gone page-composer-grows page-inplace page-inplace-back page-inplace-esc page-inplace-update page-inplace-working page-inplace-reply page-inplace-room page-inplace-room-update --theme both --width 1120,720,1920x1080
-npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
+npm run look -- composer-model-small composer-model-favorites composer-model-sources composer-model-same composer-model-fold composer-model-unfolded composer-quick-model composer-model-menu composer-model-alias model-sync model-sync-member settings-chatgpt-row composer-model-arrives member-brain-saved --theme both --width 1120,720,1920x1080
 ```
+
+R-MODEL-05: a member saved with Claude Code's alias (`cli:claude:haiku`) reads the model the alias is
+(`composer-model-alias`: 「Claude Haiku 5.5」 on the button, its exact row checked in the Claude Code list, no row for
+the alias) and keeps the alias in its settings.
 
 R-UI-47: successful conversation deletion invalidates its outstanding history load
 and reloads the member's server-selected default before requesting history. The

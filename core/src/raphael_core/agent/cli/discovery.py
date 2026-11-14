@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from .process import Child, subscription_env
-from .models import claude_cli_models, claude_models, codex_models, antigravity_models
+from .models import claude_cli_models, claude_models, codex_models, antigravity_models, find_model
 from ...brain.model_ref import CLI_NAMES as NAMES
 
 # "gemini" is Google's Antigravity CLI (`agy`), which replaced Gemini CLI.
@@ -180,14 +180,16 @@ class CliBrains:
         if not found:
             return None
         base = reference.partition("?effort=")[0]
-        return next((row["name"] for row in self._known_models(found[0]) if row["id"] == base and row.get("name")), NAMES[found[0]])
+        # A member saved with Claude Code's alias (`opus`) is named by the model the alias is now.
+        row = find_model(self._known_models(found[0]), base)
+        return row["name"] if row and row.get("name") else NAMES[found[0]]
 
     def with_effort(self, model, effort):
         """Resolve quick effort from discovered choices without spawning a discovery process."""
         name, _ = brain_ref(model)
         base = model.partition("?effort=")[0]
         models = self._known_models(name)
-        entry = next((m for m in models if m["id"] == base or base in m.get("effort_models", {}).values()), None)
+        entry = find_model(models, base) or next((m for m in models if base in m.get("effort_models", {}).values()), None)
         if entry is None and base == f"cli:{name}":
             entry = next((m for m in models if m.get("is_default")), None)
             if entry is not None:
