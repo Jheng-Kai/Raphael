@@ -315,6 +315,46 @@ test("pressing the card takes the same frame to the conversation's place, with n
   expect(api.pagesOpen).toHaveBeenCalledTimes(1);
 });
 
+test("an open page runs under the composer: the view says how tall the composer's dock and the answer line over it are, and forgets it when the page is put away", async () => {
+  vi.spyOn(api, "pagesViewing").mockResolvedValue({ viewing: "p1" });
+  const { thread, frame, pages, stage } = mount();
+  await flush();
+  loaded(frame);
+  Object.defineProperty(stage.querySelector(".ra-dock"), "offsetHeight", { value: 132, configurable: true });
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  expect(stage.style.getPropertyValue("--pgv-dock")).toBe("132px");
+  expect(stage.style.getPropertyValue("--pgv-say")).toBe("0px");
+  // The member works on a change asked for under the page: its line floats over the composer, and the page can scroll clear of it too.
+  const status = stage.querySelector<HTMLElement>(".pgv-status")!;
+  Object.defineProperty(status, "offsetHeight", { value: 36, configurable: true });
+  await pages.sent();
+  const line = document.createElement("li");
+  line.innerHTML = `<div class="ra"><div class="live-presence"><span class="live-action">改頁面中</span></div></div>`;
+  thread.append(line);
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  expect(status.hidden).toBe(false);
+  expect(stage.style.getPropertyValue("--pgv-say")).toBe("36px");
+  back().click();
+  expect(stage.style.getPropertyValue("--pgv-dock")).toBe("");
+  expect(stage.style.getPropertyValue("--pgv-say")).toBe("");
+});
+
+test("the page runs to the window's foot under a floating composer: the dock is no band and takes no pointer, and the room past the page is room, never a taller frame", () => {
+  const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  expect(css).toContain(".ra-stage.is-page > .pgv { grid-area: 1 / 1 / 3 / 2; }");
+  expect(css).toMatch(/\.ra-stage\.is-page > \.ra-dock \{[^}]*z-index: 2;[^}]*background: none;[^}]*pointer-events: none;/);
+  expect(css).toContain(".ra-stage.is-page > .ra-dock > * { pointer-events: auto; }");
+  // The thread hidden under the page keeps its own row beside the composer, so its place does not move.
+  expect(css).toContain(".ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }");
+  // The frame is as tall as the page says or the area, never taller by the composer's room: a page as tall as its window would grow without end.
+  expect(css).toContain(".pgv-frame-box { position: relative; width: 100%; height: max(var(--pgv-h, 320px), 100%); }");
+  expect(css).toMatch(/\.pgv-frame-box::after \{[^}]*position: absolute;[^}]*top: 100%;[^}]*height: max\(0px, calc\(var\(--pgv-h, 320px\) \+ var\(--pgv-under\) - 100%\)\);/);
+  expect(css).toMatch(/\.ra-stage\.is-page \.rp-scroll \{[^}]*padding-bottom: var\(--pgv-under\);/);
+  // The answer line floats just over the composer, on its own surface, and takes no pointer from the page.
+  expect(css).toMatch(/\.pgv-status \{[^}]*position: absolute;[^}]*bottom: calc\(var\(--pgv-dock, 0px\) \+ var\(--sp-1\)\);[^}]*pointer-events: none;/);
+  expect(css).toMatch(/\.pgv-status > :is\(\.live-presence, \.pgv-reply\) \{[^}]*border: 1px solid var\(--edge\);[^}]*background: var\(--panel\);[^}]*box-shadow: var\(--composer-shadow\);/);
+});
+
 test("the way back is the round arrow at the header's top left, named 返回, where the search stood", async () => {
   const { thread, frame } = mount();
   await flush();
