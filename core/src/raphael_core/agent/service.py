@@ -205,6 +205,8 @@ from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS, TEAM_READS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
+from .whose_computer import MEMBER, UNSURE, answer_to_the_question, whose_computer
+from ..ui_languages import LANGUAGES
 from .persona import (
     DEFAULT_LANGUAGE,
     PREFIXES,
@@ -401,6 +403,16 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     return ToolResult(_label(call), False, None, outcome.kind or "error")
 
 
+def _label_of(opening: Opening, decision: RouteDecision, text: str) -> str:
+    """What an opening is called when it is said to be done: a site's address without `www.`, otherwise the name the speaker used."""
+    if opening.kind == "url":
+        from urllib.parse import urlparse
+        host = urlparse(opening.target).hostname or opening.target
+        return host[4:] if host.startswith("www.") else host
+    heard = decision.target or extract_target(text) or ""
+    return clean_target(heard) or heard or opening.target
+
+
 def _copy_text(turn: Turn) -> str:
     """What "copy that" copies of an answer: its line and its detail, each once. The detail is
     the whole answer when the line had to be cut, and what the line left out otherwise."""
@@ -518,10 +530,18 @@ class _Ask:
     floor_refusals: int = 0
     # A reaction's analysis whose member decided that no words are needed: nothing of its turn is left.
     silent: bool = False
+    # The owner answered "which computer?" with the member's own (`_which_computer`).
+    chose_own_computer: bool = False
 
     @property
     def nested(self) -> bool:
         return self.peer is not None
+
+    @property
+    def own_computer(self) -> bool:
+        """A quick question that says the member's own computer is the one to use: it takes no shortcut to the owner's PC,
+        and the member's ordinary turn answers it with its own computer (`whose_computer`)."""
+        return self.quick and (self.chose_own_computer or whose_computer(self.text) == MEMBER)
 
 
 @dataclass(frozen=True)
@@ -1568,9 +1588,15 @@ class AgentService:
             return self._finish(ask, "chat", "negative", phrase(ask.language, off), ledger)
         settings = self._read_settings(ask.speaker, ask.conversation_id)
         blocked = self._blocked(settings)
+        if ask.quick and ask.source == VOICE and ask.speaker.is_raphael and not brain_ref(settings.model):
+            if (question := self._which_computer(ask)) is not None:
+                return self._finish(ask, "answer", "question", question, ledger)
         # Only a quick question is routed by the fast router, which can pick a command for this PC or a run on its
         # desktop; a conversation, spoken into or typed, goes to the narrated harness, which has no such tool (R-PC-01).
-        if not ask.quick or brain_ref(settings.model) or ask.source != VOICE or not ask.speaker.is_raphael:
+        # A quick question that says the member's own computer is the one to use never takes that shortcut: it goes to
+        # the member's turn, which does the work on its own computer (R-COMP-OWN-01).
+        if (not ask.quick or brain_ref(settings.model) or ask.source != VOICE or not ask.speaker.is_raphael
+                or ask.own_computer):
             if blocked is not None:
                 return self._failed(ask, "answer", blocked, ledger)
             self._mark_latency(ask, "routing")
@@ -3110,7 +3136,7 @@ class AgentService:
         """Whether the owner's own PC is in reach of this turn: only a quick question asked at this computer (the overlay's
         Alt+Space) reaches it, never an ordinary conversation, a room, an exchange between members, a task or a phone, in any
         permission mode (R-PC-01). Their computer work goes to the member's own computer."""
-        return reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested)
+        return reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested, own_computer=ask.own_computer)
 
     def _team_tools(self, ask: _Ask) -> list[str]:
         """The team tools the request `ask` is about. Never for a request one member handed another
@@ -4803,6 +4829,30 @@ class AgentService:
 
     # --- commands -------------------------------------------------------------------------------
 
+    def _which_computer(self, ask: _Ask) -> str | None:
+        """The one question a quick request to open something "on the computer" is asked, or None when it needs none. A
+        request that names whose computer it means is never asked. Asked once: the reply to the question that says a side
+        settles it (`answer_to_the_question`: the member's own computer is `ask.chose_own_computer`, this PC is the
+        router's as ever), and an agreeing reply is the member's, which cannot touch the owner's PC."""
+        if (len(ask.text) <= 24 or whose_computer(ask.text) == UNSURE) and self._asked_which_computer(ask):
+            # Asked once: whatever the reply, it is not asked again. It names a side, or agrees, or says the request again
+            # with no side on it; only "this PC" keeps the router and the owner's PC.
+            if answer_to_the_question(ask.text) == MEMBER or whose_computer(ask.text) == UNSURE:
+                ask.chose_own_computer = True
+            return None
+        if whose_computer(ask.text) == UNSURE:
+            return self._the_question(ask.speaker, ask.language)
+        return None
+
+    @staticmethod
+    def _the_question(speaker: Speaker, language: str) -> str:
+        return phrase(language, "which_computer", who=speaker.name or RAPHAEL_NAMES.get(normalize_language(language), "Raphael"))
+
+    def _asked_which_computer(self, ask: _Ask) -> bool:
+        """Whether the last thing said in this conversation was the question (`which_computer`), in any language."""
+        last = next(iter(reversed(self._context(2, ask.speaker.id, ask.conversation_id))), None)
+        return last is not None and last.text in {self._the_question(ask.speaker, language) for language in LANGUAGES}
+
     async def _command(
         self, ask: _Ask, decision: RouteDecision, settings: _Settings, ledger: Ledger
     ) -> dict:
@@ -4824,6 +4874,7 @@ class AgentService:
                 )
             logger.info("Open: step=%s kind=%s", opening.step, opening.kind)
             args = {"target_kind": opening.kind, "target": opening.target}
+            said = opening.label or _label_of(opening, decision, ask.text)
         elif command.kind == "copy":
             copy = self._what_to_copy(ask.text, ask.speaker.id, ask.conversation_id)
             if copy is None:
@@ -4851,6 +4902,9 @@ class AgentService:
         if opening is not None and opening.learn_as:
             self._learn(opening.learn_as, opening.target)  # it opened: now it is known
         done = _DONE_PHRASE.get(command.name)
+        if opening is not None:
+            # What was done is said in one line, never an empty reply: it is the owner's own PC that it was done on.
+            return self._finish(ask, "command", "understood", phrase(language, "opened", target=said), ledger)
         return self._finish(
             ask, "command", "understood", phrase(language, done) if done else "", ledger
         )
@@ -4880,11 +4934,11 @@ class AgentService:
         subject = target or text
         app = await self._catalog.find(subject, loose=False)
         if app is not None:
-            return Opening("app", app.app_id, "app")
+            return Opening("app", app.app_id, "app", label=app.name)
         if target:
             known = self._known(target)
             if known is not None:
-                return Opening("url", known, "learned", target)
+                return Opening("url", known, "learned", target, label=target)
             page = match_settings(target, bare=True)
             if page is not None:
                 return Opening("settings", page, "settings")
@@ -4903,7 +4957,7 @@ class AgentService:
         if app is None and target:
             app = await self._catalog.lookup(target)
         if app is not None:
-            return Opening("app", app.app_id, "app")
+            return Opening("app", app.app_id, "app", label=app.name)
         if failure is not None:
             raise failure
         return None
@@ -4916,7 +4970,7 @@ class AgentService:
         unless the speaker said it)."""
         if answer.kind == "app":
             app = await self._catalog.lookup(answer.name)
-            return None if app is None else Opening("app", app.app_id, "model")
+            return None if app is None else Opening("app", app.app_id, "model", label=app.name)
         said_http = "http://" in unicodedata.normalize("NFKC", text).casefold()
         url = answer.url.strip()
         if not said_http and url[:7].lower() == "http://":
@@ -4926,7 +4980,7 @@ class AgentService:
             return None
         # A search is not learned: what was searched for is what was said.
         name = (target or clean_target(answer.name)) if answer.kind == "site" else None
-        return Opening("url", checked, "model", name or None)
+        return Opening("url", checked, "model", name or None, label=answer.name.strip() if answer.name else "")
 
     def _known(self, name_key: str) -> str | None:
         try:

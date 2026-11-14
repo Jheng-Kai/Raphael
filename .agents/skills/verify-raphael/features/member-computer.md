@@ -1,5 +1,23 @@
 # Member computer (Phases A and B)
 
+## The first call after a wake is waited for; "your computer" is the member's (owner, 2026-11-14)
+
+R-COMP-FIRST-01, R-COMP-OWN-01. From the owner's own conversations: a member's first computer action after a sleep failed with
+`docker_stopped`, `driver_configuration_failed` or `task_stopped` nine times, and he had to say 「再試一次」; and 「用你的電腦開…」,
+said into the overlay, opened the page on his own PC with an empty reply.
+
+- Start: `VmTools._call` waits through `_awake` (the start, again after a pause while it fails with `TRANSIENT_START`; at most
+  `start_attempts` tries and `start_budget_s` seconds), then `_configured` (the driver's refusal of its first set-up calls,
+  `TRANSIENT_CONNECT`), and the lost-connection repair is a retry of the same kind with the right to bring Docker Desktop back.
+  A real failure (Docker absent, Docker Desktop not launched or not up in two minutes, no image, no room, the owner's hold or Stop)
+  is the answer at once. `ComputerWork.begin` revives a work item whose stop was only inferred from a cancelled first call.
+  Offline: core/tests/computer/test_first_call.py (fakes for each transient kind, the bound, each real failure, the cut-short call
+  and the owner's own stop).
+- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's goes to the member's turn
+  with the owner's PC out of reach; the owner's keeps the router and the shortcut; an unsure open request is asked once
+  (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py. The quick overlay's own look
+  scenes are unchanged (no UI change), so no look run.
+
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole (owner, 2026-11-14)
 
 R-COMP-WAKE-01, R-COMP-LOAD-01, R-COMP-PANEL-01, R-COMP-TYPE-01 (image `driver-0.37.0-v11`). The owner: 「電腦的部分你可能要再改好一下…

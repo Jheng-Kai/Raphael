@@ -271,7 +271,7 @@ async def test_the_ui_language_selects_its_translated_words(rig, client, given, 
 async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, client, actions):
     client.decisions.append(decision("command", "open", cost=0.00004))
     result = await rig.ask("打開 youtube.com")
-    assert result == {"status": "done", "turn_id": 1, "prefix": "了", "text": ""}
+    assert result == {"status": "done", "turn_id": 1, "prefix": "了", "text": "已在你的電腦打開「youtube.com」。"}
     assert did(actions) == [("open_url", "https://youtube.com/")]
     assert client.json_calls == [] and client.text_calls == []  # no language model
     assert rig.spent() == [("agent", "typesafe/jev-1.14", 0.00004)]
@@ -282,7 +282,7 @@ async def test_a_command_is_done_at_once_and_answered_with_the_fixed_reply(rig, 
         "question": "打開 youtube.com",
         "route": "command",
         "prefix": "了",
-        "text": "",
+        "text": "已在你的電腦打開「youtube.com」。",
         "detail": None,
         "status": "done",
         "failure": None,
@@ -385,7 +385,7 @@ async def test_a_site_nobody_listed_is_found_by_the_model_opened_and_learned(rig
     client.decisions.append(decision("command", "open", cost=0.00004))
     client.replies.append(site("https://www.reddit.com/", "Reddit"))
     result = await rig.ask("open reddit", language="en")
-    assert result == {"status": "done", "turn_id": 1, "prefix": "Understood", "text": ""}
+    assert result == {"status": "done", "turn_id": 1, "prefix": "Understood", "text": "Opened Reddit on your computer."}
     assert did(actions) == [("open_url", "https://www.reddit.com/")]
     assert learned(rig) == [("reddit", "https://www.reddit.com/", 1)]
     assert [row[1] for row in rig.spent()] == ["typesafe/jev-1.14", "openai/gpt-6-luna"]
@@ -477,7 +477,7 @@ async def test_an_app_that_is_installed_is_opened_before_any_site(rig, client, a
     actions.apps = [StartApp("Spotify", "spotify!App"), StartApp("Notepad", "notepad.exe")]
     client.decisions.append(decision("command", "open"))
     result = await rig.ask("open spotify", language="en")
-    assert result == {"status": "done", "turn_id": 1, "prefix": "Understood", "text": ""}
+    assert result == {"status": "done", "turn_id": 1, "prefix": "Understood", "text": "Opened Spotify on your computer."}
     assert did(actions) == [("launch_app", "spotify!App")]
     assert client.json_calls == [] and learned(rig) == []  # the name was obvious: no model
 
