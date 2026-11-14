@@ -575,13 +575,12 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 
 /* Media stand on their own; only the owner's words receive a text bubble. */
 .owner-content { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); min-width: 0; max-width: min(var(--pa-bw), 78%); }
-/* Files give the message its width; the content column takes what is left, so no room stays empty beyond the actions
-   at its side (R-UI-104). */
-.me > .owner-content:has(.me-files), .owner-message:has(.me-files) { width: min(420px, 78%); }
-.owner-message:has(.me-files) { grid-template-columns: auto minmax(0, 1fr); }
+/* The pictures have their own size (420 px, or the column when it is narrower) and the bubble under them has its own, as it has in a
+   message without a picture, up to the usual bubble width (owner, 2026-11-14: 「Message Bubble 自己的寬度」). The message is as wide as the
+   wider of the two, both at its right edge, so no room stays empty beyond the actions at its side (R-UI-104). */
 .owner-message > .owner-content { max-width: 100%; }
 .owner-content > .bubble { max-width: 100%; }
-.me-files { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); width: 100%; min-width: 0; white-space: normal; }
+.me-files { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); width: 420px; max-width: 100%; min-width: 0; white-space: normal; }
 .me-file { position: relative; min-width: 0; max-width: 100%; color: var(--text-2); font: var(--pa-sys)/1.4 var(--ui); }
 .attachment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); width: 100%; }
 .attachment-grid.is-multiple { grid-template-columns: repeat(2, minmax(0, 1fr)); }

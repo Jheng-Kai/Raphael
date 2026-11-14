@@ -8991,6 +8991,36 @@ export function checkRendered(name, context = {}) {
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
+  if (name === "owner-picture-bubble") {
+    // R-UI-149: the owner's message with a picture: the picture keeps its size and the bubble under it keeps the width it has without one.
+    return (async () => {
+    const line = [...document.querySelectorAll('.thread > .tn, .thread .tn')].find(item => item.querySelector('.me-files .attachment-picture img') && item.querySelector('.owner-message .bubble'));
+    require(line, 'a message with a picture and words');
+    const picture = line.querySelector('.me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
+    const end = performance.now() + 4000;
+    while (!(image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
+    require(image.complete && image.naturalWidth > 0 && visible(image), 'the picture is drawn');
+    const field = bubble.querySelector('[data-edit-input]'), text = field ? field.value : bubble.querySelector('.message-text').textContent;
+    // The same words in a bubble with no picture, drawn in the same line and measured, is what the bubble's width must be.
+    const reference = document.createElement('div');
+    reference.className = 'me'; reference.style.visibility = 'hidden';
+    reference.innerHTML = '<div class="chat-message owner-message"><div class="bubble"><div class="message-text"></div></div></div>';
+    reference.querySelector('.message-text').textContent = text;
+    // The message's actions stand beside its bubble and take their share of the column, with or without a picture: the same ones here.
+    const actions = bubble.closest('.owner-message').querySelector(':scope > .message-actions');
+    if (actions) reference.querySelector('.owner-message').prepend(actions.cloneNode(true));
+    line.querySelector('.me').after(reference);
+    const bare = reference.querySelector('.bubble').getBoundingClientRect().width;
+    reference.remove();
+    const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = field ? 2 : 1;
+    require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
+    require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
+    if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
+    if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
+    require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);
+    return { check: name, bubble: Math.round(b.width * 10) / 10, without: Math.round(bare * 10) / 10, picture: Math.round(p.width), editing: !!field, pending: line.classList.contains('is-pending') };
+    })();
+  }
   if (name === "message-edit-before") {
     // The sent message's bubble as it is: the editor must be this bubble, not another box.
     const bubble = document.querySelector('.tn[data-id="8201"] .owner-message .bubble'), r = bubble.getBoundingClientRect(), style = getComputedStyle(bubble);

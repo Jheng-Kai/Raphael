@@ -33,12 +33,30 @@ npm run look -- message-edit-open message-edit-long message-edit-armed message-e
 
 `message-edit-before` (a step of the scenes) records the sent bubble. `message-edit-open` and `message-edit-long` (a message of several lines) assert
 the editor against it: every colour, padding, type and radius of the bubble the same, its right edge and top where they were, a short message the same
-size (±2 px), the caret and focus, every word in view, no wrapper box, no action beside it, 取消 and a ready primary 送出 of 30 px under the bubble and
+size (±2 px), the caret and focus, every word in view, no wrapper box, no pressable action beside it (their room is held, hidden and inert, so the bubble and a picture above it keep their size), 取消 and a ready primary 送出 of 30 px under the bubble and
 ending at its right edge, the composer empty; `message-edit-armed` is the first Escape on changed words (取消 armed, editor open); `message-edit-sent`
 types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`, one `.tn[data-id]` with the new words, nothing waiting.
 `message-edit-placed` runs a thread with the 07:00 and 08:00 routine turns after the message against the look mock, which now retracts and writes the
 edit as the core does: `message-edit-pending` (the edit stands first, above the routine turns, nothing at the end), `message-edit-written` (the same
 place with the member answering) and `message-edit-answered`.
+
+## A message with a picture keeps the bubble's own width (owner, 2026-11-14, R-UI-149)
+
+Owner, with a picture of a message that carried one screenshot: 「傳送圖片的時候，下面的 message bubble 不用跟它一樣的寬度了。它就是 Message Bubble，就是有 Message Bubble 自己的寬度」.
+The picture stood on top and the blue bubble under it was stretched to the picture's width (`.owner-message:has(.me-files) { width: min(420px, 78%) }`), so its
+words wrapped at 420 px and a long text was cut with 顯示全部 far earlier than without a picture. Now `.me-files` is 420 px (or the column when it is narrower)
+and the message is as wide as the wider of the picture and the bubble, both at its right edge: the bubble is as wide as the same words without a picture.
+The group room's messages and threads draw the same markup and follow.
+
+```powershell
+npm run look -- owner-picture-short owner-picture-long owner-picture-pending message-edit-picture message-edit-open room-files-sent chat --theme both --width 1120,720,1920x1080
+```
+
+`owner-picture-bubble` (the check of the first three, and of `message-edit-picture` with the editor open) draws the same words in a bubble without a picture in the
+same line, measures it and requires the bubble to be as wide (±1 px; ±2 px for the editor's field), the picture to keep its size (200 to 420 px), a short
+message's bubble not to equal the picture's width, a long one to be wider than the picture, and the bubble to stand under the picture at its right edge.
+`owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
+Enter, the call held), `message-edit-picture` the message open in its editor.
 
 ## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
