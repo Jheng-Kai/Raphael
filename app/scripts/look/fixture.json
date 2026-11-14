@@ -1583,7 +1583,14 @@
       "checked_at_ms": 1792807200000,
       "error": null,
       "key": null,
-      "usage": null
+      "usage": {
+        "daily": 0.04,
+        "weekly": 0.3,
+        "monthly": 1.31,
+        "total": 6.2,
+        "limit": null,
+        "limit_remaining": null
+      }
     },
     "spend": {
       "month_usd": 1.24,
