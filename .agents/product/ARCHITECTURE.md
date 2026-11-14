@@ -1154,4 +1154,4 @@ telling the window with `providers.changed`. Members carry pictures by revision:
 A member's computer needs no grant (2026-11-11, R-COMP-ACCESS-01). `computer/grants.py`, `request_computer`, the grant card, the panel's take-back button and `computer.revoke` are gone;
 `VmTools.offered_for` offers every member its computer's tools whenever computer tools are on and a catalog exists for its target, and `LocalVm.full_permission()` (the 全部允許 mode) is all
 that is left of the old check, for the checkpoint restore's confirmation. The table `computer_grants` (migration 45) stays in the schema, unread and unwritten, with its member-delete trigger.
-The panel's computer row (R-PANEL-06) reads the viewer's state through `computer-row.ts`; the viewer publishes it and the details view draws it.
+The computer lives in the member panel's third tab only (R-PANEL-06, owner 2026-11-14): the Details tab has no computer row, so the viewer publishes nothing to it and streams only for the Computer tab, the larger view and a conversation card.
