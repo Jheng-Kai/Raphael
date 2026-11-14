@@ -12,7 +12,9 @@ from .test_service import make_rig, until  # noqa: F401
 from .test_narration import chat, typed
 
 
-async def blocked_cli(make_rig, monkeypatch, tmp_path, brain="claude"):
+async def blocked_cli(make_rig, monkeypatch, tmp_path, brain="codex"):
+    # Its fake driver has no `steer`, so a message said meanwhile waits its own turn (Claude Code and Antigravity take it at
+    # their next step instead: test_cli_steering.py).
     started, release = asyncio.Event(), asyncio.Event()
     calls = []
     active = 0

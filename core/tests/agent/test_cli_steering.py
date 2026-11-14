@@ -78,3 +78,53 @@ async def test_private_cli_waits_for_the_existing_native_session_instead_of_fail
         if lock.locked():
             lock.release()
         await rig.loop.aclose()
+
+
+async def test_claude_and_antigravity_take_the_owner_words_at_their_next_step_and_codex_keeps_turn_steer(monkeypatch, tmp_path):
+    from raphael_core.worker.loop import ToolOutcome
+    from .test_cli_recovery import recovery_rig
+
+    for brain in ("claude", "gemini", "codex"):
+        sent, results = [], []
+        released = asyncio.Event()
+
+        async def play(loop, attempt):
+            async def steer(text):
+                sent.append(text)
+                return True
+            loop.driver.steer = steer
+            assert await loop.steer("Sign me in first", ticket="one")
+            await loop._tool("a", "save_draft", {})
+            assert await loop.steer("And then check the time", ticket="two")
+            results.append(await loop._tool("b", "save_draft", {}))
+            released.set()
+            yield Event("final", "Done")
+
+        rig = recovery_rig(monkeypatch, tmp_path, play, brain=brain)
+        assert (await rig.loop.run()).final == "Done"
+        if brain == "codex":
+            assert sent == ["Sign me in first", "And then check the time"]  # native turn/steer, nothing on a result
+            assert cli.OWNER_NOW not in results[0].content
+            assert rig.loop.owner_input.consumed("one") and rig.loop.owner_input.consumed("two")
+        else:
+            assert sent == []
+            assert results[0].content.endswith(f"{cli.OWNER_NOW}\nAnd then check the time")
+            assert "Sign me in first" not in results[0].content  # read once, with the first result
+            assert [m["content"] for m in rig.loop.tool_messages if m["role"] == "user"] == ["Sign me in first", "And then check the time"]
+            assert rig.loop.owner_input.consumed("one") and rig.loop.owner_input.consumed("two")
+        assert len(rig.calls) == 1
+
+
+async def test_a_turn_with_no_tools_takes_no_owner_words_and_a_finished_one_takes_none(monkeypatch, tmp_path):
+    from .test_cli_recovery import recovery_rig
+
+    async def play(loop, attempt):
+        yield Event("final", "Done")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude", no_tools=True)
+    assert not await rig.loop.steer("Too late for a turn that calls nothing")
+    rig = recovery_rig(monkeypatch, tmp_path, play, brain="claude")
+    assert await rig.loop.steer("Said before it ends", ticket="a")
+    await rig.loop.run()
+    assert not await rig.loop.steer("Said after it ended", ticket="b")
+    assert rig.loop.owner_input.leftover() == ["a"]  # unread: the service starts the next turn with it

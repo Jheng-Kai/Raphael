@@ -1030,6 +1030,7 @@ export const zhTW = {
   "chat.copy": "複製",
   "chat.send": "送出",
   "chat.edit": "編輯",
+  "chat.sendNow": "立即送出",
   "chat.quote": "引用",
   "chat.you": "你",
   "chat.removeQuote": "移除引用",

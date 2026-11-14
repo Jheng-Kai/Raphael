@@ -1570,9 +1570,11 @@ npm run look -- owner-addition --theme both --width 1120,720,1920x1080
 
 An owner message in an active private conversation is an ordinary owner bubble and
 enters the same loop as a user-role message at its next step, after the complete
-tool batch. Stop alone cancels the work. The inbox seals atomically at the final
-reply; a later message starts a new turn. CLI brains finish their current turn and
-resume the existing native session with the addition. Background tasks use the same
+tool batch. Stop, or 「立即送出」 on a queued message, cancels the work. The inbox seals
+atomically at the final reply; a later message starts a new turn. Codex takes the addition
+natively (turn/steer); Claude Code and Antigravity read it with the result of their next
+call to Raphael's tools, or, when no call follows, in the next turn that resumes the
+existing native session (see Durable owner inbox). Background tasks use the same
 inbox inside the worker process, through internal task.steer admission.
 Accepted owner-only history rows use owner_input and render no empty member reply.
 CLI handoffs preserve accepted input in their saved continuation.
@@ -1968,10 +1970,35 @@ Keep R-PERF-02's existing 120ms/12% limits and R-UI-71's stable node identity.
 Compare queued withdraw/action rows with owner-addition and the existing pending
 Stop scenes at matching dimensions. See core/tests/agent/test_inbox*.py,
 test_steering.py, test_cli_steering.py and app/src/main/pages/agent-stop.test.ts.
-Claude and Antigravity input during a turn is unmeasured, so it waits for the
-next turn in FIFO order.
+Codex takes input during a turn through turn/steer. Claude Code and Antigravity
+cannot (their stream-json input is one message), but their built-in tools are off, so
+every step they take is a call to Raphael's own tools: a message said meanwhile
+(no files, nothing queued before it) rides on the result of the next such call under
+one label, "The owner just wrote (read this before continuing; decide whether it
+changes what you are doing):", so the model reads it and decides what to do with its
+work, as Claude Code does. It is read once (marked steered, kept in the turn's
+records), and withdrawing it first removes it from the pending note. A turn that
+makes no further call before it ends leaves the message unread; it then starts the
+next turn in FIFO order, as before.
+
+Owner, 2026-11-14: 「我可能傳一封訊息給一個成員，然後突然想到還有另外一件事，所以我又在後面
+queue 了一個新的訊息。…理論上你應該要跟 claude code 設計的一樣，我們可以自己選擇立即送出，就會直接
+打斷目前的工作，然後加上這個 context，或者是另外一個就是，claude 它會自己判斷它什麼時候該加進來。」
+Both halves are built: the model takes a new message at its next step, and 「立即送出」 on a
+queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu:
+「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣」) interrupts the work now. R-QUEUE-05:
+`agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
+running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
+Antigravity child is ended and the next turn resumes its stored native session; an API loop's
+task is cancelled). The interrupted turn ends cancelled with its words kept, and pending
+confirmation cards of that conversation are denied, as Stop does. A message with files is
+started as its own turn this way too (it never steers). Rooms keep a new exchange per message.
+A message already steered and read, or already started, is not sent again (`sent: false`).
+Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read
+shows as sent, not queued, so it has no 「立即送出」; Stop returns it to the field, and the
+messages with files or behind another queued one show 「排隊中」 and offer it.
 ```powershell
-npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
+npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
 
 ### Request ID reuse after settlement (2026-11-03)

@@ -1309,6 +1309,7 @@ export const tr = {
   "agent.rerun": "Yeniden çalıştır",
   "chat.send": "Gönder",
   "chat.edit": "Düzenle",
+  "chat.sendNow": "Şimdi gönder",
   "cal.edit": "Düzenle",
   "members.profile.editResource": "Düzenle",
   "chat.quote": "Alıntıla",

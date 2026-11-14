@@ -670,11 +670,14 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
 export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
   const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
     iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
-  return `<div class="message-actions">${queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>` : ""}` + extra +
+  // A message that waits its turn says so and offers 立即送出 in sight, as Claude Code does: it is the exception, not a menu item
+  // (owner, 2026-11-14: 「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣，因為它這個是例外」).
+  const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
+  return `<div class="message-actions">${waiting}` + extra +
     (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
-    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""} aria-haspopup="menu"`) : "") + `</div>`;
+    (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""}${queued ? ' data-queued="true"' : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true, latestFailure = false): string {
