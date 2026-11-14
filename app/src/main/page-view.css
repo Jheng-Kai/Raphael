@@ -16,10 +16,11 @@
    the one under the page. */
 .ra-stage.is-page > .ra-scroll .live-presence { display: none; }
 .ra-stage.is-page > .pgv { grid-area: 1 / 1; }
-/* The page is the whole area right of the sidebar to the window's edge: the pane's own side padding (a conversation's, as the thread has
-   it) is given back for it (R-PAGE-09). A room's pane has none: its thread and composer are inset by the room's own padding instead. */
-.mb-chat:not(.au-room-pane) > .ra-stage.is-page > .pgv { margin-inline: calc(-1 * var(--row-edge)); }
-/* A report and the line under the page keep the thread's own sides (their background still reaches the edges). */
+/* The page is the whole area right of the sidebar to the window's edge: while it stands, the stage takes back the pane's own side
+   padding (a conversation's, as the thread has it; R-PAGE-09), so nothing runs past its box. A room's pane has none: its thread and
+   composer are inset by the room's own padding instead. The composer, the thread hidden under the page (its lines wrap as they did), the line under the page and a report keep the thread's own sides. */
+.mb-chat:not(.au-room-pane) > .ra-stage.is-page { margin-inline: calc(-1 * var(--row-edge)); }
+.mb-chat:not(.au-room-pane) > .ra-stage.is-page > :is(.ra-dock, .ra-scroll) { padding-inline: calc(var(--row-edge) + var(--pa-dock-x)); }
 .mb-chat:not(.au-room-pane) > .ra-stage.is-page > .pgv :is(.pgv-status, .rp-scroll) { padding-inline: calc(var(--row-edge) + var(--pa-dock-x)); }
 .ra-stage.is-page > .ra-dock { grid-area: 2 / 1; }
 .pgv { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; background: var(--content); }
