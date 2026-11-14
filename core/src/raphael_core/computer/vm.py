@@ -51,6 +51,9 @@ WALLPAPER_SETUP_S = 5
 OWN_WALLPAPER = "computer-wallpaper.jpg"
 OWN_WALLPAPER_BYTES = 8_000_000
 GUEST_OWN_WALLPAPER = "/opt/raphael-desktop/wallpapers/own.jpg"
+# The watcher and the default pictures (day.jpg, night.jpg) copied into a computer at every start. Outside image/:
+# what the image's build copies stays as the layer before built it, or the next build downloads Chrome again.
+WALLPAPER_FOLDER = Path(__file__).parent / "wallpaper"
 # How long a member's own use of its computer waits for a Docker Desktop it had to start, and how often it asks.
 # Docker Desktop on Windows starts WSL first, so a cold start takes the better part of a minute.
 ENGINE_WAIT_S = 120
@@ -1051,7 +1054,7 @@ class LocalVm:
         """Put the desktop's picture up: once for each run of a computer, and again when the owner's picture changed.
 
         This is the one place a watcher is started. It ends the one before it, so the picture on the desktop is the
-        one this start chose: a watcher that was merely left running kept the town over the owner's picture."""
+        one this start chose: a watcher that was merely left running kept the default picture over the owner's."""
         key = (target.remote, target.name)
         own = self.own_wallpaper()
         try:
@@ -1080,8 +1083,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         try:
             # Decoration cannot delay a ready desktop or change a tool's result.
             async with asyncio.timeout(WALLPAPER_SETUP_S):
-                desktop = Path(__file__).parent / "image" / "desktop"
-                for source, destination in ((desktop / "wallpaper.py", "wallpaper.py"), (desktop / "wallpapers", "")):
+                for source, destination in ((WALLPAPER_FOLDER / "wallpaper.py", "wallpaper.py"), (WALLPAPER_FOLDER / "wallpapers", "")):
                     result = await self.run_for(target, ["cp", str(source), f"{target.name}:/opt/raphael-desktop/{destination}"], timeout=2)
                     if result.code:
                         return

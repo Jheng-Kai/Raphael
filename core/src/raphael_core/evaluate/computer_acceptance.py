@@ -194,10 +194,10 @@ def colour_share(pixels, colour):
 
 
 def desktop_shows(top, lower, own):
-    """Whether one screen shows the owner's picture (teal left, orange right), or else the drawn town.
+    """Whether one screen shows the owner's picture (teal left, orange right), or else a drawn picture.
 
-    `top` is one row of pixels high on the screen, `lower` the two rows the town's houses and slimes cross. The town
-    is many colours there; a desktop that drew nothing is one."""
+    `top` is one row of pixels high on the screen, `lower` two rows across its middle. The default pictures are soft
+    gradients, yet many colours there (measured at 1280x900: 95 by day, 28 by night); a desktop that drew nothing is one."""
     left, right = colour_share(top[100:540], TEAL), colour_share(top[740:1180], ORANGE)
     seen = (round(left, 2), round(right, 2), len(set(lower)))
     return (left >= .9 and right >= .9 if own else left < .1 and right < .1 and len(set(lower)) >= 12), seen
@@ -379,10 +379,9 @@ class IsolatedDocker:
         elif command == "cp":
             source, destination = args[1:]
             name, guest_path = destination.split(":", 1)
-            desktop = IMAGE_FOLDER / "desktop"
             require((Path(source), guest_path) in (
-                (desktop / "wallpaper.py", "/opt/raphael-desktop/wallpaper.py"),
-                (desktop / "wallpapers", "/opt/raphael-desktop/"),
+                (vm.WALLPAPER_FOLDER / "wallpaper.py", "/opt/raphael-desktop/wallpaper.py"),
+                (vm.WALLPAPER_FOLDER / "wallpapers", "/opt/raphael-desktop/"),
                 *([(self.picture, vm.GUEST_OWN_WALLPAPER)] if self.picture else [])), "Expected product wallpaper copy only")
             await self.owned(name)
         elif command == "ps":
@@ -866,9 +865,9 @@ class Acceptance:
             sock.close()
 
     async def wallpaper(self, target):
-        """What the desktop shows: the owner's picture while there is one, and the drawn town once there is none.
-        Neither was true of layer 5: a watcher that was merely left running kept the town over the picture, and the
-        town (SVG) was never drawn, so the desktop was one flat colour."""
+        """What the desktop shows: the owner's picture while there is one, and the default picture once there is none.
+        Neither was true of layer 5: a watcher that was merely left running kept the default (then a drawn town) over the
+        picture, and the town (SVG) was never drawn, so the desktop was one flat colour."""
         picture = self.root / vm.OWN_WALLPAPER
         aside = picture.with_suffix(".aside")
 
@@ -882,17 +881,17 @@ class Acceptance:
                     right, observed[screen] = desktop_shows(top, lower, own)
                     matched = matched and right
                 if matched and not own:
-                    # Many colours are not yet the town: the desktop's own default picture is a drawing too.
+                    # Many colours are not yet ours: the desktop's own default picture is a drawing too.
                     files = {(await self.text(target, ["xfconf-query", "-c", "xfce4-desktop", "-p",
                                                        f"/backdrop/screen0/monitorVNC-{screen - 1}/workspace0/last-image"])).strip()
                              for screen in observed}
-                    names = {f"/opt/raphael-desktop/wallpapers/{period}.svg" for period in ("morning", "noon", "dusk", "evening", "night")}
+                    names = {f"/opt/raphael-desktop/wallpapers/{name}" for name in ("day.jpg", "night.jpg")}
                     matched = len(files) == 1 and files <= names
                     observed = {**observed, "file": sorted(files)}
                 if matched:
                     return observed
                 require(time.monotonic() < deadline,
-                        f"Expected {'the owner picture' if own else 'the drawn town, not one flat colour'} within 40 s; "
+                        f"Expected {'the owner picture' if own else 'the default picture, not one flat colour'} within 40 s; "
                         f"observed per screen (teal share left, orange share right, colours in two lower rows) {observed}")
                 await asyncio.sleep(1)
 
@@ -905,7 +904,7 @@ class Acceptance:
         picture.rename(aside)
         try:
             await again()
-            town = await shown(False)
+            default = await shown(False)
         finally:
             aside.rename(picture)
         await again()
@@ -913,7 +912,7 @@ class Acceptance:
         watchers = [line for line in (await self.text(target, ["ps", "-eo", "args"])).splitlines()
                     if line.startswith("/opt/venv/bin/python /opt/raphael-desktop/wallpaper.py")]
         require(len(watchers) == 1 and "--image" in watchers[0], f"Expected one watcher holding the picture, observed {watchers}")
-        return f"owner picture shown {first}; without it the town is drawn {town}; picture put back and shown; one watcher"
+        return f"owner picture shown {first}; without it the default picture is shown {default}; picture put back and shown; one watcher"
 
     async def keys(self, target):
         """One workspace and no key that acts on the whole desktop. Layer 5 had four workspaces and every default
