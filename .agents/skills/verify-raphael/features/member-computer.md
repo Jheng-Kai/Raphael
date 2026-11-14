@@ -1,5 +1,63 @@
 # Member computer (Phases A and B)
 
+## A seat is a desktop a person can use (owner, 2026-11-14)
+
+R-COMP-SEATWIN-01, R-COMP-MARKER-01, R-COMP-TABS-01, R-COMP-FIT-01 (image `driver-0.37.0-v12`). Watching a member's screen and
+holding it, the owner (in translation): the members never open tabs; he only pressed minimize and when it came back Chrome
+could not find the original page; then the full-screen view looked strange: a Chrome window larger than the seat, cut on the
+left, top and right, with the panel over its page.
+
+What was measured on layer 11 (a throwaway shared computer, the worktree's real `LocalVm` and `VmTools`):
+- Minimize: the window stays in `wmctrl` and in the driver's list (`is_on_screen: false`, same geometry). A member's
+  `browser_open` went on in it unseen, replacing its page. The panel had no window list; its Browser icon made a second window
+  showing `data:text/html,<title>raphael-seat-...</title>`, and the core kept the older, minimized one (lowest id).
+- Tabs: the driver opens and brings forward no tab, and says `active: null` for new tab pages; `browser_open` navigated the
+  driver's shown tab or else the first one.
+- Geometry: with the compositor on, the browser's 16/16/10/32 px shadow and the window manager's maximize race; the seat's
+  window was 1312x893 at 16 px left and 10 px above its screen in 8 launches of 8 on one screen, and `wmctrl` could neither
+  unmaximize nor maximize it again. The launcher's "maximized and centred counts as settled" let it through.
+
+Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that built 11 reruns only that step, about a second):
+- `screens.py`: a window list (plugin 18 + the panel's number, `show-labels false`, this monitor only, never grouped) after each
+  panel's three launchers; no compositor (`/general/use_compositing false`); a window watch every second that puts back a
+  window whose seen part has stood outside its screen above the panel for two looks (maximized again, by the browser through
+  `raphael-browser-tabs fit` for a browser, or moved inside).
+- `xfce4-panel.xml`: the first panel's window list (a one-screen computer's only panel; the helper writes the others).
+- `raphael-browser`: the Browser icon brings the screen's browser window back with a new tab, or makes one when there is none.
+- `raphael-seat-browser`: the browser places and maximizes the found window (`fit`), then shows the new tab page in its marker
+  tab and clears its history (`settle`).
+- `raphael-browser-tabs` (standard library, the browser's own DevTools port): `settle`, `list`, `new`, `show`, `fit`.
+  A window of the browser is found by its screen, then its title, then (two alike) by which tab has the focus once it is
+  brought forward. A new tab opens in the window brought to the front last, so it is checked and, when it landed in another
+  window, closed and opened again.
+- Core: `vm_tools.py` (`browser_open` `new_tab`, the shown tab, a new `browser_tabs` tool, a minimized seat window brought back),
+  `browser_tabs.py` (the tools' words and the pure reading of tabs), `vm.py` (`restore_window`, `browser_tabs`, layer 11 in
+  `known_previous`, image v12), the acceptance (`OLD_IMAGES` with 11, panels with their window list, "shared seat windows").
+
+Offline: `core/tests/computer/test_seat_windows.py` (scripts read and run without Docker, the tools against fakes), plus the
+updated layer tests in `test_seat_tools.py`, `test_screens.py`, `tests/evaluate/test_computer_acceptance.py`.
+
+Real computer (throwaway tag `raphael-probe/seat-windows:l12`, own data folder and owner label; scripts in the session's
+scratchpad, `probe_now.py` and `probe_new.py`): pictures of seat 1 looked at one by one.
+- Layer 11, before: `04-after-launcher.png` is the owner's picture (empty page, marker in the tab and the address).
+- Layer 12: the first window shows Google's new tab page, Back greyed; `browser_open` with `new_tab` gives two tabs, "Owner page
+  A" and "Task page B", B shown; `browser_tabs` `show` brings A back; minimized, the screen shows the town and the panel's
+  faded window button, and a click on it through the screen's view brings the window back on page A; the Browser icon with the
+  window open adds a New Tab and no window (also when the window was minimized); x.com's login page in a new tab fills the
+  screen above the panel with its tab strip, back button and window buttons whole; restored and maximized by the browser
+  (twice) and by the window manager it is 0,0 1280x851 at once; dragged to 700,100 (half on screen 2) it was back at 284,100 in
+  3 s. A stuck 1312x893 window made by hand was put right by the watch within about 1.5 s.
+
+```powershell
+$env:RAPHAEL_CORE_PYTHON = "D:\Documentation\github_repos\Raphael\core\.venv\Scripts\python.exe"
+$env:PYTHONPATH = "<worktree>\core\src"
+npm.cmd run verify -- --computer
+```
+
+Stated limits: two tabs with the same address and title cannot be told apart, so which of them `show` brings forward, or which
+is shown, is not claimed (`shown: null`); the watch does not fight a drag, so a window held still half across for a second is
+put back; a member's typed tools still act on a background tab without bringing it forward (the driver's own design).
+
 ## The first call after a wake is waited for; "your computer" is the member's (owner, 2026-11-14)
 
 R-COMP-FIRST-01, R-COMP-OWN-01. From the owner's own conversations: a member's first computer action after a sleep failed with
