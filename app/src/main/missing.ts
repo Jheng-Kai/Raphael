@@ -11,12 +11,11 @@ export interface Missing {
   repair: string | null;
 }
 
-const repairs = new Set(["models", "connections", "store", "search", "read", "vision", "pdf", "computer", "dictation", "general"]);
+const repairs = new Set(["models", "connections", "store", "search", "read", "vision", "pdf", "computer", "dictation"]);
 type MissingKey = Extract<MessageKey, `missing.${string}`> | "conn.emptyInstalled";
 const messages: Record<string, MissingKey> = {
   "hidden": "missing.hidden",
   "routines": "missing.routines",
-  "onboarding": "missing.onboarding",
   "startup": "missing.startup",
   "learned": "missing.learned",
   "models": "missing.models",
