@@ -44,7 +44,7 @@ async def own_items(rig):
 
 
 async def test_a_list_longer_than_the_limit_is_cut_and_says_from_which_date_to_which(setup, home):
-    """R-CAL-08: `bad_range` for a period over 62 days failed six times in the owner's use; the limit stood only in that error."""
+    """R-CAL-09: `bad_range` for a period over 62 days failed six times in the owner's use; the limit stood only in that error."""
     from raphael_core.agent.harness_tools import DEFINITIONS
     from raphael_core.own_calendar import LIST_MAX_DAYS, CalendarError
 

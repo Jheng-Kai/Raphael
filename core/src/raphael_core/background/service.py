@@ -1441,7 +1441,7 @@ class BackgroundService:
     def _ensure_pump(self) -> None:
         """Admit ordinary work by member and capacity, and short speech through its independent pool. Routine runs take at most
         `ROUTINE_PARALLEL` of the places, and wait their turn behind the owner's own work, so five routines due at one time do
-        not start together and never hold a place the owner's task needs (R-ROUTINE-09)."""
+        not start together and never hold a place the owner's task needs (R-ROUTINE-11)."""
         if self._closing:
             return
         active = [self._store.get(identifier) for identifier in self._active]

@@ -297,7 +297,7 @@ class OwnCalendar:
             last = last if isinstance(last, str) else _local_date(last, zone)
         if last < first:
             raise CalendarError("bad_range")
-        # A longer period is read for its first LIST_MAX_DAYS days and says so, with what it did not read (R-CAL-08): a call
+        # A longer period is read for its first LIST_MAX_DAYS days and says so, with what it did not read (R-CAL-09): a call
         # that only said "bad_range" failed six times in the owner's use and told the model nothing it could mend at once.
         latest = (date.fromisoformat(first) + timedelta(days=LIST_MAX_DAYS - 1)).isoformat()
         asked_end = last
