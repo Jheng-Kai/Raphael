@@ -825,6 +825,16 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_events.push(...Array.from({ length: variant.calendarManyAllDay }, (_, index) => ({ ...sample, id: `event:many-${String(index).padStart(2, "0")}`, kind: "event", routine_id: null, all_day: true,
       at_ms: octoberAt(24, 0), end_ms: octoberAt(index === 3 ? 26 : 25, 0), title: `${prefix[index % 3]}${names[index % names.length]}${index >= names.length ? ` ${index + 1}` : ""}` })));
   }
+  // A busy week with two busy days (Thursday 22 and Saturday 24) and four bars that run Saturday into Sunday, so the fourth is below the fold of both: each day opens by itself and that bar must keep its place on the open Saturday while Sunday stays folded.
+  if (variant.calendarBusyWeek) {
+    const sample = data.home.calendar_events.find(item => item.kind === "event");
+    const day = (id, title, from, to = from) => ({ ...sample, id: `event:busy-${id}`, kind: "event", routine_id: null, all_day: true, at_ms: octoberAt(from, 0), end_ms: octoberAt(to + 1, 0), title });
+    data.home.calendar_events.push(
+      ...[1, 2, 3, 4, 5].map(n => day(`thu${n}`, `週四事項 ${n}`, 22)),
+      ...["A", "B", "C", "D"].map(letter => day(`weekend${letter}`, `週末專案 ${letter}`, 24, 25)),
+      ...[1, 2, 3, 4].map(n => day(`sat${n}`, `週六事項 ${n}`, 24)),
+    );
+  }
   const reproject = () => {
     const monthly = [...(variant.homeSparse || variant.homeEmpty ? [] : [daily]), ...data.home.calendar_events].sort((a,b)=>a.at_ms-b.at_ms);
     data.home.calendar_counts = {};

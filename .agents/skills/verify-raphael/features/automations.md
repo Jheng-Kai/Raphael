@@ -245,18 +245,26 @@ Title priority review: calendar-rhythm-week, calendar-rhythm-day and calendar-rh
 ## A busy day: every all-day item in reach (owner, 2026-11-12)
 
 R-CAL-07. The all-day band of the day and week view draws three rows and one button per day that has more, 「還有 N 個」,
-N being the items not drawn. Pressing it opens the band in place to every all-day item of the days in view (the hours move down by
-what it grew and keep their height, the day names stay on top, the page scrolls, there is no scrollbar of the band's own); its one
-button then reads 「收合」 and folds it. It is the same toggle for Tab, Enter and Space, with aria-expanded, and the choice
-(`openBand` in `pages/automations.ts`: the view and first day it was made on) is folded again on any other day or week. A month's
+N being the items not drawn. Pressing it opens that day's column in place to every all-day item of that day (the hours move down by
+what the band grew and keep their height, the day names stay on top, the page scrolls, there is no scrollbar of the band's own); that
+day's button then reads 「收合」 and folds that day. Each day opens by itself (R-CAL-08, owner 2026-11-14): other days stay folded with
+their own 「還有 N 個」, several may be open, the band is as tall as its tallest day, and focus follows the day's button (收合 after
+opening, 「還有 N 個」 after folding). It is the same toggle for Tab, Enter and Space, with aria-expanded, and the choice
+(`band` in `pages/automations.ts`: the view and first day of the range, and the set of open dates) is folded again on any other day or week.
+`allDayBars(entries, days, rows, open)` in `calendar-view.ts` lays it out: a bar below the fold that crosses an open and a folded day
+is drawn in one piece per run of open days (square cut sides, no resize handle at a cut end) in the first free row of those days. A month's
 count (a separate `.cal-more`, still `data-au="open-day"`) opens that day in the day view with the band already open. The words are
 `overview.moreEvents` and `common.showLess`, both in the fifteen languages. The gutter's `+8` is the time zone (GMT+8) and is no count.
-Fixture: `calendarManyAllDay: N` puts N all-day items on 2026-10-24. Checks: calendar-more-folded (the count equals the hidden items),
+Fixture: `calendarManyAllDay: N` puts N all-day items on 2026-10-24; `calendarBusyWeek` puts five on Thursday the 22nd, four bars across
+Saturday and Sunday and four on Saturday (R-CAL-08). Checks: calendar-more-folded (the count equals the hidden items),
 calendar-more-open (every item in the document, scrolled to and pressable, the hours moved by the band's growth, the first timed event and
-the last hour reachable), calendar-more-closed, calendar-more-month, calendar-more-focus.
+the last hour reachable; per day: an open day holds every item with its own 收合 under them, a folded day three rows and its count),
+calendar-more-closed, calendar-more-month, calendar-more-focus, calendar-more-one (Thursday alone), calendar-more-two (Thursday and Saturday,
+Sunday folded), calendar-more-cross (the Saturday-to-Sunday bar kept whole on the open Saturday, cut at the folded Sunday, nothing overlapping),
+calendar-more-fold (Thursday folded, Saturday open, focus on Thursday's count).
 
 ```powershell
-npm run look -- automations-more-day automations-more-day-open automations-more-day-closed automations-more-week automations-more-many automations-more-sixty automations-more-month-cell automations-more-month automations-more-keyboard automations-month-busy automations-all-day automations-busy-day --theme both --width 1120,720,1920x1080
+npm run look -- automations-more-day automations-more-day-open automations-more-day-closed automations-more-week automations-more-many automations-more-sixty automations-more-month-cell automations-more-month automations-more-keyboard automations-more-week-one automations-more-week-two automations-more-week-cross automations-more-week-fold automations-month-busy automations-all-day automations-busy-day --theme both --width 1120,720,1920x1080
 ```
 
 ## Moving routine triggers (2026-11-01)
