@@ -1025,8 +1025,6 @@ export function installMock(fixture, config = {}, target = window) {
   };
   // A skill's document: its frontmatter says its name and when to use it, as the core reads them (members/capabilities.py `skill_metadata`).
   const skillText = skill => skill.text ?? `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n`;
-  const skillUndo = new Map();
-  const saveSkills = member => skillUndo.set(member, { revision: `skill-${Date.now()}`, skills: structuredClone(data.skills.filter(s => s.member_id === member)) });
   const skillRow = ({ text, ...skill }) => skill;
   const skillGrants = new Map();
   const skillMember = p => p.shared ? -1 : p.member_id;
@@ -1311,7 +1309,7 @@ export function installMock(fixture, config = {}, target = window) {
           }
           return { marketplace, sets: data.skillSets, skills: visibleSkills(p) };
         }
-        return { skills: visibleSkills(p), sets: data.skillSets, undo: skillUndo.get(skillMember(p))?.revision ?? null,
+        return { skills: visibleSkills(p), sets: data.skillSets,
           ...(p.discover ? { sources: data.skillSources ?? [], marketplaces: data.skillMarketplaces } : {}) };
       }
       case "members.skills.import": {
@@ -1356,16 +1354,6 @@ export function installMock(fixture, config = {}, target = window) {
           return { skill: visibleSkills(p).find(s => s.id === p.id) };
         }
         p = { ...p, member_id: skillMember(p) };
-        if (p.undo) {
-          const previous = skillUndo.get(p.member_id);
-          if (!previous || previous.revision !== p.undo) throw new Error("Invalid params: skill revision is no longer current");
-          const current = structuredClone(data.skills.filter(s => s.member_id === p.member_id));
-          data.skills = [...data.skills.filter(s => s.member_id !== p.member_id), ...previous.skills];
-          skillUndo.set(p.member_id, { revision: `skill-${Date.now()}`, skills: current });
-          notify("MembersChanged", { member_id: p.member_id });
-          return { skills: byMember(data.skills, p).map(skillRow) };
-        }
-        saveSkills(p.member_id);
         const skill = skillOf(p);
         if (p.text !== undefined) {
           // as the core refuses a document it cannot keep: nothing changes
@@ -1390,7 +1378,6 @@ export function installMock(fixture, config = {}, target = window) {
         }
         if (!p.shared && data.skills.some(s => s.id === p.id && s.member_id === -1)) throw new Error("Invalid params: edit shared skills in the shared library");
         p = { ...p, member_id: skillMember(p) };
-        saveSkills(p.member_id);
         const deleted = data.skills.some(item => item.id === p.id && item.member_id === p.member_id);
         data.skills = data.skills.filter(item => !(item.id === p.id && item.member_id === p.member_id));
         notify("MembersChanged", { member_id: p.member_id });

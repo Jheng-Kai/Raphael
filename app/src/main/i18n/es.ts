@@ -1572,7 +1572,6 @@ export const es = {
   "skills.learned": "Autoaprendido",
   "skills.imported": "Importado",
   "skills.owner": "Del propietario",
-  "skills.undo": "Deshacer último cambio",
   "skills.instructions": "Instrucciones de la habilidad",
   "skills.save": "Guardar habilidad",
   "members.more": "Opciones de {p0}",

@@ -3496,8 +3496,17 @@ export function checkRendered(name, context = {}) {
     require(meta.textContent.split('自行學會').length === 2 && meta.textContent.includes('自行學會 · 2026/10/29'), "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
-    if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
-    else require(calls.some(c => c.method === "members.skills.delete") && calls.some(c => c.method === "members.skills.update" && c.params.undo), "Raphael deletes and restores through the same owner boundary");
+    require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
+    return { check: name };
+  }
+  if (name === "skill-deleted-final") {
+    // Owner, 2026-11-14: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」. The delete asked twice, went through the
+    // same owner boundary, and nothing in the list offers to bring the skill back.
+    const pane = document.querySelector('.ms-pane'), calls = window.__look.calls;
+    require(calls.some(c => c.method === "members.skills.delete" && c.params.id === 31), "Raphael deletes the skill through the same owner boundary");
+    require(!calls.some(c => c.method === "members.skills.update" && "undo" in c.params), "no call asks the core to restore a skill");
+    require(!pane.querySelector('[data-ms="skill-open"][data-id="31"]') && pane.querySelector('[data-ms="skill-open"][data-id="32"]'), "the deleted skill is gone and the shared one stays");
+    require(!pane.querySelector('[data-ms="skill-undo"]') && !/復原|undo/i.test(pane.textContent), "the list has no way to bring the skill back");
     return { check: name };
   }
   if (name === "confirm-menu-label" || name === "confirm-menu-asks") {
