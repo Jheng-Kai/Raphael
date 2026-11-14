@@ -54,6 +54,17 @@ export default [
   scene("chatgpt-signed-out", "ChatGPT sign-in is the first subscription account", [...settings("models"), scroll(".cli-accounts"), wait('[data-chatgpt="sign-in"]')]),
   scene("chooser-chatgpt-signed-out", "Choosing a model, ChatGPT is a subscription that says what signing in means and has the button for it", [...modelChooser("answer"), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), check("chooser-chatgpt")]),
   scene("chooser-chatgpt-signed-in", "Signing in from the chooser brings the plan's models into it", [...modelChooser("answer"), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), click('.model-chooser [data-dlg="chatgpt"]'), wait('.model-chooser [data-model="@chatgpt:gpt-6-sol"]'), check("chooser-chatgpt-models")]),
+  scene("chooser-claude-models", "Claude Code lists every model it runs with its version in the name and the exact model in each row, in the shape of the Codex list", [
+    ...modelChooser("answer"), click('.model-chooser [data-source="cli:claude"]'), wait('.model-chooser [data-model="cli:claude:claude-opus-5-5"]'), check("chooser-claude"),
+    click('.model-chooser [data-source="cli:codex"]'), wait('.model-chooser [data-model="cli:codex:gpt-6.1"]'), check("chooser-claude-style"),
+    // the picture ends on the Claude Code tab
+    click('.model-chooser [data-source="cli:claude"]'), wait('.model-chooser [data-model="cli:claude:claude-opus-5-5"]'), check("chooser-claude")]),
+  scene("chooser-claude-older", "The end of Claude Code's list, its oldest models with their dated ids, still whole in the row at every width", [
+    ...modelChooser("answer"), click('.model-chooser [data-source="cli:claude"]'), wait('.model-chooser [data-model="cli:claude:claude-haiku-4-5-20251001"]'),
+    scroll('.model-chooser [data-model="cli:claude:claude-haiku-4-5-20251001"]'), check("chooser-claude")]),
+  scene("composer-model-alias", "A member saved with Claude Code's alias reads the model it is on, with its version, and its row is the one checked", [
+    member(3), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), click('.cb-pick'),
+    click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]'), check("composer-claude-alias-row"), check("composer-claude-alias")], { claudeAlias: true }),
   scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and a menu", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-menu]")]),
   scene("cli-account-menu", "Connected CLI account row actions", [...cliMenu, check("cli-account-menu")]),
   scene("cli-account-disconnected", "Disconnect only in Raphael and offer reconnection", [...cliDisconnected, check("cli-account-disconnected")]),
@@ -159,6 +170,7 @@ export default [
   scene("connections-discover-empty", "Discovery without candidates", [...add, click('.menu [data-value="import"]')], { servers: [], candidates: [] }),
   scene("usage", "Usage: this month's spending with a coloured bar, what each subscription has left, then the key", [...usage, wait(".run-subscription"), check("usage-plain")]),
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
+  scene("usage-owner", "The owner's own mix: Codex live, Claude whose window has reset (已重置, no stale number or bar), the ChatGPT sign-in and OpenRouter's own spend, one card each as the account menu's blocks", [...usage, wait('[data-allowance="openrouter"]'), check("usage-plain"), check("usage-owner-cards")], { usageOwner: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
   scene("usage-opens-quietly", "Settings reads the allowances each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
     ...settings("general"), check("usage-open-general"),

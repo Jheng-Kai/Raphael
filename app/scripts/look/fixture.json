@@ -696,12 +696,6 @@
           "medium",
           "high"
         ]
-      },
-      "claude": {
-        "id": "cli:claude:haiku",
-        "name": "Haiku",
-        "is_default": true,
-        "reasoning_efforts": []
       }
     }
   },
@@ -1583,7 +1577,14 @@
       "checked_at_ms": 1792807200000,
       "error": null,
       "key": null,
-      "usage": null
+      "usage": {
+        "daily": 0.04,
+        "weekly": 0.3,
+        "monthly": 1.31,
+        "total": 6.2,
+        "limit": null,
+        "limit_remaining": null
+      }
     },
     "spend": {
       "month_usd": 1.24,
@@ -2672,11 +2673,21 @@
       "disconnected": false,
       "login_command": "claude",
       "models": [
-        {
-          "id": "cli:claude:sonnet",
-            "reasoning_efforts": ["low", "medium", "high"],
-          "name": "Sonnet"
-        }
+        {"id": "cli:claude:claude-opus-5-5", "name": "Claude Opus 5.5", "description": "Best for everyday, complex tasks", "aliases": ["opus"], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-fable-5-2", "name": "Claude Fable 5.2", "description": "Most capable for your hardest and longest-running tasks", "aliases": ["fable"], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-sonnet-5-5", "name": "Claude Sonnet 5.5", "description": "Efficient for routine tasks", "aliases": ["sonnet"], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": true},
+        {"id": "cli:claude:claude-haiku-5-5", "name": "Claude Haiku 5.5", "description": "Fastest for quick answers", "aliases": ["haiku"], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-opus-5", "name": "Claude Opus 5", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-opus-4-8", "name": "Claude Opus 4.8", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-opus-4-7", "name": "Claude Opus 4.7", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-opus-4-6", "name": "Claude Opus 4.6", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-opus-4-5-20251101", "name": "Claude Opus 4.5", "aliases": [], "reasoning_efforts": [], "default_effort": null, "is_default": false},
+        {"id": "cli:claude:claude-fable-5-1", "name": "Claude Fable 5.1", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-fable-5", "name": "Claude Fable 5", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-sonnet-5", "name": "Claude Sonnet 5", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "aliases": [], "reasoning_efforts": ["low", "medium", "high", "max"], "default_effort": "high", "is_default": false},
+        {"id": "cli:claude:claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5", "description": "Retires November 30, 2026", "aliases": [], "reasoning_efforts": [], "default_effort": null, "is_default": false},
+        {"id": "cli:claude:claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "aliases": [], "reasoning_efforts": [], "default_effort": null, "is_default": false}
       ]
     },
     {

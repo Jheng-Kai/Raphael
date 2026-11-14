@@ -2689,27 +2689,38 @@ export function checkRendered(name, context = {}) {
     require(menu.contains(document.activeElement)||!!document.getElementById('app-submenu')?.contains(document.activeElement),'the focus is in the menu or its submenu');
     return {check:name,rail:footRail(),chevron:!!chevron,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
   }
-  if(name==='foot-usage-submenu'){
+  if(name==='foot-usage-submenu'||name==='foot-usage-owner'){
     const menu=document.getElementById('app-popover'),sub=document.getElementById('app-submenu');
     require(menu&&sub&&visible(sub)&&sub.classList.contains('account-usage'),'the usage submenu is open beside the menu');
     const row=menu.querySelector('[data-account="usage"]'),r=footBox(row),s=footBox(sub),m=footBox(menu);
     require(row.getAttribute('aria-expanded')==='true','the row says its submenu is open');
     require(s.left>=m.right-2&&s.left<=m.right+12||s.right<=m.left+2,'the submenu stands at the menu\'s edge');
     require(s.top<=r.bottom&&s.bottom>=r.top,'and level with its row');
-    // One block for every subscription the reading gives a window for, in the reading's order (the mock core's, read here).
-    const known=window.__look.data.allowances.brains.filter(brain=>brain.windows.some(span=>typeof span.remaining_percent==='number'));
+    // One block for every provider the owner uses, in a stable order: the subscriptions as the reading gives them, the ChatGPT sign-in, then OpenRouter (the mock core's data, read here).
+    // A provider whose usage cannot be read keeps its block and says so; none shows a number that was not read.
+    const data=window.__look.data,key=data.status.openrouter;
+    const expected=[...data.allowances.brains.map(brain=>brain.id),...(data.chatgpt?.signed_in&&data.chatgpt.plan_scope_granted!==false?['chatgpt']:[]),...(key.state!=='no_key'&&key.state!=='unknown'?['openrouter']:[])];
     const blocks=[...sub.querySelectorAll('.account-window')],manage=sub.querySelector('[data-account="manage"]');
-    require(known.length>=2&&blocks.length===known.length,`a block for each of the ${known.length} subscriptions, not only the tightest (${blocks.length})`);
-    const names=blocks.map(block=>block.querySelector('.account-window-name').textContent.trim().split(' ')[0]);
-    require(new Set(names).size===names.length&&names.every(word=>/^(Claude|Codex|Antigravity)$/.test(word)),`each block names its own subscription: ${names.join(', ')}`);
-    require(names.join()===known.map(brain=>({claude:'Claude',codex:'Codex',gemini:'Antigravity',antigravity:'Antigravity'}[brain.id])).join(),`in the reading's order: ${names.join(', ')}`);
+    require(expected.length>=2&&blocks.length===expected.length,`a block for each of the ${expected.length} providers (${expected.join(', ')}), not only the tightest (${blocks.length})`);
+    require(blocks.map(block=>block.dataset.provider).join()===expected.join(),`in the stable order ${expected.join(', ')}: ${blocks.map(block=>block.dataset.provider).join(', ')}`);
+    const words={claude:'Claude',codex:'Codex',gemini:'Antigravity',chatgpt:'ChatGPT',openrouter:'OpenRouter'};
     blocks.forEach((block,at)=>{
-      const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block);
-      require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(name1)&&visible(used)&&visible(reset),`block ${at}: the window's name, its number and when it resets: ${block.textContent}`);
-      require(footBox(used).right>=r1.right-16&&footBox(used).left>footBox(name1).left,`block ${at}: the number stands at the right of the window\'s name`);
-      require(name1.scrollWidth<=name1.clientWidth+1&&footBox(used).right<=s.right,`block ${at}: its words show whole inside the submenu`);
+      const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block),state=block.dataset.state;
+      require(name1.textContent.trim().split(' ')[0]===words[block.dataset.provider],`block ${at} names its own provider: ${name1.textContent}`);
+      require(visible(name1)&&visible(used)&&used.textContent.trim().length>0,`block ${at}: its name and the words at its right: ${block.textContent}`);
+      if(state==='percent')require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(reset),`block ${at}: a window with its number and when it resets: ${block.textContent}`);
+      if(state==='reset')require(!/\d/.test(used.textContent)&&!reset,`block ${at}: a window that has reset keeps no stale number and no reset line: ${block.textContent}`);
+      if(state==='unreadable')require(!/\d/.test(used.textContent)&&!reset,`block ${at}: a provider that cannot be read shows no number: ${block.textContent}`);
+      if(state==='spend')require(/\d/.test(used.textContent)&&!/%/.test(used.textContent),`block ${at}: OpenRouter's own spend, not a percentage: ${block.textContent}`);
+      require(footBox(used).right>=r1.right-16&&footBox(used).left>footBox(name1).left,`block ${at}: the words stand at the right of the name`);
+      require(name1.scrollWidth<=name1.clientWidth+1&&used.scrollWidth<=used.clientWidth+1&&footBox(used).right<=s.right,`block ${at}: its words show whole inside the submenu`);
       if(at)require(r1.top>=footBox(blocks[at-1]).bottom-1,`block ${at} stands under the one before it`);
     });
+    if(name==='foot-usage-owner'){
+      // The owner's own mix, 2026-11-14: Codex live, Claude whose reported window has reset, the ChatGPT sign-in, OpenRouter.
+      require(blocks.map(block=>`${block.dataset.provider}:${block.dataset.state}`).join()==='codex:percent,claude:reset,chatgpt:unreadable,openrouter:spend',`the four providers say what each knows: ${blocks.map(block=>`${block.dataset.provider}:${block.dataset.state}`).join()}`);
+      require(/65\s*%/.test(blocks[0].textContent),`Codex reads 65% used: ${blocks[0].textContent}`);
+    }
     require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage&&footBox(blocks.at(-1)).bottom<=footBox(sub.querySelector('.menu-sep')).top+1,'a hairline after the last block, then 管理用量');
     require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight&&s.top>=0,'the submenu lies inside the window');
     return {check:name,sub:[Math.round(s.left),Math.round(s.top),Math.round(s.width),Math.round(s.height)],words:sub.textContent};
@@ -6534,6 +6545,47 @@ export function checkRendered(name, context = {}) {
     require(!/token/i.test(document.querySelector(".mc-pane-head").textContent), "no per-token price");
     return { check: name };
   }
+  if (name === "chooser-claude") {
+    const pane = document.querySelector(".model-chooser .mc-pane"), list = pane.querySelector(".mc-list"), rows = [...list.querySelectorAll(".mc-row")];
+    const shown = rows.map(row => row.querySelector(".mc-model-line strong").textContent.trim());
+    require(rows.length >= 8, `Claude Code has many models, not three: ${rows.length}`);
+    require(shown.every(text => /^Claude (Opus|Fable|Sonnet|Haiku) \d+(\.\d+)?$/.test(text)), `every model says its version: ${shown.join(", ")}`);
+    require(new Set(shown).size === shown.length, "no two rows share a name");
+    require(rows.every(row => /^cli:claude:claude-[a-z0-9-]+$/.test(row.dataset.model)), "each row is the exact model it runs, never an alias");
+    require(shown.slice(0, 4).join() === "Claude Opus 5.5,Claude Fable 5.2,Claude Sonnet 5.5,Claude Haiku 5.5", `the CLI's own four come first, in its order: ${shown.slice(0, 4)}`);
+    require(shown.indexOf("Claude Opus 4.8") > shown.indexOf("Claude Opus 5"), "older models follow, the newest of a family first");
+    const box = list.getBoundingClientRect();
+    require(rows.every(row => { const strong = row.querySelector("strong"); return strong.scrollWidth <= strong.clientWidth + 1; }), "every name is whole, none cut with an ellipsis");
+    require(rows.every(row => row.getBoundingClientRect().left >= box.left - 1 && row.getBoundingClientRect().right <= box.right + 1), "every row is inside the list");
+    require(list.scrollWidth <= list.clientWidth + 1 && pane.scrollWidth <= pane.clientWidth + 1, "nothing scrolls sideways");
+    require(rows.filter(row => row.getAttribute("aria-checked") === "true").length <= 1, "no more than one model is checked");
+    const row = rows[0], strong = row.querySelector("strong");
+    window.__claudeRow = { height: Math.round(row.getBoundingClientRect().height), name: getComputedStyle(strong).fontSize + getComputedStyle(strong).fontWeight,
+      parts: [...row.children].map(part => part.className.split(" ")[0]).join(), mark: !!row.querySelector(".mono svg, .mono img, svg") };
+    return { check: name, rows: rows.length };
+  }
+  if (name === "chooser-claude-style") {
+    const was = window.__claudeRow, row = document.querySelector(".model-chooser .mc-list .mc-row"), strong = row.querySelector("strong");
+    require(was, "the Claude Code list was measured first");
+    const now = { height: Math.round(row.getBoundingClientRect().height), name: getComputedStyle(strong).fontSize + getComputedStyle(strong).fontWeight,
+      parts: [...row.children].map(part => part.className.split(" ")[0]).join(), mark: !!row.querySelector(".mono svg, .mono img, svg") };
+    require(was.parts === now.parts && was.name === now.name && was.mark === now.mark, `a Claude Code row is made as a Codex row: ${JSON.stringify(was)} / ${JSON.stringify(now)}`);
+    require(Math.abs(was.height - now.height) <= 2, `and as tall (${was.height} / ${now.height} px)`);
+    return { check: name };
+  }
+  if (name === "composer-claude-alias") {
+    const face = document.querySelector(".composer .cmp-model .mp-tname")?.textContent.trim();
+    require(face === "Claude Haiku 5.5", `a member saved as 「haiku」 reads the model it is on: ${face}`);
+    require(window.__look.data.members.find(member => member.id === 3).model === "cli:claude:haiku", "and is still saved with its alias");
+    return { check: name };
+  }
+  if (name === "composer-claude-alias-row") {
+    const row = document.querySelector('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]');
+    require(row?.getAttribute("aria-checked") === "true", "the row of the model its alias is, is the one checked");
+    require(document.querySelectorAll('.cb-menu .cb-list [aria-checked="true"]').length === 1, "and only that one");
+    require(!document.querySelector('.cb-menu [data-model="cli:claude:haiku"]'), "no row stands for the alias itself");
+    return { check: name };
+  }
   if (name === "composer-model-small" || name === "composer-model-browse") {
     const menu = document.querySelector(".cb-menu"), now = menu.querySelector(".cb-now"), list = menu.querySelector(".cb-body");
     require(visible(now) !== visible(list), "the card shows one view at a time");
@@ -6815,7 +6867,9 @@ export function checkRendered(name, context = {}) {
     const lum = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
     const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
     const dark = document.documentElement.dataset.theme === 'dark';
-    const surfaces = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog')].filter(node => visible(node) && getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)');
+    // A dialog is the middle layer and a card on it the lightest (owner, 2026-11-14): a box standing on the dialog is the card colour with its hairline, never a grey of its own.
+    const dialogRgb = colourOf('backgroundColor', '--dialog'), cardRgb = colourOf('backgroundColor', '--float');
+    const surfaces = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .av-crop')].filter(node => visible(node) && getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)');
     require(surfaces.length > 0, "something floats in this picture");
     const control = 'button, input, textarea, select, .btn, .sel, .field, .tab, .tg, .mb-fin, .mail-in, [role="switch"], [role="tab"], [role="menuitem"], [role="option"], [role="slider"], .mc-range, .mc-track, .emoji-find, .chip, .cs-chip, kbd, .cs-cap';
     const selected = '[aria-pressed="true"], [aria-selected="true"], [aria-current], [aria-checked="true"], [data-on="true"], .is-selected, .is-active, .active, .on, [data-selected]';
@@ -6836,7 +6890,11 @@ export function checkRendered(name, context = {}) {
         || /inset 0px 0px 0px 1px/.test(style.boxShadow);
       const c = ratio(fill, ground), darker = lum(fill) < lum(ground) - 0.0005, isControl = node.matches(control);
       if (node.matches(selected)) continue;
-      const hole = dark && darker && c > 1.03 && !node.matches('input, textarea, .field, .mb-fin, .mail-in, select, .mc-range');
+      const groundRgb = `rgb(${ground.r}, ${ground.g}, ${ground.b})`;
+      const onDialog = groundRgb === dialogRgb, onCard = groundRgb === cardRgb;
+      // a darker hole (in the dark theme) and, in either theme, the dialog's own colour dug into a card
+      const hole = (dark && darker && c > 1.03 && !node.matches('input, textarea, .field, .mb-fin, .mail-in, select, .mc-range')) || (onCard && style.backgroundColor === dialogRgb);
+      if (onDialog && !isControl && style.backgroundColor === cardRgb && edge) continue;
       // a card is the surface itself with an edge (c ~ 1): any grey between is the near-identical one; a control is told from what it stands on by its fill
       const same = isControl ? (c < 1.06 && !edge) : (c < 1.02 ? !edge : c < 1.45);
       if (hole || same) bad.push(`${node.tagName.toLowerCase()}.${String(node.className).split(' ')[0]} ${Math.round(box.width)}x${Math.round(box.height)} ${style.backgroundColor} on ${ground.r},${ground.g},${ground.b} (${c.toFixed(2)}${hole ? ', darker' : ''})`);
@@ -6844,14 +6902,49 @@ export function checkRendered(name, context = {}) {
     require(bad.length === 0, `${bad.length} inner element(s) lose their background or stand as a near-identical grey without an edge: ${bad.slice(0, 14).join(' | ')}`);
     return { check: name, surfaces: surfaces.length };
   }
+  if (name === "dialog-layers") {
+    // Three layers (owner, 2026-11-14: 「最外層最深 ( dialog 外 )，再來是內層，再來是內容」): the window under the scrim, the dialog and its nav, a card on it, each lighter than the one outside it, in both themes.
+    const channels = value => { const m = value.match(/[\d.]+/g)?.map(Number); return m && m.length >= 3 ? { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 } : null; };
+    const lum = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
+    const hex = ({ r, g, b }) => '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+    const scrim = [...document.querySelectorAll('.modal-scrim')].find(visible);
+    const dialog = scrim?.querySelector('.modal');
+    require(visible(dialog), "a dialog is open");
+    const dim = channels(getComputedStyle(scrim).backgroundColor), page = channels(getComputedStyle(document.querySelector('.main')).backgroundColor);
+    require(dim && page && dim.a > 0 && dim.a < 1, "the window is dimmed by the scrim, not hidden");
+    const outside = { r: page.r * (1 - dim.a), g: page.g * (1 - dim.a), b: page.b * (1 - dim.a) };
+    const middle = channels(getComputedStyle(dialog).backgroundColor);
+    require(middle.a === 1 && getComputedStyle(dialog).backgroundColor === colourOf('backgroundColor', '--dialog'), `the dialog is the middle layer, --dialog (${getComputedStyle(dialog).backgroundColor})`);
+    const nav = dialog.querySelector('.modal-nav');
+    if (visible(nav)) require(['rgba(0, 0, 0, 0)', 'transparent', getComputedStyle(dialog).backgroundColor].includes(getComputedStyle(nav).backgroundColor), `the nav is the dialog's own colour (${getComputedStyle(nav).backgroundColor})`);
+    // the lightest layer is a card (a settings group, an app's information box); the list of apps in 連結應用程式 has none and shows the dialog with the controls on it
+    const card = [...dialog.querySelectorAll('.slist, .cs-box')].find(visible) ?? null;
+    require(card || !visible(nav), "a settings pane shows its groups as cards");
+    const control = card ? null : [...dialog.querySelectorAll('.cs-connect, .cs-chip:not([aria-pressed="true"])')].find(visible) ?? null;
+    // the order of lightness, outside < dialog < card, with room enough to be seen (the card's hairline carries the rest in the light theme)
+    require(lum(outside) < lum(middle) && ratio(outside, middle) >= 1.05, `outside ${hex(outside)} is darker than the dialog ${hex(middle)} (${ratio(outside, middle).toFixed(2)})`);
+    let lightest = null;
+    if (card) {
+      lightest = channels(getComputedStyle(card).backgroundColor);
+      require(lightest.a === 1 && getComputedStyle(card).backgroundColor === colourOf('backgroundColor', '--float'), `the card is --float (${getComputedStyle(card).backgroundColor})`);
+      require(getComputedStyle(card).borderTopColor === colourOf('borderTopColor', '--float-edge') && parseFloat(getComputedStyle(card).borderTopWidth) === 1, "the card has its hairline");
+      require(lum(middle) < lum(lightest) && ratio(middle, lightest) >= 1.05, `outside ${hex(outside)} < dialog ${hex(middle)} < card ${hex(lightest)} (${ratio(middle, lightest).toFixed(2)})`);
+    } else if (control) {
+      lightest = channels(getComputedStyle(control).backgroundColor);
+      require(getComputedStyle(control).backgroundColor === colourOf('backgroundColor', '--float-ctl') && ratio(middle, lightest) >= 1.05, `a control on the dialog is --float-ctl and is told from it (${getComputedStyle(control).backgroundColor})`);
+    }
+    return { check: name, outside: hex(outside), dialog: hex(middle), lightest: lightest ? hex(lightest) : null, lightestIs: card ? 'card' : control ? 'control (this list has no card)' : 'none (this list has no card)' };
+  }
   if (name === "float-surface") {
     // Whatever floats in this picture stands on the floating surface and its edge, and a control on it is filled with the control colour.
-    const surface = colourOf('backgroundColor', '--float'), edge = colourOf('borderTopColor', '--float-edge'), control = colourOf('backgroundColor', '--float-ctl');
-    const found = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .link-hover')].filter(node => visible(node) && (getComputedStyle(node).position !== 'static' || node.matches('.cb-card, .mb-dialog, .cs-dialog')));
+    const surface = colourOf('backgroundColor', '--float'), dialogLayer = colourOf('backgroundColor', '--dialog'), edge = colourOf('borderTopColor', '--float-edge'), control = colourOf('backgroundColor', '--float-ctl');
+    const found = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .av-crop, .link-hover')].filter(node => visible(node) && (getComputedStyle(node).position !== 'static' || node.matches('.cb-card, .mb-dialog, .cs-dialog, .av-crop')));
     require(found.length > 0, "something floats in this picture");
+    // A dialog stands on the middle layer; a menu, a popover and a card on the lightest one.
     for (const node of found) {
-      const style = getComputedStyle(node);
-      require(style.backgroundColor === surface, `${node.className.split(' ')[0]} stands on the floating surface (${style.backgroundColor}, not ${surface})`);
+      const style = getComputedStyle(node), layer = node.matches('.mb-dialog, .modal, .cs-dialog, .av-crop, .menu.side-search') ? dialogLayer : surface;
+      require(style.backgroundColor === layer, `${node.className.split(' ')[0]} stands on the ${layer === dialogLayer ? 'dialog' : 'card'} layer (${style.backgroundColor}, not ${layer})`);
       require(style.borderTopColor === edge && parseFloat(style.borderTopWidth) === 1, `${node.className.split(' ')[0]} has the floating edge (${style.borderTopColor} ${style.borderTopWidth})`);
     }
     // A text button standing on the surface is filled with the control colour (its frame), unless it is the primary or a bare icon.
@@ -6904,7 +6997,7 @@ export function checkRendered(name, context = {}) {
     const done = view.querySelector('.cs-card .cs-state');
     require(done && !done.closest('.cs-card').querySelector('button.cs-connect') && done.textContent.includes('已連結'), "a connected app says 已連結 in quiet words and has no button");
     const surface = getComputedStyle(modal);
-    require(surface.backgroundColor === colourOf('backgroundColor', '--float') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the floating surface and its edge");
+    require(surface.backgroundColor === colourOf('backgroundColor', '--dialog') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the dialog layer and its edge");
     const body = modal.querySelector('.modal-body');
     require(body.scrollWidth <= body.clientWidth + 1 && results.scrollWidth <= results.clientWidth + 1, "the dialog never scrolls sideways");
     require(results.getBoundingClientRect().bottom <= frame.bottom + 1 && results.getBoundingClientRect().top > chips.getBoundingClientRect().bottom - 1, "the list scrolls between the chips and the dialog's lower edge");
@@ -6986,6 +7079,25 @@ export function checkRendered(name, context = {}) {
     const switchBox = main.closest('.cs-linked').querySelector('[role="switch"]').getBoundingClientRect();
     require(switchBox.left - box.right >= 8, `the fill stops 8 px or more before the switch (${switchBox.left - box.right})`);
     return { check: name, rows: rows.length };
+  }
+  if (name === "owner-list") {
+    // The owner's own list of 2026-11-14: the seven apps of his picture, all on, under no heading, with no app's page over them.
+    const modal = connectModal(), list = modal.querySelector('.cs-connected'), rows = [...(list?.querySelectorAll('.cs-linked') ?? [])];
+    require(visible(list) && !modal.querySelector('.cs-page') && list.querySelector('.cs-top-t')?.textContent === '已連結', "the connected list is on screen, under its own title, and no app's page is over it");
+    require(!list.querySelector('.cs-sec-head'), "the list has no section heading");
+    const names = rows.map(row => row.querySelector('.nm').textContent).sort().join(',');
+    require(names === ['Gmail', 'GitHub', 'Google Calendar', 'Google Drive', 'Hugging Face', 'Mobbin MCP', 'Notion'].sort().join(','), `the rows are the seven apps of his picture (${names})`);
+    require(rows.every(row => row.querySelector('[role="switch"]').getAttribute('aria-checked') === 'true' && visible(row.querySelector('.ds')) && visible(row.querySelector('.cs-tile'))), "every row has its tile, its line and a switch that is on");
+    return { check: name, rows: rows.length };
+  }
+  if (name === "app-state-press") {
+    // 「✓ 已連結」 of the one view's row: under the pointer, the pointer says it can be pressed, and what a press lands on is the row.
+    const modal = connectModal(), state = modal.querySelector('.cs-card .cs-state'), card = state?.closest('.cs-card');
+    require(state && visible(state) && state.textContent.includes('已連結'), "a connected row of the one view says 已連結");
+    require(getComputedStyle(state).cursor === 'pointer' && card.querySelector('[data-conn="open-store"]'), "the words have the pointer, and the row has the page to open");
+    const box = state.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    require(hit && card.contains(hit) && !hit.closest('[data-conn="join"]'), "a press on the words lands in the row, not on another control");
+    return { check: name };
   }
   if (name === "app-row-hover") {
     const modal = connectModal(), row = modal.querySelector('.cs-card .cs-main:hover');
@@ -7811,13 +7923,25 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.filter(c => c.method === 'connectors.set_key').length === 1, "the error comes through the real IPC boundary");
     return { check: name, message: alert.textContent };
   }
+  if (name === "usage-owner-cards") {
+    // The same mix as the account menu's blocks (R-SIDE-02): one card for each provider, and a window that has reset keeps no stale number or bar.
+    const panel = document.querySelector('#models-panel-usage'), cards = [...panel.querySelectorAll('.run-allowance .run-subscription')].filter(visible);
+    const named = cards.map(card => card.querySelector('h4').textContent.trim());
+    require(named.join() === 'Codex,Claude,ChatGPT,OpenRouter', `a card for each of the four providers, in order: ${named.join()}`);
+    const [codex, claude, chatgpt, openrouter] = cards;
+    require(/35%/.test(codex.textContent) && codex.querySelector('[role="progressbar"]'), `Codex has its live window and bar: ${codex.textContent}`);
+    require(!claude.querySelector('[role="progressbar"]') && !/\d\s*%/.test(claude.textContent) && /已重置|Reset/.test(claude.textContent), `Claude's window has reset: it says so, with no stale number or bar: ${claude.textContent}`);
+    require(chatgpt.dataset.allowance === 'chatgpt' && chatgpt.querySelector('[data-run-act="chatgpt-usage"]'), 'ChatGPT keeps its card and the button to its own page');
+    require(openrouter.dataset.allowance === 'openrouter' && /3\.21/.test(openrouter.textContent) && !/%/.test(openrouter.textContent), `OpenRouter says this month's use of the key: ${openrouter.textContent}`);
+    return { check: name, cards: named };
+  }
   if (name === "usage-plain") {
     // Plain usage summary: what each subscription has left, then the key and what was spent.
     const panel = document.querySelector('#models-panel-usage');
     require(visible(panel), "the usage tab is open");
     require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
     const rows = ["raphael-spend", "openrouter-key"].map(row => panel.querySelector(`[data-row="${row}"]`));
-    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"]'), "this month's spending of the app and the key show; an OpenRouter account's own usage does not");
+    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"]'), "this month's spending of the app and the key show; the key's own usage is a card above them, not a row");
     const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.status.spend.limit_usd;
     if (limit > 0) {
       require(visible(spend.querySelector('.spend-bar')) && bar, "the spending has a bar against the monthly limit");
