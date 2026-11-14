@@ -3,6 +3,7 @@ crashes that switch it off, and its idle end. The workers here are small real pr
 of Python, not the real worker), so the processes, pipes and kills are the real ones."""
 
 import asyncio
+import gc
 import logging
 import os
 import sys
@@ -488,6 +489,46 @@ async def test_shutdown_joins_an_idle_workers_delayed_pipe_cleanup(hosts, rig, m
         await idle
         if shutdown is not None:
             await shutdown
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Proactor subprocess transports are Windows-only")
+def test_stopping_a_worker_releases_proactor_transports_before_loop_close():
+    from raphael_core.background.host import ProcessLink
+
+    unraisable = []
+    previous_hook = sys.unraisablehook
+    loop = asyncio.ProactorEventLoop()
+
+    async def stop_worker():
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            "import time; time.sleep(60)",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        transport = process._transport
+        link = ProcessLink(process)
+        link.start_reading()
+        stopping = asyncio.create_task(link.stop())
+        while not process.stdin.is_closing():
+            await asyncio.sleep(0)
+        stopping.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(stopping, 5)
+        assert process.returncode is not None, "cancellation left the worker alive"
+        assert transport._loop is None, "the subprocess transport still belongs to the loop"
+
+    try:
+        sys.unraisablehook = unraisable.append
+        loop.run_until_complete(stop_worker())
+    finally:
+        loop.close()
+        gc.collect()
+        sys.unraisablehook = previous_hook
+
+    assert not unraisable, [item.exc_value for item in unraisable]
 
 
 async def test_a_log_line_longer_than_the_limit_is_dropped_and_the_pipe_keeps_draining(
