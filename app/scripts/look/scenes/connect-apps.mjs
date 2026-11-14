@@ -1,4 +1,6 @@
-import { scene, click, wait, check, type, scroll, settings, hover, focus, key, pressAt } from "./steps.mjs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { scene, click, wait, check, type, scroll, settings, hover, focus, key, pressAt, pressThrough } from "./steps.mjs";
 
 // 連結應用程式 as Grok Bot's Connect Apps (R-APPS-01, R-APPS-02): one view, a chip of the connected apps, a search, a row of chips, the apps
 // in sections; an app's page in the dialog's place. The colour rule for everything that floats (R-FLOAT-01) is checked in the pictures of
@@ -17,6 +19,7 @@ const MARKS = ["notion", "github", "googledrive", "gmail", "googlecalendar", "li
 const NOTION = '.cs-linked[data-id="composio:notion"]';
 const BACK = '[data-conn="back"]';
 const backToList = [click(BACK), wait(".cs-linked")];
+const backToMain = [click(BACK), wait(".cs-card")];
 const pressRows = [
   pressAt(`${NOTION} .ds`, 0.5, 0.5, ".cs-page .cs-head"), check("connect-app-from-row"), ...backToList,
   pressAt(`${NOTION} .cs-tile`, 0.5, 0.5, ".cs-page .cs-head"), ...backToList,
@@ -24,6 +27,78 @@ const pressRows = [
   pressAt(NOTION, 0.8, 0.5, ".cs-page .cs-head"), ...backToList,
   pressAt(NOTION, 0.5, 0.97, ".cs-page .cs-head"), ...backToList,
   focus(`${NOTION} .cs-main`), key("Enter"), wait(".cs-page .cs-head"), check("connect-app-from-row"), ...backToList,
+];
+
+// The owner's own list (his picture, 2026-11-14): Composio's Gmail, Google Calendar and Google Drive, a server of his own named Mobbin MCP,
+// Notion, Hugging Face and GitHub from the built-in catalog, every one on and under no heading. Every part of every row is pressed, with a real
+// mouse press, on the way he goes: the sidebar's 連結應用程式, the chip, the list (R-APPS-01).
+const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
+const composio = (slug, name, description, tools) => ({ id: `composio:${slug}`, kind: "composio", name, description, logo: "", status: "ACTIVE", enabled: true,
+  enabled_tools: tools.map((tool) => tool.slug), disabled_tools: [], accounts: [{ id: `ca_${slug}`, status: "ACTIVE" }] });
+const tool = (slug, name, kind) => ({ slug, name, description: name, kind, enabled: true });
+const builtin = (id, name, over) => ({ ...structuredClone(base.servers[1]), id, name, enabled: true, status: "ready", error: null, auth: "oauth", catalog_id: id,
+  transport: "http", url: `https://${id}.example.test/mcp`, headers: [], ...over });
+const GMAIL = [tool("GMAIL_FETCH_EMAILS", "搜尋郵件", "read"), tool("GMAIL_CREATE_DRAFT", "撰寫草稿", "write")];
+const CALENDAR = [tool("GOOGLECALENDAR_EVENTS_LIST", "列出行程", "read"), tool("GOOGLECALENDAR_CREATE_EVENT", "建立行程", "write")];
+const DRIVE = [tool("GOOGLEDRIVE_FIND_FILE", "查找檔案", "read"), tool("GOOGLEDRIVE_CREATE_FILE", "建立檔案", "write")];
+const OWNER_LIST = {
+  managedConnectors: [
+    composio("gmail", "Gmail", "搜尋郵件、撰寫草稿與回覆", GMAIL),
+    composio("googlecalendar", "Google Calendar", "查看與安排行程", CALENDAR),
+    composio("googledrive", "Google Drive", "查找檔案、整理共用文件", DRIVE),
+  ],
+  servers: [
+    builtin("mobbin", "Mobbin MCP", { catalog_id: null, auth: "none" }),
+    builtin("notion", "Notion"),
+    builtin("huggingface", "Hugging Face", { auth: "none" }),
+    builtin("github", "GitHub", { auth: "device" }),
+  ],
+  // The core marks a service of the catalog that is added (`server_id`): the main view says 「✓ 已連結」 on its row.
+  services: [...base.services.map((s) => (["notion", "github"].includes(s.id) ? { ...s, server_id: s.id } : s)),
+    { ...base.services[0], id: "huggingface", name: "Hugging Face", publisher: "Hugging Face", url: "https://huggingface.co/mcp", icon: "huggingface", auth: "none", server_id: "huggingface",
+    summary: { "zh-TW": "搜尋 Hugging Face 的模型、資料集與論文", en: "Search Hugging Face models, datasets and papers", ja: "Hugging Face のモデル・データセット・論文を検索" } }],
+  pluginTools: { ...base.pluginTools, "composio:gmail": GMAIL, "composio:googlecalendar": CALENDAR, "composio:googledrive": DRIVE },
+};
+const OWNER_ROWS = [["composio:gmail", "Gmail"], ["mobbin", "Mobbin MCP"], ["notion", "Notion"], ["huggingface", "Hugging Face"], ["composio:googlecalendar", "Google Calendar"],
+  ["composio:googledrive", "Google Drive"], ["github", "GitHub"]];
+const rowOf = (id) => `.cs-linked[data-id="${id}"]`;
+const PAGE = ".cs-page .cs-head";
+// Where a finger can land on a row: the line under the name, the name, the mark, the empty end of the row before the switch, and its top edge.
+const partsOf = (id, name) => [
+  pressAt(`${rowOf(id)} .ds`, 0.3, 0.5, PAGE, name), pressAt(`${rowOf(id)} .nm`, 0.3, 0.5, PAGE, name), pressAt(`${rowOf(id)} .cs-tile`, 0.5, 0.5, PAGE, name),
+  pressAt(`${rowOf(id)} .cs-main`, 0.98, 0.5, PAGE, name), pressAt(rowOf(id), 0.5, 0.04, PAGE, name),
+];
+const everyPart = OWNER_ROWS.flatMap(([id, name]) => partsOf(id, name).flatMap((press) => [press, ...backToList]));
+const ownerList = [...linked, check("owner-list")];
+const refreshed = { action: "emit", events: [{ type: "ConnectionsChanged" }], wait: 400 };
+const ownerRowScenes = [
+  scene("connected-owner-rows", "His list of seven, no heading: a real press on the line, the name, the mark, the empty end and the top edge of every row opens that app's page", [
+    ...ownerList, ...everyPart, check("owner-list"),
+  ], OWNER_LIST),
+  scene("connected-owner-rows-loaded", "The same presses after the tools of every app were read once, and again after the core says the list changed", [
+    ...ownerList,
+    ...OWNER_ROWS.flatMap(([id, name]) => [pressAt(`${rowOf(id)} .nm`, 0.3, 0.5, PAGE, name), wait(".cs-page .cs-tools"), ...backToList]),
+    refreshed, ...everyPart, check("owner-list"),
+  ], OWNER_LIST),
+  scene("connected-owner-rows-late", "The tools of an app are still on the way when the owner steps back and presses the next row, whichever way they end", [
+    ...ownerList,
+    ...OWNER_ROWS.flatMap(([id, name]) => [pressAt(`${rowOf(id)} .ds`, 0.3, 0.5, PAGE, name), ...backToList]),
+    ...everyPart, check("owner-list"),
+  ], { ...OWNER_LIST, toolsLate: 900 }),
+  scene("connected-owner-rows-straddled", "A press that began on a row is not lost when the core says the connections changed before the button comes up (a tool call of any member says so), in the list and in the main view", [
+    ...open, pressThrough(".cs-card .cs-main", 0.3, 0.5, [{ type: "ConnectionsChanged" }], PAGE), ...backToMain,
+    click('[data-conn="connected"]'), wait(".cs-linked"), check("owner-list"),
+    ...OWNER_ROWS.flatMap(([id, name]) => [pressThrough(`${rowOf(id)} .nm`, 0.3, 0.5, [{ type: "ConnectionsChanged" }], PAGE, name), ...backToList]),
+    check("owner-list"),
+  ], OWNER_LIST),
+  scene("connected-owner-state-press", "「✓ 已連結」 on a row of the one view is pressable: a real press on it opens that app's page, as the rest of its row does", [
+    ...open, type("#conn-search", "notion"), wait(".cs-card .cs-state"), hover(".cs-card .cs-state"), check("app-state-press"),
+    pressAt(".cs-card .cs-state", 0.5, 0.5, ".cs-page .cs-head", "Notion"), check("connect-app-from-row"), check("connect-back"),
+  ], OWNER_LIST),
+  scene("connected-owner-rows-failed", "The tools of every app fail to load: the page still opens from each part of the row and steps back to the list", [
+    ...ownerList, ...OWNER_ROWS.slice(0, 3).flatMap(([id, name]) => [pressAt(`${rowOf(id)} .nm`, 0.3, 0.5, PAGE, name), wait(".cs-page [data-conn=\"refresh\"]"), ...backToList]),
+    ...everyPart, check("owner-list"),
+  ], { ...OWNER_LIST, toolsFail: true }),
 ];
 const connectedRowScenes = [
   scene("connect-apps-connected-rows", "Every part of a connected row but its switch opens the app's page; the switch only turns the app off and on; a row under the pointer has the hover fill", [
@@ -50,4 +125,5 @@ export default [
     ...open, type("#conn-search", "icon-mark"), wait(".cs-card"), scroll(".cs-card:last-child"), scroll(".cs-card:last-child"), check("icon-colours"),
   ], { iconMarks: MARKS }),
   ...connectedRowScenes,
+  ...ownerRowScenes,
 ];
