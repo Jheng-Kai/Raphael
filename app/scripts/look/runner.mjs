@@ -51,7 +51,17 @@ export async function pageBaseDocuments(html, python = process.env.RAPHAEL_CORE_
   return JSON.parse(stdout);
 }
 
-export const needsDesktopFixture = selected => selected.some(scene => scene.fixture?.desktop || scene.fixture?.cardDeck || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
+/**
+ * What the core itself sends for the work card (`computer.checkpoints`) and the member Library (`members.library`) of a synthetic
+ * workspace and database (core_fixtures.py, R-CARD-20, R-PANEL-10): a scene shows the list the core's rules make, never a copy of them.
+ */
+export async function coreFixtures(now = Date.now(), python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe")) {
+  const { stdout } = await promisify(execFile)(python, [join(import.meta.dirname, "core_fixtures.py"), String(now)], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" } });
+  return JSON.parse(stdout);
+}
+
+export const needsDesktopFixture =selected => selected.some(scene => scene.fixture?.desktop || scene.fixture?.cardDeck || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
 
 export function browserPath() {
   const candidates = [process.env.LOOK_BROWSER,
@@ -102,6 +112,7 @@ export async function run(options) {
       };
     }
     if (options.selected.some(scene => scene.fixture?.pageBase)) fixture.pageBaseDocs = await pageBaseDocuments(fixture.pageBaseHtml);
+    if (options.selected.some(scene => scene.fixture?.coreFixtures)) Object.assign(fixture, await coreFixtures());
     // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
     if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;
     // Recorded public artwork keeps catalog URLs realistic while the look run stays offline.

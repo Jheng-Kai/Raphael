@@ -829,9 +829,12 @@ Scenes: `member-panel-library` (全部), one per chip (`-pages`, `-media`, `-fil
 deliverables are all media; the four chips still show, 全部 lists the five) and `-single-pages` (its 頁面 chip: one quiet line),
 `-long` (the `long` fixture: 98 items of every kind), `-open` and `-empty` (four chips and the one sentence); the checks in
 scripts/look/checks.mjs read the chips, groups, card, row, mark and empty-line geometry.
+`-background-video` (R-PANEL-10, owner 2026-11-14: videos a member attached at the end of its background work were missing): the
+core's own `snapshot` of a synthetic database (`scripts/look/core_fixtures.py`, runner.mjs `coreFixtures`) lists the background work's video and
+page (a turn naming the member itself as `peer_id`) and a sent script, not a colleague's hand-off; 媒體 holds the video under 今天.
 
 ```powershell
-npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty page-library-open page-library-report page-library-back page-library-older details --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-background-video member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty page-library-open page-library-report page-library-back page-library-older details --theme both --width 1120,720,1920x1080
 ```
 
 ## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
