@@ -8,6 +8,9 @@
 // Since 2026-11-14 (R-PAGE-08; owner, with a page opened from Grok Bot's Library: 「它會直接打開那個檔案本身…然後它有一個share的鍵」) the open
 // page is the whole area right of the sidebar, as Grok Bot's: the header's centre becomes the page's own pill (its mark and
 // title) while it stands, its Share button is at the right, and the area scrolls as one.
+// Since the same day (R-PAGE-11; owner: 「它應該要是全螢幕的輸入框，感覺像是放在這個 HTML 或者是 page 上面的感覺」) the page runs to the window's
+// foot and the composer floats over it, as Grok Bot's does: the view measures what stands over the page's foot (the composer's dock
+// and the answer line over it) so the page can scroll its last line clear of them.
 import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
 import * as api from "./api";
@@ -79,6 +82,9 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
   let awaiting: { baseline: string } | null = null;
   let observer: MutationObserver | null = null;
   let frame = 0;
+  const dock = stage.querySelector<HTMLElement>(":scope > .ra-dock");
+  /** Watches what floats over the page's foot while a page stands. */
+  let foot: ResizeObserver | null = null;
   // Escape belongs to a task's Stop first (R-UI-46) and to a recording: that gesture's own listener runs before ours.
   const gesture = cancelGesture();
 
@@ -102,9 +108,35 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     status.hidden = !html;
     // A refresh that changes nothing touches nothing.
     const same = status.dataset.drawn === html;
-    if (!same) { status.dataset.drawn = html; status.innerHTML = html; }
+    if (!same) { status.dataset.drawn = html; status.innerHTML = html; measureFoot(); }
   }
   const schedule = (): void => { if (!frame) frame = requestAnimationFrame(drawStatus); };
+
+  /** The page runs under the composer to the window's foot (R-PAGE-11): the dock's height places the answer line just over the
+   *  composer, and the two together are how far the page can scroll past its end, so its last line can be read above them. */
+  function measureFoot(): void {
+    if (!current) return;
+    const set = (name: string, px: number): void => {
+      const value = `${Math.round(px)}px`;
+      // A refresh that changes nothing touches nothing.
+      if (stage.style.getPropertyValue(name) !== value) stage.style.setProperty(name, value);
+    };
+    set("--pgv-dock", dock?.offsetHeight ?? 0);
+    set("--pgv-say", status.hidden ? 0 : status.offsetHeight);
+  }
+  function watchFoot(): void {
+    measureFoot();
+    if (foot || typeof ResizeObserver !== "function") return;
+    foot = new ResizeObserver(measureFoot);
+    if (dock) foot.observe(dock);
+    foot.observe(status);
+  }
+  function unwatchFoot(): void {
+    foot?.disconnect();
+    foot = null;
+    stage.style.removeProperty("--pgv-dock");
+    stage.style.removeProperty("--pgv-say");
+  }
 
   function element(): HTMLElement {
     if (view) return view;
@@ -167,6 +199,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     host.hidden = false;
     shell?.fold();
     stage.classList.add("is-page");
+    watchFoot();
     if (back) { back.hidden = false; back.setAttribute("aria-label", t("chooser.back")); back.title = t("chooser.back"); }
     drawAction();
   }
@@ -185,6 +218,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     delete status.dataset.drawn;
     stage.classList.remove("is-page");
     delete stage.dataset.pageKind;
+    unwatchFoot();
     if (back) back.hidden = true;
     drawPill();
     drawAction();

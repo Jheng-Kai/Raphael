@@ -508,10 +508,11 @@ export async function perform(page, step, evidenceDirectory) {
       await element.dispose();
       break;
     }
-    // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows.
+    // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows. A report
+    // open in the same place (`.rp-scroll`) is turned by the same wheel.
     case "frame-scroll": {
       // The middle of what is on screen of the page: the area scrolls as a whole and a page can be far taller than it.
-      const at = await page.evaluate(() => { const box = (document.querySelector(".pgv-page") ?? document.querySelector(".pgv-frame-box"))?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + Math.min(box.height, innerHeight - box.y) / 2 }; });
+      const at = await page.evaluate(() => { const box = (document.querySelector(".pgv-page") ?? document.querySelector(".pgv:not([hidden]) .rp-scroll") ?? document.querySelector(".pgv-frame-box"))?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + Math.min(box.height, innerHeight - box.y) / 2 }; });
       if (!at) throw new Error("No page in the conversation's place to scroll");
       await page.mouse.move(at.x, at.y);
       await page.mouse.wheel({ deltaY: step.deltaY });

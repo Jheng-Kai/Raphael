@@ -118,8 +118,9 @@ it("a page open in the conversation's place is the whole area: the panel folded,
     '<div class="ra-stage is-page" data-page-kind="page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-body"><div class="pgv-page"><div class="pgv-frame-box"><iframe class="pg-frame"></iframe></div></div></div><div class="pgv-status" hidden></div></div>' +
     '<div class="ra-dock"><div class="composer"></div></div></div><section class="pg-card"><b class="card-title">輕量後背包</b></section></section></div>';
   const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  // Since R-PAGE-11 the page runs to the window's foot (900) and the composer's row stands over it.
   const places = { "mb-chat": rect(280, 0, 1100, 900), "mb-head": rect(280, 0, 1100, 60), "icon back": rect(290, 12, 326, 48), "icon share": rect(1000, 12, 1036, 48), "pgv-pill": rect(550, 20, 830, 60),
-    "pgv-page": rect(280, 0, 1100, 790), "pgv-frame-box": rect(280, 60, 1100, 790), "pg-frame": rect(280, 60, 1100, 790), "composer": rect(300, 800, 1080, 880), "ra-dock": rect(280, 790, 1100, 890) };
+    "ra-stage is-page": rect(280, 0, 1100, 900), "pgv-page": rect(280, 0, 1100, 900), "pgv-frame-box": rect(280, 60, 1100, 900), "pg-frame": rect(280, 60, 1100, 900), "composer": rect(300, 800, 1080, 870), "ra-dock": rect(280, 790, 1100, 900) };
   for (const element of doc.querySelectorAll('*')) {
     element.checkVisibility = () => true;
     element.getBoundingClientRect = () => places[element.className || element.tagName.toLowerCase()] ?? rect(0, 0, 10, 10);
@@ -127,13 +128,16 @@ it("a page open in the conversation's place is the whole area: the panel folded,
   doc.querySelector(".conversation-head").checkVisibility = () => false;
   vi.stubGlobal('document', doc);
   vi.stubGlobal('innerHeight', 900); vi.stubGlobal('innerWidth', 1100);
-  vi.stubGlobal('getComputedStyle', element => ({ visibility: element.className === "ra-scroll" ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "0px" : "999px", borderTopWidth: "0px",
-    backgroundColor: "rgb(31, 31, 31)", overflow: "visible", overflowY: "auto", boxShadow: "none", marginLeft: "0px", paddingLeft: "0px", paddingRight: "0px", maxWidth: "none",
-    paddingTop: element.className === "pgv-page" ? "60px" : "0px", paddingBottom: "0px", getPropertyValue: name => name === "--sp-6" ? "32px" : "" }));
+  // The dock draws no band and takes no pointer; the composer floats on its own surface, edge and shadow.
+  const band = { backgroundColor: "rgba(0, 0, 0, 0)", backgroundImage: "none", pointerEvents: "none" };
+  vi.stubGlobal('getComputedStyle', element => ({ visibility: element.className === "ra-scroll" ? "hidden" : "visible", pointerEvents: "auto", borderRadius: element.className === "pgv-frame-box" ? "0px" : "999px",
+    borderTopWidth: element.className === "composer" ? "1px" : "0px", backgroundColor: "rgb(31, 31, 31)", backgroundImage: "none", overflow: "visible", overflowY: "auto",
+    boxShadow: element.className === "composer" ? "rgba(0, 0, 0, 0.06) 0px 6px 20px 0px" : "none", marginLeft: "0px", paddingLeft: "0px", paddingRight: "0px", maxWidth: "none",
+    paddingTop: element.className === "pgv-page" ? "60px" : "0px", paddingBottom: "0px", getPropertyValue: name => name === "--sp-6" ? "32px" : "", ...(element.className === "ra-dock" ? band : {}) }));
   try {
     expect(checkRendered('page-inplace').width).toBe(820);
     // A dialog over the page, the arrow far from the header's left, the panel still open, the member's pill still there, no Share,
-    // a page with margins either side, a page under the composer, a title line in the page: each is refused.
+    // a page with margins either side, a page cut off at the composer's row or on a band behind it, a title line in the page: each is refused.
     doc.body.insertAdjacentHTML("beforeend", '<div class="mb-scrim"></div>');
     expect(() => checkRendered('page-inplace')).toThrow(/no dialog, no scrim and no ×/);
     doc.querySelector(".mb-scrim").remove();
@@ -152,10 +156,20 @@ it("a page open in the conversation's place is the whole area: the panel folded,
     share.setAttribute("data-page-act", "");
     places["pg-frame"] = rect(380, 60, 1000, 790);
     expect(() => checkRendered('page-inplace')).toThrow(/spans the full width of the view/);
-    places["pg-frame"] = rect(280, 60, 1100, 790);
-    places["pgv-page"] = rect(280, 0, 1100, 850);
-    expect(() => checkRendered('page-inplace')).toThrow(/reaches the composer's row/);
+    places["pg-frame"] = rect(280, 60, 1100, 900);
+    // Cut off where the composer's row begins (the band the owner did not want, 2026-11-14).
     places["pgv-page"] = rect(280, 0, 1100, 790);
+    expect(() => checkRendered('page-inplace')).toThrow(/runs to the window's foot/);
+    places["pgv-page"] = rect(280, 0, 1100, 900);
+    band.backgroundColor = "rgb(10, 10, 10)";
+    expect(() => checkRendered('page-inplace')).toThrow(/no band behind the composer/);
+    band.backgroundColor = "rgba(0, 0, 0, 0)";
+    band.pointerEvents = "auto";
+    expect(() => checkRendered('page-inplace')).toThrow(/no band behind the composer/);
+    band.pointerEvents = "none";
+    places["pg-frame"] = rect(280, 60, 1100, 790);
+    expect(() => checkRendered('page-inplace')).toThrow(/drawn under the composer/);
+    places["pg-frame"] = rect(280, 60, 1100, 900);
     doc.body.querySelector(".pgv-page").insertAdjacentHTML("afterbegin", '<h2 class="pgv-title">輕量後背包</h2>');
     expect(() => checkRendered('page-inplace')).toThrow(/title is the pill's/);
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }

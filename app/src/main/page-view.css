@@ -4,8 +4,12 @@
    scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`).
    Since 2026-11-14 (R-PAGE-08; owner, with a page opened from Grok Bot's Library) the page is the whole area right of the sidebar:
    the details panel is folded while it stands, the header's centre is the page's own pill, Share is at the right, and the area
-   scrolls as one with no frame around the page. */
-.ra-stage.is-page { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
+   scrolls as one with no frame around the page.
+   Since the same day (R-PAGE-11; owner: 「這邊不要因為底下有那個輸入框就卡在那裡，它應該要是全螢幕的輸入框，感覺像是放在這個 HTML 或者是 page
+   上面的感覺」) the page runs to the window's foot and the composer floats over it at its usual place and width, on its own surface,
+   as Grok Bot's does: no band behind it. The page can scroll its last line clear above the composer (page-view.ts measures what
+   floats there: `--pgv-dock`, the composer's dock, and `--pgv-say`, the answer line over it). */
+.ra-stage.is-page { --pgv-under: calc(var(--pgv-dock, 0px) + var(--sp-1) + var(--pgv-say, 0px) + var(--sp-2)); display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
 /* The voice flyer is the one thing that stays beside them: the thread's own "hearing" line is hidden with the thread, so it is the
    only sign left that the owner is heard (voice-mode.ts; owner, 2026-11-14). It stands over the page, takes no pointer there (the
    page scrolls and its buttons work under it; the composer's button and Escape end the recording) and is gone when it ends. */
@@ -15,15 +19,20 @@
 /* The member's face while it works is drawn apart from its line (as slimes are), so it would show through the hidden thread: its line is
    the one under the page. */
 .ra-stage.is-page > .ra-scroll .live-presence { display: none; }
-.ra-stage.is-page > .pgv { grid-area: 1 / 1; }
+/* The thread hidden under the page keeps the size it has beside the composer (its place is kept as it was); the page takes both rows,
+   down to the window's foot, and the composer's row stands over it. */
+.ra-stage.is-page > .pgv { grid-area: 1 / 1 / 3 / 2; }
 /* The page is the whole area right of the sidebar to the window's edge: while it stands, the stage takes back the pane's own side
    padding (a conversation's, as the thread has it; R-PAGE-10), so nothing runs past its box. A room's pane has none: its thread and
-   composer are inset by the room's own padding instead. The composer, the thread hidden under the page (its lines wrap as they did), the line under the page and a report keep the thread's own sides. */
+   composer are inset by the room's own padding instead. The composer, the thread hidden under the page (its lines wrap as they did), the answer line over the composer and a report keep the thread's own sides. */
 .mb-chat:not(.au-room-pane) > .ra-stage.is-page { margin-inline: calc(-1 * var(--row-edge)); }
 .mb-chat:not(.au-room-pane) > .ra-stage.is-page > :is(.ra-dock, .ra-scroll) { padding-inline: calc(var(--row-edge) + var(--pa-dock-x)); }
 .mb-chat:not(.au-room-pane) > .ra-stage.is-page > .pgv :is(.pgv-status, .rp-scroll) { padding-inline: calc(var(--row-edge) + var(--pa-dock-x)); }
-.ra-stage.is-page > .ra-dock { grid-area: 2 / 1; }
-.pgv { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; min-height: 0; background: var(--content); }
+/* The dock is no band: only what stands in it (the composer, a card in its place, a notice) takes the pointer, and everything around
+   them is the page's, which scrolls and works under it. */
+.ra-stage.is-page > .ra-dock { grid-area: 2 / 1; position: relative; z-index: 2; background: none; pointer-events: none; }
+.ra-stage.is-page > .ra-dock > * { pointer-events: auto; }
+.pgv { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--content); }
 .pgv[hidden] { display: none; }
 .pgv-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .pgv-body > .pgv-page { height: 100%; }
@@ -43,15 +52,19 @@
 /* An HTML page: the whole area under the header, scrolling as one (owner, 2026-11-14: 「它會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」), and
    since the same day (R-PAGE-10; owner, with a page standing in a centred frame between two dark margins: 「像是在 Chrome 打開 HTML 檔」) edge to
    edge: the page is as wide as the area, with no side margin, frame, corner or edge, so its own background reaches the sidebar and the window's
-   right edge, and the area ends where the composer's row begins, so nothing of the page is ever under the composer. Only the top keeps a
-   slim band the height of the header row: the page scrolls under it and fades out as the thread does. The iframe is as tall as the page says
-   (the page's own height messages), at least as tall as the area, so a page made to fill a screen fills it and a longer one is read by
-   scrolling the area. */
-.pgv-page { min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding: var(--row-lead) 0 0; scroll-padding-top: var(--row-lead); mask-image: linear-gradient(to bottom, transparent calc(var(--row-lead) - 36px), var(--text) var(--row-lead)); }
+   right edge, and (R-PAGE-11) the area runs to the window's foot under the composer, which floats over it. Only the top keeps a slim band
+   the height of the header row: the page scrolls under it and fades out as the thread does. The iframe is as tall as the page says (the
+   page's own height messages), at least as tall as the area down to the window's foot, so a page made to fill a screen fills it, under the
+   composer too, and a longer one is read by scrolling the area. */
+.pgv-page { min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; padding: var(--row-lead) 0 0; scroll-padding-top: var(--row-lead); scroll-padding-bottom: var(--pgv-under); mask-image: linear-gradient(to bottom, transparent calc(var(--row-lead) - 36px), var(--text) var(--row-lead)); }
 .pgv-page::-webkit-scrollbar { display: none; }
 .pgv-page:focus { outline: none; }
 .pgv-frame-box { position: relative; width: 100%; height: max(var(--pgv-h, 320px), 100%); }
 .pgv-frame-box > .pg-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* How far the area scrolls past the page's end: just enough for its last line to stand clear above the composer (and the answer line
+   over it), and nothing for a page that already ends above them. It is room after the frame, never a taller frame: a page that is as
+   tall as its window (100vh) would say it is taller each time and grow without end. (100% is the box: the page's height or the area's.) */
+.pgv-frame-box::after { content: ""; position: absolute; top: 100%; left: 0; width: 1px; height: max(0px, calc(var(--pgv-h, 320px) + var(--pgv-under) - 100%)); pointer-events: none; }
 
 /* The header's centre, while a page stands: its mark and its title as one soft pill, as Grok Bot's (the member's pill is put away
    and comes back with the thread). It is no control: the page's way out is the arrow. */
@@ -64,15 +77,18 @@
    the window's buttons reserve), the pill gets the rest and stays in the middle (the judge on page-inplace at 720: 5 px between the pill and Share). */
 .page-agent .mb-chat:has(> .ra-stage.is-page) > .mb-head:has(> .mb-head-c) { grid-template-columns: minmax(auto, 1fr) minmax(0, auto) minmax(auto, 1fr); }
 
+/* A report runs under the composer to the window's foot too (R-PAGE-11), its background the view's: it scrolls its last line clear
+   above the composer and the answer line over it. */
+.ra-stage.is-page .rp-scroll { padding-bottom: var(--pgv-under); scroll-padding-bottom: var(--pgv-under); }
+
 /* A room's thread and composer are inset by the room's own padding too (automations.css), so its report and the line under them
    are: they start and end where the room's composer does. An HTML page is edge to edge in a room as well. */
 .au-room-pane :is(.pgv-status, .rp-scroll) { padding-inline: calc(var(--room-pad) + var(--pa-dock-x)); }
 
 /* What the member does with a message written under the page: the same line as in the thread while it works, then the first
-   words of its reply (the arrow brings it in full). */
-.pgv-status { padding: 0 var(--pa-dock-x); }
-/* The page now reaches this row (R-PAGE-10), so the answer stands in a band of its own on a hairline and never reads as the page's last line. */
-.pgv-status:not([hidden]) { border-top: 1px solid var(--line); padding-top: var(--sp-1); }
-.pgv-status > :is(.live-presence, .pgv-reply) { max-width: var(--pa-colw); margin-inline: auto; }
-.pgv-status > .live-presence { margin-top: var(--sp-1); }
-.pgv-reply { margin-top: var(--sp-1); overflow: hidden; color: var(--text-3); font-size: var(--fs-sm); line-height: 28px; text-overflow: ellipsis; white-space: nowrap; }
+   words of its reply (the arrow brings it in full). The page runs under the composer (R-PAGE-11), so the line floats with it: just
+   over the composer, in its column, on the composer's own surface, so it never reads as the page's last line and reads over a light
+   page and a dark one alike. It takes no pointer: the page under it scrolls and works. */
+.pgv-status { position: absolute; inset-inline: 0; bottom: calc(var(--pgv-dock, 0px) + var(--sp-1)); z-index: 1; padding: 0 var(--pa-dock-x); pointer-events: none; }
+.pgv-status > :is(.live-presence, .pgv-reply) { box-sizing: border-box; max-width: var(--pa-colw); height: 36px; margin: 0 auto; padding: 0 var(--sp-4); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); background: var(--panel); box-shadow: var(--composer-shadow); }
+.pgv-reply { overflow: hidden; color: var(--text-3); font-size: var(--fs-sm); line-height: 34px; text-overflow: ellipsis; white-space: nowrap; }
