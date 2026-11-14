@@ -3,6 +3,7 @@ import { t } from "./i18n";
 import type { TurnAttachment } from "./types";
 import { esc, ico, iconButton } from "./ui";
 import * as api from "./api";
+import { audioPlayerHTML, videoPlayerHTML } from "./media-player";
 
 /** Shared with the core. Large files cross IPC only as bounded chunks and stored IDs. */
 export const ATTACH_MAX = 20;
@@ -65,11 +66,18 @@ export function fileSize(size?: number): string {
   if (size === undefined) return "";
   return size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : size >= 1024 ? `${Math.ceil(size / 1024)} KB` : `${size} B`;
 }
+/**
+ * A file's mark by its kind, the marks of the Library's rows (member-panel-work.ts): a picture, a video, a sound, a page
+ * (HTML), a document, an archive, any other file. A file that is no picture, video or sound also names its extension.
+ */
 export function fileIcon(file: Pick<TurnAttachment, "name" | "mime">): string {
   const kind = fileKind(file.mime);
-  if (kind !== "file") return ico(kind === "audio" ? "mic" : kind === "video" ? "play" : "image");
-  const ext = file.name.split(".").pop()?.toUpperCase().slice(0, 6) ?? "";
-  return `<span class="attachment-icon">${ico(/^(DOCX|XLSX|PPTX|PDF)$/.test(ext) ? "book" : "file")}<small>${esc(ext)}</small></span>`;
+  if (kind !== "file") return ico(kind === "audio" ? "voice" : kind === "video" ? "play" : "image");
+  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toUpperCase().slice(0, 6) : "";
+  const mark = /^(HTML?)$/.test(ext) || file.mime === "text/html" ? "report"
+    : /^(PDF|DOCX?|XLSX?|PPTX?|ODT|ODS|ODP|RTF|TXT|MD|CSV|TSV|JSON)$/.test(ext) ? "fileText"
+      : /^(ZIP|7Z|RAR|TAR|GZ|BZ2|XZ|TGZ)$/.test(ext) ? "fileArchive" : "file";
+  return `<span class="attachment-icon" data-mark="${mark}">${ico(mark)}<small>${esc(ext)}</small></span>`;
 }
 /** A draft card's inside: a picture is only its thumbnail, which opens it large, with the remove button inside it; another file shows its type icon, name and size. The caller fills in the thumbnail from
  *  the draft's own bytes. */
@@ -80,18 +88,19 @@ export function draftFileHTML(file: { name: string; mime: string; size?: number 
     `<span class="attachment-name"><span class="cmp-chip-t">${esc(file.name)}</span><small>${esc(fileSize(file.size))}</small></span>` +
     `<button type="button" class="chip-x" ${removeAttrs}>${ico("x")}</button>`;
 }
-export function sentFileHTML(file: TurnAttachment): string {
+/** A stored file in a message. `open: false` leaves out the button that opens a video or a sound with the computer's own program
+ *  (a member's video is a message of its own, as a picture is, with the actions of a message beside it, R-MEDIA-02). */
+export function sentFileHTML(file: TurnAttachment, options: { open?: boolean } = {}): string {
   const kind = fileKind(file.mime);
   const id = typeof file.id === "string" && /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(file.id) ? file.id : "";
   const source = file.preview && /^data:(image\/(png|jpeg|webp|gif|avif|bmp)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+);base64,[A-Za-z0-9+/=]*$/.test(file.preview) ? file.preview : "";
   const attrs = id ? ` data-attachment="${esc(id)}"${(file.size ?? 0) > 4 * 1024 * 1024 ? ' data-stream-file="true"' : ""}` : "";
   const src = source ? ` src="${esc(source)}"` : "";
-  const open = id ? iconButton("external", t("agent.openFile"), ` data-act="attachment-open" data-id="${esc(id)}"`, "attachment-open") : "";
+  const open = id && options.open !== false ? iconButton("external", t("agent.openFile"), ` data-act="attachment-open" data-id="${esc(id)}"`, "attachment-open") : "";
   if ((id || source) && kind === "image") return `<div class="me-file attachment-image"><button type="button" class="btn attachment-picture" data-act="attachment-image"${attrs} aria-label="${esc(file.name)}"><img${src} alt="${esc(file.name)}"${attrs}></button></div>`;
-  if ((id || source) && kind === "video") return `<div class="me-file attachment-video"><video${src}${attrs} controls preload="metadata" playsinline aria-label="${esc(file.name)}"></video>${open}</div>`;
-  if ((id || source) && kind === "audio") return `<div class="me-file attachment-audio"><audio${src}${attrs} preload="metadata"></audio>` +
-    iconButton("play", t("agent.cmd.playPause"), ' data-audio-toggle aria-pressed="false"', "attachment-play") +
-    `<span class="attachment-audio-body"><span class="attachment-name"><span class="me-file-t">${esc(file.name)}</span></span><input type="range" min="0" max="100" step="0.1" value="0" disabled data-audio-progress aria-label="${esc(t("agent.audioProgress"))}"><small data-audio-time>0:00 / 0:00</small></span>${open}</div>`;
+  // Our own players, never the browser's (owner, 2026-11-15): media-player.ts.
+  if ((id || source) && kind === "video") return videoPlayerHTML(`${src}${attrs}`, file.name, open);
+  if ((id || source) && kind === "audio") return audioPlayerHTML(`${src}${attrs}`, file.name, open);
   const ext = file.name.includes(".") ? file.name.split(".").pop()!.toUpperCase() : "";
   const details = [fileSize(file.size), ext].filter(Boolean).join(" · ");
   return `<button type="button" class="btn me-file attachment-file"${id ? ` data-act="attachment-open" data-id="${esc(id)}"` : " disabled"} aria-label="${esc(t("agent.openFile"))}: ${esc(file.name)}">${fileIcon(file)}<span class="attachment-name"><span class="me-file-t">${esc(file.name)}</span><small>${esc(details)}${id ? "" : ` · ${esc(t("missing.attachment"))}`}</small></span></button>`;

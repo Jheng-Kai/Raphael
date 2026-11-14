@@ -125,3 +125,31 @@ test("a reaction to a picture names that picture's message", async () => {
   expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 1, turn_id: 7, message_key: "2", emoji: "👍", active: true });
   agent.hide();
 });
+
+test("a video the member sent is a message with react, reply and ⋯ beside our player, no Copy, and a reply quotes it as the video", async () => {
+  const CLIP = `${"e".repeat(32)}.mp4`;
+  api.agentHistoryList.mockResolvedValue({ turns: [{ ...turn(), reactions: { "1": ["🔥"] }, messages: [media(1, CLIP, "tour.mp4", "video/mp4"), { seq: 2, kind: "reply", at_ms: 2, text: "影片做好了。" }] }] });
+  const agent = await open();
+  const video = agent.el.querySelector<HTMLElement>('.tn[data-id="7"] .chat-message[data-video][data-message="1"]')!;
+  const reply = agent.el.querySelector<HTMLElement>('.tn[data-id="7"] .chat-message[data-reply]')!;
+  expect(acts(video)).toEqual(acts(reply));
+  // Our player, never the browser's, with no button to open it elsewhere; its reaction stands on its corner.
+  const player = video.querySelector<HTMLElement>(':scope > .attachment-video.mp[data-mp="video"]')!;
+  expect(player.querySelector("video[controls]")).toBeNull();
+  expect(player.querySelector("video")!.getAttribute("data-attachment")).toBe(CLIP);
+  expect(player.querySelector('[data-act="attachment-open"]')).toBeNull();
+  expect(player.querySelector(":scope > .message-reactions [data-reaction]")?.textContent).toBe("🔥");
+  // Its ⋯ has Reply and no Copy: no clipboard takes a video.
+  video.querySelector<HTMLElement>('[data-act="more-message"]')!.click(); await flush();
+  expect([...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick)).toEqual(["reply"]);
+  document.querySelector<HTMLElement>('#app-popover [data-pick="reply"]')!.click(); await flush();
+  const card = agent.el.querySelector<HTMLElement>(".cmp-quote")!;
+  expect(card.querySelector(".message-quote .quote-mark svg")).not.toBeNull();
+  expect(card.querySelector(".quote-text")!.textContent).toBe("影片");
+  expect(card.textContent).not.toContain("attachment:");
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  input.value = "開頭剪短一點"; input.dispatchEvent(new Event("input", { bubbles: true }));
+  agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
+  expect(api.agentAskText.mock.calls[0]![3].quote.text).toBe(`[tour.mp4](attachment:${CLIP})`);
+  agent.hide();
+});

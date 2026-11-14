@@ -257,6 +257,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .message-quote.has-picture { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-2); align-items: center; }
 .message-quote.has-picture > :is(.quote-author, .quote-text) { grid-column: 2; }
 .quote-thumb { grid-column: 1; grid-row: 1 / span 2; display: block; width: 36px; height: 36px; object-fit: cover; border-radius: var(--r-sm); background: var(--surface-2); }
+/* A quoted video: the play mark on the tile a picture's thumbnail takes (R-MEDIA-02). */
+.quote-thumb.quote-mark { display: flex; align-items: center; justify-content: center; color: var(--text-2); }
 .cmp-quote { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }
 .cmp-quote > .message-quote { flex: 1; margin: 0; }
 .cmp-quote > .btn { flex: none; }
@@ -323,7 +325,9 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .media-img { display: block; width: 100%; max-height: calc(180px + 60 * var(--pa-u)); object-fit: cover; }
 .media-player { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
 .media-iframe, .media-video { display: block; width: 100%; height: 100%; border: 0; object-fit: cover; }
-.media-video::-webkit-media-controls-loading-panel { display: none; }
+/* An older URL video fills its 16:9 card with our player (R-MEDIA-01). */
+.media-player > .attachment-video { height: 100%; border-radius: 0; }
+.media-player > .attachment-video > video.media-video { max-height: none; border-radius: 0; object-fit: contain; }
 .media-pdf-wrap { width: 100%; height: calc(220px + 60 * var(--pa-u)); border-radius: var(--r-sm); overflow: hidden; border: 1px solid var(--edge); background: var(--surface-2); }
 .media-pdf.is-expanded .media-pdf-wrap { height: calc(440px + 120 * var(--pa-u)); }
 .media-pdf-frame { display: block; width: 100%; height: 100%; border: 0; }
@@ -415,7 +419,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* Only the picture, as large as the window allows; its close button sits inside it on the photo scrim. */
 .media-lightbox .lb-card { position: relative; max-width: 100%; max-height: 100%; overflow: hidden; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--pop); }
 .media-lightbox .lb-img { display: block; min-width: 160px; min-height: 120px; max-width: min(1400px, calc(100vw - 2 * var(--sp-4))); max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); object-fit: contain; }
-.media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
+.media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 1; width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
 .tn[data-status="error"] .ans, .tn[data-status="denied"] .ans, .tn[data-status="expired"] .ans { color: var(--text-2); }
 .tn mark { background: var(--selection); color: var(--on-selection); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
 .tn-detail { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.75; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -584,6 +588,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .attachment-file:disabled .attachment-name small { white-space: normal; overflow-wrap: anywhere; }
 .attachment-icon { display: inline-flex; flex-direction: column; align-items: center; flex-shrink: 0; gap: var(--sp-1); }
 .attachment-icon small { font-size: var(--fs-2xs); font-weight: var(--weight-semibold); line-height: 1.2; }
+/* A file's mark takes one width, whatever its extension, so the names of files one under another start at one line. */
+.attachment-file .attachment-icon { width: 36px; }
 
 /* Media stand on their own; only the owner's words receive a text bubble. */
 .owner-content { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); min-width: 0; max-width: min(var(--pa-bw), 78%); }
@@ -604,7 +610,63 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .chat-message[data-picture] .attachment-picture img { width: auto; max-width: 100%; }
 /* Its reaction stands on the picture's top-right corner, over its edge: the frame lets it out (the picture's button keeps the corners). */
 .chat-message[data-picture] .attachment-image { overflow: visible; }
-.attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); }
+.attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); cursor: pointer; }
+/* Our own players (owner, 2026-11-15, R-MEDIA-01): the browser draws no control of its own. The controls over a video are marks
+   on the photo scrim, one set for both themes, as the picture under them is the same; a sound's row takes the theme's own. */
+.mp { position: relative; --mp-played: 0%; --mp-loaded: 0%; }
+.attachment-video { --mp-fill: var(--photo-mark); --mp-buffer: var(--photo-grid); --mp-rail: var(--photo-rail); }
+.attachment-audio { --mp-fill: var(--accent-text); --mp-buffer: var(--hover-edge); --mp-rail: var(--edge); }
+.attachment-video .mp-big { position: absolute; top: 50%; left: 50%; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); translate: -50% -50%; pointer-events: none; transition: opacity 0.15s ease; }
+.attachment-video .mp-big > .i { width: 20px; height: 20px; }
+.mp[data-started]:not([data-ended]) .mp-big { opacity: 0; }
+.attachment-video .mp-length { position: absolute; right: var(--sp-2); bottom: var(--sp-2); padding: 0 var(--sp-1); border-radius: var(--r-sm); background: var(--photo-dim); color: var(--photo-mark); font-size: var(--fs-2xs); line-height: 18px; pointer-events: none; }
+.attachment-video .mp-length:empty, .mp[data-started] .mp-length, .attachment-video:is(:hover, :focus-within) .mp-length { display: none; }
+.attachment-video .mp-bar { position: absolute; right: 0; bottom: 0; left: 0; display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-5) var(--sp-2) var(--sp-1); border-radius: 0 0 var(--r-lg) var(--r-lg); background: linear-gradient(to bottom, transparent, var(--photo-dim)); color: var(--photo-mark); opacity: 0; pointer-events: none; transition: opacity 0.15s ease; container-type: inline-size; }
+/* A small video keeps the controls that matter: the time goes first, then sound and speed; play, the scrubber and full screen stay. */
+@container (max-width: 260px) { .mp-bar > .mp-time { display: none; } }
+@container (max-width: 190px) { .mp-bar > :is(.mp-vol, .mp-rate) { display: none; } }
+.attachment-video:is(:hover, :focus-within) .mp-bar, .mp[data-started]:not([data-playing]) .mp-bar { opacity: 1; pointer-events: auto; }
+.mp[data-bar-hidden]:not(:focus-within) .mp-bar { opacity: 0; pointer-events: none; }
+.mp[data-bar-hidden] video { cursor: none; }
+.attachment-video .btn.icon.mp-btn, .attachment-video .btn.icon.mp-btn:hover:not(:disabled), .attachment-video .mp-time { color: var(--photo-mark); }
+.mp-time { flex-shrink: 0; font-size: var(--fs-2xs); line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mp-seek, .mp-volume { height: 12px; margin: 0; padding: 0; appearance: none; background: transparent; cursor: pointer; }
+.mp-seek { flex: 1; width: 100%; min-width: 40px; }
+.mp-seek::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-pill); background: linear-gradient(to right, var(--mp-fill) 0 var(--mp-played), var(--mp-buffer) var(--mp-played) max(var(--mp-played), var(--mp-loaded)), var(--mp-rail) max(var(--mp-played), var(--mp-loaded))); }
+.mp-volume::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-pill); background: linear-gradient(to right, var(--mp-fill) 0 var(--mp-level, 100%), var(--mp-rail) var(--mp-level, 100%)); }
+.mp-seek::-webkit-slider-thumb, .mp-volume::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -4px; border: 0; border-radius: var(--r-pill); background: var(--mp-fill); appearance: none; }
+.mp-seek:disabled { cursor: default; }
+.mp-seek:disabled::-webkit-slider-thumb { opacity: 0; }
+:root[data-keys] .mp-seek:focus-visible, :root[data-keys] .mp-volume:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-pill); }
+:root[data-keys] .attachment-video .mp-seek:focus-visible, :root[data-keys] .attachment-video .mp-volume:focus-visible { outline-color: var(--photo-mark); }
+/* The volume opens above its button, ending at its right edge, so the row never grows under the pointer. */
+.mp-vol { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; }
+.mp-volume { position: absolute; right: 0; bottom: 100%; z-index: 1; width: 96px; height: var(--h-ctl); padding: 0 var(--sp-2); border-radius: var(--r-pill); background: var(--mp-pop); box-shadow: var(--mp-pop-shadow, none); opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+.mp-vol:is(:hover, :focus-within) .mp-volume { opacity: 1; pointer-events: auto; }
+.attachment-video { --mp-pop: var(--photo-dim); }
+.attachment-audio { --mp-pop: var(--panel); --mp-pop-shadow: var(--pop); }
+/* The speed is a small framed chip, as every text button is. */
+.btn.mp-rate { flex-shrink: 0; min-height: var(--h-ctl-sm); padding: 0 var(--sp-1); font-size: var(--fs-2xs); line-height: calc(var(--h-ctl-sm) - 4px); }
+.attachment-video .btn.mp-rate, .attachment-video .btn.mp-rate:hover:not(:disabled), .attachment-video .btn.mp-rate[aria-expanded="true"] { border-color: var(--photo-edge); background: transparent; color: var(--photo-mark); }
+/* A member's video is a message of its own (R-MEDIA-02): it keeps its own shape, its reaction stands on its corner. */
+.chat-message[data-video] .attachment-video { width: fit-content; max-width: 100%; overflow: visible; }
+.chat-message[data-video] .attachment-video video { width: auto; max-width: 100%; }
+/* The app's own full screen of a video: the lightbox filling the window under the caption strip at every size, the video as large as
+   it fits inside it, on an opaque dark ground (the page under it never shows through). */
+/* Nothing of the page shows around it: the caption strip above is a clean band of the page's own surface (its window buttons keep
+   their colours), and the player is the dark ground below it. */
+.mb-scrim.media-lightbox:has(> .lb-video) { padding: var(--window-controls-height) 0 0; background: linear-gradient(var(--content) 0 var(--window-controls-height), var(--photo-ground) 0); }
+.media-lightbox .lb-card.lb-video { width: 100%; height: 100%; border-radius: 0; background: var(--photo-ground); box-shadow: none; }
+.media-lightbox .lb-video .attachment-video { height: 100%; border-radius: 0; }
+.media-lightbox .lb-video video { width: 100%; height: 100%; max-height: none; border-radius: 0; background: transparent; object-fit: contain; }
+/* The window is the player now: its controls a size up, with room at the edges, and its × a soft round button on the dark ground. */
+.media-lightbox .lb-video .mp-bar { gap: var(--sp-2); padding: var(--sp-6) clamp(var(--sp-4), 2.5vw, var(--sp-6) + var(--sp-2)) var(--sp-4); border-radius: 0; }
+.media-lightbox .lb-video .mp-bar > .mp-time { font-size: clamp(var(--fs-xs), 1vw, var(--fs-md)); }
+.media-lightbox .lb-video .mp-bar .btn.icon.mp-btn { width: 32px; min-height: 32px; }
+.media-lightbox .lb-video .mp-bar .btn.icon.mp-btn > .i { width: 20px; height: 20px; }
+/* Its bar's own button leaves it (with Escape), as a player's full screen does: no second × over a picture whose edges move with its
+   shape (judge, 2026-11-15: a × straddling a pillarboxed video's edge). */
+.media-lightbox .lb-card.lb-video > .btn.icon.lb-close { display: none; }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
 /* Several pictures sent together are small squares side by side, in as many rows as they need and right-aligned with the bubble,
    as Claude, ChatGPT and Grok show them (owner, 2026-11-15, R-ATTACH-02); each still opens large. One picture keeps its size (R-UI-149). */
@@ -615,13 +677,14 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .attachment-thumbs .attachment-picture img { height: 100%; max-height: none; object-fit: cover; }
 .btn.attachment-open { position: absolute; top: 6px; right: 6px; width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
 .me-file:hover > .attachment-open, .me-file:focus-within > .attachment-open { opacity: 1; pointer-events: auto; }
-.attachment-audio { display: flex; align-items: center; gap: var(--sp-2); width: 320px; height: 64px; padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); }
+.attachment-audio { display: flex; align-items: center; gap: var(--sp-1); width: 320px; height: 64px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); }
 .attachment-audio audio { display: none; }
-.btn.attachment-play { flex: 0 0 var(--h-ctl); width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); }
-.attachment-audio-body { display: flex; flex-direction: column; gap: var(--sp-1); flex: 1; min-width: 0; padding-right: var(--sp-5); }
+.btn.attachment-play { flex: 0 0 var(--h-ctl); width: var(--h-ctl); min-height: var(--h-ctl); margin-right: var(--sp-1); border-radius: var(--r-sm); background: var(--panel); }
+.attachment-audio-body { display: flex; flex-direction: column; gap: var(--sp-1); flex: 1; min-width: 0; }
 .attachment-audio .attachment-name { font-size: var(--fs-xs); }
-.attachment-audio input { width: 100%; height: 12px; margin: 0; padding: 0; accent-color: var(--accent-text); }
-.attachment-audio-body > small { color: var(--text-3); font-size: var(--fs-xs); line-height: 1; }
+.attachment-audio-body > .mp-time { color: var(--text-3); font-size: var(--fs-xs); }
+/* The open button of a sound stands in its row, after its controls, not over them. */
+.attachment-audio > .btn.attachment-open { position: static; flex-shrink: 0; }
 .btn.attachment-file { display: flex; justify-content: flex-start; gap: var(--sp-2); width: 320px; min-height: 56px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); text-align: start; background: var(--surface-2); }
 .attachment-file .attachment-name { flex: 1; gap: var(--sp-1); }
 

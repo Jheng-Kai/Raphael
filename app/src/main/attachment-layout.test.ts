@@ -43,7 +43,7 @@ test("several pictures the owner sent stand side by side as thumbnails that open
 test("pictures sent with a video, documents and words: the pictures' row, the video, the files, then the bubble", () => {
   const root = parse(pendingTurnHTML("Caption", "app", { face: () => "" }, [file, picture(1), audio, picture(2), video, picture(3)]));
   const files = root.querySelector(".me-files")!;
-  expect([...files.children].map(node => node.className)).toEqual(["attachment-thumbs", "attachment-grid", "btn me-file attachment-file", "me-file attachment-audio"]);
+  expect([...files.children].map(node => node.className)).toEqual(["attachment-thumbs", "attachment-grid", "btn me-file attachment-file", "me-file attachment-audio mp"]);
   expect(files.querySelectorAll(".attachment-thumbs > .attachment-image")).toHaveLength(3);
   expect(files.querySelectorAll(".attachment-grid > .attachment-video")).toHaveLength(1);
   // A picture whose stored copy is gone is named as a file, never an empty thumbnail.
@@ -64,9 +64,13 @@ test("pictures and video have no visible filename, size, or separate information
   for (const attachment of [image, video]) {
     const root = parse(sentFileHTML(attachment));
     expect(root.querySelector(".attachment-info,.attachment-name,.me-file-t")).toBeNull();
+    // A video's only words are its own player's: the time and the speed (R-MEDIA-01).
+    root.querySelectorAll(".mp-time, .mp-length, .mp-rate").forEach(node => node.remove());
     expect(root.textContent).toBe("");
   }
-  expect(parse(sentFileHTML(video)).querySelector("video[controls]")).not.toBeNull();
+  const player = parse(sentFileHTML(video));
+  expect(player.querySelector("video[controls]")).toBeNull();
+  expect(player.querySelector('.mp[data-mp="video"] [data-mp-act="toggle"]')).not.toBeNull();
 });
 
 test("a quote stays at the top of the text bubble below the owner's media", () => {
@@ -82,9 +86,9 @@ test("a quote stays at the top of the text bubble below the owner's media", () =
 
 test("audio has one pill with controls; documents open from their whole card", () => {
   const sound = parse(sentFileHTML(audio));
-  expect(sound.querySelector(".attachment-audio [data-audio-toggle]")).not.toBeNull();
-  expect(sound.querySelector('input[type="range"]')).not.toBeNull();
-  expect(sound.querySelector("[data-audio-time]")).not.toBeNull();
+  expect(sound.querySelector('.attachment-audio [data-mp-act="toggle"]')).not.toBeNull();
+  expect(sound.querySelector('input[type="range"].mp-seek')).not.toBeNull();
+  expect(sound.querySelector(".mp-time")).not.toBeNull();
   expect(sound.querySelector("audio[controls]")).toBeNull();
   expect(sound.querySelectorAll(".attachment-name")).toHaveLength(1);
   const document = parse(sentFileHTML(file));

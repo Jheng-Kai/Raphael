@@ -307,7 +307,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     checkMarkdown(element);
     if (element.matches('.work-time, .work-toggle, .step-ms') && /\b(?:NaN|Infinity)\b/.test(element.textContent)) invalidDurations.push(description);
-    if (element.matches('select,input[type="time"]')) nativeControls.push(description);
+    // The browser's own media player is a native control too: every video and sound plays in ours (R-MEDIA-01).
+    if (element.matches('select,input[type="time"],video[controls],audio[controls]')) nativeControls.push(description);
     // Owner-authored text is data; labels, titles and placeholders remain UI copy. So is the name of a file a member
     // delivered (its Library's rows).
     const authored = element.matches(".cs-info-row .v, .modal-body .data-record > .data-record-text, .output-path, .output-name, .template-path, .lib-title, .task-result .tr-name, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");

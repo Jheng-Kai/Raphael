@@ -17,6 +17,7 @@ mod identity;
 mod learn;
 mod learned;
 mod media;
+mod media_protocol;
 mod member_notifications;
 mod mic_access;
 mod notices;
@@ -190,6 +191,9 @@ pub fn run() {
         // Tauri keeps only the last `invoke_handler` call, so every command of the app goes into
         // this one list.
         .manage(overlay::mouse::Windows::default())
+        // A stored attachment under a stable, cacheable URL for the main window (media_protocol.rs).
+        .manage(media_protocol::MediaGrants::default())
+        .register_asynchronous_uri_scheme_protocol(media_protocol::SCHEME, media_protocol::handle)
         .invoke_handler(tauri::generate_handler![
             commands::floating_controls,
             overlay::overlay_subscribe,

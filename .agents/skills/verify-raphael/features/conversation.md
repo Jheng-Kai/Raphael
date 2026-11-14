@@ -40,6 +40,55 @@ picture) shorter for a frame; `follow-reply-near` moved the read line 108 to 431
 drawn again), `scripts/look/follow-probe.test.mjs` (the reading of the frames). Not covered offline: WebView2 at the owner's display scale
 and a real touchpad's momentum.
 
+## Our own media players, and media that load once (owner, 2026-11-15, R-MEDIA-01, R-MEDIA-02, R-MEDIA-03)
+
+Owner: 「我看到你影片好像是用系統 default 的嗎？因為它旁邊是可以下載的。那我覺得不要用系統 default 的比較好…能夠 cache 的東西就
+cache」. Every video and sound plays in our own player (`media-player.ts`: `videoPlayerHTML`, `audioPlayerHTML`, bound by
+`attachment-media.ts` `sync()` through `bindPlayers`), never the browser's (`controls` is never drawn; `controlslist`,
+`disablepictureinpicture`, `disableremoteplayback`). Its full screen is the lightbox (`openLightbox` in `media-lightbox.ts`). A member's video
+is a message of its own (`artifactHTML`, `.chat-message[data-video]`, `mediaVideo`/`quotedVideo` in `picture-message.ts`). Stored pictures,
+videos and sounds come by their id from the shell's protocol `raphael-media` (`media_protocol.rs`, granted by `attachment_source`) with a
+year-long immutable cache lifetime and an ETag, and the window keeps each id's URL and its last drawn pictures (`media-cache.ts`).
+
+What a member or the owner can put in a conversation, and how it is shown:
+
+| Kind | Where | Before (2026-11-14) | Now | Left, and why |
+| --- | --- | --- | --- | --- |
+| Picture (png, jpeg, webp, gif, avif, bmp) | Thread (owner's message, member's picture message), room threads, the Library's 20 px marks, a quote's thumbnail | base64 over IPC (`attachments.get`) on every open, a Blob revoked when the thread was left | by id from `raphael-media`, its URL kept for the session, the last 120 drawn kept decoded: a conversation opened again sets them in the same frame and asks nothing | the composer's draft thumbnail is its own bytes or the same URL (another session's area, untouched) |
+| Picture | Lightbox | the Blob URL | the same URL, unchanged view | — |
+| Picture in a reply's markdown, older URL image card | Thread | an `https` image after consent, its own enlarged dialog | unchanged | it is the web's, not a stored copy |
+| Video (mp4, webm, mov, mkv) | Thread: owner's file, member's media message, room threads | the browser's `<video controls>` (its download, picture-in-picture and menu) through Tauri's asset protocol, no cache headers | our player (first frame, play mark and length at rest; play, scrubber with played and loaded, time, mute and volume, speed, full screen); a member's video is a message with react, reply and ⋯ (R-MEDIA-02) | — |
+| Video | Full screen | the browser's own | the lightbox with our player, where the video was | the Windows full screen itself (the window's) is not used: the lightbox fills the window under the caption strip |
+| Video | Older URL card (`mediaCardHTML`) | `<video controls>` | our player in the 16:9 card | a YouTube link stays YouTube's own embed (a third party's player in its frame) |
+| Video, sound | Library (媒體) | opened with the computer's own program (`openAttachment`) | unchanged | another session is reworking the Library's 媒體 chip; opening there in our full screen is the next step |
+| Sound (mp3, wav, m4a, ogg, flac) | Thread: owner's voice message or file, a connection's | a custom pill: play, a native range, time | our compact row: play, name over the scrubber (played and loaded), time, mute with volume, speed | members make no sound (R-BATCH-03) |
+| PDF | Thread (owner's file, member's file) | a card with a book mark, opened with the computer's program | a card with the document mark, opened the same way | its first page as the card's picture and a scrollable view need a PDF renderer: the window has none (no pdf.js) and the core reads only text (pypdf); WebView2's own viewer would bring back the browser's download and print bar |
+| PDF | Older URL card | a frame of the remote URL (the app's `frame-src` does not allow it) | unchanged | a legacy payload; the same renderer question |
+| Page / HTML file the owner attaches | Thread | a card with a file mark, opened in the browser | a card with the page mark | showing it in the conversation's place needs the core's page host to serve owner files under the pages' sandbox and policy (R-PAGE-10), and another session owns the page view |
+| A member's page, report | Thread card, in-place view, Library | unchanged (R-PAGE-08, R-PAGE-10) | unchanged | not cached on purpose: a page being edited changes |
+| Document (docx, xlsx, pptx, txt, md, csv, json), archive (zip, 7z, rar, tar, gz), other file, SVG | Thread | a book or file mark | a mark by kind, the Library's: document, archive, file (SVG is a document) | previews need a renderer, as PDF |
+
+```powershell
+npm run look -- video-message video-message-hover video-message-playing video-message-space video-full-screen video-lightbox-playing video-message-reply audio-message audio-speed-menu file-cards media-reopen generated-video generated-image picture-message --theme both --width 1120,720,1920x1080
+```
+
+`video-message` (小晴's thirty-second clip, `clip` in `media-fixture.mjs`) asserts at rest: no browser controls, `nodownload`, no
+picture-in-picture or casting, the stream by id from `raphael-media`, react, reply and ⋯ beside it and no Copy, the play mark and 「0:30」, no
+bar. `video-message-hover` points at it: the bar (play, mute, speed, full screen; the scrubber, the time and the volume). `video-message-playing`
+presses the picture and lets it play: playing, the scrubber part-way with its loaded part, the button 暫停. `video-message-space` plays it and
+presses Space: paused part-way with the focus on the video and the bar kept. `video-full-screen` presses full screen: the lightbox with the same
+video and our controls, edge to edge under the caption strip at every size with its controls a size up, left by its bar's button (no second ×), the thread's video waiting. `video-lightbox-playing` presses F while it plays: the lightbox
+plays on from where it was. `video-message-reply` presses Reply: the composer's quote is the play mark, 小晴 and 影片. `audio-message` is the
+owner's sound: our row, its time 0:00 / 0:05, every control inside the row. `audio-speed-menu` opens the speed: six speeds, 1× checked, the menu below the row, clear of its time.
+`file-cards`: a PDF, a ZIP and an HTML file wear the document, archive and page marks. `media-reopen` (two pictures with a photograph's
+grain, about 1.7 MB each, the browser cache on as in a real window) opens the conversation, opens 小森's, and opens it again; the second open
+makes no `attachments.get`, no `attachment_source` and no request on the media protocol (the runner serves `http://raphael-media.localhost/<id>`
+from the mock's stored copies with the native headers and counts each request), and the check reports calls, bytes and time to paint for both.
+Vitest: `media-player.test.ts`, `media-cache.test.ts`, `attachment-media.test.ts`, `pages/agent-picture-message.test.ts` (the video message),
+`csp.test.ts`; look's audit fails any `video[controls]` or `audio[controls]` in any scene (`audit.test.mjs`). Rust: `media_protocol.rs`
+tests. Core: `test_attachment_upload.py`. Not covered offline: whether WebView2 keeps the protocol's answers in its disk cache from one run to
+the next (the headers allow it; look's browser serves them by interception), native playback and seeking of large files, audio output.
+
 ## A picture a member sends is a message (owner, 2026-11-14, R-UI-156)
 
 Owner: 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」. A member's pictures (a media message whose
@@ -54,8 +103,9 @@ to its stored file, `[name](attachment:<id>)` (no interface words reach the memb
 as the picture's 36 px thumbnail, the author and 「圖片」, in the composer and in the sent bubble; the quote finds its picture again. A reaction
 to it names its `seq`: the core takes a media message's reaction (`set_reaction`) and tells the member it was the file it sent, by name and
 type (`_ask_about_reaction`). In a group room (and a side thread) the picture of a member's room message stands with that room message's own
-row (`pictureActionsHTML`): its Copy is 複製圖片 (`copy-picture`), react, thread and reply act on the room message. A video, a document and an
-older URL card are unchanged; there is no save, since the app has no save path for a stored file (opening one is `attachment-open`).
+row (`pictureActionsHTML`): its Copy is 複製圖片 (`copy-picture`), react, thread and reply act on the room message. A document and an
+older URL card are unchanged (a video is a message too since 2026-11-15, R-MEDIA-02, below); there is no save, since the app has no save
+path for a stored file (opening one is `attachment-open`).
 
 ```powershell
 npm run look -- picture-message picture-message-menu picture-message-reply room-picture-message generated-image message-hugs-bubble reaction-row room-text --theme both --width 1120,720,1920x1080

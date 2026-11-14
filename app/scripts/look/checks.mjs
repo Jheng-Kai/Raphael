@@ -1999,10 +1999,121 @@ export function checkRendered(name, context = {}) {
     const selector = name === 'generated-image' ? 'img[data-attachment]' : 'video[data-attachment]';
     const element = document.querySelector('.ra-body ' + selector);
     require(document.querySelectorAll(selector).length === 1, 'the generated output is not also fabricated as owner input');
-    require(visible(element) && element.src.startsWith('blob:'), name === 'generated-image' ? 'the stored image is loaded through attachments.get' : 'the stored video streams through attachment_source');
+    // R-MEDIA-03: a stored copy comes by its id from the shell's media protocol, never as base64 over IPC.
+    require(visible(element) && element.src === `http://raphael-media.localhost/${element.dataset.attachment}`, name === 'generated-image' ? 'the stored image is loaded by its id from the media protocol' : 'the stored video streams by its id from the media protocol');
+    require(!window.__look.calls.some(c => c.method === 'attachments.get'), 'no stored copy crosses IPC as base64');
     require(name !== 'generated-image' || element.naturalWidth > 0, 'the image decoded');
-    require(name !== 'generated-video' || element.controls && element.readyState >= 1, 'the existing video player has playable metadata');
+    // R-MEDIA-01: our own player, never the browser's.
+    require(name !== 'generated-video' || (!element.controls && element.readyState >= 1 && element.closest('.mp[data-mp="video"]')?.querySelector('[data-mp-act="toggle"]')), 'our own video player has playable metadata');
     return {check:name,id:element.dataset.attachment};
+  }
+  if (['video-player-rest', 'video-player-hover', 'video-player-playing', 'video-player-space'].includes(name)) {
+    // R-MEDIA-01: our own player, never the browser's; R-MEDIA-02: a member's video is a message of its own.
+    const message = document.querySelector('.tn[data-id="824"] .chat-message[data-video]');
+    const player = message?.querySelector('.mp[data-mp="video"]'), video = player?.querySelector('video');
+    require(player && video && visible(video), 'the video stands as a message with our player');
+    require(!video.controls && !video.hasAttribute('controls'), 'the browser draws no controls of its own');
+    require(/nodownload/.test(video.getAttribute('controlslist') ?? '') && video.disablePictureInPicture && video.hasAttribute('disableremoteplayback'), 'no download, picture-in-picture or casting');
+    require(video.src === `http://raphael-media.localhost/${video.dataset.attachment}`, 'it streams by its id from the media protocol');
+    const actions = message.querySelector(':scope > .message-actions');
+    require(actions?.querySelector('[data-act="react-message"]') && actions.querySelector('[data-act="reply-message"]') && actions.querySelector('[data-act="more-message"]') && !message.querySelector('[data-act="copy-message"],[data-act="copy-picture"]'), 'react, reply and ⋯ beside it, and no Copy');
+    const bar = player.querySelector('.mp-bar'), big = player.querySelector('.mp-big'), length = player.querySelector('.mp-length');
+    const shown = element => !!element && getComputedStyle(element).display !== 'none' && Number(getComputedStyle(element).opacity) > 0.5;
+    const acts = [...bar.querySelectorAll('[data-mp-act]')].map(button => button.dataset.mpAct).join();
+    require(acts === 'toggle,mute,rate,full', `the bar has play, sound, speed and full screen in that order: ${acts}`);
+    require(bar.querySelector('.mp-seek') && bar.querySelector('.mp-time') && bar.querySelector('.mp-volume'), 'the bar has the scrubber, the time and the volume');
+    const toggle = bar.querySelector('[data-mp-act="toggle"]');
+    if (name === 'video-player-rest') {
+      require(shown(big) && !shown(bar) && shown(length) && length.textContent === '0:30', `at rest: the play mark and the length, no bar (${length.textContent})`);
+      require(video.paused && video.readyState >= 1 && video.currentTime < 0.1, 'at rest on its first frame');
+    }
+    if (name === 'video-player-hover') require(shown(bar) && !shown(length) && shown(big), 'pointing at it shows the bar over the play mark');
+    if (name === 'video-player-playing') {
+      const seek = bar.querySelector('.mp-seek'), part = property => parseFloat(seek.style.getPropertyValue(property));
+      require(!video.paused && video.currentTime > 0.5 && player.hasAttribute('data-playing'), 'a press on the picture plays it');
+      require(Number(seek.value) > 0 && part('--mp-played') > 0 && part('--mp-loaded') >= part('--mp-played'), 'the scrubber shows what was played and what is loaded');
+      require(document.documentElement.lang !== 'zh-TW' || toggle.getAttribute('aria-label') === '暫停', 'its button pauses');
+      require(!shown(big) && shown(bar), 'playing: no play mark, the bar while pointed at');
+    }
+    if (name === 'video-player-space') {
+      require(video.paused && video.currentTime > 0.5 && player.hasAttribute('data-started') && document.activeElement === video, 'Space paused the focused video part-way');
+      require(shown(bar) && !shown(big), 'paused part-way: the bar stays and no play mark');
+    }
+    return { check: name, time: Number(video.currentTime.toFixed(2)), duration: video.duration };
+  }
+  if (name === 'video-full-screen' || name === 'video-lightbox-playing') {
+    // R-MEDIA-01: full screen is the app's own, the lightbox, with the same video and our controls.
+    const inline = document.querySelector('.tn[data-id="824"] .chat-message[data-video] video');
+    const box = document.querySelector('.media-lightbox[role="dialog"]'), large = box?.querySelector('.lb-video .mp[data-mp="video"] video');
+    require(box && large && visible(large), 'the full screen is the lightbox with our player');
+    require(!large.controls && large.src === inline.src && /nodownload/.test(large.getAttribute('controlslist') ?? ''), 'the same video, with no browser controls');
+    require(inline.paused, 'the video in the thread waits meanwhile');
+    // It is left by its bar's own button (and Escape); the lightbox's × stays hidden over a picture whose edges move with its shape.
+    require(visible(box.querySelector('.lb-video [data-mp-act="full"]')) && !visible(box.querySelector('[data-lb="close"]')), 'it is left by its bar\'s button, with no second × over the video');
+    // It is the window under the caption strip at every size: edge to edge, down to the window's bottom (judge, 2026-11-15).
+    const card = box.querySelector('.lb-card.lb-video').getBoundingClientRect(), width = large.getBoundingClientRect().width;
+    require(card.left <= 1 && card.right >= innerWidth - 1 && card.bottom >= innerHeight - 1 && card.top <= 60, `it fills the window (${Math.round(card.left)},${Math.round(card.top)} ${Math.round(card.width)} x ${Math.round(card.height)})`);
+    if (name === 'video-lightbox-playing') require(!large.paused && large.currentTime > 1, `it plays on from where it was (${large.currentTime})`);
+    return { check: name, width, time: Number(large.currentTime.toFixed(2)) };
+  }
+  if (name === 'video-message-reply') {
+    // R-MEDIA-02: a quoted video is the play mark, the author and the word for a video; never the link or the file name.
+    const quote = document.querySelector('.cmp-quote:not([hidden]) .message-quote');
+    require(quote?.querySelector('.quote-mark svg') && quote.querySelector('.quote-author')?.textContent === '小晴', 'the quote shows the play mark and the author');
+    require(document.documentElement.lang !== 'zh-TW' || quote.querySelector('.quote-text')?.textContent === '影片', 'the quote says 影片');
+    require(!/attachment:|\.mp4/.test(quote.textContent), 'never the link or the file name');
+    return { check: name };
+  }
+  if (name === 'audio-player-rest') {
+    // R-MEDIA-01: a sound has the same controls in one compact row.
+    const row = document.querySelector('.tn[data-id="825"] .attachment-audio.mp'), audio = row?.querySelector('audio');
+    require(row && audio && !audio.controls && getComputedStyle(audio).display === 'none', 'our row, the element itself never shown');
+    require(audio.src === `http://raphael-media.localhost/${audio.dataset.attachment}`, 'it streams by its id from the media protocol');
+    const acts = [...row.querySelectorAll('[data-mp-act]')].map(button => button.dataset.mpAct).join();
+    require(acts === 'toggle,mute,rate', `play, sound and speed: ${acts}`);
+    require(row.querySelector('.mp-time')?.textContent === '0:00 / 0:05' && !row.querySelector('.mp-seek').disabled, 'its time and a scrubber that works');
+    const box = row.getBoundingClientRect();
+    // The volume opens above its button only while it is pointed at; every other control lies in the row.
+    for (const part of row.querySelectorAll('button, input:not(.mp-volume), .attachment-name')) {
+      const rect = part.getBoundingClientRect();
+      if (rect.width) require(rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5 && rect.top >= box.top - 0.5 && rect.bottom <= box.bottom + 0.5, `every control fits in the row: ${part.className}`);
+    }
+    return { check: name, width: box.width };
+  }
+  if (name === 'audio-speed-menu') {
+    const choices = [...document.querySelectorAll('#app-popover .menu-choice')];
+    require(choices.map(choice => choice.dataset.value).join() === '0.5,0.75,1,1.25,1.5,2', 'six speeds in the app menu');
+    require(choices.find(choice => choice.getAttribute('aria-checked') === 'true')?.dataset.value === '1', 'the current speed is checked');
+    // It opens below the whole row, never over the row's own time or name (judge, 2026-11-15).
+    const row = document.querySelector('.tn[data-id="825"] .attachment-audio').getBoundingClientRect(), menu = document.querySelector('#app-popover').getBoundingClientRect();
+    require(menu.top >= row.bottom || menu.bottom <= row.top, `the menu clears the row (${Math.round(menu.top)} under ${Math.round(row.bottom)})`);
+    return { check: name };
+  }
+  if (name === 'file-card-kinds') {
+    const marks = [...document.querySelectorAll('.tn[data-id="826"] .attachment-file .attachment-icon')].map(icon => icon.dataset.mark).join();
+    require(marks === 'fileText,fileArchive,report', `a document, an archive and a page each have their mark: ${marks}`);
+    return { check: name, marks };
+  }
+  if (name === 'media-reopen') {
+    // R-MEDIA-03: a conversation opened again draws its pictures from what the window already has.
+    const marks = window.__look.mediaMarks ?? [];
+    const first = marks.find(item => item.label === 'first'), again = marks.find(item => item.label === 'reopen');
+    require(first && again, 'both opens were marked');
+    // What the shell answered on the media protocol (the runner counts each request it serves, mock-ipc.js `mediaServed`).
+    const served = window.__look.mediaServed ?? [], length = id => window.__look.storedLength?.(id) ?? 0;
+    const span = (from, until) => {
+      const calls = window.__look.calls.slice(from.calls, until ? until.calls : undefined);
+      const reads = calls.filter(call => call.method === 'attachments.get'), grants = calls.filter(call => call.command === 'attachment_source');
+      const requests = served.slice(from.requests, until ? until.requests : undefined);
+      return { base64Reads: reads.length, base64Chars: reads.reduce((sum, call) => sum + length(call.params?.id), 0), grants: grants.length,
+        requests: requests.length, bytes: requests.reduce((sum, id) => sum + Math.floor(length(id) * 0.75), 0), paintMs: from.paintMs };
+    };
+    const summary = { first: span(first, again), reopen: span(again) };
+    const told = JSON.stringify(summary);
+    require(summary.first.paintMs !== null && summary.reopen.paintMs !== null, `the pictures were drawn both times: ${told}`);
+    require(summary.reopen.base64Reads === 0 && summary.reopen.grants === 0 && summary.reopen.requests === 0, `the second open asks the shell for nothing and requests no picture again: ${told}`);
+    require(summary.first.base64Reads === 0, `no picture crosses IPC as base64: ${told}`);
+    return { check: name, ...summary };
   }
   if (name === 'picture-message' || name === 'picture-message-hover' || name === 'picture-message-room') {
     // R-UI-156: a picture a member sent is a message: the actions of the message (a reply's, or the room message's) beside it,
@@ -2020,7 +2131,7 @@ export function checkRendered(name, context = {}) {
     const same = act => words.querySelector(`:scope > .message-actions > button[data-act="${act}"], :scope > .message-actions > button[data-room-act="${act}"]`) ?? words.querySelector(':scope > .message-actions > button[data-act="copy-message"]');
     const measured = pictures.map(message => {
       const img = message.querySelector(':scope > .attachment-image .attachment-picture img[data-attachment]'), actions = message.querySelector(':scope > .message-actions');
-      require(img && img.src.startsWith('blob:') && img.naturalWidth > 0, 'the picture is loaded from its stored copy');
+      require(img && img.src.startsWith('http://raphael-media.localhost/') && img.naturalWidth > 0, 'the picture is loaded from its stored copy');
       require(acts(message).join() === expected.join(), `the picture has the same actions in the same order (${acts(message)})`);
       for (const button of actions.querySelectorAll('button')) {
         const act = button.dataset.roomAct ?? button.dataset.act;
@@ -2061,7 +2172,7 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('.cmp-quote:not([hidden])'), quote = card?.querySelector('.message-quote.has-picture');
     require(visible(quote), 'the composer quotes the picture');
     const thumb = quote.querySelector('.quote-thumb'), author = quote.querySelector('.quote-author'), word = quote.querySelector('.quote-text');
-    require(thumb.src.startsWith('blob:') && thumb.naturalWidth > 0, "the quote shows the picture's own thumbnail");
+    require(thumb.src.startsWith('http://raphael-media.localhost/') && thumb.naturalWidth > 0, "the quote shows the picture's own thumbnail");
     require(author.textContent === '小晴' && word.textContent === '圖片', `who sent it and the word for a picture (${author.textContent} / ${word.textContent})`);
     require(!card.textContent.includes('attachment:') && !card.textContent.includes('.png'), 'never the link or the file name');
     const t = thumb.getBoundingClientRect(), a = author.getBoundingClientRect(), w = word.getBoundingClientRect();
