@@ -2536,8 +2536,8 @@ export function checkRendered(name, context = {}) {
     require(visible(pane.querySelector('[data-pane][aria-current="page"]')), 'Safety is open');
     require(!pane.querySelector('[data-k="local-commands"]'), 'there is no local commands control');
     require(!/本機指令|Local commands|Ask every time|每次詢問/.test(pane.textContent), `no word of it is left in Safety: ${pane.textContent.slice(0, 120)}`);
-    const last = [...pane.querySelectorAll('.sgroup')].at(-1);
-    require(visible(last) && last.querySelectorAll('.slist > *').length >= 1, 'the computer section still has its row (the apps always allowed, or the note that there are none)');
+    // Owner, 2026-11-14: the 電腦操作 section (the apps always allowed) is gone too; the computer lives in a member's third tab.
+    require(!/電腦操作|Computer use/.test(pane.textContent) && !pane.querySelector('[data-act="computer-menu"]'), 'Safety has no 電腦操作 section');
     return {check:name};
   }
   if (name === "local-command-card" || name === "local-command-settled") {
@@ -2832,7 +2832,7 @@ export function checkRendered(name, context = {}) {
       const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block),state=block.dataset.state;
       require(name1.textContent.trim().split(' ')[0]===words[block.dataset.provider],`block ${at} names its own provider: ${name1.textContent}`);
       require(visible(name1)&&visible(used)&&used.textContent.trim().length>0,`block ${at}: its name and the words at its right: ${block.textContent}`);
-      if(state==='percent')require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(reset),`block ${at}: a window with its number and when it resets: ${block.textContent}`);
+      if(state==='percent')require(/\d+\s*%/.test(used.textContent)&&!reset,`block ${at}: a window with its number and no reset time (owner, 2026-11-14): ${block.textContent}`);
       if(state==='reset')require(!/\d/.test(used.textContent)&&!reset,`block ${at}: a window that has reset keeps no stale number and no reset line: ${block.textContent}`);
       if(state==='unreadable')require(!/\d/.test(used.textContent)&&!reset,`block ${at}: a provider that cannot be read shows no number: ${block.textContent}`);
       if(state==='spend')require(/\d/.test(used.textContent)&&!/%/.test(used.textContent),`block ${at}: OpenRouter's own spend, not a percentage: ${block.textContent}`);
@@ -3594,6 +3594,29 @@ export function checkRendered(name, context = {}) {
     if (name.endsWith('local')) require(!panel.querySelector('input') && document.querySelector('[data-computer-location]').textContent.includes('本機'), "the header names the local host without repeating it in the popover");
     else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
     return {check:name};
+  }
+  if (name === "owner-about-typing" || name === "owner-about-rest") {
+    // 關於我 (owner, 2026-11-14): never dragged to a size; four lines at rest with the rest folded; while written, every line in sight.
+    const about = document.querySelector('[data-owner="owner_about"]'), style = getComputedStyle(about);
+    const line = parseFloat(style.lineHeight), pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const rest = 4 * line + pad + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth), box = about.getBoundingClientRect();
+    require(visible(about) && style.resize === 'none', `no drag handle (resize ${style.resize})`);
+    require(about.value.length > 200, `the long text is in the field (${about.value.length} characters)`);
+    if (name === 'owner-about-typing') {
+      require(document.activeElement === about, 'the field is being written');
+      require(box.height > rest + line && about.scrollHeight <= about.clientHeight + 1, `the box grows with its words (${Math.round(box.height)} px against ${Math.round(rest)} at rest; ${about.scrollHeight} of ${about.clientHeight} in sight)`);
+    } else {
+      require(document.activeElement !== about, 'the field was left');
+      require(Math.abs(box.height - rest) <= 1.5, `four lines at rest (${Math.round(box.height)} px against ${Math.round(rest)})`);
+      require(about.scrollHeight > about.clientHeight + line && about.scrollTop === 0 && style.overflowY === 'hidden', `the rest is folded, its start in sight, no scroll bar (top ${about.scrollTop}, overflow ${style.overflowY})`);
+    }
+    return { check: name, height: Math.round(box.height), rest: Math.round(rest) };
+  }
+  if (name === "about-brand-unselectable") {
+    // The about tab's mark and name are the app's face, not text: a drag over them selects nothing (owner, 2026-11-14).
+    const brand = document.querySelector('.about-brand'), parts = [brand, brand?.querySelector('.about-name'), brand?.querySelector('img')];
+    require(parts.every(part => part && visible(part) && getComputedStyle(part).userSelect === 'none'), `the mark and the name select nothing (${parts.map(part => part && getComputedStyle(part).userSelect).join(', ')})`);
+    return { check: name };
   }
   if (["settings-owner", "settings-tools", "settings-draft-grouped"].includes(name)) {
     if (name === 'settings-owner') {
@@ -5846,12 +5869,44 @@ export function checkRendered(name, context = {}) {
       require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
       for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
     }
-    if (open) {
-      require(toggles.length === 1 && toggles[0].getAttribute('aria-expanded') === 'true' && toggles[0].textContent === '收合', "an open band has one button, 「收合」, saying it is expanded");
-      for (const column of columns) {
-        const wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
-        require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${column.dataset.allDay} is in the band: ${seen.size} of ${wanted.length}`);
+    // Each day opens by itself (R-CAL-07): an open day shows every item of its own with its 「收合」 under them, any other day stays folded with its 「還有 N 個」, and the band is as tall as its tallest day.
+    const expandedDays = toggles.filter(toggle => toggle.getAttribute('aria-expanded') === 'true').map(toggle => toggle.dataset.date).sort();
+    const wantedDays = { "calendar-more-one": ["2026-10-22"], "calendar-more-two": ["2026-10-22", "2026-10-24"], "calendar-more-cross": ["2026-10-24"], "calendar-more-fold": ["2026-10-24"] }[name];
+    if (wantedDays) require(JSON.stringify(expandedDays) === JSON.stringify(wantedDays), `the open days are ${wantedDays}, not ${expandedDays}`);
+    require(open === (expandedDays.length > 0), "the band's head is open exactly while a day is");
+    for (const column of columns) {
+      const key = column.dataset.allDay, wanted = expected(column), here = standing(column), toggle = toggles.find(item => item.dataset.date === key);
+      if (expandedDays.includes(key)) {
+        const seen = new Set(here.map(chip => chip.dataset.entry)), box = column.getBoundingClientRect(), at = toggle.getBoundingClientRect();
+        require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${key} is in the band: ${seen.size} of ${wanted.length}`);
+        require(toggle.textContent === '收合' && at.left >= box.left - 1 && at.right <= box.right + 1, `${key} has its own 「收合」, standing in its day`);
+        require(here.every(chip => chip.getBoundingClientRect().bottom <= at.top + 1), `${key}'s 「收合」 stands under all its items`);
+      } else {
+        const words = toggle?.textContent.match(/^還有 (\d+) 個$/);
+        require(new Set(here.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, `${key} is folded to three rows at most`);
+        if (wanted.length > here.length) require(words && toggle.getAttribute('aria-expanded') === 'false' && Number(words[1]) === wanted.length - here.length, `${key} counts the items it hides: ${wanted.length - here.length}`);
+        else require(!toggle, `${key} has nothing hidden and no button`);
       }
+    }
+    if (expandedDays.length) {
+      const tallest = Math.max(...[...band.querySelectorAll('.au-bar:not(.au-draft), [data-au="all-day-toggle"]')].map(node => Number.parseInt(node.style.gridRowStart, 10)));
+      require(Number(band.dataset.rows) === tallest, "the band is as tall as its tallest day");
+    }
+    if (name === "calendar-more-cross") {
+      // One bar crosses the open Saturday and the folded Sunday: it stays whole on Saturday, is cut at the fold and is nowhere else.
+      const pieces = chips.filter(chip => chip.textContent.includes("週末專案 D")), sunday = columns.find(column => column.dataset.allDay === "2026-10-25");
+      require(pieces.length === 1 && pieces[0].closest('.au-bar').classList.contains('ends-after'), "the bar that crosses the open and the folded day is drawn once, cut at the fold");
+      require(standing(sunday).length === 3 && !standing(sunday).includes(pieces[0]), "the folded day shows its three rows and not the piece");
+    }
+    if (name === "calendar-more-fold") {
+      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22");
+      require(thursday && document.activeElement === thursday && thursday.getAttribute('aria-expanded') === 'false', "folding a day returns the keyboard to that day's 「還有 N 個」");
+    }
+    if (name === "calendar-more-one" || name === "calendar-more-two") {
+      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22"), sat = toggles.find(toggle => toggle.dataset.date === "2026-10-24");
+      require(document.activeElement === (name === "calendar-more-one" ? thursday : sat), "after opening, the keyboard is on that day's 「收合」");
+    }
+    if (open) {
       // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
       const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
       for (const chip of chips) {
@@ -5877,15 +5932,8 @@ export function checkRendered(name, context = {}) {
       scroll.scrollTop = 0;
       return { check: name, items: chips.length, rows: state.rows, growth };
     }
-    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden.
+    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden (checked per day above).
     require(!band.querySelector('[data-au="open-day"]'), "the band's count is no link to the day it already shows");
-    require(new Set(chips.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, "a folded band draws three rows at most");
-    for (const toggle of toggles) {
-      const column = columns.find(item => item.dataset.allDay === toggle.dataset.date), words = toggle.textContent.match(/^還有 (\d+) 個$/);
-      require(column && words && toggle.getAttribute('aria-expanded') === 'false', "a folded band's button counts what is left and says it is not expanded");
-      require(Number(words[1]) === expected(column).length - standing(column).length, `the button counts the hidden items: ${words[1]} for ${expected(column).length - standing(column).length}`);
-    }
-    for (const column of columns) require((expected(column).length > standing(column).length) === toggles.some(toggle => toggle.dataset.date === column.dataset.allDay), "a day with items left has a button, a day without has none");
     if (name === "calendar-more-folded") window.__look.calendarMore = state;
     else {
       const before = window.__look.calendarMore;
@@ -7379,6 +7427,9 @@ export function checkRendered(name, context = {}) {
     require(connectBox.height === 26 && connectBox.width < 120, `its height is the control token and its width hugs its words (${connectBox.width}x${connectBox.height})`);
     const done = view.querySelector('.cs-card .cs-state');
     require(done && !done.closest('.cs-card').querySelector('button.cs-connect') && done.textContent.includes('已連結'), "a connected app says 已連結 in quiet words and has no button");
+    // Owner, 2026-11-14: the row's button and its 已連結 are one piece: the check stands inside the button, whose fill runs past it.
+    const one = done.closest('.btn.cs-main[data-conn="open-store"]'), oneBox = one?.getBoundingClientRect(), doneBox = done.getBoundingClientRect();
+    require(one && oneBox.right >= doneBox.right + 4 && oneBox.left <= doneBox.left, `已連結 is part of the row's one button (button ${oneBox && Math.round(oneBox.right)}, check ${Math.round(doneBox.right)})`);
     const surface = getComputedStyle(modal);
     require(surface.backgroundColor === colourOf('backgroundColor', '--dialog') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the dialog layer and its edge");
     const body = modal.querySelector('.modal-body');
@@ -9517,34 +9568,74 @@ export function checkRendered(name, context = {}) {
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
+  if (name === "owner-picture-bubble") {
+    // R-UI-149: the owner's message with a picture: the picture keeps its size and the bubble under it keeps the width it has without one.
+    return (async () => {
+    const line = [...document.querySelectorAll('.thread > .tn, .thread .tn')].find(item => item.querySelector('.me-files .attachment-picture img') && item.querySelector('.owner-message .bubble'));
+    require(line, 'a message with a picture and words');
+    const picture = line.querySelector('.me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
+    const end = performance.now() + 4000;
+    while (!(image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
+    require(image.complete && image.naturalWidth > 0 && visible(image), 'the picture is drawn');
+    const field = bubble.querySelector('[data-edit-input]'), text = field ? field.value : bubble.querySelector('.message-text').textContent;
+    // The same words in a bubble with no picture, drawn in the same line and measured, is what the bubble's width must be.
+    const reference = document.createElement('div');
+    reference.className = 'me'; reference.style.visibility = 'hidden';
+    reference.innerHTML = '<div class="chat-message owner-message"><div class="bubble"><div class="message-text"></div></div></div>';
+    reference.querySelector('.message-text').textContent = text;
+    // The message's actions stand beside its bubble and take their share of the column, with or without a picture: the same ones here.
+    const actions = bubble.closest('.owner-message').querySelector(':scope > .message-actions');
+    if (actions) reference.querySelector('.owner-message').prepend(actions.cloneNode(true));
+    line.querySelector('.me').after(reference);
+    const bare = reference.querySelector('.bubble').getBoundingClientRect().width;
+    reference.remove();
+    const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = field ? 2 : 1;
+    require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
+    require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
+    if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
+    if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
+    require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);
+    return { check: name, bubble: Math.round(b.width * 10) / 10, without: Math.round(bare * 10) / 10, picture: Math.round(p.width), editing: !!field, pending: line.classList.contains('is-pending') };
+    })();
+  }
+  if (name === "message-edit-before") {
+    // The sent message's bubble as it is: the editor must be this bubble, not another box.
+    const bubble = document.querySelector('.tn[data-id="8201"] .owner-message .bubble'), r = bubble.getBoundingClientRect(), style = getComputedStyle(bubble);
+    window.__look.beforeBubble = { rect: { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }, style: Object.fromEntries(["backgroundColor", "color", "borderRadius", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "fontFamily", "lineHeight", "fontWeight", "borderTopWidth", "boxShadow"].map(key => [key, style[key]])) };
+    return { check: name, width: Math.round(r.width) };
+  }
   if (name === "message-edit-open" || name === "message-edit-armed" || name === "message-edit-sent") {
-    // R-UI-148: the owner's message is edited in its own place; the composer is not touched and what is sent is the composer's own edit.
+    // R-UI-148: the owner's message is edited in its own bubble, in its place; the composer is not touched and what is sent is the composer's own edit.
     const turn = document.querySelector('.tn[data-id="8201"]'), composerField = document.querySelector('.cmp-input');
     require(composerField && composerField.value === '', 'the composer keeps its own (empty) draft: nothing of the message went into it');
     if (name === "message-edit-sent") {
       const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
       const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
       require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words && asks[0].memberId === 1, 'Enter asks once, with the edited words and the message it replaces, as the composer\'s edit did');
-      require(!document.querySelector('[data-edit-input], .msg-editor') && !document.querySelector('.tn[data-id="8201"]'), 'the editor is gone with the message it replaced');
+      require(!document.querySelector('[data-edit-input], [data-msg-editor]'), 'the editor is gone');
       const bubbles = [...document.querySelectorAll('.thread .owner-message .bubble')];
       require(bubbles.length === 1 && bubbles[0].querySelector('.message-text').textContent.trim() === words && visible(bubbles[0]), 'the edited message stands in its bubble, once');
-      require(!document.querySelector('.tn.is-pending'), 'nothing is left waiting beside it');
+      require(document.querySelectorAll('.tn[data-id="8201"]').length === 1 && !document.querySelector('.tn.is-pending'), 'it is the same message, in its place, and nothing is left waiting beside it');
       return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
     }
-    const field = turn.querySelector('[data-edit-input]'), box = turn.querySelector('.msg-editor'), me = turn.querySelector('.me');
-    require(visible(field) && visible(box), 'the bubble is an editor');
+    const field = turn.querySelector('[data-edit-input]'), message = turn.querySelector('.owner-message[data-msg-editor]'), bubble = field.closest('.bubble'), me = turn.querySelector('.me');
+    require(visible(field) && visible(bubble) && message && message.classList.contains('is-editing'), 'the message is open as an editor');
+    require(!turn.querySelector('.msg-editor') && !bubble.querySelector('.btn'), 'the bubble is not wrapped in another box and holds no button');
     require(document.activeElement === field && (name === "message-edit-armed" || field.selectionStart === field.value.length && field.selectionEnd === field.value.length), 'the field has the focus, the caret after its words');
-    require(!turn.querySelector('.owner-message .bubble') && !turn.querySelector('.owner-message .message-actions'), 'the editor takes the bubble\'s place: no bubble and no actions beside it');
-    const b = box.getBoundingClientRect(), m = me.getBoundingClientRect();
-    require(Math.abs(b.right - m.right) <= 1, `the editor ends where the bubble ended (${Math.round(b.right)} vs ${Math.round(m.right)})`);
-    require(b.width <= m.width && b.width >= Math.min(m.width * .6, 300), `the editor is as wide as the bubble's column (${Math.round(b.width)} of ${Math.round(m.width)})`);
+    require(!turn.querySelector('.owner-message .message-actions:not([inert])') && [...turn.querySelectorAll('.owner-message .message-actions')].every(held => getComputedStyle(held).visibility === 'hidden'), 'no action can be pressed beside the bubble while it is edited (its room is held)');
+    const before = window.__look.beforeBubble, b = bubble.getBoundingClientRect(), style = getComputedStyle(bubble), m = me.getBoundingClientRect();
+    require(before, 'the sent bubble was measured before it opened');
+    for (const [key, value] of Object.entries(before.style)) require(style[key] === value, `the editor is the bubble's own: ${key} is ${style[key]}, it was ${value}`);
+    require(Math.abs(b.right - before.rect.right) <= 1 && Math.abs(b.top - before.rect.top) <= 1, `the bubble stays where it stood (right ${Math.round(b.right)} vs ${Math.round(before.rect.right)}, top ${Math.round(b.top)} vs ${Math.round(before.rect.top)})`);
+    require(b.right <= m.right + 1, 'the bubble ends inside its column');
+    if (name === "message-edit-open" && field.value.length < 40) require(Math.abs(b.width - before.rect.width) <= 2 && Math.abs(b.height - before.rect.height) <= 2, `a short message keeps its bubble's size (${Math.round(b.width)}x${Math.round(b.height)} vs ${Math.round(before.rect.width)}x${Math.round(before.rect.height)})`);
     require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
-    const buttons = [...box.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
+    const under = turn.querySelector('.msg-editor-under'), buttons = [...under.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
     require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, 'Cancel and, last, the primary Send, ready');
-    const [cancel, send] = buttons.map(button => button.getBoundingClientRect());
+    const [cancel, send] = buttons.map(button => button.getBoundingClientRect()), u = under.getBoundingClientRect();
     require(cancel.right <= send.left && Math.abs(cancel.height - send.height) < .5 && Math.abs(send.height - 30) < .5, `Cancel and Send are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
-    const pad = parseFloat(getComputedStyle(box).paddingRight);
-    require(Math.abs(send.right - (b.right - 1 - pad)) <= 1.5, 'Send stands at the right edge of the editor');
+    const box = getComputedStyle(under);
+    require(Math.abs(send.right - b.right) <= 1.5 && cancel.top >= b.bottom - 1 && box.borderTopWidth === '0px' && /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(box.backgroundColor), `Send ends at the bubble's right edge and under it, in no box (${Math.round(send.right)} vs ${Math.round(b.right)})`);
     require(!document.querySelector('.tn.is-pending'), 'nothing was sent');
     if (name === "message-edit-armed") {
       const armed = buttons[0];
@@ -9552,7 +9643,23 @@ export function checkRendered(name, context = {}) {
     } else {
       require(!buttons[0].dataset.cancelArmed, 'Cancel is not armed');
     }
-    return { check: name, editor: Math.round(b.width), height: Math.round(b.height), words: field.value.length };
+    return { check: name, bubble: `${Math.round(b.width)}x${Math.round(b.height)}`, was: `${Math.round(before.rect.width)}x${Math.round(before.rect.height)}`, words: field.value.length, underTop: Math.round(u.top) };
+  }
+  if (name === "message-edit-pending" || name === "message-edit-written" || name === "message-edit-answered") {
+    // R-UI-148: an edit stands where its message stood (the thread has routine turns after it), on its way, written and answered; never at the end, never twice.
+    const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
+    const lines = [...document.querySelectorAll('.thread > .tn')].map(line => line.classList.contains('is-pending') ? 'pending' : line.dataset.id);
+    const mine = [...document.querySelectorAll('.thread .owner-message .message-text')].filter(node => node.textContent.trim() === words);
+    require(mine.length === 1 && visible(mine[0]), `the edited words stand once in the thread (${mine.length}): ${lines.join(',')}`);
+    require(lines.length === 3 && lines[1] === '8203' && lines[2] === '8204' && lines[0] === (name === "message-edit-pending" ? 'pending' : '8201'), `the edit stands first, before the 07:00 and 08:00 routine turns that came after its message: ${lines.join(',')}`);
+    const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+    require(asks.length === 1 && asks[0].replaceTurnId === 8201, 'one edit was sent, naming the message it replaces');
+    require(!document.querySelector('[data-edit-input]'), 'no editor is left open');
+    const line = document.querySelector('.thread > .tn'), bubble = mine[0].closest('.bubble').getBoundingClientRect(), later = document.querySelector('.tn[data-id="8203"]').getBoundingClientRect();
+    require(bubble.bottom <= later.top, 'the edit is above the routine turns on screen');
+    if (name === "message-edit-written") require(line.dataset.status === 'running' && !document.querySelector('.is-pending'), 'the member is answering the written message: nothing waits beside it');
+    if (name === "message-edit-answered") require(line.dataset.status === 'done' && line.textContent.includes('照新的說法整理好了') && !document.querySelector('.is-pending'), 'the answer stands under the edited message, above the routine turns');
+    return { check: name, order: lines.join(',') };
   }
   throw new Error(`Unknown rendered check: ${name}`);
 }

@@ -30,3 +30,9 @@ remain unverified. Do not equate wrapper tests with proof against model prompt
 injection. Follow-up 1 fixes delivery replay and catalogue freshness. The owner
 keeps broad bypass grants with the existing firm floor; malicious-source influence
 within those grants remains an accepted risk, described plainly in the report.
+
+The data floor stays closed to credentials and loosens for what the owner gave a member (R-FLOOR-03; owner, 2026-11-14:
+「機密資訊鎖得太死了…除非是什麼密碼啊、金鑰啊」). A member's command or file tool may read the files the owner attached in a
+conversation (the app's `attachments` folder, by their opaque ids) with no refusal, including an
+`if (Test-Path ...) { Get-Content ... }` command; writing one, its sidecar, the database, the vault, keys, settings, `.env` and
+the folder itself are refused as before. Core only: `core/tests/agent/test_data_floor.py`.

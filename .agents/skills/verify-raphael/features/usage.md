@@ -8,7 +8,7 @@ subscription brain (Claude, Codex, Antigravity) has one card: every window it re
 live or from the last run, and an honest line when the percentage is unknown or the
 allowance ran out. A window whose reported reset has passed says 已重置, with no number or bar. ChatGPT has its card with 管理用量, which opens its own usage page, and OpenRouter has its card with what OpenRouter itself reports for the key (this month's use, what is left of its limit; owner, 2026-11-14).
 With nothing signed in or keyed the cards stand aside. The account menu's 用量 submenu lists the same
-providers, one block each (its tightest window, its number and when it resets; 已重置; OpenRouter's spend; or 無法讀取 for one that cannot be read), from the same readings, decided once in `usage-blocks.ts`.
+providers, one block each (its tightest window and its number, with no reset time since 2026-11-14; 已重置; OpenRouter's spend; or 無法讀取 for one that cannot be read), from the same readings, decided once in `usage-blocks.ts`.
 
 Below them are rows: the OpenRouter key and what Raphael spent this month (the same
 ledger as everywhere else, across every paid call; the OpenRouter card's figure is OpenRouter's own for the key, so the two can differ).

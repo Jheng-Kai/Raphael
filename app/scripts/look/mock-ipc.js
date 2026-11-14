@@ -42,7 +42,16 @@ export function installMock(fixture, config = {}, target = window) {
       turn.owner_questions = [{...structuredClone(data.ownerQuestionCard),id:'metadata-question',turn_id:turn.id,question:sample.question}];
       turn.permissions = structuredClone(data.permissionTurns.local.turn.permissions);
     }
+    // The owner's message carries one screenshot (the message is stored with it; `attachments.get` gives its picture back).
+    if (variant.ownerPicture) turn.attachments = [{ id: `${'a'.repeat(32)}.png`, name: '畫面截圖.png', mime: 'image/png', size: 4096 }];
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
+    if (variant.ownerEdit === 'placed') {
+      // A member's thread as the owner's has it: routine turns posted after his message (07:00 and 08:00), so an edit that
+      // went to the end of the thread would be seen far from where he edited.
+      const routine = (id, hour, words) => ({...structuredClone(base), id, session_id:`routine-${id}`, source:'routine', route:'routine', question:`${hour}:00 例行`, prefix:'', text:words, created_at_ms:data.now + (id - 8200) * 3_600_000,
+        messages:[{seq:1,kind:'reply',text:words,at_ms:data.now + (id - 8200) * 3_600_000}], drafts:[], reactions:{}, owner_questions:[], permissions:[]});
+      data.turns.push(routine(8203, '07', '早上七點的例行整理已送出。'), routine(8204, '08', '早上八點的例行整理已送出。'));
+    }
     if (variant.chatMetadata === 'room') {
       data.messages = [{id:8202,room_id:1,thread_id:1,member_id:1,text:sample.root,created:data.now,status:'done',turn_id:null,reply_to:null,reactions:['👍'],reply_count:2,reply_thread_id:900},
         {id:8203,room_id:1,thread_id:900,member_id:null,text:sample.sideOwner,created:data.now+1000,status:'done',turn_id:null,reply_to:null},
@@ -816,6 +825,16 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_events.push(...Array.from({ length: variant.calendarManyAllDay }, (_, index) => ({ ...sample, id: `event:many-${String(index).padStart(2, "0")}`, kind: "event", routine_id: null, all_day: true,
       at_ms: octoberAt(24, 0), end_ms: octoberAt(index === 3 ? 26 : 25, 0), title: `${prefix[index % 3]}${names[index % names.length]}${index >= names.length ? ` ${index + 1}` : ""}` })));
   }
+  // A busy week with two busy days (Thursday 22 and Saturday 24) and four bars that run Saturday into Sunday, so the fourth is below the fold of both: each day opens by itself and that bar must keep its place on the open Saturday while Sunday stays folded.
+  if (variant.calendarBusyWeek) {
+    const sample = data.home.calendar_events.find(item => item.kind === "event");
+    const day = (id, title, from, to = from) => ({ ...sample, id: `event:busy-${id}`, kind: "event", routine_id: null, all_day: true, at_ms: octoberAt(from, 0), end_ms: octoberAt(to + 1, 0), title });
+    data.home.calendar_events.push(
+      ...[1, 2, 3, 4, 5].map(n => day(`thu${n}`, `週四事項 ${n}`, 22)),
+      ...["A", "B", "C", "D"].map(letter => day(`weekend${letter}`, `週末專案 ${letter}`, 24, 25)),
+      ...[1, 2, 3, 4].map(n => day(`sat${n}`, `週六事項 ${n}`, 24)),
+    );
+  }
   const reproject = () => {
     const monthly = [...(variant.homeSparse || variant.homeEmpty ? [] : [daily]), ...data.home.calendar_events].sort((a,b)=>a.at_ms-b.at_ms);
     data.home.calendar_counts = {};
@@ -1216,6 +1235,7 @@ export function installMock(fixture, config = {}, target = window) {
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
       case "attachments.get": {
+        if (variant.ownerPicture && p.id === `${'a'.repeat(32)}.png`) return { mime: "image/png", data: "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" };
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
         return unsupported(method);
@@ -2136,15 +2156,31 @@ export function installMock(fixture, config = {}, target = window) {
           notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
           return null;
         }
-        // A message sent again from its editor: the core retracts the old turn and writes the new one (`replace_turn_id`).
+        // A message sent again from its editor, as the core does it (`replace_turn_id`): it retracts the old turn (and tells the
+        // app), then writes the edit with the id and the time of the turn it replaces; the call lasts until the member has answered.
         if (variant.ownerEdit && args.replaceTurnId !== undefined) {
           const old = data.turns.find(turn => turn.id === args.replaceTurnId);
           if (!old) throw new Error("replace_turn_id must name a completed owner message in this thread");
           data.turns = data.turns.filter(turn => turn.id !== old.id);
-          const id = nextId(data.turns.concat(old));
-          data.turns.push({ ...structuredClone(old), id, session_id: args.requestId, question: args.text, created_at_ms: data.now + 1000, reactions: {} });
-          notify("AgentTurn", { turn_id: id, member_id: old.member_id });
-          return null;
+          notify("AgentTurn", { turn_id: old.id, member_id: old.member_id });
+          const write = () => {
+            const edit = { ...structuredClone(old), session_id: args.requestId, question: args.text, reactions: {}, ...(variant.ownerEdit === 'placed' ? { status: "running", text: "", prefix: "", messages: [] } : {}) };
+            data.turns.push(edit);
+            notify("AgentTurn", { turn_id: edit.id, member_id: old.member_id });
+            return edit;
+          };
+          if (variant.ownerEdit !== 'placed') { write(); return null; }
+          // The scene looks at the edit on its way, then lets the core write it, then lets the member answer.
+          return new Promise(resolve => {
+            window.__look.writeEdit = () => {
+              const edit = write();
+              window.__look.answerEdit = () => {
+                Object.assign(edit, { status: "done", prefix: "答", text: "好，照新的說法整理好了。", messages: [{ seq: 1, kind: "reply", text: "好，照新的說法整理好了。", at_ms: data.now }] });
+                notify("AgentTurn", { turn_id: edit.id, member_id: edit.member_id });
+                resolve(null);
+              };
+            };
+          });
         }
         // A member answering what was written under an open page (`pageAsk`): its turn is running until the scene lets it say its reply.
         if (variant.pageAsk) {

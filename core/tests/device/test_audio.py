@@ -17,6 +17,7 @@ import sounddevice
 import soxr
 
 from raphael_core.device import audio
+from raphael_core.device.mic_choice import AutomaticMicrophone
 from raphael_core.device.audio import (
     SAMPLE_RATE,
     InputDevice,
@@ -346,7 +347,7 @@ def fake_sd(monkeypatch):
     # A test that leaves a recorder running must not stop the next one from looking for devices.
     monkeypatch.setattr(audio, "_active", 0)
     monkeypatch.setattr(audio, "_automatic_device", None, raising=False)
-    monkeypatch.setattr(audio, "_last_good_automatic", None, raising=False)
+    monkeypatch.setattr(audio, "_automatic", AutomaticMicrophone())
     return fake
 
 
@@ -659,7 +660,7 @@ def test_portaudio_that_will_not_restart_gives_the_original_error(fake_sd):
         sounddevice.PortAudioError("first"),
         sounddevice.PortAudioError("second"),
     ]
-    with pytest.raises(NoMicrophoneError, match="no default recording device"):
+    with pytest.raises(NoMicrophoneError, match="no microphone"):
         MicRecorder(lambda frames: None).start()
     assert fake_sd.initialize_calls == 2  # it tried twice and then gave up
 
@@ -707,15 +708,16 @@ def plug_in_mic(fake):
     fake.devices.append(FakeSd.device(5, "Plugged Mic", 1, 48000.0))
 
 
-def test_the_automatic_microphone_follows_the_default_between_two_starts(fake_sd):
+def test_the_automatic_microphone_stays_on_the_headset_when_windows_default_is_the_array(fake_sd):
     rec = MicRecorder(lambda frames: None)
     rec.start()
     rec.stop()
     assert fake_sd.streams[0].kwargs["device"] == 1
-    fake_sd.after_refresh = default_becomes(2)  # the user chose the laptop's array in Windows
-    rec.start()
-    rec.stop()
-    assert fake_sd.streams[1].kwargs["device"] == 2
+    fake_sd.after_refresh = default_becomes(2)  # Windows now calls the laptop's array the default
+    for _ in range(3):
+        rec.start()
+        rec.stop()
+    assert [s.kwargs["device"] for s in fake_sd.streams] == [1, 1, 1, 1]
 
 
 def test_the_automatic_microphone_reads_the_devices_again_at_every_start(fake_sd):
@@ -763,7 +765,7 @@ def test_a_chosen_microphone_that_is_still_missing_reads_once_and_uses_the_defau
     rec = MicRecorder(lambda frames: None, device="Unplugged Mic")
     rec.start()
     assert fake_sd.refreshes == 1  # once, not once more for the fallback
-    assert fake_sd.streams[0].kwargs["device"] == 2  # the default as it is now
+    assert fake_sd.streams[0].kwargs["device"] == 1  # the automatic one: the headset
     assert "Unplugged Mic" in caplog.text
     rec.stop()
 
@@ -839,12 +841,11 @@ def test_the_automatic_microphone_that_opened_is_logged_once_per_start(fake_sd, 
         rec.start()
         rec.stop()
         assert microphone_lines(caplog) == ["Microphone: Headset Mic (automatic)"]
-        fake_sd.after_refresh = default_becomes(2)
         rec.start()
         rec.stop()
     assert microphone_lines(caplog) == [
         "Microphone: Headset Mic (automatic)",
-        "Microphone: Array Mic (automatic)",
+        "Microphone: Headset Mic (automatic)",
     ]
     assert all(r.levelno == logging.INFO for r in caplog.records if "Microphone:" in r.message)
 
@@ -946,26 +947,41 @@ def test_explicit_microphone_never_probes_even_when_it_is_digitally_silent(fake_
     assert len(fake_sd.streams) == 1
 
 
-def test_automatic_cache_prioritizes_last_alive_candidate_but_rechecks_default(fake_sd):
+def test_automatic_tries_attached_microphones_before_the_array_and_rechecks_the_first(fake_sd):
     fake_sd.devices.append(FakeSd.device(5, "USB Mic", 1, 48000.0))
     rec = MicRecorder(lambda frames: None)
     rec.start()
     try:
         feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
         wait_for_audio(lambda: len(fake_sd.streams) == 2)
+        assert fake_sd.streams[1].kwargs["device"] == 5  # the other attached one, not the array
         feed_milliseconds(fake_sd.streams[1], 200, 0.000015)
         wait_for_audio(lambda: len(fake_sd.streams) == 3)
-        assert fake_sd.streams[2].kwargs["device"] == 5
+        assert fake_sd.streams[2].kwargs["device"] == 2  # the array, last
         feed_milliseconds(fake_sd.streams[2], 200, 0.001)
-        wait_for_audio(lambda: audio.automatic_device_name() == "USB Mic")
+        wait_for_audio(lambda: audio.automatic_device_name() == "Array Mic")
     finally:
         rec.stop()
     rec.start()
     try:
+        # the headset is never heard, so it is looked at again at the next start
         assert fake_sd.streams[3].kwargs["device"] == 1
-        feed_milliseconds(fake_sd.streams[3], 300, 0.000015)
-        wait_for_audio(lambda: len(fake_sd.streams) == 5)
-        assert fake_sd.streams[4].kwargs["device"] == 5
+    finally:
+        rec.stop()
+    assert audio._active == 0
+
+
+def test_a_headset_that_was_heard_is_kept_when_it_is_quiet_at_the_next_start(fake_sd):
+    rec = MicRecorder(lambda frames: None)
+    rec.start()
+    feed_milliseconds(fake_sd.streams[0], 300, 0.001)
+    rec.stop()
+    rec.start()
+    try:
+        feed_milliseconds(fake_sd.streams[1], 400, 0.0)  # a noise gate: silence until it speaks
+        time.sleep(0.2)
+        assert len(fake_sd.streams) == 2  # nothing else was opened
+        assert audio.automatic_device_name() == "Headset Mic"
     finally:
         rec.stop()
     assert audio._active == 0
@@ -1043,7 +1059,7 @@ def test_an_automatic_candidate_unplugged_during_probe_is_skipped(fake_sd):
         fake_sd.streams[1].unplug()
         wait_for_audio(lambda: len(fake_sd.streams) == 3)
         feed_milliseconds(fake_sd.streams[2], 200, 0.001)
-        wait_for_audio(lambda: audio.automatic_device_name() == "USB Mic")
+        wait_for_audio(lambda: audio.automatic_device_name() == "Array Mic")
     finally:
         rec.stop()
     assert rec.error is None
@@ -1176,3 +1192,94 @@ def test_a_probe_without_callbacks_keeps_recording_alive_for_the_stall_watchdog(
         rec.stop()
     assert rec.error is None
     assert audio._active == 0
+
+
+# --- the owner's microphones (R-MIC-AUTO-01) ----------------------------------------------------
+
+OWNER_HEADSET = "麥克風 (3- HyperX Cloud II Core Wi"
+OWNER_MIX = "立體聲混音 (Realtek(R) Audio)"
+OWNER_ARRAY = "麥克風排列 (Realtek(R) Audio)"
+
+
+def owner_devices(*, headset=True, number=3):
+    """What MME lists on the owner's laptop, Windows' default being the Sound Mapper entry."""
+    names = ["Microsoft Sound Mapper - Input"]
+    names += [f"麥克風 ({number}- HyperX Cloud II Core Wi"] if headset else []
+    names += [OWNER_MIX, OWNER_ARRAY]
+    return [FakeSd.device(i, name, 2, 48000.0) for i, name in enumerate(names)]
+
+
+def started_device(fake, rec):
+    """The name of the microphone a start opened."""
+    rec.start()
+    try:
+        return fake.devices[fake.streams[-1].kwargs["device"]]["name"]
+    finally:
+        rec.stop()
+
+
+def test_automatic_opens_the_headset_not_the_sound_mapper_and_stays_on_it(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    rec = MicRecorder(lambda frames: None)
+    assert [started_device(fake_sd, rec) for _ in range(6)] == [OWNER_HEADSET] * 6
+    assert audio.automatic_device_name() == OWNER_HEADSET
+
+
+def test_a_silent_headset_falls_to_the_array_never_to_stereo_mix(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    rec = MicRecorder(lambda frames: None)
+    rec.start()
+    try:
+        feed_milliseconds(fake_sd.streams[0], 300, 0.0)
+        wait_for_audio(lambda: len(fake_sd.streams) == 2)
+        assert fake_sd.streams[1].kwargs["device"] == 3  # the array: Stereo Mix (2) is skipped
+        feed_milliseconds(fake_sd.streams[1], 200, 0.001)
+        wait_for_audio(lambda: audio.automatic_device_name() == OWNER_ARRAY)
+    finally:
+        rec.stop()
+    assert [s.kwargs["device"] for s in fake_sd.streams] == [1, 3]
+
+
+def test_the_menu_label_stays_on_the_headset_while_the_list_is_read_again_and_again(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    names = []
+    for _ in range(5):
+        list_input_devices()
+        names.append(audio.automatic_device_name())
+    assert names == [OWNER_HEADSET] * 5
+
+
+def test_unplugging_and_replugging_the_headset_moves_automatic_and_back(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    rec = MicRecorder(lambda frames: None)
+    assert started_device(fake_sd, rec) == OWNER_HEADSET
+    fake_sd.devices = owner_devices(headset=False)
+    assert started_device(fake_sd, rec) == OWNER_ARRAY
+    assert started_device(fake_sd, rec) == OWNER_ARRAY
+    fake_sd.devices = owner_devices(number=5)  # back, and Windows numbers it differently
+    assert started_device(fake_sd, rec) == "麥克風 (5- HyperX Cloud II Core Wi"
+    assert audio.automatic_device_name() == "麥克風 (5- HyperX Cloud II Core Wi"
+
+
+def test_stereo_mix_alone_is_no_microphone(fake_sd):
+    fake_sd.devices = [
+        FakeSd.device(0, "Microsoft Sound Mapper - Input", 2, 44100.0),
+        FakeSd.device(1, OWNER_MIX, 2, 48000.0),
+    ]
+    fake_sd.default_input = 0
+    with pytest.raises(NoMicrophoneError):
+        MicRecorder(lambda frames: None).start()
+    assert fake_sd.streams == []
+    assert audio.automatic_device_name() is None
+
+
+def test_stereo_mix_stays_in_the_list_for_a_manual_choice(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    assert [d.name for d in list_input_devices()] == [OWNER_HEADSET, OWNER_MIX, OWNER_ARRAY]
+    rec = MicRecorder(lambda frames: None, device=OWNER_MIX)
+    assert started_device(fake_sd, rec) == OWNER_MIX

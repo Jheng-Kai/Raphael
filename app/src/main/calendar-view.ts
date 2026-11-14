@@ -165,9 +165,12 @@ export interface Bar { entry: CalendarEntry; column: number; span: number; row: 
 
 /**
  * The all-day row: each entry a bar across the days it covers, in the first row where it fits. What does not fit in
- * `rows` rows is counted per day in `more`.
+ * `rows` rows is counted per day in `more`, except on the days named in `open` (date keys): such a day draws every
+ * entry it has, however far down, and counts none. A bar that crosses an open and a folded day is drawn in pieces, one
+ * per run of days that show it, so the open day keeps it and the folded day never shows what is below its limit.
+ * `used` is the height of a folded day (its drawn rows, `rows` at most); `bottoms` is the rows each day draws.
  */
-export function allDayBars(entries: readonly CalendarEntry[], days: readonly Date[], rows = 3): { bars: Bar[]; more: number[]; used: number } {
+export function allDayBars(entries: readonly CalendarEntry[], days: readonly Date[], rows = 3, open: ReadonlySet<string> = new Set()): { bars: Bar[]; more: number[]; used: number; bottoms: number[] } {
   const keys = days.map(dateKey), first = keys[0]!, last = keys[keys.length - 1]!;
   const shown = entries.filter(isAllDayRow).filter(entry => { const { first: a, last: b } = entryDays(entry); return a <= last && b >= first; });
   const span = (entry: CalendarEntry): [number, number, boolean, boolean] => {
@@ -177,16 +180,33 @@ export function allDayBars(entries: readonly CalendarEntry[], days: readonly Dat
   };
   const ordered = [...shown].sort((a, b) => Number(!!a.rhythm) - Number(!!b.rhythm) || span(a)[0] - span(b)[0] || span(b)[1] - span(a)[1] || a.start - b.start || a.id.localeCompare(b.id));
   const taken: number[][] = [];
-  const bars: Bar[] = [], more = keys.map(() => 0);
+  const bars: Bar[] = [], more = keys.map(() => 0), bottoms = keys.map(() => 0);
+  const occupied: boolean[][] = [], later: { entry: CalendarEntry; column: number; to: number; startsBefore: boolean; endsAfter: boolean }[] = [];
+  const place = (entry: CalendarEntry, a: number, b: number, row: number, startsBefore: boolean, endsAfter: boolean): void => {
+    bars.push({ entry, column: a, span: b - a + 1, row, startsBefore, endsAfter });
+    for (let n = a; n <= b; n++) { (occupied[row] ??= [])[n] = true; bottoms[n] = Math.max(bottoms[n]!, row + 1); }
+  };
   for (const entry of ordered) {
     const [from, to, startsBefore, endsAfter] = span(entry);
     let row = taken.findIndex(ends => ends.every((end, index) => index % 2 === 1 || end > to || ends[index + 1]! < from));
     if (row < 0) { row = taken.length; taken.push([]); }
-    if (row >= rows) { for (let n = from; n <= to; n++) more[n]!++; continue; }
     taken[row]!.push(from, to);
-    bars.push({ entry, column: from, span: to - from + 1, row, startsBefore, endsAfter });
+    if (row < rows) { place(entry, from, to, row, startsBefore, endsAfter); continue; }
+    // Below the folded rows only the open days draw it, in one piece for each run of them.
+    for (let n = from, run = -1; n <= to + 1; n++) {
+      const here = n <= to && open.has(keys[n]!);
+      if (n <= to && !here) more[n]!++;
+      if (here && run < 0) run = n;
+      else if (!here && run >= 0) { later.push({ entry, column: run, to: n - 1, startsBefore: startsBefore || run > from, endsAfter: endsAfter || n - 1 < to }); run = -1; }
+    }
   }
-  return { bars, more, used: Math.min(rows, taken.length) };
+  // Those pieces then settle into the first rows free in their days, so an open day has no gap above them.
+  for (const piece of later) {
+    let row = 0;
+    while (occupied[row]?.slice(piece.column, piece.to + 1).some(Boolean)) row++;
+    place(piece.entry, piece.column, piece.to, row, piece.startsBefore, piece.endsAfter);
+  }
+  return { bars, more, used: Math.min(rows, taken.length), bottoms };
 }
 
 /** The entries of one day of a month's grid, the all-day ones first. */

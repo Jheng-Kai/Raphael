@@ -9,6 +9,7 @@ import pytest
 
 from raphael_core.agent.data_floor import READ_CONSENT, WRITE_REFUSAL, DataFloor
 from raphael_core.agent.history import AgentHistory
+from raphael_core.agent.policy import Tier
 from raphael_core.protocol import RpcError
 from agent.test_service import Rig  # noqa: F401
 from .test_answering import client, member, setup  # noqa: F401
@@ -121,3 +122,35 @@ def test_what_a_colleague_handed_a_member_is_read_as_the_colleagues_in_every_for
     assert owner_lines([exchange, brief, delegated, routine]) == () and owner_lines([owners]) == ("主人要求你每天檢查",)
     # a member's own work, handed to itself, names itself and is not a colleague's
     assert not from_colleague(made(route="worker", source="worker", peer_id=5))
+
+
+READ_ACTIONS = ({"action": "member_routines_list", "arguments": {"member_id": 1}},
+                {"action": "member_skills_list", "arguments": {"member_id": 1}},
+                {"action": "member_commands_list", "arguments": {"member_id": 1}})
+WRITE_ACTIONS = ({"action": "member_routine_update", "arguments": {"id": 1, "member_id": 1, "title": "x"}},
+                 {"action": "member_skill_update", "arguments": {"member_id": 1, "id": 1, "enabled": False}},
+                 {"action": "member_routine_delete", "arguments": {"id": 1}},
+                 {"action": "member_delete", "arguments": {"id": 1}})
+
+
+async def test_a_routines_run_reads_any_member_with_no_card_and_a_change_still_asks(setup):
+    """Owner, 2026-11-14: a team health check raised a card for each member it read (16, two timed out) and was cancelled."""
+    from raphael_core.management import background_management, background_requires_approval
+
+    rig, team = setup
+    health = member(team, name="蛋博士")
+    with background_management(health.id):
+        for arguments in READ_ACTIONS:
+            assert not background_requires_approval("member_manage", arguments), arguments
+            assert not rig.service._gate.firm_confirmation("member_manage", arguments)
+            assert rig.service._gate.tier("member_manage", arguments) < Tier.T2
+            team.members.authorize_management(health.id, "member_manage", arguments, interactive=False)
+        for arguments in WRITE_ACTIONS:
+            assert background_requires_approval("member_manage", arguments), arguments
+            assert rig.service._gate.tier("member_manage", arguments) == Tier.T3
+            with pytest.raises(RpcError):  # without the owner's yes for this very action
+                team.members.authorize_management(health.id, "member_manage", arguments, interactive=False)
+        for name in ("member_update", "member_create"):
+            assert background_requires_approval(name, {"id": 1, "name": "x"})
+    # Outside a run nothing is asked on account of the run.
+    assert not background_requires_approval("member_manage", WRITE_ACTIONS[0])

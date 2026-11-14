@@ -14,7 +14,6 @@ import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
-import { openActions } from "../member-column";
 import "../member-panel.css";
 import "../settings-polish.css";
 import "../connections.css";
@@ -888,15 +887,6 @@ export function createSettings(app: AppContext): SettingsPage {
     render();
   }
 
-  async function removeComputerApp(exe: string): Promise<void> {
-    try {
-      await app.removeComputerApp(exe);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    render();
-  }
-
   async function submitKey(text: string): Promise<void> {
     const key = text.trim();
     if (!key || keyBusy) return;
@@ -1142,15 +1132,6 @@ export function createSettings(app: AppContext): SettingsPage {
       case "or-check":
         void checkOpenrouter();
         break;
-      case "computer-menu": {
-        // one app at a time, taken off under the app's own lock: a list computed from the
-        // settings the window has would put back an app another quick removal takes away
-        const exe = target.closest<HTMLElement>("[data-exe]")?.dataset.exe;
-        if (exe !== undefined) {
-          openActions(target.closest<HTMLElement>('[data-act]')!, [{ id: "delete", label: t("settings.computerRemove"), icon: "trash" }], () => void removeComputerApp(exe));
-        }
-        break;
-      }
       case "help":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1164,6 +1145,8 @@ export function createSettings(app: AppContext): SettingsPage {
   // `change` comes when a field loses focus or Enter is pressed: no save button needed. The key is
   // the exception: it is sent by Enter or 貼上 only, never by leaving the field (keyfield.ts), so
   // that 取消 after typing a replacement does not store it.
+  // 關於我 folds back to its first lines when it is left (owner-settings.css).
+  el.addEventListener("focusout", (e) => { if (e.target instanceof HTMLTextAreaElement && e.target.dataset.owner === "owner_about") e.target.scrollTop = 0; });
   el.addEventListener("change", (e) => {
     void ownerControls.change(e.target as Element);
     void providers.change(e.target as Element);

@@ -1,24 +1,15 @@
 // The account menu (R-SIDE-02, owner 2026-11-12, after Grok Bot's): the owner's face at the foot of the sidebar opens it above
 // the face, left edges together; on the rail it opens to the right of the face. 用量 opens, on a chevron alone, what the app knows of each
 // provider the owner uses: a submenu at its right edge, one block for each (Claude, Codex, Antigravity, the ChatGPT sign-in, OpenRouter:
-// its tightest window and number and when it resets, or what is truthfully known instead) and 管理用量. The row itself carries no number:
+// its tightest window and number, or what is truthfully known instead; no reset time, owner 2026-11-14) and 管理用量. The row itself carries no number:
 // one provider's figure under the bare word would read as everyone's. 聽寫, 行事曆 (the calendar, on today in a fresh session, R-CAL-04)
 // and, after a hairline, 設定 follow. What each reading means is decided in usage-blocks.ts, which Settings' usage cards use as well.
 
-import { getLocale, t } from "./i18n";
+import { t } from "./i18n";
 import type { AppContext, ChatGptStatus, Status } from "./types";
 import { closeMenu, esc, ico, openPopover, placeMenu } from "./ui";
 import type { CliAllowances } from "./usage-analytics-types";
 import { usageBlocks, type UsageBlock } from "./usage-blocks";
-
-const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
-
-/** `in 6 days`, `in 5 hours`, `in 20 minutes`: the nearest whole unit, in the window's language. */
-export function resetsIn(resetsAt: number, now = Date.now()): string {
-  const left = Math.max(0, resetsAt * 1000 - now);
-  const [value, unit] = left >= 36 * HOUR ? [Math.round(left / DAY), "day"] as const : left >= 90 * MINUTE ? [Math.round(left / HOUR), "hour"] as const : [Math.max(1, Math.round(left / MINUTE)), "minute"] as const;
-  return t("account.resets", { p0: new Intl.RelativeTimeFormat(getLocale(), { numeric: "always", style: "long" }).format(value, unit) });
-}
 
 /** The rows of the menu. With a provider known 用量 has a chevron and a submenu; with none it opens the settings itself. */
 export function accountMenuHTML(blocks: UsageBlock[]): string {
@@ -31,10 +22,11 @@ export function accountMenuHTML(blocks: UsageBlock[]): string {
     `<div class="menu-sep" role="separator"></div>` + row("settings", "gear", t("nav.settings"));
 }
 
-/** The submenu of 用量: each provider's block (name, words at the right, and when it resets), then the way to the settings' usage. */
-export function usageSubmenuHTML(blocks: UsageBlock[], now = Date.now()): string {
+/** The submenu of 用量: each provider's block (name, words at the right, and OpenRouter's balance under them), then the way to the
+ *  settings' usage. No reset time: the owner (2026-11-14) wants none in this small box; Settings' usage cards keep it. */
+export function usageSubmenuHTML(blocks: UsageBlock[]): string {
   return blocks.map(block => `<div class="account-window" data-menu-row data-provider="${esc(block.id)}" data-state="${block.state}"><span class="account-window-name">${esc(block.name)}</span><span class="account-window-used num">${esc(block.value)}</span>` +
-    (block.resetsAt ? `<span class="account-window-reset">${esc(resetsIn(block.resetsAt, now))}</span>` : block.detail ? `<span class="account-window-reset">${esc(block.detail)}</span>` : "") + `</div>`).join("") +
+    (block.detail ? `<span class="account-window-reset">${esc(block.detail)}</span>` : "") + `</div>`).join("") +
     `<div class="menu-sep" role="separator"></div>` +
     `<button type="button" role="menuitem" tabindex="-1" data-account="manage"><span class="mt">${esc(t("brains.manageUsage"))}</span></button>`;
 }

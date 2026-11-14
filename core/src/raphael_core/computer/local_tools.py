@@ -81,7 +81,7 @@ def ask_context(ask, results=()):
     # The last cell: only a quick question reaches the owner's own PC (R-PC-01); every other turn is refused in `call`.
     return (("chat", ask.speaker.id, ask.conversation_id), external,
             qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id,
-            reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested))
+            reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested, own_computer=ask.own_computer))
 
 
 def run_context(run):

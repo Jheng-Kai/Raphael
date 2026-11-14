@@ -680,6 +680,15 @@ export function messageActionsHTML(_time: number, regenerate = false, owner?: "e
     (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""}${queued ? ' data-queued="true"' : ""} aria-haspopup="menu"`) : "") + `</div>`;
 }
 
+/**
+ * The actions beside a bubble take their share of the message's width, so a bubble is as wide as that share allows. While the message is
+ * edited they are not there to press, but their room is held (hidden, inert), so opening the editor changes neither the bubble's width nor
+ * the size of a picture above it.
+ */
+function heldActionsHTML(time: number): string {
+  return messageActionsHTML(time).replace('class="message-actions"', 'class="message-actions is-held" inert aria-hidden="true"');
+}
+
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true, latestFailure = false): string {
   if (reply) text = plainReplies([text])[0];
   text = composioText(text, composioAction(turn));
@@ -1148,7 +1157,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
     (asked && state.editing?.turnId === turn.id
-      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question">${ownerEditorHTML(state.editing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote) : "")}</div></div>`
+      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question" data-msg-editor>${ownerEditorHTML(state.editing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote, true) : "")}${heldActionsHTML(turn.created_at_ms)}</div></div>`
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +

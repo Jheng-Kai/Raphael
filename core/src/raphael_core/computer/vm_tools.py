@@ -93,6 +93,16 @@ def _waking(member, tool):
         _WAKE.reset(token)
 
 
+# The states a computer passes through on its way up, which a member's first call waits out instead of reporting
+# (owner, 2026-11-14: the first action after a wake failed nine times with these, and "try again" made it work with
+# nothing changed): the engine not answering yet, the container not started or not healthy yet. What is not here is a
+# real answer and is reported at once: Docker not installed (`absent`), Docker Desktop that could not be launched
+# (`docker_start_failed`) or that did not come up in its two minutes (`docker_start_timeout`), no image, an image that
+# does not fit, no room, the owner holding control, a computer the member no longer has.
+TRANSIENT_START = ("docker_stopped", "unavailable", "start_failed", "health_timeout")
+# The one failure of setting a connection up that is only the driver not being ready yet.
+TRANSIENT_CONNECT = ("driver_configuration_failed",)
+
 # What the model is told when Docker Desktop cannot be had, so it never meets a bare kind with nothing to do next.
 DISK_FILES_EN = ("The disk the computer's files are kept on ({p0}) is {p1}% full, with {p2} free. The computer's own folders "
                  "hold only {p3} of it, so cleaning them up would not help. Free some space on {p0} itself.")
@@ -237,6 +247,14 @@ class VmTools:
     browser_open_s = 300.0
     # How long a window that was moved onto its screen is waited for before it is called outside it.
     window_fit_wait_s = 10.0
+    # A first call after a wake waits for the computer to be ready, and when it finds the computer still on its way up
+    # (`TRANSIENT_START`, `TRANSIENT_CONNECT`) it looks again: this many tries in all, after a growing pause, and never
+    # past this many seconds since the first. A real failure is not tried again.
+    start_attempts = 3
+    start_retry_s = 3.0
+    start_budget_s = 150.0
+    connect_attempts = 3
+    connect_retry_s = 2.0
 
     def __init__(self, delegate, vm, *, attachments, conn=None, bridge=CuaBridge):
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
@@ -882,8 +900,7 @@ class VmTools:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
                 # Only a member's own call that needs its computer may start Docker Desktop; a read or a viewer never does (R-PANEL-04).
-                with engine_start_allowed(), _waking(member, tool.name):
-                    await self.vm.start(target)
+                await self._started(target, member, tool.name)
                 await self._disk_notice(target)
                 if target != self.vm.target(member):
                     return PluginResult(False, "computer_changed")
@@ -924,7 +941,7 @@ class VmTools:
                         result = PluginResult(False, "bad_arguments", "The driver requires different arguments. Read the refreshed computer tool schema before retrying.")
                         return result
                     try:
-                        client, session = await self._connection(target, member=member)
+                        client, session = await self._configured(target, member)
                     except (ConnectionError, VmError, OSError) as error:
                         if isinstance(error, VmError) and str(error) not in ("unavailable", "driver_configuration_failed"):
                             raise
@@ -933,9 +950,14 @@ class VmTools:
                         await self._disconnect(target.key)
                         if target != self.vm.target(member):
                             return PluginResult(False, "computer_changed")
-                        await repair_connection(self.vm, target)
+
+                        async def repair():
+                            # A member's own call that needs its computer may bring Docker Desktop back, as its start may.
+                            with engine_start_allowed():
+                                await repair_connection(self.vm, target)
+                        await self._settling(target, member, TRANSIENT_START, self.start_attempts, self.start_retry_s, repair)
                         # No owner action has been sent. Re-enter the same target and hold checks.
-                        client, session = await self._connection(target, member=member)
+                        client, session = await self._configured(target, member)
                     self._refresh(target)
                     await asyncio.sleep(0)
                     if target != self.vm.target(member):
@@ -1055,6 +1077,39 @@ class VmTools:
                 for identifier in self.logins.values:
                     result.kind = self.logins.redact(identifier, result.kind)
             self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
+
+    # --- waking and connecting ----------------------------------------------------------------------
+
+    async def _settling(self, target, member, kinds, attempts, delay, work):
+        """`work()`, again after a pause (`delay`, then twice that) while it fails with one of `kinds`: a computer still on
+        its way up. At most `attempts` tries and `start_budget_s` seconds since the first; any other failure, the last of
+        these, and the member no longer having this computer end it with the failure as it was."""
+        began = time.monotonic()
+        for attempt in range(1, attempts + 1):
+            try:
+                return await work()
+            except VmError as error:
+                if (str(error) not in kinds or attempt == attempts or time.monotonic() - began >= self.start_budget_s
+                        or target != self.vm.target(member)):
+                    raise
+                logger.info("The computer is not ready yet (%s): looking again, %d of %d", error, attempt + 1, attempts)
+                self.vm.invalidate(target)
+                await asyncio.sleep(delay * attempt)
+
+    async def _started(self, target, member, tool):
+        """The computer up and healthy for a member's call: its start, waited for, with what is only a start in progress
+        tried again (`TRANSIENT_START`). Only a member's own call that needs its computer may start Docker Desktop; a
+        read or a viewer never does (R-PANEL-04)."""
+        async def start():
+            with engine_start_allowed(), _waking(member, tool):
+                return await self.vm.start(target)
+        return await self._settling(target, member, TRANSIENT_START, self.start_attempts, self.start_retry_s, start)
+
+    async def _configured(self, target, member):
+        """The driver connection of a computer that has just come up: the driver may answer its first set-up calls with a
+        refusal until it has finished starting, so that is waited out (`TRANSIENT_CONNECT`) before it is called a failure."""
+        return await self._settling(target, member, TRANSIENT_CONNECT, self.connect_attempts, self.connect_retry_s,
+                                    lambda: self._connection(target, member=member))
 
     # --- the driver connection -------------------------------------------------------------------
 

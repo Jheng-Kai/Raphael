@@ -40,6 +40,7 @@ Nothing here logs an entry.
 """
 
 from raphael_core.ui_words import ui_word, with_ui_words
+import difflib
 import hashlib
 import logging
 import re
@@ -103,6 +104,41 @@ def owner_stated(content: str, owner_text: str) -> bool:
 
     note = clause(_TOLD.sub("", without_mark(content)))
     return bool(note and owner_text and any(note == clause(part) for part in re.split(r"[.!?;。！？；\n]+", owner_text)))
+
+
+def owner_replaced(old_text: str, content: str, owner_text: str) -> bool:
+    """Whether the owner's own words in this private turn say the change a `replace` makes.
+
+    A correction like 仁愛路 -> 信愛路 is said as the new street, never as the whole entry, so
+    `owner_stated` cannot see it. Here every span the replace writes (and every span it takes out) has
+    to stand in the owner's words together with at least one neighbouring character of the entry (a span replaced by
+    another needs only the new one), and up to two
+    neighbouring characters for context. Words the owner
+    never said, such as an instruction from a web page, never pass, so a model cannot rewrite a
+    confirmed entry from outside content."""
+    said = " ".join(owner_text.casefold().split())
+    if not said or not old_text.strip() or not content.strip():
+        return False
+    old_text, content = old_text.casefold(), content.casefold()
+
+    def stood(span: str, before: str, after: str) -> bool:
+        if not span.strip():
+            return True
+        return any(len((variant := before[len(before) - k:] + span if side == "before" else span + after[:k]).strip()) >= 2
+                   and variant in said for k in (1, 2) for side in ("before", "after"))
+
+    matcher = difflib.SequenceMatcher(None, old_text, content, autojunk=False)
+    changed = False
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        changed = True
+        if j2 > j1 and not stood(content[j1:j2], content[:j1], content[j2:]):
+            return False
+        # What is taken out without a word in its place has to be something the owner named.
+        if j2 == j1 and not stood(old_text[i1:i2], old_text[:i1], old_text[i2:]):
+            return False
+    return changed
 
 
 def told_stamp(name: str, day: str) -> str:
@@ -424,8 +460,9 @@ class MemoryFile:
                 index, ambiguous = _find_unique_match(working, old_text)
                 patched = working[index].replace(old_text, content, 1) if index is not None and not ambiguous else ""
                 confirmed = action == "replace" and owner_stated(patched, owner_text)
+                owner_edit = action == "replace" and not confirmed and bool(patched) and owner_replaced(working[index], patched, owner_text)
                 self._edit(working, action, old_text, content, where, mark="" if confirmed else mark,
-                           told=told, alone=len(ops) == 1, confirmed=confirmed)
+                           told=told, alone=len(ops) == 1, confirmed=confirmed, owner_edit=owner_edit)
             else:
                 raise Refused("bad_arguments", f"{where}: unknown action. Use add, replace or remove.")
         return working
@@ -454,7 +491,8 @@ class MemoryFile:
                     f"same, there is nothing to do.\nThe entry: {entry}"))
         working.append(fresh)
 
-    def _edit(self, working: list[str], action: str, old_text: str, content: str, where: str, *, mark: str, told: str, alone: bool, confirmed: bool = False) -> None:
+    def _edit(self, working: list[str], action: str, old_text: str, content: str, where: str, *, mark: str, told: str, alone: bool,
+              confirmed: bool = False, owner_edit: bool = False) -> None:
         if not old_text.strip():
             raise Refused("missing_old_text", (
                 f"{where}: old_text is required: a short unique part of the entry. Retry with old_text set "
@@ -468,11 +506,13 @@ class MemoryFile:
                 f"{where}: no entry matched '{old_text}'. Retry with old_text copied verbatim from the entry "
                 "you mean; old_text comes from ONE entry." + _listed("current_entries" if alone else "closest_entries", near)))
         entry = working[index]
-        if mark and not is_unconfirmed(entry):
+        # The owner's own correction in this private turn is not outside content, whatever else the turn read.
+        if mark and not is_unconfirmed(entry) and not owner_edit:
             raise Refused("unconfirmed_only", (
                 f"{where}: this turn read outside content, so it may add entries and edit the ones marked as "
-                "unconfirmed, and never changes what the owner has confirmed. Nothing was changed; add it as a "
-                "new entry if it is worth keeping, and the owner can confirm it."))
+                "unconfirmed, and never changes what the owner has confirmed, unless the owner's own message in this "
+                "private conversation says the change (then retry with old_text and content as the owner put it). Nothing "
+                "was changed; add it as a new entry if it is worth keeping, and the owner can confirm it."))
         if action == "remove":
             del working[index]
             return
@@ -494,7 +534,7 @@ class MemoryFile:
             raise Refused("no_change", f"{where}: this leaves the entry as it is.")
         if refused := _refusal(patched):
             raise Refused(refused[0], f"{where}: {refused[1]}")
-        if mark and not is_unconfirmed(patched):
+        if mark and not owner_edit and not is_unconfirmed(patched):
             patched = mark + patched
         if told:
             patched = _TOLD.sub("", patched) + told

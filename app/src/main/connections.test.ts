@@ -698,12 +698,13 @@ describe("a connected row and the back chevron", () => {
     expect(groupPage("ab12")).toBe(appPage("notion"));
   });
 
-  test("the words 「✓ 已連結」 of a connected row in the one view open the app's page too: the whole row is pressable, 連結 alone does something else", () => {
+  test("a connected row's 「✓ 已連結」 is part of the row's one button that opens the app's page, and 連結 alone does something else", () => {
     const card = cardOf("notion");
     const state = card.querySelector(".cs-state")!;
-    expect(state.closest("[data-conn]")).toBeNull(); // no control of its own: the row's handler takes the press
-    expect(state.closest(".cs-card")).toBe(card);
-    expect(rule(".cs-card .cs-state:hover")).toMatch(/color:/);
+    expect(state.closest("[data-conn]")!.getAttribute("data-conn")).toBe("open-store");
+    expect(state.closest(".btn.cs-main")).toBe(card.querySelector(".cs-main"));
+    expect(card.querySelectorAll("button")).toHaveLength(1);
+    expect(rule(".cs-card .btn.cs-main:hover > .cs-state")).toMatch(/color:/);
     // an app that is not connected: 連結 still joins, and the rest of its row opens the page
     const linear = cardOf("linear");
     expect(linear.querySelector(".cs-connect")!.closest("[data-conn]")!.getAttribute("data-conn")).toBe("join");

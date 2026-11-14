@@ -164,7 +164,7 @@ def test_the_local_tools_door_asks_the_services_question():
 
     def asked(source, quick=True, nested=False):
         return SimpleNamespace(memory_untrusted=False, attachments=(), nested=nested, steps=(), speaker=SimpleNamespace(id=0),
-                               conversation_id=1, source=source, quick=quick, scope="private", session_id="s")
+                               conversation_id=1, source=source, quick=quick, scope="private", session_id="s", own_computer=False)
     assert set(AT_THIS_COMPUTER) == set(_AT_THIS_COMPUTER)
     assert all(ask_context(asked(source))[4] for source in ("voice", "overlay", "app"))
     assert not any(ask_context(request)[4] for request in (asked("telegram"), asked("connector"), asked("discord"),
