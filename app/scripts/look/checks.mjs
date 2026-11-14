@@ -6433,12 +6433,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, column: Math.round(column), aside };
   }
   if (name === "page-base") {
-    // An HTML page that writes no style of its own, opened in the conversation's place: its frame is the composer's column (the frame's own
-    // measures are `checkFrame`).
-    const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe");
-    require(stage.classList.contains("is-page") && frame && visible(frame), "the page is open in the conversation's place");
-    const composer = stage.querySelector(".ra-dock .composer").getBoundingClientRect(), box = frame.getBoundingClientRect();
-    require(Math.abs(box.left - composer.left) <= 2 && Math.abs(box.right - composer.right) <= 2 && box.height > 300, `as wide as the composer: ${Math.round(box.width)} and ${Math.round(composer.width)}`);
+    // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-08 its frame is as wide as the area
+    // allows up to `--pgv-w`, in the middle (the frame's own measures are `checkFrame`).
+    const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe"), area = stage.querySelector(".pgv-page");
+    require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
+    const areaBox = area.getBoundingClientRect(), box = frame.getBoundingClientRect(), gutter = parseFloat(getComputedStyle(area).paddingLeft) || 0;
+    const cap = 40 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6"));
+    require(Math.abs(box.width - Math.min(cap, areaBox.width - 2 * gutter)) <= 2 && Math.abs((box.left + box.right) / 2 - (areaBox.left + areaBox.right) / 2) <= 2 && box.height > 300, `as wide as the area allows up to ${cap}, in the middle: ${Math.round(box.width)} in ${Math.round(areaBox.width)}`);
     return { check: name, width: Math.round(box.width) };
   }
   if (name.startsWith("page-dashboard")) {
@@ -9524,7 +9525,7 @@ export function checkFrame(name) {
     const on = style(".chips .on"), other = style(".chips button:not(.on)");
     require(style(".chips").display === "flex" && on.fontWeight === "600" && on.borderBottomColor === words.fg && other.color === words.muted && other.backgroundColor === "rgba(0, 0, 0, 0)", "tabs: the chosen word bold and underlined, the others quiet and flat");
     const cards = style(".cards"), tracks = cards.gridTemplateColumns.split(" ").length, room = document.querySelector(".cards").getBoundingClientRect().width;
-    require(cards.display === "grid" && tracks === Math.max(1, Math.min(3, Math.floor((room + 16) / 256))) && style(".cards > div").backgroundColor === words.surface, `cards in a grid that fills the width: ${tracks} columns in ${Math.round(room)} px`);
+    require(cards.display === "grid" && tracks === Math.max(1, Math.floor((room + 16) / 256)) && style(".cards > div").backgroundColor === words.surface, `cards in a grid that fills the width: ${tracks} columns in ${Math.round(room)} px`);
     require(style(".kpis b").fontSize === "28px" && style(".kpis").display === "grid", "figures in tiles of large numbers");
     require(style("blockquote").borderInlineStartWidth === "3px" && style("code").backgroundColor === words.surface, "a quote with its rule, code on the surface");
     return { check: name, dark, width: innerWidth, table: table.display, tracks };
