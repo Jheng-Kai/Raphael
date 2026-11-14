@@ -372,14 +372,12 @@ async def test_the_lines_of_the_run_are_in_the_owners_language(make_run, shell):
     assert "《告。操作中：「七」をクリック》" in [line for _, line in shell.states]
 
 
-def test_the_prompt_asks_for_the_owners_language():
+def test_the_prompt_asks_for_the_owners_language_and_names_no_interface_language():
+    # Owner, 2026-11-14: the interface language goes to no model. The run's prompt takes no language at all.
     from raphael_core.agent.persona import REPLY_LANGUAGE
-    from raphael_core.ui_languages import LANGUAGES
-    for language in LANGUAGES:
-        prompt = run_module.system_prompt(language)
-        assert REPLY_LANGUAGE in prompt
-        assert f"Interface locale: {language} " in prompt
-        assert "This selects fixed UI labels only." in prompt
+    prompt = run_module.system_prompt()
+    assert REPLY_LANGUAGE in prompt
+    assert "Interface locale" not in prompt and "interface language:" not in prompt.casefold()
 
 
 async def test_nothing_of_the_screen_is_logged(make_run, shell, caplog):

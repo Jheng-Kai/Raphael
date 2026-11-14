@@ -95,6 +95,7 @@ from typing import Any
 from ..agent.answers import Reply, owner_script, parse_reply, pending_replies
 from ..brain.textnorm import authored_chinese
 from ..languages import chinese_variant
+from ..conversation_language import chat_language, detect_language
 from ..agent.failure import KINDS, AgentFailure, turn_failure
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS, ToolGate
 from ..memory.conversation import turn_text
@@ -337,8 +338,17 @@ def _interrupted_report(language: str, steps: int) -> tuple[str, str]:
     return PREFIXES[language].notice, phrase(language, "worker_interrupted", steps=str(steps))
 
 
+# What a task is told of the language to write in, with the task (R-CACHE-02), naming no language: the owner's own words
+# say which. It took the place of the interface language the task was told before (owner, 2026-11-14: 「它的 UI 語言就是
+# 單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」).
+TASK_LANGUAGE = ("Language: unless the owner or your own persona asks for another, write every message and the report "
+                 "in the language the owner writes in, as their own messages here show it; when there are none, in the "
+                 "language of this task's text.")
+# Where the owner's own words come from (a typed or spoken request, a messaging chat).
+_OWNER_WORDS = frozenset({"app", "voice", "overlay", "telegram", "slack", "discord"})
+
+
 def _prompts(
-    language: str,
     text: str,
     moment: dict[str, str],
     context: Sequence[Turn],
@@ -355,11 +365,10 @@ def _prompts(
     persona, with its own file and its own conversation."""
     if speaker.is_raphael:
         system = worker_system_prompt(
-            language, model_calls=limits.model_calls, tool_calls=limits.tool_calls, speaker=speaker, cli=cli
+            model_calls=limits.model_calls, tool_calls=limits.tool_calls, speaker=speaker, cli=cli
         )
     else:
         system = member_worker_system_prompt(
-            language,
             name=speaker.name,
             role=speaker.role,
             instructions=speaker.instructions,
@@ -406,7 +415,7 @@ def _prompts(
             "one only if the task clearly needs a second.\n"
             f"{calls}\n</previous_attempt>"
         )
-    parts.append(language_reminder(language, narrated=not speaker.is_raphael, member=not speaker.is_raphael))
+    parts.append(language_reminder())
     # A CLI task's loop gives the progress rules itself (agent/cli/loop.py): twice cost every call 1.7 KB.
     return system + ("" if cli else PUBLIC_PROGRESS_RULES), "\n\n".join(parts)
 
@@ -1119,13 +1128,23 @@ class BackgroundService:
         room speaker does to start tool work) rather than a colleague's request."""
         return task.from_member_id is None or task.from_member_id == task.member_id
 
+    @staticmethod
+    def _chat_language(task, origin, context) -> str:
+        """The language the owner writes in for this task, read from the owner's own words (the request it came from,
+        else their latest message in the conversation), else from the task's text: never the interface language, which
+        goes to no model (owner, 2026-11-14). It picks the per-language pieces a model is given (Raphael's name)."""
+        asked = origin.question if origin is not None and origin.source in _OWNER_WORDS else ""
+        latest = next((turn.question for turn in reversed(context or ())
+                       if turn.source in _OWNER_WORDS and detect_language(turn.question)), "")
+        return chat_language(asked, latest, task.text)
+
     def _work_brief(self, task):
         """Who the work is from and who reads what (owner, 2026-11-09): the work and the owner-facing result
         stay in the member's own conversation; only the <handback> block goes back, written to the colleague
         who asked, or for its own background work to the place it came from, never to the owner."""
         owner = neutralize(self._settings.get("owner_name") or "") or "the owner"
-        common = ('First send a useful short acknowledgment addressed to the owner as an explicit public message; use '
-                  'your own persona and the owner language. Do the work here, in your own private conversation, with its '
+        common = ('First send a useful short acknowledgment addressed to the owner as an explicit public message, in '
+                  'your own voice and the language the owner writes in. Do the work here, in your own private conversation, with its '
                   'actions, cards, attachments and full result; this is where you speak to the owner. Start the final result '
                   'with a short report of what you actually accomplished. ')
         if self._own_work(task):
@@ -1746,7 +1765,6 @@ class BackgroundService:
             expand(speaker.id, task.text) if expand is not None else task.text, False)
         run._memory_untrusted = run._memory_untrusted or skill_loaded
         system, user = _prompts(
-            language,
             request,
             self._tools.local_time().data or {},
             context,
@@ -1758,8 +1776,7 @@ class BackgroundService:
             cli=room_cli,
             paths=self._stored_paths(files),
         )
-        from ..agent.owner_language import reply_context
-        user += "\n" + reply_context(language)
+        user += "\n" + TASK_LANGUAGE
         from ..agent.card_context import source_text
         user += "\n" + source_text(origin.source if origin else "")
         if task.routine_id is not None:
@@ -1771,7 +1788,7 @@ class BackgroundService:
         # The team as it is now goes with the task, not among the rules: a meeting's state changes from one
         # reply to the next, and in the system prompt each change had the provider read the member's whole
         # prefix again at full price, where its replies would otherwise share it (owner, 2026-11-09).
-        user += roster_prompt(self._team, speaker, language)
+        user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
         system += owner_context(self._settings)
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
                    'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')

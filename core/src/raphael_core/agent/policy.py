@@ -42,6 +42,10 @@ CONFIRM_TIMEOUT_S = 30.0
 # A question that has no timer: it ends when it is answered, cancelled or replaced, never by the clock.
 NO_TIMER_S = float("inf")
 CONFIRM_TIMEOUT_MS = round(CONFIRM_TIMEOUT_S * 1000)
+# What a model is told when nobody answered a question in time. It is the model's, not the window's: the same words
+# whatever the interface language, which goes to no model (owner, 2026-11-14). The owner's own notice of it is the
+# fixed phrase `expired` in the interface language.
+EXPIRED_NOTE = "Nobody answered the owner's approval in time. The action was not done and nothing was executed."
 # How long a question waits when nobody sits at the keyboard to answer it: the background worker's
 # questions and the questions of a run that carries on after the owner gave the computer back. After
 # this a yes finds nothing, and nothing the question was about has been done (R-PC-02, R-AG-MGMT-04).

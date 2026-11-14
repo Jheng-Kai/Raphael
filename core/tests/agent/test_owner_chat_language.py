@@ -1,4 +1,5 @@
-"""Configured owner language is stable across unrelated and external turns."""
+"""An external or unattended turn is told no language: the owner's words say which (owner, 2026-11-14: 「它的 UI 語言就是
+單純 UI 語言而已，它也不會去到 system prompt」). The interface language stays for the app's own notices."""
 
 import pytest
 
@@ -10,27 +11,29 @@ from .test_service import make_rig  # noqa: F401
 
 @pytest.mark.parametrize("source", ["telegram", "slack", "discord", "connector"])
 @pytest.mark.parametrize("language", ["en", "ja"])
-async def test_unconfigured_external_turn_uses_its_own_language(make_rig, client, source, language):
-    rig = make_rig(owner_language=lambda: None)
+async def test_an_external_turn_is_told_no_interface_language(make_rig, client, source, language):
+    rig = make_rig(owner_language=lambda: language)
     rig.service._last_language = "zh-TW"
     def reply(**kwargs):
-        assert f"Owner's configured reply language: {language}" in str(kwargs["messages"])
+        prompt = str(kwargs["messages"])
+        assert "configured reply language" not in prompt and "Interface locale" not in prompt
+        assert "這是什麼意思" in prompt
         return chat("Done.")
     client.chats = [reply]
-    result = await rig.call("agent.ask", {"session_id": "unconfigured", "text": "Check",
+    result = await rig.call("agent.ask", {"session_id": "unconfigured", "text": "這是什麼意思",
         "ui_language": language, "source": source})
     assert result["status"] == "done"
 
 
 @pytest.mark.parametrize("source", ["telegram", "slack", "discord", "connector"])
-async def test_external_turn_uses_owner_language_after_an_english_turn(make_rig, client, source):
+async def test_the_interface_language_stays_the_windows_after_an_english_turn(make_rig, client, source):
     rig = make_rig(owner_language=lambda: "zh-TW")
     client.chats = [chat("English answer.")]
     await rig.call("agent.ask", {"session_id": "english", "text": "Answer in English", "ui_language": "en", "source": "app"})
-    assert rig.service.language == "zh-TW"
+    assert rig.service.language == "zh-TW"  # the app's notices of an external chat
     def reply(**kwargs):
         prompt = str(kwargs["messages"])
-        assert "Owner's configured reply language: zh-TW" in prompt
+        assert "configured reply language" not in prompt and "zh-TW" not in prompt
         return chat("Owner language answer.")
     client.chats = [reply]
     result = await rig.call("agent.ask", {"session_id": "external", "text": "Continue", "ui_language": "en", "source": source})

@@ -12,8 +12,8 @@ def test_rich_reply_doctrine_is_shared_and_retains_command_permissions(language)
     assert "tool permission flow" in DOCTRINE
     assert "external messaging remain plain text" in DOCTRINE
     for prompt in (
-        system_prompt(language, "answer"),
-        member_system_prompt(language, "answer", name="Peer", role="Research", instructions=""),
-        cli_system_prompt(language),
+        system_prompt("answer"),
+        member_system_prompt("answer", name="Peer", role="Research", instructions=""),
+        cli_system_prompt(),
     ):
         assert DOCTRINE in prompt

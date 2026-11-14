@@ -230,10 +230,11 @@ async def test_images_go_to_the_vision_model_together_and_a_pdf_is_read(services
     assert ("agent", "openai/gpt-6-luna", 0.003) in rig.spent()  # the vision call is paid for
 
 
-@pytest.mark.parametrize(
-    ("language", "question"), [("zh-TW", "看這個"), ("en", "Look at this"), ("ja", "これを見て")]
-)
-async def test_files_with_no_words_ask_to_look_at_them(services_rig, client, language, question):
+@pytest.mark.parametrize("language", ["zh-TW", "en", "ja"])
+async def test_files_with_no_words_ask_to_look_at_them(services_rig, client, language):
+    # The words stand for the owner's, so they are in the conversation's language, never the interface's (owner,
+    # 2026-11-14): with no word of the owner's yet and no language in Raphael's profile, English on every interface.
+    question = "Look at this"
     rig = services_rig
     client.decisions.append(decision("unclear"))
     client.texts.append(found("A receipt."))

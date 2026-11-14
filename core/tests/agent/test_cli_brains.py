@@ -24,7 +24,7 @@ def test_codex_reads_a_skill_list_as_a_toml_sequence_of_tables():
 def test_a_cli_brain_edits_the_memory_by_the_fields_an_api_brain_is_given():
     from raphael_core.agent.answers import reply_schema
     from raphael_core.memory.growth import DEFINITIONS
-    item = reply_schema("en", memory=True, plain=True)["properties"]["memory"]["items"]["properties"]
+    item = reply_schema(memory=True, plain=True)["properties"]["memory"]["items"]["properties"]
     tool = DEFINITIONS["memory_update"]["parameters"]["properties"]
     assert tool["target"]["enum"] == item["target"]["enum"]
     assert tool["operations"]["items"]["properties"]["action"]["enum"] == item["action"]["enum"]

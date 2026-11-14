@@ -137,8 +137,10 @@ async def test_the_question_about_a_reaction_is_in_the_owners_language_whatever_
     await react(rig, turn_id, '👎', who=one.id)
     await until(lambda: len(client.chat_calls) == calls + 1)
     system = client.chat_calls[-1]['messages'][0]['content']
-    # The window's language is told by name, and what the member's persona says of Japanese is read before it.
-    assert f'in {named}' in system and "the owner's language, whatever language you teach or the conversation holds" in system
+    # The language the owner writes in, never the window's (the interface language reaches no model), and what the member's
+    # persona says of Japanese is read before it.
+    assert named not in system
+    assert "the language the owner writes to you in" in system and "whatever language you teach or your persona uses" in system
     assert system.index('日本語を教える') < system.index('whatever language you teach')
     # The rule that lets a persona choose its language is not part of this prompt; it would hand the question back to Japanese.
     from raphael_core.agent.persona import REPLY_LANGUAGE

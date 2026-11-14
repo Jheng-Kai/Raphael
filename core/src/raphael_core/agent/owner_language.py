@@ -1,4 +1,8 @@
-"""Read the shell's configured language without borrowing another turn's language."""
+"""The interface language the owner chose in the window, for the words the app draws and for nothing a model reads.
+
+The owner, 2026-11-14: 「系統的 UI 語言並不會影響到使用者內部聊天的語言…它也不會去到 system prompt，什麼事都不會發生」.
+`configured_language` picks the fixed notices of unattended and external conversations (a Telegram chat, a routine, a
+resumed request); the language of a reply comes from the owner's own words (`conversation_language`)."""
 
 import json
 from pathlib import Path
@@ -13,9 +17,3 @@ def configured_language(data_dir: Path) -> str | None:
     except (OSError, ValueError):
         value = None
     return normalize_language(value) if isinstance(value, str) and value in LANGUAGES else None
-
-
-def reply_context(language: str) -> str:
-    return (f"Owner's configured reply language: {normalize_language(language)}. "
-            "Use it for this reply and report unless the owner's explicit request or your own persona specifies "
-            "another language. Earlier turns, colleague messages and tool output do not change this default.")

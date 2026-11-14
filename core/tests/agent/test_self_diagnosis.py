@@ -310,7 +310,7 @@ def test_reference_names_and_prompt_doctrine_follow_real_code():
     for pane in PANES:
         assert f'"{pane}"' in types
     assert set(SAFE_SETTINGS) <= DEFAULTS.keys()
-    for prompt in (system_prompt("en", "answer"), member_system_prompt("en", "answer", name="Peer", role="Help", instructions=""), cli_system_prompt("en")):
+    for prompt in (system_prompt("answer"), member_system_prompt("answer", name="Peer", role="Help", instructions=""), cli_system_prompt()):
         assert DOCTRINE in prompt and ABOUT_INDEX in prompt
 
 

@@ -1,4 +1,7 @@
-"""Canonical interface locales and English fallback for unknown locale codes."""
+"""Canonical interface locales and English fallback for unknown locale codes.
+
+The interface language picks the words the app draws and goes to no model (owner, 2026-11-14); the language a
+conversation is in is read from its own words (`conversation_language`)."""
 
 LANGUAGE_NAMES = {
     "zh-TW": "Traditional Chinese as written in Taiwan (never Simplified characters)",
@@ -25,9 +28,3 @@ def fixed_language(value: str) -> str:
     """Preserve supported locales and use English only for an unknown locale."""
     return normalize_language(value)
 
-
-def interface_context(language: str) -> str:
-    """Pass locale metadata to brains without overriding the owner's speaking language."""
-    language = normalize_language(language)
-    name = LANGUAGE_NAMES[language].split(" as written")[0]
-    return f"Interface locale: {language} ({name}). This selects fixed UI labels only. "

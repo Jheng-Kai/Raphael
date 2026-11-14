@@ -65,6 +65,7 @@ from ..brain.secrets import KeyStore
 from ..brain.settings import SettingsStore, api_model
 from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
+from ..conversation_language import chat_language
 from ..protocol import invalid_params
 from ..router import Router as RpcRouter
 from . import legacy
@@ -177,8 +178,6 @@ class MemoryService(Growth):
         self._base_client = client
         self._cli_brains = None
         self._now = now
-        # The language of the owner's screen, for what the host writes into a file: the app sets it.
-        self.language: Callable[[], str] = lambda: "zh-TW"
         from ..bots.homes import BotHomes
         self.homes = BotHomes(root.parent)
         self.homes.migrate(root)
@@ -315,15 +314,23 @@ class MemoryService(Growth):
             row = None
         return "the assistant" if row is None else str(row[0])
 
-    def _told_name(self, member_id: int) -> str:
-        """Whom a shared entry was told to, as the owner knows them."""
-        return RAPHAEL_NAMES.get(self.language(), RAPHAEL_NAMES["zh-TW"]) if member_id == 0 else self._name_of(member_id)
+    def _told_name(self, member_id: int, language: str = "zh-TW") -> str:
+        """Whom a shared entry was told to, as the owner knows them: Raphael by his name in `language`, the language
+        of the conversation the entry came from (`_written_in`). The files are what every model reads, so the interface
+        language never picks it (owner, 2026-11-14)."""
+        return RAPHAEL_NAMES.get(language, RAPHAEL_NAMES["zh-TW"]) if member_id == 0 else self._name_of(member_id)
 
     def _today(self) -> date:
         return (self._now() if self._now is not None else datetime.now().astimezone()).date()
 
-    def _mark(self) -> str:
-        return UNCONFIRMED.get(self.language(), UNCONFIRMED["en"])
+    def _mark(self, language: str = "zh-TW") -> str:
+        """The mark of an entry nobody confirmed, in `language` (`_written_in`), never the interface's."""
+        return UNCONFIRMED.get(language, UNCONFIRMED["en"])
+
+    @staticmethod
+    def _written_in(*texts: str) -> str:
+        """The language of what the host writes beside an entry: the owner's words, else the entry's own."""
+        return chat_language(*texts, default="zh-TW")
 
     async def forget_member(self, member_id: int) -> None:
         """A member was deleted: its own memory folder goes, with its conversation's summary and
@@ -380,10 +387,12 @@ class MemoryService(Growth):
                     private_request: bool = False, unattended: bool = False, owner_text: str = "") -> dict:
         """Apply a model's edits to the file `target` names, with the checks of the module for USER.md.
         The result is what the model is told."""
-        mark = self._mark() if untrusted else ""
         own = self.own(member_id)
         added = lambda op: isinstance(op, dict) and op.get("action") == "add"  # noqa: E731
         content = lambda op: str(op.get("content") or "")  # noqa: E731
+        # What the host writes beside an entry is in the language of the owner's words, else of the entries.
+        written_in = self._written_in(owner_text, " ".join(content(op) for op in operations if isinstance(op, dict)))
+        mark = self._mark(written_in) if untrusted else ""
         # What came from outside stays with the member that read it, unless the owner asked to tell everyone.
         if target != "user" or (untrusted and not share):
             # One fact keeps one line across the two files too.
@@ -393,7 +402,7 @@ class MemoryService(Growth):
                 return {"success": True, "done": True, "target": "user", "changed": False, "usage": self.shared.usage(), "entry_count": len(said),
                         "message": "USER.md already says this, so nothing was added.", "note": "This update is complete: do not repeat it."}
             return own.apply(fresh, mark=mark, unattended=unattended, owner_text=owner_text)
-        told = told_stamp(self._told_name(member_id), self._today().isoformat())
+        told = told_stamp(self._told_name(member_id, written_in), self._today().isoformat())
         kept = [] if share else [op for op in operations if added(op) and (private_request or not about_the_owner(content(op)))]
         rest = [op for op in operations if not any(op is item for item in kept)]
         if kept:
@@ -404,7 +413,7 @@ class MemoryService(Growth):
             if not rest or not result["success"]:
                 return result
         pending = [entry for entry in own.entries() if is_unconfirmed(entry)]
-        rest = [{**op, "content": self._mark() + content(op)} if added(op) and not owner_stated(content(op), owner_text)
+        rest = [{**op, "content": self._mark(written_in) + content(op)} if added(op) and not owner_stated(content(op), owner_text)
                 and any(relation(content(op), entry) in ("same", "inside", "wider", "near") for entry in pending) else op for op in rest]
         result = self.shared.apply(rest, mark=mark, told=told, unattended=unattended, owner_text=owner_text)
         if result["success"]:

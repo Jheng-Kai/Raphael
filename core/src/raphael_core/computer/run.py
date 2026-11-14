@@ -74,7 +74,6 @@ from ..agent.gate import ToolGate
 from ..agent.history import Turn
 from ..agent.ledger import Ledger
 from ..agent.persona import REPLY_LANGUAGE, fit_text, phrase
-from ..ui_languages import interface_context
 from ..agent import safety as rules
 from ..agent.policy import (
     CONFIRM_TIMEOUT_S,
@@ -299,8 +298,9 @@ class _Finished(Exception):
         self.final = final
 
 
-def system_prompt(language: str) -> str:
-    """What the model is told about a run. The same for every run in a language."""
+def system_prompt() -> str:
+    """What the model is told about a run: the same for every run, whatever the interface language, which goes to no
+    model (owner, 2026-11-14)."""
     return (
         "You operate apps on the owner's own Windows computer with the tools you "
         "are given, to carry out the request inside <task> tags. The owner is at the computer and "
@@ -325,7 +325,7 @@ def system_prompt(language: str) -> str:
         "the task did not name.\n"
         "- When the task is done, or cannot be done, reply without calling a tool: one or two "
         "short sentences, saying what was done or what stopped you, with no prefix, no greeting and no markdown. "
-        + interface_context(language) + REPLY_LANGUAGE
+        + REPLY_LANGUAGE
     )
 
 
@@ -586,7 +586,7 @@ class ComputerRun:
 
     async def _loop(self) -> Final:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt(self.language)},
+            {"role": "system", "content": system_prompt()},
             {"role": "user", "content": f"<task>\n{neutralize(self.request)}\n</task>"},
         ]
         if self.background:

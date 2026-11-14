@@ -85,7 +85,8 @@ the images and PDFs the owner handed over (`services.attachments`, `from_wire`; 
 be taken fails the request as a bad request, with its kind in the error's data): the images go to
 the vision model together, with the question, and each PDF is read by the PDF service chosen; what
 they hold is data for the call that words the answer. A request of only files (no words) asks
-「看這個」 in the language of the request. The files are kept in memory for the turn, and for the
+「看這個」 in the language of the conversation (`ui_language` is the window's: it picks the words the app draws
+and reaches no model, owner, 2026-11-14). The files are kept in memory for the turn, and for the
 task when the request is handed to the background worker: never in the database, on disk or in a
 log. The history keeps their names and types (`attachments: [{name, mime}]` of a turn), for the
 conversation view. A request routed to `operate` or to a command makes nothing of them.
@@ -154,6 +155,7 @@ from ..brain.secrets import KeyStore
 from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_providers
 from ..brain.textnorm import authored_chinese
 from ..languages import chinese_variant
+from ..conversation_language import chat_language, detect_language
 from ..brain.spend import SpendTracker
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router as RpcRouter
@@ -235,6 +237,7 @@ from .plugins import (
 from .toolpick import ToolPicker
 from .policy import (
     CONFIRM_TIMEOUT_MS,
+    EXPIRED_NOTE,
     NO_TIMER_S,
     PLUGIN_PREFIX,
     Action,
@@ -336,7 +339,8 @@ _DAY_MS = 86_400_000
 MAX_REQUEST_URLS = 2
 # How much of what a call is given a permission card says, in characters (the overlay's question keeps its short line).
 CARD_PREVIEW_CHARS = 240
-# What a request of only files asks, in the language of the request.
+# What a request of only files asks, in the language of the conversation (`_chat_language`), never the interface's: it
+# is the owner's message the model reads (owner, 2026-11-14).
 _LOOK_AT_THIS = with_ui_words({"zh-TW": "看這個", "en": "Look at this", "ja": "これを見て"})
 # The routes that word a reply, which read the pages and the files of the request first.
 _READING_ROUTES = ("answer", "discuss", "chat")
@@ -637,6 +641,12 @@ DECLINED_NOTE = (
     "done now: do not try another way or another tool to get the same thing done. Say in one short sentence that "
     "it was not done because the owner said no; never say that an app or a service refused it."
 )
+# What a new member's first turn is asked, with no word of the owner's yet. `language` there is the interface's, for the
+# turn's notices only: the greeting's language is the member's own, or the owner's as what it knows of them shows it
+# (owner, 2026-11-14: the interface language goes to no model).
+GREETING_NOW = ("Write your greeting now, in the language your own instructions set; when they set none, in the language "
+                "the owner's profile and your memory of them are written in, else the language of your name, role and "
+                "instructions.")
 # A new member's first message is its own words and one card (R-COLLEAGUE-02). Live, a Codex model called the card as its
 # first act with nothing written before it; the call is sent back, and the same turn goes on, rather than the greeting
 # failing. The number of times it is sent back; a model that still writes nothing leaves a failed greeting.
@@ -936,8 +946,25 @@ class AgentService:
 
     @property
     def language(self) -> str:
-        """The configured owner language for unattended and external conversations."""
+        """The interface language, for the fixed words of unattended and external conversations (a notice, a card).
+        Never a model's: what a member says follows the owner's words (owner, 2026-11-14)."""
         return normalize_language(self._owner_language() or DEFAULT_LANGUAGE)
+
+    def _chat_language(self, ask: "_Ask") -> str:
+        """The language the conversation of `ask` is in, read from its own words: the owner's message, else the owner's
+        latest words in that conversation, else the speaker's own profile, else English. It picks what a model is given
+        per language (Raphael's name in the roster, a place's name, the words of a request of only files); the interface
+        language never does (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」)."""
+        if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text)):
+            return language
+        try:
+            earlier = self._history.list(limit=8, member_id=ask.speaker.id, conversation_id=ask.conversation_id)
+        except sqlite3.Error:
+            earlier = []
+        said = next((turn.question for turn in earlier if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES)
+                     and detect_language(turn.question)), "")
+        speaker = ask.speaker
+        return chat_language(said, " ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
 
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
@@ -1049,7 +1076,7 @@ class AgentService:
         speaker = self._speaker(member_id)
         conversation_id = self.conversations.main(member_id)
         self._last_language = normalize_language(language)
-        ask = _Ask(session_id=f"greeting-{member_id}-{uuid.uuid4().hex}", text="Write your greeting now.",
+        ask = _Ask(session_id=f"greeting-{member_id}-{uuid.uuid4().hex}", text=GREETING_NOW,
                    language=normalize_language(language), source="greeting", speaker=speaker,
                    conversation_id=conversation_id, started_at_ms=self._now_ms())
         self._record(ask, "greeting", "", "", "running", None, Ledger(self._spend))
@@ -1305,7 +1332,7 @@ class AgentService:
                 INVALID_PARAMS, "Invalid params: attachments (count)", {"kind": "count"}
             )
         if ask.attachments and not ask.text.strip():
-            ask.text = _LOOK_AT_THIS[ask.language]
+            ask.text = _LOOK_AT_THIS[self._chat_language(ask)]
         self._last_language = ask.language
         # The owner moved on: what the member was thinking about a reaction of theirs does not hold up what they ask now.
         self._yield_reactions((speaker.id, conversation_id))
@@ -1753,7 +1780,7 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, ask.language), owner=owner_context(self._settings, owner_pc=self._owner_pc(ask)),
+                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, owner_pc=self._owner_pc(ask)),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
                 viewing=viewing_text(ask.viewing), owner_pc=self._owner_pc(ask),
@@ -2233,17 +2260,17 @@ class AgentService:
             # message (owner, 2026-11-09). The owner's permission mode stays here: it changes seldom, and
             # a rule the whole turn obeys belongs where the model reads its rules.
             if brain_ref(settings.model):
-                system = cli_system_prompt(ask.language,
+                system = cli_system_prompt(
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
                     personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker,
                     owner_pc=self._owner_pc(ask))
             elif ask.speaker.is_raphael:
-                system = system_prompt(ask.language, "answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False,
+                system = system_prompt("answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False,
                                        owner_pc=self._owner_pc(ask))
             else:
                 system = member_system_prompt(
-                    ask.language, "answer", name=ask.speaker.name, role=ask.speaker.role,
+                    "answer", name=ask.speaker.name, role=ask.speaker.role,
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
@@ -2257,7 +2284,7 @@ class AgentService:
             # A CLI's own session already holds what it was told: it gets the team and the files as sections
             # below, whole at first and then only their edits.
             standing = [] if brain_ref(settings.model) else [
-                roster_prompt(self._team, ask.speaker, ask.language).strip(),
+                roster_prompt(self._team, ask.speaker, self._chat_language(ask)).strip(),
                 memory_files(memory) if memory is not None else ""]
             from ..management import tools_for_request
             management_tools = tools_for_request(ask.text, member_named=bool(
@@ -2273,7 +2300,7 @@ class AgentService:
                 system += "\nTemplate CreateAgent instructions map to member_create (legacy alias: create_member)."
             message_args = dict(
                 question=labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
-                moment=self._moment(), context=context.turns, tools=[], language=ask.language,
+                moment=self._moment(), context=context.turns, tools=[],
                 background=background_block(self._briefs(ask.speaker.id)), summary=context.summary, narrated=True,
                 quote=ask.quote,
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
@@ -2308,7 +2335,7 @@ class AgentService:
                     user += SETUP_AFTER_CONNECT
             if brain_ref(settings.model):
                 # The initial snapshot is sent once; checkpoints carry only later edits.
-                native_sections["Team"] = roster_prompt(self._team, ask.speaker, ask.language)
+                native_sections["Team"] = roster_prompt(self._team, ask.speaker, self._chat_language(ask))
                 native_sections["Memory"] = str(memory) if memory is not None else "No memory files."
             earlier = self._earlier_files(context.turns, ask.attachments)
             if earlier:
@@ -2500,7 +2527,7 @@ class AgentService:
                         result = self._tools.local_time()
                         ask.steps.append(self._step("tool", name, BUILTIN_SERVER, "ok" if result.ok else "error", began, result.error))
                     elif name == "weather":
-                        result = await self._tool(ask, self._tools.weather(str(args.get("city") or settings.city), ask.language), name)
+                        result = await self._tool(ask, self._tools.weather(str(args.get("city") or settings.city), self._chat_language(ask)), name)
                     elif name == "web_search":
                         query = args.get("query")
                         if not isinstance(query, str) or not query.strip():
@@ -2736,7 +2763,7 @@ class AgentService:
         from .owner_questions import ASK_OWNER, question_input
         from .persona import greeting_prompt
         system = greeting_prompt(ask.speaker)
-        system += owner_context(self._settings) + roster_prompt(self._team, ask.speaker, ask.language)
+        system += owner_context(self._settings) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
         if self._memory is not None:
             snapshot = self._memory.snapshot(ask.speaker.id)
             memory = "\n".join(text for text in (snapshot.shared, snapshot.own) if text)
@@ -2789,7 +2816,7 @@ class AgentService:
         async def execute(call_id, name, args):
             raise AgentFailure("error")  # No tool of any kind is offered to a question about a reaction.
         common = dict(model=settings.model, ledger=ledger, language=ask.language, plain=True,
-                      system=reaction_prompt(ask.speaker, ask.language) + owner_context(self._settings), user=ask.text, tools=[],
+                      system=reaction_prompt(ask.speaker) + owner_context(self._settings), user=ask.text, tools=[],
                       progress=lambda text: None, thinking=lambda text: None, execute=execute)
         if brain_ref(settings.model):
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id, owner_text=ask.text,
@@ -3016,7 +3043,7 @@ class AgentService:
         if decision.needs_weather and uses("weather"):
             # Each city the question names, else the one in the settings.
             for city in cities_in(ask.text) or [settings.city]:
-                jobs.append(self._tool(ask, self._tools.weather(city, ask.language), "weather"))
+                jobs.append(self._tool(ask, self._tools.weather(city, self._chat_language(ask)), "weather"))
         if decision.needs_search and uses("web_search"):
             jobs.append(
                 self._tool(
@@ -4794,7 +4821,7 @@ class AgentService:
         if isinstance(followup.loop, CliLoop) and approval is None:
             kind = "expired" if expired else "denied"
             self._gate.record_unrun(call.tool.key, outcome=kind)
-            instruction = phrase(language, "expired") if expired else DECLINED_NOTE if followup.ask.declined else None
+            instruction = EXPIRED_NOTE if expired else DECLINED_NOTE if followup.ask.declined else None
             result = ToolResult(call.tool.key, False, None, kind,
                                 instruction=instruction)
             steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), kind))
@@ -5407,7 +5434,7 @@ class AgentService:
                 self._followups.pop(pending.id)
                 # Release this card's waiter before scheduling its history continuation;
                 # a late continuation must never answer the next card the CLI opens.
-                followup.loop.continue_with(ToolOutcome(False, "expired", phrase(pending.language, "expired")))
+                followup.loop.continue_with(ToolOutcome(False, "expired", EXPIRED_NOTE))
                 self._start_narrated(pending, None, followup, expired=True)
                 continue
             self._drop_followup(pending, "expired")

@@ -29,6 +29,7 @@ from ..memory.conversation import SUMMARY_HEADER, turn_text
 from .persona import (
     MEMBER_TEXT_MAX,
     PREFIXES,
+    REPLY_KINDS,
     canonical_prefix,
     language_reminder,
     member_system_prompt,
@@ -105,11 +106,12 @@ _NEED = {
 }
 
 
-def reply_schema(language: str, memory: bool = False, *, plain: bool = False) -> dict:
-    """The JSON the model must return: the prefixes offered are the language's own. With a
-    `memory`, the fields `memory` and `need` too. A `plain` reply (a member's) has no prefix."""
+def reply_schema(memory: bool = False, *, plain: bool = False) -> dict:
+    """The JSON the model must return: the kind of the reply is one of `REPLY_KINDS`, the same words whatever the
+    interface language (owner, 2026-11-14: it goes to no model; `parse_reply` turns the kind into the prefix the app
+    shows). With a `memory`, the fields `memory` and `need` too. A `plain` reply (a member's) has no prefix."""
     properties: dict[str, Any] = {
-        "prefix": {"type": "string", "enum": list(PREFIXES[language])},
+        "prefix": {"type": "string", "enum": list(REPLY_KINDS)},
         "text": {"type": "string"},
         "detail": {"type": "string"},
     }
@@ -157,9 +159,8 @@ def build_user_message(
     moment: Mapping[str, str],
     context: Sequence[Turn],
     tools: Sequence[ToolResult],
-    language: str,
-    background: str = "",
     *,
+    background: str = "",
     summary: str = "",
     looked_up: bool = False,
     narrated: bool = False,
@@ -173,10 +174,11 @@ def build_user_message(
 ) -> str:
     """What the model is shown: the summary of the earlier conversation, the latest turns
     (oldest first), the date and time, the results of the tools, the question in tags, which mark it
-    as the user's words, and last the language to reply in. What changes least comes first.
+    as the user's words, and last the rule of the language to reply in, which names no language: the owner's words
+    say which (owner, 2026-11-14: the interface language goes to no model). What changes least comes first.
     `looked_up` says that the lookups the model asked for were made (their results are among the
     tools) and that it is to answer now. `narrated` and `member` retain call compatibility; all authored speech follows the speaker,
-    never the interface locale. `standing` is what holds for the turn and may differ at the next: the team as it
+    never the interface language. `standing` is what holds for the turn and may differ at the next: the team as it
     is now and the memory files. It comes after the conversation, so that the system prompt and the
     conversation before it stay as the provider cached them (owner, 2026-11-09)."""
     parts = []
@@ -203,9 +205,6 @@ def build_user_message(
     if recall:
         parts.append(recall)
     from .card_context import source_text
-    if source in {"telegram", "slack", "discord", "connector", "member"}:
-        from .owner_language import reply_context
-        parts.append(reply_context(language))
     if current := source_text(source) + messaging + viewing:
         parts.append(current)
     parts.append(f"<question>\n{question}\n</question>")
@@ -214,7 +213,7 @@ def build_user_message(
             "The lookups you asked for are done: their results are among the tool results. "
             "Answer now, and leave \"need\" empty."
         )
-    parts.append(language_reminder(language, narrated=narrated, member=member))
+    parts.append(language_reminder())
     return "\n\n".join(parts)
 
 
@@ -581,8 +580,9 @@ class Voice:
         viewing: str = "",
         owner_pc: bool = False,
     ) -> Reply:
-        """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"), in
-        `language`. `summary` is the summary of the earlier conversation and `context` its latest
+        """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"). `language` is the interface
+        language, for the prefix the app shows and its fixed words only: nothing sent to the model has it.
+        `summary` is the summary of the earlier conversation and `context` its latest
         turns; `memory_snapshot` is the memory files, or None when there is no memory (then the
         reply has no `memory` and no `need`). With a `speaker` who is a member of the team, the
         member says it instead, in its persona and in plain sentences (`parse_reply`'s `plain`).
@@ -593,13 +593,12 @@ class Voice:
         plain = not speaker.is_raphael
         standing = [roster.strip(), memory_files(memory_snapshot) if memory_snapshot is not None else ""]
         user = build_user_message(
-            question, moment, context, tools, language, background,
+            question, moment, context, tools, background=background,
             summary=summary, looked_up=looked_up, member=plain, recall=recall, source=source, messaging=messaging, viewing=viewing,
             standing="\n\n".join(part for part in standing if part),
         )  # fmt: skip
         if plain:
             system = member_system_prompt(
-                language,
                 route,
                 name=speaker.name,
                 role=speaker.role,
@@ -609,7 +608,7 @@ class Voice:
                 memory_inline=False,
             )
         else:
-            system = system_prompt(language, route, memory_snapshot, speaker=speaker, memory_inline=False, owner_pc=owner_pc)
+            system = system_prompt(route, memory_snapshot, speaker=speaker, memory_inline=False, owner_pc=owner_pc)
         system += MESSAGE_RULES + owner
         began = time.perf_counter()
         try:
@@ -621,7 +620,7 @@ class Voice:
                     fallbacks=[],
                     system=system,
                     user=user,
-                    schema=reply_schema(language, memory=memory_snapshot is not None, plain=plain),
+                    schema=reply_schema(memory=memory_snapshot is not None, plain=plain),
                     schema_name="raphael_reply",
                     timeout_s=self._timeout_s,
                     max_tokens=REPLY_MAX_TOKENS,
