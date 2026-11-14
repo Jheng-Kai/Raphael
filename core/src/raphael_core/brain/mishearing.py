@@ -33,7 +33,9 @@ observation, and must not break the replacements the user already has
 The same tests decide which words of the dictionary the cleanup prompt shows for a transcript
 (`may_be_heard_in`). A Latin word with nothing spelled or sounding like it in the transcript cannot
 be a recognition error there: shown to the model, it only invites a translation (提交 written as
-Commit because Commit is in the dictionary).
+Commit because Commit is in the dictionary). A word with CJK characters is shown in such a
+transcript only when a form it is known to be heard as is in it: 唯讀 and 本機端 listed bare turned
+the speaker's 讀寫 and 本地端 into them.
 """
 
 import functools
@@ -365,7 +367,9 @@ def _inflected(first: str, second: str) -> bool:
 
 def _near_spelling(word: str, span: str, runs: int) -> bool:
     """Whether `span`, `runs` Latin words of a transcript, may be the dictionary's Latin `word`
-    as speech-to-text misspelled it (see `misheard_spans`)."""
+    as speech-to-text misspelled it (see `misheard_spans`). Not when the one is the other with
+    letters added at either end: a longer word is not a mishearing of a shorter one, nor the
+    reverse."""
     target, found = _compact(word), _compact(span)
     if len(target) < _SPAN_MIN_LETTERS or len(found) < _SPAN_MIN_LETTERS:
         return False
@@ -374,6 +378,10 @@ def _near_spelling(word: str, span: str, runs: int) -> bool:
         # case alone is left as speech-to-text wrote it.
         return runs > 1 and len(word.split()) < runs
     if found[0] != target[0] or _inflected(found, target):
+        return False
+    if found.startswith(target) or target.startswith(found) or found.endswith(target) or target.endswith(found):
+        # One is the other with letters added at an end ("SpaceX" and "Space", "Spacer", "Grokbotz"):
+        # a longer word that is right as it stands, never a misspelling of the shorter one.
         return False
     longer = max(len(found), len(target))
     limit = _SPAN_EDITS_SHORT if longer <= _SPAN_SHORT_LETTERS else _SPAN_EDITS_LONG
@@ -424,16 +432,19 @@ def misheard_spans(
 def may_be_heard_in(word: str, text: str, forms: Sequence[str] = ()) -> bool:
     """Whether `text`, a transcript, may hold the dictionary's `word`, said right or misheard.
 
-    A word with CJK characters always may, and so does every word when the transcript has no CJK
-    text to be translated from. Otherwise a Latin word may when one of its known misheard `forms`
-    is in the text, or when a run of up to _MAX_WINDOW_RUNS of the text's Latin words is alike to it
-    or to one of its words of three letters or more, as `is_plausible` judges Latin text.
+    Every word may when the transcript has no CJK text to be translated from. In a Chinese or
+    Japanese transcript a word with CJK characters may only when one of its known misheard `forms`
+    is in the text: a word of another spelling is a word the speaker said, and a bare hint of a
+    word one character away (本機端 for 本地端, 唯讀 for 讀寫) makes the model swap it. A Latin word
+    may when one of its known forms is in the text, or when a run of up to _MAX_WINDOW_RUNS of the
+    text's Latin words is alike to it or to one of its words of three letters or more, as
+    `is_plausible` judges Latin text.
     """
-    if any(_is_cjk(char) for char in word):
-        return True
     windows = _windows(text)
     if not windows.has_cjk:
         return True
+    if any(_is_cjk(char) for char in word):
+        return any(form and form in text for form in forms)
     compact_text = _compact(text)
     if any(key and key in compact_text for key in map(_compact, forms)):
         return True

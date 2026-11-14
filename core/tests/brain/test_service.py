@@ -155,6 +155,26 @@ async def test_a_short_sentence_that_spells_the_dictionary_right_keeps_the_short
     assert fake_client.calls == []
 
 
+async def test_a_correction_is_kept_as_a_form_and_the_next_dictation_respells_it(
+    router, fake_client, keys
+):
+    # R-LEARN-FORM-01: the first correction keeps its form (evidence, shown on the page, a hint for
+    # the models) and no rule yet; the paste writes the word in Chinese text, where it is on record.
+    keys.set(KEY)
+    await router.call("dictionary.add", {"word": "claude"})
+    learned = await router.call("dictionary.learn", {"corrections": [{"word": "claude", "misheard": "Cloud"}]})
+    assert learned["learned"] == ["claude"]
+    [entry] = (await router.call("dictionary.list", {}))["entries"]
+    assert entry["misheard"] == [] and entry["heard"] == ["Cloud"]
+    text = "為什麼這邊顯示的是Cloud的用量，我不是有連線Codex嗎？"
+    fake_client.next_completion = completion({"text": text})
+    result = await finalize(router, raw_text=text)
+    assert result["text"] == "為什麼這邊顯示的是claude的用量，我不是有連線Codex嗎？"
+    english = "Move the files to the Cloud for the night."
+    fake_client.next_completion = completion({"text": english})
+    assert (await finalize(router, raw_text=english))["text"] == english
+
+
 @pytest.mark.parametrize("text", [
     "hello world", "Um, hello world.", "不對，明天見。", "I I agree.",
     "First, open it. Second, close it.", "Run `rm`.", "A sentence. Another sentence.",
@@ -1052,13 +1072,14 @@ async def test_the_hints_of_the_dictionary_reach_the_cleanup_prompt(router, fake
     await router.call("dictionary.add", {"word": "拉斐爾", "misheard": ["拉菲爾"]})
     await learn(router, "Claude", "cloud")
     await learn(router, "手機", "首機")
-    await finalize(router, "好，用 cloud 寫")
+    await finalize(router, "好，用 cloud 寫，拉菲爾的首機")
     system = fake_client.calls[0]["system"]
-    assert "- 拉斐爾（常被聽成：拉菲爾）" in system
+    # A rule has written the word already, and no form of it is left in the transcript to name.
+    assert "- 拉斐爾" not in system
     assert "- Claude（常被聽成：cloud）" in system, "a hint is told to the model like a rule"
     assert "- 手機（常被聽成：首機）" in system
-    # The words the user chose come before the ones learned.
-    assert system.index("- 拉斐爾") < system.index("- 手機") < system.index("- Claude")
+    # The words learned come newest first.
+    assert system.index("- 手機") < system.index("- Claude")
 
 
 async def test_dictionary_learn_learns_even_if_an_older_version_saved_learning_off(router, conn):

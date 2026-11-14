@@ -205,7 +205,8 @@ async def test_prompt_leaves_out_latin_words_with_nothing_like_them_in_the_dicta
         dictionary.add(word)
     fake_client.reply = completion({"text": "x"}, cost=0)
     await svc.clean("拉斐爾當幕僚長，然後用歐噴 router 傳訊息", audio_seconds=2)
-    assert dictionary_lines(fake_client.calls[0]["system"]) == ["- 拉斐爾", "- OpenRouter"]
+    # 拉斐爾 is spelled right, and no form of it is in the transcript to name.
+    assert dictionary_lines(fake_client.calls[0]["system"]) == ["- OpenRouter"]
 
 
 # --- when the model is not asked ----------------------------------------------------------------
@@ -342,9 +343,9 @@ async def test_a_word_added_between_two_dictations_is_in_the_second_prompt(
     svc, fake_client, dictionary
 ):
     fake_client.reply = completion({"text": "你好。"})
-    await svc.clean("你好", audio_seconds=1)
+    await svc.clean("拉菲爾你好", audio_seconds=1)
     dictionary.add("拉斐爾", ["拉菲爾"])
-    await svc.clean("你好", audio_seconds=1)
+    await svc.clean("拉菲爾你好", audio_seconds=1)
     first, second = (dictionary_lines(call["system"]) for call in fake_client.calls)
     assert first == ["（空）"]
     assert second == ["- 拉斐爾（常被聽成：拉菲爾）"]
@@ -1075,13 +1076,39 @@ async def test_the_service_uses_the_languages_of_the_settings(svc, fake_client, 
 def test_the_dictionary_block_keeps_only_words_the_transcript_may_hold():
     words = ["Commit", "OpenRouter", "Alt", "拉斐爾"]
     prompt = build_system_prompt(words, [("O S", "Alt")], heard="右邊那個O S鍵，用歐噴 router 看提交記錄")
-    assert dictionary_lines(prompt) == ["- OpenRouter", "- Alt（常被聽成：O S）", "- 拉斐爾"]
+    assert dictionary_lines(prompt) == ["- OpenRouter", "- Alt（常被聽成：O S）"]
     assert dictionary_lines(build_system_prompt(words, [("O S", "Alt")])) == [
         "- Commit",
         "- OpenRouter",
         "- Alt（常被聽成：O S）",
         "- 拉斐爾",
     ]
+
+
+def test_a_cjk_word_is_listed_for_a_chinese_transcript_only_with_a_form_it_is_heard_as():
+    # R-DICT-HINT-01: 唯讀 and 本機端 listed bare turned the speaker's 讀寫 and 本地端 into them
+    # (the owner's dictations of 2026-11-14, written again here).
+    words = ["唯讀", "本機端", "拉斐爾"]
+    heard = "這個資料夾要開讀寫，本地端的設定也不要動，拉菲爾老師說的"
+    assert dictionary_lines(build_system_prompt(words, [], heard=heard)) == ["（空）"]
+    prompt = build_system_prompt(words, [("拉菲爾", "拉斐爾")], heard=heard)
+    assert dictionary_lines(prompt) == ["- 拉斐爾（常被聽成：拉菲爾）"]
+    # Without a transcript, and for one with no Chinese in it, the whole dictionary is listed.
+    assert dictionary_lines(build_system_prompt(words, [])) == ["- 唯讀", "- 本機端", "- 拉斐爾"]
+    assert dictionary_lines(build_system_prompt(words, [], heard="open the folder")) == [
+        "- 唯讀",
+        "- 本機端",
+        "- 拉斐爾",
+    ]
+
+
+def test_a_longer_word_that_holds_a_dictionary_word_is_not_named_as_its_misspelling():
+    # R-DICT-HINT-01: "SpaceX" is right as it stands; naming it under "Space" made the model
+    # write "Space".
+    heard = "我看了 SpaceX 的發射，Spacer 也在"
+    spans = cleanup.dictionary_spans(["Space"], [], heard)
+    assert spans == {}
+    assert "這次可能是" not in build_system_prompt(["Space"], [], heard=heard)
 
 
 def test_words_left_out_for_the_transcript_do_not_count_towards_the_limit():
@@ -1098,7 +1125,7 @@ def test_words_left_out_for_the_transcript_do_not_count_towards_the_limit():
 def test_a_misspelled_dictionary_word_is_named_for_the_model():
     heard = "你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下"
     prompt = build_system_prompt(["拉斐爾", "OpenRouter", "grokbot"], [], heard=heard)
-    assert dictionary_lines(prompt) == ["- 拉斐爾", "- grokbot（這次可能是：Grok Bus）"]
+    assert dictionary_lines(prompt) == ["- grokbot（這次可能是：Grok Bus）"]
 
 
 def test_a_learned_form_in_the_transcript_is_listed_with_the_word():
