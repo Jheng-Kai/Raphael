@@ -3201,6 +3201,30 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name,place};
   }
+  if (name === "composer-queued-sendnow-menu") {
+    // 立即送出 is the exception and stands in sight beside 「排隊中」, as Claude Code's (owner, 2026-11-14); the menu does not repeat it.
+    const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => `${node.dataset.pick}:${node.textContent.trim()}`);
+    require(!labels.some(item => item.startsWith("send-now:")) && labels.some(item => item.startsWith("cancel:")), `the menu keeps Cancel and has no 立即送出: ${labels}`);
+    const mark = document.querySelector('.tn[data-id="901"] .queued-mark'), button = document.querySelector('.tn[data-id="901"] .message-actions [data-act="send-now"]');
+    require(visible(mark) && visible(button) && button.textContent.trim() === "立即送出" && mark.nextElementSibling === button, "立即送出 stands in sight right after 排隊中");
+    const box = button.getBoundingClientRect(), bubble = document.querySelector('.tn[data-id="901"] .bubble').getBoundingClientRect();
+    require(box.right <= bubble.left + 1 && Math.abs((box.top + box.bottom) / 2 - (bubble.top + bubble.bottom) / 2) <= bubble.height / 2, "beside the bubble, on its line");
+    const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
+    require(new Set(icons).size === icons.length, "each menu action has its own icon");
+    require(!document.querySelector('.tn[data-id="902"]'), "only the one queued bubble exists");
+    return {check: name, labels};
+  }
+  if (name === "composer-queued-sendnow") {
+    const calls = window.__look.calls, sent = calls.filter(call => call.method === "agent.history.send_now");
+    require(sent.length === 1 && sent[0].params.turn_id === 901 && sent[0].params.member_id === 1 && sent[0].params.session_id, "send now names the queued message once");
+    require(!calls.some(call => call.command === "agent_retract" || call.method === "agent.history.stop" || call.method === "worker.cancel"), "send now withdraws nothing and is not a Stop");
+    const bubble = document.querySelector('.tn[data-id="901"]');
+    require(bubble && !bubble.querySelector('.queued-mark') && bubble.dataset.status !== "queued", "the message is no longer queued");
+    require(bubble.querySelector('.message-text').textContent.trim() === "第二個範例請求", "the message keeps its words");
+    require(!document.querySelector('.tn[data-status="queued"]'), "nothing is left queued");
+    require(document.querySelector('.cmp-input').value === "", "the field was not given words back");
+    return {check: name, status: bubble.dataset.status};
+  }
   if (name === "composer-queued" || name === "composer-queued-withdraw" || name === "composer-queued-stop" || name === "room-send-while-working") {
     const calls = window.__look.calls;
     if (name === "composer-queued") {

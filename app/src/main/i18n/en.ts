@@ -1031,6 +1031,7 @@ export const en = {
   "chat.copy": "Copy",
   "chat.send": "Send",
   "chat.edit": "Edit",
+  "chat.sendNow": "Send now",
   "chat.quote": "Quote",
   "chat.you": "You",
   "chat.removeQuote": "Remove quote",

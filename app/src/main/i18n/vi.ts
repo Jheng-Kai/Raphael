@@ -1309,6 +1309,7 @@ export const vi = {
   "agent.rerun": "Chạy lại",
   "chat.send": "Gửi",
   "chat.edit": "Sửa",
+  "chat.sendNow": "Gửi ngay",
   "cal.edit": "Sửa",
   "members.profile.editResource": "Sửa",
   "chat.quote": "Trích dẫn",

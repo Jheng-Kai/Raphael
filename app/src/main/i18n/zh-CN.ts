@@ -1309,6 +1309,7 @@ export const zhCN = {
   "agent.rerun": "重新运行",
   "chat.send": "送出",
   "chat.edit": "编辑",
+  "chat.sendNow": "立即发送",
   "cal.edit": "编辑",
   "members.profile.editResource": "编辑",
   "chat.quote": "引用",
