@@ -399,7 +399,10 @@ const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OW
 
 const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
 
-/** A row of the dialog: the mark on its tile and the name open the app's page; 「連結」 (or 「✓ 已連結」) stands at the right. */
+/**
+ * A row of the dialog: the mark on its tile and the name open the app's page, and so does the rest of the row, 「✓ 已連結」 included (owner,
+ * 2026-11-14: 已連結 also has to be pressable, see `click`); 「連結」 is the one control in it that does something else.
+ */
 function appRowHTML(s: StoreService, v: ConnectionsView): string {
   const here = v.login?.target === s.id;
   const wait = here ? `<span class="sub wait">${esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` : "";
@@ -997,7 +1000,20 @@ export function createConnections(host: ConnectionsHost): Connections {
   /** Something is over the view: an app's page, or the key's dialog. */
   const dialogOpen = (): boolean => keyOpen || open !== null;
 
+  /**
+   * What the dialog last drew from its view, kept to tell whether a reading brought anything to show. The core says the connections
+   * changed after every tool call of every member, and a page that draws itself again from under a press loses it: the button went
+   * down on a row that is no longer there when it comes up, and no click follows.
+   */
+  let drawn: string | null = null;
+
+  /** Draws again only if the view would draw something else than the dialog drew (a reading that found nothing new touches nothing). */
+  const refresh = (): void => {
+    if (drawn === null || connectionsHTML(view()) !== drawn) redraw();
+  };
+
   const redraw = (): void => {
+    drawn = host.visible() ? connectionsHTML(view()) : null;
     if (host.visible()) host.redraw();
     // The key's dialog is the one that stands over the page; a press outside it closes it.
     if (keyOpen && !stopOutside && typeof document !== "undefined") {
@@ -1077,7 +1093,8 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (recent.status === "fulfilled") audit = recent.value.entries;
     // what is open is gone (removed from elsewhere): back to the list
     if (open && !(open.kind === "group" ? groupById(open.id) : entryById(open.id))) open = null;
-    redraw();
+    // A reading that finds nothing new touches nothing: the page stands as it is, under a press that is on its way.
+    refresh();
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
   }
 
@@ -1108,7 +1125,8 @@ export function createConnections(host: ConnectionsHost): Connections {
   async function loadTools(id: string): Promise<void> {
     const group = groupById(id);
     if (!group?.source || group.tools_state === "loading") return;
-    group.tools_state = "loading"; redraw();
+    // The tools are drawn on the app's page only: a reading that ends after the owner stepped back to the list leaves the list as it is.
+    group.tools_state = "loading"; refresh();
     try {
       const result = await api.connectorsTools(id);
       const current = groupById(id);
@@ -1119,7 +1137,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       current.write_count = current.tools.filter(t => t.kind === "write").length;
       current.read_count = current.tools.length - current.write_count;
     } catch { const current = groupById(id); if (current) current.tools_state = "failed"; }
-    redraw();
+    refresh();
   }
 
   async function saveKey(): Promise<void> {
@@ -1423,7 +1441,13 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   function click(target: Element): boolean {
     const button = target.closest<HTMLElement>("[data-conn]");
-    if (!button) return false;
+    if (!button) {
+      // What is in a row of the one view but is no control (「✓ 已連結」, the gap beside it) opens the app's page, as the row's name does.
+      const name = target.closest(".cs-card")?.querySelector<HTMLElement>('[data-conn="open-store"]');
+      if (!name) return false;
+      if (entryById(name.dataset.id ?? "")) openPage({ kind: "app", id: name.dataset.id! });
+      return true;
+    }
     const id = button.dataset.id ?? "";
     switch (button.dataset.conn) {
       case "server-menu": {
@@ -1750,6 +1774,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     screen = "apps";
     loginError = null;
     dialogNotice = null;
+    drawn = null; // whatever stands on the page is not this view's: the next reading draws
     // the code stays: the login still waits for it in the core, which does not send it again
     loads++;
   }

@@ -3,7 +3,11 @@
    were when the owner goes back; the composer stays below, so a change can be asked for where the page is read. There is no
    scrim and no ×: the way back is the round arrow in the conversation header (members.css, styles.css `.pgv-back`). */
 .ra-stage.is-page { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
-.ra-stage.is-page > :not(.ra-scroll, .pgv, .ra-dock) { display: none; }
+/* The voice flyer is the one thing that stays beside them: the thread's own "hearing" line is hidden with the thread, so it is the
+   only sign left that the owner is heard (voice-mode.ts; owner, 2026-11-14). It stands over the page, takes no pointer there (the
+   page scrolls and its buttons work under it; the composer's button and Escape end the recording) and is gone when it ends. */
+.ra-stage.is-page > :not(.ra-scroll, .pgv, .ra-dock, .ra-flyer) { display: none; }
+.ra-stage.is-page > .ra-flyer { pointer-events: none; cursor: default; }
 .ra-stage.is-page > .ra-scroll { grid-area: 1 / 1; visibility: hidden; }
 /* The member's face while it works is drawn apart from its line (as slimes are), so it would show through the hidden thread: its line is
    the one under the page. */

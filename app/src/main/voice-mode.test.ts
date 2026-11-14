@@ -68,3 +68,76 @@ describe("the voice button while the picture is up", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("the flyer in front of a page", () => {
+  /** A stage with a composer and a voice button, the way the conversation has them; `page` puts a page in the thread's place. */
+  function setup(page: boolean) {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const stage = document.createElement("div"), composer = document.createElement("form"), button = document.createElement("button");
+    composer.append(button); stage.append(composer); document.body.append(stage);
+    button.getClientRects = () => [{}] as unknown as DOMRectList;
+    if (page) stage.classList.add("is-page");
+    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, target: () => null, face: () => '<span class="av"></span>', onClick() {} });
+    return { stage, button, voice };
+  }
+  const css = (name: string): string => readFileSync(path.resolve(import.meta.dirname, name), "utf8").replace(/\r\n/g, "\n");
+
+  test("the page's stylesheet puts away every child of the stage but the thread, the page, the composer and the flyer", () => {
+    const rules = css("page-view.css");
+    expect(rules).toContain(".ra-stage.is-page > :not(.ra-scroll, .pgv, .ra-dock, .ra-flyer) { display: none; }");
+    // the page scrolls and its buttons work under the flyer
+    expect(rules).toMatch(/\.ra-stage\.is-page > \.ra-flyer \{[^}]*pointer-events: none/);
+    // nothing makes a page or the composer stand over it
+    expect(css("agent.css")).toMatch(/\.ra-flyer \{[^}]*z-index: 5/);
+  });
+
+  test("with a page open the flyer stays after the recording and leaves when the words are in", () => {
+    const { stage, button, voice } = setup(true);
+    try {
+      voice.up();
+      expect(stage.querySelector(".ra-flyer")).not.toBeNull();
+      expect(voice.hold()).toBe(true);
+      expect(voice.isUp).toBe(true);
+      expect(voice.isHeld).toBe(true);
+      expect(stage.querySelector(".ra-flyer")).not.toBeNull();
+      // the recording is over: the button is the slot's again
+      expect(button.classList.contains("vm-away")).toBe(false);
+      voice.down();
+      expect(voice.isUp).toBe(false);
+      expect(voice.isHeld).toBe(false);
+      expect(stage.querySelector(".ra-flyer")).toBeNull();
+    } finally { voice.drop(); stage.remove(); vi.unstubAllGlobals(); }
+  });
+
+  test("without a page it is not held: the flyer goes back as it always did", () => {
+    const { stage, voice } = setup(false);
+    try {
+      voice.up();
+      expect(voice.hold()).toBe(false);
+      expect(voice.isHeld).toBe(false);
+      voice.down();
+      expect(stage.querySelector(".ra-flyer")).toBeNull();
+    } finally { voice.drop(); stage.remove(); vi.unstubAllGlobals(); }
+  });
+
+  test("a held flyer goes back when the page is put away, and a new press listens with the same one", async () => {
+    const first = setup(true);
+    try {
+      first.voice.up(); first.voice.hold();
+      first.stage.classList.remove("is-page");
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(first.voice.isUp).toBe(false);
+      expect(first.stage.querySelector(".ra-flyer")).toBeNull();
+    } finally { first.voice.drop(); first.stage.remove(); vi.unstubAllGlobals(); }
+    const again = setup(true);
+    try {
+      again.voice.up(); again.voice.hold();
+      const flyer = again.stage.querySelector(".ra-flyer");
+      again.voice.up();
+      expect(again.voice.isHeld).toBe(false);
+      expect(again.stage.querySelectorAll(".ra-flyer")).toHaveLength(1);
+      expect(again.stage.querySelector(".ra-flyer")).toBe(flyer);
+      expect(again.button.classList.contains("vm-away")).toBe(true);
+    } finally { again.voice.drop(); again.stage.remove(); vi.unstubAllGlobals(); }
+  });
+});
