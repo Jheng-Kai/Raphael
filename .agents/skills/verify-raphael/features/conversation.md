@@ -1,5 +1,30 @@
 # Conversation
 
+## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
+
+Owner, with a picture of a card titled 「工作結果」, a green 「● 完成」, 「53 個檔案變更 +0 −0」, 「顯示內容」, 「還原檔案」 and 「查看」:
+「這個卡片的部分，你可以看一下 grokbot 是怎麼做的，因為我不記得他們會有那個完成的點點。然後這個工作結果我也不知道是在幹嘛，你可能要看一下，去幫我調整一下 card 的 UI/UX」.
+What the card is: a member that ran commands on its computer (workspace or team folder) gets a file checkpoint at the start of the turn
+(`vm_tools._checkpoint`); when the turn's background task finishes (`task.state === "done"`) and files differ from the checkpoint, the thread draws
+`taskResultHTML` (`task-result.ts`) under it, private conversations and rooms alike. 還原檔案 put the files back to the checkpoint. Grok Bot has no such
+card: what a bot makes is a named file with its size and no state, and the card of its results came from the Cursor deck (`Done`, files changed with +/−).
+The count was wrong for files with nothing to count (R-CARD-16: the core compared text for the first twenty files only, and for no picture or document).
+
+Now (`task-result.ts`, `card.css` `.task-result`, core `checkpoints.py` `_view`): no pill and no dot. The title is 「改了 N 個檔案」 (「新增了」 when all are new, 「刪除了」 when all
+are gone, 「已復原 N 個檔案的變更」 once undone). Below it a well of rows: the name, its folder quiet, and at the right 「新增」, 「刪除」, `+12 −3` or 「已修改」. Five rows show, the rest fold under
+「還有 N 個檔案」; a text file opens under its row. Buttons: the primary 開啟檔案變更 (opens the member's computer panel on 檔案變更, all of that member's changes) and 復原這些變更, which asks in
+a dialog first (「復原這些變更？」, what comes back, what is kept) unless the mode is 全部允許, then toasts how many came back and were kept. An undo that fails says
+「沒能復原這些變更，請再試一次。」 beside 重試. Routine and background turns keep the card: the checkpoint is their only undo.
+
+```powershell
+npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+```
+
+`card-task-few` (four files, a text file opened under its row), `card-task-many` (53 files with nothing to count: five rows and 「還有 48 個檔案」, no +0 −0), `card-task-new` (only new
+files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-restored` (「已復原 1 個檔案的變更」, one button) assert no pill or dot, none of the old words, one-line rows with their
+state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
+`npm run verify -- --contract` after a change to the file list the core sends.
+
 ## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
 
 Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
