@@ -1652,7 +1652,11 @@ export function installMock(fixture, config = {}, target = window) {
         return { items: data.pluginCatalog, categories: data.pluginCategories, next_cursor: null };
       }
       case "connectors.categories": return { items: data.pluginCategories };
-      case "connectors.tools": return { items: data.pluginTools[p.id] ?? [] };
+      case "connectors.tools":
+        // `toolsLate` ms: the tools of an app arrive late (a press can land while they are on the way); `toolsFail`: they never come.
+        if (variant.toolsLate) await new Promise(resolve => setTimeout(resolve, variant.toolsLate));
+        if (variant.toolsFail) return { ok: false, error: "network" };
+        return { items: data.pluginTools[p.id] ?? [] };
       case "connectors.set_key": {
         if (p.key.startsWith("sk-or-")) return { ok: false, error: "openrouter_key" };
         if (p.key.startsWith("ck_")) return { ok: false, error: "consumer_key" };

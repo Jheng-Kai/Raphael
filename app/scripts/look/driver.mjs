@@ -761,7 +761,29 @@ export async function perform(page, step, evidenceDirectory) {
         const box = await element.boundingBox();
         await page.mouse.click(box.x + box.width * step.x, box.y + box.height * step.y);
         const destination = await visible(step.expect);
+        // `contains`: the page that opened must be the one of what was pressed (its name stands in it), not just some page.
+        const words = step.contains ? await destination.evaluate(node => node.textContent) : "";
         await destination.dispose();
+        if (step.contains && !words.includes(step.contains)) throw new Error(`A press on ${step.selector} opened ${JSON.stringify(words.trim())}, not ${JSON.stringify(step.contains)}`);
+        return { check: "surface-navigation", selector: step.selector, x: step.x, y: step.y, destination: step.expect };
+      } finally { await element.dispose(); }
+    }
+    // A press that events straddle (the core says something changed between the button going down and coming up): a page that draws
+    // itself again from under the press loses it, as the owner's pointer would (a tool call of any member says the connections changed).
+    case "press-through": {
+      const element = await visible(step.selector);
+      try {
+        await element.scrollIntoView();
+        const box = await element.boundingBox();
+        await page.mouse.move(box.x + box.width * step.x, box.y + box.height * step.y);
+        await page.mouse.down();
+        await page.evaluate(events => { for (const event of events) window.__look.emit(event); }, step.events);
+        await new Promise(resolve => setTimeout(resolve, step.wait ?? 500));
+        await page.mouse.up();
+        const destination = await visible(step.expect);
+        const words = step.contains ? await destination.evaluate(node => node.textContent) : "";
+        await destination.dispose();
+        if (step.contains && !words.includes(step.contains)) throw new Error(`A press on ${step.selector} opened ${JSON.stringify(words.trim())}, not ${JSON.stringify(step.contains)}`);
         return { check: "surface-navigation", selector: step.selector, x: step.x, y: step.y, destination: step.expect };
       } finally { await element.dispose(); }
     }

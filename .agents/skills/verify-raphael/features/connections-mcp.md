@@ -23,6 +23,13 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
   list's title row and every app's page) is the ✕'s own 36 px round control with an 18 px glyph, on the ✕'s line. Scenes
   `connect-apps-connected-rows` (a real press on each part of a row, the keyboard, the switch, the hover) and `connect-app-from-row`; the check
   `connect-back` is on every scene that shows the chevron.
+- The owner's own list (his picture of 2026-11-14: Gmail, Google Calendar and Google Drive from Composio, Mobbin MCP of his own, Notion, Hugging Face and GitHub built in,
+  all on, no heading) is the fixture `OWNER_LIST` in `scenes/connect-apps.mjs`: `connected-owner-rows` presses the line, the name, the mark, the empty end and the top edge
+  of all seven (real `page.mouse` presses, each must open that app's own page), `-loaded` after every app's tools were read and after a `ConnectionsChanged`, `-late` and
+  `-failed` with the tools slow or failing (`toolsLate`, `toolsFail`), `-straddled` with the core's event arriving between the button going down and coming up
+  (`pressThrough`). A page that draws itself again from under a press loses it, so `load()` draws only when the reading changes what the dialog drew (`drawn`).
+- 「✓ 已連結」 of a main-view row is pressable (the row opens the app's page from anywhere but 連結): `connected-owner-state-press`, check `app-state-press`.
+  On an app's own page it stays words: its destination would be the page itself.
 - An app's page replaces the view (no title row; a bare back chevron and the dialog's ✕): the mark on a 56 px white tile with the name,
   and at the right 「連結」 (white, round) or, when connected, 「✓ 已連結」 with its switch and ⋯; a paragraph; accounts; for a connected app
   a 工具 card (kind switches, the folded tool list); a 資訊 card (提供者, 類別, 登入方式, 伺服器, 工具) of 38 px rows; the latest actions and
@@ -36,7 +43,7 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
   `connections-delete`, `connect-apps-more`).
 
 ```powershell
-npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected connect-apps-connected-rows connect-app-from-row connect-apps-row-hover --theme both --width 1120,720,1920x1080
+npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect-apps-more connect-apps-search connect-apps-connected connect-app-oauth connect-app-key connect-app-connected connect-apps-connected-rows connect-app-from-row connect-apps-row-hover connected-owner-rows connected-owner-rows-loaded connected-owner-rows-late connected-owner-rows-failed connected-owner-rows-straddled connected-owner-state-press --theme both --width 1120,720,1920x1080
 npm run look -- member-delete-ask context-menu-member composer-model-small composer-model-sources member-maker automations-detail-own automations-create-slot appearance-menu model-choices-answer profile connections-add-menu server-menu connections-delete --theme both --width 1120,720,1920x1080
 ```
 
