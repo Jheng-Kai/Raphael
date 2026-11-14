@@ -17,6 +17,7 @@ const MAP = {
   external: "external-link", minus: "minus", image: "image", file: "file", download: "download", more: "ellipsis",
   repeat: "repeat", mail: "mail", swap: "arrow-left-right", report: "file-chart-column", pinOff: "pin-off", store: "store",
   fileDown: "file-down", fileArchive: "file-archive", fileText: "file-text", gauge: "gauge", gridPlus: "grid-2x2-plus",
+  alert: "circle-alert", success: "circle-check",
 };
 
 const root = new URL("../../", import.meta.url);
