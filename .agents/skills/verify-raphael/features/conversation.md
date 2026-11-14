@@ -1,5 +1,45 @@
 # Conversation
 
+## A conversation read at its bottom stays at its bottom (owner, 2026-11-14, R-FOLLOW-01)
+
+Owner: 「成員回覆的時候，有時候畫面會從最底部往上跳一點…完全不要有任何移動」. Following the bottom was a correction queued by the
+thread's own draws (`preserveRichScroll`), with an 80 px band read by the end marker's IntersectionObserver. Two things moved the thread
+without a draw to correct them: a stored picture read back late (`attachment-media.ts`: the bytes come after the line is placed, its box grows
+from its name to the picture), and the same picture drawn again each time its line changed (the words beside it, the work ending, a reaction,
+paced bubbles: `patchThread` makes a new `<img>`, which stood as its name or empty until the lazy observer set its `src` a frame later). A
+small one left the thread a few px above its bottom until the next draw pulled it down; one past 80 px also made it stop following, so a
+conversation that opens with large pictures ended with its last reply under the composer.
+
+Now one place keeps a following thread at its bottom (`readingAnchor` in `message-rich.ts`): a ResizeObserver on the scroller, its column and
+its end marker writes a clamped bottom (`scrollTop = 1e9`, no geometry read) in the frame of any change of their sizes, while the thread
+follows; it is told after layout and before paint, so no frame is seen above the bottom. It also replaces `keepBottomOnResize`
+(reading-place.ts, removed): the composer, a question card or a notice growing or shrinking under the thread is a change of the scroller's
+size. A picture drawn again takes the copy already loaded in the same task (`sync`), and a new one is decoded before it is shown (`decoded`),
+so a picture only grows. The owner's own scrolling up lets go of the bottom at once (`letGo`: a wheel up, also over the header, which passes
+its wheel to the thread; PageUp, ArrowUp, Home or Shift+Space outside a field; a touch drag down), before the scroll it starts has moved
+anything; from then on nothing moves the line he reads, however near the bottom, until a scroll of his ends at the very bottom (2 px, not
+while still going up) or he presses the latest button. A thread that cannot scroll up is not let go. Explicit navigation (search, quote,
+unread line, the settings page's way back) keeps its own place as before (`releaseRichScroll`). No timer and no smooth scrolling.
+
+```powershell
+npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom --theme both --width 1120,720,1920x1080
+```
+
+`follow-probe` (`scripts/look/follow-probe.mjs`) samples every painted frame: a 1 px probe changes size each animation frame, and its
+ResizeObserver, made after the app's own, is told after their corrections and before paint. Each frame records how far the thread stands
+above its bottom, where the line the owner reads stands, and how tall each stored picture of the thread is. `follow-reply-bottom` sends the
+owner's message from the composer and plays the member's reply as the core sends it (the turn running, the work line and its words, a 40 px
+picture strip that comes late, the reply's words growing sentence by sentence, a large picture read back 700 ms late, the turn ending, the
+composer leaving Stop, three reply bubbles paced in, the member's 👍 on the owner's message) and fails a frame more than 1 px above the bottom
+or a picture standing shorter than it already stood, named by phase. `follow-reply-reading` and `follow-reply-near` wheel up with the real
+mouse (most of a screen, and 40 px) and fail any frame where the read line moved. `follow-open-pictures` opens the conversation by its row
+with two large pictures on their way and watches the opening. Before the fix (original `message-rich.ts`, `attachment-media.ts`):
+`follow-reply-bottom` stood 12 px above the bottom through the words, picture, done and reaction phases and 417 to 425 px from the large
+picture on, at every size and theme; `follow-open-pictures` 516 to 544 px; re-drawn pictures stood 22 px (the strip) and 282 px (the large
+picture) shorter for a frame; `follow-reply-near` moved the read line 108 to 431 px. Vitest: `message-rich.test.ts` (the stick, its reads, letting go and following again), `attachment-media.test.ts` (a picture
+drawn again), `scripts/look/follow-probe.test.mjs` (the reading of the frames). Not covered offline: WebView2 at the owner's display scale
+and a real touchpad's momentum.
+
 ## A picture a member sends is a message (owner, 2026-11-14, R-UI-156)
 
 Owner: 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」. A member's pictures (a media message whose
@@ -92,13 +132,20 @@ a dialog first (「復原這些變更？」, what comes back, what is kept) unle
 「沒能復原這些變更，請再試一次。」 beside 重試. Routine and background turns keep the card: the checkpoint is their only undo.
 
 ```powershell
-npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-noise card-task-work-only card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
 ```
 
 `card-task-few` (four files, a text file opened under its row), `card-task-many` (53 files with nothing to count: five rows and 「還有 48 個檔案」, no +0 −0), `card-task-new` (only new
 files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-restored` (「已復原 1 個檔案的變更」, one button) assert no pill or dot, none of the old words, one-line rows with their
 state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
 `npm run verify -- --contract` after a change to the file list the core sends.
+
+What tools leave is never on the card (R-CARD-20, owner 2026-11-14: a card 「新增了 30 個檔案」 of bare hashes, the content store of
+`npm i --cache /home/cua/workspace/.npm-cache`): the core's checkpoints neither walk nor list hidden folders, package and build stores, caches and
+temporary folders, lock files, temporary or partial files and bare-hash names (`checkpoints.py` `noise_folder`, `noise_file`); a review kept before is
+filtered when read, and undo leaves them alone. `card-task-noise` (a turn of leftovers alone: no card) and `card-task-work-only` (the same leftovers
+beside three work files: 「新增了 3 個檔案」 and only those rows) show the list the core's own `CheckpointStore` makes of a synthetic workspace
+(`scripts/look/core_fixtures.py`, through runner.mjs `coreFixtures`), not a mocked copy.
 
 ## A sign-in the CLI refused is mended once for every routine (2026-11-14, R-CLI-SIGNIN-03)
 
@@ -222,6 +269,42 @@ same line, measures it and requires the bubble to be as wide (±1 px; ±2 px for
 message's bubble not to equal the picture's width, a long one to be wider than the picture, and the bubble to stand under the picture at its right edge.
 `owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
 Enter, the call held), `message-edit-picture` the message open in its editor.
+
+## Several pictures: a scrolling row in the composer, small squares once sent (owner, 2026-11-15, R-ATTACH-01, R-ATTACH-02)
+
+Owner, with two pictures: twelve pictures in the composer ran past its right edge where the mouse could not reach them
+(「理論上要可以用滑鼠，就是可以讓它滾動，向右向左滾動」), and once sent they stood as a two-column grid of tiles about 230 px wide,
+several screens tall (「可以看一下 claude 是怎麼傳的，理論上它應該會是側著的」).
+
+The composer's files (`composerHTML` in `chat-composer.ts`, shared by a member's conversation and a group room) are now the shared
+chip row: `.cmp-files[data-chip-row]` around `.cmp-file[data-chip-scroll]`, so the wheel moves the row sideways, an arrow and a fade
+stand only at an end with more behind it, and a picture reached by Tab comes into view (`chip-scroll.ts`, which now also marks the ends
+again when chips are added or removed without the row changing size). The row is gone with its last file (`.cmp-files:has(> .cmp-file[hidden])`).
+
+Sent: `filesHTML` in `timeline.ts` puts two or more pictures in `.attachment-thumbs`, squares of `--pa-pic` (96 px) side by side,
+wrapping, every row ending at the bubble's right edge; one picture keeps the R-UI-149 size, a video keeps `.attachment-grid`, and
+documents and audio follow, before the bubble. The message on its way, the editor and a group room's message draw the same markup. A
+member's pictures are messages of their own (R-UI-156) and are not changed: each has its own actions and reaction.
+
+Research (2026-11-15, Mobbin screens and the Grok Bot shots in the local research folder, not in the repository): Claude shows a sent
+picture as a square of about 120 px over the bubble at its right edge, Gemini about 110 px; ChatGPT's composer keeps its pictures as small
+squares in one sideways-scrolling row; Grok keeps a picture's shape at a fixed height; Grok Bot shows a member's pictures as a row of
+183 x 120 thumbnails. 96 px rather than 120 lets four stand in the 452 px a bubble has beside its actions at 1120 px, so twelve take three rows.
+
+```powershell
+npm run look -- composer-pictures-strip owner-pictures-four owner-pictures-twelve owner-pictures-mixed owner-pictures-open owner-pictures-pending owner-picture-short owner-picture-pending message-edit-picture room-composer-files room-files-sent attachment-limits --theme both --width 1120,720,1920x1080
+```
+
+`composer-pictures-strip` drops twelve numbered pictures on the composer (`file-drop` with `fill` and `label`), checks one row inside the
+composer, wider than it, at its start with only the right arrow (`composer-pictures-start`), turns a real wheel over it and checks the row
+at its end with only the left arrow, the twelfth picture and its × whole and pressable, and the page and the thread unmoved
+(`composer-pictures-end`). In the 1920 px window the twelve fit the 960 px composer: the checks then require every picture whole, no
+arrow or fade, and a wheel that moves nothing (narrower windows must overflow). `owner-pictures-four`, `-twelve` and `-mixed` (three and a PDF) are the sent message (`ownerPictures`,
+`ownerFile` in the mock); `owner-pictures-pending` pastes three and presses Enter; `room-files-sent` is a group room's. Each runs
+`owner-pictures-row`: 96 px squares, full rows first, as many side by side as the column holds, no taller than its rows, every row at the
+bubble's right edge and the bubble under them; and `owner-picture-bubble` (the bubble keeps its own width). `owner-pictures-open` presses
+the third thumbnail and finds that picture in the viewer. Vitest: `attachment-layout.test.ts` (1, 2, 3, 4 and 12 pictures, mixed),
+`chat-composer.test.ts` (the row and its wheel), `chip-scroll.test.ts` (ends after a change).
 
 ## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
@@ -643,6 +726,22 @@ one short opening, an answer that opens with the result and keeps to what the ow
 file or page, and a second message only for a separate question or exercise. Tests: `tests/agent/test_live_replies.py`.
 Judge it from the owner's database by counts only, never text: messages per turn, the share of turns with
 three or more, and the share opening with process words, per brain family (Claude Code, Codex, API).
+
+Since 2026-11-14 (R-PROGRESS-01, owner: 「他現在又開始不講任何進度了…我可能會覺得它是不是當機了」; a hand-off task of
+37 minutes and 71 calls had 142 steps and no message) long work owes the owner a word. Each run the owner reads as it
+works (a turn of the owner's own conversation, a task in a member's private conversation; any brain) keeps one
+`agent/progress_updates.py` `ProgressUpdates`: the time of its last bubble (the opening counts, progress does not).
+Past 120 s with no bubble, or 300 s since the last, the next tool result carries one line asking for a two-sentence
+update (what is done, what is next), after the result and outside its untrusted wrapper; a reminder nobody answered
+comes again only 300 s later. Stored tool events, CLI receipts and the CLI's tool conversation keep the real result.
+While a run is past that time, what it says next is a bubble: a CLI's held or plain speech between steps
+(`_release_held`, `_progress`), a background API task's words with its calls (`TaskRun._chat`); an API conversation
+turn puts it in `messages` (NARRATION_RULES allows an update a reminder asks for). The line reaches a CLI through its
+MCP result (`CliLoop._tool`), an API turn through `ToolOutcome.note` (`NarratedLoop.tool`, `run_task`), a background
+API task through `host.tool`'s `note` (`TaskRun.reminded`). A meeting's reply, a routine, a consultation, a colleague's
+question, greetings and memory passes keep none. Tests: `tests/agent/test_progress_updates.py`,
+`tests/background/test_progress_updates.py`. No UI changes: an update is an ordinary reply bubble. Judge it from the
+owner's database by counts only: messages per long task (over five minutes) and the longest gap between two.
 
 Selected matrix (both themes, 1120,720,1920x1080):
 
@@ -2104,7 +2203,7 @@ npm run look -- thread-new-divider thread-new-divider-short thread-new-divider-s
 
 The long fixture covers more than one history page. The short fixture follows a long seen reply, so its scroller must overflow while the unread run fits. The short, arrival, leave/return and latest scenes assert scroll geometry, independent line identity, retained message HTML and no additional members.read on arrivals. Existing busy-team and send-prompt limits remain unchanged. Compare the muted label with adjacent time separators at matching theme/width. Core members and schema tests cover persistence and upgrade; agent-members.test.ts covers visit lifetime and scroll decisions. Existing regenerate tests now exercise the visible menu: eligibility is validated on menu open, so new replies no longer replace an older reply just to change hidden metadata.
 
-Opening places the thread once (owner, 2026-11-11: Raphael's conversation opened and then jumped up). A page shown again takes the boundary from the roster already loaded (agent.ts `beginOpening`); when none is loaded the thread is drawn but held back (`.ra-scroll.is-opening`, at most 1.5 s) until the roster and any history pages it needs are in, so the first place seen is the place it stays at. A first unseen turn inside the newest 25 leaves the newest window alone (`unreadInTail`), so a run of up to 25 turns never cuts the newest turn off or shows the latest button at the bottom. Raphael's thread is told read with `members.read` as every member's is. The member settings page hides the conversation, so the place is remembered as it opens and put back as it closes. The scroller keeps its bottom when what stands under it grows or shrinks (`keepBottomOnResize`: the composer with typed or placed text, a question card, a notice, a chip); a thread read higher up stays where it is. Look: `thread-new-divider-raphael-short`, `-medium` and `-long` record every place the thread was seen (`scrollTimeline`) with a late roster (`rosterDelay`, the `late-roster` step), `member-settings-back-bottom` and `member-settings-back-kept` the way back from the settings page, and `page-buy`, `page-expand-place`, `page-send` and `page-composer-grows` the last card whole above a grown composer (R-UI-21, R-CARD-11).
+Opening places the thread once (owner, 2026-11-11: Raphael's conversation opened and then jumped up). A page shown again takes the boundary from the roster already loaded (agent.ts `beginOpening`); when none is loaded the thread is drawn but held back (`.ra-scroll.is-opening`, at most 1.5 s) until the roster and any history pages it needs are in, so the first place seen is the place it stays at. A first unseen turn inside the newest 25 leaves the newest window alone (`unreadInTail`), so a run of up to 25 turns never cuts the newest turn off or shows the latest button at the bottom. Raphael's thread is told read with `members.read` as every member's is. The member settings page hides the conversation, so the place is remembered as it opens and put back as it closes. The scroller keeps its bottom when what stands under it grows or shrinks (the composer with typed or placed text, a question card, a notice, a chip: the thread's one stick to the bottom, R-FOLLOW-01, `readingAnchor` in message-rich.ts); a thread read higher up stays where it is. Look: `thread-new-divider-raphael-short`, `-medium` and `-long` record every place the thread was seen (`scrollTimeline`) with a late roster (`rosterDelay`, the `late-roster` step), `member-settings-back-bottom` and `member-settings-back-kept` the way back from the settings page, and `page-buy`, `page-expand-place`, `page-send` and `page-composer-grows` the last card whole above a grown composer (R-UI-21, R-CARD-11).
 
 ## Durable owner inbox (2026-11-03)
 
@@ -2353,7 +2452,7 @@ stays below. Since 2026-11-14 (R-PAGE-08) the page is the whole area beside the 
 is the page's own pill (its mark and title; a room keeps its heading) in place of the member's pill, and its tools hold the one Share button on a report and on an HTML page (the member's share waits). The way back is the round arrow at the
 header's top left (`.mb-head-l`, or a room's `.room-picker`): the window edge's soft round 36 px button named 返回, no word, standing where the search stood
 (the search, a room's search keeping its place unseen, and the search bar wait while a page is open). Escape goes back too unless a menu, a dialog, a task's Stop (R-UI-46) or a recording
-has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page edge to edge (R-PAGE-10: the whole view's width, no margin, frame or width cap; the area ends where the composer's row begins), its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
+has it; the composer's draft is never touched. An HTML page has no title row and no frame: the whole area under the header scrolls as one (`.pgv-page`), the page edge to edge (R-PAGE-10: the whole view's width, no margin, frame or width cap; R-PAGE-11: the area runs to the window's foot under the floating composer), its frame as tall as the page says (the helper's `height` messages, up to 20000 px) and at least as tall as the area; there is no dialog, scrim or ×. A report is the same place with
 its own heading, its column and its contents. The same frame is moved there and back (no reload with `moveBefore`; the scene
 `page-inplace-back` counts `load` events); going back its preview is at the top again and where the owner was reading (how far the area was scrolled) is kept for the next opening. A page the member
 changes (`update_page`) loads beside the one on screen, says how tall it is while it loads and replaces it once drawn, the area keeping its scroll: the
@@ -2362,7 +2461,7 @@ What the member answers to a message written under the page shows under the page
 the first words of its reply as one line (page-inplace-answered); the whole reply is in the thread, one press of the arrow away. The window tells the core which page is open before it
 sends (`pages.viewing`, answered `{viewing}`; the look fixture records them in `window.__look.viewing`), and the core's context says "the page the owner is looking at now: page_id=…" so "here" means it.
 Checks: page-inplace (also under the names page-expanded, page-opened-whole and page-library-open) measures the place, the one frame, the absence of any dialog, scrim or ×, the arrow's size, place, name and
-surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's frame against the view's left and right edges (within 1 px, to the window's right edge) and the area's bottom against the composer's row, with no part of the composer over the page, no frame (no corner, edge or clip), the area scrolling, nothing covered by the composer; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
+surface, the folded panel, the page's pill (and that the member's gave way; a room keeps its heading), Share leading the tools at 36 px level with the arrow, the area against the pane and the sidebar, the page's frame against the view's left and right edges (within 1 px, to the window's right edge) and (R-PAGE-11) the area's bottom at the window's foot with the composer standing over it on its own surface, no band in its row (the dock transparent and taking no pointer) and, at rest, the page's frame drawn under the composer, no frame (no corner, edge or clip), the area scrolling; page-inplace-before/-kept the thread's place, the same frame and no reload; page-inplace-escaped the draft and that nothing was sent or stopped.
 
 A page opened from the member's Library (R-PAGE-08, owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它有一個share的鍵」, after Grok Bot's Library, whose page row opens the page and not the thread at its reply): the press folds the panel, stands the view with the page's title at once and takes the page's place when its card has read it (`pagesHost.show`, `agent.ts openLibraryPage`);
 a page of an older conversation opens that conversation quietly (no turn marked) and the arrow brings back the one that was open, the thread where it was (`TranscriptWindow.snapshot` / `restore`, the scroll) and the panel on its Library tab (`members.foldForPage` / `unfoldAfterPage`, which every open page uses, so a press on the card folds the panel too).
@@ -2370,7 +2469,13 @@ The scenes use the fixture's `libraryPages` (the Library lists the page scenes' 
 `page-library-esc` (Escape does the same), `page-library-older` (`page-library-older-open` / `-kept`: the page's own conversation under it, then the one that was open) and `page-library-share` (`page-library-shared`: one `report_save` with the page's id and no text, a word of where it went, the page still open). The file itself is the core's (`page_file` in `core/src/raphael_core/agent/pages.py`, tested in core/tests/agent/test_pages.py); a look cannot open it, as the core is not there.
 `answer-forms.test.mjs` and `page-card.test.ts` hold the same with stubs and the real module. The look fixture's pages (the product page and the news page) mimic the core's helper, scroll and Escape messages included, and
 `updatePage(id)` / `answerPageAsk(text)` of the mock (`lookCall` steps) stand for the core changing a page and the member replying.
-An open page is edge to edge (R-PAGE-10, owner, 2026-11-14, with a picture of the page in a centred 1280 px frame between two dark margins: it should open as an HTML file does in Chrome, as Grok Bot's pages do): `.pgv` takes back the pane's side padding (`--row-edge`; a room's pane has none) and `.pgv-page` has no side or bottom padding and no width cap, so the iframe spans the view and the page's own background reaches the sidebar and the window's right edge. The composer is kept (R-PAGE-03: a change is asked for under the page) and its row is reserved, so the area ends where the composer begins and no page content is ever under it; only the top keeps the header's slim band, the page fading under it. A report's background fills the view the same way, its column keeping `--pa-colw`. `page-inplace`, `page-base` and `page-report-open` assert the frame's and the report's left and right edges against the view's (1 px), the window's right edge, the area's bottom against the composer's row and that the composer overlaps nothing of the page; `answer-forms.test.mjs` refuses a page with margins and a page that runs under the composer. Run `page-inplace page-inplace-room page-base page-library-open page-report page-dashboard` at 1120, 720 and 1920x1080 in both themes.
+An open page is edge to edge (R-PAGE-10, owner, 2026-11-14, with a picture of the page in a centred 1280 px frame between two dark margins: it should open as an HTML file does in Chrome, as Grok Bot's pages do): `.pgv` takes back the pane's side padding (`--row-edge`; a room's pane has none) and `.pgv-page` has no side or bottom padding and no width cap, so the iframe spans the view and the page's own background reaches the sidebar and the window's right edge. The composer is kept (R-PAGE-03: a change is asked for under the page) and, since R-PAGE-11, floats over the page (below); only the top keeps the header's slim band, the page fading under it. A report's background fills the view the same way, its column keeping `--pa-colw`. `page-inplace`, `page-base` and `page-report-open` assert the frame's and the report's left and right edges against the view's (1 px), the window's right edge and (R-PAGE-11) the area's bottom at the window's foot with the composer over it; `answer-forms.test.mjs` refuses a page with margins, a page cut off at the composer's row and a band behind the composer. Run `page-inplace page-inplace-room page-base page-library-open page-report page-dashboard` at 1120, 720 and 1920x1080 in both themes.
+
+The page runs under the composer (R-PAGE-11, owner, 2026-11-14, with a picture of the page cut off at the top of the composer, which stood on a band of its own: 「這邊不要因為底下有那個輸入框就卡在那裡，它應該要是全螢幕的輸入框，感覺像是放在這個 HTML 或者是 page 上面的感覺」, as Grok Bot's composer floats over what it shows): `.pgv` takes both rows of the stage, down to the window's foot, while the thread hidden under it keeps its own row beside the composer (its place does not move); the dock (`.ra-dock`) stands over the page with no background and takes no pointer, only what stands in it does (the composer on its own `--panel`, edge and `--composer-shadow`). page-view.ts measures the dock and the answer line while a page stands (`--pgv-dock`, `--pgv-say`, a ResizeObserver) and `--pgv-under` is how far the area scrolls past the page's end: an HTML page's room is `.pgv-frame-box::after`, after the frame and never a taller frame (a `100vh` page would say it is taller each time and grow without end), a report's the bottom padding of `.rp-scroll`; a page that already ends above the composer does not scroll. The answer line (`.pgv-status`) floats just over the composer on the composer's surface and takes no pointer. The check `page-under-composer` (scenes page-end, page-report-end, page-room-end, page-inplace-reply-end) reads the page to its end with the wheel (`frame-scroll` also turns a report) and asserts the area at the window's foot, the composer over it with no band, the page's last line (an HTML page's `--pgv-h`, a report's last section) clear above the composer and the answer line with at most a gap's room past it, and `elementFromPoint` on the composer the composer's, beside and under it the page's. `page-inplace`, `page-base`, `page-report-open` and `page-inplace-working`/`-answered` assert the same placement at rest. The look audit (R-UI-145, audit.mjs `coverOf`) lets the composer's row stand over what has scrolled under it, as the header's row (R-TOP-01), and still judges a control of that row: before this, a report's tabs under the composer failed page-report.
+
+```powershell
+npm run look -- page-inplace page-inplace-room page-inplace-working page-inplace-reply page-inplace-reply-end page-end page-room-end page-base page-base-table page-base-end page-report page-report-end page-library-open page-library-scrolled page-library-report page-dashboard page-document voice-over-page-listening --theme both --width 1120,720,1920x1080
+```
 
 The voice flyer is the one stage child a page does not put away (R-VC-04; `voice-over-page-listening`, `-hearing`, `-gone`, see
 [Dictation](dictation.md)): Raphael stays in front of the page, above the composer, while the owner is heard.

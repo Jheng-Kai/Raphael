@@ -4,6 +4,7 @@
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
+import contextlib
 import itertools
 import json
 import logging
@@ -26,6 +27,7 @@ from .vm import VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
+from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_view
 from . import file_tools
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
@@ -182,9 +184,9 @@ EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside th
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
-BROWSER_OPEN = {"description": "Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. Use the typed browser tools for follow-ups. " + VM_CONTRACT,
+BROWSER_OPEN = {"description": "Open an http/https URL in your browser and return its page references, no screenshot. " + NEW_TAB + "Use the typed browser tools for follow-ups. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
-        "query": {"type": "string"}, "scope_ref": {"type": "string"}}, "required": ["url"], "additionalProperties": False}}
+        "query": {"type": "string"}, "scope_ref": {"type": "string"}, "new_tab": {"type": "boolean"}}, "required": ["url"], "additionalProperties": False}}
 FILL_LOGIN = {"description": "Use vault_entries labels and owner hints to choose a saved login; if two fit, ask_owner. Fill only the current exact HTTPS origin. Never submit or request private values in chat; use request_takeover for owner-only steps. Legacy request_secret(site) references still work. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {key: {"type": "string", "minLength": 1, "maxLength": 2048} for key in
         ("reference", "site", "target_id", "username_ref", "password_ref")},
@@ -296,6 +298,8 @@ class VmTools:
         self.logins = None
         self.private_pages = {}
         self.page_windows = {}
+        # target key -> {tab_id: (url, title, target_id)} of the tabs a member was told of: what browser_tabs' show brings forward.
+        self.tab_names = {}
         self.page_tabs = {}
         self.page_refs = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
@@ -481,7 +485,8 @@ class VmTools:
 
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
-                           vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
+                           vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN,
+                           browser_tabs={**BROWSER_TABS, "description": BROWSER_TABS["description"] + " " + VM_CONTRACT}, run_steps=RUN_STEPS)
         definitions.update(file_tools.DEFINITIONS)
         from .datasets import DEFINITION
         definitions["dataset"] = DEFINITION
@@ -625,7 +630,7 @@ class VmTools:
             private_before = await self._shared_private_picture(picture_target) or private_before
         began = time.monotonic()
         repair_budget = _REPAIRS.set(set())
-        reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open"}
+        reading = key in self.tools and self.tools[key].name in SCREEN_READS | {"browser_open", "browser_tabs"}
         progress, language = _NOTE.get()
         async def announce():
             await asyncio.sleep(self.read_progress_s)
@@ -1016,9 +1021,10 @@ class VmTools:
                         sent.setdefault("include_screenshot", False)
                         sent.setdefault("snapshot_format", "semantic_v2")
                     try:
-                        if tool.name == "browser_open":
+                        if tool.name in ("browser_open", "browser_tabs"):
                             async with asyncio.timeout(self.browser_open_s):
-                                data = await self._browser_open(target, member, client, session, arguments)
+                                data = await (self._browser_open if tool.name == "browser_open" else self._browser_tabs)(
+                                    target, member, client, session, arguments)
                         else:
                             data = await self._driver_call(target, client, tool.name, sent, own=True)
                     except (VmError, ConnectionError, TimeoutError) as error:
@@ -1183,7 +1189,7 @@ class VmTools:
             completed += 1
         return PluginResult(True, text=result.text, blocks=result.blocks, truncated=result.truncated)
 
-    async def _browser_open(self, target, member, client, session, arguments):
+    def _page_call(self, target, member, client, session, failure):
         async def call(name, args):
             if target != self.vm.target(member) or target.key in self.vm.held:
                 raise VmError("owner_holds_control")
@@ -1192,9 +1198,13 @@ class VmTools:
                 args = {"delivery_mode": "foreground", **args}
             reply = await self._driver_call(target, client, name, {**args, "session": session})
             if reply.get("isError"):
-                raise VmError("browser_open_failed")
+                raise VmError(failure)
             return reply
+        return call
 
+    async def _browser_window(self, target, client, session, call, *, new_tab=False):
+        """The member's own browser window, attached, back on its screen if it was minimized, and showing a new tab when
+        asked (raphael-browser-tabs brings the window to the front for it, so on a shared computer under the unit lock)."""
         if target.container:
             async with self._native_lock(target):
                 window = await self._shared_browser_window(target, client, session)
@@ -1202,50 +1212,128 @@ class VmTools:
                     "pid": window["pid"], "window_id": window["window_id"], "session": session, "delivery_mode": "foreground"})
                 if prepared.get("isError"):
                     raise VmError("browser_open_failed")
+                if new_tab:
+                    await self.vm.browser_tabs(target, "new", window["window_id"], BLANK)
+            return window
+        prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
+        prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
+        until = time.monotonic() + self.browser_window_wait_s
+        pause = self.browser_window_poll_s
+        while True:
+            windows = await call("list_windows", {})
+            state = windows.get("structuredContent") or {}
+            if not state:
+                for block in windows.get("content", []):
+                    if block.get("type") == "text":
+                        try:
+                            state = json.loads(block["text"])
+                            break
+                        except ValueError:
+                            state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
+                                for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
+            rows = state if isinstance(state, list) else state.get("windows", [])
+            matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
+                       and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
+                       and (not prepared_pid or row["pid"] == prepared_pid)]
+            if len(matches) == 1:
+                break
+            if matches or time.monotonic() >= until:
+                raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
+            # Preparing the CDP endpoint can finish before the window manager maps its window.
+            await asyncio.sleep(min(pause, max(0, until - time.monotonic())))
+            pause = min(pause * 1.5, self.browser_window_poll_max_s)
+        window = matches[0]
+        if window.get("is_on_screen") is False:
+            await self.vm.restore_window(target, window["window_id"])
+        if new_tab:
+            await self.vm.browser_tabs(target, "new", window["window_id"], BLANK)
+        return window
+
+    async def _tab_listing(self, target, window):
+        """What the browser itself says of the window's tabs, or None: a list that cannot be had leaves the driver's word."""
+        try:
+            return await self.vm.browser_tabs(target, "list", window["window_id"])
+        except VmError:
+            return None
+
+    def _name_tabs(self, target, found, target_id):
+        names = self.tab_names.setdefault(target.key, {})
+        for row in found:
+            names[row["tab_id"]] = (row["url"], row["title"], target_id)
+        while len(names) > 64:
+            names.pop(next(iter(names)))
+
+    async def _browser_open(self, target, member, client, session, arguments):
+        call = self._page_call(target, member, client, session, "browser_open_failed")
+        new_tab = arguments.get("new_tab") is True
+        window = await self._browser_window(target, client, session, call, new_tab=new_tab)
+
+        async def bind():
+            bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
+                "include_screenshot": False, "snapshot_format": "semantic_v2"})
+            page = bound.get("structuredContent") or {}
+            if not page.get("target_id"):
+                raise VmError("browser_target_missing")
+            return page, [tab for tab in page.get("tabs", []) if tab.get("tab_id")]
+        page, tabs = await bind()
+        if new_tab:
+            selected = new_tab_of(tabs)
+        elif len(tabs) == 1:
+            selected = tabs[0]
         else:
-            prepared = await call("browser_prepare", {"allow_launch": True, "profile": {"mode": "isolated_named", "name": "main"}})
-            prepared_pid = (prepared.get("structuredContent") or {}).get("pid")
-            until = time.monotonic() + self.browser_window_wait_s
-            pause = self.browser_window_poll_s
-            while True:
-                windows = await call("list_windows", {})
-                state = windows.get("structuredContent") or {}
-                if not state:
-                    for block in windows.get("content", []):
-                        if block.get("type") == "text":
-                            try:
-                                state = json.loads(block["text"])
-                                break
-                            except ValueError:
-                                state = {"windows": [{"window_id": int(match[1]), "pid": int(match[2]), "app_name": match[3]}
-                                    for match in re.finditer(r'window_id=(\d+) pid=(\d+) "[^"]*"[^\n]*app=([^\n]+)', block["text"])]}
-                rows = state if isinstance(state, list) else state.get("windows", [])
-                matches = [row for row in rows if "chrom" in str(row.get("app_name", row.get("title", ""))).lower()
-                           and isinstance(row.get("pid"), int) and isinstance(row.get("window_id"), int)
-                           and (not prepared_pid or row["pid"] == prepared_pid)]
-                if len(matches) == 1:
-                    break
-                if matches or time.monotonic() >= until:
-                    raise VmError("browser_window_ambiguous" if matches else "browser_window_missing")
-                # Preparing the CDP endpoint can finish before the window manager maps its window.
-                await asyncio.sleep(min(pause, max(0, until - time.monotonic())))
-                pause = min(pause * 1.5, self.browser_window_poll_max_s)
-            window = matches[0]
-        bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
-            "include_screenshot": False, "snapshot_format": "semantic_v2"})
-        page = bound.get("structuredContent") or {}
-        if not page.get("target_id"):
-            raise VmError("browser_target_missing")
-        tabs = page.get("tabs", [])
-        selected = next((tab for tab in tabs if tab.get("active") is True), tabs[0] if tabs else {})
-        if not selected.get("tab_id"):
+            # The page goes to the tab the owner sees. The driver cannot say which one that is among the browser's own pages
+            # (a new tab page), and its first tab was taken, which could be one behind the shown one (2026-11-14).
+            listing = None if shown_tab(tabs) else await self._tab_listing(target, window)
+            selected = shown_tab(tabs, listing)
+            if selected is None and listing is not None:
+                # Which tab is shown cannot be told: a new one is, rather than a page behind it being replaced.
+                async with (self._native_lock(target) if target.container else contextlib.nullcontext()):
+                    await self.vm.browser_tabs(target, "new", window["window_id"], BLANK)
+                page, tabs = await bind()
+                selected = new_tab_of(tabs)
+            elif selected is None:
+                selected = tabs[0] if tabs else None
+        if not selected:
             raise VmError("browser_tab_missing")
         tab = {"target_id": page["target_id"], "tab_id": selected["tab_id"]}
         await call("browser_navigate", {**tab, "url": arguments["url"]})
         reply = await call("get_browser_state", {**tab, "include_screenshot": False, "snapshot_format": "semantic_v2",
             **{key: arguments[key] for key in ("query", "scope_ref") if key in arguments}})
         reply["content"] = [block for block in reply.get("content", []) if block.get("type") != "image"]
+        opened = (reply.get("structuredContent") or {}).get("page") or {}
+        found = [{"tab_id": row["tab_id"], "title": opened.get("title", "") if row["tab_id"] == selected["tab_id"] else row["title"],
+                  "url": opened.get("url", arguments["url"]) if row["tab_id"] == selected["tab_id"] else row["url"],
+                  "shown": row["tab_id"] == selected["tab_id"]} for row in tab_rows(tabs)]
+        self._name_tabs(target, found, page["target_id"])
+        if len(found) > 1:
+            # What else the window holds, so a member knows its tabs without asking (the same ids work with this target_id).
+            reply["content"].append({"type": "text", "text": "Tabs of this window: " + json.dumps(found, ensure_ascii=False)})
         return reply
+
+    async def _browser_tabs(self, target, member, client, session, arguments):
+        call = self._page_call(target, member, client, session, "browser_tabs_failed")
+        window = await self._browser_window(target, client, session, call)
+        if "show" in arguments:
+            named = self.tab_names.get(target.key, {}).get(arguments["show"])
+            if named is None:
+                return self._seat_error("No tab of this window has that tab_id: call browser_tabs and pass one from its list.")
+            try:
+                async with (self._native_lock(target) if target.container else contextlib.nullcontext()):
+                    await self.vm.browser_tabs(target, "show", window["window_id"], named[0], named[1])
+            except VmError:
+                return self._seat_error("That tab is no longer as it was listed: call browser_tabs for the window's tabs now.")
+        bound = await call("get_browser_state", {"pid": window["pid"], "window_id": window["window_id"],
+            "include_screenshot": False, "snapshot_format": "semantic_v2"})
+        page = bound.get("structuredContent") or {}
+        if not page.get("target_id"):
+            raise VmError("browser_target_missing")
+        found = tab_rows([tab for tab in page.get("tabs", []) if tab.get("tab_id")], await self._tab_listing(target, window))
+        self._name_tabs(target, found, page["target_id"])
+        shown = [row["tab_id"] for row in found if row["shown"] is True]
+        # As a bind's answer, the tab named at the top is the one shown: the core remembers it as this target's tab.
+        state = {"target_id": page["target_id"], **({"tab_id": shown[0]} if len(shown) == 1 else {}), "tabs": found}
+        return {"content": [{"type": "text", "text": f"Your browser window has {len(found)} tab(s); shown marks the one on your screen."}],
+                "structuredContent": state}
 
     @staticmethod
     def _page_tab(page):
@@ -1466,7 +1554,12 @@ class VmTools:
         own = seat_view.windows(canvas, target.screen, target.screens)["windows"]
         found = [row for row in own if row.get("app_name", "").lower() in BROWSER_APPS]
         if found:
-            return min(found, key=lambda row: row["window_id"])
+            window = min(found, key=lambda row: row["window_id"])
+            # A window the owner minimized is still listed, and a member went on working in it where nobody could see
+            # (2026-11-14): it comes back to the screen first. The driver says so of a window it lists.
+            if window.get("is_on_screen") is False:
+                await self.vm.restore_window(target, window["window_id"])
+            return window
         return await self.vm.seat_browser(target)
 
     @staticmethod

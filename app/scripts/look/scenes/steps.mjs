@@ -57,7 +57,8 @@ export const scene = (name, description, steps = [], fixture = {}) => ({ name, d
 
 // The compact member/room picker exposes the same destinations as the wide sidebar.
 export const member = id => ({ action: "member", id });
-// What the clipboard or the mouse hands the page; the events reach the real composer. `{ image }` is a file name, `{ text }` words.
+// What the clipboard or the mouse hands the page; the events reach the real composer. `{ image }` is a file name, `{ text }` words;
+// `{ fill, label }` makes the picture that colour with that label on it (one pixel otherwise), so pictures in a row can be told apart.
 export const paste = (selector, contents) => ({ action: "clipboard-paste", selector, ...contents });
 export const dropFile = (selector, name, options = {}) => ({ action: "file-drop", selector, name, ...options });
 export const room = id => ({ action: "room", id });

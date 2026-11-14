@@ -211,3 +211,18 @@ def test_a_delivered_picture_whose_mime_is_unknown_is_still_media(conn):
     history, identifier = turn(conn)
     media(history, identifier, name='Sketch', key='c' * 32 + '.webp', mime='application/octet-stream')
     assert [(item['name'], item['kind']) for item in snapshot(conn, 0)['files']] == [('Sketch', 'image')]
+
+
+def test_a_file_the_member_hands_over_from_its_own_background_work_is_in_the_library(conn):
+    # Owner, 2026-11-14: two videos a member attached at the end of its background work were in the conversation and not in its
+    # Library. Such a turn names the member itself as `peer_id`; a colleague's hand-off names another member and stays out.
+    history, work = turn(conn, member=3, at=3000, source='worker', peer_id=3)
+    media(history, work, name='launch-film.mp4', key='d' * 32 + '.mp4', mime='video/mp4')
+    history.add_message(work, 'reply', 'The cut is here: [Storyboard](attachment:' + 'e' * 32 + '.pdf)')
+    conversation = conn.execute('SELECT conversation_id FROM agent_turns WHERE id=?', (work,)).fetchone()[0]
+    PageStore(conn, now_ms=lambda: 3000).write(turn_id=work, member_id=3, conversation_id=conversation, title='Shot list', html='<p>1</p>')
+    history, handed = turn(conn, member=3, at=4000, source='worker', peer_id=5)
+    media(history, handed, name='for-a-colleague.mp4', key='f' * 32 + '.mp4', mime='video/mp4')
+    files = snapshot(conn, 3)['files']
+    assert sorted((item['name'], item['kind'], item['turn_id']) for item in files) == [
+        ('Shot list', 'page', work), ('Storyboard', 'document', work), ('launch-film.mp4', 'video', work)]

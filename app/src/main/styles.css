@@ -360,7 +360,8 @@ code, pre, samp { font-family: var(--mono); }
 [data-chip-scroll]::-webkit-scrollbar { display: none; }
 [data-chip-row][data-more-before] > [data-chip-scroll] { --cut-l: 24px; --fade-l: var(--chip-fade); }
 [data-chip-row][data-more-after] > [data-chip-scroll] { --cut-r: 24px; --fade-r: var(--chip-fade); }
-[data-chip-row] > .btn.icon.chip-step { position: absolute; top: 50%; translate: 0 -50%; display: none; width: 28px; height: 28px; min-height: 28px; padding: 0; color: var(--text-2); }
+/* The arrow stands over the row's faded end on purpose, a layer of its own above the chips there (R-UI-145). */
+[data-chip-row] > .btn.icon.chip-step { position: absolute; z-index: 1; top: 50%; translate: 0 -50%; display: none; width: 28px; height: 28px; min-height: 28px; padding: 0; color: var(--text-2); }
 [data-chip-row] > .chip-step[data-chip-step="-1"] { left: 0; }
 [data-chip-row] > .chip-step[data-chip-step="1"] { right: 0; }
 [data-chip-row][data-more-before] > .chip-step[data-chip-step="-1"], [data-chip-row][data-more-after] > .chip-step[data-chip-step="1"] { display: inline-flex; align-items: center; justify-content: center; }

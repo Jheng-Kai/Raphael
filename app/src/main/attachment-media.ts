@@ -43,6 +43,11 @@ export function createAttachmentMedia(root: HTMLElement, read: (id: string) => P
     for (const event of ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "ended", "error"]) audio.addEventListener(event, update);
     update();
   };
+  const decoded = (url: string): Promise<void> => {
+    const image = new Image();
+    image.src = url;
+    return image.decode().catch(() => { /* A picture that cannot be decoded is shown as the browser shows it. */ });
+  };
   const apply = (id: string, url: string): void => {
     for (const node of root.querySelectorAll<HTMLImageElement | HTMLMediaElement>(`img[data-attachment="${id}"],video[data-attachment="${id}"],audio[data-attachment="${id}"]`)) {
       if (node.getAttribute("src") !== url) node.src = url;
@@ -76,6 +81,10 @@ export function createAttachmentMedia(root: HTMLElement, read: (id: string) => P
       }
       const url = URL.createObjectURL(new Blob([bytes], { type: file.mime }));
       loaded.set(id, { url, size: bytes.length });
+      // A picture is decoded before it is shown, so it goes from its name to itself in one frame and never stands empty
+      // between them: what stands above it in the thread does not move down and up (R-FOLLOW-01).
+      if (fileKind(file.mime) === "image") await decoded(url);
+      if (generation !== epoch) return;
       apply(id, url);
     } catch {
       // A missing stored copy leaves its name visible, without exposing backend details.
@@ -94,7 +103,11 @@ export function createAttachmentMedia(root: HTMLElement, read: (id: string) => P
       }
       const ids = new Set([...root.querySelectorAll<HTMLElement>("[data-attachment]")].map(node => node.dataset.attachment));
       for (const [id, entry] of loaded) if (!ids.has(id)) { URL.revokeObjectURL(entry.url); loaded.delete(id); }
-      for (const node of root.querySelectorAll("img[data-attachment],video[data-attachment],audio[data-attachment]")) {
+      for (const node of root.querySelectorAll<HTMLImageElement | HTMLMediaElement>("img[data-attachment],video[data-attachment],audio[data-attachment]")) {
+        // A picture drawn again (its line changed) takes the copy already loaded in the same task, before the next frame: it keeps
+        // its size instead of standing as its name until the observer reports it, which moved the thread above it (R-FOLLOW-01).
+        const cached = loaded.get(node.dataset.attachment ?? "");
+        if (cached && node.getAttribute("src") !== cached.url) node.src = cached.url;
         // Custom audio controls hide the native element; watch their visible pill instead.
         if (observer) observer.observe(node.closest(".attachment-audio") ?? node);
         else void load(node);

@@ -365,8 +365,8 @@ async def test_live_schema_check_requires_the_kept_list_to_be_the_drivers_own(tm
             await run.driver_schema(target)
     else:
         detail = await run.driver_schema(target)
-        # 40 before the five file tools (read_file, edit_file, write_file, glob, grep: R-FILE-01 to R-FILE-05).
-        assert "All 30 DRIVER_TOOLS" in detail and "left the 45 offered tools as they were" in detail
+        # 40 before the five file tools (read_file, edit_file, write_file, glob, grep: R-FILE-01 to R-FILE-05) and browser_tabs (R-COMP-TABS-01).
+        assert "All 30 DRIVER_TOOLS" in detail and "left the 46 offered tools as they were" in detail
     # What the driver listed is kept beside the report: the file the two kept lists are written from.
     assert (json.dumps(snapshot(run.out / "driver-tools.json")["tools"]) == json.dumps(KEPT)) == (changed is None)
 
@@ -535,17 +535,18 @@ async def test_computer_block_prints_duration_including_stop_even_when_start_fai
     assert float(lines[-1].split(": ")[1].removesuffix(" s")) >= 0
 
 
-def test_the_desktop_picture_verdict_tells_the_picture_the_town_and_a_flat_colour_apart():
+def test_the_desktop_picture_verdict_tells_the_owner_picture_the_default_and_a_flat_colour_apart():
     teal, orange, navy = acceptance.TEAL, acceptance.ORANGE, bytes((47, 33, 21))
     picture = [teal] * 640 + [orange] * 640
     flat = [navy] * 1280
-    town = [bytes((value % 256, 40, 90)) for value in range(0, 1280 * 3, 3)]
+    # The night picture across the middle: a soft dark gradient, a few dozen colours along a row.
+    default = [bytes((18 + value // 64, 18 + value // 64, 24 + value // 64)) for value in range(1280)]
     # The owner's picture: shown only when both halves are its colours.
     assert acceptance.desktop_shows(picture, picture * 2, True)[0]
     assert not acceptance.desktop_shows(flat, flat * 2, True)[0]
-    assert not acceptance.desktop_shows(town, town * 2, True)[0]
-    # No picture: the town is many colours; the flat colour layer 5 showed is not a town, nor is a picture left up.
-    assert acceptance.desktop_shows(town, town * 2, False)[0]
+    assert not acceptance.desktop_shows(default, default * 2, True)[0]
+    # No picture: the default is many colours; the flat colour layer 5 showed is not it, nor is a picture left up.
+    assert acceptance.desktop_shows(default, default * 2, False)[0]
     assert not acceptance.desktop_shows(flat, flat * 2, False) [0]
     assert not acceptance.desktop_shows(picture, picture * 2, False)[0]
     assert acceptance.desktop_shows(flat, flat * 2, False)[1] == (0.0, 0.0, 1)
@@ -581,7 +582,9 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert [a for a, b in zip(ninth, current) if a != b] == [f"{vm.LABEL}.layer=9", acceptance.OLD_IMAGES["9"]]
     tenth = acceptance.previous_args(target, machine.owner, "private", "10")
     assert [a for a, b in zip(tenth, current) if a != b] == [f"{vm.LABEL}.layer=10", acceptance.OLD_IMAGES["10"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10"]
+    eleventh = acceptance.previous_args(target, machine.owner, "private", "11")
+    assert [a for a, b in zip(eleventh, current) if a != b] == [f"{vm.LABEL}.layer=11", acceptance.OLD_IMAGES["11"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11"]
 
 
 class FakeDocker:
@@ -630,7 +633,11 @@ async def test_owner_guard_accepts_product_exec_and_exact_recovery_filter(tmp_pa
     runner.containers[target.name] = raw_container(target.name, machine.owner)
     await guard(vm.exec_args(target, ["test", "-f", vm.SCREENS_READY]))
     await guard(vm.exec_args(target, ["true"], detached=True))
-    await guard(["cp", str(acceptance.IMAGE_FOLDER / "desktop/wallpaper.py"), target.name + ":/opt/raphael-desktop/wallpaper.py"])
+    await guard(["cp", str(vm.WALLPAPER_FOLDER / "wallpaper.py"), target.name + ":/opt/raphael-desktop/wallpaper.py"])
+    await guard(["cp", str(vm.WALLPAPER_FOLDER / "wallpapers"), target.name + ":/opt/raphael-desktop/"])
+    # What the image's build folder holds is never the product's copy (image/desktop/ stays as the last layer built it).
+    with pytest.raises(AssertionError, match="Expected product wallpaper copy only"):
+        await guard(["cp", str(acceptance.IMAGE_FOLDER / "desktop/wallpaper.py"), target.name + ":/opt/raphael-desktop/wallpaper.py"])
     await guard(["ps", "-a", "--filter", f"label={guard.label}", "--format", "{{.Names}}"])
     for command in ("stop", "start", "restart", "rm"):
         await guard([command, *( ["--time", "10"] if command == "restart" else []), target.name])
@@ -711,17 +718,19 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v12"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v11"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v9"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v8"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v11"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v12"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v12", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v11", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v9", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v8", "image"],
@@ -991,7 +1000,9 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             return vm.Result(0, json.dumps({"credentials_enable_service": False, "profile": {"password_manager_enabled": False},
                                             "autofill": {"credit_card_enabled": False, "profile_enabled": False}}))
         if guest[:1] == ["raphael-browser"]:
-            rows.append(window(556, 60, "Chromium-browser"))
+            # As layer 12's icon: a window where the screen has none, and no second one when pressed again.
+            if not any(row["window_id"] == 556 for row in rows):
+                rows.append(window(556, 60, "Chromium-browser"))
             return vm.Result(0, "")
         if guest[:1] == ["/usr/lib/chromium/chromium"]:
             if "--version" in guest:
@@ -1135,6 +1146,12 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         return 'Synthetic carry boundary; Linux copy and core retry have their own offline tests'
     monkeypatch.setattr(run, 'seed_shared_carry', carry_seed)
     monkeypatch.setattr(run, 'check_shared_carry', carried)
+    seat_windows = []
+
+    async def windows_of_a_seat(tool, target, member):
+        seat_windows.append((target.screen, member))
+        return 'Synthetic seat windows; the real window list, tabs and geometry are proven on a real computer'
+    monkeypatch.setattr(run, 'seat_windows', windows_of_a_seat)
     monkeypatch.setattr('raphael_core.computer.datasets.command_for', lambda args: 'dataset-runtime:' + json.dumps(args))
 
     original_sleep = asyncio.sleep
@@ -1262,9 +1279,9 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     assert not [row for row in run.results if row["result"] != "ok"], run.results
     assert [row["name"] for row in run.results] == ["shared carry seed", "shared prepares", "shared window lists", "shared member datasets", "shared terminal wall",
         "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
-        "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared browser is a person's", "shared page text", "shared clipped product pictures", "shared owner control", "shared owner input",
+        "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared browser is a person's", "shared seat windows", "shared page text", "shared clipped product pictures", "shared owner control", "shared owner input",
         "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
-    assert seed_calls == [9201] and len(carry_checks) == 1
+    assert seed_calls == [9201] and len(carry_checks) == 1 and seat_windows == [(1, 9201)]
     assert launches == [1, 2]
     # The shared computer's panel on each of its six screens is read for the browser's name and mark.
     assert launchers == [f"/home/cua/.config/xfce4/panel/launcher-{number}/browser.desktop" for number in (1, 4, 7, 10, 13, 16)]
@@ -1625,14 +1642,17 @@ class PanelAcceptance:
 async def test_a_panel_that_loads_late_is_waited_for_and_one_that_stays_empty_fails_naming_what_it_holds(monkeypatch):
     # Seat 2's panel was seen 12 px wide, holding nothing, for twenty seconds and more (2026-11-13).
     target = vm.Target("k", "n", None, None, screen=1, screens=4, container="shared")
-    ids = {i: [str(n) for n in range(i * 3 - 2, i * 3 + 1)] for i in range(1, 5)}
+    ids = {i: [*map(str, range(i * 3 - 2, i * 3 + 1)), str(18 + i)] for i in range(1, 5)}
     sleeps = []
 
     async def sleep(seconds):
         sleeps.append(seconds)
     monkeypatch.setattr(acceptance.asyncio, "sleep", sleep)
     late = PanelAcceptance([[146, 146, 12, 12], [146, 146, 146, 12], [146] * 4], ids)
-    assert "one panel per screen with its three launchers" in await late.quiet(target)
+    assert "one panel per screen with its three launchers and its window list" in await late.quiet(target)
+    # A panel is as wide as its launchers and its windows' buttons (image layer 12): a wider one is as whole.
+    wide = PanelAcceptance([[146, 194, 242, 146]], ids)
+    assert "its window list" in await wide.quiet(target)
     assert late.looks == 3 and len(sleeps) == 2
     # The panel holds nothing: no plugin ids, and 12 px for as long as the check waits (a clock that jumps a minute).
     clock = iter([0, 0, 61, 61, 61, 61])
@@ -1642,6 +1662,10 @@ async def test_a_panel_that_loads_late_is_waited_for_and_one_that_stays_empty_fa
         await empty.quiet(target)
     # Whole panels without the three launchers by their own ids are no pass either.
     monkeypatch.undo()
-    wrong = PanelAcceptance([[146] * 4], {**ids, 2: ["1", "2", "3"]})
-    with pytest.raises(AssertionError, match="its own three launchers"):
+    wrong = PanelAcceptance([[146] * 4], {**ids, 2: ["1", "2", "3", "19"]})
+    with pytest.raises(AssertionError, match="its own three launchers and window list"):
+        await wrong.quiet(target)
+    # Nor are its launchers without its window list.
+    wrong = PanelAcceptance([[146] * 4], {**ids, 2: ["4", "5", "6"]})
+    with pytest.raises(AssertionError, match="its own three launchers and window list"):
         await wrong.quiet(target)

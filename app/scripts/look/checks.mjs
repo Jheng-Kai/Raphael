@@ -644,6 +644,15 @@ export function checkRendered(name, context = {}) {
         const rows = [...body.querySelectorAll('.lib-row')], kinds = new Set(rows.map(row => row.querySelector('.lib-icon').dataset.kind));
         require(rows.length === 5 && [...kinds].every(kind => ['image', 'video', 'audio'].includes(kind)) && !body.querySelector('.mp-empty'), `全部 lists the five pictures, video and audio (${rows.length})`);
       }
+    } else if (name === 'member-panel-library-background-video') {
+      // Owner, 2026-11-14: videos a member attached at the end of its background work were in the conversation, not in its Library.
+      // The list is the core's own (runner.mjs `coreFixtures`): the video and the page of that work, the script it sent, and not the colleague's.
+      const body = panel.querySelector('.mb-tab-body'), rows = [...body.querySelectorAll('.lib-row')], titles = rows.map(row => row.querySelector('.lib-title').textContent.trim());
+      const listed = window.__look.data.coreLibrary.files.map(item => item.name).sort().join();
+      require(listed === ['分鏡表', '宣傳影片.mp4', '腳本.pdf'].sort().join(), `the core lists the background work's video and page and the sent script, not the colleague's (${listed})`);
+      require(titles.join() === '宣傳影片.mp4' && rows[0].querySelector('.lib-icon').dataset.kind === 'video', `媒體 holds the video (${titles})`);
+      require(rows[0].dataset.panelFile === 'attachment:' + 'd'.repeat(32) + '.mp4' && Math.abs(rows[0].getBoundingClientRect().height - 36) <= 1, 'the row is the attachment, one 36 px line');
+      require(body.querySelector('.lib-group .mb-dh')?.textContent === '今天', 'it stands under today, when it was handed over');
     } else if (name === 'member-panel-library-open') {
       const opened = window.__look.state?.openedLibraryFile ?? window.__look.openedLibraryFile;
       require(opened?.id === 'delivered-file:bundle' && opened.member_id === 1, `the delivered file opens by its Library handle, never a path (${JSON.stringify(opened)})`);
@@ -1223,7 +1232,7 @@ export function checkRendered(name, context = {}) {
     const screen = name === 'desktop-boot-inline' ? document.querySelector('[data-card-desktop-screen], [data-card-screen]') : panel.querySelector('.desktop-screen');
     const wallpaper = screen.querySelector('.desktop-wallpaper');
     require(visible(wallpaper), 'the full wallpaper fills the screen');
-    require(getComputedStyle(wallpaper).objectPosition === '50% 100%', 'the slimes at the bottom stay in view');
+    require(getComputedStyle(wallpaper).objectPosition === '50% 50%', 'the picture is centred as the computer zooms it');
     require(getComputedStyle(wallpaper).opacity === '1' && getComputedStyle(screen.querySelector('.desktop-placeholder')).backgroundColor === 'rgba(0, 0, 0, 0)', 'nothing dims the picture');
     // No status pill, stage, face or progress: a getting-ready computer is the wallpaper alone, and its state stays in data.
     requireBareScreen(screen, 'the booting screen');
@@ -1234,7 +1243,7 @@ export function checkRendered(name, context = {}) {
     }
     const box = screen.getBoundingClientRect();
     if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
-    if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
+    if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.jpg`, 'the fixed fixture hour selects its expected picture');
     return {check:name};
   }  if(name === "daily-newest") {const reads=window.__look.calls.filter(call=>call.method==='agent.history.list'&&!call.params?.member_id&&call.params?.conversation_id!==undefined);require(reads.length>0&&reads.every(call=>call.params.conversation_id===77),'the newest standard conversation (not the default one, not the quick questions) is the one read');require(document.querySelector('.conversation-caption').hidden,'the header names only the member while a standard conversation is open (R-UI-103)');return {check:name,reads:reads.map(call=>call.params.conversation_id)};}
   if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
@@ -2260,7 +2269,7 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, kind };
   }
-  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-result','card-task-few','card-task-many','card-task-new','card-task-confirm','card-task-room','card-task-files','card-task-restored','card-task-prose','card-sheet','card-permission-settled'].includes(name)) {
+  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-result','card-task-few','card-task-many','card-task-new','card-task-noise','card-task-work-only','card-task-confirm','card-task-room','card-task-files','card-task-restored','card-task-prose','card-sheet','card-permission-settled'].includes(name)) {
     const calls = window.__look.calls;
     if (name === 'card-question-typing') require(!calls.some(call=>call.method==='owner_questions.answer'), 'typing A never answers the question');
     if (name === 'card-question-key') {
@@ -2290,7 +2299,7 @@ export function checkRendered(name, context = {}) {
       else require(card.dataset.mailState==='sent' && sends.length===2 && sends[1].params.retry_version===1 && window.__look.sent.length===1, 'an explicit version-bound retry sends once');
     }
     if (name === 'card-task-result') require(document.querySelector('[data-task-result="980"]').textContent.includes('+1 −1'), 'counts come from the actual checkpoint diff');
-    if (['card-task-result','card-task-few','card-task-many','card-task-new','card-task-confirm'].includes(name)) {
+    if (['card-task-result','card-task-few','card-task-many','card-task-new','card-task-work-only','card-task-confirm'].includes(name)) {
       // The work-result card (owner, 2026-11-14: 「工作結果」, 「53 個檔案變更 +0 −0」 and a green 「完成」 told nothing).
       const card = document.querySelector('[data-task-result="980"]'), text = value => value.textContent.replace(/\s+/g, ' ').trim();
       require(card && visible(card), 'the result card is on screen');
@@ -2325,6 +2334,13 @@ export function checkRendered(name, context = {}) {
         require(title === '新增了 3 個檔案', `only new files: ${title}`);
         require(shown.every(row => text(row.querySelector('.tr-state')) === '新增'), 'every row says 新增');
       }
+      if (name === 'card-task-work-only') {
+        // The core's own list (runner.mjs `coreFixtures`): beside npm's store of bare hashes, node_modules, a cache, a lock file, a partial
+        // render and a temporary folder, the work's three files and nothing else.
+        const names = shown.map(row => text(row.querySelector('.tr-name')));
+        require(title === '新增了 3 個檔案' && names.slice().sort().join() === ['Promo.tsx', 'package.json', '宣傳影片.mp4'].sort().join(), `only the work's files: ${title}, ${names}`);
+        require(!card.querySelector('[data-card-disclosure]') && !names.some(item => /^[0-9a-f]{32,}|lock|\.part$|node_modules|cache/i.test(item)), 'nothing a tool left is listed or folded away');
+      }
       if (name === 'card-task-confirm') {
         const dialog = document.querySelector('.mb-confirm');
         require(dialog && visible(dialog) && text(dialog.querySelector('h2')) === '復原這些變更？', 'the dialog asks first');
@@ -2340,6 +2356,13 @@ export function checkRendered(name, context = {}) {
       require(restores.length === 1 && restores[0].params.review_token === 'a'.repeat(64) && !document.querySelector('[data-task-restore]'), 'one confirmed restore uses the exact reviewed checkpoint token');
       const settled = document.querySelector('[data-task-result="980"]');
       require(settled?.querySelector('.card-title').textContent === '已復原 1 個檔案的變更' && [...settled.querySelectorAll('.card-actions button')].map(button => button.textContent.trim()).join('|') === '開啟檔案變更' && !settled.querySelector('.card-status'), 'an undone result says so, has no pill and offers no second undo');
+    }
+    if (name === 'card-task-noise') {
+      // Owner, 2026-11-14: 「這個可以不要顯示嗎」 of a card of thirty bare hashes. The core's own list for a turn of tools' leftovers alone is empty.
+      require(Array.isArray(window.__look.data.coreCheckpoints['core-noise']) && window.__look.data.coreCheckpoints['core-noise'].length === 0, 'the core sends no checkpoint for a turn of tools\' leftovers alone');
+      require(calls.some(call => call.method === 'computer.checkpoints'), 'the thread asked the core for its checkpoints');
+      require(!document.querySelector('.task-result') && document.querySelector('.tn[data-id="980"] [data-task-result-slot]')?.innerHTML === '', 'no card under the turn');
+      require(visible(document.querySelector('.tn[data-id="980"] [data-message="reply"] .message-text')), 'the reply is on screen as prose');
     }
     if (name === 'card-task-prose') require(!document.querySelector('.task-result') && !document.querySelector('.tn[data-id="980"] .task-actions'), 'no files means no result card, and the reply already says it is finished');
     if (name === 'card-sheet') require(document.querySelectorAll('.conversation-card').length >= 9 && document.querySelector('[data-card-desktop-screen] iframe'), 'the sheet uses real production consumers, team rows and one live screen in one column');
@@ -6283,6 +6306,19 @@ export function checkRendered(name, context = {}) {
   // area right of the sidebar: the details panel folded, the header's centre the page's own pill, Share at the right, the whole area scrolling with
   // no frame around the page, the thread hidden under it, the composer below, the way back the round arrow at the header's top left, and no
   // dialog, scrim or × anywhere.
+  // R-PAGE-11 (owner, 2026-11-14: 「這邊不要因為底下有那個輸入框就卡在那裡，它應該要是全螢幕的輸入框，感覺像是放在這個 HTML 或者是 page 上面的感覺」): an
+  // open page, an HTML page's area or a report's, runs to the window's foot and the composer floats over it at its own place, on its own
+  // surface, with no band behind it; the dock around the composer takes no pointer, so everything but the composer is the page's.
+  const pageUnderComposer = (stage, area) => {
+    const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
+    const areaBox = area.getBoundingClientRect(), stageBox = stage.getBoundingClientRect(), dockBox = dock.getBoundingClientRect(), composerBox = composer.getBoundingClientRect();
+    require(Math.abs(areaBox.bottom - stageBox.bottom) <= 1 && Math.abs(areaBox.bottom - innerHeight) <= 1, `the page runs to the window's foot, under the composer: ${Math.round(areaBox.bottom)} of ${innerHeight}`);
+    require(composerBox.top > areaBox.top && composerBox.bottom <= areaBox.bottom + 0.5 && composerBox.left >= areaBox.left - 0.5 && composerBox.right <= areaBox.right + 0.5 && dockBox.bottom <= areaBox.bottom + 1, "the composer stands over the page");
+    const band = getComputedStyle(dock), surface = getComputedStyle(composer);
+    require(/^(transparent|rgba\(\d+, \d+, \d+, 0\))$/.test(band.backgroundColor) && band.backgroundImage === "none" && band.pointerEvents === "none", `no band behind the composer: ${band.backgroundColor}, ${band.backgroundImage}, pointer ${band.pointerEvents}`);
+    require(/^rgb\(/.test(surface.backgroundColor) && parseFloat(surface.borderTopWidth) >= 1 && surface.boxShadow !== "none" && surface.pointerEvents !== "none", `the composer floats on its own surface and takes the pointer: ${surface.backgroundColor}, ${surface.boxShadow}`);
+    return { areaBox, dockBox, composerBox };
+  };
   if (name === "page-inplace" || name === "page-opened-whole" || name === "page-expanded" || name === "page-library-open") {
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
     const view = stage.querySelector(":scope > .pgv"), area = view?.querySelector(".pgv-page"), box = area?.querySelector(".pgv-frame-box"), frame = box?.querySelector("iframe");
@@ -6328,10 +6364,10 @@ export function checkRendered(name, context = {}) {
     const memberShare = pane.querySelector('.mb-head [data-act="share-member"]');
     require(!memberShare || !visible(memberShare), "the member's share waits while a page stands in the thread's place");
     // The area, since R-PAGE-10 (owner, 2026-11-14: the page as Chrome shows a file): the whole view right of the sidebar to the window's right edge,
-    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. It ends where the composer's row
-    // begins, so no part of the page is ever under the composer.
+    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. Since R-PAGE-11 it runs to the
+    // window's foot and the composer floats over it.
     const areaBox = area.getBoundingClientRect(), shown = box.getBoundingClientRect(), side = document.querySelector("#nav")?.getBoundingClientRect();
-    const frameBox = frame.getBoundingClientRect(), dockBox = dock.getBoundingClientRect(), composerBox = composer.getBoundingClientRect();
+    const frameBox = frame.getBoundingClientRect();
     require((!side || areaBox.left >= side.right - 1) && Math.abs(areaBox.left - paneBox.left) <= 1 && Math.abs(areaBox.right - paneBox.right) <= 1, `the area is the whole view beside the sidebar: ${Math.round(areaBox.left)}-${Math.round(areaBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
     require(Math.abs(frameBox.left - paneBox.left) <= 1 && Math.abs(frameBox.right - paneBox.right) <= 1 && Math.abs(shown.left - frameBox.left) <= 1 && Math.abs(shown.right - frameBox.right) <= 1, `the page spans the full width of the view, no margin either side: ${Math.round(frameBox.left)}-${Math.round(frameBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
     require(Math.abs(frameBox.right - innerWidth) <= 1, `and reaches the window's right edge: ${Math.round(frameBox.right)} of ${innerWidth}`);
@@ -6340,11 +6376,9 @@ export function checkRendered(name, context = {}) {
     require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0 && parseFloat(areaStyle.paddingBottom) === 0, "the area has no side or bottom padding");
     require(areaStyle.overflowY === "auto" && area.contains(box), "the whole area scrolls");
     require(shown.height >= area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom) - 1, `the page is at least as tall as the area: ${Math.round(shown.height)}`);
-    // It reaches the bottom of its view (the composer's row stands below it), and nothing of the composer is over it.
-    require(Math.abs(areaBox.bottom - dockBox.top) <= 1, `the page reaches the composer's row, with no strip between: ${Math.round(areaBox.bottom)} against ${Math.round(dockBox.top)}`);
-    const over = (one, two) => one.left < two.right - 0.5 && two.left < one.right - 0.5 && one.top < two.bottom - 0.5 && two.top < one.bottom - 0.5;
-    const visibleFrame = { left: frameBox.left, right: frameBox.right, top: Math.max(frameBox.top, areaBox.top), bottom: Math.min(frameBox.bottom, areaBox.bottom) };
-    require(!over(visibleFrame, composerBox) && !over(visibleFrame, dockBox) && areaBox.bottom <= dockBox.top + 1, "no part of the composer overlaps the page");
+    // It runs to the window's foot with the composer standing over it, and at rest the page itself is drawn under the composer.
+    const { composerBox } = pageUnderComposer(stage, area);
+    if (area.scrollTop === 0) require(frameBox.bottom >= areaBox.bottom - 1 && frameBox.top < composerBox.top, `the page is drawn under the composer, to the window's foot: ${Math.round(frameBox.bottom)} of ${Math.round(areaBox.bottom)}`);
     require(!view.querySelector(".pgv-title"), "the title is the pill's, not a line of the page");
     require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
@@ -6507,8 +6541,11 @@ export function checkRendered(name, context = {}) {
     require(stage.classList.contains("is-page") && !view.hidden, "the page stays open while the member answers");
     require(visible(status) && !status.hidden, "something shows under the page");
     const line = status.firstElementChild.getBoundingClientRect(), column = dock.querySelector(".composer").getBoundingClientRect();
-    const row = status.getBoundingClientRect();
-    require(row.top >= box.getBoundingClientRect().bottom - 1 && row.bottom <= dock.getBoundingClientRect().top + 1, "it stands between the page and the composer");
+    // The page runs under the composer (R-PAGE-11), so the line floats with it: just over the composer, over the page, on the composer's surface.
+    const { areaBox } = pageUnderComposer(stage, box);
+    require(line.bottom <= column.top - 2 && column.top - line.bottom <= 24 && line.top >= areaBox.top && line.bottom <= areaBox.bottom, `it stands just over the composer, over the page: ${Math.round(line.bottom)} against ${Math.round(column.top)}`);
+    const card = getComputedStyle(status.firstElementChild);
+    require(/^rgb\(/.test(card.backgroundColor) && parseFloat(card.borderTopWidth) >= 1 && getComputedStyle(status).pointerEvents === "none", `on its own surface, taking no pointer from the page: ${card.backgroundColor}`);
     require(line.left >= column.left - 1 && line.right <= column.right + 1 && line.height <= 40, `one line in the column: ${Math.round(line.height)} px`);
     require(!view.querySelector("button, .btn"), "no button for it, no sentence that explains it");
     if (name === "page-inplace-working") {
@@ -6527,6 +6564,37 @@ export function checkRendered(name, context = {}) {
     const said = [...pane.querySelectorAll(".ra-scroll .message-text")].some(text => text.textContent.includes("好了，最後一題改成問今天的新聞"));
     require(said, "the whole reply is in the thread behind it");
     return { check: name };
+  }
+  // Read to its end (R-PAGE-11): the page, an HTML page or a report, in a conversation or a room, ran under the floating composer, and its
+  // last line now stands clear above the composer and the answer line over it, with no more than a gap's room past it. Only the composer
+  // takes the pointer: beside it and under it a press is the page's.
+  if (name === "page-under-composer") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
+    const view = stage.querySelector(":scope > .pgv"), report = stage.dataset.pageKind === "report", dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
+    const area = view && (report ? view.querySelector(".rp-scroll") : view.querySelector(".pgv-page"));
+    require(stage.classList.contains("is-page") && !view.hidden && area, "a page stands in the conversation's place");
+    const { areaBox, dockBox, composerBox } = pageUnderComposer(stage, area);
+    require(area.scrollHeight - area.scrollTop - area.clientHeight <= 1, `the page is read to its end: ${Math.round(area.scrollTop)} of ${area.scrollHeight - area.clientHeight}`);
+    const line = view.querySelector(".pgv-status:not([hidden]) > *"), say = line && visible(line) ? line.getBoundingClientRect() : null;
+    const floor = Math.min(composerBox.top, say?.top ?? Infinity);
+    // The page's own last line: an HTML page's is where the page it holds ends (the height it says), a report's its last section's foot.
+    const box = view.querySelector(".pgv-frame-box");
+    const end = report ? Math.max(...[...view.querySelectorAll(".rp-body > .rp-sec")].filter(visible).map(section => section.getBoundingClientRect().bottom))
+      : box.getBoundingClientRect().top + parseFloat(box.style.getPropertyValue("--pgv-h"));
+    require(Number.isFinite(end) && end <= floor - 4, `its last line stands clear above the composer${say ? " and the answer over it" : ""}: ${Math.round(end)} against ${Math.round(floor)}`);
+    // Scrolled exactly far enough: past its end only a gap (a report keeps its own foot under its last section).
+    const room = report ? 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")) + 48 : 48;
+    if (area.scrollTop > 0) require(floor - end <= room, `with no more than a gap's room past it: ${Math.round(floor - end)} px`);
+    // A press on the composer is the composer's; beside it and under it, the page's (an HTML page's frame, or the report).
+    const middle = document.elementFromPoint((composerBox.left + composerBox.right) / 2, composerBox.top + 12);
+    require(middle && composer.contains(middle), `a press on the composer is the composer's: ${middle?.className || middle?.tagName}`);
+    const under = document.elementFromPoint((composerBox.left + composerBox.right) / 2, (composerBox.bottom + dockBox.bottom) / 2);
+    require(under && area.contains(under) && !dock.contains(under), `under the composer a press is the page's: ${under?.className || under?.tagName}`);
+    if (composerBox.left - areaBox.left >= 16) {
+      const beside = document.elementFromPoint((areaBox.left + composerBox.left) / 2, (composerBox.top + composerBox.bottom) / 2);
+      require(beside && area.contains(beside) && !dock.contains(beside), `beside the composer a press is the page's: ${beside?.className || beside?.tagName}`);
+    }
+    return { check: name, end: Math.round(end), floor: Math.round(floor), gap: Math.round(floor - end), scrolled: Math.round(area.scrollTop) };
   }
   // Escape goes back, and a draft in the composer is neither lost nor cleared by it.
   if (name === "page-inplace-escaped") {
@@ -6648,9 +6716,10 @@ export function checkRendered(name, context = {}) {
     // (its own style, page_style.py, keeps the lines readable inside it; the frame's own measures are `checkFrame`).
     const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe"), area = stage.querySelector(".pgv-page");
     require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
-    const pane = stage.parentElement.getBoundingClientRect(), box = frame.getBoundingClientRect(), dock = stage.querySelector(":scope > .ra-dock").getBoundingClientRect();
+    const pane = stage.parentElement.getBoundingClientRect(), box = frame.getBoundingClientRect();
     require(Math.abs(box.left - pane.left) <= 1 && Math.abs(box.right - pane.right) <= 1 && box.height > 300, `the page spans the full width of the view: ${Math.round(box.left)}-${Math.round(box.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
-    require(area.getBoundingClientRect().bottom <= dock.top + 1, "and ends where the composer begins");
+    // And runs under the composer to the window's foot (R-PAGE-11).
+    pageUnderComposer(stage, area);
     return { check: name, width: Math.round(box.width) };
   }
   if (name.startsWith("page-dashboard")) {
@@ -6841,8 +6910,7 @@ export function checkRendered(name, context = {}) {
     require(!memberShare || !visible(memberShare), "the member's share waits: one button in that place");
     require(getComputedStyle(scroller).visibility === "hidden", "the thread is out of sight under it");
     const dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer");
-    require(composer && visible(composer), "the member's composer stays below the report");
-    require(view.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top + 1, "the report ends where the composer begins");
+    require(composer && visible(composer), "the member's composer stays over the report");
     // The report stands for the thread: its column starts and ends where the composer does, and so do its tools (R-UI-45,
     // the judge on the first Share run: the × ended past the composer at every width).
     const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect();
@@ -6851,7 +6919,10 @@ export function checkRendered(name, context = {}) {
     // R-PAGE-10: the report's background fills the whole view beside the sidebar to the window's edge; only its column keeps a readable width.
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible).getBoundingClientRect(), fill = page.getBoundingClientRect(), viewBox = view.getBoundingClientRect();
     require(Math.abs(fill.left - pane.left) <= 1 && Math.abs(fill.right - pane.right) <= 1 && Math.abs(viewBox.left - pane.left) <= 1 && Math.abs(viewBox.right - pane.right) <= 1, `the report fills the full width of the view: ${Math.round(fill.left)}-${Math.round(fill.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
-    require(Math.abs(fill.right - innerWidth) <= 1 && fill.bottom <= dock.getBoundingClientRect().top + 1 && !(fill.bottom > composer.getBoundingClientRect().top + 0.5), "to the window's right edge, and no part of it is under the composer");
+    require(Math.abs(fill.right - innerWidth) <= 1, "to the window's right edge");
+    // R-PAGE-11: the report runs under the composer to the window's foot, its background the view's, and the composer floats over it.
+    pageUnderComposer(stage, page);
+    require(Math.abs(viewBox.bottom - fill.bottom) <= 1, "the report's background reaches the window's foot with it");
     require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
     require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
     if (name === "page-report-open") {
@@ -8533,6 +8604,19 @@ export function checkRendered(name, context = {}) {
       }
     };
     const watched = () => { const state = keep(); count(state, state.observer?.takeRecords() ?? []); return state; };
+    // The app reads them once after it starts, before Settings is ever opened (owner, 2026-11-15: 「在打開 app 的時候就跑一次，
+    // 之後才是每次設定的時候再跑一次」); every count after it is one more than the openings.
+    const launched = () => window.__lookUsageLaunch ?? 0;
+    if (stage === "launch") {
+      return (async () => {
+        for (let waited = 0; waited < 8000 && asked() < 1; waited += 50) await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 150));
+        require(!visible(document.querySelector('.modal-scrim [data-pane]')), "Settings has not been opened yet");
+        require(asked() === 1, `the allowances were read once after the app started, before Settings was opened (${asked()})`);
+        window.__lookUsageLaunch = asked();
+        return { check: name, asked: asked() };
+      })();
+    }
     if (stage === "general") {
       require(visible(document.querySelector('.modal-scrim [data-pane="general"][aria-current="page"]')) && !document.querySelector('[data-models-tab]'), "Settings is open on 一般, not on the allowances' tab");
       require(window.__look.calls.some(call => call.from), "the scene traces where each call comes from");
@@ -8540,12 +8624,12 @@ export function checkRendered(name, context = {}) {
       // Settings asks at its opening, before its first tab is drawn; the account menu it was opened from asked on its own (api.ts ASKED_AGAIN: no earlier answer stands in for it).
       return (async () => {
         await new Promise(resolve => setTimeout(resolve, 150));
-        require(asked() === 1, `the allowances were asked for once, at the opening (${asked()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
+        require(asked() === launched() + 1, `the allowances were asked for once, at the opening (${asked() - launched()}; all readings: ${JSON.stringify(window.__look.calls.filter(call => call.method === "usage.allowances").map(call => String(call.from).split(" < ").slice(3, 6).join(" < ")))})`);
         return { check: name, asked: asked() };
       })();
     }
     if (stage === "arm") {
-      require(asked() === 1, `reaching the tab asks for nothing more (${asked()})`);
+      require(asked() === launched() + 1, `reaching the tab asks for nothing more (${asked() - launched()})`);
       const area = root(), card = area?.querySelector('.run-subscription');
       require(visible(area) && card && area.getAttribute('aria-busy') === 'false', "the numbers are on the tab as it opens, none being waited for");
       const state = keep();
@@ -8565,15 +8649,15 @@ export function checkRendered(name, context = {}) {
     return (async () => {
       // The reading has answered (the mock stamps the end of each call), and the page has had a moment to draw it.
       const answered = () => window.__look.calls.filter(call => call.method === "usage.allowances").every(call => call.t1 !== undefined);
-      for (let waited = 0; waited < 3000 && !(answered() && asked() >= (stage === "same" ? 2 : 3)); waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
+      for (let waited = 0; waited < 3000 && !(answered() && asked() - launched() >= (stage === "same" ? 2 : 3)); waited += 25) await new Promise(resolve => setTimeout(resolve, 25));
       await new Promise(resolve => setTimeout(resolve, 150));
       const state = watched(), area = root();
       require(visible(area) && state.card && area.contains(state.card), "the card the numbers were shown in is still on the page");
       if (stage === "same") {
-        require(asked() === 2, `the next opening asked again (${asked()})`);
+        require(asked() - launched() === 2, `the next opening asked again (${asked() - launched()})`);
         require(state.touched === 0 && area.innerHTML === state.html, `a reading that found the same numbers touched nothing (${state.touched} changes)`);
       } else {
-        require(asked() === 3, `the opening after asked again (${asked()})`);
+        require(asked() - launched() === 3, `the opening after asked again (${asked() - launched()})`);
         require(state.card.textContent !== state.text && /\d+%/.test(state.card.textContent) && state.touched > 0, "the new number replaced the old in the same card");
         require(!state.busy && area.getAttribute('aria-busy') === 'false', "no busy state was drawn while it read");
       }
@@ -9736,12 +9820,98 @@ export function checkRendered(name, context = {}) {
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
+  if (name === "composer-pictures-start" || name === "composer-pictures-end") {
+    // R-ATTACH-01: twelve pictures wait in the composer in one row, inside it; the mouse wheel takes the row sideways to its last
+    // picture, whose × can still be pressed, and moves nothing else. In a 1920 px window the twelve fit: no arrow, no fade, and the wheel leaves the row.
+    const composer = [...document.querySelectorAll('.composer')].find(visible);
+    require(composer, 'a composer is on screen');
+    const row = composer.querySelector(':scope > .cmp-files[data-chip-row]'), strip = row?.querySelector(':scope > .cmp-file[data-chip-scroll]');
+    require(strip && visible(strip), "the files stand in the composer's own row");
+    const chips = [...strip.querySelectorAll(':scope > .cmp-chip')];
+    require(chips.length === 12 && chips.every(chip => chip.querySelector('.cmp-pic img.cmp-thumb[src]')), `twelve pictures with their thumbnails (${chips.length})`);
+    const tops = new Set(chips.map(chip => Math.round(chip.getBoundingClientRect().top)));
+    require(tops.size === 1, `the pictures keep one row (tops ${[...tops].join(', ')})`);
+    const c = composer.getBoundingClientRect(), s = strip.getBoundingClientRect(), high = chips[0].getBoundingClientRect().height;
+    require(s.left >= c.left - 0.5 && s.right <= c.right + 0.5, `the row stays inside the composer (${Math.round(s.left)} to ${Math.round(s.right)} in ${Math.round(c.left)} to ${Math.round(c.right)})`);
+    require(s.height <= high + 16, `the row is one picture high (${Math.round(s.height)} px for ${Math.round(high)} px pictures)`);
+    const fits = strip.scrollWidth <= strip.clientWidth + 1;
+    require(!fits || innerWidth >= 1400, `twelve pictures are wider than the composer, so the row scrolls (${strip.scrollWidth} in ${strip.clientWidth})`);
+    require(strip.offsetHeight - strip.clientHeight < 1, `no scrollbar shows under the row (${strip.offsetHeight - strip.clientHeight} px)`);
+    const inside = element => { const r = element.getBoundingClientRect(); return r.left >= s.left - 0.5 && r.right <= s.right + 0.5; };
+    const arrow = step => row.querySelector(`:scope > [data-chip-step="${step}"]`);
+    const pageTop = document.scrollingElement.scrollTop, threadTop = [...document.querySelectorAll('.ra-scroll')].filter(visible).map(thread => Math.round(thread.scrollTop));
+    if (fits) {
+      require(strip.scrollLeft <= 1 && !row.hasAttribute('data-more-after') && !row.hasAttribute('data-more-before') && !visible(arrow(1)) && !visible(arrow(-1)), 'all twelve show, with no arrow or fade');
+      require(chips.every(inside), 'every picture shows whole');
+      if (name === "composer-pictures-start") { window.__look.pictureStrip = { pageTop, threadTop }; return { check: name, fits, scrollWidth: strip.scrollWidth, clientWidth: strip.clientWidth }; }
+      const before = window.__look.pictureStrip;
+      require(before && pageTop === before.pageTop && JSON.stringify(threadTop) === JSON.stringify(before.threadTop), 'the wheel moved neither the page nor the thread');
+      return { check: name, fits, scrollLeft: Math.round(strip.scrollLeft) };
+    }
+    if (name === "composer-pictures-start") {
+      require(strip.scrollLeft <= 1 && row.hasAttribute('data-more-after') && !row.hasAttribute('data-more-before'), 'it starts at its first picture, with more past its right end');
+      require(visible(arrow(1)) && !visible(arrow(-1)), 'only the right arrow shows');
+      require(inside(chips[0]) && !inside(chips[11]), 'the first picture shows whole and the last is past the right end');
+      window.__look.pictureStrip = { pageTop, threadTop };
+      return { check: name, scrollWidth: strip.scrollWidth, clientWidth: strip.clientWidth };
+    }
+    const end = strip.scrollWidth - strip.clientWidth;
+    require(strip.scrollLeft >= end - 1, `the wheel took the row to its end (${Math.round(strip.scrollLeft)} of ${end})`);
+    require(row.hasAttribute('data-more-before') && !row.hasAttribute('data-more-after'), 'more lies before its left end and none after its right');
+    require(visible(arrow(-1)) && !visible(arrow(1)), 'only the left arrow shows');
+    const last = chips[11], remove = last.querySelector('.chip-x'), r = remove.getBoundingClientRect();
+    require(inside(last) && inside(remove) && visible(remove), 'the last picture and its × show whole');
+    require(remove.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)), 'its × is what a press there reaches');
+    const before = window.__look.pictureStrip;
+    require(before && pageTop === before.pageTop && JSON.stringify(threadTop) === JSON.stringify(before.threadTop), 'the wheel moved the row alone, not the page or the thread');
+    return { check: name, scrollLeft: Math.round(strip.scrollLeft), end };
+  }
+  if (name === "owner-pictures-row") {
+    // R-ATTACH-02: several pictures the owner sent are 96 px squares side by side, full rows first, right-aligned with his bubble, and the
+    // block is no taller than its rows.
+    return (async () => {
+    const line = [...document.querySelectorAll('.tn')].filter(visible).find(item => item.querySelector('.owner-message .attachment-thumbs'));
+    require(line, "the owner's message with several pictures");
+    const message = line.querySelector('.owner-message'), files = message.querySelector('.me-files'), row = files.querySelector(':scope > .attachment-thumbs');
+    const tiles = [...row.children], images = tiles.map(tile => tile.querySelector('.attachment-picture img'));
+    require(tiles.length >= 2 && tiles.every(tile => tile.matches('.me-file.attachment-image')) && images.every(Boolean), `the pictures are its thumbnails (${tiles.length})`);
+    require(files.querySelectorAll('.attachment-image').length === tiles.length, 'every picture of the message is in the row');
+    const end = performance.now() + 4000;
+    while (!images.every(image => image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
+    require(images.every(image => image.complete && image.naturalWidth > 0 && visible(image)), 'every thumbnail is drawn');
+    const rects = tiles.map(tile => tile.getBoundingClientRect());
+    const side = 96;
+    require(rects.every(r => Math.abs(r.width - side) <= 1 && Math.abs(r.height - side) <= 1), `every thumbnail is a ${side} px square (${rects.map(r => `${Math.round(r.width)}x${Math.round(r.height)}`).join(' ')})`);
+    require(images.every(image => getComputedStyle(image).objectFit === 'cover'), 'each picture fills its square');
+    const rows = [];
+    for (const r of rects) { const same = rows.find(item => Math.abs(item.top - r.top) <= 1); if (same) same.items.push(r); else rows.push({ top: r.top, items: [r] }); }
+    const across = rows[0].items.length;
+    require(rows.length === Math.ceil(tiles.length / across) && rows.slice(0, -1).every(item => item.items.length === across), `full rows first, then the rest (${rows.map(item => item.items.length).join(', ')})`);
+    require(across >= Math.min(tiles.length, 3), `at least three side by side when there are three (${across})`);
+    const block = row.getBoundingClientRect();
+    require(rows.length === 1 || (across + 1) * side + across * 8 > block.width + 1, `as many side by side as the bubble's column holds (${across} in ${Math.round(block.width)} px)`);
+    require(block.height <= rows.length * side + (rows.length - 1) * 8 + 1, `the pictures take no more than their rows (${Math.round(block.height)} px for ${rows.length} rows)`);
+    const bubble = message.querySelector('.bubble'), edge = (bubble ?? files).getBoundingClientRect().right;
+    require(rows.every(item => Math.abs(Math.max(...item.items.map(r => r.right)) - edge) <= 1.5), `every row ends at the bubble's right edge (${rows.map(item => Math.round(Math.max(...item.items.map(r => r.right)))).join(', ')} vs ${Math.round(edge)})`);
+    if (bubble) require(bubble.getBoundingClientRect().top >= block.bottom - 1, 'the bubble stands under the pictures');
+    const thread = line.closest('.ra-scroll'), t = thread?.getBoundingClientRect();
+    require(!t || rects.every(r => r.left >= t.left && r.right <= t.right), 'the pictures stay inside the thread');
+    return { check: name, pictures: tiles.length, rows: rows.length, across, height: Math.round(block.height) };
+    })();
+  }
+  if (name === "owner-pictures-lightbox") {
+    // A press on one of several thumbnails opens that picture large, in the app's own viewer (R-ATTACH-02).
+    const large = document.querySelector('.media-lightbox .lb-img'), pressed = document.querySelector('.tn[data-id="8201"] .attachment-thumbs > .attachment-image:nth-child(3) img');
+    require(visible(large) && pressed && large.getAttribute('src') === pressed.getAttribute('src'), 'the third picture opens large');
+    return { check: name };
+  }
   if (name === "owner-picture-bubble") {
     // R-UI-149: the owner's message with a picture: the picture keeps its size and the bubble under it keeps the width it has without one.
     return (async () => {
     const line = [...document.querySelectorAll('.thread > .tn, .thread .tn')].find(item => item.querySelector('.me-files .attachment-picture img') && item.querySelector('.owner-message .bubble'));
     require(line, 'a message with a picture and words');
-    const picture = line.querySelector('.me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
+    // Several pictures are a row of thumbnails (R-ATTACH-02), measured as one block; one picture is the grid of one.
+    const picture = line.querySelector('.me-files .attachment-thumbs, .me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
     const end = performance.now() + 4000;
     while (!(image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
     require(image.complete && image.naturalWidth > 0 && visible(image), 'the picture is drawn');
@@ -9759,7 +9929,7 @@ export function checkRendered(name, context = {}) {
     reference.remove();
     const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = field ? 2 : 1;
     require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
-    require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
+    if (picture.matches('.attachment-grid')) require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
     if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);

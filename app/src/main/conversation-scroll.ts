@@ -12,6 +12,8 @@ export function passWheelUnder(head: HTMLElement, stage: HTMLElement): void {
     const under = stage.classList.contains("is-page") ? stage.querySelector<HTMLElement>(".rp-scroll, .pgv-page") : stage.querySelector<HTMLElement>(":scope > .ra-scroll");
     if (!under || under.scrollHeight <= under.clientHeight) return;
     event.preventDefault();
+    // What listens for the owner's wheel on the thread hears this one too (message-rich.ts lets go of the bottom on a wheel up).
+    under.dispatchEvent(new WheelEvent("wheel", { deltaY: event.deltaY, deltaMode: event.deltaMode }));
     under.scrollTop += event.deltaY * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? under.clientHeight : 1);
   }, { passive: false });
 }

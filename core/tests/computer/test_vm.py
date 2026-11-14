@@ -166,6 +166,10 @@ async def test_start_installs_the_decorative_wallpaper_once_per_start_and_target
     assert len(copies) == 2
     assert any(Path(args[1]).name == 'wallpaper.py' and args[-1] == target.name + ':/opt/raphael-desktop/wallpaper.py' for args in copies)
     assert any(Path(args[1]).name == 'wallpapers' and args[-1] == target.name + ':/opt/raphael-desktop/' for args in copies)
+    # The copy carries the shipped watcher and both default pictures: a new picture needs no new image.
+    folder = next(Path(args[1]) for args in copies if Path(args[1]).name == 'wallpapers')
+    assert sorted(path.name for path in folder.iterdir()) == ['day.jpg', 'night.jpg']
+    assert next(Path(args[1]) for args in copies if Path(args[1]).name == 'wallpaper.py').read_text(encoding='utf-8').count('"day.jpg", "night.jpg"') == 1
     watcher = [(args, options) for args, options in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args]
     assert len(watcher) == 1
     script = watcher[0][0][-1]
@@ -874,9 +878,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert CURATED <= set(DRIVER_CATALOG["names"])
     deferred = {"vault_entries", "fill_contact", "fill_card"}
     from raphael_core.computer.file_tools import DEFINITIONS as FILE_DEFINITIONS
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"} | deferred | set(FILE_DEFINITIONS)
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "browser_tabs", "run_steps", "dataset"} | deferred | set(FILE_DEFINITIONS)
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"} | set(FILE_DEFINITIONS)
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "browser_tabs", "run_steps", "dataset"} | set(FILE_DEFINITIONS)
     assert set(snapshot.hidden()) == {"computer__" + name for name in deferred}
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())

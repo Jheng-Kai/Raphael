@@ -206,6 +206,8 @@ class ToolOutcome:
     instruction: str = ""  # a refusal of Raphael's own tool: what the model is told instead of `kind`
     blocks: list[dict] = field(default_factory=list)
     replace_tools: bool = False  # tools is the complete offer, including changed schemas/removals
+    # The harness's line for the model after the result, outside the data it wraps (agent/progress_updates.py).
+    note: str = ""
 
 
 class Host(Protocol):
@@ -460,6 +462,8 @@ async def _run_task(
                         raise Stop("failed", "tool_loop")
                     if verdict.note:  # after the result, outside the wrapper that marks it as data
                         content += "\n\n" + verdict.note
+                    if outcome.note:
+                        content += "\n\n" + outcome.note
                     if outcome.replace_tools:
                         tools[:] = outcome.tools
                         offered = {tool["function"]["name"] for tool in tools}

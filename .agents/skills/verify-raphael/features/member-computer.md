@@ -34,6 +34,76 @@ No UI changes, so no look run. Not run: a real computer (`verify -- --computer` 
 own flags against the image's ripgrep, a live turn of each brain (`verify -- --live`), the providers' acceptance of the
 dashed parameter names (`-i`, `-A`) that Claude Code's Grep uses.
 
+## A seat is a desktop a person can use (owner, 2026-11-14)
+
+R-COMP-SEATWIN-01, R-COMP-MARKER-01, R-COMP-TABS-01, R-COMP-FIT-01 (image `driver-0.37.0-v12`). Watching a member's screen and
+holding it, the owner (in translation): the members never open tabs; he only pressed minimize and when it came back Chrome
+could not find the original page; then the full-screen view looked strange: a Chrome window larger than the seat, cut on the
+left, top and right, with the panel over its page.
+
+What was measured on layer 11 (a throwaway shared computer, the worktree's real `LocalVm` and `VmTools`):
+- Minimize: the window stays in `wmctrl` and in the driver's list (`is_on_screen: false`, same geometry). A member's
+  `browser_open` went on in it unseen, replacing its page. The panel had no window list; its Browser icon made a second window
+  showing `data:text/html,<title>raphael-seat-...</title>`, and the core kept the older, minimized one (lowest id).
+- Tabs: the driver opens and brings forward no tab, and says `active: null` for new tab pages; `browser_open` navigated the
+  driver's shown tab or else the first one.
+- Geometry: with the compositor on, the browser's 16/16/10/32 px shadow and the window manager's maximize race; the seat's
+  window was 1312x893 at 16 px left and 10 px above its screen in 8 launches of 8 on one screen, and `wmctrl` could neither
+  unmaximize nor maximize it again. The launcher's "maximized and centred counts as settled" let it through.
+
+Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that built 11 reruns only that step, about a second):
+- `screens.py`: a window list (plugin 18 + the panel's number, `show-labels false`, this monitor only, never grouped) after each
+  panel's three launchers; no compositor (`/general/use_compositing false`); a window watch every second that puts back a
+  window whose seen part has stood outside its screen above the panel for two looks (maximized again, by the browser through
+  `raphael-browser-tabs fit` for a browser, or moved inside).
+- `xfce4-panel.xml`: the first panel's window list (a one-screen computer's only panel; the helper writes the others).
+- `raphael-browser`: the Browser icon brings the screen's browser window back with a new tab, or makes one when there is none.
+- `raphael-seat-browser`: the browser places and maximizes the found window (`fit`), then shows the new tab page in its marker
+  tab and clears its history (`settle`).
+- `raphael-browser-tabs` (standard library, the browser's own DevTools port): `settle`, `list`, `new`, `show`, `fit`.
+  A window of the browser is found by its screen, then its title, then (two alike) by which tab has the focus once it is
+  brought forward. A new tab opens in the window brought to the front last, so it is checked and, when it landed in another
+  window, closed and opened again.
+- Core: `vm_tools.py` (`browser_open` `new_tab`, the shown tab, a new `browser_tabs` tool, a minimized seat window brought back),
+  `browser_tabs.py` (the tools' words and the pure reading of tabs), `vm.py` (`restore_window`, `browser_tabs`, layer 11 in
+  `known_previous`, image v12), the acceptance (`OLD_IMAGES` with 11, panels with their window list, "shared seat windows").
+
+Offline: `core/tests/computer/test_seat_windows.py` (scripts read and run without Docker, the tools against fakes), plus the
+updated layer tests in `test_seat_tools.py`, `test_screens.py`, `tests/evaluate/test_computer_acceptance.py`.
+
+Real computer (throwaway tag `raphael-probe/seat-windows:l12`, own data folder and owner label; scripts in the session's
+scratchpad, `probe_now.py` and `probe_new.py`): pictures of seat 1 looked at one by one.
+- Layer 11, before: `04-after-launcher.png` is the owner's picture (empty page, marker in the tab and the address).
+- Layer 12: the first window shows Google's new tab page, Back greyed; `browser_open` with `new_tab` gives two tabs, "Owner page
+  A" and "Task page B", B shown; `browser_tabs` `show` brings A back; minimized, the screen shows the town and the panel's
+  faded window button, and a click on it through the screen's view brings the window back on page A; the Browser icon with the
+  window open adds a New Tab and no window (also when the window was minimized); x.com's login page in a new tab fills the
+  screen above the panel with its tab strip, back button and window buttons whole; restored and maximized by the browser
+  (twice) and by the window manager it is 0,0 1280x851 at once; dragged to 700,100 (half on screen 2) it was back at 284,100 in
+  3 s. A stuck 1312x893 window made by hand was put right by the watch within about 1.5 s. A terminal pushed to 1900,500 (half
+  over screen 3 and under the panel) was back with its frame at 1733,334, exactly inside screen 2 above the panel, in 3 s.
+- `wmctrl -lG` lists a decorated window at its frame's corner plus twice its decoration (frame at 0,0 with 5, 5, 29, 5 is listed
+  at 10,58; `xwininfo` gives the client at 5,29) and `wmctrl -e` places the frame. The first acceptance run of layer 12 failed
+  "shared seat displacement" because the watch had mixed the two and left a seat's terminal 5 px over the free screen.
+
+```powershell
+$env:RAPHAEL_CORE_PYTHON = "D:\Documentation\github_repos\Raphael\core\.venv\Scripts\python.exe"
+$env:PYTHONPATH = "<worktree>\core\src"
+npm.cmd run verify -- --computer
+```
+
+`npm run verify -- --computer` on the final tree (2026-11-15, 26 min, the owner's own shared computer running beside it): 88 ok,
+3 failed, 6 skipped (no images of layers 4 to 8 and 10). "shared seat windows", "shared seat displacement", "shared browser is a
+person's" and "previous layer 11 start/update" (layer 11 made again on 12, workspace kept) passed. The three failures are one
+thing: removing the run's temporary data folder, `vm-homes/<key>/.browser-profiles` is access denied to the host on this PC
+(`previous layer 9 erase`, `previous layer 11 erase`, `cleanup`). The home of a throwaway layer 11 computer made before any of
+this change has the same denied folders, so it is this PC's Docker file sharing, not layer 12; the folders were removed through a
+throwaway root container. Not run: a member's real turn with a model, and a computer of a member's own on a remote host.
+
+Stated limits: two tabs with the same address and title cannot be told apart, so which of them `show` brings forward, or which
+is shown, is not claimed (`shown: null`); the watch does not fight a drag, so a window held still half across for a second is
+put back; a member's typed tools still act on a background tab without bringing it forward (the driver's own design).
+
 ## The first call after a wake is waited for; "your computer" is the member's (owner, 2026-11-14)
 
 R-COMP-FIRST-01, R-COMP-OWN-01. From the owner's own conversations: a member's first computer action after a sleep failed with
@@ -206,6 +276,50 @@ The new sentence has its translations in all fifteen interface languages (`_ui_w
 once-per-episode rule and the read-only, ask-before-delete behaviour are unchanged. The `computer-low-disk` scene's sample
 reply still shows the folder-listing sentence.
 
+## The default picture: light by day, dark by night (owner, 2026-11-14)
+
+R-UI-92 (rewritten), R-UI-95, R-COMP-PICTURE-01, R-COMP-3-04. The slime town of five periods is gone. The default
+picture of a computer and of every preview is one of two original abstract pictures drawn for Raphael (no characters):
+`day.jpg`, the light one, from 06:00 to 17:59 and `night.jpg`, the dark one, from 18:00 to 05:59. Both are 1495x1052
+JPEGs (quality 92, about 70 KB each), the screen's shape within half a percent, so the computer's zoom (xfdesktop
+`image-style` 5) and the preview's `object-fit: cover; object-position: center` fill a 1280x900 screen and cut off at
+most a pixel.
+
+One clock. The computer's watcher (`wallpaper.py --watch`, every 30 s) reads the computer's own clock, and the computer
+runs with `TZ` set to the owner's zone: the zone the window sends with `members.viewing` (its `Intl` zone), which
+`HomeOverview.note_timezone` keeps and `vm.refresh_timezone` / `_reconcile_timezone` give the container. The preview
+(`defaultWallpaper` in `desktop-viewer.ts`) reads the window's own clock, whose zone is that same `Intl` zone. The
+picture is part of the draw signature, so an open panel turns at 18:00 on its next poll without being opened again.
+Until the window has said a zone the core's computers run in UTC (`timezone_name(None)`); it says one as soon as a
+conversation is open.
+
+Where the files are. `core/src/raphael_core/computer/wallpaper/` holds `wallpaper.py` and `wallpapers/day.jpg` and
+`wallpapers/night.jpg`. `LocalVm._wallpaper` copies the script and the folder into `/opt/raphael-desktop/` at every start
+(each copy within 2 s, all of it within 5 s), so a new picture needs no image layer; `app/public/wallpapers/` holds the
+same bytes for the preview and the look transport, and PyInstaller collects `wallpaper/**/*`. The folder is outside
+`image/` on purpose. Every file the image's build copies is part of its cache key: a change to `image/desktop/` would make
+a PC that built layer 11 (or 12, whose step says `desktop/` stays byte for byte) download Chrome and every package again.
+So `image/desktop/wallpaper.py` and its five SVGs stay as layer 11 built them and nothing reads them (the core writes the
+new script over the image's copy at every start); they can go when a layer rebuilds from the base anyway. And `image/**`
+is `text eol=lf` in `.gitattributes`, which would rewrite a JPEG's bytes.
+
+The owner's own picture (`computer-wallpaper.jpg`, R-UI-95) is untouched and still wins at every hour.
+
+Tests: `core/tests/computer/test_wallpaper.py` runs the watcher's own pass with its clock stopped at 05:59, 06:00, 17:59
+and 18:00, checks every hour, the two JPEGs' shape, that the preview's bytes are the same, and that the folder is outside
+`image/`; `test_vm.py::test_start_installs_the_decorative_wallpaper_once_per_start_and_target` checks that the copy carries
+both pictures; `desktop-viewer.test.ts` checks the same four minutes on the panel (Asia/Taipei, as `vitest.config.ts`
+sets) and an open panel turning at 18:00. `npm run verify -- --computer` reads `last-image` for `day.jpg` or `night.jpg`
+once its own picture is put aside (measured colours across the middle at 1280x900: 95 by day, 28 by night; it asks 12).
+
+```powershell
+npm run look -- desktop-wallpaper-day desktop-wallpaper-night desktop-viewer desktop-viewer-night desktop-starting desktop-boot-inline desktop-boot-card desktop-own-wallpaper desktop-own-wallpaper-card panel-off --theme both --width 1120,720,1920x1080
+```
+
+`desktop-wallpaper-day` and `-night` fix 06:00 and 18:00, the first minute of each, and check the source and the
+centred zoom; `desktop-viewer-night` opens the larger view at 22:00 over the synthetic stream, which draws the same
+picture. Offline look evidence does not prove the picture in a real computer.
+
 ## One foot under the larger view's screen (owner, 2026-11-13)
 
 R-PANEL-08. The owner's picture after a failed demonstration: the red line began at the window's edge
@@ -283,7 +397,7 @@ start of a running computer. A start confirmed within the last 45 seconds is ans
 from memory and looks at nothing, the picture included (R-COMP-PERF-01). With the loader
 installed the desktop's own default drawing renders too, so "many colours" alone does
 not prove the town: the acceptance also reads `last-image` and requires one of the five
-town files.
+town files (`day.jpg` or `night.jpg` since 2026-11-14, the default picture section).
 
 The keys. `xfconf-query -c xfce4-keyboard-shortcuts -l -v` on layer 5 listed every XFCE
 default under `/xfwm4/custom` and `/commands/custom`, with four workspaces. The session
@@ -715,9 +829,12 @@ Scenes: `member-panel-library` (全部), one per chip (`-pages`, `-media`, `-fil
 deliverables are all media; the four chips still show, 全部 lists the five) and `-single-pages` (its 頁面 chip: one quiet line),
 `-long` (the `long` fixture: 98 items of every kind), `-open` and `-empty` (four chips and the one sentence); the checks in
 scripts/look/checks.mjs read the chips, groups, card, row, mark and empty-line geometry.
+`-background-video` (R-PANEL-10, owner 2026-11-14: videos a member attached at the end of its background work were missing): the
+core's own `snapshot` of a synthetic database (`scripts/look/core_fixtures.py`, runner.mjs `coreFixtures`) lists the background work's video and
+page (a turn naming the member itself as `peer_id`) and a sent script, not a colleague's hand-off; 媒體 holds the video under 今天.
 
 ```powershell
-npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty page-library-open page-library-report page-library-back page-library-older details --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-background-video member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty page-library-open page-library-report page-library-back page-library-older details --theme both --width 1120,720,1920x1080
 ```
 
 ## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
@@ -1081,6 +1198,7 @@ in this offline-only brief, with no UI consistency comparison implied.
 
 ## Slime town and computer preparation (2026-11-03)
 
+The town was replaced on 2026-11-14 by two pictures (the default picture section); what follows on preparation holds.
 R-UI-92/93/94 replace the monochrome artwork and preparation stage-list assertions
 only. The existing hour boundaries, five filenames, XFCE watcher, start/repair
 controls, leases and single carried iframe remain authoritative. The approved
@@ -1090,7 +1208,7 @@ asset folders through wallpaper.py --generate. The byte ceiling is 20,000, with
 the largest current SVG approximately 15,000 bytes. No embedded/external images,
 text, scripts, CSS or modern SVG features are shipped.
 
-Preparation keeps the running preview's aspect ratio and bottom-aligned picture.
+Preparation keeps the running preview's aspect ratio and its picture (centred since 2026-11-14).
 The member's shared face has local working motion at 64px (96px expanded), with
 Raphael's emblem retained. The frame-token translucent pill holds only the
 current localized stage, a real percent when supplied and the first-build line
@@ -1120,10 +1238,10 @@ animation, and samples the actual CSS fade at 0/120/240ms under normal motion.
 Selected matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-day desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
-Compare the full-size preparation and town-period images and the preview/emblem
+Compare the full-size preparation and day and night images and the preview/emblem
 with the shared member-header face. Offline look evidence does not prove the
 XFCE loader or guest timezone.
 
@@ -1147,9 +1265,9 @@ the owned stream, releases its current nonce once and retains the conversation
 position. Refreshes with unchanged data preserve nodes, animation, focus, menus
 and scroll (R-UI-71); action menus use ui.ts dismissal/anchor behavior (R-UI-73).
 
-The original generated monochrome wallpapers are shared by the guest, off preview
-and fixture RFB transport. wallpaper.py proves each hour's selection and generated
-asset bytes. Since layer 6 the 30-second timer is the one watcher the core starts when
+The default pictures (two since 2026-11-14, R-UI-92) are shared by the guest, off preview
+and fixture RFB transport. The wallpaper tests prove each hour's selection and that the
+guest and the preview carry the same bytes. Since layer 6 the 30-second timer is the one watcher the core starts when
 the computer is ready (`LocalVm._wallpaper`), under the existing guest TZ; the session's
 `prepare-desktop` starts none (R-COMP-PICTURE-01).
 Unchanged workspaces get no writes; late monitors are initialized on the next tick.

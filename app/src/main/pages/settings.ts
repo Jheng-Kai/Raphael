@@ -488,8 +488,10 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
+    // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last (owner, 2026-11-15).
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
+    else if (canonicalPane(next) === "models" && canonicalPane(next) !== pane) modelsTab = "models";
     pane = canonicalPane(next);
     if (pane === "about") void checkUpdate();
     if (pane === "connections") void connections.load();
@@ -1276,7 +1278,11 @@ export function createSettings(app: AppContext): SettingsPage {
       if (!connectionsWarmed) {
         connectionsWarmed = true;
         // After the first view, and one read at a time with the other optional reads (startup-reads.ts).
-        const warm = (): void => { if (!(visible && pane === "connections")) void optionalRead(() => connections.load()); };
+        const warm = (): void => {
+          if (!(visible && pane === "connections")) void optionalRead(() => connections.load());
+          // The models' usage too, once after launch (owner, 2026-11-15: 「在打開 app 的時候就跑一次，之後才是每次設定的時候再跑一次」).
+          if (!visible) void optionalRead(() => refreshInBackground());
+        };
         if (typeof requestIdleCallback === "function") requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 1500);
       }
     },
@@ -1297,7 +1303,9 @@ export function createSettings(app: AppContext): SettingsPage {
       limitError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
-      if (open === "usage" || open === "models") modelsTab = open;
+      // Every opening starts afresh: 模型與用量 at 模型, 用量 only when the way in asks for it (owner, 2026-11-15:
+      // 「每次進到設定的時候，它的狀態要重置 他不會跳到用量 而是在最初模型的地方才對」).
+      modelsTab = open === "usage" ? "usage" : "models";
       connections.reset();
       rules.reset();
       vault.reset();

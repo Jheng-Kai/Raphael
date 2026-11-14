@@ -44,6 +44,12 @@ export function installMock(fixture, config = {}, target = window) {
     }
     // The owner's message carries one screenshot (the message is stored with it; `attachments.get` gives its picture back).
     if (variant.ownerPicture) turn.attachments = [{ id: `${'a'.repeat(32)}.png`, name: '畫面截圖.png', mime: 'image/png', size: 4096 }];
+    // Several pictures in one message (R-ATTACH-02): `ownerPictures` of them, each drawn by `attachments.get` in its own colour and
+    // shape (square, landscape, portrait); `ownerFile` puts a document among them.
+    if (variant.ownerPictures) {
+      const shots = Array.from({ length: variant.ownerPictures }, (_, i) => ({ id: `${String(i + 1).padStart(2, '0').repeat(16)}.png`, name: `畫面-${i + 1}.png`, mime: 'image/png', size: 48_000 }));
+      turn.attachments = variant.ownerFile ? [shots[0], { id: `${'d'.repeat(32)}.pdf`, name: '研究摘要.pdf', mime: 'application/pdf', size: 182_000 }, ...shots.slice(1)] : shots;
+    }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
     if (variant.ownerEdit === 'placed') {
       // A member's thread as the owner's has it: routine turns posted after his message (07:00 and 08:00), so an edit that
@@ -1238,8 +1244,13 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.ownerPicture && p.id === `${'a'.repeat(32)}.png`) return { mime: "image/png", data: "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" };
         if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         // Pictures a member sent (R-UI-156), drawn here at the size the scene gives (a square, a landscape) and read back as stored copies.
-        const drawn = variant.drawnPictures?.[p.id];
+        // The owner's several pictures (`ownerPictures`, ids of one two-digit number sixteen times) come in turn in their own colours and shapes.
+        const shot = variant.ownerPictures && /^(\d\d)\1{15}\.png$/.exec(p.id), n = shot ? Number(shot[1]) : 0, hue = (n * 37) % 360;
+        const drawn = variant.drawnPictures?.[p.id] ?? (shot ? { width: [1024, 1280, 720][n % 3], height: [1024, 720, 1280][n % 3],
+          wall: `hsl(${hue}, 35%, 78%)`, window: `hsl(${(hue + 180) % 360}, 45%, 62%)`, floor: `hsl(${hue}, 25%, 45%)`, desk: `hsl(${hue}, 30%, 28%)` } : null);
         if (drawn) {
+          // A busy core reads a stored picture back late (`pictureLate`, ms): the thread is drawn and placed before it comes.
+          if (variant.pictureLate) await new Promise(resolve => setTimeout(resolve, variant.pictureLate));
           const canvas = document.createElement("canvas"); canvas.width = drawn.width; canvas.height = drawn.height;
           const ctx = canvas.getContext("2d"), w = drawn.width, h = drawn.height;
           ctx.fillStyle = drawn.wall; ctx.fillRect(0, 0, w, h);
@@ -1289,6 +1300,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.library": {
         // As the core since brief 10: only what the member delivered, newest first, with the day it was handed over.
         if (!variant.memberPanelFiles) return { files: [], has_more: false };
+        // `core`: the Library the core's own snapshot reads from a synthetic database (runner.mjs `coreFixtures`).
+        if (variant.memberPanelFiles === "core") return data.coreLibrary;
         const sample = data.memberPanelSample, now = Date.now(), limit = p.limit ?? 12;
         const dayOf = at => { const d = new Date(at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
         // Three pictures it sent in its replies, stored as attachments (drawn here, read back through attachments.get).
@@ -2086,6 +2099,9 @@ export function installMock(fixture, config = {}, target = window) {
             picture('/home/cua/workspace/預算.xlsx', 'added'), picture('/home/cua/team/封面.png', 'added'),
           ],
         };
+        // `core-noise` and `core-work`: what the core's own CheckpointStore sends for a turn of tools' leftovers alone, and beside the
+        // work's files (runner.mjs `coreFixtures`).
+        if (variant.checkpointShape?.startsWith('core-')) return {checkpoints:data.coreCheckpoints[variant.checkpointShape],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
         const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:variant.roomOwnerCard === 'result' ? 950 : variant.cardTaskResult || variant.cardDeck ? 980 : 7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:shapes[variant.checkpointShape] ?? [{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
         if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:checkpoint.files.map(file => file.path),skipped:[]}; }
         return {checkpoints:variant.checkpoints || variant.cardDeck ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};

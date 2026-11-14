@@ -4,9 +4,8 @@
 .mb-det[data-details-tab="details"] .desktop-panel:not([data-expanded], [hidden]) { display: grid; position: fixed; top: 0; left: -10000px; width: 480px; visibility: hidden; pointer-events: none; }
 /* While the member's computer works, a small dot follows its name in the header: no button. */
 .conversation-trigger.is-computer-active .mb-pill::after { content: ""; flex: none; width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--computer-active); }
-.desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
-/* xfdesktop zooms the owner's picture from its centre, and its subject sits in the middle rather than along the bottom. */
-.desktop-wallpaper[data-own] { object-position: center; }
+/* xfdesktop zooms every picture, the default ones and the owner's, from its centre: the preview does the same. */
+.desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 /* R-UI-95: the stage sits below the owner's picture's subject (the placeholder is a column). */
 .desktop-wallpaper[data-own] ~ .desktop-placeholder { justify-content: flex-end; }
 .desktop-panel:not([data-expanded]) .desktop-wallpaper[data-own] ~ .desktop-placeholder .desktop-state-content > .desktop-boot-face > .av { --av: 44px; }
