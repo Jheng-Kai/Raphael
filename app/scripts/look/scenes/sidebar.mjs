@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
 const pinnedTiles = { sidebarMany: true, pinnedTiles: [0, 3, 1] };
+// The one light of a row (owner, 2026-11-14): 1 and 6 only think, 2 has a message, 3 a task that ended, 4 work that failed, 5 a question that waits
+// (and a message too, which it outranks); the group chats have a message, a meeting that ended and a question.
+const lights = { sidebarMany: true, sidebarLights: { 1: "thinking", 2: "message", 3: "done", 4: "failed", 5: "waiting", 6: "thinking" }, sidebarLightRooms: true };
 const cropOpen = [...settings("general"), click('[data-owner-photo]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-frame:not([hidden])')];
 
 export default [
@@ -12,6 +15,12 @@ export default [
   scene("sidebar-folded", "A collapsed folder preserves its choice", [{ action: "member-column", collapsed: false }, wide(click('[data-group-fold="1"]')), check("sidebar-folded"), check("sidebar-shell")]),
   scene("sidebar-many", "Many colleagues retain a scrollable single list", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { sidebarMany: true }),
   scene("sidebar-unread", "Unread member and group messages have previews and times", [{ action: "member-column", collapsed: false }, check("sidebar-room-summary"), check("sidebar-unread"), check("sidebar-shell")], { sidebarUnread: true }),
+  // Owner, 2026-11-14: 「他們如果在思考的情況下，不要有提示…只有他們真正傳出訊息的時候，我左邊才會有提示…白色 maybe 是它傳了一個新的 message，然後綠色可能是他完成任務」.
+  scene("sidebar-lights", "Each row wears one still dot: orange for a question that waits, red for work that failed, green for a task that ended, white for a new message, and none for a member that only thinks", [{ action: "member-column", collapsed: false }, check("sidebar-lights"), check("sidebar-shell")], lights),
+  scene("sidebar-lights-rail", "On the rail the same dot stands on each face's corner", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), check("sidebar-lights"), check("sidebar-rail")], lights),
+  scene("sidebar-lights-pinned", "A pinned face at the top wears the same dot", [{ action: "member-column", collapsed: false }, check("sidebar-lights"), check("sidebar-shell")], { ...lights, sidebarLights: { ...lights.sidebarLights, 0: "message" }, pinnedTiles: [0, 3, 1] }),
+  scene("sidebar-lights-thinking", "Members that are only thinking have no dot at all", [{ action: "member-column", collapsed: false }, check("sidebar-lights-quiet"), check("sidebar-shell")], { sidebarMany: true, sidebarLights: { 1: "thinking", 2: "thinking", 3: "thinking", 4: "thinking" } }),
+  scene("sidebar-lights-open", "Opening a conversation reads its white and green dot, and an orange question stays while it waits", [{ action: "member-column", collapsed: false }, member(2), member(3), member(5), wait('.mb-col [data-member="5"][aria-current="true"]'), check("sidebar-lights-open"), check("sidebar-shell")], { sidebarMany: true, sidebarLights: lights.sidebarLights }),
   scene("sidebar-metrics", "The sidebar's geometry is recorded: width, row pitch, the highlight, the type, the foot and how many rows fit", [{ action: "member-column", collapsed: false }, check("sidebar-metrics")], { sidebarMany: true }),
   // Grok Bot's air (owner, 2026-11-12): rows 58px apart, the foot on its two rows, and under 860px a rail of faces. Every width runs the same steps:
   // a face opens its conversation, the + opens its menu from the rail as from the list, and a right click opens the row menu.

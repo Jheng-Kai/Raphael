@@ -1661,6 +1661,8 @@ export const vi = {
   "reminder.waiting": "{p0} đang chờ bạn",
   "reminder.open": "Mở",
   "members.unread": "Tin nhắn mới",
+  "members.lightDone": "Đã hoàn tất",
+  "members.lightFailed": "Cần bạn xem qua",
   "members.pick": "Chọn thành viên",
   "members.panel": "Chi tiết thành viên",
   "members.close": "Đóng chi tiết",
