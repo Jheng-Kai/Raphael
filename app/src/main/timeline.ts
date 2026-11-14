@@ -1078,7 +1078,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
     (asked && state.editing?.turnId === turn.id
-      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question">${ownerEditorHTML(state.editing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote) : "")}</div></div>`
+      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question" data-msg-editor>${ownerEditorHTML(state.editing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote, true) : "")}</div></div>`
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +

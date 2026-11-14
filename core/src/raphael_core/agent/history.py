@@ -264,10 +264,13 @@ class AgentHistory:
         source_turn_id: int | None = None,
         admission: str | None = None,
         failure: dict | None = None,
+        place: tuple[int, int] | None = None,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
-        request; `peer_id` is the other member of an exchange."""
+        request; `peer_id` is the other member of an exchange. `place` is `(id, created_at_ms)` of a
+        turn that was removed: the new turn stands where that one stood (an edited message keeps its
+        place in the thread). The id must be free."""
         files = [{key: item[key] for key in ("name", "mime", "id", "size") if key in item} for item in attachments]
         if scope == "private" and (source == "member" or route == "exchange"):
             scope = "exchange"
@@ -284,11 +287,12 @@ class AgentHistory:
             conversations = Conversations(self._conn, self._now_ms)
             conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
             cursor = self._conn.execute(
-                "INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix,"
+                "INSERT INTO agent_turns (id, created_at_ms, session_id, question, route, prefix,"
                 " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    self._now_ms(),
+                    place[0] if place else None,
+                    place[1] if place else self._now_ms(),
                     session_id,
                     question,
                     route,

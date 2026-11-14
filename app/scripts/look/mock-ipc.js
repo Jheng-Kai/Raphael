@@ -42,6 +42,13 @@ export function installMock(fixture, config = {}, target = window) {
       turn.permissions = structuredClone(data.permissionTurns.local.turn.permissions);
     }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
+    if (variant.ownerEdit === 'placed') {
+      // A member's thread as the owner's has it: routine turns posted after his message (07:00 and 08:00), so an edit that
+      // went to the end of the thread would be seen far from where he edited.
+      const routine = (id, hour, words) => ({...structuredClone(base), id, session_id:`routine-${id}`, source:'routine', route:'routine', question:`${hour}:00 例行`, prefix:'', text:words, created_at_ms:data.now + (id - 8200) * 3_600_000,
+        messages:[{seq:1,kind:'reply',text:words,at_ms:data.now + (id - 8200) * 3_600_000}], drafts:[], reactions:{}, owner_questions:[], permissions:[]});
+      data.turns.push(routine(8203, '07', '早上七點的例行整理已送出。'), routine(8204, '08', '早上八點的例行整理已送出。'));
+    }
     if (variant.chatMetadata === 'room') {
       data.messages = [{id:8202,room_id:1,thread_id:1,member_id:1,text:sample.root,created:data.now,status:'done',turn_id:null,reply_to:null,reactions:['👍'],reply_count:2,reply_thread_id:900},
         {id:8203,room_id:1,thread_id:900,member_id:null,text:sample.sideOwner,created:data.now+1000,status:'done',turn_id:null,reply_to:null},
@@ -1982,15 +1989,31 @@ export function installMock(fixture, config = {}, target = window) {
           notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
           return null;
         }
-        // A message sent again from its editor: the core retracts the old turn and writes the new one (`replace_turn_id`).
+        // A message sent again from its editor, as the core does it (`replace_turn_id`): it retracts the old turn (and tells the
+        // app), then writes the edit with the id and the time of the turn it replaces; the call lasts until the member has answered.
         if (variant.ownerEdit && args.replaceTurnId !== undefined) {
           const old = data.turns.find(turn => turn.id === args.replaceTurnId);
           if (!old) throw new Error("replace_turn_id must name a completed owner message in this thread");
           data.turns = data.turns.filter(turn => turn.id !== old.id);
-          const id = nextId(data.turns.concat(old));
-          data.turns.push({ ...structuredClone(old), id, session_id: args.requestId, question: args.text, created_at_ms: data.now + 1000, reactions: {} });
-          notify("AgentTurn", { turn_id: id, member_id: old.member_id });
-          return null;
+          notify("AgentTurn", { turn_id: old.id, member_id: old.member_id });
+          const write = () => {
+            const edit = { ...structuredClone(old), session_id: args.requestId, question: args.text, reactions: {}, ...(variant.ownerEdit === 'placed' ? { status: "running", text: "", prefix: "", messages: [] } : {}) };
+            data.turns.push(edit);
+            notify("AgentTurn", { turn_id: edit.id, member_id: old.member_id });
+            return edit;
+          };
+          if (variant.ownerEdit !== 'placed') { write(); return null; }
+          // The scene looks at the edit on its way, then lets the core write it, then lets the member answer.
+          return new Promise(resolve => {
+            window.__look.writeEdit = () => {
+              const edit = write();
+              window.__look.answerEdit = () => {
+                Object.assign(edit, { status: "done", prefix: "答", text: "好，照新的說法整理好了。", messages: [{ seq: 1, kind: "reply", text: "好，照新的說法整理好了。", at_ms: data.now }] });
+                notify("AgentTurn", { turn_id: edit.id, member_id: edit.member_id });
+                resolve(null);
+              };
+            };
+          });
         }
         // A member answering what was written under an open page (`pageAsk`): its turn is running until the scene lets it say its reply.
         if (variant.pageAsk) {

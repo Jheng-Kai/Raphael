@@ -518,6 +518,10 @@ class MembersService:
         except sqlite3.Error as exc:
             logger.warning("Could not mark a thread unread: %s", type(exc).__name__)
 
+    def forget_delivery(self, turn_id: int) -> None:
+        """A turn was removed: what was told of it is forgotten, for another may be written with its id and time (an edit)."""
+        self._delivered = {key for key in self._delivered if key[0] != turn_id}
+
     def _deliver_turn(self, turn: Turn) -> None:
         kind = "needs_input" if turn.status == "confirm" else "finished" if turn.status == "done" else None
         if kind is None or turn.id is None or (turn.id, turn.created_at_ms, kind) in self._delivered:

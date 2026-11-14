@@ -1,4 +1,4 @@
-import { scene, member, room, wait, waitGone, hover, click, check, type, key } from "./steps.mjs";
+import { scene, member, room, wait, waitGone, hover, click, check, type, key, lookCall } from "./steps.mjs";
 const reply = '.tn[data-id="8201"] .chat-message[data-reply]';
 const reactButton = `${reply} [data-act="react-message"]`;
 const owner = '.tn[data-id="8201"] .chat-message.owner-message';
@@ -7,12 +7,13 @@ const privateOpen = [member(1), wait(reply)];
 const root = '[data-room-message="8202"]';
 const roomOpen = [room(1), wait(root)];
 const ownerMenu = `${owner} [data-act="more-message"]`, editField = '.tn[data-id="8201"] [data-edit-input]';
-const openEditor = [...privateOpen, hover(owner), click(ownerMenu), wait('#app-popover [data-pick="edit"]'), click('#app-popover [data-pick="edit"]'), wait(editField)];
+const openEditor = [...privateOpen, check('message-edit-before'), hover(owner), click(ownerMenu), wait('#app-popover [data-pick="edit"]'), click('#app-popover [data-pick="edit"]'), wait(editField)];
 export default [
-  scene('message-edit-open', "Choosing 編輯 on the owner's message turns its bubble into an editor where it stands: the words ready, Cancel and Send, the composer untouched", [...openEditor, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short'}),
-  scene('message-edit-long', "A long message of several lines opens whole in its editor, as wide as its bubble's column", [...openEditor, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'long'}),
+  scene('message-edit-open', "Choosing 編輯 on the owner's message makes its own bubble the editor: the same colour, shape and size, the words ready in it, Cancel and Send small under it, the composer untouched", [...openEditor, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short'}),
+  scene('message-edit-long', "A long message of several lines opens whole in its own bubble, which grows with the words", [...openEditor, check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'long'}),
   scene('message-edit-armed', 'A changed message needs Escape twice: the first arms Cancel (Esc) and says so, the editor stays', [...openEditor, type(editField, '改到一半的字'), key('Escape'), check('message-edit-armed')], {chatMetadata:'reaction', ownerEdit:'short'}),
-  scene('message-edit-sent', 'Enter sends the edited words with the same call as before and the edited message stands in its bubble', [...openEditor, type(editField, '改過的說法：請整理這份範例研究摘要，並列出三個重點。'), key('Enter'), waitGone('[data-edit-input]'), waitGone('.tn.is-pending'), wait('.thread .owner-message .bubble'), check('message-edit-sent'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short'}),
+  scene('message-edit-sent', 'Enter sends the edited words with the same call as before and the edited message stands in its bubble, in its place', [...openEditor, type(editField, '改過的說法：請整理這份範例研究摘要，並列出三個重點。'), key('Enter'), waitGone('[data-edit-input]'), waitGone('.tn.is-pending'), wait('.thread .owner-message .bubble'), check('message-edit-sent'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short'}),
+  scene('message-edit-placed', 'An edit stands where its message stood, with the routine turns after it: on its way, written by the core, and answered', [...openEditor, type(editField, '改過的說法：請整理這份範例研究摘要，並列出三個重點。'), key('Enter'), wait('.thread > .tn.is-pending'), check('message-edit-pending'), lookCall('writeEdit'), wait('.thread > .tn[data-id="8201"][data-status="running"]'), check('message-edit-written'), lookCall('answerEdit'), wait('.thread > .tn[data-id="8201"][data-status="done"]'), check('message-edit-answered'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'placed'}),
   scene('reaction-picker', 'One reaction control opens the compact five-reaction pill', [...privateOpen, hover(reply), click(`${reply} [data-act="react-message"]`), check('reaction-picker')], {chatMetadata:'reaction'}),
   scene('message-hugs-bubble', 'A long reply is only as wide as its bubble and actions: the room beside it answers neither the pointer nor a right click', [...privateOpen, hover(reply), check('message-hugs-bubble'), hover('.composer')], {chatMetadata:'long'}),
   scene('reaction-row',"Saved owner reactions sit on their bubble's corner and add no height", [...privateOpen, check('reaction-row'), check('reaction-layout-rest'), hover(reply), check('reaction-layout-hover'), hover('.composer')], {chatMetadata:'reaction'}),

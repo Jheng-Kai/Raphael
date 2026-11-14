@@ -14,14 +14,20 @@ export interface OwnerEditing {
   sendable: boolean;
 }
 
-/** The editor that takes the place of the owner's bubble, under the files and the quote it keeps. */
+/**
+ * The owner's bubble itself, its words in a field (owner, 2026-11-14: 「用原本的 message bubble 下去編輯就好了」): the same
+ * `.bubble` as the sent message's, under the files and the quote it keeps, so its colour, shape, type and width are the
+ * bubble's own and it grows with its words. Cancel and Send are small and under it, at its right edge, in no box of their own.
+ * The caller puts it in the message element that carries `data-msg-editor`.
+ */
 export function ownerEditorHTML(editing: OwnerEditing, files: string, quote: string): string {
   const chips = editing.missing.map((file, index) => `<span class="cmp-chip" data-missing><span class="cmp-chip-t">${esc(file.name)} · ${esc(t("chat.reattach"))}</span>` +
     `<button type="button" class="chip-x" data-act="drop-edit-missing" data-index="${index}" aria-label="${esc(t("agent.unattach"))}" title="${esc(t("agent.unattach"))}">${ico("x")}</button></span>`).join("");
-  return `<div class="owner-content">${files}<div class="msg-editor" data-msg-editor>${quote}` +
-    `<textarea class="msg-editor-input" data-edit-input rows="1" aria-label="${esc(t("chat.edit"))}">${esc(editing.text)}</textarea>` +
-    (chips ? `<div class="msg-editor-files">${chips}</div>` : "") +
-    `<div class="msg-editor-actions">${btn(`<span>${esc(t("common.cancel"))}</span>`, "sm", ' data-act="edit-cancel"')}${btn(esc(t("chat.send")), "sm pri", ` data-act="edit-send"${editing.sendable ? "" : " disabled"}`)}</div></div></div>`;
+  const bubble = `<div class="bubble">${quote}<div class="message-text">` +
+    `<textarea class="msg-editor-input" data-edit-input rows="1" aria-label="${esc(t("chat.edit"))}">${esc(editing.text)}</textarea></div></div>`;
+  return (files ? `<div class="owner-content">${files}${bubble}</div>` : bubble) +
+    `<div class="msg-editor-under">${chips ? `<div class="msg-editor-files">${chips}</div>` : ""}` +
+    `<div class="msg-editor-actions">${btn(`<span>${esc(t("common.cancel"))}</span>`, "sm", ' data-act="edit-cancel"')}${btn(esc(t("chat.send")), "sm pri", ` data-act="edit-send"${editing.sendable ? "" : " disabled"}`)}</div></div>`;
 }
 
 /**

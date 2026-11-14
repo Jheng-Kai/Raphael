@@ -224,6 +224,12 @@ interface Outgoing {
   /** Files it went with, including previews until their stored copies reach history. */
   files: TurnAttachment[];
   quote?: MessageQuote;
+  /**
+   * The message this one is the edit of, as it stood: it keeps its place in the thread while the edit is on its way
+   * (the core writes the edit with the id and the time of the message it replaces), so the message never leaves where
+   * it was and never comes back at the end.
+   */
+  replaces?: AgentTurn;
 }
 
 interface ComposerDraft {
@@ -631,8 +637,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
   window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
-  /** Messages sent again from their editor, until the history drops them for their replacements. */
-  const replaced = new Set<number>();
   /** The owner's message open as an editor (`state.editing` draws it): the thread it belongs to and what it carries, as the composer would. */
   let editDraft: { key: string; draft: ComposerDraft } | null = null;
   const retracted = new Set<string>();
@@ -932,11 +936,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function lines(): { key: string; html: string; turnId?: number }[] {
     const shape = look();
     const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
-    const sentHere = outgoing.filter(belongs);
+    // An edit stands in the place of its message, not at the end: the old message holds its place while the edit is on its way.
+    const placed = new Map(outgoing.filter(sent => belongs(sent) && sent.replaces).map(sent => [sent.replaces!.id, sent]));
+    const sentHere = outgoing.filter(sent => belongs(sent) && !placed.has(sent.replaces?.id ?? -1));
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
     const turnLook = additions ? { ...shape, deferPresence: true } : shape;
-    // A message sent again from its editor leaves its place while the replacement is on its way (`replaced`), as it does in the history.
-    const chronological = turns.filter(turn => !replaced.has(turn.id)).sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    // The history may have dropped the old message already (the core removes it before it writes the edit): its place is kept.
+    const held = [...placed.values()].map(sent => sent.replaces!).filter(old => !turns.some(turn => turn.id === old.id));
+    const chronological = [...turns, ...held].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
     // A first unseen turn inside the newest window leaves that window alone (unreadInTail); a farther one centres it.
     const unseen = openingThread && unreadFrom !== null ? chronological.findIndex(turn => turn.id >= unreadFrom!) : -1;
     const openingTarget = targetTurn ?? (unseen >= 0 && !unreadInTail(unseen, chronological.length) ? chronological[unseen]!.id : undefined);
@@ -953,7 +960,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         ? { key: item.key, html: dayHTML(item.label) }
         // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
         : { key: item.key, html: (() => {
-          const turn = item.turn, view = pacing.view(turn), task = turn.task?.id;
+          const turn = item.turn, waiting = placed.get(turn.id);
+          // The edit is on its way and the history still has the message as it was, or has it no more: the edit stands in its place.
+          if (waiting && turn.session_id !== waiting.requestId) return pendingTurnHTML(waiting.text, TYPED, shape, waiting.files, { id: waiting.requestId, time: waiting.sentAt, quote: waiting.quote }, state.nowMs, state.expandedMessages.has(`pending:${waiting.requestId}:question`), true);
+          const view = pacing.view(turn), task = turn.task?.id;
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
@@ -961,7 +971,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
-            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}` : ""],
+            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}:${state.editing.text}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
         })(), turnId: item.turn.id },
     );
@@ -973,10 +983,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (at >= 0) out.splice(at, 0, unreadLine(boundary));
     }
     // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
-    const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
+    const pendingAt = sentHere[0]?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
     if (pendingAt !== undefined && (!lastAt || new Date(pendingAt).toDateString() !== new Date(lastAt).toDateString())) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(dayLabel(pendingAt, state.nowMs)) });
-    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
+    for (const sent of sentHere) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
     if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
     return out;
@@ -1354,8 +1364,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
             (turn) =>
               (turn.member_id ?? RAPHAEL_ID) === sent.member &&
               sourceOf(turn) === TYPED &&
-              (turn.session_id ? turn.session_id === sent.requestId : turn.question.trim() === sent.text.trim()) &&
-              turn.created_at_ms >= sent.sentAt - 5_000,
+              // A turn named by this request is its own whenever it was made: an edit is written with the time of the message it replaces.
+              (turn.session_id ? turn.session_id === sent.requestId : turn.question.trim() === sent.text.trim() && turn.created_at_ms >= sent.sentAt - 5_000),
           )
         : undefined;
     outgoing = outgoing.filter(sent => {
@@ -1455,17 +1465,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     rememberDraft(requestId, draft);
     if (!edit) { clearTimeout(draftTimer); discardComposerDraft(composerKey); }
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
+    // The message an edit replaces stays where it stands until the edit has taken its place (lines).
+    if (edit && draft.replacing !== undefined) mine.replaces = turns.find(turn => turn.id === draft.replacing);
     outgoing.push(mine);
     if (edit) {
       closeEditor(false);
-      if (draft.replacing !== undefined) replaced.add(draft.replacing);
     } else {
       files = [];
       replacing = undefined;
       composerQuote = undefined;
     }
-    // Drawn while the layout is still clean, so reading the thread's scroll position costs nothing.
-    render(true);
+    // Drawn while the layout is still clean, so reading the thread's scroll position costs nothing. An edit stands where its
+    // message stood, so the reader stays where they are; a message at the end brings the reader to it.
+    render(!mine.replaces);
     if (!edit) {
       input.value = "";
       input.dispatchEvent(new Event("composer-draft-restored"));
@@ -1484,7 +1496,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       outgoing = outgoing.filter((item) => item !== mine);
       if (edit) {
         // Its place is back, open again with the words as they were typed.
-        if (draft.replacing !== undefined) replaced.delete(draft.replacing);
         if (memberId() === member && conversationId() === sentConversation && draft.replacing !== undefined && turns.some(turn => turn.id === draft.replacing)) openEditor(draft.replacing, draft);
         toaster.info(describeError(err));
         render();
@@ -1508,7 +1519,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The turn is written by now: the history brings it, and the question waits no more.
     if (memberId() === member && conversationId() === sentConversation) await load(false, true);
     else members.changed();
-    if (draft.replacing !== undefined) replaced.delete(draft.replacing);
     outgoing = outgoing.filter((item) => item !== mine);
     render();
   }
@@ -2185,7 +2195,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!field) return;
     field.focus({ preventScroll: true });
     field.setSelectionRange(field.value.length, field.value.length);
-    field.closest(".msg-editor")?.scrollIntoView({ block: "nearest" });
+    field.closest("[data-msg-editor]")?.scrollIntoView({ block: "nearest" });
   }
 
   /** Sends the edited words as the composer would send them (`send`), the message it replaces named as before. */
@@ -2406,7 +2416,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!field || !state.editing || !editDraft) return;
     state.editing.text = field.value;
     state.editing.sendable = editSendable(field.value, editDraft.draft);
-    const button = field.closest(".msg-editor")?.querySelector<HTMLButtonElement>('[data-act="edit-send"]');
+    const button = field.closest("[data-msg-editor]")?.querySelector<HTMLButtonElement>('[data-act="edit-send"]');
     if (button) button.disabled = !state.editing.sendable;
   });
   thread.addEventListener("keydown", (e) => {
@@ -2658,7 +2668,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // once they changed: the first press arms Cancel, the second within 1.5 s leaves. It comes before the composer's Stop while the focus is here.
   cancelGesture().register(() => {
     const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
-    const cancel = field?.closest(".msg-editor")?.querySelector<HTMLElement>('[data-act="edit-cancel"]');
+    const cancel = field?.closest("[data-msg-editor]")?.querySelector<HTMLElement>('[data-act="edit-cancel"]');
     return visible && state.editing && editDraft && field && cancel && document.activeElement === field ? {
       key: `edit:${state.editing.turnId}`, immediate: field.value === editDraft.draft.text, button: cancel, hint: t("common.cancelAgain"),
       cancel: () => closeEditor(),
