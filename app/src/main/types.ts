@@ -1011,6 +1011,8 @@ export interface Member {
   created: number;
   unread: boolean;
   unread_from?: number | null;
+  /** What the unseen news is: a message, a task or routine that ended well, or work that went wrong (null: none). */
+  unread_kind?: "message" | "done" | "failed" | null;
   waiting: boolean;
   activity?: string;
   activity_label?: string;
@@ -1113,7 +1115,7 @@ export interface RoutineRun {
   status: string; turn_id: number | null; summary: string; cost: number;
 }
 export interface Room {
-  preview?: string; preview_member_id?: number | null; last_at?: number | null; unread?: boolean; waiting?: boolean; pinned?: boolean; hidden?: boolean;
+  preview?: string; preview_member_id?: number | null; last_at?: number | null; unread?: boolean; unread_kind?: "message" | "done" | null; waiting?: boolean; pinned?: boolean; hidden?: boolean;
   id: number; name: string; group_id: number | null; created: number;
   is_team: number; member_ids: number[]; default_responder?: string;
   membership_state?: "ready" | "needs_adjustment";

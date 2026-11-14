@@ -564,9 +564,26 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (state?.control === 'owner') { suspended = false; return false; }
     expand(false); checkpoints.hide(); filesOpen = false; review.hidden = true; closeStream();
     if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.();
+    // The panel that stays open is a preview of a computer that runs: it streams again at once. `suspended` only keeps a
+    // returned request's card from reopening its stream, and a visible panel is not that card (owner, 2026-11-14: a black
+    // frame with only 開啟 after he ended control).
+    if (options.panelVisible()) { suspended = false; if (state?.state === 'running') void openStream(); }
     draw(); return true;
   }
-  action.addEventListener('click', () => { void handback(); });
+  /** 停止 hands the computer back and nothing else: the larger view stays open on the same stream, watching, with Take
+   *  control offered again (owner, 2026-11-14: 「結束控制不代表我要結束觀看，所以不要跳掉」). Only 我完成了, which answers a
+   *  sign-in request, goes back to the conversation (handback). */
+  async function release(): Promise<void> {
+    if (changing || !session) return;
+    const opened = session;
+    watching = true; document.documentElement.setAttribute('data-desktop-watch', '');
+    await control(false);
+    if (session !== opened) return;
+    // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes his input again.
+    if (state?.control === 'owner') { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); send(true); }
+    draw();
+  }
+  action.addEventListener('click', () => { void (pending() ? handback() : release()); });
   options.timeline.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;

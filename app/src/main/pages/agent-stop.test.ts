@@ -540,3 +540,64 @@ test("a failed typed send restores the exact draft and clears the failure on suc
  $(".cmp-send").click(); await flush();
  expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();
 });
+
+// One member shows at most one working slime in its conversation (owner, 2026-11-14, R-SLIME-03).
+const presences = () => [...document.querySelectorAll<HTMLElement>(".thread .live-presence")];
+const at = (id: number, more: Partial<AgentTurn> = {}) => live({ id, session_id: `slime-${id}`, created_at_ms: 1_000_000 + id * 1000, question: `Request ${id}`, ...more });
+const task = (id: number, more: Partial<NonNullable<AgentTurn["task"]>> = {}) => ({ id, state: "running", started_at_ms: 1, finished_at_ms: null, ...more }) as AgentTurn["task"];
+const reply = (text: string) => [{ seq: 1, kind: "reply" as const, text, at_ms: 1_000_000 }];
+
+test("a reply that handed work to the background shows one slime, on the task line", async () => {
+  turns = [at(21, { status: "done", text: "Queued in the background", messages: reply("Queued in the background"), task: task(7, { progress: "Starting the research" }) })];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("21");
+  expect(presences()[0]!.querySelector(".live-action")?.textContent).toBe("Starting the research");
+});
+
+test("a turn that is running without a task shows one slime", async () => {
+  turns = [at(22)];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("22");
+});
+
+test("two background tasks of one member show one slime, on the newest", async () => {
+  turns = [at(23, { status: "done", text: "First", messages: reply("First"), task: task(8, { progress: "The older task" }) }),
+    at(24, { status: "done", text: "Second", messages: reply("Second"), task: task(9, { progress: "The newer task" }) })];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("24");
+  expect(presences()[0]!.querySelector(".live-action")?.textContent).toBe("The newer task");
+  // A refresh that changes nothing keeps that very slime.
+  const stands = presences()[0]!;
+  await refresh({ type: "AgentTurn", turn_id: 24, member_id: 0 });
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]).toBe(stands);
+});
+
+test("a task line with words wins over a face that only waits, as in the owner's picture", async () => {
+  turns = [at(25, { status: "done", text: "Queued in the background", messages: reply("Queued in the background"), task: task(10, { state: "waiting", waiting_owner: 1 }) }),
+    at(26, { status: "done", text: "", messages: [], task: task(11, { progress: "Checking the sandbox" }) })];
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("26");
+  expect(presences()[0]!.querySelector(".live-action")?.textContent).toBe("Checking the sandbox");
+  // Once the working task is over, the waiting turn's own face comes back: it is the only one left.
+  turns = [turns[0]!, { ...turns[1]!, task: task(11, { state: "done", finished_at_ms: 2 }) }];
+  await refresh({ type: "AgentTurn", turn_id: 26, member_id: 0 });
+  expect(presences()).toHaveLength(1);
+  expect(presences()[0]!.closest("li")?.dataset.id).toBe("25");
+});
+
+test("a message just sent takes the one slime from a task that waits", async () => {
+  turns = [at(27, { status: "done", text: "Waiting", messages: reply("Waiting"), task: task(12, { state: "waiting", waiting_owner: 1 }) })];
+  api.agentAskText.mockReturnValue(new Promise(() => {}));
+  mount(); await flush();
+  expect(presences()).toHaveLength(1);
+  $<HTMLTextAreaElement>(".cmp-input").value = "One more thing";
+  $(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await flush();
+  expect(presences()).toHaveLength(1);
+  expect($(".thread > li:last-child").contains(presences()[0]!)).toBe(true);
+});

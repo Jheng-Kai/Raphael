@@ -1662,6 +1662,8 @@ export const ko = {
   "reminder.waiting": "{p0} 님이 기다리고 있습니다",
   "reminder.open": "열기",
   "members.unread": "새 메시지",
+  "members.lightDone": "완료됨",
+  "members.lightFailed": "확인 필요",
   "members.pick": "멤버 선택",
   "members.panel": "멤버 세부 정보",
   "members.close": "세부 정보 닫기",

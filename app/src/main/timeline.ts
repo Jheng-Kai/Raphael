@@ -31,7 +31,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { messageHTML, replyContentHTML } from "./message-content";
+import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
@@ -256,6 +256,38 @@ export function workMs(turn: AgentTurn, nowMs: number): number {
 /** A step's own key, by which the page knows which steps it has drawn before. */
 export const stepKey = (turn: AgentTurn, index: number): string => `${turn.id}:${index}`;
 
+const STORED_FILE = /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/;
+const filesOfTurn = new WeakMap<AgentTurn, TurnAttachment[]>();
+/** The stored files a turn holds: what the owner sent with it, and what the member delivered in it (its media messages). */
+function turnFiles(turn: AgentTurn): TurnAttachment[] {
+  let files = filesOfTurn.get(turn);
+  if (!files) {
+    files = (turn.attachments ?? []).filter(file => typeof file.id === "string" && STORED_FILE.test(file.id) && typeof file.name === "string");
+    for (const message of turn.messages ?? []) {
+      if (message.kind !== "media") continue;
+      try {
+        const file = JSON.parse(message.text)?.attachment as TurnAttachment | undefined;
+        if (file && typeof file.id === "string" && STORED_FILE.test(file.id) && typeof file.name === "string") files.push(file);
+      } catch { /* Not a delivered file. */ }
+    }
+    filesOfTurn.set(turn, files);
+  }
+  return files;
+}
+
+/** The files of a conversation by stored id: an `attachment:<id>` link opens one of these and nothing else (R-MSG-LINK-01). */
+export function knownFiles(turns: readonly AgentTurn[]): KnownFiles {
+  const known = new Map<string, TurnAttachment>();
+  for (const turn of turns) for (const file of turnFiles(turn)) known.set(file.id!, file);
+  return known;
+}
+
+/** What a turn's words say of the conversation's files, for the identity of its drawing. */
+export function fileLinks(turn: AgentTurn, files: KnownFiles | undefined): string {
+  if (!files?.size) return "";
+  return [turn.text, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.text)].map(text => fileLinkStamp(text, files)).filter(Boolean).join(";");
+}
+
 /** What the page keeps between draws. */
 export interface TimelineState {
   /** Turns whose steps the reader opened or closed: their choice beats the default. */
@@ -280,6 +312,8 @@ export interface TimelineState {
   expandedMessages: Set<string>;
   /** The owner's message open as an editor in its place, if any (message-edit.ts). */
   editing: OwnerEditing | null;
+  /** The files of the open conversation by stored id (`knownFiles`): what an `attachment:<id>` link in a reply may open. Left out, none. */
+  files?: KnownFiles;
 }
 
 export const emptyTimelineState = (): TimelineState => ({
@@ -569,6 +603,11 @@ export interface TurnLook {
   /** The earlier exchanges with the same colleague in a row (conversation.ts threadItems), counted in this turn's line. */
   exchangeTogether?: readonly AgentTurn[];
   deferPresence?: boolean;
+  /**
+   * Which turn of the thread draws the member's one working slime (standingPresence): the others draw none, `null` for none at all
+   * (the tail of the thread stands for it). Left out, every turn that wants a presence draws its own, as a turn shown alone does.
+   */
+  presenceTurnId?: number | null;
   revealing?: (turnId: number) => boolean;
   waitingForOwner?: (turnId: number) => boolean;
   regenerateTurnId?: number;
@@ -648,7 +687,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   const retry = reply && last ? rerunActionHTML(turn, state, regenerate) : "";
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
-    withReactions(reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
+    withReactions(reply ? replyContentHTML(text, query, turn.status === "running", undefined, state.files) : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
     (reply && last ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
     // Its links are chips in its words, with no row of cards under it.
     messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
@@ -1042,6 +1081,33 @@ function publicEventsHTML(turn: AgentTurn, conversation: boolean, place: "inline
   }));
 }
 
+/**
+ * What a turn asks of its member's working slime: `words` while it is at work (or its replies are being read in), a `bare` face
+ * while it waits for the owner (a card, a question, a yes), nothing for a turn that is over.
+ */
+export type PresenceWant = "words" | "bare" | null;
+export function presenceWant(turn: AgentTurn, look: Pick<TurnLook, "revealing" | "waitingForOwner"> = {}): PresenceWant {
+  const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
+  const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
+  if (live || look.revealing?.(turn.id)) return "words";
+  return waitingForOwner || waitsAtCard(turn) || turn.task?.state === "waiting" || turn.status === "confirm" ? "bare" : null;
+}
+
+/**
+ * The one turn whose line carries a member's working slime in a conversation (owner, 2026-11-14: 「理論上它不管怎麼樣都只會有一個史萊姆在運作才對」).
+ * Of the turns that want one, the newest that is at work stands (a background task's line with its progress words); a face
+ * that only waits stands for nobody while another turn works. `turns` run from the oldest to the newest.
+ */
+export function standingPresence(turns: readonly AgentTurn[], look: Pick<TurnLook, "revealing" | "waitingForOwner"> = {}): AgentTurn | undefined {
+  let bare: AgentTurn | undefined;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const want = presenceWant(turns[i]!, look);
+    if (want === "words") return turns[i];
+    if (want === "bare" && !bare) bare = turns[i];
+  }
+  return bare;
+}
+
 /** One question and its answer, with what was done in between. */
 export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: boolean, look: TurnLook): string {
   const id = esc(turn.id);
@@ -1060,6 +1126,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
+  const want = presenceWant(turn, look);
   // What a colleague said to this member is one line that opens the two members' conversation (exchange-line.ts):
   // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
   if (handed) {
@@ -1102,7 +1169,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     ownerQuestionsHTML(turn, false) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
-    (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
+    (want && !look.deferPresence && (look.presenceTurnId === undefined || look.presenceTurnId === turn.id) ? livePresenceHTML(look, latestProgress(turn), want === "words") : "") +
     `</div></div>`) +
     // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.
     [...publicEventsHTML(turn, true).values()].join("") + `</li>`
@@ -1117,14 +1184,14 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
  * a bubble with light passing over it until the words arrive) and Raphael thinking. A typed
  * question shows the chips of the files it was sent with.
  */
-export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true): string {
+export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true, tail?: { progress?: string; words?: boolean }): string {
   void nowMs;
   const words =
     question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim(), "", false, look.mentions);
   return (
     `<li class="tn is-pending is-owner-only"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
-    (showPresence ? `<div class="ra"><div class="ra-body">${livePresenceHTML(look)}</div></div>` : "") + `</li>`
+    (showPresence ? `<div class="ra"><div class="ra-body">${livePresenceHTML(look, tail?.progress, tail?.words ?? true)}</div></div>` : "") + `</li>`
   );
 }
 
