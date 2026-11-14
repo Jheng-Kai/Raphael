@@ -1,5 +1,45 @@
 # Conversation
 
+## A conversation read at its bottom stays at its bottom (owner, 2026-11-14, R-FOLLOW-01)
+
+Owner: 「成員回覆的時候，有時候畫面會從最底部往上跳一點…完全不要有任何移動」. Following the bottom was a correction queued by the
+thread's own draws (`preserveRichScroll`), with an 80 px band read by the end marker's IntersectionObserver. Two things moved the thread
+without a draw to correct them: a stored picture read back late (`attachment-media.ts`: the bytes come after the line is placed, its box grows
+from its name to the picture), and the same picture drawn again each time its line changed (the words beside it, the work ending, a reaction,
+paced bubbles: `patchThread` makes a new `<img>`, which stood as its name or empty until the lazy observer set its `src` a frame later). A
+small one left the thread a few px above its bottom until the next draw pulled it down; one past 80 px also made it stop following, so a
+conversation that opens with large pictures ended with its last reply under the composer.
+
+Now one place keeps a following thread at its bottom (`readingAnchor` in `message-rich.ts`): a ResizeObserver on the scroller, its column and
+its end marker writes a clamped bottom (`scrollTop = 1e9`, no geometry read) in the frame of any change of their sizes, while the thread
+follows; it is told after layout and before paint, so no frame is seen above the bottom. It also replaces `keepBottomOnResize`
+(reading-place.ts, removed): the composer, a question card or a notice growing or shrinking under the thread is a change of the scroller's
+size. A picture drawn again takes the copy already loaded in the same task (`sync`), and a new one is decoded before it is shown (`decoded`),
+so a picture only grows. The owner's own scrolling up lets go of the bottom at once (`letGo`: a wheel up, also over the header, which passes
+its wheel to the thread; PageUp, ArrowUp, Home or Shift+Space outside a field; a touch drag down), before the scroll it starts has moved
+anything; from then on nothing moves the line he reads, however near the bottom, until a scroll of his ends at the very bottom (2 px, not
+while still going up) or he presses the latest button. A thread that cannot scroll up is not let go. Explicit navigation (search, quote,
+unread line, the settings page's way back) keeps its own place as before (`releaseRichScroll`). No timer and no smooth scrolling.
+
+```powershell
+npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom --theme both --width 1120,720,1920x1080
+```
+
+`follow-probe` (`scripts/look/follow-probe.mjs`) samples every painted frame: a 1 px probe changes size each animation frame, and its
+ResizeObserver, made after the app's own, is told after their corrections and before paint. Each frame records how far the thread stands
+above its bottom, where the line the owner reads stands, and how tall each stored picture of the thread is. `follow-reply-bottom` sends the
+owner's message from the composer and plays the member's reply as the core sends it (the turn running, the work line and its words, a 40 px
+picture strip that comes late, the reply's words growing sentence by sentence, a large picture read back 700 ms late, the turn ending, the
+composer leaving Stop, three reply bubbles paced in, the member's 👍 on the owner's message) and fails a frame more than 1 px above the bottom
+or a picture standing shorter than it already stood, named by phase. `follow-reply-reading` and `follow-reply-near` wheel up with the real
+mouse (most of a screen, and 40 px) and fail any frame where the read line moved. `follow-open-pictures` opens the conversation by its row
+with two large pictures on their way and watches the opening. Before the fix (original `message-rich.ts`, `attachment-media.ts`):
+`follow-reply-bottom` stood 12 px above the bottom through the words, picture, done and reaction phases and 417 to 425 px from the large
+picture on, at every size and theme; `follow-open-pictures` 516 to 544 px; re-drawn pictures stood 22 px (the strip) and 282 px (the large
+picture) shorter for a frame; `follow-reply-near` moved the read line 108 to 431 px. Vitest: `message-rich.test.ts` (the stick, its reads, letting go and following again), `attachment-media.test.ts` (a picture
+drawn again), `scripts/look/follow-probe.test.mjs` (the reading of the frames). Not covered offline: WebView2 at the owner's display scale
+and a real touchpad's momentum.
+
 ## A picture a member sends is a message (owner, 2026-11-14, R-UI-156)
 
 Owner: 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」. A member's pictures (a media message whose
@@ -2104,7 +2144,7 @@ npm run look -- thread-new-divider thread-new-divider-short thread-new-divider-s
 
 The long fixture covers more than one history page. The short fixture follows a long seen reply, so its scroller must overflow while the unread run fits. The short, arrival, leave/return and latest scenes assert scroll geometry, independent line identity, retained message HTML and no additional members.read on arrivals. Existing busy-team and send-prompt limits remain unchanged. Compare the muted label with adjacent time separators at matching theme/width. Core members and schema tests cover persistence and upgrade; agent-members.test.ts covers visit lifetime and scroll decisions. Existing regenerate tests now exercise the visible menu: eligibility is validated on menu open, so new replies no longer replace an older reply just to change hidden metadata.
 
-Opening places the thread once (owner, 2026-11-11: Raphael's conversation opened and then jumped up). A page shown again takes the boundary from the roster already loaded (agent.ts `beginOpening`); when none is loaded the thread is drawn but held back (`.ra-scroll.is-opening`, at most 1.5 s) until the roster and any history pages it needs are in, so the first place seen is the place it stays at. A first unseen turn inside the newest 25 leaves the newest window alone (`unreadInTail`), so a run of up to 25 turns never cuts the newest turn off or shows the latest button at the bottom. Raphael's thread is told read with `members.read` as every member's is. The member settings page hides the conversation, so the place is remembered as it opens and put back as it closes. The scroller keeps its bottom when what stands under it grows or shrinks (`keepBottomOnResize`: the composer with typed or placed text, a question card, a notice, a chip); a thread read higher up stays where it is. Look: `thread-new-divider-raphael-short`, `-medium` and `-long` record every place the thread was seen (`scrollTimeline`) with a late roster (`rosterDelay`, the `late-roster` step), `member-settings-back-bottom` and `member-settings-back-kept` the way back from the settings page, and `page-buy`, `page-expand-place`, `page-send` and `page-composer-grows` the last card whole above a grown composer (R-UI-21, R-CARD-11).
+Opening places the thread once (owner, 2026-11-11: Raphael's conversation opened and then jumped up). A page shown again takes the boundary from the roster already loaded (agent.ts `beginOpening`); when none is loaded the thread is drawn but held back (`.ra-scroll.is-opening`, at most 1.5 s) until the roster and any history pages it needs are in, so the first place seen is the place it stays at. A first unseen turn inside the newest 25 leaves the newest window alone (`unreadInTail`), so a run of up to 25 turns never cuts the newest turn off or shows the latest button at the bottom. Raphael's thread is told read with `members.read` as every member's is. The member settings page hides the conversation, so the place is remembered as it opens and put back as it closes. The scroller keeps its bottom when what stands under it grows or shrinks (the composer with typed or placed text, a question card, a notice, a chip: the thread's one stick to the bottom, R-FOLLOW-01, `readingAnchor` in message-rich.ts); a thread read higher up stays where it is. Look: `thread-new-divider-raphael-short`, `-medium` and `-long` record every place the thread was seen (`scrollTimeline`) with a late roster (`rosterDelay`, the `late-roster` step), `member-settings-back-bottom` and `member-settings-back-kept` the way back from the settings page, and `page-buy`, `page-expand-place`, `page-send` and `page-composer-grows` the last card whole above a grown composer (R-UI-21, R-CARD-11).
 
 ## Durable owner inbox (2026-11-03)
 
