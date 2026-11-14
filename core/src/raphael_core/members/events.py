@@ -67,6 +67,27 @@ def clean_when(value):
     return json.loads(json.dumps(value))
 
 
+def clean_precheck(value):
+    """A routine's precheck as it is kept, or None for none (an empty object, or nothing). It names a read tool of a connected
+    app and what to ask it: `{"app": the connection id, "tool": "mcp:<server>/<tool>", "arguments": {...}}`, nothing else.
+    Whether the tool really only reads is the scheduler's gate to say (`EventPoller.read_precheck`); here only the form."""
+    from .store import MemberError
+    if value in (None, {}):
+        return None
+    def refuse():
+        raise MemberError("precheck", "A precheck is {app, tool, arguments}: the connection id, the exact read tool as mcp:server/tool, and its arguments.")
+    if not isinstance(value, dict) or set(value) != {"app", "tool", "arguments"}:
+        refuse()
+    app, tool, arguments = value["app"], value["tool"], value["arguments"]
+    if not isinstance(app, str) or not app.strip() or len(app) > 200 or not isinstance(arguments, dict):
+        refuse()
+    if not isinstance(tool, str) or not re.fullmatch(r"mcp:[A-Za-z0-9_.:-]+/[^/\s]+", tool):
+        refuse()
+    if len(json.dumps(value)) > 8000:
+        refuse()
+    return json.loads(json.dumps(value))
+
+
 def failure_message(language, name, *, stop=False):
     language = normalize_language(language)
     if language in NEW_LANGUAGES:
@@ -141,6 +162,21 @@ class EventPoller:
                 or self.gate.tier_now(tool.key, args) not in (Tier.T0, Tier.T1)):
             return None
         return tool
+
+    def precheck_tool(self, routine, precheck=None):
+        """The read tool a routine's precheck names, or None when this member may not call it as a read now (a tool that
+        writes, one above the read tiers, a connection that is missing or signed out): the same gate as an event's read."""
+        return self._tool(self._as_event(routine, precheck or routine.precheck), (precheck or routine.precheck)["arguments"])
+
+    @staticmethod
+    def _as_event(routine, precheck):
+        from dataclasses import replace
+        return replace(routine, when={"app": precheck["app"], "event": {"tool": precheck["tool"], "arguments": precheck["arguments"]}})
+
+    async def read_precheck(self, routine):
+        """What a routine's precheck tool returns now, with no model: a `PluginResult`, or None when the tool is not one this
+        member may call as a read (`precheck_tool`)."""
+        return await self.read(self._as_event(routine, routine.precheck))
 
     async def read(self, routine, arguments=None):
         async def checked_read():

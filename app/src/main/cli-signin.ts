@@ -1,11 +1,20 @@
 import * as api from "./api";
 import { CLIS } from "./cli-brains";
-import type { SigninPhase } from "./timeline";
-import type { CliBrainId } from "./types";
+import { RERUNNABLE, type SigninPhase } from "./timeline";
+import type { AgentTurn, CliBrainId } from "./types";
 
 /** How often the CLI list is read while its sign-in window is open, and how long the window may stay open before the press is given back. */
 const POLL_MS = 1500;
 const GIVE_UP_MS = 10 * 60_000;
+
+/**
+ * What a finished sign-in sends again for the failed reply it was pressed under: the work of a task, a routine's run
+ * included, is run again by the core (the reply's own Run again), because its question is the routine's title and no
+ * one's words; any other reply asks its question again.
+ */
+export function signinRetry(turn: AgentTurn): { kind: "rerun"; task: number } | { kind: "ask" } {
+  return turn.task && RERUNNABLE.has(turn.task.state) ? { kind: "rerun", task: turn.task.id } : { kind: "ask" };
+}
 
 export interface CliSigninHost {
   /** The phases the thread draws (`TimelineState.signin`). */

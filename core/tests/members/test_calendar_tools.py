@@ -43,6 +43,26 @@ async def own_items(rig):
     return [item for item in value["calendar_events"] if item["kind"] == "own"]
 
 
+async def test_a_list_longer_than_the_limit_is_cut_and_says_from_which_date_to_which(setup, home):
+    """R-CAL-09: `bad_range` for a period over 62 days failed six times in the owner's use; the limit stood only in that error."""
+    from raphael_core.agent.harness_tools import DEFINITIONS
+    from raphael_core.own_calendar import LIST_MAX_DAYS, CalendarError
+
+    rig, _ = setup
+    calendar = rig.service._calendar
+    assert LIST_MAX_DAYS == 62 and f"At most {LIST_MAX_DAYS} days; longer is cut" in DEFINITIONS["calendar_list"]["description"]
+    whole = await calendar.listing({"start": "2026-10-21", "end": "2026-12-21"})  # 62 days, both ends in
+    assert (whole["start"], whole["end"]) == ("2026-10-21", "2026-12-21") and "cut" not in whole
+    cut = await calendar.listing({"start": "2026-10-21", "end": "2027-03-01"})
+    assert (cut["start"], cut["end"]) == ("2026-10-21", "2026-12-21")
+    assert cut["cut"]["asked_end"] == "2027-03-01" and cut["cut"]["read"] == "2026-10-21 to 2026-12-21"
+    assert "from 2026-12-22" in cut["cut"]["note"] and "62 days" in cut["cut"]["note"]
+    # An end before the start is still a refusal, with its words.
+    with pytest.raises(CalendarError) as refused:
+        await calendar.listing({"start": "2026-10-21", "end": "2026-10-01"})
+    assert refused.value.kind == "bad_range"
+
+
 async def test_a_request_to_add_to_todays_schedule_lands_in_the_store_and_on_home(setup, client, home):
     rig, team = setup
     secretary = member(team, name="秘書長")

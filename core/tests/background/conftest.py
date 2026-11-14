@@ -258,6 +258,14 @@ class Plugins:
 
 
 @pytest.fixture(autouse=True)
+def no_routine_cli_gap(monkeypatch):
+    """Routine runs on one CLI start 10 seconds apart in production (R-CLI-SIGNIN-03); a test that hands several over is not made to wait."""
+    from raphael_core.background import service
+
+    monkeypatch.setattr(service, "ROUTINE_CLI_GAP_S", 0.0)
+
+
+@pytest.fixture(autouse=True)
 def calls():
     """What the fake servers' tools were asked to do, by tool name; empty at the start."""
     fake_server.CALLS.clear()

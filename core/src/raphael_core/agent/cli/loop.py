@@ -926,6 +926,10 @@ class CliLoop:
                         await asyncio.sleep(wait)
                         self.alive()
                 if failure:
+                    # A sign-in the CLI refused is remembered, so routines that start before it is mended are not run into it.
+                    cause = getattr(self.failure_reason, "cause", None)
+                    if failure == "auth_expired" and cause in ("expired", "signed_out") and hasattr(self.brains, "sign_in_lost"):
+                        self.brains.sign_in_lost(name, cause)
                     self._failure(failure, NAMES[name])
             except asyncio.CancelledError:
                 raise
@@ -1130,6 +1134,8 @@ class CliLoop:
                         self._save_context()
                         self._buffer = ""
                         self.owner_input.closed = True
+                        if hasattr(self.brains, "sign_in_back"):
+                            self.brains.sign_in_back(name)  # it answered: its sign-in stands
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()

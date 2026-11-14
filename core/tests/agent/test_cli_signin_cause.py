@@ -10,6 +10,7 @@ import time
 
 import pytest
 
+from raphael_core.agent.cli import discovery as discovery_module
 from raphael_core.agent.cli.discovery import CliBrains
 from raphael_core.agent.cli.drivers import Driver
 from raphael_core.agent.failure import public_failure, turn_failure
@@ -182,6 +183,54 @@ async def test_a_console_the_owner_closes_is_a_stopped_sign_in_and_a_cancel_is_n
     assert brains._signed.get("codex") is None, "a cancel is no failure to tell"
     # Cancelling when nothing runs is harmless.
     assert brains.cancel_login("codex") == {"cancelled": True}
+
+
+def test_a_refused_sign_in_is_remembered_until_something_says_it_is_back(tmp_path):
+    """R-CLI-SIGNIN-03: what a routine that starts next is told; nothing here reads what a credential file holds."""
+    now = [100.0]
+    folder = tmp_path / ".claude"
+    folder.mkdir()
+    credentials = folder / ".credentials.json"
+    credentials.write_text("{}")
+    brains = CliBrains(home=tmp_path, environ={}, commands={"claude": ["claude.exe"]}, clock=lambda: now[0])
+    assert brains.sign_in_missing("claude") is None
+    brains.sign_in_lost("claude", "expired")
+    assert brains.sign_in_missing("claude") == "expired" and brains.sign_in_missing("codex") is None
+    brains.sign_in_lost("claude", "other")  # only the two causes of a sign-in are kept
+    assert brains.sign_in_missing("claude") == "expired"
+    brains.sign_in_back("claude")  # a run was answered, or a sign-in finished
+    assert brains.sign_in_missing("claude") is None
+    brains.sign_in_lost("claude", "signed_out")
+    assert brains.sign_in_missing("claude") == "signed_out"
+    stamp = credentials.stat().st_mtime_ns
+    import os
+    os.utime(credentials, ns=(stamp, stamp + 1_000_000_000))  # signed in anywhere else
+    assert brains.sign_in_missing("claude") is None
+    brains.sign_in_lost("claude", "expired")
+    now[0] += discovery_module.SIGNIN_LOST_S - 1
+    assert brains.sign_in_missing("claude") == "expired"
+    now[0] += 2  # after half an hour the CLI is asked itself again
+    assert brains.sign_in_missing("claude") is None
+
+
+async def test_a_sign_in_that_finished_in_the_apps_own_console_clears_the_refusal(tmp_path, monkeypatch):
+    from raphael_core.agent.cli import discovery
+    from .test_cli_brains import SignInProcess
+
+    if discovery.os.name != "nt":
+        pytest.skip("Windows visible console contract")
+    made = []
+    monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: made.append(SignInProcess()) or made[-1])
+    brains = CliBrains(home=tmp_path, environ={}, commands={"claude": ["claude.exe"]})
+    brains.sign_in_lost("claude", "expired")
+    brains.login("claude", again=True)
+    made[0].finish(1)  # closed before it finished: still refused
+    await _until(lambda: brains._signed.get("claude"))
+    assert brains.sign_in_missing("claude") == "expired"
+    brains.login("claude", again=True)
+    made[1].finish(0)
+    await _until(lambda: brains._signed.get("claude") == "done")
+    assert brains.sign_in_missing("claude") is None
 
 
 async def _until(condition, seconds=5):

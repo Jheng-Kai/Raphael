@@ -115,7 +115,7 @@ const REASONS: Record<string, MessageKey> = {
   error: "agent.reason.error",
 };
 /** The states of a task that did not finish: it can be run again. */
-const RERUNNABLE: ReadonlySet<string> = new Set(["interrupted", "cancelled", "limit", "failed"]);
+export const RERUNNABLE: ReadonlySet<string> = new Set(["interrupted", "cancelled", "limit", "failed"]);
 const TASK_ENDS: Record<string, MessageKey> = {
   cancelled: "agent.taskCancelled",
   limit: "agent.taskLimit",

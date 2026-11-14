@@ -222,6 +222,78 @@ def clean_arguments(schema: Mapping[str, Any], arguments: Mapping[str, Any]) -> 
     return cleaned
 
 
+# The most of a tool's arguments that are told to a model that sent them wrongly, and how long that is.
+SHAPE_NAMES = 24
+SHAPE_CHARS = 900
+# How a server words the refusal of arguments that do not fit its schema (a validator's, a framework's or its own).
+_SHAPE_ERROR = re.compile(
+    r"validation error|invalid (?:arguments?|params?|parameters?|input|request body|tool input)|invalid_type|invalid_union"
+    r"|unrecognized[_ ](?:key|field|argument)|unexpected (?:keyword )?(?:argument|field|property|parameter)"
+    r"|(?:field|property|parameter|argument)s? (?:is |are )?required|missing (?:a )?required|required (?:field|property|parameter)"
+    r"|does not match (?:the )?schema|is not valid under|additional properties|must (?:be|have) (?:of type|an? |one of)"
+    r"|(?:expected|should be) (?:an? )?(?:string|number|integer|boolean|object|array)\b", re.I)
+
+
+def argument_shape(schema: Mapping[str, Any]) -> str:
+    """The arguments a tool takes, at the top level of the call, in one line: each name with its type and whether it is
+    required, as its schema says. Empty for a schema that lists none."""
+    properties = schema.get("properties") if isinstance(schema, Mapping) else None
+    if not isinstance(properties, Mapping) or not properties:
+        return ""
+    required = schema.get("required")
+    required = set(required) if isinstance(required, list) else set()
+    parts = []
+    for name, spec in list(properties.items())[:SHAPE_NAMES]:
+        spec = spec if isinstance(spec, Mapping) else {}
+        kind = spec.get("type")
+        kind = "/".join(str(item) for item in kind) if isinstance(kind, list) else kind if isinstance(kind, str) else "any"
+        options = spec.get("enum")
+        if isinstance(options, list) and options and len(options) <= 8:
+            kind = "one of " + "|".join(str(option) for option in options)
+        if kind == "array" and isinstance(spec.get("items"), Mapping) and isinstance(spec["items"].get("type"), str):
+            kind = f"array of {spec['items']['type']}"
+        parts.append(f"{name} ({kind}{', required' if name in required else ''})")
+    more = len(properties) - SHAPE_NAMES
+    text = "; ".join(parts) + (f"; and {more} more" if more > 0 else "")
+    return text if len(text) <= SHAPE_CHARS else text[: SHAPE_CHARS - 1] + "…"
+
+
+def _shape_words(tool: str, schema: Mapping[str, Any], said: str) -> str:
+    shape = argument_shape(schema)
+    wrapper = "Send the arguments directly, never inside another object (such as `data`, `input` or `params`)."
+    return (f"{said} {wrapper}" + (f" The top-level arguments of {tool} are: {shape}." if shape else "")).strip()
+
+
+def shape_problem(tool: str, schema: Mapping[str, Any], arguments: Mapping[str, Any]) -> str | None:
+    """Why a call cannot be right, from its top level alone, in words for the model: a required argument that is not
+    there (a wrapper such as `data` around the real ones is said to be one). None when nothing is missing. Values are never
+    read or repeated."""
+    properties = schema.get("properties") if isinstance(schema, Mapping) else None
+    required = schema.get("required") if isinstance(schema, Mapping) else None
+    if not isinstance(properties, Mapping) or not isinstance(required, list):
+        return None
+    missing = [name for name in required if isinstance(name, str) and name not in arguments]
+    if not missing:
+        return None
+    sent = [str(key)[:40] for key in list(arguments)[:12]]
+    wrapped = [key for key, value in arguments.items() if key not in properties and isinstance(value, Mapping)
+               and any(name in value for name in properties)]
+    said = f"{tool} was not called: it needs {', '.join(missing)} at the top level of the arguments. You sent: {', '.join(sent) or 'nothing'}."
+    if wrapped:
+        said += f" The names it takes are inside `{str(wrapped[0])[:40]}`; they belong at the top level."
+    return _shape_words(tool, schema, said)
+
+
+def shape_advice(tool: str, schema: Mapping[str, Any], error: str) -> str | None:
+    """What to add to a server's refusal of a call whose words say the arguments did not fit: what the server said, once and
+    short, and the shape that fits. None when the words are not about arguments, or the schema lists none."""
+    if not _SHAPE_ERROR.search(error or "") or not argument_shape(schema):
+        return None
+    said = " ".join(error.split())
+    said = said if len(said) <= 300 else said[:299] + "…"
+    return _shape_words(tool, schema, f"{tool} refused these arguments. It said: {said}")
+
+
 def resolve_calls(offer: Offer, requested: list[tuple[str, Any]]) -> list[PlannedCall]:
     """The calls a model asked for as calls of the tools it was offered. A call to a name that was
     not offered, or with arguments that are not an object or are far too long, is dropped; so is

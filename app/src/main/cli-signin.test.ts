@@ -3,9 +3,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn(async (_command: string, _args?: unknown): Promise<unknown> => ({ started: true })) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke, Channel: class {} }));
 
-import { createCliSignin } from "./cli-signin";
+import { createCliSignin, signinRetry } from "./cli-signin";
 import type { SigninPhase } from "./timeline";
-import type { CliBrain } from "./types";
+import type { AgentTurn, CliBrain } from "./types";
 
 const row = (more: Partial<CliBrain>): CliBrain => ({ id: "claude", name: "Claude Code", installed: true, logged_in: true, disconnected: false, available: true, login_command: "claude auth login", models: [], ...more });
 
@@ -105,4 +105,12 @@ test("the install guide of a missing CLI is the page Settings opens for it", asy
   await signin.install("codex");
   expect(invoke).toHaveBeenCalledWith("open_external_url", { url: "https://developers.openai.com/codex/cli/" });
   signin.dispose();
+});
+
+test("a finished sign-in runs a failed task again by the core (a routine's run), and asks the question again only for a reply with no task", () => {
+  const turn = (task?: { id: number; state: string }): AgentTurn => ({ id: 4, status: "error", question: "Morning check", task } as unknown as AgentTurn);
+  expect(signinRetry(turn({ id: 31, state: "failed" }))).toEqual({ kind: "rerun", task: 31 });
+  expect(signinRetry(turn({ id: 31, state: "interrupted" }))).toEqual({ kind: "rerun", task: 31 });
+  expect(signinRetry(turn({ id: 31, state: "done" }))).toEqual({ kind: "ask" });
+  expect(signinRetry(turn())).toEqual({ kind: "ask" });
 });

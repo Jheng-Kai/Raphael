@@ -216,6 +216,7 @@ def routine_view(routine: Routine) -> dict[str, Any]:
         "enabled": routine.enabled,
         "last_run": routine.last_run_ms,
         "next_run": routine.next_run_ms,
+        **({"precheck": routine.precheck, "last_skipped": routine.last_skipped_ms} if routine.precheck else {}),
     }
 
 
@@ -331,6 +332,7 @@ class MembersService:
         self.activity.viewing = lambda: self._viewing
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
         self._events = None
+        self._prechecks: set[asyncio.Task] = set()
         self._event_poll_task: asyncio.Task | None = None
         self._ticking: asyncio.Task[None] | None = None
         self._ingress_start: asyncio.Task[None] | None = None
@@ -798,7 +800,10 @@ class MembersService:
                 self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"],
                     "action": "updated" if existed else "created"}, ensure_ascii=False))
                 if self._notify:
-                    self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id})
+                    # A review can run hours after its turn (a restart, a quiet PC, the six-hour gap): the line is drawn in the
+                    # turn, but a turn that already ended is not news again, no "finished" notice and no light (R-SKILL-12).
+                    late = turn.status not in ("running", "confirm")
+                    self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id, **({"activity_only": True} if late else {})})
 
     def skill_read(self, member_id: int, name: object) -> str | None:
         try:
@@ -2064,9 +2069,24 @@ class MembersService:
         if unknown := unknown_in(prompt, available):
             raise invalid_params(refusal(unknown, available))
 
+    def _check_precheck(self, member_id: int, precheck: object) -> None:
+        """A routine's precheck is only a read: the tool it names must be one this member may call as a read now. Where the
+        gate that says so is not there (the core before its tools are up), the form alone was checked."""
+        from .events import clean_precheck
+        from .store import MemberError
+        check = clean_precheck(precheck) if precheck is not None else None
+        if check is None or self._events is None:
+            return
+        probe = Routine(id=0, member_id=member_id, title="", prompt="", schedule=None, enabled=True, last_run_ms=None,
+                        next_run_ms=None, created_at_ms=0, precheck=check)
+        if self._events.precheck_tool(probe) is None:
+            raise _rpc_error(MemberError("precheck", "A precheck must be a read-only tool of a connected app that this member may use; "
+                                                     "this one is not (it writes, is not enabled for the member, or its app is not connected)."))
+
     async def _routine_create(self, params: dict) -> dict:
         member_id = self._routine_member(params)
         self._check_routine_tools(member_id, params.get("prompt"))
+        self._check_precheck(member_id, params.get("precheck"))
         if params.get("schedule") is not None and params.get("when") is not None:
             raise invalid_params("Choose either a schedule or when")
         params = {**params, "schedule": self._saved_schedule(params.get("schedule"))}
@@ -2081,6 +2101,7 @@ class MembersService:
                 app_name=self._event_name(params.get("when")),
                 enabled=params.get("enabled", True),
                 next_run_ms=self._next(schedule) if schedule else self._now_ms(),
+                precheck=params.get("precheck"),
             )
         except MemberError as error:
             raise _rpc_error(error) from None
@@ -2092,6 +2113,7 @@ class MembersService:
         routine_id = self._routine_id(params)
         existing = self.store.routine(routine_id)
         self._check_routine_tools(existing.member_id, params.get("prompt"))
+        self._check_precheck(existing.member_id, params.get("precheck"))
         params = {**params, "schedule": self._saved_schedule(params.get("schedule"), existing)}
         was_webhook = existing.when == {"webhook": True}
         try:
@@ -2104,6 +2126,7 @@ class MembersService:
                 app_name=self._event_name(params.get("when")),
                 enabled=params.get("enabled"),
                 next_run=self._next,
+                precheck=params.get("precheck"),
             )
         except MemberError as error:
             raise _rpc_error(error) from None
@@ -2199,10 +2222,13 @@ class MembersService:
             if catch_up and not self.admit_routine(routine):
                 self.store.advance(routine.id, next_run_ms=now + 60_000, ran_at_ms=None)
                 continue
-            if catch_up and routine.schedule.max_runs is not None and count + 1 >= routine.schedule.max_runs:
+            # A routine with a precheck may be skipped, so its last permitted run is not known to be this one: the check at the
+            # top of the loop ends it once its runs are all made.
+            checked = routine.precheck is not None and self._events is not None
+            if catch_up and routine.schedule.max_runs is not None and count + 1 >= routine.schedule.max_runs and not checked:
                 following = None
             still_there = self.store.advance(
-                routine.id, next_run_ms=following, ran_at_ms=now if catch_up else None
+                routine.id, next_run_ms=following, ran_at_ms=now if catch_up and not checked else None
             )
             if not still_there:
                 continue
@@ -2210,9 +2236,55 @@ class MembersService:
             if not catch_up:
                 logger.info("A routine was missed too long ago to run: %d", routine.id)
                 continue
-            self._run(routine)
+            if checked:
+                self._start_checked(routine, now)
+            else:
+                self._run(routine)
             ran.append(routine.id)
         return ran
+
+    def _start_checked(self, routine: Routine, now: int) -> None:
+        """A due routine that has a precheck: its tool is read first, off the loop, and the run is made only if what it returned
+        is not what it returned the time before (`_checked_run`)."""
+        try:
+            task = asyncio.get_running_loop().create_task(self._checked_run(routine, now))
+        except RuntimeError:  # no loop to wait on: the run is made, as it is when the precheck cannot be read
+            self._ran(routine, now, None)
+            return
+        self._prechecks.add(task)
+        task.add_done_callback(self._prechecks.discard)
+
+    async def _checked_run(self, routine: Routine, now: int) -> None:
+        digest = None
+        try:
+            result = await self._events.read_precheck(routine)
+            if result is not None and result.ok and not result.truncated:
+                data = result.mcp_result.get("structuredContent") if result.mcp_result else None
+                digest = hashlib.sha256(json.dumps(data if data is not None else result.text, sort_keys=True, ensure_ascii=False,
+                                                   default=str).encode("utf-8")).hexdigest()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # a precheck that cannot be read never holds the work back
+            logger.info("A routine precheck could not be read: %d (%s)", routine.id, type(exc).__name__)
+        current = self.store.routine(routine.id)
+        if current is None or not current.enabled or current.precheck != routine.precheck:
+            return  # deleted, paused or changed while the tool was read
+        if digest is not None and digest == current.precheck_hash:
+            with self._conn:
+                self._conn.execute("UPDATE routines SET last_skipped_ms=? WHERE id=?", (self._now_ms(), routine.id))
+            logger.info("A routine run was skipped: its precheck has not changed: %d", routine.id)
+            self._changed("routines.changed", routine.member_id)
+            return
+        self._ran(current, now, digest)
+
+    def _ran(self, routine: Routine, now: int, digest: str | None) -> None:
+        """The run of a routine with a precheck: when it ran, and what its precheck had returned for it, are written down once
+        the run was made (one that the hourly limits refused is tried again at the next time, against the same answer)."""
+        if self._run(routine) is None:
+            return
+        with self._conn:
+            self._conn.execute("UPDATE routines SET last_run_ms=?, precheck_hash=? WHERE id=?",
+                               (now, digest if digest is not None else routine.precheck_hash, routine.id))
 
     def _guard_reason(self, kind: str) -> str:
         messages = with_ui_words({

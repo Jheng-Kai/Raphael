@@ -1,5 +1,17 @@
 # Calendar and automations
 
+## Routine reliability found in real use (2026-11-14)
+
+Core behaviour only; no screen changed (verify with the pytest files named in each rule, not with `look`).
+R-ROUTINE-11: routine runs take two of the three places and wait in order, behind the owner's own tasks
+(`tests/background/test_routine_places.py`). R-CLI-SIGNIN-03: a routine that would start on a subscription CLI that has
+just refused its sign-in ends unstarted with the same cause sentence, and the existing sign-in button of R-CLI-SIGNIN-02 is
+under it (see [Conversation](conversation.md)). R-ROUTINE-10: a routine's optional `precheck` (a read tool the scheduler
+calls with no model; an unchanged result skips the run quietly, no turn, no message) is in `routine_create`'s schema (changed by `routines.update` and `member_routine_update`) and in
+`routine_view` as `precheck` and `last_skipped` (`tests/members/test_routine_precheck.py`); the read-only routine view does not draw
+it yet. R-CAL-09: `calendar_list` cuts a period over 62 days and says so. Update this map if the routine view starts to show
+a precheck or a skipped run.
+
 ## Routines are read; their members change them (owner, 2026-11-09)
 
 Owner: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」, and the calendar too. There is no routine editor:
