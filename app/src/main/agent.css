@@ -775,7 +775,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-find-count { flex: 0 0 max(13ch, 8em); text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ra-find .btn { flex: none; }
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
-.thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
+/* The match being shown is the words in reverse, no frame and no underline (owner, 2026-11-14: 「不用有現在這個外框 有反色就好」). */
+.thread mark.is-current { outline: none; text-decoration: none; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
 /* Reactions stand on the first bubble's top-right corner, as Grok Bot's (the owner's, on the left), over its top edge. They are drawn inside the bubble (withReactions), so cards, a sign-in button or a failure row under it never
    take them from it. Their outer edge is the bubble's own, so they reach neither the hover actions nor past the bubble's scroll width.

@@ -1766,7 +1766,7 @@ export function checkRendered(name, context = {}) {
       require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
       require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');
       require(document.querySelectorAll('mark.is-current').length === 1, 'one exact word is the current target');
-      require(getComputedStyle(document.querySelector('mark.is-current')).outlineStyle !== 'none', 'current target differs by outline as well as contrast');
+      { const current = getComputedStyle(document.querySelector('mark.is-current')), page = getComputedStyle(pane.querySelector('.thread') ?? pane); require(current.outlineStyle === 'none' && current.textDecorationLine === 'none', `the current target has no frame and no underline (${current.outlineStyle}, ${current.textDecorationLine})`); require(current.backgroundColor === page.color || current.backgroundColor !== getComputedStyle(document.querySelector('mark[data-find-match]:not(.is-current)') ?? document.body).backgroundColor, `the current target is the words in reverse (${current.backgroundColor})`); }
       require([...document.querySelectorAll('mark[data-find-match]:not(.is-current)')].every(el=>getComputedStyle(el).textDecorationStyle==='dotted'), 'other exact matches remain visible even on owner bubbles');
       require(pane.querySelectorAll('button').length === 3, 'real previous, next and close controls');
     }
@@ -7652,6 +7652,15 @@ export function checkRendered(name, context = {}) {
     require(box.left >= list.left && box.right <= list.right && parseFloat(style.borderTopLeftRadius) >= 6, `the fill's corners are round and inside the list, never cut square (${Math.round(box.left)} against ${Math.round(list.left)})`);
     return { check: name };
   }
+  if (name === "app-connect-hover") {
+    // Owner, 2026-11-14: the button on a lit row answers the pointer on its own, a shade past the row's own step.
+    const modal = connectModal(), button = modal.querySelector('.cs-card .cs-connect:not(.pri):hover'), row = button?.closest('.cs-card');
+    require(button && visible(button) && row.matches(':hover'), "連結 is under the pointer, on its lit row");
+    const fill = getComputedStyle(button).backgroundColor;
+    require(fill === colourOf('backgroundColor', '--float-ctl-raised-hover'), `連結 under the pointer takes the next shade (${fill})`);
+    require(fill !== colourOf('backgroundColor', '--float-ctl-raised') && fill !== getComputedStyle(row).backgroundColor, "it differs from the row's lit step and from the row itself");
+    return { check: name };
+  }
   if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {
     const modal = connectModal(), page = modal.querySelector('.cs-page'), back = page.querySelector('[data-conn="back"]'), close = modal.querySelector('.modal-x');
     require(visible(page) && !page.querySelector('.cs-top') && visible(back) && back.tagName === 'BUTTON', "an app's page has a bare back chevron and no title row");
@@ -8610,6 +8619,24 @@ export function checkRendered(name, context = {}) {
     const open = scrim.querySelector('.modal-nav [data-pane][aria-current="page"]')?.dataset.pane;
     require(open === want, `the ${want} tab is the open one (${open})`);
     return { check: name, open };
+  }
+  // R-UI-157: the skill's row is lit as one under the pointer, its switch on the fill.
+  if (name === "member-settings-row-lit") {
+    const open = document.querySelector('.ms-pane [data-ms="skill-open"]'), row = open.closest('.ms-row'), toggle = row.querySelector(':scope > .tg');
+    const fill = getComputedStyle(row).backgroundColor, own = getComputedStyle(open).backgroundColor;
+    require(open.matches(':hover'), 'the pointer is on the skill');
+    require(!/rgba\(0, 0, 0, 0\)|transparent/.test(fill), `the row is lit (${fill})`);
+    require(/rgba\(0, 0, 0, 0\)|transparent/.test(own), `the button has no fill of its own over the row's (${own})`);
+    const box = row.getBoundingClientRect(), knob = toggle.getBoundingClientRect();
+    require(knob.left >= box.left && knob.right <= box.right && knob.top >= box.top && knob.bottom <= box.bottom, 'the switch stands inside the lit row');
+    return { check: name, fill };
+  }
+  if (name === "member-settings-switch-hover") {
+    const toggle = document.querySelector('.ms-pane [data-ms="skill-toggle"][aria-checked="true"]'), row = toggle.closest('.ms-row');
+    require(toggle.matches(':hover') && row.matches(':hover'), 'the pointer is on the switch, inside its row');
+    require(/brightness/.test(getComputedStyle(toggle).filter), `the switch answers the pointer (${getComputedStyle(toggle).filter})`);
+    require(!/rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(row).backgroundColor), 'its row is lit around it');
+    return { check: name };
   }
   if (name.startsWith("member-settings-place-")) {
     const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll');

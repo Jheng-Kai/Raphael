@@ -95,6 +95,19 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], sceneLatinNames(scene, "zh-TW", {}));
     expect(result.mixedLanguage.map(item => item.word)).toEqual(["Save"]);
   });
+  it("rejects a row whose button lights alone under the pointer while its switch stands outside the fill", () => {
+    const run = (css) => {
+      const window = new Window();
+      window.document.head.innerHTML = `<style>.btn.open:hover { background: #ededed; } ${css}</style>`;
+      window.document.body.innerHTML = '<div class="row"><button type="button" class="btn open">gmail-organize</button><button type="button" class="tg" role="switch" aria-checked="true" aria-label="開啟"></button></div>';
+      for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 44, width: 400, height: 44 });
+      try { return auditDocument(window.document, { width: 1120, height: 900 }).productRules.filter(item => item.rule === "R-UI-157"); }
+      finally { window.happyDOM.abort(); }
+    };
+    expect(run("")).toHaveLength(1);
+    // The row lit as one, the switch on its fill: what Connect Apps and the member settings page do.
+    expect(run(".row:hover { background: #ededed; } .row > .btn.open:hover { background: transparent; }")).toHaveLength(0);
+  });
   it("accepts the complete 1Password brand while still rejecting an untranslated Password label", () => {
     const window = new Window();
     window.document.body.innerHTML = '<p>從 1Password 匯入</p><label>Password</label>';
