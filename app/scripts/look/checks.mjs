@@ -2192,7 +2192,7 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, kind };
   }
-  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-result','card-task-room','card-task-files','card-task-restored','card-task-prose','card-sheet','card-permission-settled'].includes(name)) {
+  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-result','card-task-few','card-task-many','card-task-new','card-task-confirm','card-task-room','card-task-files','card-task-restored','card-task-prose','card-sheet','card-permission-settled'].includes(name)) {
     const calls = window.__look.calls;
     if (name === 'card-question-typing') require(!calls.some(call=>call.method==='owner_questions.answer'), 'typing A never answers the question');
     if (name === 'card-question-key') {
@@ -2222,11 +2222,56 @@ export function checkRendered(name, context = {}) {
       else require(card.dataset.mailState==='sent' && sends.length===2 && sends[1].params.retry_version===1 && window.__look.sent.length===1, 'an explicit version-bound retry sends once');
     }
     if (name === 'card-task-result') require(document.querySelector('[data-task-result="980"]').textContent.includes('+1 −1'), 'counts come from the actual checkpoint diff');
+    if (['card-task-result','card-task-few','card-task-many','card-task-new','card-task-confirm'].includes(name)) {
+      // The work-result card (owner, 2026-11-14: 「工作結果」, 「53 個檔案變更 +0 −0」 and a green 「完成」 told nothing).
+      const card = document.querySelector('[data-task-result="980"]'), text = value => value.textContent.replace(/\s+/g, ' ').trim();
+      require(card && visible(card), 'the result card is on screen');
+      require(!card.querySelector('.card-status, .card-head i'), 'a finished result has no pill and no dot');
+      require(!/完成|工作結果|還原檔案|顯示內容|\+0|−0/.test(text(card)), `no word that says nothing and no +0 −0: ${text(card)}`);
+      const title = text(card.querySelector('.card-title'));
+      const shown = [...card.querySelectorAll(':scope > .tr-files .tr-file')];
+      require(shown.length >= 1 && shown.length <= 5, `at most five rows show before the fold: ${shown.length}`);
+      for (const row of shown.filter(visible)) {
+        const name = row.querySelector('.tr-name'), state = row.querySelector('.tr-state'), box = row.getBoundingClientRect(), line = (row.querySelector(':scope > summary') ?? row).getBoundingClientRect();
+        // The line of a row that is open is its summary: the diff under it is the row's own opened text.
+        require(line.height <= 48 && name.getBoundingClientRect().height <= 24, `a row is one line: ${text(name)} is ${Math.round(line.height)} px`);
+        require(state.getBoundingClientRect().right >= box.right - 14 && state.getBoundingClientRect().right <= box.right - 8, `the state stands at the row's right: ${text(state)}`);
+        require(name.scrollWidth <= name.clientWidth + 1 || getComputedStyle(name).textOverflow === 'ellipsis', 'a long name is cut with an ellipsis, never into the state');
+      }
+      const buttons = [...card.querySelectorAll('.card-actions button')].map(text);
+      require(buttons.join('|') === '開啟檔案變更|復原這些變更', `the buttons say what they do: ${buttons}`);
+      if (name === 'card-task-result') require(title === '改了 1 個檔案', `the title says what happened: ${title}`);
+      if (name === 'card-task-few') {
+        require(title === '改了 4 個檔案' && shown.length === 4, `a few files: ${title}`);
+        require(shown.map(row => text(row.querySelector('.tr-state'))).join('|') === '+12 −3|新增|新增|刪除', `each row says what happened to it: ${shown.map(row => text(row.querySelector('.tr-state')))}`);
+        require(card.querySelector('details.tr-file[open] pre') && visible(card.querySelector('details.tr-file[open] pre')), 'a text file opens under its row');
+        require(!card.querySelector('[data-card-disclosure]'), 'four files need no fold');
+      }
+      if (name === 'card-task-many') {
+        require(title === '改了 53 個檔案' && shown.length === 5, `fifty-three files: ${title}, ${shown.length} rows`);
+        const fold = card.querySelector('[data-card-disclosure]');
+        require(fold && text(fold) === '還有 48 個檔案' && card.querySelector('.card-detail[hidden]') && card.querySelectorAll('.card-detail .tr-file').length === 48, 'the other forty-eight fold under one line');
+        require(!card.querySelector('.tr-file .tr-state:empty') && [...card.querySelectorAll('.tr-state')].every(state => ['新增', '已修改', '+4 −1'].includes(text(state))), 'a file with nothing to count says 新增 or 已修改');
+      }
+      if (name === 'card-task-new') {
+        require(title === '新增了 3 個檔案', `only new files: ${title}`);
+        require(shown.every(row => text(row.querySelector('.tr-state')) === '新增'), 'every row says 新增');
+      }
+      if (name === 'card-task-confirm') {
+        const dialog = document.querySelector('.mb-confirm');
+        require(dialog && visible(dialog) && text(dialog.querySelector('h2')) === '復原這些變更？', 'the dialog asks first');
+        require(text(dialog).includes('新增的檔案會刪除，刪掉的會補回，改過的會改回原樣') && text(dialog).includes('你之後自己改過的檔案會保留'), 'the dialog says what comes back and what is kept');
+        require([...dialog.querySelectorAll('.mb-dlg-act button')].map(text).join('|').includes('復原這些變更'), 'its primary says the effect');
+        require(!window.__look.calls.some(call => call.method === 'computer.checkpoints' && call.params.action === 'restore'), 'nothing is undone before the owner agrees');
+      }
+    }
     if (name === 'card-task-room') require(document.querySelector('[data-task-result="950"]')?.textContent.includes('+1 \u22121'), 'room counts use the same actual checkpoint');
     if (name === 'card-task-files') require(visible(document.querySelector('.desktop-checkpoints')) && calls.some(call => call.method === 'computer.checkpoints'), 'the existing file view opens independently of a running computer');
     if (name === 'card-task-restored') {
       const restores = calls.filter(call => call.method === 'computer.checkpoints' && call.params.action === 'restore');
       require(restores.length === 1 && restores[0].params.review_token === 'a'.repeat(64) && !document.querySelector('[data-task-restore]'), 'one confirmed restore uses the exact reviewed checkpoint token');
+      const settled = document.querySelector('[data-task-result="980"]');
+      require(settled?.querySelector('.card-title').textContent === '已復原 1 個檔案的變更' && [...settled.querySelectorAll('.card-actions button')].map(button => button.textContent.trim()).join('|') === '開啟檔案變更' && !settled.querySelector('.card-status'), 'an undone result says so, has no pill and offers no second undo');
     }
     if (name === 'card-task-prose') require(!document.querySelector('.task-result') && !document.querySelector('.tn[data-id="980"] .task-actions'), 'no files means no result card, and the reply already says it is finished');
     if (name === 'card-sheet') require(document.querySelectorAll('.conversation-card').length >= 9 && document.querySelector('[data-card-desktop-screen] iframe'), 'the sheet uses real production consumers, team rows and one live screen in one column');
@@ -2278,6 +2323,9 @@ export function checkRendered(name, context = {}) {
         require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
+      } else if (card.matches('.task-result') && !card.querySelector(':scope > .card-failure')) {
+        // A finished work result is a named thing with nothing after it, as Grok Bot's files are (owner, 2026-11-14): no pill, no dot.
+        require(!pill && !card.querySelector(':scope > .card-head i'), 'a finished work result has no pill and no dot');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
         // A failed card's × closes the head at the right; otherwise the status does. A × in the head
