@@ -106,6 +106,25 @@ describe("a member's panel", () => {
     expect(panel.el.textContent).not.toContain('Stale file');
     expect(panel.el.querySelector('.mb-tab-body .mp-empty')?.textContent).toBe(t('members.panelNoFiles'));
   });
+  test('a press on a page of the Library opens the page itself, whole, by its id and in its own conversation, and only a host that cannot goes to its reply', async () => {
+    const files = [
+      { id: 'page:abc', title: 'Tokyo list', name: 'Tokyo list', kind: 'page', at_ms: Date.now(), day: '2026-11-14', turn_id: 41, conversation_id: 12 },
+      { id: 'page:def', title: 'No conversation', name: 'No conversation', kind: 'page', at_ms: Date.now() - 1000, day: '2026-11-14', turn_id: 42 },
+    ];
+    api.core.mockImplementation(async method => method === 'members.library' ? { files, has_more: false } : {});
+    const panel = mount(); await flush();
+    const openPage = vi.fn(), openTurn = vi.fn();
+    host.openPage = openPage; host.openTurn = openTurn;
+    panel.select('library'); await flush();
+    panel.el.querySelector<HTMLElement>('[data-panel-file="page:abc"]')!.click();
+    panel.el.querySelector<HTMLElement>('[data-panel-file="page:def"]')!.click();
+    expect(openPage.mock.calls).toEqual([[{ id: 'abc', title: 'Tokyo list', conversation: 12, turn: 41 }], [{ id: 'def', title: 'No conversation', conversation: undefined, turn: 42 }]]);
+    expect(openTurn).not.toHaveBeenCalled();
+    // A host that cannot open a page itself still takes the owner to the reply that holds its card.
+    host.openPage = undefined;
+    panel.el.querySelector<HTMLElement>('[data-panel-file="page:abc"]')!.click();
+    expect(openTurn).toHaveBeenCalledExactlyOnceWith(3, 12, 41);
+  });
   test("Raphael's face follows the current custom avatar on redraw", async () => {
     current=0; const panel=mount(); await flush();
     const avatar={url:'data:image/png;base64,c2FtcGxl',crop:{x:.5,y:.5,zoom:1}};

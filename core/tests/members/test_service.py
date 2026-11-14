@@ -40,7 +40,7 @@ async def test_raphael_is_first_in_the_list_in_the_language_asked(rig):
         "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
         "id": 0, "name": "Raphael", "role": "", "personality": "", "instructions": "", "avatar": "", "group_id": None,
         "model": "", "tools": None, "position": -1, "created": 0, "unread": False, "unread_from": None,
-        "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "profile_ready": False, "chief": True,
+        "unread_kind": None, "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "profile_ready": False, "chief": True,
     }  # fmt: skip
     rig.language = "ja"
     assert (await rig.call("members.list"))["members"][0]["name"] == "ラファエル"
@@ -263,6 +263,67 @@ async def test_an_unseen_members_voice_reply_is_unread_because_it_is_text_only(r
     rig.service.turn_arrived(turn_id)
     listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
     assert listed[member["id"]]["unread"]
+
+
+async def test_a_member_that_is_thinking_is_not_news_until_it_has_sent_something(rig, conn):
+    member = (await rig.call("members.create", {"name": "Thinker"}))["member"]["id"]
+    history = AgentHistory(conn)
+    await rig.call("members.viewing", {"id": None})
+    running = history.add(session_id="s", question="q", route="answer", prefix="", text="", status="running", source="app", member_id=member)
+    rig.service.turn_arrived(running)  # the turn was written and is still thinking
+    rig.service.turn_arrived(running)  # and again at each step it takes
+    listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
+    assert listed[member]["unread"] is False and listed[member]["unread_kind"] is None
+    history.add_message(running, "progress", "looking it up")
+    rig.service.turn_arrived(running)  # a progress line is not a message to the owner
+    assert not {m["id"]: m for m in (await rig.call("members.list"))["members"]}[member]["unread"]
+    history.add_message(running, "reply", "first answer")
+    rig.service.turn_arrived(running)  # a reply sent while it goes on is
+    listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
+    assert listed[member]["unread"] is True and listed[member]["unread_kind"] == "message"
+
+
+async def test_a_routine_that_starts_is_not_news_and_one_that_ends_is_done(rig, conn):
+    member = (await rig.call("members.create", {"name": "Runner"}))["member"]["id"]
+    history = AgentHistory(conn)
+    await rig.call("members.viewing", {"id": None})
+    turn = history.add(session_id="routine:1", question="Morning", route="routine", prefix="", text="", status="running", source="routine", member_id=member)
+    rig.service.turn_arrived(turn)
+    assert not {m["id"]: m for m in (await rig.call("members.list"))["members"]}[member]["unread"]
+    history.resolve(turn, prefix="", text="Done", status="done")
+    rig.service.turn_arrived(turn)
+    listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
+    assert listed[member]["unread"] is True and listed[member]["unread_kind"] == "done"
+    await rig.call("members.read", {"id": member})
+    assert {m["id"]: m for m in (await rig.call("members.list"))["members"]}[member]["unread_kind"] is None
+
+
+async def test_a_failed_turn_is_failed_news_and_a_reply_after_it_does_not_hide_it(rig, conn):
+    member = (await rig.call("members.create", {"name": "Failing"}))["member"]["id"]
+    history = AgentHistory(conn)
+    await rig.call("members.viewing", {"id": None})
+    bad = history.add(session_id="s", question="q", route="answer", prefix="", text="It broke", status="error", source="app", member_id=member)
+    rig.service.turn_arrived(bad)
+    good = history.add(session_id="s", question="q", route="answer", prefix="", text="Fine", status="done", source="app", member_id=member)
+    rig.service.turn_arrived(good)
+    listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
+    assert listed[member]["unread_from"] == bad and listed[member]["unread_kind"] == "failed"
+    await rig.call("members.unread", {"id": 0})
+    assert {m["id"]: m for m in (await rig.call("members.list"))["members"]}[0]["unread_kind"] == "message"  # by hand: no turn behind it
+
+
+def test_unread_kind_ranks_failed_over_done_over_message():
+    from raphael_core.members.service import unread_kind
+
+    assert unread_kind([]) == "message"
+    assert unread_kind([("done", "app", 0, None)]) == "message"
+    assert unread_kind([("done", "app", 0, "done")]) == "done"
+    assert unread_kind([("done", "app", 1, None)]) == "done"
+    assert unread_kind([("done", "routine", 0, None)]) == "done"
+    assert unread_kind([("error", "app", 0, None)]) == "failed"
+    assert unread_kind([("done", "app", 0, "limit")]) == "failed"
+    assert unread_kind([("expired", "app", 0, None), ("done", "routine", 0, None)]) == "failed"
+    assert unread_kind([("denied", "app", 0, None), ("cancelled", "app", 0, None)]) == "message"  # the owner's own no is no failure
 
 
 async def test_a_thread_waits_while_a_question_waits_there_or_the_background_says_so(rig, conn):

@@ -1661,6 +1661,8 @@ export const it = {
   "reminder.waiting": "{p0} ti sta aspettando",
   "reminder.open": "Apri",
   "members.unread": "Nuovi messaggi",
+  "members.lightDone": "Completato",
+  "members.lightFailed": "Richiede un'occhiata",
   "members.pick": "Scegli un membro",
   "members.panel": "Dettagli del membro",
   "members.close": "Chiudi dettagli",

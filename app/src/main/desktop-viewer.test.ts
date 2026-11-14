@@ -446,8 +446,38 @@ test('a screen click changes input in place without replacing the frame, URL or 
   expect(api.desktopControl).toHaveBeenCalledWith('one',true);expect(frame()).toBe(same);expect(frame().src).toBe(url);
   expect(frame().style.pointerEvents).toBe('auto');expect(panel().dataset.interactive).toBe('true');expect(handback().textContent).toBe('停止');
   api.desktopControl.mockResolvedValue(running);handback().click();handback().click();await flush();
-  expect(api.desktopControl.mock.calls.filter(call=>call[1]===false)).toHaveLength(1);expect(api.desktopClose).toHaveBeenCalledWith('one');
+  // Stop hands the computer back once and nothing else: the stream is neither closed nor reopened (owner, 2026-11-14).
+  expect(api.desktopControl.mock.calls.filter(call=>call[1]===false)).toHaveLength(1);expect(api.desktopClose).not.toHaveBeenCalled();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(frame()).toBe(same);expect(frame().src).toBe(url);
+});
+test('ending control keeps watching: the larger view, the stream and the live frame stay, the pill reads 觀看中 and 接手控制 is offered again (owner, 2026-11-14)',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  api.desktopControl.mockResolvedValue({...running,control:'owner'});await takeOver();message('interactive',{held:true});
+  expect(panel().querySelector('.desktop-mode-label')!.textContent).toBe('你正在控制');expect(handback().textContent).toBe('停止');
+  const same=frame();
+  api.desktopControl.mockResolvedValue(running);handback().click();await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one',false);
+  expect(panel().hasAttribute('data-expanded')).toBe(true);expect(document.documentElement.hasAttribute('data-desktop-watch')).toBe(true);
+  expect(frame()).toBe(same);expect(frame().hidden).toBe(false);expect(frame().style.pointerEvents).toBe('none');expect(panel().dataset.interactive).toBe('false');
+  expect(panel().querySelector('.desktop-mode-label')!.textContent).toBe('觀看中');
+  expect(take().hidden).toBe(false);expect(take().disabled).toBe(false);expect(handback().hidden).toBe(true);
+  expect(api.desktopClose).not.toHaveBeenCalled();expect(api.desktopOpen).toHaveBeenCalledTimes(1);expect(panelOpen).toBe(true);
+  // Watching again: Take control works on the same stream, and Esc is what folds the view back.
+  api.desktopControl.mockResolvedValue({...running,control:'owner'});take().click();await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one',true);expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+  message('interactive',{held:true});api.desktopControl.mockResolvedValue(running);handback().click();await flush();
+  window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));await flush();
+  expect(panel().hasAttribute('data-expanded')).toBe(false);expect(api.desktopClose).not.toHaveBeenCalled();expect(frame()).toBe(same);
+});
+test('a stop the core refuses leaves the owner in control: the pill and the screen say so and Stop is offered again',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  api.desktopControl.mockResolvedValue({...running,control:'owner'});await takeOver();message('interactive',{held:true});
+  api.desktopControl.mockRejectedValueOnce(new Error('desktop busy'));handback().click();await flush();
+  expect(panel().hasAttribute('data-expanded')).toBe(true);expect(document.documentElement.hasAttribute('data-desktop-watch')).toBe(false);
+  message('interactive',{held:true});
+  expect(panel().querySelector('.desktop-mode-label')!.textContent).toBe('你正在控制');expect(handback().hidden).toBe(false);expect(take().hidden).toBe(true);
+  expect(api.desktopClose).not.toHaveBeenCalled();
 });
 test('explicit done includes the current nonce once; close never sends handback',async()=>{
   api.desktopStatus.mockResolvedValue({...running,works:[work]});mounted.show();await flush();message('connected');
@@ -745,29 +775,41 @@ test('a member without a computer retains location controls without starting one
  expect(panel().hidden).toBe(false); expect(panel().querySelector("[data-computer-location]")).not.toBeNull(); expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
-test('handback restores the compact conversation even when takeover began in its preview',async()=>{
- panelOpen=true; mounted.show(); await flush(); message('connected');
- api.desktopControl.mockResolvedValue({...running,control:'owner'}); await takeOver();
- api.desktopControl.mockResolvedValue(running); handback().click(); await flush();
+test('completing a sign-in request restores the compact conversation even when takeover began in its preview',async()=>{
+ panelOpen=true; api.desktopStatus.mockResolvedValue({...running,works:[work]}); mounted.show(); await flush(); message('connected');
+ api.desktopControl.mockResolvedValueOnce({...running,control:'owner',works:[work]}).mockResolvedValueOnce({...running,works:[{...work,state:'returning'}]});
+ await takeOver(); handback().click(); await flush();
  expect(panelOpen).toBe(false);
 });
 
-test('handback can be followed by a fresh takeover after its new stream connects',async()=>{
+test('Stop can be followed by a fresh takeover on the same stream, with no reconnect',async()=>{
  panelOpen=true; mounted.show(); await flush(); message('connected');
  api.desktopControl.mockResolvedValue({...running,control:'owner'}); await takeOver();
  api.desktopControl.mockResolvedValue(running); handback().click(); await flush();
  expect(panel().querySelector('.desktop-placeholder')!.textContent).not.toContain('正在連線');
- expect(enlarge().hidden).toBe(false);
- api.desktopOpen.mockResolvedValue({session:'two',url:'http://127.0.0.1:5000/two/vnc.html'});
+ expect(take().hidden).toBe(false); expect(take().disabled).toBe(false); expect(enlarge().hidden).toBe(true);
  api.desktopControl.mockResolvedValue({...running,control:'owner'});
- enlarge().click(); await flush();
- expect(api.desktopOpen).toHaveBeenCalledTimes(2);
- expect(take().disabled).toBe(true);
- expect(api.desktopControl).toHaveBeenCalledTimes(2);
- message('connected'); await flush();
  take().click(); await flush();
- expect(api.desktopControl).toHaveBeenLastCalledWith('two',true);
+ expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+ expect(api.desktopControl).toHaveBeenLastCalledWith('one',true);
  expect(api.desktopControl).toHaveBeenCalledTimes(3);
+});
+
+test("a running computer's panel streams again after a handback that leaves it open, never a black frame with only 開啟 (owner, 2026-11-14)",async()=>{
+ const width = window.innerWidth; Object.defineProperty(window,'innerWidth',{value:1920,configurable:true});
+ try {
+  panelOpen=true; api.desktopStatus.mockResolvedValue({...running,works:[work]}); mounted.show(); await flush(); message('connected');
+  api.desktopControl.mockResolvedValueOnce({...running,control:'owner',works:[work]}).mockResolvedValueOnce(running);
+  await takeOver();
+  api.desktopOpen.mockResolvedValue({session:'two',url:'http://127.0.0.1:5000/two/vnc.html'});
+  handback().click(); await flush();
+  // The view folds back, the wide panel stays open on the Computer tab, and its preview is the stream again.
+  expect(panel().hasAttribute('data-expanded')).toBe(false); expect(panelOpen).toBe(true);
+  expect(api.desktopClose).toHaveBeenCalledWith('one'); expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+  expect(frame().getAttribute('src')).toBe('http://127.0.0.1:5000/two/vnc.html');
+  message('connected'); await flush();
+  expect(frame().hidden).toBe(false); expect(panel().dataset.desktopState).toBe('member');
+ } finally { Object.defineProperty(window,'innerWidth',{value:width,configurable:true}); }
 });
 
 test('file changes opened from a card offer only Back, which returns to the conversation',async()=>{

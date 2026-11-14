@@ -1661,6 +1661,8 @@ export const id = {
   "reminder.waiting": "{p0} menunggu Anda",
   "reminder.open": "Buka",
   "members.unread": "Pesan baru",
+  "members.lightDone": "Selesai",
+  "members.lightFailed": "Perlu dilihat",
   "members.pick": "Pilih anggota",
   "members.panel": "Detail anggota",
   "members.close": "Tutup detail",
