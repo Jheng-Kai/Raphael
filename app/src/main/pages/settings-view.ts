@@ -435,13 +435,12 @@ function generalHTML(v: SettingsView): string {
     section(t("agent.title"), [
       row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
       outputFolderRow(v),
-    ]) +
+    ])
     // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
     // Nothing of them is set here.
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts), and the
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
-    // The tour, as one button named 導覽.
-    `<section class="sgroup"><h2>${esc(t("settings.groupStartup"))}</h2><div class="sgroup-act">${btn(esc(t("settings.rerunGuide")), "", ' data-act="rerun-guide"')}</div></section>`
+    // The guide is the first run's only: Settings has no way to open it again (owner, 2026-11-14).
   );
 }
 
