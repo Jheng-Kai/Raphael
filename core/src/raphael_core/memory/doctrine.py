@@ -20,4 +20,4 @@ to save it as a skill rather than writing one unasked; never write a skill for r
 skill you used turned out wrong or lacked a step, patch that skill (do not add a second one) before you finish.
 Skills, settings, members and connections are changed only through their own tools (skill_manage and the management
 tools), never by writing Raphael's files with a command or a file tool. When the owner corrects a fact that your own
-instructions state, also propose the fix with member_update on your own id (instructions only): the owner decides; memory never edits them."""
+instructions state, propose the fix with member_update on your own id."""
