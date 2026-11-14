@@ -17,7 +17,7 @@
 .ra-stage.is-page > .ra-scroll .live-presence { display: none; }
 .ra-stage.is-page > .pgv { grid-area: 1 / 1; }
 /* The page is the whole area right of the sidebar to the window's edge: while it stands, the stage takes back the pane's own side
-   padding (a conversation's, as the thread has it; R-PAGE-09), so nothing runs past its box. A room's pane has none: its thread and
+   padding (a conversation's, as the thread has it; R-PAGE-10), so nothing runs past its box. A room's pane has none: its thread and
    composer are inset by the room's own padding instead. The composer, the thread hidden under the page (its lines wrap as they did), the line under the page and a report keep the thread's own sides. */
 .mb-chat:not(.au-room-pane) > .ra-stage.is-page { margin-inline: calc(-1 * var(--row-edge)); }
 .mb-chat:not(.au-room-pane) > .ra-stage.is-page > :is(.ra-dock, .ra-scroll) { padding-inline: calc(var(--row-edge) + var(--pa-dock-x)); }
@@ -41,7 +41,7 @@
 .mb-chat:has(> .ra-stage.is-page) .mb-head .ra-tools:has(> [data-page-act]) [data-room-search] { display: none; }
 
 /* An HTML page: the whole area under the header, scrolling as one (owner, 2026-11-14: 「它會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」), and
-   since the same day (R-PAGE-09; owner, with a page standing in a centred frame between two dark margins: 「像是在 Chrome 打開 HTML 檔」) edge to
+   since the same day (R-PAGE-10; owner, with a page standing in a centred frame between two dark margins: 「像是在 Chrome 打開 HTML 檔」) edge to
    edge: the page is as wide as the area, with no side margin, frame, corner or edge, so its own background reaches the sidebar and the window's
    right edge, and the area ends where the composer's row begins, so nothing of the page is ever under the composer. Only the top keeps a
    slim band the height of the header row: the page scrolls under it and fades out as the thread does. The iframe is as tall as the page says
@@ -71,7 +71,7 @@
 /* What the member does with a message written under the page: the same line as in the thread while it works, then the first
    words of its reply (the arrow brings it in full). */
 .pgv-status { padding: 0 var(--pa-dock-x); }
-/* The page now reaches this row (R-PAGE-09), so the answer stands in a band of its own on a hairline and never reads as the page's last line. */
+/* The page now reaches this row (R-PAGE-10), so the answer stands in a band of its own on a hairline and never reads as the page's last line. */
 .pgv-status:not([hidden]) { border-top: 1px solid var(--line); padding-top: var(--sp-1); }
 .pgv-status > :is(.live-presence, .pgv-reply) { max-width: var(--pa-colw); margin-inline: auto; }
 .pgv-status > .live-presence { margin-top: var(--sp-1); }

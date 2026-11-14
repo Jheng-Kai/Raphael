@@ -6193,7 +6193,7 @@ export function checkRendered(name, context = {}) {
     require(Math.round(shareBox.width) === 36 && Math.round(shareBox.height) === 36 && Math.abs((shareBox.top + shareBox.bottom) - (arrow.top + arrow.bottom)) <= 2 && head.right - shareBox.right < head.width / 4, "36 px, level with the arrow, at the header's right");
     const memberShare = pane.querySelector('.mb-head [data-act="share-member"]');
     require(!memberShare || !visible(memberShare), "the member's share waits while a page stands in the thread's place");
-    // The area, since R-PAGE-09 (owner, 2026-11-14: the page as Chrome shows a file): the whole view right of the sidebar to the window's right edge,
+    // The area, since R-PAGE-10 (owner, 2026-11-14: the page as Chrome shows a file): the whole view right of the sidebar to the window's right edge,
     // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. It ends where the composer's row
     // begins, so no part of the page is ever under the composer.
     const areaBox = area.getBoundingClientRect(), shown = box.getBoundingClientRect(), side = document.querySelector("#nav")?.getBoundingClientRect();
@@ -6510,7 +6510,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, column: Math.round(column), aside };
   }
   if (name === "page-base") {
-    // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-09 its frame is the whole area, edge to edge
+    // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-10 its frame is the whole area, edge to edge
     // (its own style, page_style.py, keeps the lines readable inside it; the frame's own measures are `checkFrame`).
     const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe"), area = stage.querySelector(".pgv-page");
     require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
@@ -6714,7 +6714,7 @@ export function checkRendered(name, context = {}) {
     const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect();
     require(Math.abs(doc.left - column.left) <= 1 && Math.abs(doc.right - column.right) <= 1, `the report's column is the composer's: ${Math.round(doc.left)}-${Math.round(doc.right)} and ${Math.round(column.left)}-${Math.round(column.right)}`);
     const page = view.querySelector(":scope > .rp-scroll");
-    // R-PAGE-09: the report's background fills the whole view beside the sidebar to the window's edge; only its column keeps a readable width.
+    // R-PAGE-10: the report's background fills the whole view beside the sidebar to the window's edge; only its column keeps a readable width.
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible).getBoundingClientRect(), fill = page.getBoundingClientRect(), viewBox = view.getBoundingClientRect();
     require(Math.abs(fill.left - pane.left) <= 1 && Math.abs(fill.right - pane.right) <= 1 && Math.abs(viewBox.left - pane.left) <= 1 && Math.abs(viewBox.right - pane.right) <= 1, `the report fills the full width of the view: ${Math.round(fill.left)}-${Math.round(fill.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
     require(Math.abs(fill.right - innerWidth) <= 1 && fill.bottom <= dock.getBoundingClientRect().top + 1 && !(fill.bottom > composer.getBoundingClientRect().top + 0.5), "to the window's right edge, and no part of it is under the composer");
