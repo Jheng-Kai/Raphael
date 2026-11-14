@@ -15,9 +15,13 @@ resamples through Windows, so a microphone opens at 16 kHz whatever rate it work
 mode would not, and lists every microphone once per host API besides.
 
 PortAudio keeps the list of devices, and which of them is the default, as they were when it started.
-So a recorder follows a change of the Windows default microphone, or a headset plugged in since,
-only by having PortAudio read the devices again (`_read_devices_again`), which takes about 35 ms and
+So a recorder sees a headset plugged in since, or one taken away, only by having PortAudio read the
+devices again (`_read_devices_again`), which takes about 35 ms and
 is possible only while none of our streams is open.
+
+Automatic (no name given) does not follow the Windows default: mic_choice.py orders the microphones
+(an attached one before a built-in array, never a loopback such as Stereo Mix) and keeps the choice
+still, so the one a person wears does not change between two recordings.
 """
 
 import logging
@@ -34,6 +38,7 @@ import numpy as np
 import sounddevice as sd
 import soxr
 
+from raphael_core.device.mic_choice import AutomaticMicrophone
 from raphael_core.device.stt import read_wav
 
 logger = logging.getLogger(__name__)
@@ -54,7 +59,8 @@ _SILENT_RMS = 2e-4
 _DEFAULT_CHECK_SECONDS = 0.3
 _PROBE_SECONDS = 0.2
 _automatic_device: str | None = None
-_last_good_automatic: str | None = None
+# Which microphone automatic is on, and which have been heard: see mic_choice.py.
+_automatic = AutomaticMicrophone()
 
 # The sound level that rms_level maps to 0 and to 1 (dB relative to full scale).
 _QUIET_DB = -56.0
@@ -151,11 +157,11 @@ def current_input_devices() -> list[InputDevice]:
 
 
 def automatic_device_name() -> str | None:
-    """The automatic microphone most recently opened, or Windows' default before the first run."""
-    devices = current_input_devices()
-    if any(device.name == _automatic_device for device in devices):
+    """The automatic microphone most recently opened, or the one automatic would open first."""
+    ranked = _automatic_order(*_input_infos())
+    if any(info["name"] == _automatic_device for info in ranked):
         return _automatic_device
-    return next((device.name for device in devices if device.is_default), None)
+    return ranked[0]["name"] if ranked else None
 
 
 def _has_device(name: str) -> bool:
@@ -163,19 +169,35 @@ def _has_device(name: str) -> bool:
     return any(info["name"] == name for info in _input_infos()[0])
 
 
+def _automatic_order(infos: list[dict], default: int) -> list[dict]:
+    """The descriptions of the microphones automatic may use, the one it uses first, first.
+
+    Never the "Sound Mapper" entry Windows adds, which stands for whichever device Windows calls
+    the default at the moment and so moves under us; never a loopback such as Stereo Mix
+    (mic_choice.py).
+    """
+    devices = [
+        InputDevice(index=info["index"], name=info["name"], is_default=info["index"] == default)
+        for info in infos
+        if not info["name"].startswith(_SOUND_MAPPER)
+    ]
+    by_index = {info["index"]: info for info in infos}
+    return [by_index[device.index] for device in _automatic.rank(devices)]
+
+
 def _pick_device(name: str | None) -> tuple[dict, bool]:
-    """The description of the microphone called `name`, or of the system default for None, and
-    whether it is the one called `name`. A name that is not there gives the default."""
+    """The description of the microphone called `name`, or of the one automatic picks for None,
+    and whether it is the one called `name`. A name that is not there gives the automatic one."""
     infos, default = _input_infos()
     if name is not None:
         for info in infos:
             if info["name"] == name:
                 return info, True
-        logger.warning("The microphone %r is not there; using the system default", name)
-    for info in infos:
-        if info["index"] == default:
-            return info, False
-    raise NoMicrophoneError("There is no microphone: Windows has no default recording device")
+        logger.warning("The microphone %r is not there; choosing one automatically", name)
+    ranked = _automatic_order(infos, default)
+    if ranked:
+        return ranked[0], False
+    raise NoMicrophoneError("There is no microphone: none that can record is plugged in")
 
 
 # PortAudio reads the list of devices once, when sounddevice is imported. A microphone plugged in
@@ -266,10 +288,11 @@ class MicRecorder:
     A name that is not there falls back to the default microphone, with a warning in the log; the
     microphone someone chose last month may well be unplugged today.
 
-    Every automatic start checks Windows' current default. A digitally silent default is replaced
-    by the first live input, trying the last successful automatic input first. A background worker
-    probes other microphones, preserving their startup frames when one is selected. Explicit
-    choices never probe. Device refreshes are skipped while another stream is open.
+    Automatic opens the first microphone of mic_choice's order (an attached one before a built-in
+    array, a loopback never, the same one while it stays plugged in). A digitally silent one that
+    has never been heard is replaced by the next live one in that order; a background worker
+    probes them, preserving their startup frames when one is selected. Explicit choices never
+    probe. Device refreshes are skipped while another stream is open.
     """
 
     def __init__(self, on_frames: OnFrames, device: str | None = None) -> None:
@@ -430,13 +453,14 @@ class MicRecorder:
 
     def _accept_probe(self, capture: _Capture) -> bool:
         """Commit a live probe while holding its delivery lock, including its buffered speech."""
-        global _automatic_device, _last_good_automatic
+        global _automatic_device
         if capture.pending is None or capture.failed or capture.peak_rms < _SILENT_RMS:
             return False
         pending, capture.pending = capture.pending, None
         for block in pending:
             self._on_frames(block)
-        _automatic_device = _last_good_automatic = capture.info["name"]
+        _automatic_device = capture.info["name"]
+        _automatic.heard(capture.info["name"])
         assert capture.choice is not None
         logger.info(
             "Microphone: %s (automatic: default %s was silent)",
@@ -447,13 +471,10 @@ class MicRecorder:
     def _find_live_input(self, default: _Capture, choice: _AutomaticChoice) -> None:
         global _automatic_device
         try:
-            infos, _ = _input_infos()
             candidates = [
-                info for info in infos
+                info for info in _automatic_order(*_input_infos())
                 if info["index"] != default.info["index"]
-                and not info["name"].startswith(_SOUND_MAPPER)
             ]
-            candidates.sort(key=lambda info: info["name"] != _last_good_automatic)
             if not candidates:
                 return
             for info in candidates:
@@ -503,7 +524,6 @@ class MicRecorder:
 
     def _deliver(self, capture: _Capture, indata: np.ndarray, status) -> None:
         """PortAudio's callback: copy, resample, pass on. It must not wait for anything."""
-        global _last_good_automatic
         if status:
             logger.debug("PortAudio reported: %s", status)  # an overflow means lost sound
         if capture.stopping:
@@ -516,10 +536,13 @@ class MicRecorder:
                 if capture.samples >= capture.window:
                     capture.checked.set()
                     if capture.pending is None:
-                        if capture.peak_rms < _SILENT_RMS:
+                        name = capture.info["name"]
+                        if capture.peak_rms >= _SILENT_RMS:
+                            _automatic.heard(name)
+                        elif not _automatic.was_heard(name):
+                            # Quiet and never heard: asleep, perhaps. One that was heard before may
+                            # only be gated until someone speaks, so it is kept.
                             self._schedule_probe(capture)
-                        else:
-                            _last_good_automatic = capture.info["name"]
             if capture.resampler is not None:
                 block = resample_block(capture.resampler, block)
             if block.size:
