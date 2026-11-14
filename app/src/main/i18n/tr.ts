@@ -1950,7 +1950,6 @@ export const tr = {
   "rooms.blockedStalled": "Uzun süre ilerleme olmadı",
   "rooms.blockedTooLong": "Bir seferde okunamayacak kadar uzun",
   "overview.used": "%{p0} kullanıldı",
-  "account.resets": "{p0} sıfırlanır",
   "account.reset": "Sıfırlandı",
   "account.unreadable": "Okunamıyor",
   "account.thisMonth": "Bu ay",

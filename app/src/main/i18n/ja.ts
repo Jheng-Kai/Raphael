@@ -1779,7 +1779,6 @@ export const ja = {
   "rooms.blockedStalled": "長い間進展がありませんでした",
   "rooms.blockedTooLong": "一度に読める量を超えました",
   "overview.used": "{p0}% 使用済み",
-  "account.resets": "{p0}にリセット",
   "account.reset": "リセット済み",
   "account.unreadable": "読み取れません",
   "account.thisMonth": "今月",

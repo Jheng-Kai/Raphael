@@ -1779,7 +1779,6 @@ export const en = {
   "rooms.blockedStalled": "No progress for too long",
   "rooms.blockedTooLong": "Too much text to read at once",
   "overview.used": "Used {p0}%",
-  "account.resets": "Resets {p0}",
   "account.reset": "Reset",
   "account.unreadable": "Can't be read",
   "account.thisMonth": "This month",
