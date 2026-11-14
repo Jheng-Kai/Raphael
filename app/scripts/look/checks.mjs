@@ -8495,6 +8495,38 @@ export function checkRendered(name, context = {}) {
     require(!document.body.textContent.includes("Transcribing") && !document.body.textContent.includes("\u8f49\u9304\u4e2d"), "elapsed-time captions are absent");
     return { check: name, caption: caption.textContent };
   }
+  // Where a step of the side buttons landed (R-NAV-03): every view the owner went into is one step.
+  if (name.startsWith("nav-ms-")) {
+    const want = name.slice("nav-ms-".length), pane = document.querySelector(".ms-pane");
+    require(visible(pane), "the member's settings page is still on screen");
+    const open = pane.querySelector('.ms-nav [data-cat][aria-current="page"]')?.dataset.cat;
+    if (want === "skill") require(pane.dataset.view === "skill" && visible(pane.querySelector("#ms-skill-text")), `the skill's own page is back (${pane.dataset.view})`);
+    else {
+      require(pane.dataset.view === "main", `the tab itself, not a skill's page (${pane.dataset.view})`);
+      require(open === want, `the ${want} tab is the open one (${open})`);
+    }
+    return { check: name, open, view: pane.dataset.view };
+  }
+  if (name.startsWith("nav-conversation-")) {
+    const id = name.slice("nav-conversation-".length);
+    require(!visible(document.querySelector(".ms-pane")), "the settings page is gone");
+    require(visible(document.querySelector(".page-agent .mb-chat .composer")), "the conversation is on screen");
+    const current = document.querySelector('.mb-col [data-member][aria-current="true"]')?.dataset.member;
+    require(current === id, `member ${id}'s conversation is the open one (${current})`);
+    return { check: name, current };
+  }
+  if (name.startsWith("nav-settings-")) {
+    const want = name.slice("nav-settings-".length), scrim = document.querySelector('.modal-scrim[data-page="settings"]');
+    if (want === "closed") {
+      require(!scrim || scrim.hidden || !document.documentElement.dataset.windowModal, "the settings are closed");
+      require(visible(document.querySelector(".page-agent .mb-chat .composer")), "the page under them is on screen");
+      return { check: name };
+    }
+    require(document.documentElement.dataset.windowModal === "true" && visible(scrim.querySelector(".modal")), "the settings are still open");
+    const open = scrim.querySelector('.modal-nav [data-pane][aria-current="page"]')?.dataset.pane;
+    require(open === want, `the ${want} tab is the open one (${open})`);
+    return { check: name, open };
+  }
   if (name.startsWith("member-settings-place-")) {
     const scroller = document.querySelector('.page-agent .mb-chat .ra-scroll');
     const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;

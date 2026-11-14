@@ -573,10 +573,10 @@ export const connectionsAddHTML = (): string =>
   `<span>${esc(t("conn.addMenu"))}</span>${ico("down")}</button>`;
 
 /** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
-const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
+const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back" data-nav-back', "cs-back");
 /** The connected list's title is its way back: the chevron and the title are one button (owner, 2026-11-14, asked more than three times). */
 const backTitleHTML = (title: string): string =>
-  btn(`${ico("left")}<span>${esc(title)}</span>`, "cs-back cs-back-title", ` data-conn="back" data-k="cs-back" title="${esc(t("conn.back"))}"`);
+  btn(`${ico("left")}<span>${esc(title)}</span>`, "cs-back cs-back-title", ` data-conn="back" data-k="cs-back" data-nav-back title="${esc(t("conn.back"))}"`);
 
 // ---------- the connected apps: one list ----------
 
@@ -966,6 +966,10 @@ export interface Connections {
   followEvent(event: MainEvent): void;
   /** The panel is closed or leaves the dialog: drop what must not stay (an unsent form, a pending disconnect). */
   reset(): void;
+  /** The view on screen in words the way back keeps: the connected list (`connected`) and an app's page over it (`group:github`). */
+  navView(): string;
+  /** Shows the view `navView` named; an app that is gone leaves the list it was in. */
+  showNavView(key: string): void;
 }
 
 export function createConnections(host: ConnectionsHost): Connections {
@@ -1784,5 +1788,23 @@ export function createConnections(host: ConnectionsHost): Connections {
     loads++;
   }
 
-  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset };
+  function navView(): string {
+    const parts: string[] = [];
+    if (screen === "connected") parts.push("connected");
+    if (open) parts.push(`${open.kind}:${open.id}`);
+    return parts.join("/");
+  }
+  function showNavView(key: string): void {
+    const parts = key ? key.split("/") : [];
+    const nextScreen: Screen = parts[0] === "connected" ? "connected" : "apps";
+    const page = /^(app|group):(.+)$/.exec(parts.find(part => /^(app|group):/.test(part)) ?? "");
+    const wanted: OpenApp | null = page && (page[1] === "app" ? entryById(page[2]) : groupById(page[2])) ? { kind: page[1] as OpenApp["kind"], id: page[2] } : null;
+    if (wanted && open?.kind === wanted.kind && open.id === wanted.id && screen === nextScreen) return;
+    screen = nextScreen;
+    if (wanted) { if (open?.kind !== wanted.kind || open.id !== wanted.id) { openPage(wanted); return; } }
+    else if (open) { open = null; toolsOpen = false; auditOpen = false; clearTimeout(confirmTimer); confirming = null; loginError = null; dialogNotice = null; }
+    redraw();
+  }
+
+  return { view, load, click, input, key, menuFor, painted, scrolled, followEvent, reset, navView, showNavView };
 }

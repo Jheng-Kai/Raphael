@@ -128,7 +128,7 @@ export interface PagesHost {
   /** Puts an open page away, so the thread is in sight again. */
   close(): void;
   /** The page open now, an HTML page or a report. */
-  shown(): { id: string; kind: "page" | "report" } | null;
+  shown(): { id: string; kind: "page" | "report"; title: string } | null;
   /**
    * Opens page `id` whole, from wherever its card stands in the thread (the Library's press, R-PAGE-08): the view stands at
    * once with the page's title, and the page takes its place when its card is in the thread and ready. `done` runs once the

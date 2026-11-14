@@ -38,7 +38,7 @@ export interface PageView {
   open(page: PageViewOpen): void;
   /** The thread is back where it was. */
   close(): void;
-  shown(): { id: string; kind: "page" | "report" } | null;
+  shown(): { id: string; kind: "page" | "report"; title: string } | null;
   /** `done` runs once, after the page now open (or the next one to open) is put away and its content has left. */
   watchClose(done: () => void): void;
   /**
@@ -119,7 +119,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     // The way back stands at the header's top left, where the search stood: the conversation header's round edge button.
     const slot = pane?.querySelector<HTMLElement>(":scope > .mb-head .mb-head-l, :scope > .mb-head .room-picker");
     if (slot) {
-      slot.insertAdjacentHTML("afterbegin", iconButton("left", t("chooser.back"), ' data-page-back hidden', "ra-tool pgv-back"));
+      slot.insertAdjacentHTML("afterbegin", iconButton("left", t("chooser.back"), ' data-page-back data-nav-back hidden', "ra-tool pgv-back"));
       back = slot.querySelector<HTMLButtonElement>("[data-page-back]");
       back!.addEventListener("click", () => close());
     }
@@ -209,7 +209,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     get body() { element(); return body; },
     open,
     close,
-    shown: () => (current ? { id: current.id, kind: current.kind } : null),
+    shown: () => (current ? { id: current.id, kind: current.kind, title: current.title } : null),
     watchClose: done => { closing.push(done); },
     sent() {
       const id = current?.id ?? null;

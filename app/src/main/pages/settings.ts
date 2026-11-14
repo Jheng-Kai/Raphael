@@ -154,6 +154,10 @@ export interface SettingsPage extends Page {
   pane(): SettingsPane;
   /** Reads ahead, so that the first opening has nothing to wait for either. */
   preload(): Promise<void>;
+  /** What the open tab shows inside it, in words the way back keeps (a sub-tab, a dialog, an app's page); "" for the tab alone. */
+  navView(): string;
+  /** Puts the panel at tab `pane` showing what `navView` named, as the presses that lead there do. */
+  showNavView(pane: SettingsPane, key: string): void;
 }
 export function createSettings(app: AppContext): SettingsPage {
   const el = document.createElement("div");
@@ -166,7 +170,7 @@ export function createSettings(app: AppContext): SettingsPage {
     `<div class="set-list"></div>` +
     `</nav>` +
     `<div class="modal-body"></div>` +
-    `${iconBtn("x", t("common.close"), ' data-act="close"', "modal-x")}` +
+    `${iconBtn("x", t("common.close"), ' data-act="close" data-nav-back', "modal-x")}` +
     `</div>`;
   const body = el.querySelector<HTMLElement>(".modal-body")!;
   const navList = el.querySelector<HTMLElement>(".set-list")!;
@@ -1246,6 +1250,22 @@ export function createSettings(app: AppContext): SettingsPage {
     id: "settings",
     el,
     pane: () => pane,
+    navView() {
+      if (pane === "models") return [modelsTab, providers.navView()].filter(Boolean).join("/");
+      if (pane === "tools") return services.navView();
+      if (pane === "connections") return connections.navView();
+      return "";
+    },
+    showNavView(next, key) {
+      if (canonicalPane(next) !== pane) openPane(next);
+      if (pane === "models") {
+        const at = key.indexOf("/");
+        const tab = at < 0 ? key : key.slice(0, at);
+        switchModelsTab(tab === "usage" ? "usage" : "models");
+        providers.showNavView(at < 0 ? "" : key.slice(at + 1));
+      } else if (pane === "tools") services.showNavView(key);
+      else if (pane === "connections") connections.showNavView(key);
+    },
     async preload() {
       if (readOnce || preloading) return;
       preloading = true;

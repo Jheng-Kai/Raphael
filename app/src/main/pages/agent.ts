@@ -122,7 +122,7 @@ import type { PageArgument, AgentQuestion, AgentTurn, AppContext, CliBrainId, Gr
 import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
-import { createRoomPane } from "../group-chats";
+import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
 import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
@@ -246,7 +246,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; showSettings(id: number | null): void } {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void>; settingsOf(): number | null; navView(): string; showNavView(key: string): void } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -2971,13 +2971,71 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     }).catch(error => toaster.info(describeError(error)));
   });
 
+  // ---------- the way back (nav-history.ts) ----------
+
+  /** The titles of the pages opened here, so a step forward can open one again with its name. */
+  const pageTitles = new Map<string, string>();
+  /** The conversation a member's thread shows when it is not the newest one, which is the one a member opens at. */
+  const conversationStep = (): string => {
+    const chosen = conversationId(), newest = newestConversation(conversationCache.get(memberId()) ?? []);
+    return chosen !== undefined && newest && chosen !== newest.id ? `:c:${chosen}` : "";
+  };
+  /**
+   * What the page shows, in words the history keeps (a group `r:5`; a member's thread `m:3`, with `:c:17` for an older
+   * conversation; then `>s:` and the view of the member's settings page, or `>p:` and a page open in the thread's place).
+   */
+  function navView(): string {
+    const room = currentRoomId();
+    let key = room !== null ? `r:${room}` : `m:${memberId()}${conversationStep()}`;
+    if (room === null && members.settings.isOpen()) key += `>s:${members.settings.navView()}`;
+    const page = room !== null ? roomPane.page() : pagesHost.shown();
+    if (page) {
+      pageTitles.set(page.id, page.title);
+      key += `>p:${page.id}`;
+    }
+    return key;
+  }
+  /** Puts the page back at a view `navView` named. A step takes the ways a press takes, so each view comes in as it does then. */
+  function showNavView(key: string): void {
+    const [chat = "", ...layers] = key.split(">");
+    const settingsView = layers.find(layer => layer.startsWith("s:"))?.slice(2);
+    const pageId = layers.find(layer => layer.startsWith("p:"))?.slice(2);
+    const room = /^r:(\d+)$/.exec(chat), thread = /^m:(\d+)(?::c:(\d+))?$/.exec(chat);
+    if (room) {
+      // A room opened by the step reads its thread first: its page comes back with the next step, within the room.
+      if (currentRoomId() !== Number(room[1])) { void openGroupChat(Number(room[1])); return; }
+      const open = roomPane.page();
+      if (pageId !== undefined && open?.id !== pageId) roomPane.showPage(pageId, pageTitles.get(pageId) ?? "");
+      else if (pageId === undefined && open) roomPane.closePage();
+      return;
+    }
+    if (!thread) return;
+    const member = Number(thread[1]);
+    const conversation = thread[2] !== undefined ? Number(thread[2]) : newestConversation(conversationCache.get(member) ?? [])?.id;
+    if (conversation !== undefined && (member !== memberId() || conversation !== conversationId() || currentRoomId() !== null)) openConversation(member, conversation);
+    else if (member !== memberId() || currentRoomId() !== null) members.select(member);
+    // The member's settings page opens and closes as its gear and its arrow do (show), keeping the thread's place.
+    if (settingsView !== undefined && !members.settings.isOpen()) {
+      chatPlace = !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
+      members.openSettings();
+    } else if (settingsView === undefined && members.settings.isOpen()) {
+      members.closeSettings();
+      restoreChatPlace();
+    }
+    if (settingsView !== undefined) members.settings.showNavView(settingsView);
+    const shown = pagesHost.shown();
+    if (pageId !== undefined && shown?.id !== pageId) void pagesHost.show(pageId, pageTitles.get(pageId) ?? "", () => {});
+    else if (pageId === undefined && shown) pagesHost.close();
+  }
+
   return {
     id: "agent",
     el,
     sidebar: members.column,
     loadSidebar: () => members.load(),
     settingsOf: () => members.settings.isOpen() ? members.current() : null,
-    showSettings(id) { if (id !== null && id === members.current()) members.openSettings(); else members.closeSettings(); },
+    navView,
+    showNavView,
     show(arg) {
       const wasVisible = visible;
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.

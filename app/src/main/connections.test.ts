@@ -1316,6 +1316,24 @@ describe("what the dialog does", () => {
     expect(c.view().screen).toBe("connected"); // a read does not move the choice
   });
 
+  test("names each view for the way back and comes back from the name: the connected list, an app's page over it, and none for a gone app", async () => {
+    const c = createConnections(host);
+    await c.load(); await settle();
+    expect(c.navView()).toBe("");
+    c.click(button("connected"));
+    expect(c.navView()).toBe("connected");
+    c.click(button("open", { id: "ab12" }));
+    expect(c.navView()).toBe("connected/group:ab12");
+    c.showNavView("connected");
+    expect(c.view()).toMatchObject({ screen: "connected", open: null });
+    c.showNavView("connected/group:ab12");
+    expect(c.view()).toMatchObject({ screen: "connected", open: { kind: "group", id: "ab12" } });
+    c.showNavView("");
+    expect(c.view()).toMatchObject({ screen: "apps", open: null });
+    c.showNavView("group:gone");
+    expect(c.view()).toMatchObject({ screen: "apps", open: null });
+  });
+
   test("read in the background at launch it decides nothing about where the dialog opens, and leaving puts it back on the one view", async () => {
     let shown = false;
     const c = createConnections({ ...host, visible: () => shown });

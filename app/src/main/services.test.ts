@@ -334,7 +334,7 @@ describe("the dialog of a capability", () => {
 describe("the page of one service", () => {
   test("has a back chevron and a close button, both borderless, and the service's name", () => {
     const d = inDialog(dialog("search", "brave"));
-    expect(d).toMatch(/<div class="cs-dlg-head sub"><button type="button" class="btn icon" aria-label="返回" title="返回" data-svc="back" data-k="svc-back">/);
+    expect(d).toMatch(/<div class="cs-dlg-head sub"><button type="button" class="btn icon" aria-label="返回" title="返回" data-svc="back" data-k="svc-back" data-nav-back>/);
     expect(d).toContain('<h2 class="cs-dlg-name" id="svc-dlg-title">Brave</h2>');
     expect(d).toMatch(/data-svc="close"/);
     expect(d).not.toContain("已安裝");
