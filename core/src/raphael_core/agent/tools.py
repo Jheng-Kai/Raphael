@@ -75,8 +75,19 @@ _HTTP_STAGE_TIMEOUT_S = 5.0
 SEARCH_TIMEOUT_S = 12.0
 SEARCH_MAX_TOKENS = 500
 SEARCH_PLUGINS = [{"id": "web", "max_results": 3}]
-# Reading a page: the built-in reader has ten seconds of its own, a service that reads it longer.
-READ_TIMEOUT_S = 30.0
+# Reading a page: the built-in reader has ten seconds of its own, a service that reads it longer, and a second reader
+# may try after the first failed (`ServiceHub.read`).
+READ_TIMEOUT_S = 45.0
+# A read that failed in a way a real browser may get past (R-PERSIST-06): a site that turns readers away (a 401 or 403,
+# an error page), a page that did not come or came as nothing a page is made of. Not a wrong or forbidden address.
+BROWSER_MAY_READ = frozenset(("bad_response", "http_error", "auth", "timeout", "network", "redirects"))
+# What such a failure means, where its one word reads like something only the owner can fix (R-PERSIST-02).
+READ_CAUSES = {
+    "auth": "The site or the reading service refused the read (401 or 403), as sites often do to robots: no sign-in of the "
+            "owner's is asked for. A browser or another source may still work.",
+    "http_error": "The site answered with an error page (such as 403 or 404). A browser, another address or another source "
+                  "may still work.",
+}
 # A reader fetches a page without a browser, so a page that shows its text only after a consent button or
 # its scripts comes back cut short; a member then said the page could not be read while its browser could.
 READ_WITHOUT_BROWSER = (
@@ -400,19 +411,20 @@ class Tools:
         service = self.services.read_service()
         try:
             service, page = await asyncio.wait_for(self.services.read(url), READ_TIMEOUT_S)
-        except TimeoutError:
-            return self._failed("web_read", "timeout", service)
-        except ServiceError as error:
-            if error.kind == 'bad_response' and self.rendered_read:
+        except (TimeoutError, ServiceError) as error:
+            kind = error.kind if isinstance(error, ServiceError) else "timeout"
+            if kind in BROWSER_MAY_READ and self.rendered_read:
                 rendered = await self.rendered_read(url)
                 if rendered.ok:
                     return ToolResult("web_read", True, {"url": url, "text": rendered.text, "rendered": True,
                         "cookie_policy": "reject_nonessential", "truncated": rendered.truncated}, untrusted=True, detail="member_browser")
                 if rendered.kind == "computer_asleep":
-                    failed = self._failed("web_read", error.kind, service)
+                    failed = self._failed("web_read", kind, service)
                     failed.instruction = READ_NEEDS_BROWSER
                     return failed
-            return self._failed("web_read", error.kind, service)
+            failed = self._failed("web_read", kind, service)
+            failed.instruction = failed.instruction or READ_CAUSES.get(kind)
+            return failed
         from ..services.web import needs_rendered_read
         asleep = False
         if needs_rendered_read(page) and self.rendered_read:

@@ -188,6 +188,9 @@ class Worker:
                 limits=_limits(params.get("limits")),
                 cancelled=cancelled,
                 guardrails=ToolGuardrails(hard_stop=True),  # nobody is in a background task to read a note
+                # Nobody is there to say "try again" either: a run that ends on a failed call is told what failed and
+                # what it has not tried, up to twice (R-PERSIST-03).
+                corrective_rounds=2,
                 context_window=window if type(window) is int else None,
             )
         finally:

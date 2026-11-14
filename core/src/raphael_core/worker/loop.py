@@ -44,7 +44,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-from ..failures import CORRECTIVE_NOTE, tool_failure, redact
+from ..failures import CORRECTIVE_NOTE, failure_ledger, tool_failure, redact
 
 from .context import CONTEXT_OVERFLOW, ContextKeeper
 from .guards import (
@@ -103,6 +103,21 @@ TOO_LONG = (
 WAITING_FOR_WORK = "Not made: waiting for delegated work."
 # After a result its source could not give whole.
 SOURCE_CUT = "\n[The source cut this result short. To read the rest, ask it for the next part, if it can.]"
+
+# What the owner decided: the turn takes no other way to the same end, and is not pushed to (`CORRECTIVE_NOTE`).
+OWNER_DENIED = frozenset(("denied", "declined", "cancelled", "owner_denied", "forbidden", "presence_required",
+                          "private_chat_only", "member_create_limit"))
+# The only failures the model is told were refused: the owner's decisions and the safety rules (R-PERSIST-02, owner,
+# 2026-11-14). A model reads "refused" as a verdict and stops, so a page that did not load or a URL to look up first
+# is told as a failure with its cause.
+REFUSED = OWNER_DENIED | {"protected_data", "tool_disabled"}
+# Calls the harness did not make because something else comes first (an answer that did not come in time, a hand-off,
+# a ceiling, the owner at the desk): neither refused nor a way that failed.
+NOT_MADE = frozenset(("expired", "unanswered", "not_made", "tools_disabled", "waiting_for_handoff", "stopped", "limit",
+                      "already_done", "waiting_for_connection", "computer_busy", "owner_holds_control"))
+# How much of a tool's own words of why it failed the model reads (Hermes bounds an error at 2048 characters).
+FAILURE_CHARS = 2000
+OTHER_WAYS = "Another way may still work."
 
 
 @dataclass(frozen=True)
@@ -309,8 +324,10 @@ async def _run_task(
     from .computer_verification import ComputerVerification
     computer_check = ComputerVerification()
     computer_check.restore(messages)
-    corrective = any(message.get("role") == "user" and message.get("content") == CORRECTIVE_NOTE
+    corrective = sum(message.get("role") == "user" and str(message.get("content")).startswith(CORRECTIVE_NOTE)
                      for message in messages)
+    failed_calls: list[tuple[str, str]] = []  # (tool, kind) of each call of this run that failed, for the note
+    tried: set[str] = set()
     # Counted in the conversation, so that a pause for the owner's yes does not start the count again.
     nudged = sum(message.get("role") == "user" and message.get("content") == CONTINUE_NOW for message in messages)
     pieces: list[str] = []  # the parts of a text the output limit cut off, until it is whole
@@ -385,9 +402,12 @@ async def _run_task(
                     nudged += 1
                     messages.append({"role": "user", "content": CONTINUE_NOW})
                     continue
-                if last_failed and not owner_denied and not corrective and corrective_rounds:
-                    corrective = True
-                    messages.append({"role": "user", "content": CORRECTIVE_NOTE})
+                if last_failed and not owner_denied and corrective < corrective_rounds:
+                    # Told once for each round of failed calls: a reply to the note that makes no call ends the turn.
+                    corrective += 1
+                    last_failed = False
+                    untried = [n for n in dict.fromkeys(t["function"]["name"] for t in tools) if n not in tried]
+                    messages.append({"role": "user", "content": failure_ledger(failed_calls, untried)})
                     continue
                 pending = owner_input.drain(finishing=True) if owner_input else []
                 if pending:
@@ -424,13 +444,15 @@ async def _run_task(
                         )  # fmt: skip
                     content = result_text(call.name, outcome, keeper.window)
                     tool, arguments = called(call.name, call.arguments)
+                    tried.update((call.name, tool))
                     computer_check.after(tool, arguments, outcome.ok, outcome.kind)
                     images.extend(image_parts(outcome))
                     if not outcome.ok:
-                        last_failed = True
-                        owner_denied = owner_denied or outcome.kind in (
-                            "denied", "declined", "cancelled", "owner_denied", "forbidden",
-                            "presence_required", "private_chat_only", "member_create_limit")
+                        owner_denied = owner_denied or outcome.kind in OWNER_DENIED
+                        if outcome.kind not in NOT_MADE:  # held back is no way that failed
+                            last_failed = True
+                            # The harness's own words, when it gave some, stand for its code (`failure_text`).
+                            failed_calls.append((tool, "" if outcome.instruction else outcome.kind or "failed"))
                         tool_failure(outcome.kind, outcome.content)  # noted for self_check
                     verdict = guardrails.after_call(tool, arguments, outcome)
                     if verdict.halt:
@@ -567,12 +589,22 @@ def result_text(name: str, outcome: ToolOutcome, window: int | None = None) -> s
     if outcome.ok:
         text = outcome.content + (SOURCE_CUT if outcome.truncated else "")
         return wrap_untrusted(name, text, ok=True, limit=result_limit(name, window))
-    if outcome.instruction:
-        return wrap_untrusted(name, f"The call was refused. {outcome.instruction}", ok=False)
-    reason = tool_failure(outcome.kind, outcome.content, record=False).kind
-    if outcome.kind and reason != outcome.kind:
-        reason += "; " + redact(outcome.kind)
-    text = f"The call failed ({reason})."
-    if outcome.content:  # a tool that says why it failed: its words are data too
-        text += f"\n{redact(outcome.content)}"
-    return wrap_untrusted(name, text, ok=False)
+    return wrap_untrusted(name, failure_text(outcome), ok=False)
+
+
+def failure_text(outcome: ToolOutcome) -> str:
+    """Why a call did not work, as the model reads it, on every brain (the CLI's MCP results too). Only what the owner or a
+    safety rule decided is "refused" (`REFUSED`); a call the harness held back is "not made"; any other failure is told with
+    its own kind and its own words, held to FAILURE_CHARS, and with the fact that another way may still work. Fixed words of
+    the harness (`instruction`) stand in place of the tool's."""
+    if outcome.instruction:  # what to do instead, never an internal code
+        head, said = "", outcome.instruction
+    else:
+        kind = redact(outcome.kind, limit=80) if outcome.kind else tool_failure(outcome.kind, outcome.content, record=False).kind
+        head, said = f" ({kind})", redact(outcome.content, limit=FAILURE_CHARS)  # a tool's words of why are data too
+    said = f"\n{said}" if said else ""
+    if outcome.kind in REFUSED:
+        return f"The call was refused{head}.{said}"
+    if outcome.kind in NOT_MADE:
+        return f"The call was not made{head}.{said}"
+    return f"The call failed{head}.{said}\n{OTHER_WAYS}"

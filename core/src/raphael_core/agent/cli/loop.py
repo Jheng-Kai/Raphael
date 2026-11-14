@@ -12,7 +12,7 @@ from collections import Counter
 from contextlib import aclosing
 from dataclasses import replace
 
-from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT, called
+from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT, NOT_MADE, OWNER_DENIED, called, failure_text
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
@@ -32,7 +32,7 @@ from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_has
                       should_compact, window_tokens)
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
-from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, tool_failure
+from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, failure_ledger, tool_failure
 from ...retry_utils import MODEL_SILENCE_S, Outage
 
 logger = logging.getLogger(__name__)
@@ -305,6 +305,9 @@ class CliLoop:
         self._stream_records = []
         self._usage = {}
         self._guardrails = ToolGuardrails()
+        # What failed in this turn and what was called, for the note after a tool's first failure (R-PERSIST-03): a CLI
+        # makes its own model calls, so the note comes with the result rather than before its last word.
+        self._failed_calls, self._tried, self._ledgers, self._owner_denied = [], set(), 0, False
         from ...worker.computer_verification import ComputerVerification
         self._computer_check = ComputerVerification()
         self.failure_reason = None
@@ -433,12 +436,16 @@ class CliLoop:
                 self.reload_note = ("The connected tools changed. Read the current tool list and continue the original task "
                                     "from the completed tool results below; do not repeat successful actions.")
                 self.catalog_changed = True
+            self._tried.update((name, tool))
             if not result.ok:
-                result.content = json.dumps(tool_failure(result.kind, result.content).wire(), ensure_ascii=False)
+                tool_failure(result.kind, result.content)  # noted for self_check
             note = self._guardrails.after_call(tool, arguments, result).note
+            if not result.ok and (ledger := self._ledger(tool, result.kind, bool(result.instruction))):
+                note = (note + "\n\n" if note else "") + ledger
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
-            shown = wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok)
+            shown = wrap_untrusted(name, (result.instruction or result.content or result.kind or "") if result.ok
+                                   else failure_text(result), ok=result.ok)
             receipt.update(status="completed" if result.ok else "failed", result=shown)
             self.tool_messages.extend([
                 {"role": "assistant", "content": None, "tool_calls": [{"id": identifier, "type": "function",
@@ -454,6 +461,21 @@ class CliLoop:
                 note = (note + "\n\n" if note else "") + OWNER_NOW + "\n" + "\n\n".join(message["content"] for message in said)
             return ToolOutcome(result.ok, result.kind, shown + ("\n\n" + note if note else ""), blocks=result.blocks,
                                tools=result.tools, replace_tools=result.replace_tools)
+
+    def _ledger(self, tool, kind, worded=False):
+        """The note after the first failure of `tool` in this turn: what failed and which offered tools it has not called.
+        Never after the owner said no, never for a call held back, and three times a turn at most. A failure the harness
+        `worded` (told what to do instead) is listed by its tool alone, as `failure_text` shows it."""
+        self._owner_denied = self._owner_denied or kind in OWNER_DENIED
+        if self._owner_denied or kind in NOT_MADE:
+            return ""
+        first = all(failed != tool for failed, _ in self._failed_calls)
+        self._failed_calls.append((tool, "" if worded else kind or "failed"))
+        if not first or self._ledgers >= 3:
+            return ""
+        self._ledgers += 1
+        offered = dict.fromkeys(item["function"]["name"] for item in self.tools if isinstance(item, dict) and "function" in item)
+        return failure_ledger(self._failed_calls, [name for name in offered if name not in self._tried])
 
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]

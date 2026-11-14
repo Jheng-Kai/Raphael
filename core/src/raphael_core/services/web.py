@@ -296,12 +296,24 @@ async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str
 # --- reading a page -------------------------------------------------------------------------------
 
 
+# A consent or terms step that stands in front of a page (R-PERSIST-06, owner, 2026-11-14: a news site's 「ご利用にあたって」
+# page came back with its navigation, well over the short-text mark, and the member read only the lead). The button words
+# count anywhere; the title of such a page only on a page short enough to be little more than it.
+_GATE_WORDS = (
+    "enable javascript", "javascript is required", "accept all cookies", "reject all cookies",
+    "consent preferences", "before you continue", "agree and continue", "accept and continue", "i agree to the terms",
+    "同意 cookie", "接受所有 cookie", "すべての cookie", "内容について確認しました", "同意して進む", "同意して利用",
+    "同意並繼續", "同意并继续")
+_GATE_TITLES = ("ご利用にあたって", "利用規約", "terms of use", "terms of service", "使用條款", "服務條款", "使用条款", "服务条款")
+_GATE_PAGE_CHARS = 2500
+
+
 def needs_rendered_read(page):
     text = page.get("text", "")
     lower = text.lower()
-    return len(text.strip()) < 600 or any(marker in lower for marker in (
-        "enable javascript", "javascript is required", "accept all cookies", "reject all cookies",
-        "consent preferences", "before you continue", "同意 cookie", "接受所有 cookie", "すべての cookie"))
+    short = len(text.strip())
+    return (short < 600 or any(marker in lower for marker in _GATE_WORDS)
+            or short < _GATE_PAGE_CHARS and any(title in lower for title in _GATE_TITLES))
 
 
 def _page(title: Any, text: Any) -> dict:

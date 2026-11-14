@@ -19,7 +19,7 @@ class FakeClient:
     async def chat_tools(self, **kwargs):
         self.requests.append(kwargs)
         from raphael_core.failures import CORRECTIVE_NOTE
-        if kwargs["messages"][-1].get("content") == CORRECTIVE_NOTE:
+        if str(kwargs["messages"][-1].get("content")).startswith(CORRECTIVE_NOTE):
             content, calls = self.last_final, []
         else:
             content, calls = next(self.turns)

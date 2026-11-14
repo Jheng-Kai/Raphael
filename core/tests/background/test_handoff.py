@@ -143,7 +143,9 @@ async def test_a_refused_handoff_tells_the_model_what_to_do_instead_of_a_code(ma
     target,source=setup(rig,model=model)
     shown=[]
     if brain=='api':
-        rig.client.replies.extend([turn(calls=[call('handoff',args(target,member_id=target.id,stage_id='self'))]),report('Answered in place')])
+        # The run is then told what failed and what it has not tried (R-PERSIST-03), and answers once more.
+        rig.client.replies.extend([turn(calls=[call('handoff',args(target,member_id=target.id,stage_id='self'))]),report('Answered in place'),
+                                   report('Answered in place')])
     else:
         rig.service.use_cli(object())
         async def work(loop):
@@ -154,7 +156,7 @@ async def test_a_refused_handoff_tells_the_model_what_to_do_instead_of_a_code(ma
     accepted=rig.service.handoff(RAPHAEL,args(target,mode='consult'),source_turn_id=source.id,language='en')
     await until(lambda:rig.task(accepted.data['task_id']).state in ('done','failed'))
     if brain=='api':
-        shown.append(rig.client.chat_calls[-1]['messages'][-1]['content'])
+        shown.append(rig.client.chat_calls[1]['messages'][-1]['content'])
     assert 'You are already doing this background work; finish it here or hand a distinct part to a colleague.' in shown[0]
     assert 'self_handoff' not in shown[0]
     assert 'self_handoff' in caplog.text
