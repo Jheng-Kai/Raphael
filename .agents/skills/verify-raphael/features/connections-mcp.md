@@ -824,3 +824,12 @@ secret/test/enable ordering and local reconnect), and
 core/tests/evaluate/test_guardian.py (scenario intent reaches the shared snapshot,
 recorded creates without side effects and approval pause/resume). No UI changes;
 look, judge, native providers and live models are outside this offline repair.
+
+## One button per row, one way back, one mark, a search that finds the name (2026-11-14, R-UI-154, R-UI-155, R-APPS-SEARCH-01, R-APPS-MARK-01)
+
+A row of Connect Apps is one button with 連結, 「✓ 已連結」 or its switch on its fill, whose round corners the list never cuts; the connected
+list's chevron and title are one back button; a search orders apps by how well their names answer it; the @ menu draws the logo the list draws.
+
+```powershell
+npm run look -- connect-apps-back-title connect-apps-back-title-press connect-apps-row-hover connect-apps-connected-hover connect-apps-connected-rows --theme both --width 1120,720,1920x1080
+```

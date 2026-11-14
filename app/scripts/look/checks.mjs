@@ -4561,7 +4561,8 @@ export function checkRendered(name, context = {}) {
       if (!visible(grid)) continue;
       const tracks = getComputedStyle(grid).gridTemplateColumns.split(/\s+/).map(Number.parseFloat);
       for (const [index, card] of [...grid.children].entries())
-        require(Math.abs(card.getBoundingClientRect().width - tracks[index % tracks.length]) <= 1, "store rows fill their allocated content track");
+        // A row reaches 8 px past its track on each side for its hover fill (R-UI-155); its margins give that back.
+        require(Math.abs(card.getBoundingClientRect().width + parseFloat(getComputedStyle(card).marginLeft) + parseFloat(getComputedStyle(card).marginRight) - tracks[index % tracks.length]) <= 1, "store rows fill their allocated content track");
     }
     // Keep this measurable on the pre-token stylesheet too: all limits derive from the shared 32px space.
     const space = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-6'));
