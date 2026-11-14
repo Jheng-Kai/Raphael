@@ -293,6 +293,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
+    onOpenPage: (_member, page) => void openLibraryPage(page),
     conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
     onReadThread: member => {
@@ -370,6 +371,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   el.querySelector(".mb-head-c")!.append(head);
   const conversationCache = new Map<number, ConversationInfo[]>();
   let targetTurn: number | undefined;
+  /** The turn opened for a page of the Library is not marked in the thread: the page is what the owner came for. */
+  let targetQuiet = false;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
   quotaHost.hidden = true;
   const problemNotice = createProblemNotice(app, () => { if (!problemNotice.el.hidden) composer.before(problemNotice.el); });
@@ -438,10 +441,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
   }
 
-  function openConversation(member: number, id: number, turnId?: number): void {
+  function openConversation(member: number, id: number, turnId?: number, quiet = false): void {
     const changed = memberId() !== member;
     if (!changed && !roomPane.active && conversationId() === id && turnId === undefined) return;
-    chosenConversations.set(member, id); targetTurn = turnId;
+    chosenConversations.set(member, id); targetTurn = turnId; targetQuiet = quiet;
     if (changed) members.select(member); else switchThread();
     drawConversation();
     window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
@@ -652,7 +655,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searching = false;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }) });
+  // An open page takes the whole area, so the details panel folds while it stands and comes back with it (R-PAGE-08).
+  const pagesHost = mountPages(thread, { place: pageDraft.place, people: () => ({ nameOf: id => members.nameOf(id), colorOf: id => members.colorOf(id) }),
+    shell: { fold: () => members.foldForPage(), unfold: () => members.unfoldAfterPage() } });
   mountOwnerQuestions(thread, () => { void load(false); });
   const floatingQuestions = mountPendingQuestions(thread, scroller, () => load(false), () => pendingQuestions?.member === memberId() && pendingQuestions.conversation === conversationId() ? pendingQuestions.questions : [], revealTurn);
   /** The newest turn drawn: a turn after it comes in from below. */
@@ -1324,8 +1329,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       openingThread = false;
       holdOpening();
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
-      if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
+      if (target) {
+        target.scrollIntoView?.({ block: "center" });
+        if (!targetQuiet) { target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
+      }
       targetTurn = undefined;
+      targetQuiet = false;
     }
   }
 
@@ -1441,6 +1450,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // A page open in the thread's place stays: the member that answers is told which page it is (before the message goes),
     // and what it says shows under the page while it works.
     const pageTold = pagesHost.sent();
+    // Something was said about the page opened from the Library: the exchange is in its conversation, which stays when the page is put away.
+    if (libraryReturn && pagesHost.shown()) libraryReturn.spoke = true;
     const sending = carried;
     const dictation = edit ? undefined : correctionLearning.snapshot();
     const corrections = edit ? [] : correctionLearning.take(input.value);
@@ -2723,6 +2734,48 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     releasePointer();
     if (heldKey !== null) releaseKey();
   });
+
+  /**
+   * A page of the Library opens as the page itself (R-PAGE-08; owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」):
+   * the details panel folds, the page's view stands at once and the page takes its place when its card is drawn in the
+   * thread (its turn is read quietly, in its own conversation if that is another). The card is still the page's one home
+   * (its frame, revisions and what the member is told it is called), so what stands behind the view is the thread, hidden.
+   * Putting the page away puts back what the press found: the panel on its Library tab, the conversation, and the thread where it was.
+   */
+  let libraryReturn: { member: number; conversation: number | undefined; bottom: boolean; top: number; window: ReturnType<typeof turnWindow.snapshot>; spoke: boolean } | null = null;
+  async function openLibraryPage(page: { id: string; title: string; conversation?: number; turn: number }): Promise<void> {
+    const back = { member: memberId(), conversation: conversationId(), bottom: atBottom(), top: scroller.scrollTop, window: turnWindow.snapshot(), spoke: false };
+    libraryReturn = back;
+    const opened = pagesHost.show(page.id, page.title, () => leaveLibraryPage(back));
+    const conversation = page.conversation ?? back.conversation;
+    try {
+      if (conversation !== undefined && conversation !== back.conversation) openConversation(back.member, conversation, page.turn, true);
+      else if (!thread.querySelector(`.tn[data-id="${page.turn}"]`)) await revealTurn(page.turn);
+    } catch (error) {
+      // The turn could not be read: nothing is left open, and everything the press found is put back.
+      pagesHost.close();
+      toaster.info(describeError(error));
+      return;
+    }
+    await opened;
+  }
+  function leaveLibraryPage(back: NonNullable<typeof libraryReturn>): void {
+    if (libraryReturn === back) libraryReturn = null;
+    // The owner went to another member meanwhile: nothing here is theirs to put back.
+    if (memberId() !== back.member || roomPane.active) return;
+    const away = back.conversation !== undefined && conversationId() !== back.conversation && !back.spoke;
+    const place = (): void => {
+      if (memberId() !== back.member) return;
+      if (turnWindow.restore(back.window)) { drawingFollows = false; render(); }
+      else if (away) return;
+      if (back.bottom) { followRichScroll(scroller); scroller.scrollTop = scroller.scrollHeight; }
+      else { releaseRichScroll(scroller); scroller.scrollTop = back.top; }
+    };
+    if (away) {
+      openConversation(back.member, back.conversation!);
+      void load(false).then(place);
+    } else if (JSON.stringify(turnWindow.snapshot()) !== JSON.stringify(back.window)) place();
+  }
 
   async function revealTurn(id: number): Promise<void> {
     releaseRichScroll(scroller);

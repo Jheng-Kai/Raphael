@@ -91,6 +91,14 @@ with no tag in it), names the file after the stored title, writes it exclusively
 owner_output_folder or else Downloads, and returns where; the shell selects it in File Explorer.
 No page host, frame, migration or model tool is added (R-PAGE-01; core/tests/agent/test_pages.py).
 
+An HTML page is shared the same way (2026-11-14, R-PAGE-08) with the opposite split: the window gives
+the page id and no text (`pageSave` sends the same command an empty `html`, which the core ignores for a
+page), and the core builds the file itself from the page it stores (`pages.py page_file`: `document()`
+without the helper script that talks to the window, the dark theme's words under
+`prefers-color-scheme`, and a meta policy equal to the page's own header policy minus its sandbox),
+runs the same secret scan on it and writes it by the same `save_file`. A plugin's page is not
+saved: it works only through its host.
+
 ## No voice output (2026-11-10)
 
 The app speaks nothing: no text-to-speech service, spoken Alt+Space answer, generated

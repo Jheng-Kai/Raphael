@@ -510,7 +510,8 @@ export async function perform(page, step, evidenceDirectory) {
     }
     // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows.
     case "frame-scroll": {
-      const at = await page.evaluate(() => { const box = document.querySelector(".pgv-frame-box")?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 }; });
+      // The middle of what is on screen of the page: the area scrolls as a whole and a page can be far taller than it.
+      const at = await page.evaluate(() => { const box = (document.querySelector(".pgv-page") ?? document.querySelector(".pgv-frame-box"))?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + Math.min(box.height, innerHeight - box.y) / 2 }; });
       if (!at) throw new Error("No page in the conversation's place to scroll");
       await page.mouse.move(at.x, at.y);
       await page.mouse.wheel({ deltaY: step.deltaY });
@@ -524,6 +525,9 @@ export async function perform(page, step, evidenceDirectory) {
       for (;;) {
         const frames = page.frames().filter(item => item !== page.mainFrame() && item.url().startsWith("data:text/html"));
         const seen = frames.length === 1 ? await frames[0].evaluate(() => ({ text: document.body.innerText, y: Math.round(scrollY), room: Math.max(0, document.documentElement.scrollHeight - innerHeight) })).catch(() => null) : null;
+        // The whole area scrolls, not the page (R-PAGE-08): where it is read is how far the area is scrolled.
+        const area = await page.evaluate(() => { const box = document.querySelector(".pgv-page"); return box ? { y: Math.round(box.scrollTop), room: Math.max(0, box.scrollHeight - box.clientHeight) } : null; });
+        if (seen && area) Object.assign(seen, area);
         // A page that fits its place cannot be read lower down: it is asked to be only as far down as it can be.
         const least = seen && step.scrollAtLeast !== undefined ? Math.min(step.scrollAtLeast, seen.room) : 0;
         const problem = !seen ? `${frames.length} page frames, not one` : step.text && !seen.text.includes(step.text) ? `the page does not show 「${step.text}」` : seen.y < least ? `the page is at ${seen.y}, not at ${least} or lower down` : "";
