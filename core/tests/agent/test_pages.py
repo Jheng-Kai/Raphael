@@ -6,6 +6,7 @@ Only in-process MCP fixtures and a loopback test listener are used. No provider 
 import asyncio
 import json
 import re
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
@@ -867,7 +868,7 @@ async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_st
     page = stored(rig.conn, html="<p>first</p>")
     PageStore(rig.conn).update(page["id"], "<p>second</p>")
     saved = await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
-    assert "<p>second</p>" in open(saved["path"], encoding="utf-8").read()
+    assert "<p>second</p>" in Path(saved["path"]).read_text(encoding="utf-8")
     # A page that the scanner would not take is not written as a file either, even if it got into the store.
     rig.conn.execute("UPDATE pages SET html=? WHERE id=?", ("<p>sk-ant-api03-" + "a1B2c3D4" * 8 + "</p>", page["id"]))
     with pytest.raises(RpcError) as error:
