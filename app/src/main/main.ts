@@ -121,8 +121,6 @@ function mountWindowChrome(): void {
   }
 }
 
-let startupHasSettings = false;
-
 async function start(): Promise<void> {
   holdOptionalReads();
   applyTheme();
@@ -165,7 +163,6 @@ async function start(): Promise<void> {
     undo: new Undoable(toaster),
     cleared: new Cleared(),
     closeSettings: () => closeSettings(),
-    rerunGuide: () => startGuide("rerun"),
   };
 
   bindMissing(document, go);
@@ -376,13 +373,8 @@ watchChipRows(document.body);
     console.warn("main: no events from the app", err);
   });
 
-  /**
-   * The guide takes the place of the pages: on a first run until it is done, and from the settings
-   * (`rerun`) until it is done or left. A rerun never clears `onboarded`.
-   */
-  function startGuide(mode: "first" | "rerun"): void {
-    if (!guide.hidden) return;
-    closeSettings(false);
+  /** The guide takes the place of the pages on a first run, until it is done. */
+  function startGuide(): void {
     document.documentElement.dataset.windowLayout = "onboarding";
     document.querySelector<HTMLElement>(".wbody")!.hidden = true;
     guide.hidden = false;
@@ -398,13 +390,12 @@ watchChipRows(document.body);
     mountOnboarding(
       guide,
       {
-        mode,
         onDone: () => {
           void releaseGuideWindow().catch((err) => console.warn("main: the window did not get its size back", err));
           guide.hidden = true;
           showPages();
           tellAgentPage();
-          if (mode === "first" || !current) go(START_PAGE);
+          go(START_PAGE);
           firstViewShown();
           void openPendingTemplate(templateFile).catch((err) => console.warn("main: the opened template file was not shown", err));
           // The speech models that the guide did not wait for come on in the background.
@@ -415,13 +406,12 @@ watchChipRows(document.body);
     );
   }
 
-  startupHasSettings = true;
   void installedUpdateNotice();
 
   // Until the first-run guide is done it takes the place of the pages. (Settings that could not be
   // read are no reason to start a guide for someone who has been through it.)
   if (deviceRead && !device.get().onboarded) {
-    startGuide("first");
+    startGuide();
   } else {
     showPages();
     go(START_PAGE);
@@ -448,5 +438,5 @@ start().catch((err) => {
   // Whatever went wrong, the window must not stay blank.
   document.getElementById("ob")!.hidden = true;
   showPages();
-  document.getElementById("main")?.insertAdjacentHTML("afterbegin", noticeHTML(startupHasSettings ? "onboarding" : "startup", startupHasSettings ? "general" : null));
+  document.getElementById("main")?.insertAdjacentHTML("afterbegin", noticeHTML("startup", null));
 });

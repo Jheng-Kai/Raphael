@@ -1114,9 +1114,6 @@ export function createSettings(app: AppContext): SettingsPage {
       case "close":
         app.closeSettings();
         break;
-      case "rerun-guide":
-        app.rerunGuide();
-        break;
       case "rec":
       case "rec-agent": {
         const field = act === "rec" ? "dictation_keys" : "agent_keys";
@@ -1340,9 +1337,6 @@ export function createSettings(app: AppContext): SettingsPage {
           await connections.load();
           if (mine !== loads || !visible) return;
           if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
-        } else if (target === "general") {
-          const field = el.querySelector<HTMLElement>('[data-act="rerun-guide"]');
-          field?.scrollIntoView({block: "center"}); field?.focus();
         }
       }
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();

@@ -33,10 +33,10 @@ back, in turn: the two stacked pills, because the stack took room the AI tools a
 然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」). The pair stands in the same place on
 every step and never stacks, and the height a second pill used belongs to the step's content. The welcome keeps
 its one wide pill (360 px) in the middle and nothing else; a status in a tile
-wraps inside it in every language. There is no back arrow at the top: the welcome has the pill alone, on a first run and
-on a rerun (the guide opened again from Settings, scene `onboarding-rerun`) alike. Owner, 2026-11-14: 「第一頁應該只會有開始就好了。
-它那個叉叉現在是因為我已經導覽過了，所以才會有叉叉，那基本上一般的使用者不會看到這個」; the Settings entry stays for now (「先不用關啦」),
-and a rerun leaves by its last step's check. Before that, on a rerun a round × named 取消 stood at the pill's left.
+wraps inside it in every language. There is no back arrow at the top: the welcome has the pill alone. Owner, 2026-11-14: 「第一頁應該只會有開始就好了。
+它那個叉叉現在是因為我已經導覽過了，所以才會有叉叉，那基本上一般的使用者不會看到這個」. The guide is the first run's only:
+Settings has no 導覽 entry any more (owner, 2026-11-14, once he had checked the first run: 「我剛剛確認過啟動都沒有問題，所以你可以把設定裡面的導覽拿掉 不用留著了」);
+`settings-owner` checks that General has no way back into it.
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
    canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
@@ -96,7 +96,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-back-hover onboarding-back-focus onboarding-rerun onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the
@@ -113,8 +113,7 @@ last step, in the same place on every step, never stacked at 720) and the
 grid fades out over it, that the steps' content ends above the foot, that nothing is cut off at 720 wide
 and that the dark theme has no light edges. `onboarding-back-hover` hovers the way back (a lighter surface than at rest)
 and `onboarding-back-focus` presses Shift+Tab from the primary (the way back takes the app's focus ring, so it
-is before the primary in the tab order); `onboarding-rerun` opens the guide from Settings 導覽 and checks that the
-welcome is the first run's own: the one pill, no pair and no ×. Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
+is before the primary in the tab order). Native proof needs an authorized fresh `RAPHAEL_DATA_DIR`: finish the
 steps, relaunch and verify onboarding stays dismissed and the chosen tools, services and switches
 persist. Keep sanitized readback and stop the owned dev process.
 

@@ -7,22 +7,18 @@
 // Every step can be gone past without choosing: connecting, signing in and switching are done where
 // they are shown and never undone by going on or back.
 
-/** `first`: the first run, which saves `onboarded` at the end. `rerun`: from the settings, which does not. */
-export type Mode = "first" | "rerun";
-
 export type StepId = "welcome" | "tools" | "services" | "abilities";
 
 /** The screens, in order. */
 export const STEPS: readonly StepId[] = ["welcome", "tools", "services", "abilities"];
 
 export interface FlowState {
-  mode: Mode;
   step: StepId;
 }
 
 export type FlowEvent = { type: "NEXT" } | { type: "BACK" };
 
-export const initialState = (mode: Mode): FlowState => ({ mode, step: "welcome" });
+export const initialState = (): FlowState => ({ step: "welcome" });
 
 /** The last step: 「繼續」 there is 「完成」, and it ends the guide. */
 export const isLast = (state: Pick<FlowState, "step">): boolean => state.step === STEPS[STEPS.length - 1];
