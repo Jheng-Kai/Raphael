@@ -104,6 +104,8 @@ import {
   noteTaskEnds,
   pendingTurnHTML,
   latestProgress,
+  presenceWant,
+  standingPresence,
   livePresenceHTML,
   parseMediaPayload,
   requestRerun,
@@ -932,9 +934,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
     const sentHere = outgoing.filter(belongs);
     const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
-    const turnLook = additions ? { ...shape, deferPresence: true } : shape;
     // A message sent again from its editor leaves its place while the replacement is on its way (`replaced`), as it does in the history.
     const chronological = turns.filter(turn => !replaced.has(turn.id)).sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    // One member shows at most one working slime in its conversation (R-SLIME-03): the tail of the thread (what the owner just sent,
+    // or is saying) takes it as the newest thing there is, else the newest turn that is at work, a task line with its words before a
+    // face that only waits.
+    const hearingHere = hearingBelongs();
+    const tail = additions || sentHere.length > 0 || hearingHere;
+    const standing = standingPresence(chronological, shape);
+    const turnLook = { ...shape, deferPresence: additions, presenceTurnId: tail ? null : standing?.id ?? null };
+    // What the slime at the tail says: the words of the turn that stands, or the plain thinking line when none works yet.
+    const tailWords = { progress: standing ? latestProgress(standing) : undefined, words: !standing || presenceWant(standing, shape) === "words" };
     // A first unseen turn inside the newest window leaves that window alone (unreadInTail); a farther one centres it.
     const unseen = openingThread && unreadFrom !== null ? chronological.findIndex(turn => turn.id >= unreadFrom!) : -1;
     const openingTarget = targetTurn ?? (unseen >= 0 && !unreadInTail(unseen, chronological.length) ? chronological[unseen]!.id : undefined);
@@ -957,7 +967,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            live ? turnLook.deferPresence : false, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
+            turnLook.presenceTurnId === turn.id, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
             state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
@@ -974,9 +984,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
     if (pendingAt !== undefined && (!lastAt || new Date(pendingAt).toDateString() !== new Date(lastAt).toDateString())) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(dayLabel(pendingAt, state.nowMs)) });
-    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
-    if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
-    if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
+    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions && !hearingHere, tailWords) });
+    if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs, false, !additions, tailWords) });
+    if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, tailWords.progress, tailWords.words)}</div></div></li>` });
     return out;
   }
 

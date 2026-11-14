@@ -4736,6 +4736,22 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
     return { check: name };
   }
+  if (name === "slime-one-working") {
+    // R-SLIME-03: the member's reply, a task that waits and a task that works are three lines of one conversation, and one slime.
+    const thread = document.querySelector('.mb-chat:not([hidden]) .thread');
+    const lines = [...thread.querySelectorAll('.live-presence')];
+    const moving = [...thread.querySelectorAll('.slime-surface')].filter(surface => visible(surface) && !surface.hasAttribute('data-slime-still'));
+    require(lines.length === 1 && moving.length === 1, `exactly one working slime in the thread (${lines.length} lines, ${moving.length} moving)`);
+    const sample = window.__look.data.presenceSample;
+    const stands = lines[0], line = stands.querySelector('.live-action');
+    require(visible(stands) && visible(line) && line.textContent === sample.backgroundProgress, "the slime stands on the task line that works, with its progress words");
+    require(stands.closest('.tn') && !stands.closest('.tn').querySelector('[data-reply]'), "the line is the task's own, not the reply's");
+    const reply = [...thread.querySelectorAll('.chat-message[data-reply]')].find(node => node.textContent.includes(sample.backgroundReply));
+    require(visible(reply) && reply.getBoundingClientRect().bottom <= stands.getBoundingClientRect().top, "the reply stands above the slime");
+    const waiting = [...thread.querySelectorAll('.tn')].find(node => node.contains(reply));
+    require(waiting && !waiting.querySelector('.live-presence'), "the turn of the waiting task draws no slime of its own");
+    return { check: name, lines: lines.length, moving: moving.length };
+  }
   if (name === "work-dots" || name === "pending-work") {
     const section = document.querySelector(`${name === "pending-work" ? '.tn.is-pending ' : ''}.live-presence`);
     require(visible(section), "one live avatar shows pending work");

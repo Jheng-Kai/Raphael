@@ -365,6 +365,18 @@ export function installMock(fixture, config = {}, target = window) {
       runningTurn.status = "done";
       runningTurn.task = { id: 71, state: "running", started_at_ms: data.now - 5000, finished_at_ms: null };
     }
+    if (variant.oneSlime) {
+      // The owner's picture of 2026-11-14 (R-SLIME-03): a reply that queued research in the background, its task that waits (an empty
+      // slime under the reply) and a task that works with its progress words. One member, one working slime: only the line that works.
+      const sample = data.presenceSample;
+      runningTurn.status = "done";
+      runningTurn.text = sample.backgroundReply;
+      runningTurn.messages = [{ seq: 1, kind: "reply", text: sample.backgroundReply, at_ms: data.now - 9000 }];
+      runningTurn.steps = [];
+      runningTurn.task = { id: 71, state: "waiting", started_at_ms: data.now - 8000, finished_at_ms: null };
+      data.turns.push({ ...structuredClone(runningTurn), id: Math.max(...data.turns.map(turn => turn.id)) + 1, session_id: `${runningTurn.session_id}-background`, created_at_ms: data.now - 4000,
+        question: "", text: "", messages: [], task: { id: 72, state: "running", started_at_ms: data.now - 4000, finished_at_ms: null, progress: sample.backgroundProgress } });
+    }
     if (variant.linkedThread) {
       // A long conversation the way a team leaves it: earlier replies hold links, and the newest turn's work is still running.
       const link = variant.linkedThreadURL;

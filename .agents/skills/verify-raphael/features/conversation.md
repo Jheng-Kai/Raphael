@@ -1,5 +1,22 @@
 # Conversation
 
+## One member, one working slime (owner, 2026-11-14, R-SLIME-03)
+
+Owner, with a picture of a reply that queued research in the background (an empty slime under the reply, a task line with the
+slime and its progress words under that): 「這邊為什麼會有兩個史萊姆？理論上它不管怎麼樣都只會有一個史萊姆在運作才對，你可能確定一下」.
+A reply and the task it handed to the background are separate turns of one conversation, each of which drew its own working slime
+(`turnHTML`): the earlier one waited (a task or card waiting on the owner), so its face had no words, and the newer task line worked.
+`standingPresence` (timeline.ts) now decides for the whole thread, in `lines()` of `pages/agent.ts`: the newest turn that works
+stands (a task line with progress words wins over a face that only waits), every other turn draws none (`TurnLook.presenceTurnId`),
+and what the owner has just sent or is saying is newer than all of them and takes the slime under the newest bubble, with the working
+turn's words. `slime-one-working` mirrors the picture (a reply, a task that waits, a task that works) and counts the working slimes
+in the thread: exactly one, on the line that works with its words, none under the reply. Before the fix the same scene drew two
+(2 lines, 2 moving). A group's thinking lines are per member and per message and are not part of this rule.
+
+```powershell
+npm run look -- slime-one-working composer-stop-background composer-queued composer-send-while-working composer-stop-pending transcript-working running --theme both --width 1120,720,1920x1080
+```
+
 ## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
 
 Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.

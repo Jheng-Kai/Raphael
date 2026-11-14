@@ -10,6 +10,7 @@ export default [
   conversation("presence-blocked-stays", "Owner attention survives unchanged roster refreshes", "blocked", [{action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: {name: "blocked-presence", enforce: false}, limits: {replacedFaces: 0, longTaskMs: 600}}]),
   conversation("presence-waiting-colleague", "Dependency waiting has lidded eyes rather than an attention mark", "colleague"),
   conversation("transcript-clean", "Private bubbles leave room for the words"),
+  scene("slime-one-working", "One member shows one working slime: a task line with words wins over the face of a task that waits (owner, 2026-11-14)", [member(1), wait('.thread .live-presence .live-action'), check("slime-one-working")], { running: true, runningMember: 1, oneSlime: true }),
   conversation("transcript-working", "The live avatar and one line follow public progress", "working", [hover('.live-presence')]),
   conversation("transcript-action-long", "One long action truncates with its full words on hover", "action-long", [hover('.live-presence')]),
   scene("group-live-line", "A group action sits below its working member", [room(1),wait('.au-room-thinking .live-action'),hover('.au-room-thinking .live-presence'),check("group-live-line")], {presence:"action-group"}),

@@ -569,6 +569,11 @@ export interface TurnLook {
   /** The earlier exchanges with the same colleague in a row (conversation.ts threadItems), counted in this turn's line. */
   exchangeTogether?: readonly AgentTurn[];
   deferPresence?: boolean;
+  /**
+   * Which turn of the thread draws the member's one working slime (standingPresence): the others draw none, `null` for none at all
+   * (the tail of the thread stands for it). Left out, every turn that wants a presence draws its own, as a turn shown alone does.
+   */
+  presenceTurnId?: number | null;
   revealing?: (turnId: number) => boolean;
   waitingForOwner?: (turnId: number) => boolean;
   regenerateTurnId?: number;
@@ -1039,6 +1044,33 @@ function publicEventsHTML(turn: AgentTurn, conversation: boolean, place: "inline
   }));
 }
 
+/**
+ * What a turn asks of its member's working slime: `words` while it is at work (or its replies are being read in), a `bare` face
+ * while it waits for the owner (a card, a question, a yes), nothing for a turn that is over.
+ */
+export type PresenceWant = "words" | "bare" | null;
+export function presenceWant(turn: AgentTurn, look: Pick<TurnLook, "revealing" | "waitingForOwner"> = {}): PresenceWant {
+  const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
+  const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
+  if (live || look.revealing?.(turn.id)) return "words";
+  return waitingForOwner || waitsAtCard(turn) || turn.task?.state === "waiting" || turn.status === "confirm" ? "bare" : null;
+}
+
+/**
+ * The one turn whose line carries a member's working slime in a conversation (owner, 2026-11-14: 「理論上它不管怎麼樣都只會有一個史萊姆在運作才對」).
+ * Of the turns that want one, the newest that is at work stands (a background task's line with its progress words); a face
+ * that only waits stands for nobody while another turn works. `turns` run from the oldest to the newest.
+ */
+export function standingPresence(turns: readonly AgentTurn[], look: Pick<TurnLook, "revealing" | "waitingForOwner"> = {}): AgentTurn | undefined {
+  let bare: AgentTurn | undefined;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const want = presenceWant(turns[i]!, look);
+    if (want === "words") return turns[i];
+    if (want === "bare" && !bare) bare = turns[i];
+  }
+  return bare;
+}
+
 /** One question and its answer, with what was done in between. */
 export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: boolean, look: TurnLook): string {
   const id = esc(turn.id);
@@ -1057,6 +1089,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
+  const want = presenceWant(turn, look);
   // What a colleague said to this member is one line that opens the two members' conversation (exchange-line.ts):
   // the request and the answer are read there, not under the line. Only a card that waits for the owner stays here.
   if (handed) {
@@ -1099,7 +1132,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     ownerQuestionsHTML(turn, false) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
-    (!look.deferPresence && (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm") ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
+    (want && !look.deferPresence && (look.presenceTurnId === undefined || look.presenceTurnId === turn.id) ? livePresenceHTML(look, latestProgress(turn), want === "words") : "") +
     `</div></div>`) +
     // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.
     [...publicEventsHTML(turn, true).values()].join("") + `</li>`
@@ -1114,14 +1147,14 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
  * a bubble with light passing over it until the words arrive) and Raphael thinking. A typed
  * question shows the chips of the files it was sent with.
  */
-export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true): string {
+export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false, showPresence = true, tail?: { progress?: string; words?: boolean }): string {
   void nowMs;
   const words =
     question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim(), "", false, look.mentions);
   return (
     `<li class="tn is-pending is-owner-only"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
-    (showPresence ? `<div class="ra"><div class="ra-body">${livePresenceHTML(look)}</div></div>` : "") + `</li>`
+    (showPresence ? `<div class="ra"><div class="ra-body">${livePresenceHTML(look, tail?.progress, tail?.words ?? true)}</div></div>` : "") + `</li>`
   );
 }
 
