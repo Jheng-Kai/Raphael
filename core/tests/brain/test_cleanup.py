@@ -1090,7 +1090,7 @@ def test_a_cjk_word_is_listed_for_a_chinese_transcript_only_with_a_form_it_is_he
     # (the owner's dictations of 2026-11-14, written again here).
     words = ["唯讀", "本機端", "拉斐爾"]
     heard = "這個資料夾要開讀寫，本地端的設定也不要動，拉菲爾老師說的"
-    assert dictionary_lines(build_system_prompt(words, [], heard=heard)) == []
+    assert dictionary_lines(build_system_prompt(words, [], heard=heard)) == ["（空）"]
     prompt = build_system_prompt(words, [("拉菲爾", "拉斐爾")], heard=heard)
     assert dictionary_lines(prompt) == ["- 拉斐爾（常被聽成：拉菲爾）"]
     # Without a transcript, and for one with no Chinese in it, the whole dictionary is listed.

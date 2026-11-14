@@ -1072,13 +1072,14 @@ async def test_the_hints_of_the_dictionary_reach_the_cleanup_prompt(router, fake
     await router.call("dictionary.add", {"word": "拉斐爾", "misheard": ["拉菲爾"]})
     await learn(router, "Claude", "cloud")
     await learn(router, "手機", "首機")
-    await finalize(router, "好，用 cloud 寫")
+    await finalize(router, "好，用 cloud 寫，拉菲爾的首機")
     system = fake_client.calls[0]["system"]
-    assert "- 拉斐爾（常被聽成：拉菲爾）" in system
+    # A rule has written the word already, and no form of it is left in the transcript to name.
+    assert "- 拉斐爾" not in system
     assert "- Claude（常被聽成：cloud）" in system, "a hint is told to the model like a rule"
     assert "- 手機（常被聽成：首機）" in system
-    # The words the user chose come before the ones learned.
-    assert system.index("- 拉斐爾") < system.index("- 手機") < system.index("- Claude")
+    # The words learned come newest first.
+    assert system.index("- 手機") < system.index("- Claude")
 
 
 async def test_dictionary_learn_learns_even_if_an_older_version_saved_learning_off(router, conn):
