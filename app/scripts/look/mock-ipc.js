@@ -32,7 +32,8 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
-    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍"],...(variant.chatMetadata === 'owner' ? {owner:["🎉"]} : {})},owner_questions:[],permissions:[]};
+    // A scene of the member's analysis of a reaction (`reactionAsk`) starts with a reply nobody reacted to.
+    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:variant.reactionAsk ? [] : ["👍"],...(variant.chatMetadata === 'owner' ? {owner:["🎉"]} : {})},owner_questions:[],permissions:[]};
     if (['slack','approval'].includes(variant.chatMetadata)) {
       const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
       turn.drafts = [draft];
@@ -881,6 +882,18 @@ export function installMock(fixture, config = {}, target = window) {
     for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
     notify("RoomsChanged", { room_id: 1 });
   };
+  // The member has made up its mind about the reaction it is analysing (`reactionAsk`): it asks what was wrong, or decides that no
+  // words are needed and the turn is taken out of the thread, as the core does. The window is told as the core tells it.
+  state.reactionEnds = () => {
+    const turn = data.turns.find(item => item.source === "reaction" && item.status === "running");
+    if (!turn) return;
+    if (variant.reactionAsk === "silent") data.turns = data.turns.filter(item => item !== turn);
+    else {
+      const words = data.chatMetadataSample.askWhatWasWrong;
+      Object.assign(turn, { status: "done", text: words, created_at_ms: data.now + 1000, messages: [{ seq: 1, kind: "reply", text: words, at_ms: data.now + 1000 }] });
+    }
+    notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+  };
   // The CLI's sign-in console ended (`done`, or `stopped` when it was closed first), as `brains.cli` then tells.
   state.cliSigninEnds = (id, outcome) => {
     const cli = data.clis.find(item => item.id === id);
@@ -1446,11 +1459,16 @@ export function installMock(fixture, config = {}, target = window) {
         const reactions = (turn.reactions ??= {}), current = reactions[p.message_key]?.[0];
         if (p.active) reactions[p.message_key] = [p.emoji];
         else if (current === p.emoji) reactions[p.message_key] = [];
-        // `reactionAsk`: a thumbs down on a reply makes its member ask what was wrong, in a turn with no message of the owner's.
-        if (variant.reactionAsk && p.active && p.emoji === "👎" && p.message_key !== "owner" && !data.turns.some(item => item.source === "reaction")) {
-          const words = data.chatMetadataSample.askWhatWasWrong;
-          data.turns.push({ ...structuredClone(turn), id: turn.id + 1, session_id: `reaction-${turn.id}`, source: "reaction", route: "answer", question: "", text: words, detail: null, prefix: "",
-            created_at_ms: data.now + 1000, messages: [{ seq: 1, kind: "reply", text: words, at_ms: data.now + 1000 }], reactions: {}, steps: [], drafts: [], owner_questions: [], permissions: [] });
+        // `reactionAsk`: every reaction to a reply starts its member's own analysis at once, a running turn with no message of the
+        // owner's and no words yet (it shows as the member's presence). It holds until the scene lets it end (`reactionEnds`): as
+        // "words" the member asks what was wrong; as "silent" it decides that no words are needed, and nothing of the turn is left.
+        // A reaction taken back, or changed, ends the analysis under way: nothing is left of it either.
+        if (variant.reactionAsk && p.message_key !== "owner") {
+          const ended = data.turns.filter(item => item.source === "reaction" && item.status === "running");
+          data.turns = data.turns.filter(item => !ended.includes(item));
+          for (const item of ended) notify("AgentTurn", { turn_id: item.id, member_id: item.member_id });
+          if (p.active) data.turns.push({ ...structuredClone(turn), id: turn.id + 1, session_id: `reaction-${turn.id}`, source: "reaction", route: "answer", question: "", text: "", detail: null, prefix: "",
+            status: "running", created_at_ms: data.now + 1000, messages: [], reactions: {}, steps: [], drafts: [], owner_questions: [], permissions: [], task: null });
         }
         notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
       }

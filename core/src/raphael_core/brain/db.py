@@ -2049,6 +2049,37 @@ PRAGMA user_version = 82;
 COMMIT;
 """
 
+# Every reaction is analysed once per message and emoji (owner, 2026-11-14): the record of what was analysed names the
+# emoji too, so another emoji on the same message is a new reaction while the same one given again is not. A row of
+# the old rule (a negative emoji that was asked about) has no emoji of its own: it keeps the thumbs down, the one
+# the old rule asked about most. The triggers of 82 name the message only, so they come back as they were (a table
+# cannot be dropped while a trigger names it).
+_MIGRATIONS[83] = """
+BEGIN;
+DROP TRIGGER clear_message_reactions;
+DROP TRIGGER clear_room_reactions;
+CREATE TABLE reaction_asks_v83 (
+    kind TEXT NOT NULL CHECK(kind IN ('turn','room')),
+    ref TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY(kind, ref, emoji)
+);
+INSERT INTO reaction_asks_v83 SELECT kind, ref, '👎' FROM reaction_asks;
+DROP TABLE reaction_asks;
+ALTER TABLE reaction_asks_v83 RENAME TO reaction_asks;
+CREATE TRIGGER clear_message_reactions AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM message_reactions WHERE turn_id=OLD.id;
+    DELETE FROM reaction_asks WHERE kind='turn' AND ref LIKE OLD.id || ':%';
+END;
+CREATE TRIGGER clear_room_reactions AFTER DELETE ON room_messages BEGIN
+    DELETE FROM room_reactions WHERE message_id=OLD.id;
+    DELETE FROM reaction_asks WHERE kind='room' AND ref=CAST(OLD.id AS TEXT);
+    UPDATE room_threads SET parent_message_id=NULL WHERE parent_message_id=OLD.id;
+END;
+PRAGMA user_version = 83;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
