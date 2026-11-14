@@ -644,6 +644,22 @@ file or page, and a second message only for a separate question or exercise. Tes
 Judge it from the owner's database by counts only, never text: messages per turn, the share of turns with
 three or more, and the share opening with process words, per brain family (Claude Code, Codex, API).
 
+Since 2026-11-14 (R-PROGRESS-01, owner: 「他現在又開始不講任何進度了…我可能會覺得它是不是當機了」; a hand-off task of
+37 minutes and 71 calls had 142 steps and no message) long work owes the owner a word. Each run the owner reads as it
+works (a turn of the owner's own conversation, a task in a member's private conversation; any brain) keeps one
+`agent/progress_updates.py` `ProgressUpdates`: the time of its last bubble (the opening counts, progress does not).
+Past 120 s with no bubble, or 300 s since the last, the next tool result carries one line asking for a two-sentence
+update (what is done, what is next), after the result and outside its untrusted wrapper; a reminder nobody answered
+comes again only 300 s later. Stored tool events, CLI receipts and the CLI's tool conversation keep the real result.
+While a run is past that time, what it says next is a bubble: a CLI's held or plain speech between steps
+(`_release_held`, `_progress`), a background API task's words with its calls (`TaskRun._chat`); an API conversation
+turn puts it in `messages` (NARRATION_RULES allows an update a reminder asks for). The line reaches a CLI through its
+MCP result (`CliLoop._tool`), an API turn through `ToolOutcome.note` (`NarratedLoop.tool`, `run_task`), a background
+API task through `host.tool`'s `note` (`TaskRun.reminded`). A meeting's reply, a routine, a consultation, a colleague's
+question, greetings and memory passes keep none. Tests: `tests/agent/test_progress_updates.py`,
+`tests/background/test_progress_updates.py`. No UI changes: an update is an ordinary reply bubble. Judge it from the
+owner's database by counts only: messages per long task (over five minutes) and the longest gap between two.
+
 Selected matrix (both themes, 1120,720,1920x1080):
 
 ```powershell

@@ -5,6 +5,7 @@ The service supplies tool execution so its safety gate and inline confirmations 
 """
 
 import asyncio
+import dataclasses
 import json
 import re
 import time
@@ -22,6 +23,7 @@ from ..worker.tool_guardrails import ToolGuardrails
 from .answers import MESSAGE_RULES, Reply, loose_reply, parse_reply, public_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
+from .progress_updates import IN_MESSAGES, ProgressUpdates
 from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
 from ..retry_utils import MODEL_SILENCE_S, Outage
@@ -46,8 +48,8 @@ answer directly in a single model reply.
 NARRATION_RULES = PUBLIC_PROGRESS_RULES + """
 Before tool calls, content must be one public object with thinking, progress and optional messages:
 {"thinking": "...", "progress": "...", "messages": ["A complete message for the owner."]}.
-Use messages only for an important result or owner question worth reading now, never routine narration.
-Each complete message is delivered immediately. Progress remains the short action line.
+Use messages only for an important result, owner question or update a reminder asks for, never routine narration.
+Each message is delivered at once; progress stays the short action line.
 Do not repeat already delivered messages in the final answer; finish with only the new result.
 Use no code fences, no prose before or after, and no other objects.
 "thinking" is at most 2 sentences (about 60 CJK characters) about the practical choice or next decision that helps
@@ -127,8 +129,11 @@ class NarratedLoop:
         reasoning_effort: str = "none",
         context_window: int | None = None,
         reply: Callable[[Reply], None] | None = None,
+        updates: ProgressUpdates | None = None,
     ) -> None:
         self.client, self.model, self.ledger = client, model, ledger
+        # When the owner was last shown a message of this turn (agent/progress_updates.py); None owes no word.
+        self.updates = updates
         self.reasoning_effort = reasoning_effort
         self.context_window = context_window
         self.max_tokens = REPLY_TOKENS
@@ -230,6 +235,8 @@ class NarratedLoop:
             authored = public_reply(answer.content, self.language, plain=self.plain, explicit=True) if answer.calls else None
             if authored is not None and self.publish_reply is not None:
                 self.publish_reply(authored)
+                if self.updates is not None:
+                    self.updates.shown()
             if answer.calls and not objects and prose:
                 text = public_line(_public_text(prose, 60), "auto")
                 if text:
@@ -248,7 +255,12 @@ class NarratedLoop:
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         self.used_tools = True
-        return await self.execute(call_id, name, arguments)
+        outcome = await self.execute(call_id, name, arguments)
+        # The owner has heard nothing for a while: the result asks for an update in `messages`, after the data it wraps
+        # (`run_task`); the tool events were kept before (agent/progress_updates.py).
+        if self.publish_reply is not None and self.updates is not None and (reminder := self.updates.reminder(IN_MESSAGES)):
+            outcome = dataclasses.replace(outcome, note=reminder)
+        return outcome
 
     async def run(self) -> Outcome:
         outcome = await run_task(
