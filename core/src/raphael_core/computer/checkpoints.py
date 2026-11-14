@@ -15,11 +15,51 @@ import sys
 import time
 
 EXCLUDED = {".raphael-checkpoints", ".browser-profiles", ".raphael-jobs", ".git", "node_modules", ".venv", "__pycache__", ".cache"}
+# What programs write by themselves are never the member's work, whatever the folder is called or where it lies: a browser's
+# user-data directory (its component updater, on-device models, extension manifests and caches), an app's own state and
+# cache folders, and lock files. They are not tracked, not counted on the work card and never undone.
+PROGRAM_FOLDERS = {".config", ".local", ".mozilla", ".pki", ".npm", ".tmp", ".thumbnails", ".dbus",
+                   "OptGuideOnDeviceModel", "optimization_guide_model_store", "component_crx_cache", "extensions_crx_cache",
+                   "WidevineCdm", "ZxcvbnData", "Safe Browsing", "GrShaderCache", "ShaderCache", "GraphiteDawnCache",
+                   "Crashpad", "BrowserMetrics"}
+UNTRACKED = EXCLUDED | PROGRAM_FOLDERS
+LOCK_FILES = {"SingletonLock", "SingletonSocket", "SingletonCookie", ".parentlock"}
+# A folder the carry-over published whole (computer/carry.py): the files of an older computer's home, put there by the core.
+CARRIED = ".raphael-carried-member"
 MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 500 * 1024 * 1024
 MAX_CHECKPOINTS = 20
 MAX_FILES = 10000
 WALK_SECONDS = 8.0
+# The change view reads text only: a file over this size or with a NUL byte in its first bytes is not compared.
+TEXT_DIFF_BYTES = 1024 * 1024
+SNIFF_BYTES = 8192
+DIFF_FILES = 20
+DIFF_SECONDS = 3.0
+
+
+def program_file(name):
+    return name in LOCK_FILES or name.startswith(".~lock.")
+
+
+def browser_profile(names, dirs):
+    """True for the folder a Chrome-family or Firefox browser keeps its profile in, which any name and place can hold."""
+    if "Local State" in names and ("Default" in dirs or "First Run" in names or "Last Version" in names
+                                   or any(name.startswith("Profile ") for name in dirs)):
+        return True
+    return "prefs.js" in names and any(name in names for name in ("places.sqlite", "compatibility.ini", "extensions.json"))
+
+
+def profile_roots(paths):
+    """The browser profiles a list of file paths shows (the same test as `browser_profile`, for a manifest or a review)."""
+    parts = [Path(path).parts for path in paths]
+    roots = set()
+    for candidate in {part[:-1] for part in parts if part[-1] == "Local State"}:
+        size = len(candidate)
+        if any(len(part) > size and part[:size] == candidate and (part[size] in ("Default", "First Run", "Last Version") or part[size].startswith("Profile "))
+               for part in parts):
+            roots.add(candidate)
+    return roots
 
 
 class CheckpointStore:
@@ -30,7 +70,7 @@ class CheckpointStore:
     def _safe(self, path):
         path = Path(path)
         root = next((root for root in self.roots if path.is_relative_to(root) and path != root), None)
-        if root is None or ".." in path.parts or any(part in EXCLUDED for part in path.relative_to(root).parts):
+        if root is None or ".." in path.parts or any(part in UNTRACKED for part in path.relative_to(root).parts) or program_file(path.name):
             raise ValueError("outside_workspace")
         for part in [path, *path.parents]:
             if part == root.parent:
@@ -103,12 +143,15 @@ class CheckpointStore:
             for directory, dirs, names in os.walk(root, followlinks=False, onerror=failed):
                 if time.monotonic() >= deadline or len(files) >= MAX_FILES:
                     return files, uncovered + [str(directory)], True
-                dirs[:] = sorted(name for name in dirs if name not in EXCLUDED and not (Path(directory) / name).is_symlink())
+                if browser_profile(names, dirs):
+                    dirs[:] = []
+                    continue
+                dirs[:] = sorted(name for name in dirs if name not in UNTRACKED and not (Path(directory) / name).is_symlink())
                 for name in sorted(names):
                     if time.monotonic() >= deadline or len(files) >= MAX_FILES:
                         return files, uncovered + [str(Path(directory) / name)], True
                     path = Path(directory) / name
-                    if name in EXCLUDED:
+                    if name in UNTRACKED or program_file(name):
                         continue
                     key = str(path)
                     try:
@@ -232,17 +275,59 @@ class CheckpointStore:
             raise ValueError("broken_archive")
         return content
 
+    def _relative(self, path):
+        path = Path(path)
+        root = next((root for root in self.roots if path.is_relative_to(root)), None)
+        return path.relative_to(root).parts if root else path.parts
+
+    def _program_paths(self, paths):
+        """Which of these paths are what programs wrote by themselves (a browser's profile, an app's state and caches, lock
+        files), by folder and file names and by the browser profiles the list itself shows. A checkpoint kept before the
+        core left them out is read the same way, so nothing it holds of them is shown or undone."""
+        paths = list(paths)
+        roots = profile_roots(paths)
+        output = set()
+        for path in paths:
+            parts = Path(path).parts
+            if any(part in PROGRAM_FOLDERS for part in self._relative(path)) or program_file(parts[-1]) or any(parts[:len(root)] == root for root in roots):
+                output.add(path)
+        return output
+
+    def _peek(self, value, path, deadline):
+        """The first bytes of one side of a change, from the archive or, for a file that is only on the disk, from the disk."""
+        if not value:
+            return b""
+        stored = self._object(value["digest"])
+        if stored.exists():
+            with stored.open("rb") as stream:
+                return stream.read(SNIFF_BYTES)
+        descriptor = os.open(self._safe(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(descriptor, "rb") as stream:
+            return stream.read(SNIFF_BYTES)
+
     def _changes(self, before, after, deadline):
-        files = []
+        # The folder a carry-over published whole in this window is the core's doing, not the member's work: its files are not listed.
+        carried = {Path(path).parts[:-1] for path, value in after.items()
+                   if Path(path).name == CARRIED and value.get("size") == 16 and path not in before}
+        noise = self._program_paths(before.keys() | after.keys())
+        files, diffed = [], 0
+        # The text of a change is read only for the first files, within a few seconds, and never for a picture, a model or any file
+        # past a megabyte: the list of changes must open at once, and a binary file is only named.
+        diff_deadline = min(deadline, time.monotonic() + DIFF_SECONDS)
         for path in sorted(before.keys() | after.keys()):
             old, new = before.get(path), after.get(path)
-            if old and not old.get("digest") or new and not new.get("digest"):
+            if path in noise or old and not old.get("digest") or new and not new.get("digest"):
                 continue
             if (old and (old["digest"], old["mode"])) == (new and (new["digest"], new["mode"])):
                 continue
+            if not old and any(Path(path).parts[:len(folder)] == folder for folder in carried):
+                continue
             diff, added, removed = "", None, None
-            if time.monotonic() < deadline and len(files) < 20:
+            if time.monotonic() < diff_deadline and diffed < DIFF_FILES and max((old or {}).get("size", 0), (new or {}).get("size", 0)) <= TEXT_DIFF_BYTES:
                 try:
+                    if b"\0" in self._peek(old, path, deadline) + self._peek(new, path, deadline):
+                        raise UnicodeError()
+                    diffed += 1
                     left = self._bytes(old)
                     right = self._bytes(new) if new and self._object(new["digest"]).exists() else self._read(path, deadline)[1] if new else b""
                     if b"\0" in left + right:
@@ -254,7 +339,7 @@ class CheckpointStore:
                     diff = "\n".join(lines)[:12000]
                 except (UnicodeError, OSError, ValueError, TimeoutError):
                     pass
-            # `added` and `removed` stay None where no text could be compared (a picture, a large file, past the twentieth file): the owner is
+            # `added` and `removed` stay None where no text could be compared (a picture, a large file, past the twentieth text file): the owner is
             # told such a file is new, gone or changed, never "+0 -0".
             files.append({"path": path, "before": old, "after": new, "diff": diff, "added": added, "removed": removed})
         return files
@@ -282,17 +367,28 @@ class CheckpointStore:
             # An incomplete walk cannot prove that an absent file was deleted.
             if incomplete:
                 after = {**{path: value for path, value in data["manifest"].items() if path not in after}, **after}
-            files = data.get("review", []) if data["state"] == "restored" else self._changes(data["manifest"], after, deadline)
+            # What lies between two checkpoints never changes, so it is read once: only the window after the newest checkpoint is
+            # read again. A checkpoint kept before the core left program files out has no `review_after` and is read anew.
+            window = following["id"] if following else None
+            if data["state"] == "restored":
+                files = data.get("review", [])
+            elif window and data.get("review_after") == window and "review" in data:
+                files = data["review"]
+            else:
+                files = self._changes(data["manifest"], after, deadline)
             if not files and not incomplete:
                 continue
             token = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
             if data["state"] != "restored":
                 reviews = data.setdefault("reviews", {})
+                known = token in reviews and data.get("review") == files and data.get("review_after") == window
                 reviews[token] = files
                 while len(reviews) > 5:
                     del reviews[next(iter(reviews))]
                 data["review"] = files
-                self._write(data["id"], data)
+                data["review_after"] = window
+                if not known:
+                    self._write(data["id"], data)
             output.append({key: data[key] for key in ("id", "member", "turn", "created", "state")} | {
                 "partial": incomplete, "uncovered": omitted, "review_token": token,
                 "files": [self._view(file) for file in files]})
@@ -310,7 +406,11 @@ class CheckpointStore:
         if review_token is not None and review_token not in data.get("reviews", {}):
             raise ValueError("checkpoint_changed")
         files = data.get("reviews", {}).get(review_token, data.get("review", []))
+        # A review kept before the core left program files out may still hold some: they are never put back or deleted.
+        program = self._program_paths(file["path"] for file in files)
         for file in files:
+            if file["path"] in program:
+                continue
             try:
                 path = self._safe(file["path"])
                 try:

@@ -25,6 +25,28 @@ files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-rest
 state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
 `npm run verify -- --contract` after a change to the file list the core sends.
 
+## What a program writes by itself is not the member's work (owner, 2026-11-14, R-CARD-18, R-CARD-19)
+
+Owner, with a picture of the card 「Added 110 files」 under a member that was asked to read email (`verified_contents.json`,
+`summarizer_gemma4_*_solution_config.binarypb`, under 「Workspace / member-b17ef6d19…」, with 「Undo these changes」):
+「看個 email 怎麼會改了一百多個檔案」, and 「Open file changes」 listed them only after a long wait.
+Cause, as far as the code shows (the owner's volume was not read; the files are named by the picture only) (core `computer/checkpoints.py`): a turn's checkpoint is the workspace as it was at the turn's first command, and the card is the
+difference to the folder now, so anything that appears in `/home/cua/workspace` meanwhile counts as the member's. Only the names in
+`EXCLUDED` (`.browser-profiles`, `.cache`, ...) were left out, by folder name; the browser's own files lay under another name:
+`member-<16 hex>` is the folder the carry-over (`carry.py`, run by the member's first browser use) makes for an older computer's home
+that no member record names, and a Chrome user-data directory (component updater, on-device models, extension manifests) in it, or
+anywhere else outside `.browser-profiles`, was counted file by file. The view was slow because the live walk hashed every such file and
+the change list read both sides of the first twenty files whole (models of tens of MiB) to learn they were not text.
+Now: `checkpoints.py` does not walk a browser's user-data directory (found by its marker files), `PROGRAM_FOLDERS` and lock files, and
+`_changes` also drops them from a checkpoint kept before (and `restore` never undoes them); a folder carried in whole in the window
+(`.raphael-carried-member`, 16 bytes) is not listed; text is read only for small text files (R-CARD-19), and a closed window is compared once.
+No image change, no UI change: a turn with only such files has no card. Not covered here: a real Chrome run on a computer.
+
+```powershell
+python -m pytest tests/computer/test_checkpoints.py tests/computer/test_checkpoint_revision.py   # from core/, PYTHONPATH=src
+npm run verify -- --contract                                                                      # from app/
+```
+
 ## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
 
 Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with
