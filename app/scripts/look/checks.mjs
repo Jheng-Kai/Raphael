@@ -2705,27 +2705,38 @@ export function checkRendered(name, context = {}) {
     require(menu.contains(document.activeElement)||!!document.getElementById('app-submenu')?.contains(document.activeElement),'the focus is in the menu or its submenu');
     return {check:name,rail:footRail(),chevron:!!chevron,menu:[Math.round(m.left),Math.round(m.top),Math.round(m.width),Math.round(m.height)]};
   }
-  if(name==='foot-usage-submenu'){
+  if(name==='foot-usage-submenu'||name==='foot-usage-owner'){
     const menu=document.getElementById('app-popover'),sub=document.getElementById('app-submenu');
     require(menu&&sub&&visible(sub)&&sub.classList.contains('account-usage'),'the usage submenu is open beside the menu');
     const row=menu.querySelector('[data-account="usage"]'),r=footBox(row),s=footBox(sub),m=footBox(menu);
     require(row.getAttribute('aria-expanded')==='true','the row says its submenu is open');
     require(s.left>=m.right-2&&s.left<=m.right+12||s.right<=m.left+2,'the submenu stands at the menu\'s edge');
     require(s.top<=r.bottom&&s.bottom>=r.top,'and level with its row');
-    // One block for every subscription the reading gives a window for, in the reading's order (the mock core's, read here).
-    const known=window.__look.data.allowances.brains.filter(brain=>brain.windows.some(span=>typeof span.remaining_percent==='number'));
+    // One block for every provider the owner uses, in a stable order: the subscriptions as the reading gives them, the ChatGPT sign-in, then OpenRouter (the mock core's data, read here).
+    // A provider whose usage cannot be read keeps its block and says so; none shows a number that was not read.
+    const data=window.__look.data,key=data.status.openrouter;
+    const expected=[...data.allowances.brains.map(brain=>brain.id),...(data.chatgpt?.signed_in&&data.chatgpt.plan_scope_granted!==false?['chatgpt']:[]),...(key.state!=='no_key'&&key.state!=='unknown'?['openrouter']:[])];
     const blocks=[...sub.querySelectorAll('.account-window')],manage=sub.querySelector('[data-account="manage"]');
-    require(known.length>=2&&blocks.length===known.length,`a block for each of the ${known.length} subscriptions, not only the tightest (${blocks.length})`);
-    const names=blocks.map(block=>block.querySelector('.account-window-name').textContent.trim().split(' ')[0]);
-    require(new Set(names).size===names.length&&names.every(word=>/^(Claude|Codex|Antigravity)$/.test(word)),`each block names its own subscription: ${names.join(', ')}`);
-    require(names.join()===known.map(brain=>({claude:'Claude',codex:'Codex',gemini:'Antigravity',antigravity:'Antigravity'}[brain.id])).join(),`in the reading's order: ${names.join(', ')}`);
+    require(expected.length>=2&&blocks.length===expected.length,`a block for each of the ${expected.length} providers (${expected.join(', ')}), not only the tightest (${blocks.length})`);
+    require(blocks.map(block=>block.dataset.provider).join()===expected.join(),`in the stable order ${expected.join(', ')}: ${blocks.map(block=>block.dataset.provider).join(', ')}`);
+    const words={claude:'Claude',codex:'Codex',gemini:'Antigravity',chatgpt:'ChatGPT',openrouter:'OpenRouter'};
     blocks.forEach((block,at)=>{
-      const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block);
-      require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(name1)&&visible(used)&&visible(reset),`block ${at}: the window's name, its number and when it resets: ${block.textContent}`);
-      require(footBox(used).right>=r1.right-16&&footBox(used).left>footBox(name1).left,`block ${at}: the number stands at the right of the window\'s name`);
-      require(name1.scrollWidth<=name1.clientWidth+1&&footBox(used).right<=s.right,`block ${at}: its words show whole inside the submenu`);
+      const name1=block.querySelector('.account-window-name'),used=block.querySelector('.account-window-used'),reset=block.querySelector('.account-window-reset'),r1=footBox(block),state=block.dataset.state;
+      require(name1.textContent.trim().split(' ')[0]===words[block.dataset.provider],`block ${at} names its own provider: ${name1.textContent}`);
+      require(visible(name1)&&visible(used)&&used.textContent.trim().length>0,`block ${at}: its name and the words at its right: ${block.textContent}`);
+      if(state==='percent')require(/\d+\s*%/.test(used.textContent)&&reset&&/\d/.test(reset.textContent)&&visible(reset),`block ${at}: a window with its number and when it resets: ${block.textContent}`);
+      if(state==='reset')require(!/\d/.test(used.textContent)&&!reset,`block ${at}: a window that has reset keeps no stale number and no reset line: ${block.textContent}`);
+      if(state==='unreadable')require(!/\d/.test(used.textContent)&&!reset,`block ${at}: a provider that cannot be read shows no number: ${block.textContent}`);
+      if(state==='spend')require(/\d/.test(used.textContent)&&!/%/.test(used.textContent),`block ${at}: OpenRouter's own spend, not a percentage: ${block.textContent}`);
+      require(footBox(used).right>=r1.right-16&&footBox(used).left>footBox(name1).left,`block ${at}: the words stand at the right of the name`);
+      require(name1.scrollWidth<=name1.clientWidth+1&&used.scrollWidth<=used.clientWidth+1&&footBox(used).right<=s.right,`block ${at}: its words show whole inside the submenu`);
       if(at)require(r1.top>=footBox(blocks[at-1]).bottom-1,`block ${at} stands under the one before it`);
     });
+    if(name==='foot-usage-owner'){
+      // The owner's own mix, 2026-11-14: Codex live, Claude whose reported window has reset, the ChatGPT sign-in, OpenRouter.
+      require(blocks.map(block=>`${block.dataset.provider}:${block.dataset.state}`).join()==='codex:percent,claude:reset,chatgpt:unreadable,openrouter:spend',`the four providers say what each knows: ${blocks.map(block=>`${block.dataset.provider}:${block.dataset.state}`).join()}`);
+      require(/65\s*%/.test(blocks[0].textContent),`Codex reads 65% used: ${blocks[0].textContent}`);
+    }
     require(visible(manage)&&manage.textContent.trim().length>0&&sub.querySelectorAll('.menu-sep').length===1&&sub.querySelector('.menu-sep').nextElementSibling===manage&&footBox(blocks.at(-1)).bottom<=footBox(sub.querySelector('.menu-sep')).top+1,'a hairline after the last block, then 管理用量');
     require(s.left>=0&&s.right<=innerWidth&&s.bottom<=innerHeight&&s.top>=0,'the submenu lies inside the window');
     return {check:name,sub:[Math.round(s.left),Math.round(s.top),Math.round(s.width),Math.round(s.height)],words:sub.textContent};
@@ -7827,13 +7838,25 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.filter(c => c.method === 'connectors.set_key').length === 1, "the error comes through the real IPC boundary");
     return { check: name, message: alert.textContent };
   }
+  if (name === "usage-owner-cards") {
+    // The same mix as the account menu's blocks (R-SIDE-02): one card for each provider, and a window that has reset keeps no stale number or bar.
+    const panel = document.querySelector('#models-panel-usage'), cards = [...panel.querySelectorAll('.run-allowance .run-subscription')].filter(visible);
+    const named = cards.map(card => card.querySelector('h4').textContent.trim());
+    require(named.join() === 'Codex,Claude,ChatGPT,OpenRouter', `a card for each of the four providers, in order: ${named.join()}`);
+    const [codex, claude, chatgpt, openrouter] = cards;
+    require(/35%/.test(codex.textContent) && codex.querySelector('[role="progressbar"]'), `Codex has its live window and bar: ${codex.textContent}`);
+    require(!claude.querySelector('[role="progressbar"]') && !/\d\s*%/.test(claude.textContent) && /已重置|Reset/.test(claude.textContent), `Claude's window has reset: it says so, with no stale number or bar: ${claude.textContent}`);
+    require(chatgpt.dataset.allowance === 'chatgpt' && chatgpt.querySelector('[data-run-act="chatgpt-usage"]'), 'ChatGPT keeps its card and the button to its own page');
+    require(openrouter.dataset.allowance === 'openrouter' && /3\.21/.test(openrouter.textContent) && !/%/.test(openrouter.textContent), `OpenRouter says this month's use of the key: ${openrouter.textContent}`);
+    return { check: name, cards: named };
+  }
   if (name === "usage-plain") {
     // Plain usage summary: what each subscription has left, then the key and what was spent.
     const panel = document.querySelector('#models-panel-usage');
     require(visible(panel), "the usage tab is open");
     require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
     const rows = ["raphael-spend", "openrouter-key"].map(row => panel.querySelector(`[data-row="${row}"]`));
-    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"]'), "this month's spending of the app and the key show; an OpenRouter account's own usage does not");
+    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"]'), "this month's spending of the app and the key show; the key's own usage is a card above them, not a row");
     const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.status.spend.limit_usd;
     if (limit > 0) {
       require(visible(spend.querySelector('.spend-bar')) && bar, "the spending has a bar against the monthly limit");

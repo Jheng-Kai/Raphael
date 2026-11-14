@@ -25,15 +25,17 @@ Connections pill having an effect on hover.
   `--marks-spread`, `--marks-lift`, `--marks-scale`, `--marks-turn`, `--marks-time-in`, `--marks-ease-in`, `--marks-time-out` and
   `--marks-ease-out` on `.sidebar-apps`, retuned in one place.
 - **The account menu.** Pressing the face opens it above the face, left edges together (beside the whole rail, 8px past its right edge, ending where the face ends): 用量 (a chevron and no number, since 2026-11-14: one provider's figure under the bare word read as everyone's; pointing at it or pressing it opens a submenu at its right
-  edge with a block for every subscription the reading returns (Claude, Codex, Antigravity, in its order): its tightest window's name such as 「Codex 每週」, its 已使用 N% and 「6 天後重置」,
-  then a hairline and 管理用量, which opens Settings at its usage section; with no window known the row has no chevron and opens that section directly), 聽寫 (the dictation page), 行事曆 (the calendar on today),
+  edge with a block for every provider the owner uses, in a stable order: the subscriptions the reading returns (Claude, Codex, Antigravity, in its order), the ChatGPT sign-in, then OpenRouter. A subscription: its tightest window's name such as 「Codex 每週」, its 已使用 N% and 「6 天後重置」;
+  one that reported no percentage says what it reported (可使用, 接近額度上限, 額度已用完); a reported window past its reset is 已重置 with no number; one that cannot be read keeps its block and says 無法讀取 (the ChatGPT sign-in has no usage to read). OpenRouter: 「OpenRouter 本月 US$3.21」, and what is left of the key's limit under it. Owner, 2026-11-14: 「每一個有再使用的供應商都要顯示出來…除非沒有辦法顯示」.
+  Then a hairline and 管理用量, which opens Settings at its usage section; with no provider known the row has no chevron and opens that section directly), 聽寫 (the dictation page), 行事曆 (the calendar on today),
   a hairline, 設定. Enter or Space on the face opens it with the focus on the first row, the arrows move, Esc closes it (the submenu alone
   first) and returns the focus to the face, a press outside closes it, the face again closes it (R-UI-124). It uses the app's menu tokens.
 - **The member search.** The search button, Ctrl+Shift+F and the palette's Search (on the rail, which has no button, Ctrl+Shift+F) open one card in the middle of the dimmed window, across and down at every size (owner, 2026-11-14, R-MENU-04): 560 px wide (the window's less 24), 480 px tall (the window's less 96), so the words typed never move it, always below the window controls and inside the window. `sidebar-search` (button, typing never moves it), `sidebar-search-rail` (Ctrl+Shift+F on the rail) and `shortcut-search` (the palette) each check it with `search-card-middle`.
 - **The rail.** Under 860px, or dragged narrow, the foot is a column: the plus alone (no search on the rail, owner 2026-11-12 23:25; Ctrl+Shift+F still opens it), the apps icon (Lucide `grid-2x2-plus`, accessible name
   only, no tooltip), then the face (named on hover, as the other faces of the rail). The menu is the same, opening beside the rail and covering none of its buttons.
-- **What the numbers are.** `usage.allowances` through `api.usageAllowances()`, read at each opening of the menu and shown at once from
-  the last reading; a reading that fails changes nothing in the row. Another unit owns how that read refreshes.
+- **What the numbers are.** `usage.allowances` (`api.usageAllowances()`), `chatgpt.status` and `status.get` (OpenRouter's own reading of the key), each read at each opening of the menu, shown at once from
+  the last readings and landing as they arrive (a slow Codex read never holds back the others); a reading that fails changes only its own provider's block. What each reading means is decided once in `usage-blocks.ts`,
+  which Settings' usage cards read as well, so the menu and the cards cannot disagree. Another unit owns how the allowances read refreshes.
 
 ## How to get to it (user POV)
 
@@ -43,7 +45,7 @@ pill beside it is 連結應用程式.
 ## Driving it with look
 
 ```powershell
-npm run look -- start-conversation start-startup-order foot-rest foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- start-conversation start-startup-order foot-rest foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 start-conversation and foot-rest measure the foot at rest in both shapes (the list's one row: face 32px, pill 36px and round on
@@ -51,8 +53,9 @@ start-conversation and foot-rest measure the foot at rest in both shapes (the li
 and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (four rows with distinct Lucide
 icons, one hairline before 設定, placement above the face or right of it on the rail, inside the window, the chevron at the
 right and no number, menu tokens); foot-usage-submenu and foot-usage-two the submenu (its place at the menu's edge and level with its row, one block per
-subscription of the mock reading, in its order, each with name, number and reset, then a hairline and 管理用量; the first with Claude, Codex and Antigravity (the fixture's Gemini CLI), the second with the two the owner has connected);
-foot-usage-default the same with the fixture's own windows; foot-usage-none the row with no window (no number, no chevron, no submenu); foot-account-keys and foot-usage-keys the keyboard
+provider of the mock (the subscriptions in its order, the ChatGPT sign-in when signed in, OpenRouter with a key), in a stable order, each with name and its words (number and reset, 已重置, 無法讀取 or OpenRouter's spend), then a hairline and 管理用量; the first with Claude, Codex and Antigravity (the fixture's Gemini CLI) and OpenRouter, the second with the two the owner has connected and OpenRouter;
+foot-usage-owner the owner's own mix of 2026-11-14 (Codex live at 65% used, Claude whose reported window has reset, the ChatGPT sign-in, OpenRouter with its own spend: exactly those four blocks, in that order, Claude with no number);
+foot-usage-default the same with the fixture's own windows; foot-usage-none the row with nothing connected (no key either: no number, no chevron, no submenu); foot-account-keys and foot-usage-keys the keyboard
 (focus on each row, ArrowRight, Escape closing the submenu alone and then the menu, the focus back on the face); foot-account-outside a
 press inside the conversation closing the menu and its submenu; foot-pill-hover the marks' translate, turn and scale against the named values after the
 motion settles (nothing to move on the rail) and foot-pill-narrow the narrowest list with the pill's words whole and the marks dropped.

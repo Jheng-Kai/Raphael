@@ -153,7 +153,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   let drawnFace = "";
   account.addEventListener("click", () => {
     if (!app?.go) return;
-    openAccountMenu(account, { go: app.go, allowances: api.usageAllowances }, rail() ? "right" : "above");
+    openAccountMenu(account, { go: app.go, allowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, status: api.statusGet }, rail() ? "right" : "above");
   });
   compactWindow.addEventListener("change", placeRail);
   // The list's own width never squeezes the conversation on a window narrower than it was dragged on.

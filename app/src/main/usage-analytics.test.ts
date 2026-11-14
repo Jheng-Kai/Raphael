@@ -37,8 +37,8 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   const usageAllowances = vi.fn().mockResolvedValue({ brains: [
     { id: "codex", name: "Codex", source: "live", windows: [{ period: "fiveHour", remaining_percent: 76, resets_at: 1792900000 }] },
     { id: "claude", name: "Claude", source: "reported", windows: [
-      { period: "fiveHour", remaining_percent: 17, resets_at: 1, status: "allowed_warning", updated_at_ms: 1792800000000 },
-      { period: "weekly", remaining_percent: null, resets_at: null, status: "allowed", updated_at_ms: 1792800000000 },
+      { period: "fiveHour", remaining_percent: 17, resets_at: Math.round(Date.now() / 1000) + 3600, status: "allowed_warning", updated_at_ms: 1792800000000 },
+      { period: "weekly", remaining_percent: null, resets_at: 1, status: "allowed", updated_at_ms: 1792800000000 },
     ] },
     { id: "gemini", name: "Antigravity", source: "unavailable", windows: [] },
   ], quotas: [{ provider: "gemini", reset_at_ms: null }] });
@@ -51,7 +51,10 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   expect(section.textContent).toContain("接近額度上限");
   expect(section.textContent).not.toContain("null%");
   expect(section.querySelectorAll('[role="progressbar"]')).toHaveLength(2);
+  // A window whose reset has passed says 已重置 and keeps no number or status of the run that reported it.
   expect(section.textContent).toContain("此回報的重設時間已過");
+  expect(section.textContent).toContain("已重置");
+  expect(section.textContent).not.toContain("可使用");
   usageAllowances.mockResolvedValueOnce({ brains: [{ id: "claude", name: "Claude", source: "reported", windows: [{ period: "fiveHour", remaining_percent: 12, resets_at: null, status: "allowed_warning", updated_at_ms: 1792800060000 }] }] });
   void view.refresh().catch(() => {});
   await vi.waitFor(() => expect(host.querySelector(".run-allowance")!.textContent).toContain("12%"));
@@ -113,4 +116,25 @@ it("a failed reading says so, a quiet refresh that changes nothing touches nothi
   view.destroy();
   finish({ brains: [] }); await late;
   expect(host.childElementCount).toBe(0);
+});
+
+it("OpenRouter has its card, from the key's own reading, and says so when that cannot be read", async () => {
+  const key = (usage: unknown, state = "ok") => ({ openrouter: { state, latency_ms: 1, checked_at_ms: 1, error: null, key: null, usage }, spend: { month_usd: 1, today_usd: 0, limit_usd: 20, forecast_usd: 1, daily: [] }, last: null });
+  const statusGet = vi.fn().mockResolvedValue(key({ daily: 0, weekly: 0, monthly: 3.21, total: 9, limit: 20, limit_remaining: 16.79 }));
+  const { host, view } = await mount({ usageAllowances: vi.fn().mockResolvedValue({ brains: [] }), statusGet });
+  const card = host.querySelector('.run-allowance [data-allowance="openrouter"]')!;
+  expect(card.classList.contains("run-subscription")).toBe(true);
+  expect(card.textContent).toContain("OpenRouter"); expect(card.textContent).toContain("本月"); expect(card.textContent).toContain("US$3.21"); expect(card.textContent).toContain("US$16.79 剩餘");
+  expect(host.querySelector<HTMLElement>(".usage-analytics")!.hidden).toBe(false);
+  statusGet.mockResolvedValueOnce(key({ daily: null, weekly: null, monthly: null, total: null, limit: null, limit_remaining: null }));
+  await view.refresh();
+  expect(host.querySelector('[data-allowance="openrouter"]')!.textContent).toContain("無法讀取");
+  // A failed read keeps the card as it was; no key at all removes it.
+  statusGet.mockRejectedValueOnce(new Error("offline"));
+  await view.refresh();
+  expect(host.querySelector('[data-allowance="openrouter"]')!.textContent).toContain("無法讀取");
+  statusGet.mockResolvedValueOnce(key(null, "no_key"));
+  await view.refresh();
+  expect(host.querySelector('[data-allowance="openrouter"]')).toBeNull();
+  view.destroy();
 });
