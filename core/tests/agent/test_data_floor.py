@@ -130,3 +130,45 @@ async def test_read_consent_is_single_use_in_every_mode(conn, mode):
     assert not (await gate.call_plugin(action.tool, action.args, approval=yes, action=action)).ok
     assert not (await gate.call_plugin(action.tool, action.args)).ok
     assert len(hub.calls) == 1
+
+
+_DATA = r"C:\Users\Owner\AppData\Roaming\Raphael Dev"
+_ATTACHED = _DATA + r"\attachments\0123456789abcdef0123456789abcdef.html"
+
+
+@pytest.mark.parametrize("command", [
+    f"Get-Content -LiteralPath '{_ATTACHED}' -Raw",
+    f"$p='{_ATTACHED}'; if (Test-Path -LiteralPath $p) {{ Get-Content -LiteralPath $p -Raw -Encoding UTF8 }} else {{ 'TEMPLATE_NOT_FOUND' }}",
+    f"Get-Item '{_ATTACHED}'; Get-ChildItem 'D:/bots' -Filter '*japanese*' | Select-Object Name,LastWriteTime; "
+    "Get-Process | Where-Object {$_.MainWindowTitle -match 'NHK'} | Select-Object Id,ProcessName",
+])
+def test_a_member_reads_the_files_the_owner_attached_in_its_conversation(floor, command):
+    """Owner, 2026-11-14: 紫苑's own attachments were refused as protected_data 5 times."""
+    assert floor.access("local__local_exec", {"command": command}) is None
+    assert floor.access("read_file", {"path": _ATTACHED}) is None
+
+
+@pytest.mark.parametrize("command", [
+    f"Set-Content '{_ATTACHED}' hacked",
+    f"Get-Content '{_ATTACHED}' > 'D:/copy.html'",
+    f"Remove-Item '{_ATTACHED}'",
+    f"rm '{_ATTACHED}'",
+    f"python -c \"open(r'{_ATTACHED}', 'w').write('x')\"",
+    f"[IO.File]::WriteAllText('{_ATTACHED}', 'x')",
+])
+def test_an_attachment_is_still_not_written_by_a_command(floor, command):
+    assert floor.access("local__local_exec", {"command": command}) == "write"
+    assert floor.access("write_file", {"path": _ATTACHED, "content": "x"}) == "write"
+
+
+@pytest.mark.parametrize("path", [
+    _DATA + r"\raphael.db", _DATA + r"\vault.json", _DATA + r"\settings.json", _DATA + r"\.env",
+    _DATA + r"\attachments", _DATA + r"\attachments\0123456789abcdef0123456789abcdef.html.json",
+    _DATA + r"\attachments\notes.html", _DATA + r"\attachments\sub\0123456789abcdef0123456789abcdef.html",
+    r"C:\Users\Owner\AppData\Roaming\Other\attachments\0123456789abcdef0123456789abcdef.html\..\..\Raphael\raphael.db",
+])
+def test_credentials_and_the_rest_of_the_data_folder_stay_protected_beside_attachments(floor, path):
+    assert floor.access("read_file", {"path": path}) == "read"
+    assert floor.access("local__local_exec", {"command": f"Get-Content '{path}'"}) == "read"
+    assert floor.access("local__local_exec", {"command": f"Get-Content '{_ATTACHED}'; Get-Content '{path}'"}) == "read"
+    assert floor.access("local__local_exec", {"command": f"$p='{path}'; if ($p) {{ Get-Content $p }}"}) == "write"

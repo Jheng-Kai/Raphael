@@ -33,8 +33,23 @@ def background_actor():
     return _BACKGROUND_MEMBER.get()
 
 
+def only_reads(name, arguments):
+    """Whether the call is one of the reads of `READS` (listing a member's routines or skills, reading its settings...): it
+    changes nothing, so no card is asked for it (owner, 2026-11-14: a health check of the team raised a card for every member
+    it read, 16 in two days, and the runs were cancelled while they waited)."""
+    from .protocol import RpcError
+    if not isinstance(arguments, dict):
+        return False
+    try:
+        item, _ = resolve(name, arguments)
+    except RpcError:
+        return False
+    return item is not None and item.name in READS and not item.destructive
+
+
 def background_requires_approval(name, arguments):
-    return background_actor() is not None and name in BACKGROUND_MEMBER_TOOLS
+    """A routine's run of a member asks the owner for each change it makes to the team, never for a read."""
+    return background_actor() is not None and name in BACKGROUND_MEMBER_TOOLS and not only_reads(name, arguments)
 
 
 def obj(properties=None, required=()):

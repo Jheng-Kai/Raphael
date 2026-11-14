@@ -40,7 +40,8 @@ def test_the_tool_says_patch_is_preferred_and_lessons_not_logs():
 def test_the_persona_carries_the_skill_line_beside_the_memory_doctrine():
     flat = " ".join(SKILL_DOCTRINE.split())
     for phrase in ("offer to save it as a skill rather than writing one unasked", "never write a skill for routine work",
-                   "patch that skill (do not add a second one)", "changed only through their own tools"):
+                   "patch that skill (do not add a second one)", "changed only through their own tools",
+                   "corrects a fact that your own instructions state", "member_update on your own id"):
         assert phrase in flat
     assert SKILL_DOCTRINE in persona._MEMORY_EDITS and persona.MEMORY_DOCTRINE in persona._MEMORY_EDITS
     assert SKILL_DOCTRINE in persona.cli_system_prompt("en", name="Writer", role="Writer", memory=True)

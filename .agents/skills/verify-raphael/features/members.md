@@ -550,6 +550,15 @@ editor confirm a claim; model rewrites, remove/add batches and moves between fil
 The reflection pass reads only the owner's words of a turn that read outside content, so
 what it writes needs no mark.
 
+The owner's own correction is the exception to "outside claims never change confirmed entries" (R-MEM-12; owner,
+2026-11-14: his address typo stayed in memory after five refused corrections): in a private turn that read outside
+content, a `replace` whose every written (and removed) span stands in the owner's message, with two characters of
+context, changes the confirmed entry and leaves it his; words he never said, a removal, a room, a colleague's work and a
+routine are refused as `unconfirmed_only`. Check it in a private turn after a web read: say the street was wrong and
+the right one; the entry changes and carries no 「（待確認）」. When he corrects a fact that a member's own
+instructions state, the doctrine has the member propose `member_update` on its own id (R-MEM-13); memory never edits
+the instructions, and the owner's card decides.
+
 A turn reads both files once, at its start, in a form nothing it writes changes (`snapshot`), with how full each
 is; the tools see the live file. API brains read them in the system prompt. A resumed CLI session keeps the
 instructions it began with, so CLI brains read them in every turn's message. A room's turn and work a colleague
