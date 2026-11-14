@@ -400,12 +400,43 @@ async def test_a_background_report_shows_its_card_without_waiting_for_the_owner(
     assert shown.ok and "owner_card" not in shown.data
     [card] = agent.service.pages.store.shown_in([origin])[origin]
     assert card["id"] == shown.data["page_id"] and card["kind"] == "report"
-    page = await agent.service.background_owner_tool(task, "show_page", {"title": "Choose", "html": "<button>Pick</button>"})
-    assert page.data["owner_card"]["kind"] == "show_page"
     await background.service._cancel({"task_id": task_id})
 
 
-@pytest.mark.parametrize("name", ["connect_app", "request_secret", "email_draft", "show_page"])
+async def test_a_background_page_never_asks_the_owner_whether_they_can_see_it(wired):
+    # Owner, 2026-11-14, with a picture: a card in the conversation read, in English, "The owner can see the page in this
+    # conversation." above 「我完成了」: the sentence the tool gives the model had become the words of a question card.
+    agent, background = wired
+    origin = agent.history.add(session_id="job", question="Prepare", route="delegate", prefix="", text="",
+                               status="running", conversation_id=agent.service.conversations.main())
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    task = background.task(task_id)
+    page = await agent.service.background_owner_tool(task, "show_page", {"title": "Choose", "html": "<button>Pick</button>"})
+    assert page.ok and "owner_card" not in page.data
+    assert page.data["note"] == "The page is in the conversation as a card. It needs no word from you about it."
+    [card] = agent.service.pages.store.shown_in([origin])[origin]  # the page itself stands in the thread
+    assert card["id"] == page.data["page_id"]
+    assert not background.service.owner_questions.for_turn(origin)  # and no question card was made of it
+    assert "owner can see" not in json.dumps(agent.service._turn_views([agent.history.get(origin)]), ensure_ascii=False)
+    await background.service._cancel({"task_id": task_id})
+
+
+async def test_a_task_that_shows_a_page_goes_on_and_ends_with_no_question_card(wired):
+    agent, background = wired
+    origin = agent.history.add(session_id="job", question="Prepare", route="delegate", prefix="", text="", status="running",
+                               source="routine", scope="private", conversation_id=agent.service.conversations.main())
+    background.client.replies = [turn("The page is ready.", [call("show_page", {"title": "Choose", "html": "<button>Pick</button>"}, "page1")]),
+                                 report("The page is shown.")]
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    await until(lambda: background.task(task_id).state == "done")
+    assert not background.service.owner_questions.for_turn(origin)
+    [view] = agent.service._turn_views([agent.history.get(origin)])
+    assert view["pages"] and not view.get("owner_questions")
+
+
+@pytest.mark.parametrize("name", ["connect_app", "request_secret", "email_draft"])
 @pytest.mark.parametrize("cancel", [False, True])
 @pytest.mark.parametrize("scope", ["private", "room"])
 async def test_real_background_cards_reach_history_and_return_only_the_outcome(wired, tmp_path, name, cancel, scope):
@@ -430,8 +461,6 @@ async def test_real_background_cards_reach_history_and_return_only_the_outcome(w
         from raphael_core.agent.drafts import EmailDrafts
         agent.service._drafts = EmailDrafts(agent.conn, background.plugins.hub, background.gate)
         arguments = {"to": "owner@example.test", "subject": "Report", "body": "Prepared."}
-    else:
-        arguments = {"title": "Choose", "html": "<button>Tuesday</button>"}
     room_id = None
     if scope == "room":
         with agent.conn:
@@ -446,7 +475,7 @@ async def test_real_background_cards_reach_history_and_return_only_the_outcome(w
     await until(lambda: background.task(task_id).state == "waiting")
     assert not background.service.owner_questions.in_conversation(room_id=room_id) if room_id else True
     [view] = agent.service._turn_views([agent.history.get(origin)])
-    assert view[{"connect_app": "connectors", "request_secret": "secrets", "email_draft": "drafts", "show_page": "pages"}[name]]
+    assert view[{"connect_app": "connectors", "request_secret": "secrets", "email_draft": "drafts"}[name]]
     [question] = view["owner_questions"]
     background.client.replies = [report("Owner cancelled." if cancel else "Owner finished.")]
     if cancel:
@@ -455,19 +484,15 @@ async def test_real_background_cards_reach_history_and_return_only_the_outcome(w
         await connector.connect(connector.cards.store.get(question["card_id"]))
     elif name == "request_secret":
         await secret.router.call("integrations.card_save", {"id": question["card_id"], "value": "synthetic-secret-value"})
-    elif name == "email_draft":
+    else:
         draft = agent.service._drafts.store.get(question["card_id"])
         agent.service._drafts.store.claim_send(draft.id, draft.digest)
         agent.service._drafts.store.finish(draft.id, draft.digest, ok=True)
         agent.service.sync_owner_cards()
-    else:
-        await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
     await until(lambda: background.task(task_id).state == "done")
     content = background.client.chat_calls[-1]["messages"][-1]["content"]
     assert "synthetic-secret-value" not in content
-    assert ("cancelled" if cancel else {"connect_app": "connected", "request_secret": "saved", "email_draft": "sent", "show_page": "Tuesday"}[name]) in content
-    if name == "show_page":
-        assert question["card_id"] in content  # The resumed task can update the page it just showed.
+    assert ("cancelled" if cancel else {"connect_app": "connected", "request_secret": "saved", "email_draft": "sent"}[name]) in content
     if cleanup:
         await cleanup.cards.aclose()
 

@@ -3655,8 +3655,9 @@ class AgentService:
             else:
                 page = self.pages.store.update(page_id, args.get("html"), title, tool_input={})
         self.pages.changed(page)
-        note = ("The owner sees a link card to the report in this conversation; it opens over the conversation."
-                if is_report(page) else "The owner can see the page in this conversation.")
+        # For the model alone: a plain fact, with nothing in it to ask or to say to the owner (R-PAGE-08).
+        note = ("The report is in the conversation as a link card that opens over it. It needs no word from you about it."
+                if is_report(page) else "The page is in the conversation as a card. It needs no word from you about it.")
         return {"page_id": page["id"], "rev": page["rev"], "note": note}
 
     def _report_page(self, title: str, report: Any) -> dict:
@@ -3976,9 +3977,9 @@ class AgentService:
         elif name in (EMAIL_DRAFT, SLACK_DRAFT):
             drafts = self._drafts.store.shown_in([task.turn_id]).get(task.turn_id, [])
             card = {"kind": name, "id": drafts[-1].id}
-        elif name == "show_page" and arguments.get("report") is None:
-            # A report only shows facts: the work goes on without waiting for the owner to touch it.
-            card = {"kind": name, "id": result.data["page_id"], "question": result.data.get("note", "")}
+        # A page shown is already a card in the thread: the work goes on without asking the owner to confirm that they can
+        # see it (R-PAGE-08), and no sentence meant for the model is ever the words of a card. A member that needs the owner's
+        # choice asks with ask_owner, in its own words.
         elif name == "add_mcp_server" and ask.owner_card_ids:
             card = {"kind": name, "id": ask.owner_card_ids[0]}
         elif name == "manage_connection" and ask.owner_card_ids:

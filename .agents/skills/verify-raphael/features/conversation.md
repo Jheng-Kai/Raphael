@@ -1,5 +1,13 @@
 # Conversation
 
+## Words meant for the model stay out of what the owner reads (owner, 2026-11-14)
+
+- **A page shown is no question (R-PAGE-08).** A task that shows an HTML page (`show_page`) goes on: the page is already a card in
+  the thread, and the core no longer makes an owner question (`kind` show_page, the 「我完成了」 card) of it. Before, the model's
+  own note, "The owner can see the page in this conversation.", was that card's title. The note is now a plain fact for the
+  model; a member that needs a choice from the owner asks with `ask_owner`. Older question rows of that kind still draw.
+  Evidence: `core/tests/agent/test_owner_questions.py` (the page tests).
+
 ## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
 
 Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
