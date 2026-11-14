@@ -631,7 +631,7 @@ OWN_CALENDAR_NOTE = (
     "calendar_update and calendar_delete. Connect nothing for it."
 )
 # What the model is told when one of Raphael's own tools refuses it, by the kind of the refusal.
-# How many refusals of the data floor a request gets told to its model before it ends in the owner's words (R-FLOOR-03).
+# How many refusals of the data floor a request gets told to its model before it ends in the owner's words (R-FLOOR-04).
 FLOOR_REFUSALS = 3
 FLOOR_AGAIN = (" This is the second refusal: do not try another command or path. Answer the owner now, in their language, "
                "with what you can: say in one plain sentence what you could not do, and go on with the rest of what they asked.")

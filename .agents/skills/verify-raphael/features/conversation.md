@@ -16,7 +16,7 @@
   the field held in the reply.
 - **The wake line is an event, not a reply (R-TEXT-08).** `computer_woke` is drawn by `publicEventsHTML` as `.bot-renamed[data-computer-woke]`;
   look scene `computer-wake-line` asserts one such line and no reply of the member's.
-- **A data-floor refusal does not end the turn (R-FLOOR-03).** The model is told up to three times, and answers with what it can.
+- **A data-floor refusal does not end the turn (R-FLOOR-04).** The model is told up to three times, and answers with what it can.
 
 ## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
 

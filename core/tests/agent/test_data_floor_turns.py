@@ -3,7 +3,7 @@ plain words in their own language, never a safety rule around an English sentenc
 
 Owner, 2026-11-11: the refusal reached him in English inside a Chinese conversation, in the frame of
 「安全規則「…」不准此操作。未執行。」, and the turn ended there. 2026-11-14: a refusal no longer ends the turn at the second
-try either; the member is told again and answers with what it can (R-FLOOR-03).
+try either; the member is told again and answers with what it can (R-FLOOR-04).
 """
 
 import json
