@@ -5846,12 +5846,44 @@ export function checkRendered(name, context = {}) {
       require(toggle.getBoundingClientRect().bottom <= band.getBoundingClientRect().bottom + 1 && toggle.scrollWidth <= toggle.clientWidth + 1, "the toggle stands whole inside the band");
       for (const chip of chips) require(!overlapping(toggle.getBoundingClientRect(), chip.getBoundingClientRect()), "the toggle covers no chip");
     }
-    if (open) {
-      require(toggles.length === 1 && toggles[0].getAttribute('aria-expanded') === 'true' && toggles[0].textContent === '收合', "an open band has one button, 「收合」, saying it is expanded");
-      for (const column of columns) {
-        const wanted = expected(column), seen = new Set(standing(column).map(chip => chip.dataset.entry));
-        require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${column.dataset.allDay} is in the band: ${seen.size} of ${wanted.length}`);
+    // Each day opens by itself (R-CAL-07): an open day shows every item of its own with its 「收合」 under them, any other day stays folded with its 「還有 N 個」, and the band is as tall as its tallest day.
+    const expandedDays = toggles.filter(toggle => toggle.getAttribute('aria-expanded') === 'true').map(toggle => toggle.dataset.date).sort();
+    const wantedDays = { "calendar-more-one": ["2026-10-22"], "calendar-more-two": ["2026-10-22", "2026-10-24"], "calendar-more-cross": ["2026-10-24"], "calendar-more-fold": ["2026-10-24"] }[name];
+    if (wantedDays) require(JSON.stringify(expandedDays) === JSON.stringify(wantedDays), `the open days are ${wantedDays}, not ${expandedDays}`);
+    require(open === (expandedDays.length > 0), "the band's head is open exactly while a day is");
+    for (const column of columns) {
+      const key = column.dataset.allDay, wanted = expected(column), here = standing(column), toggle = toggles.find(item => item.dataset.date === key);
+      if (expandedDays.includes(key)) {
+        const seen = new Set(here.map(chip => chip.dataset.entry)), box = column.getBoundingClientRect(), at = toggle.getBoundingClientRect();
+        require(wanted.length === seen.size && wanted.every(item => seen.has(item.id)), `every item of ${key} is in the band: ${seen.size} of ${wanted.length}`);
+        require(toggle.textContent === '收合' && at.left >= box.left - 1 && at.right <= box.right + 1, `${key} has its own 「收合」, standing in its day`);
+        require(here.every(chip => chip.getBoundingClientRect().bottom <= at.top + 1), `${key}'s 「收合」 stands under all its items`);
+      } else {
+        const words = toggle?.textContent.match(/^還有 (\d+) 個$/);
+        require(new Set(here.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, `${key} is folded to three rows at most`);
+        if (wanted.length > here.length) require(words && toggle.getAttribute('aria-expanded') === 'false' && Number(words[1]) === wanted.length - here.length, `${key} counts the items it hides: ${wanted.length - here.length}`);
+        else require(!toggle, `${key} has nothing hidden and no button`);
       }
+    }
+    if (expandedDays.length) {
+      const tallest = Math.max(...[...band.querySelectorAll('.au-bar:not(.au-draft), [data-au="all-day-toggle"]')].map(node => Number.parseInt(node.style.gridRowStart, 10)));
+      require(Number(band.dataset.rows) === tallest, "the band is as tall as its tallest day");
+    }
+    if (name === "calendar-more-cross") {
+      // One bar crosses the open Saturday and the folded Sunday: it stays whole on Saturday, is cut at the fold and is nowhere else.
+      const pieces = chips.filter(chip => chip.textContent.includes("週末專案 D")), sunday = columns.find(column => column.dataset.allDay === "2026-10-25");
+      require(pieces.length === 1 && pieces[0].closest('.au-bar').classList.contains('ends-after'), "the bar that crosses the open and the folded day is drawn once, cut at the fold");
+      require(standing(sunday).length === 3 && !standing(sunday).includes(pieces[0]), "the folded day shows its three rows and not the piece");
+    }
+    if (name === "calendar-more-fold") {
+      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22");
+      require(thursday && document.activeElement === thursday && thursday.getAttribute('aria-expanded') === 'false', "folding a day returns the keyboard to that day's 「還有 N 個」");
+    }
+    if (name === "calendar-more-one" || name === "calendar-more-two") {
+      const thursday = toggles.find(toggle => toggle.dataset.date === "2026-10-22"), sat = toggles.find(toggle => toggle.dataset.date === "2026-10-24");
+      require(document.activeElement === (name === "calendar-more-one" ? thursday : sat), "after opening, the keyboard is on that day's 「收合」");
+    }
+    if (open) {
       // Every chip is in the document and, once scrolled to, whole and under the pointer (the day names that stay on top do not cover it).
       const port = scroll.getBoundingClientRect(), top = port.top + Math.max(...[...head.querySelectorAll('.au-day-head')].map(day => day.getBoundingClientRect().height));
       for (const chip of chips) {
@@ -5877,15 +5909,8 @@ export function checkRendered(name, context = {}) {
       scroll.scrollTop = 0;
       return { check: name, items: chips.length, rows: state.rows, growth };
     }
-    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden.
+    // Folded: three rows at most, each day's button says how many are left and nothing else is hidden (checked per day above).
     require(!band.querySelector('[data-au="open-day"]'), "the band's count is no link to the day it already shows");
-    require(new Set(chips.map(chip => chip.closest('.au-bar').style.gridRow)).size <= 3, "a folded band draws three rows at most");
-    for (const toggle of toggles) {
-      const column = columns.find(item => item.dataset.allDay === toggle.dataset.date), words = toggle.textContent.match(/^還有 (\d+) 個$/);
-      require(column && words && toggle.getAttribute('aria-expanded') === 'false', "a folded band's button counts what is left and says it is not expanded");
-      require(Number(words[1]) === expected(column).length - standing(column).length, `the button counts the hidden items: ${words[1]} for ${expected(column).length - standing(column).length}`);
-    }
-    for (const column of columns) require((expected(column).length > standing(column).length) === toggles.some(toggle => toggle.dataset.date === column.dataset.allDay), "a day with items left has a button, a day without has none");
     if (name === "calendar-more-folded") window.__look.calendarMore = state;
     else {
       const before = window.__look.calendarMore;
