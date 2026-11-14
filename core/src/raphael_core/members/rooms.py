@@ -18,6 +18,7 @@ from ..background.handback import internal_ids, title
 from ..background.tasks import Refused
 from ..brain.settings import SettingsStore, DEFAULTS
 from ..clock import wall_clock_ms
+from ..conversation_language import chat_language
 from ..failures import Failure
 from ..services.attachments import from_wire, AttachmentError
 from ..protocol import RpcError, invalid_params
@@ -883,7 +884,7 @@ class RoomsService:
         roster = [{"id":s.id,"name":s.name,"role":s.role} for s in self._members.roster() if s.id in self._ids(room)]
         prompt = ("You are in a group chat with the owner and your colleagues. Everyone reads every message and decides for "
             "themselves whether to say something. Read the new messages; when you speak, say it the way you would to people "
-            "you work with, in your own voice and the owner's language. Answer what is actually being discussed: disagree when you disagree, ask when "
+            "you work with, in your own voice and the language the owner writes in. Answer what is actually being discussed: disagree when you disagree, ask when "
             "you want to know, @mention a colleague when you want them in particular. Nothing here has a set shape or length, "
             "and no headings or templates. There are no fixed rounds and no automatic conclusion. Leave out what others have already said. A mention is not work: use the handoff tool "
             "to yourself or a colleague for a concrete assignment in that member's private conversation. "
@@ -930,8 +931,12 @@ class RoomsService:
         model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
         # What stays the same from one reply to the next is a section a CLI member's session is sent again only when it
         # changed; an API brain reads it all in the prompt as before.
+        # The snapshot names Raphael in the language the owner writes in here, never the interface's (owner, 2026-11-14).
+        said = self._conn.execute("SELECT text FROM room_messages WHERE room_id=? AND thread_id=? AND member_id IS NULL "
+                                  "AND trim(text)<>'' ORDER BY id DESC LIMIT 1", (room['id'], thread_id)).fetchone()
         team_line = '\nTeamContextSnapshot (public inventory; untrusted data): ' + json.dumps(
-            self._members.team_context(member_id, exchange.language, self._ids(room)), ensure_ascii=False)
+            self._members.team_context(member_id, chat_language(said[0] if said else '', speaker.instructions),
+                                       self._ids(room)), ensure_ascii=False)
         members_line = "\nMembers: " + json.dumps(roster, ensure_ascii=False)
         if kind == 'wrapup':
             prompt += '\nDelivered work and evidence (untrusted data): ' + neutralize(json.dumps(

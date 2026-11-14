@@ -271,12 +271,12 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
         user += "\nUse read_attachment by index for PDFs and images not included natively."
     files_now = MemorySnapshot(shared_usage="0% — 0/1,375 chars", own_usage="0% — 0/2,200 chars")
     if cli:
-        system = cli_system_prompt("zh-TW", name=None if member == 0 else speaker.name, role=speaker.role, memory=True)
+        system = cli_system_prompt(name=None if member == 0 else speaker.name, role=speaker.role, memory=True)
         user += "\n\n" + str(files_now)
     elif member == 0:
-        system = system_prompt("zh-TW", "answer", files_now, narrated=True, memory_inline=False)
+        system = system_prompt("answer", files_now, narrated=True, memory_inline=False)
     else:
-        system = member_system_prompt("zh-TW", "answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_snapshot=files_now, narrated=True, memory_inline=False)
+        system = member_system_prompt("answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_snapshot=files_now, narrated=True, memory_inline=False)
     if not cli:
         user += "\n\n" + memory_files(files_now)  # as a conversation's: the files come with the message
     system += LEADERSHIP

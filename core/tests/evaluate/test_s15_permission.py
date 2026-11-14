@@ -114,6 +114,7 @@ async def test_the_cli_brain_that_tries_the_other_tool_after_a_no_is_stopped(tmp
 
 
 async def test_a_cli_brain_hears_the_no_was_the_owners_and_has_no_tool_to_ask_for_permission_itself(tmp_path, monkeypatch):
+    from raphael_core.agent.policy import EXPIRED_NOTE
     # Live on Codex, a bare "denied" read as the app refusing ("Guardian 拒絕了寄送操作"), and the next request called approve
     # to ask for permission itself: a question about no action, where the card of the action belonged.
     offered, seen = [], []
@@ -129,7 +130,7 @@ async def test_a_cli_brain_hears_the_no_was_the_owners_and_has_no_tool_to_ask_fo
         assert offered and not any("approve" in tools for tools in offered)
         # The connection's tool is called through use_tool (decision 2): its refusals are use_tool's results.
         refused = [text for text in seen if text.startswith("<tool_result") and 'tool="use_tool"' in text and 'status="error"' in text
-                   and "逾時" not in text]  # a question that ran out is nobody's no
+                   and EXPIRED_NOTE not in text]  # a question that ran out is nobody's no (its fixed words, owner, 2026-11-14)
         assert refused and all("because the owner said no" in text for text in refused), refused
     finally:
         await driver.aclose()

@@ -24,12 +24,12 @@ from raphael_core.brain.textnorm import convert_leftover_simplified
 def test_all_system_contracts_require_owner_approval_for_outward_vm_actions(language):
     member = dict(name="Member", role="Assistant", instructions="", personality="")
     prompts = [
-        persona.system_prompt(language, "answer"),
-        persona.cli_system_prompt(language),
-        persona.cli_system_prompt(language, **member),
-        persona.member_system_prompt(language, "answer", **member),
-        persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
-        persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10),
+        persona.system_prompt("answer"),
+        persona.cli_system_prompt(),
+        persona.cli_system_prompt(**member),
+        persona.member_system_prompt("answer", **member),
+        persona.worker_system_prompt(model_calls=5, tool_calls=10),
+        persona.member_worker_system_prompt(**member, model_calls=5, tool_calls=10),
     ]
     for prompt in prompts:
         for clause in ("no per-action approval", "owner holds control", "sending a message or email",
@@ -306,32 +306,35 @@ def test_nothing_is_nothing():
 # --- the system prompt ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("route", ["answer", "discuss", "chat"])
-def test_the_system_prompt_names_the_language_prefixes_and_complete_reply(language, route):
-    prompt = persona.system_prompt(language, route)
+def test_the_system_prompt_names_the_reply_kinds_and_complete_reply(route):
+    prompt = persona.system_prompt(route)
     assert persona.REPLY_LANGUAGE in prompt
-    for prefix in PREFIXES[language]:
-        assert f'"{prefix}"' in prompt
+    for kind in persona.REPLY_KINDS:
+        assert f'"{kind}"' in prompt
     assert "your complete reply" in prompt
     assert "optional work receipts only" in prompt
     assert 'put anything longer in "detail"' not in prompt
     from raphael_core.agent.self_check import DOCTRINE
     without_schema = prompt.replace(DOCTRINE, "")
     assert "{" not in without_schema and "}" not in without_schema  # every placeholder was filled
-    assert persona.system_prompt(language, route) == prompt  # the same every time
+    assert persona.system_prompt(route) == prompt  # the same every time
 
 
-def test_interface_language_only_selects_fixed_prefixes():
+def test_the_prompt_offers_the_same_reply_kinds_whatever_the_interface_language():
+    # Owner, 2026-11-14: the interface language goes to no model. The kinds are fixed words; the app shows the prefix
+    # of the interface language (canonical_prefix), so a kind the model names reads as that language's prefix.
+    prompt = persona.system_prompt("chat")
+    assert persona.REPLY_LANGUAGE in prompt
+    assert "Reply ONLY in" not in prompt and "never Simplified" not in prompt
+    assert not any(f'"{PREFIXES[language].answer}"' in prompt for language in ("zh-TW", "ja", "ko", "ru", "th"))
     for language in LANGUAGES:
-        prompt = persona.system_prompt(language, "chat")
-        assert persona.REPLY_LANGUAGE in prompt
-        assert "Reply ONLY in" not in prompt and "never Simplified" not in prompt
-        assert f'"{PREFIXES[language].answer}"' in prompt
+        for kind, prefix in zip(persona.REPLY_KINDS, PREFIXES[language]):
+            assert persona.canonical_prefix(kind, language, default="?") == prefix
 
 
 def test_the_system_prompt_has_the_character_and_the_rules_about_facts():
-    prompt = persona.system_prompt("en", "answer")
+    prompt = persona.system_prompt("answer")
     for rule in (
         "Calm, logical and precise",
         "the result first",
@@ -354,7 +357,7 @@ def test_the_system_prompt_has_the_character_and_the_rules_about_facts():
 def test_the_system_prompt_names_the_master_in_the_word_of_its_language_to_use_sparingly(
     language, address
 ):
-    prompt = persona.system_prompt(language, "chat")
+    prompt = persona.system_prompt("chat")
     assert persona.ADDRESS[language] == address
     assert address in prompt and "according to the reply language" in prompt
     assert "sparingly" in prompt and "most replies not at all" in prompt
@@ -364,13 +367,13 @@ def test_the_system_prompt_names_the_master_in_the_word_of_its_language_to_use_s
 
 def test_persona_is_identical_across_interface_languages():
     for route in ("answer", "discuss", "chat"):
-        personas = [persona.system_prompt(language, route).split("</persona>")[0] for language in LANGUAGES]
+        personas = [persona.system_prompt(route).split("</persona>")[0] for language in LANGUAGES]
         assert len(set(personas)) == 1
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_the_system_prompt_keeps_its_register_across_interface_languages(language):
-    prompt = persona.system_prompt(language, "answer")
+    prompt = persona.system_prompt("answer")
     assert "same formal, concise register in whichever language" in prompt
     assert persona._TONE["en"] in prompt
     assert "For the tone only, never for the content" in prompt
@@ -380,20 +383,19 @@ def test_the_system_prompt_keeps_its_register_across_interface_languages(languag
 
 def test_the_system_prompt_asks_for_the_text_without_its_prefix():
     # The page writes 《prefix。text》 itself: a prefix in the text would be said twice.
-    assert "without the prefix" in persona.system_prompt("zh-TW", "answer")
+    assert "without the prefix" in persona.system_prompt("answer")
 
 
 def test_each_route_has_its_own_rule():
-    rules = {route: persona.system_prompt("en", route) for route in ("answer", "discuss", "chat")}
+    rules = {route: persona.system_prompt(route) for route in ("answer", "discuss", "chat")}
     assert len(set(rules.values())) == 3
     assert "think something through" in rules["discuss"]
     assert "small talk" in rules["chat"]
 
 
-@pytest.mark.parametrize("language", LANGUAGES)
-def test_the_answer_rules_refuse_only_when_nothing_useful_can_be_said(language):
-    prompt = persona.system_prompt(language, "answer")
-    negative = PREFIXES[language].negative
+def test_the_answer_rules_refuse_only_when_nothing_useful_can_be_said():
+    prompt = persona.system_prompt("answer")
+    negative = persona.REPLY_KINDS.negative
     assert "Stable general knowledge" in prompt  # no tool needed for what does not change
     assert "answer with what you have" in prompt  # partial data is not a refusal
     assert f'Use "{negative}" only when there is truly nothing useful to say' in prompt
@@ -406,8 +408,8 @@ def test_the_answer_rules_refuse_only_when_nothing_useful_can_be_said(language):
 @pytest.mark.parametrize("language", LANGUAGES)
 @pytest.mark.parametrize("narrated", [False, True])
 def test_every_speaker_knows_that_replies_are_text_and_has_no_audio_tool(language, narrated):
-    prompts = [persona.system_prompt(language, "answer", narrated=narrated),
-               persona.member_system_prompt(language, "answer", name="Tutor", role="Teacher",
+    prompts = [persona.system_prompt("answer", narrated=narrated),
+               persona.member_system_prompt("answer", name="Tutor", role="Teacher",
                                             instructions="Teach examples.", narrated=narrated)]
     assert all("Replies are text" in prompt for prompt in prompts)
     assert not any("generate_audio" in prompt or "spoken answers" in prompt for prompt in prompts)
@@ -416,10 +418,10 @@ def test_every_speaker_knows_that_replies_are_text_and_has_no_audio_tool(languag
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_composio_two_step_doctrine_reaches_every_api_and_cli_brain(language):
     member = dict(name="Member", role="Assistant", instructions="", personality="")
-    prompts = [persona.system_prompt(language, "answer"), persona.cli_system_prompt(language),
-               persona.cli_system_prompt(language, **member), persona.member_system_prompt(language, "answer", **member),
-               persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
-               persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10)]
+    prompts = [persona.system_prompt("answer"), persona.cli_system_prompt(),
+               persona.cli_system_prompt(**member), persona.member_system_prompt("answer", **member),
+               persona.worker_system_prompt(model_calls=5, tool_calls=10),
+               persona.member_worker_system_prompt(**member, model_calls=5, tool_calls=10)]
     for prompt in prompts:
         for clause in ("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", "tool_slug", "input schema",
                        "searching alone does not read mail", "sync_response_to_workbench false"):

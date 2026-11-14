@@ -8,7 +8,9 @@ copy. New catalogs require every source key and the same formatted fields. Korea
 and Thai use script-specific installed font fallbacks. Localized date and number labels use Intl.
 Fixed core health, error, receipt, permission, messaging, event and store copy and native notices cover
 the same locales. Unknown locales use English. Authored member speech still follows persona/owner
-instructions and the conversation; interface metadata never overrides that policy.
+instructions and the conversation; the interface language reaches no model at all, not even as metadata
+(owner, 2026-11-14, R-LANG-01 to R-LANG-04 and conversation.md R-AG-LANG-01). Switching the locale changes the
+words the window draws and nothing a member is sent.
 
 Use the existing appearance and appearance-menu scenes with --locale ko, th and de for representative
 script/long-label checks at both themes and 1120,720,1920x1080. The visual/native locale lists must match

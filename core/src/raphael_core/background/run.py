@@ -77,6 +77,7 @@ from ..brain.openrouter import OpenRouterError, TextCompletion
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..brain.textnorm import public_line
+from ..conversation_language import chat_language
 from ..brain.pricing import builtin_catalog
 from ..computer.vm_catalog import NOTICES
 from ..brain.spend import SpendTracker
@@ -318,6 +319,8 @@ class TaskRun:
         # The files of the task, by number from 1, and the addresses it has seen (see the module).
         self.attachments = list(attachments)
         self.seen_urls = SeenUrls([request])
+        # The task's own words: a tool that names something per language names it in theirs, never the interface's.
+        self._request = request
         self.tool_allowed = lambda _key: True
         self.task_id = task_id
         self.language = language
@@ -1208,7 +1211,7 @@ class TaskRun:
             if name == "weather":
                 city = arguments.get("city")
                 city = city.strip() if isinstance(city, str) and city.strip() else self._city()
-                return await self._guarded(self._tools.weather(city, self.language))
+                return await self._guarded(self._tools.weather(city, chat_language(self._request, city)))
             if name == "web_search":
                 query = arguments.get("query")
                 if not isinstance(query, str) or not query.strip():

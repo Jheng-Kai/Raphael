@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from raphael_core.agent.cli.loop import CliLoop
-from raphael_core.agent.persona import phrase
+from raphael_core.agent.policy import EXPIRED_NOTE
 from raphael_core.worker.loop import Outcome, Stop, ToolOutcome, WAITING
 
 
@@ -36,11 +36,12 @@ async def test_an_expired_confirmation_declines_only_its_call(monkeypatch, swept
     try:
         assert (await loop.run()).kind == WAITING
         if swept:
-            loop.continue_with(ToolOutcome(False, "expired", phrase(language, "expired")))
+            loop.continue_with(ToolOutcome(False, "expired", EXPIRED_NOTE))
         result = await asyncio.wait_for(loop.run(), 2)
         assert result.final == "Finished the rest."
         assert not replies[0].ok and replies[0].kind == "expired"
-        assert replies[0].content == phrase(language, "expired")
+        # The model is told the same words on every interface language (owner, 2026-11-14: it goes to no model).
+        assert replies[0].content == EXPIRED_NOTE
         assert replies[1].ok and calls == ["routine_create", "local_time"]
         assert not loop.task.cancelled()
         if not swept:
@@ -58,4 +59,5 @@ async def test_an_expired_claude_permission_names_the_unanswered_action(language
         language=language, plain=True, system="", user="", tools=[], progress=lambda _: None,
         thinking=lambda _: None, event=lambda _: None, execute=execute, wait_timeout_s=0)
     result = await loop._tool("one", "approve", {"tool_name": "Write", "input": {"path": "lesson.txt"}})
-    assert json.loads(result.content) == {"behavior": "deny", "message": phrase(language, "expired")}
+    # The CLI model is told the same words on every interface language (owner, 2026-11-14: it goes to no model).
+    assert json.loads(result.content) == {"behavior": "deny", "message": EXPIRED_NOTE}

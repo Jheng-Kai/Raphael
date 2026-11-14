@@ -44,12 +44,12 @@ def test_every_speaker_gets_the_same_tools_and_capabilities(path, primary):
             assert (tool in offered.refs) == (speaker.id > 0 and path != "worker")
         fields = dict(name=speaker.name, role=speaker.role, instructions=speaker.instructions)
         if path == "cli":
-            prompt = persona.cli_system_prompt("en", **{**fields, "name": None if speaker.is_raphael else speaker.name})
+            prompt = persona.cli_system_prompt(**{**fields, "name": None if speaker.is_raphael else speaker.name})
         elif path == "api":
-            prompt = (persona.system_prompt("en", "answer") if speaker.is_raphael else
-                      persona.member_system_prompt("en", "answer", **fields))
+            prompt = (persona.system_prompt("answer") if speaker.is_raphael else
+                      persona.member_system_prompt("answer", **fields))
         else:
-            prompt, _ = _prompts("en", "Work", {}, [], RunLimits(), speaker=speaker)
+            prompt, _ = _prompts("Work", {}, [], RunLimits(), speaker=speaker)
         prompts.append(prompt)
     assert offers[0] == offers[1] == offers[2]
     for prompt in prompts:
@@ -66,7 +66,7 @@ def test_raphael_never_enters_new_member_setup_after_primary_moves():
 
 
 def test_raphael_worker_keeps_owner_instructions_and_member_report_space():
-    system, _ = _prompts("en", "Work", {}, [], RunLimits(),
+    system, _ = _prompts("Work", {}, [], RunLimits(),
                              speaker=replace(RAPHAEL, instructions="OWNER-INSTRUCTION"))
     assert "OWNER-INSTRUCTION" in system
     assert "complete result" in system

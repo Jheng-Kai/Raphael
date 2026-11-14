@@ -24,8 +24,7 @@ from ...brain.reasoning import split_reasoning
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
-from ..policy import CONFIRM_TIMEOUT_S
-from ..persona import phrase
+from ..policy import CONFIRM_TIMEOUT_S, EXPIRED_NOTE
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
 from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
@@ -416,7 +415,7 @@ class CliLoop:
             if name == "approve":
                 decision = await self._permission(args)
                 if decision in ("deny", "expired"):
-                    answer = {"behavior": "deny", "message": phrase(self.language, "expired") if decision == "expired" else self._permission_denial}
+                    answer = {"behavior": "deny", "message": EXPIRED_NOTE if decision == "expired" else self._permission_denial}
                 else:
                     answer = {"behavior": "allow", "updatedInput": args.get("input", args.get("tool_input", {}))}
                     if decision == "always" and isinstance(args.get("tool_name"), str):
@@ -476,7 +475,7 @@ class CliLoop:
             except TimeoutError:
                 if self.expire:
                     self.expire()
-                return ToolOutcome(False, "expired", phrase(self.language, "expired"))
+                return ToolOutcome(False, "expired", EXPIRED_NOTE)
             finally:
                 self._owner_waits -= 1
         except Exception as exc:

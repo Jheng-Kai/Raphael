@@ -73,6 +73,8 @@ A core-only unit: prompt words and one card line, no page, RPC or schema change;
   (and changed), and the first 360 characters of its visible text ("It begins: ..."); a plugin's page keeps title and ids only. There is
   still no tool that reads a page back whole; `update_page` with the id replaces it.
 - A routine's run gets `ROUTINE_REPORT` after its task (never in the system prompt, R-CACHE-02).
+- Every task, a routine's run included, gets `TASK_LANGUAGE` with its task in place of the interface language it was told
+  before (owner, 2026-11-14, R-LANG-02): the language the owner's own messages show, else the task text's, never named.
 
 Offline: `core/tests/agent/test_member_behaviour.py`, `core/tests/agent/test_card_context.py`, `core/tests/background/test_routine_report.py`,
 and the default prompt budget (`npm run verify -- --contract`). Not covered offline, left to a live brain run: whether a given model, told

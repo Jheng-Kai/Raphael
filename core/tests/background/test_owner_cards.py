@@ -20,8 +20,8 @@ def test_background_offers_owner_cards_without_desktop_tools():
 @pytest.mark.parametrize("member", [False, True])
 def test_every_worker_persona_can_discover_apps_and_wait_for_owner_sign_in(member):
     from raphael_core.agent.persona import worker_system_prompt, member_worker_system_prompt
-    prompt = (member_worker_system_prompt("en", name="Reviewer", role="Review", instructions="Review reports",
-              model_calls=100, tool_calls=100) if member else worker_system_prompt("en", model_calls=100, tool_calls=100))
+    prompt = (member_worker_system_prompt(name="Reviewer", role="Review", instructions="Review reports",
+              model_calls=100, tool_calls=100) if member else worker_system_prompt(model_calls=100, tool_calls=100))
     assert "find_app" in prompt and "connect_app" in prompt and "ask_owner" in prompt
     assert "Only the owner signs in, even in full-permission mode" in prompt
     assert "You cannot ask the user anything" not in prompt

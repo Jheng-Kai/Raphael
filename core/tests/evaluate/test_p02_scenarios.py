@@ -218,7 +218,8 @@ async def test_native_roster_survives_unchanged_turns_applies_updates_and_rebuil
         changed, stable = context.calls[2:]
         assert changed['session'] == stable['session'] == first['native']
         assert 'Team changed' in changed['user']
-        assert changed['roster'] == driver.app.members.team_context(0, 'zh-TW')
+        # Raphael is named in the language of the owner's words (English here), not the interface's (owner, 2026-11-14).
+        assert changed['roster'] == driver.app.members.team_context(0, 'en')
         assert changed['roster']['primary_id'] == changed['roster']['chief_id'] == members[0]
         assert changed['roster']['connected'] < first['roster']['connected']
         assert any(person['name'] == 'Synthetic Cedar' for person in changed['roster']['members'])

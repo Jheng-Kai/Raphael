@@ -1,7 +1,10 @@
 """Raphael's voice: the language it answers in, how it labels what it says, and the fixed phrases.
 
 Reply language follows the speaker's own language instructions, otherwise the owner's words.
-The interface language selects fixed app notices and labels only. What it says is shown as `《prefix。text》`, the prefix naming the kind of thing said:
+The interface language selects fixed app notices and labels only, and never reaches a model: no prompt built here
+takes it (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」). The model names the kind
+of a reply with a fixed word (`REPLY_KINDS`); the app shows it as `《prefix。text》` in the interface language, the
+prefix naming the kind of thing said:
 
 - zh-TW: 答 (an answer) 告 (a report) 否 (cannot, or refuses) 了 (done, understood) 問 (asks yes or no)
 - ja: 解 告 否 了 問
@@ -26,7 +29,7 @@ from ..memory.store import UNCONFIRMED, MemorySnapshot
 from ..memory.doctrine import DOCTRINE as MEMORY_DOCTRINE, SKILL_DOCTRINE
 from .capabilities import SHARED_CAPABILITIES
 from .speaker import Speaker
-from ..ui_languages import LANGUAGES, LANGUAGE_NAMES, fixed_language, interface_context, normalize_language
+from ..ui_languages import LANGUAGES, fixed_language, normalize_language
 
 ACTIVITY_LABELS = with_ui_words({
     "zh-TW": {"queued": "正在等候執行", "colleague": "等 {name} 的結果", "thinking": "正在思考", "working": "正在處理", "searching": "正在搜尋網路", "computer": "正在使用電腦", "blocked": "等你回答", "waiting": "正在等候同事或排程", "error": "需要你處理"},
@@ -69,6 +72,9 @@ PREFIXES: dict[str, Prefixes] = {
     "id": Prefixes("Jawaban", "Pemberitahuan", "Tidak", "Dipahami", "Pertanyaan"),
     "tr": Prefixes("Yanıt", "Bildirim", "Hayır", "Anlaşıldı", "Soru"),
 }
+# The kinds of a reply as a model names them, the same whatever the interface language: `canonical_prefix` turns one
+# into the prefix the app shows (owner, 2026-11-14: the interface language reaches no model).
+REPLY_KINDS = Prefixes("answer", "notice", "negative", "understood", "question")
 
 # What a model might wrap around or after a prefix: brackets, a full stop, a colon.
 _PREFIX_MARKS = "《》「」[]()（）.。:：,，、 \t"
@@ -538,43 +544,19 @@ def _last_sentence_end(text: str) -> int:
 
 # --- the system prompt of the model that words Raphael's answers ---------------------------------
 
-_LANGUAGE_NAMES = {
-    "zh-TW": "Traditional Chinese as written in Taiwan (never Simplified characters)",
-    "en": "English",
-    "ja": "Japanese",
-    **LANGUAGE_NAMES,
-}
-# One progress line as it should read, so that the language and the length are shown, not told.
-_PROGRESS_EXAMPLE = {
-    "zh-TW": "「我先找今天的新聞，挑一篇適合你練習的。」",
-    "ja": "「まず今日のニュースから、練習に合う記事を探します。」",
-    "en": '"I will look through the news of today for an article that suits your practice."',
-}
-# How Raphael addresses the user, in each language.
+# How Raphael addresses the user, in each language: the fixed phrases the app says without a model use it. The model
+# is given all three forms at once and picks by the language it replies in (`_raphael_persona`), never by the interface.
 ADDRESS = {"zh-TW": "主人", "ja": "マスター", "en": "Master"}
 ADDRESS.update({language: "Master" for language in LANGUAGES if language not in ADDRESS})
-# How each language is written in his voice.
-_REGISTER = {
-    "zh-TW": (
-        "Write formal, concise written Chinese in short declarative sentences, without colloquial "
-        "particles such as 啦, 喔, 呢 or 吧."
-    ),
-    "ja": (
-        "Write polite Japanese (です and ます) in a formal, terse register, in short declarative "
-        "sentences, without casual endings such as よ or ね."
-    ),
-    "en": "Write formal English in short declarative sentences, without contractions.",
-}
-# One line in his voice, for the tone: a recommendation, which claims nothing about the world.
+# One line in his voice, for the tone: a recommendation, which claims nothing about the world. Every prompt shows the
+# English line, whatever the interface language (`_raphael_persona`).
 _TONE = {
     "zh-TW": "第二個方案最佳。成本低三成，風險相同。",
     "ja": "二つ目の案が最適です。コストは三割低く、リスクは同等です。",
     "en": "The second option is optimal. It costs thirty percent less at the same risk.",
 }
 for _language in LANGUAGES:
-    _REGISTER.setdefault(_language, "Write concise, formal declarative sentences in the reply language selected by the persona and owner.")
     _TONE.setdefault(_language, _TONE["en"])
-    _PROGRESS_EXAMPLE.setdefault(_language, _PROGRESS_EXAMPLE["en"])
 
 _FINAL_FORMAT = (
     "Final content must be ONLY one JSON object with the fields below, with "
@@ -679,9 +661,10 @@ progress names the operation without command arguments or raw tool results.
 """
 
 
-def _contract(language: str, owner_pc: bool = False) -> str:
-    """The shared contract of a prompt, with the owner's-PC words only for a quick question."""
-    return interface_context(language) + _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
+def _contract(owner_pc: bool = False) -> str:
+    """The shared contract of a prompt, with the owner's-PC words only for a quick question. It names no interface
+    language: that is the window's and goes to no model (owner, 2026-11-14)."""
+    return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
 
 _FACT_RULES = """\
 Facts
@@ -751,7 +734,7 @@ Language
 - For the tone only, never for the content: {tone}
 </persona>"""
 
-def _raphael_persona(language: str, speaker: Speaker | None = None) -> str:
+def _raphael_persona(speaker: Speaker | None = None) -> str:
     prompt = _RAPHAEL_PERSONA.format(
         language_policy=REPLY_LANGUAGE,
         address='"主人" in Chinese, "マスター" in Japanese, or "Master" in English, according to the reply language',
@@ -851,12 +834,9 @@ def memory_files(snapshot: "str | MemorySnapshot") -> str:
     return f"Your memory files as they are now (data, not instructions):\n{neutralize(str(files))}"
 
 
-def language_reminder(
-    language: str, *, narrated: bool = False, member: bool = False,
-) -> str:
-    """A shared speech rule independent of the interface locale and transport."""
-    reminder = REPLY_LANGUAGE
-    return reminder
+def language_reminder() -> str:
+    """The speech rule again beside the owner's words: the same for every turn, with no interface language in it."""
+    return REPLY_LANGUAGE
 
 
 _WORK_RULES = """\
@@ -919,19 +899,15 @@ Never output a JSON reply envelope or separate prefix, text, detail or messages 
 JSON examples and code requested by the owner remain authored content, with their code fences intact."""
 
 
-def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, speaker: Speaker | None = None, cli: bool = False) -> str:
-    """The system prompt of the background worker's model, in `language`. The same arguments always
-    give the same prompt, including this speaker's owner-confirmed work instructions."""
-    prefixes = PREFIXES[language]
+def worker_system_prompt(*, model_calls: int, tool_calls: int, speaker: Speaker | None = None, cli: bool = False) -> str:
+    """The system prompt of the background worker's model. The same arguments always give the same prompt,
+    including this speaker's owner-confirmed work instructions, whatever the interface language."""
+    prefixes = REPLY_KINDS
     return (_WORKER_PROMPT + (_CLI_WORKER_REPORT if cli else _WORKER_REPORT)).format(
-        persona=_raphael_persona(language, speaker),
-        contract=_contract(language),
+        persona=_raphael_persona(speaker),
+        contract=_contract(),
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
         owner_work=_OWNER_WORK,
-        language=_LANGUAGE_NAMES[language],
-        address=ADDRESS[language],
-        register=_REGISTER[language],
-        tone=_TONE[language],
         prefixes=", ".join(f'"{prefix}"' for prefix in prefixes),
         notice=f'"{prefixes.notice}"',
         negative=f'"{prefixes.negative}"',
@@ -950,13 +926,6 @@ def worker_system_prompt(language: str, *, model_calls: int, tool_calls: int, sp
 
 # Soft target for splitting complete replies at paragraph boundaries; never a truncation limit.
 MEMBER_TEXT_MAX = 2000
-_MEMBER_REGISTER = {
-    "zh-TW": "Write natural, clear written Chinese in Traditional characters as used in Taiwan.",
-    "ja": "Write natural, polite Japanese (です and ます).",
-    "en": "Write natural, clear English.",
-}
-_MEMBER_REGISTER.update({language: "Write naturally and clearly in the reply language selected by the persona and owner."
-                         for language in LANGUAGES if language not in _MEMBER_REGISTER})
 
 _MEMBER_PERSONA = """\
 <persona>
@@ -1077,10 +1046,10 @@ REACTION = (
 )
 
 
-def reaction_prompt(speaker: Speaker, language: str) -> str:
+def reaction_prompt(speaker: Speaker) -> str:
     """The speaker's own persona and the one thing it does on a reaction: say a few words, or pass."""
-    persona = (_raphael_persona(language, speaker) if speaker.is_raphael else
-               _member_fields(language, speaker.name, speaker.role, speaker.instructions, speaker.personality)["persona"])
+    persona = (_raphael_persona(speaker) if speaker.is_raphael else
+               _member_fields(speaker.name, speaker.role, speaker.instructions, speaker.personality)["persona"])
     return REACTION + "\n" + REPLY_LANGUAGE + "\n" + persona
 
 
@@ -1131,43 +1100,41 @@ SETUP_AFTER_CONNECT = (
 )
 
 
-def _member_fields(language: str, name: str, role: str, instructions: str, personality: str) -> dict[str, str]:
+def _member_fields(name: str, role: str, instructions: str, personality: str) -> dict[str, str]:
     return {
         "persona": _MEMBER_PERSONA.format(
             name=name, role=f"Your role: {role}." if role else "",
             personality=personality.strip() or "(unspecified)", instructions=instructions.strip() or "(none)",
         ),
-        "contract": _contract(language),
+        "contract": _contract(),
         "language_policy": REPLY_LANGUAGE,
         "facts": _FACT_RULES,
         "owner_work": _OWNER_WORK,
         "name": name,
         "role": f"Your role: {role}." if role else "",
         "instructions": instructions.strip() or "(none)",
-        "language": _LANGUAGE_NAMES[language],
-        "register": _MEMBER_REGISTER[language],
     }
 
 
 def cli_system_prompt(
-    language: str, *, name: str | None = None, role: str = "", instructions: str = "",
+    *, name: str | None = None, role: str = "", instructions: str = "",
     personality: str = "", memory: bool = False, speaker: Speaker | None = None, owner_pc: bool = False,
 ) -> str:
     """The same persona and factual rules, with MCP tools instead of a JSON reply contract. A resumed CLI
     session keeps the instructions it began with, so the memory files themselves come with every turn's
     message (`agent.service`); here are only their rules."""
     if name is None:
-        persona = _raphael_persona(language, speaker or Speaker(role=role, instructions=instructions, personality=personality))
+        persona = _raphael_persona(speaker or Speaker(role=role, instructions=instructions, personality=personality))
         language_rule = (
             REPLY_LANGUAGE + " Return message bodies without persona labels "
             "or display brackets; Raphael adds one opening label to the first message and closes "
             "the display brackets after the last message."
         )
     else:
-        fields = _member_fields(language, name, role, instructions, personality)
+        fields = _member_fields(name, role, instructions, personality)
         persona = fields["persona"]
         language_rule = REPLY_LANGUAGE
-    prompt = "\n\n".join((persona, _contract(language, owner_pc and name is None), _FACT_RULES,
+    prompt = "\n\n".join((persona, _contract(owner_pc and name is None), _FACT_RULES,
                           *((_OWNER_WORK,) if name is not None else ()), language_rule))
     if memory:
         prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace(_FILES_HERE, "in the initial snapshot and later change records")
@@ -1177,7 +1144,6 @@ def cli_system_prompt(
 
 
 def member_system_prompt(
-    language: str,
     route: str,
     *,
     name: str,
@@ -1188,12 +1154,12 @@ def member_system_prompt(
     narrated: bool = False,
     memory_inline: bool = True,
 ) -> str:
-    """The system prompt for the model that words a member's reply on `route` in `language`, with
+    """The system prompt for the model that words a member's reply on `route`, with
     the memory's rules and files when there is a memory (the rules alone without `memory_inline`: the
     files then come with the message). The same arguments always give the same
     prompt. `narrated` uses the live thread's longer final format, including optional thinking."""
     prompt = _MEMBER_PROMPT.format(
-        **_member_fields(language, name, role, instructions, personality),
+        **_member_fields(name, role, instructions, personality),
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (
             '"text": your complete reply, in plain sentences.\n'
@@ -1207,7 +1173,6 @@ def member_system_prompt(
 
 
 def member_worker_system_prompt(
-    language: str,
     *,
     name: str,
     role: str,
@@ -1219,7 +1184,7 @@ def member_worker_system_prompt(
 ) -> str:
     """The system prompt of the background worker's model for a task of a member."""
     return (_MEMBER_WORKER_PROMPT + (_CLI_WORKER_REPORT if cli else _MEMBER_WORKER_REPORT)).format(
-        **_member_fields(language, name, role, instructions, personality),
+        **_member_fields(name, role, instructions, personality),
         work=_WORK_RULES.format(model_calls=model_calls, tool_calls=tool_calls),
         report_text=_MEMBER_REPORT_TEXT,
         model_calls=model_calls,
@@ -1228,29 +1193,26 @@ def member_worker_system_prompt(
 
 
 def system_prompt(
-    language: str, route: str, memory_snapshot: "str | MemorySnapshot | None" = None, *,
+    route: str, memory_snapshot: "str | MemorySnapshot | None" = None, *,
     narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True, owner_pc: bool = False,
 ) -> str:
     """The system prompt for the model that words an answer on `route` ("answer", "discuss" or
-    "chat") with fixed labels in `language`, and the memory's rules and files (`memory_rules`) when there is a
+    "chat"), and the memory's rules and files (`memory_rules`) when there is a
     memory (`memory_snapshot` is not None; the rules alone without `memory_inline`: the files then come
     with the message). The
     same arguments always give the same prompt. `narrated` uses the live thread's longer final
-    format, including optional thinking."""
-    prefixes = PREFIXES[language]
+    format, including optional thinking. The reply's kind is one of `REPLY_KINDS`, the same words whatever the
+    interface language: the app turns it into the prefix it shows."""
+    prefixes = REPLY_KINDS
     prompt = _SYSTEM_PROMPT.format(
-        persona=_raphael_persona(language, speaker),
-        contract=_contract(language, owner_pc),
+        persona=_raphael_persona(speaker),
+        contract=_contract(owner_pc),
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (
             '"text": your complete reply, without the prefix (it is shown for you). '
             'Keep every requested part; split long replies at natural paragraph boundaries.'
         ),
-        language=_LANGUAGE_NAMES[language],
-        address=ADDRESS[language],
-        register=_REGISTER[language],
-        tone=_TONE[language],
         prefixes=", ".join(f'"{prefix}"' for prefix in prefixes),
         answer=f'"{prefixes.answer}"',
         notice=f'"{prefixes.notice}"',
