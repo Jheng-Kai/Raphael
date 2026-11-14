@@ -291,10 +291,30 @@ test("the allowances are kept across tabs and Settings closing, refresh on compl
   expect(destroyed).not.toHaveBeenCalled();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
+  // Every opening starts afresh (owner, 2026-11-15): 模型與用量 is at 模型 again, not at the 用量 looked at last.
   await page.show("general"); click('[data-pane="models"]'); await flush();
+  expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
+  await page.show("usage");
   expect(page.el.querySelector('[data-models-tab="usage"][aria-selected="true"]')).not.toBeNull();
   await page.show("models");
   expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
+});
+
+test("the models' usage is read once after the app starts, before Settings is ever opened, and again at the opening", async () => {
+  // Owner, 2026-11-15: 「在打開 app 的時候就跑一次，之後才是每次設定的時候再跑一次」.
+  vi.useFakeTimers();
+  try {
+    const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
+    create(); page.el.hidden = true;
+    await page.preload();
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(mountAnalytics).toHaveBeenCalledTimes(1);
+    expect(api.usageAllowances).toHaveBeenCalledTimes(1);
+    page.el.hidden = false;
+    void page.show("general");
+    await vi.advanceTimersByTimeAsync(10);
+    expect(api.usageAllowances).toHaveBeenCalledTimes(2);
+  } finally { vi.useRealTimers(); }
 });
 
 const cardsOf = (): string[] => [...document.querySelectorAll(".usage-analytics .run-subscription")].map(card => card.textContent ?? "");
