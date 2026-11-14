@@ -1743,6 +1743,11 @@ R-CLI-10: a fresh native session's first message (`agent/cli/context.py` `fresh_
 fixed 16,000 characters. The request, file names, additions, note and records are never cut and overflow only when they
 alone outgrow the window; the rest is filled with memory and team sections, the summary, the owner's own recent words and
 then recent turns, newest first. Covered offline by `core/tests/agent/test_cli_context.py`.
+
+R-CLI-11: a subscription CLI waits for one call to our MCP tools as long as the loop gives a call in flight (2 hours:
+Claude Code `MCP_TOOL_TIMEOUT`, Codex `tool_timeout_sec`), not the vendors' 60 s, and each MCP call is recorded under the
+server's, endpoint's and request's ids so `/mcp` and `/computer` never overwrite each other's tool events. Covered offline
+by `core/tests/agent/test_cli_brains.py` and `core/tests/agent/test_cli_mcp.py`. Core-only change: no visual scene.
 ## Background app discovery (2026-11-01)
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract
