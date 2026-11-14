@@ -107,7 +107,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   const saving = new Map<string, string>();
   let adding = false;
   let skills: Loaded<MemberSkill[]> = "loading";
-  let undo: string | null = null;
   let commands: Loaded<MemberCommand[]> = "loading";
   let toolChoices: Loaded<ToolChoices> = "loading";
   let skillText: { id: number; skill: MemberSkill; text: string; revision?: string } | "loading" | null = null;
@@ -131,7 +130,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       read(() => api.membersToolChoices()),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
-    if (skillList.status === "fulfilled") { skills = skillList.value?.skills ?? []; undo = skillList.value?.undo ?? null; } else if (!Array.isArray(skills)) skills = "failed";
+    if (skillList.status === "fulfilled") skills = skillList.value?.skills ?? []; else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
     if (tools.status === "fulfilled" && tools.value) toolChoices = tools.value; else if (typeof toolChoices !== "object") toolChoices = "failed";
     draw();
@@ -187,8 +186,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
         skills.map(skill =>
           `<div class="ms-row" data-k="ms-skill:${skill.id}"><button type="button" class="btn ms-open" data-ms="skill-open" data-id="${skill.id}" data-k="ms-skill-open:${skill.id}"><span class="ms-label">${esc(skill.name)}</span></button>` +
           `${tg(skill.enabled, `${t("members.profile.enable")} ${skill.name}`, ` data-ms="skill-toggle" data-id="${skill.id}" data-k="ms-skill-toggle:${skill.id}"`)}</div>`).join("") +
-        (skills.length || adding ? "" : muted(t("members.profile.noSkills"))) +
-        (undo ? `<div class="ms-add">${btn(esc(t("skills.undo")), "sm", ' data-ms="skill-undo" data-k="ms-skill-undo"')}</div>` : "");
+        (skills.length || adding ? "" : muted(t("members.profile.noSkills")));
     }
     return section(title, rows, tool, "ms-skills");
   }
@@ -377,7 +375,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, undo, commands, toolChoices, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, commands, toolChoices, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
@@ -418,7 +416,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     try {
       const answer = await api.membersSkillsList(id);
       if (id !== host.member().id) return;
-      skills = answer.skills ?? []; undo = answer.undo ?? null;
+      skills = answer.skills ?? [];
     } catch (error) { toaster.info(describeError(error)); }
     draw();
   }
@@ -555,7 +553,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "skill-open": void openSkill(Number(act.dataset.id)); break;
       case "skill-toggle": void toggleSkill(Number(act.dataset.id)); break;
       case "skill-save": void saveSkill(); break;
-      case "skill-undo": void api.core("members.skills.update", { member_id: member.id, undo }).then(reloadSkills).catch(error => toaster.info(describeError(error))); break;
       case "skill-more": {
         const id = view.kind === "skill" ? view.id : -1;
         openConfirmMenu(act, { label: t("members.profile.delete"), ask: t("conn.deleteConfirm"), run: () => void api.membersSkillsDelete(member.id, id).then(() => { back(); return reloadSkills(); }).catch(error => toaster.info(describeError(error))) });

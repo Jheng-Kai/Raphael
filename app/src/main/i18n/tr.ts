@@ -1572,7 +1572,6 @@ export const tr = {
   "skills.learned": "Kendi öğrendi",
   "skills.imported": "İçe aktarıldı",
   "skills.owner": "Sahibinden",
-  "skills.undo": "Son değişikliği geri al",
   "skills.instructions": "Beceri talimatları",
   "skills.save": "Beceriyi kaydet",
   "members.more": "{p0} seçenekleri",

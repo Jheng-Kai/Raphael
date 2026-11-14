@@ -345,7 +345,7 @@ export function checkRendered(name, context = {}) {
     require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉', `the one reaction is there, never a second (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
     return { check: name };
   }
-  if (['reaction-bar-given', 'reaction-replaced', 'reaction-taken-back', 'reaction-ask'].includes(name)) {
+  if (['reaction-bar-given', 'reaction-replaced', 'reaction-taken-back', 'reaction-ask', 'reaction-thinking', 'reaction-silent', 'reaction-changed'].includes(name)) {
     // One reaction per message (owner, 2026-11-14): another emoji replaces the one given, the same again takes it back.
     const calls = window.__look.calls.filter(call => call.method === 'agent.react'), message = document.querySelector('.tn[data-id="8201"]');
     const chips = [...message.querySelectorAll('[data-reaction]')].map(chip => chip.dataset.reaction);
@@ -363,12 +363,36 @@ export function checkRendered(name, context = {}) {
       require(chips.length === 0 && !message.querySelector('.message-reactions'), 'the same emoji again takes the reaction back and leaves no chip');
       require(calls.length === 1 && calls[0].params.emoji === '👍' && calls[0].params.active === false, 'the call was the removal of that emoji');
     }
+    const owner_said_nothing = () => !window.__look.calls.some(call => ['agent.ask', 'agent.confirm', 'owner_questions.answer'].includes(call.method));
     if (name === 'reaction-ask') {
       const ask = document.querySelector('.tn[data-id="8202"]');
       require(chips.join(' ') === '👎', `the reply keeps its thumbs down (${chips.join(' ')})`);
       require(ask && visible(ask.querySelector('.chat-message[data-reply]')) && ask.textContent.includes(window.__look.data.chatMetadataSample.askWhatWasWrong), 'the member asks what was wrong, as a message of its own');
       require(!ask.querySelector('.owner-message, .me'), 'the ask carries no message of the owner');
-      require(!window.__look.calls.some(call => ['agent.ask', 'agent.confirm', 'owner_questions.answer'].includes(call.method)), 'the owner said nothing and answered nothing');
+      require(!ask.querySelector('.live-presence') && !ask.dataset.live, 'the member is no longer shown at work once it has spoken');
+      require(owner_said_nothing(), 'the owner said nothing and answered nothing');
+    }
+    if (name === 'reaction-thinking') {
+      // The reaction is analysed at once (owner, 2026-11-14): the member's usual presence stands under the reply while it thinks.
+      const turn = document.querySelector('.tn[data-id="8202"]'), presence = turn?.querySelector('.live-presence');
+      require(turn && turn.dataset.live === 'true' && visible(presence), 'the member shows at work at once');
+      require(presence.textContent.trim().length > 0 && visible(presence.querySelector('.live-action')), 'the presence says what the member is doing');
+      require(!turn.querySelector('.owner-message, .me, .chat-message[data-reply], .message-text'), 'it has said nothing yet and carries no message of the owner');
+      require(chips.length === 1 && calls.length === 1, `the reply carries the one reaction (${chips.join(' ')})`);
+      require(owner_said_nothing() && !document.querySelector('.toast'), 'the owner said nothing, and nothing was announced');
+    }
+    if (name === 'reaction-silent') {
+      // A member that needs no words leaves nothing behind: no turn, presence, message, card, failure or notice.
+      require(!document.querySelector('.tn[data-id="8202"]') && !document.querySelector('.live-presence') && !document.querySelector('[data-live="true"]'), 'the member is no longer shown at work and no turn is left');
+      require(document.querySelectorAll('.tn').length === 1, `the thread holds only the reply that was reacted to (${document.querySelectorAll('.tn').length})`);
+      require(chips.join(' ') === '👍' && visible(message.querySelector('.message-reactions')), 'the reaction stays on the reply');
+      require(!document.querySelector('.toast, .is-latest-failure, .turn-signin, .failure-detail, [data-act="rerun"], [data-act="regenerate"]'), 'no notice, failure or button stands in its place');
+      require(owner_said_nothing(), 'the owner said nothing and answered nothing');
+    }
+    if (name === 'reaction-changed') {
+      require(chips.join(' ') === '👎' && calls.length === 2, `the reply carries only the new emoji (${chips.join(' ')})`);
+      require(document.querySelectorAll('.live-presence').length === 1 && document.querySelectorAll('.tn[data-live="true"]').length === 1, 'one analysis is under way, never two');
+      require(owner_said_nothing(), 'the owner said nothing and answered nothing');
     }
     return { check: name };
   }
@@ -3496,8 +3520,17 @@ export function checkRendered(name, context = {}) {
     require(meta.textContent.split('自行學會').length === 2 && meta.textContent.includes('自行學會 · 2026/10/29'), "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
-    if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
-    else require(calls.some(c => c.method === "members.skills.delete") && calls.some(c => c.method === "members.skills.update" && c.params.undo), "Raphael deletes and restores through the same owner boundary");
+    require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
+    return { check: name };
+  }
+  if (name === "skill-deleted-final") {
+    // Owner, 2026-11-14: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」. The delete asked twice, went through the
+    // same owner boundary, and nothing in the list offers to bring the skill back.
+    const pane = document.querySelector('.ms-pane'), calls = window.__look.calls;
+    require(calls.some(c => c.method === "members.skills.delete" && c.params.id === 31), "Raphael deletes the skill through the same owner boundary");
+    require(!calls.some(c => c.method === "members.skills.update" && "undo" in c.params), "no call asks the core to restore a skill");
+    require(!pane.querySelector('[data-ms="skill-open"][data-id="31"]') && pane.querySelector('[data-ms="skill-open"][data-id="32"]'), "the deleted skill is gone and the shared one stays");
+    require(!pane.querySelector('[data-ms="skill-undo"]') && !/復原|undo/i.test(pane.textContent), "the list has no way to bring the skill back");
     return { check: name };
   }
   if (name === "confirm-menu-label" || name === "confirm-menu-asks") {

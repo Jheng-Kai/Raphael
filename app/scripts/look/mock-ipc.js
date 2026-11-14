@@ -32,7 +32,8 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.chatMetadata) {
     const sample = data.chatMetadataSample, base = structuredClone(data.mailTurns.draft);
     data.members.forEach(member => Object.assign(member, {unread:false,unread_from:null,activity:"idle",waiting:false}));
-    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:["👍"],...(variant.chatMetadata === 'owner' ? {owner:["🎉"]} : {})},owner_questions:[],permissions:[]};
+    // A scene of the member's analysis of a reaction (`reactionAsk`) starts with a reply nobody reacted to.
+    const turn = {...base,id:8201,question:sample.question,text:sample.reply,created_at_ms:data.now, messages:[],drafts:[],reactions:{reply:variant.reactionAsk ? [] : ["👍"],...(variant.chatMetadata === 'owner' ? {owner:["🎉"]} : {})},owner_questions:[],permissions:[]};
     if (['slack','approval'].includes(variant.chatMetadata)) {
       const draft = {...structuredClone(base.drafts[0]),id:'slack-1',kind:'slack',to:sample.channel,subject:'',body:sample.body,from:{key:'mcp:slack/send_message',name:'Slack'},senders:[{key:'mcp:slack/send_message',name:'Slack'}]};
       turn.drafts = [draft];
@@ -301,6 +302,14 @@ export function installMock(fixture, config = {}, target = window) {
     data.groups = structuredClone(roster.groups);
     for (const cli of data.clis) if (roster.models[cli.id]) cli.models.push(structuredClone(roster.models[cli.id]));
     data.settings.agent_model = "cli:codex:gpt-6.1-sol?effort=high";
+  }
+  // The owner's own sidebar, as the drag-to-reorder reports describe it (R-SIDE-03): three folders of five, five and three members and
+  // three members in none, fifteen faces in all, held by a core that numbers places the way members/store.py `_move` does.
+  if (variant.sidebarDrag) {
+    const base = data.members.find(item => item.id === 1), folders = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, null, null];
+    const numerals = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五"];
+    data.groups = [{ id: 1, name: "學習", position: 0, sources: [] }, { id: 2, name: "工作", position: 1, sources: [] }, { id: 3, name: "生活", position: 2, sources: [] }];
+    data.members = [data.members.find(item => item.id === 0), ...folders.map((group_id, index) => ({ ...structuredClone(base), id: index + 1, name: `成員${numerals[index]}`, role: "研究與資訊整理", group_id, position: index, unread: false, waiting: false, preview: "", last_at: null }))];
   }
   if (variant.sidebarUnread) {
     data.members[1].unread = true;
@@ -897,6 +906,18 @@ export function installMock(fixture, config = {}, target = window) {
     for (const turn of data.turns) if ((turn.pages ?? []).some(page => page.id === id)) notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
     notify("RoomsChanged", { room_id: 1 });
   };
+  // The member has made up its mind about the reaction it is analysing (`reactionAsk`): it asks what was wrong, or decides that no
+  // words are needed and the turn is taken out of the thread, as the core does. The window is told as the core tells it.
+  state.reactionEnds = () => {
+    const turn = data.turns.find(item => item.source === "reaction" && item.status === "running");
+    if (!turn) return;
+    if (variant.reactionAsk === "silent") data.turns = data.turns.filter(item => item !== turn);
+    else {
+      const words = data.chatMetadataSample.askWhatWasWrong;
+      Object.assign(turn, { status: "done", text: words, created_at_ms: data.now + 1000, messages: [{ seq: 1, kind: "reply", text: words, at_ms: data.now + 1000 }] });
+    }
+    notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+  };
   // The CLI's sign-in console ended (`done`, or `stopped` when it was closed first), as `brains.cli` then tells.
   state.cliSigninEnds = (id, outcome) => {
     const cli = data.clis.find(item => item.id === id);
@@ -1007,6 +1028,12 @@ export function installMock(fixture, config = {}, target = window) {
     if (!item) throw new Error(`Fixture item not found: ${id}`);
     Object.assign(item, patch); return item;
   };
+  // members/store.py `_move`: `item` goes to `place` among `items` (the last place when that is past the end) and the places are numbered again from 0.
+  const moveInto = (items, item, place) => {
+    const order = items.filter(other => other !== item).sort((a, b) => a.position - b.position || a.id - b.id);
+    order.splice(Math.min(place, order.length), 0, item);
+    order.forEach((other, index) => { other.position = index; });
+  };
   // The core's inventory of the owner's apps (integrations/inventory.py) as a double, computed from the fixture's connections so that
   // every scene that switches, signs in or uninstalls moves the count as the core moves it: an app is connected when its tools can be
   // called now; one that waits for a sign-in, failed, is off, has every tool off, or is a second way to an app that is counted already
@@ -1041,8 +1068,6 @@ export function installMock(fixture, config = {}, target = window) {
   };
   // A skill's document: its frontmatter says its name and when to use it, as the core reads them (members/capabilities.py `skill_metadata`).
   const skillText = skill => skill.text ?? `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n`;
-  const skillUndo = new Map();
-  const saveSkills = member => skillUndo.set(member, { revision: `skill-${Date.now()}`, skills: structuredClone(data.skills.filter(s => s.member_id === member)) });
   const skillRow = ({ text, ...skill }) => skill;
   const skillGrants = new Map();
   const skillMember = p => p.shared ? -1 : p.member_id;
@@ -1236,7 +1261,10 @@ export function installMock(fixture, config = {}, target = window) {
         const counted = inventory();
         const roster = data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned }));
         if (variant.pinnedTiles) roster.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id);
-        return { members: roster, groups: data.groups, team_context: {
+        // The core lists Raphael first, then the others by place (pinned first), and the folders by place.
+        if (variant.sidebarDrag) roster.sort((a, b) => (a.id === 0 ? -1 : b.id === 0 ? 1 : (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || a.position - b.position || a.id - b.id));
+        const folders = variant.sidebarDrag ? [...data.groups].sort((a, b) => a.position - b.position || a.id - b.id) : data.groups;
+        return { members: roster, groups: folders, team_context: {
           schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
           members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
@@ -1258,6 +1286,8 @@ export function installMock(fixture, config = {}, target = window) {
           order.splice(Math.min(p.position, order.length), 0, member);
           order.forEach((other, place) => { other.position = place; });
         }
+        // As store.py `_move`: a place is among all the members but Raphael, and every place is numbered again from 0.
+        if (variant.sidebarDrag && p.position !== undefined) moveInto(data.members.filter(other => other.id !== 0), member, p.position);
         if (p.hidden && p.id === data.primaryId) data.primaryId = 0;
         notify("MembersChanged", { member_id: p.id });
         return { member };
@@ -1335,7 +1365,7 @@ export function installMock(fixture, config = {}, target = window) {
           }
           return { marketplace, sets: data.skillSets, skills: visibleSkills(p) };
         }
-        return { skills: visibleSkills(p), sets: data.skillSets, undo: skillUndo.get(skillMember(p))?.revision ?? null,
+        return { skills: visibleSkills(p), sets: data.skillSets,
           ...(p.discover ? { sources: data.skillSources ?? [], marketplaces: data.skillMarketplaces } : {}) };
       }
       case "members.skills.import": {
@@ -1380,16 +1410,6 @@ export function installMock(fixture, config = {}, target = window) {
           return { skill: visibleSkills(p).find(s => s.id === p.id) };
         }
         p = { ...p, member_id: skillMember(p) };
-        if (p.undo) {
-          const previous = skillUndo.get(p.member_id);
-          if (!previous || previous.revision !== p.undo) throw new Error("Invalid params: skill revision is no longer current");
-          const current = structuredClone(data.skills.filter(s => s.member_id === p.member_id));
-          data.skills = [...data.skills.filter(s => s.member_id !== p.member_id), ...previous.skills];
-          skillUndo.set(p.member_id, { revision: `skill-${Date.now()}`, skills: current });
-          notify("MembersChanged", { member_id: p.member_id });
-          return { skills: byMember(data.skills, p).map(skillRow) };
-        }
-        saveSkills(p.member_id);
         const skill = skillOf(p);
         if (p.text !== undefined) {
           // as the core refuses a document it cannot keep: nothing changes
@@ -1414,7 +1434,6 @@ export function installMock(fixture, config = {}, target = window) {
         }
         if (!p.shared && data.skills.some(s => s.id === p.id && s.member_id === -1)) throw new Error("Invalid params: edit shared skills in the shared library");
         p = { ...p, member_id: skillMember(p) };
-        saveSkills(p.member_id);
         const deleted = data.skills.some(item => item.id === p.id && item.member_id === p.member_id);
         data.skills = data.skills.filter(item => !(item.id === p.id && item.member_id === p.member_id));
         notify("MembersChanged", { member_id: p.member_id });
@@ -1422,7 +1441,11 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.commands.list": return { commands: byMember(data.commands, p) };
       case "groups.create": { const group = { ...p, id: nextId(data.groups), position: data.groups.length, sources: [] }; data.groups.push(group); notify("MembersChanged", { member_id: 0 }); return { group }; }
-      case "groups.update": { const group = update(data.groups, p.id, p); notify("MembersChanged", { member_id: 0 }); return { group }; }
+      case "groups.update": {
+        const group = update(data.groups, p.id, p);
+        if (variant.sidebarDrag && p.position !== undefined) moveInto(data.groups, group, p.position);
+        notify("MembersChanged", { member_id: 0 }); return { group };
+      }
       case "groups.delete": data.groups = data.groups.filter(item => item.id !== p.id); notify("MembersChanged", { member_id: 0 }); return { deleted: true };
       case "conversations.list": mainConversation(p.member_id ?? 0); return { conversations: byMember(data.conversations, p).map(c=>({...c,turn_count:data.turns.filter(t=>t.conversation_id===c.id).length})) };
       case "conversations.clear": { const member = data.conversations.find(item => item.id === p.id).member_id; data.turns = data.turns.filter(item => item.conversation_id !== p.id); notify("ConversationsChanged", { member_id: member }); notify("AgentTurn", { turn_id: 0, member_id: member }); return { cleared: 1 }; }
@@ -1470,11 +1493,16 @@ export function installMock(fixture, config = {}, target = window) {
         const reactions = (turn.reactions ??= {}), current = reactions[p.message_key]?.[0];
         if (p.active) reactions[p.message_key] = [p.emoji];
         else if (current === p.emoji) reactions[p.message_key] = [];
-        // `reactionAsk`: a thumbs down on a reply makes its member ask what was wrong, in a turn with no message of the owner's.
-        if (variant.reactionAsk && p.active && p.emoji === "👎" && p.message_key !== "owner" && !data.turns.some(item => item.source === "reaction")) {
-          const words = data.chatMetadataSample.askWhatWasWrong;
-          data.turns.push({ ...structuredClone(turn), id: turn.id + 1, session_id: `reaction-${turn.id}`, source: "reaction", route: "answer", question: "", text: words, detail: null, prefix: "",
-            created_at_ms: data.now + 1000, messages: [{ seq: 1, kind: "reply", text: words, at_ms: data.now + 1000 }], reactions: {}, steps: [], drafts: [], owner_questions: [], permissions: [] });
+        // `reactionAsk`: every reaction to a reply starts its member's own analysis at once, a running turn with no message of the
+        // owner's and no words yet (it shows as the member's presence). It holds until the scene lets it end (`reactionEnds`): as
+        // "words" the member asks what was wrong; as "silent" it decides that no words are needed, and nothing of the turn is left.
+        // A reaction taken back, or changed, ends the analysis under way: nothing is left of it either.
+        if (variant.reactionAsk && p.message_key !== "owner") {
+          const ended = data.turns.filter(item => item.source === "reaction" && item.status === "running");
+          data.turns = data.turns.filter(item => !ended.includes(item));
+          for (const item of ended) notify("AgentTurn", { turn_id: item.id, member_id: item.member_id });
+          if (p.active) data.turns.push({ ...structuredClone(turn), id: turn.id + 1, session_id: `reaction-${turn.id}`, source: "reaction", route: "answer", question: "", text: "", detail: null, prefix: "",
+            status: "running", created_at_ms: data.now + 1000, messages: [], reactions: {}, steps: [], drafts: [], owner_questions: [], permissions: [], task: null });
         }
         notify('AgentTurn',{turn_id:turn.id,member_id:turn.member_id}); return {ok:true};
       }

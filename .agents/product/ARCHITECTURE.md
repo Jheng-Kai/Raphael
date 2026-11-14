@@ -119,13 +119,15 @@ reuses room_threads/thread_id, the existing worker and its isolated transcript.
 
 Migration 82 (2026-11-14) makes the message the primary key of both reaction tables, so a
 message carries one reaction (R-REACT-01), and adds `reaction_asks`, the once-only record of
-the messages whose negative reaction a member already asked about. `set_reaction` replaces in
-one write and returns what the message carries; `agent/reaction_asks.py` waits 4 seconds on the
-latest reaction of each message and then asks the service that owns the message to start the
-ask: `AgentService._ask_about_reaction` (a turn of source `reaction`, written like a greeting
-with no owner message, on the member's own model with no tool and no fallback) or
-`RoomsService._ask_about_reaction` (a one-turn room exchange for the message's author). Only
-these two ever read a reaction to start work, and neither treats it as approval.
+what was analysed; migration 83 keys it by kind, message and emoji. `set_reaction` replaces in
+one write and returns what the message carries; `agent/reaction_asks.py` keeps the record and
+starts, at once, the analysis of every reaction (ending the one under way for that message)
+through the service that owns the message: `AgentService._ask_about_reaction` (a turn of source
+`reaction`, written like a greeting with no owner message, on the member's own model with no tool
+and no fallback; it answers with words or a pass, and a pass takes the turn out of the thread) or
+`RoomsService._ask_about_reaction` (a one-turn room exchange for the message's author, which the
+room's discussion logic ignores: `latest`, Stop and the circuit breaker). Only these two ever read
+a reaction to start work, and neither treats it as approval.
 
 slack_draft shares EmailDrafts, its version digest, send claim and ToolGate. It refuses
 room origins at both tool and service boundaries. Discovered Slack sends obey the

@@ -180,18 +180,26 @@ the newest of whatever a core lists. Scenes: `reaction-row` (reply), `reaction-o
 `reaction-signin` (a failed sign-in reply with 重新登入 under it), `room-thread-open` and
 `room-thread-chip` (room messages), each with the `reaction-layout-rest/hover` check; `reaction-replaced`
 (another emoji replaces the one given, and the open bar presses only that one), `reaction-taken-back` (the
-same emoji again leaves no chip) and `reaction-ask` (a 👎 makes the member ask what was wrong). Private
+same emoji again leaves no chip), `reaction-thinking` (a 👍 shows the member's usual presence at once, with no message), `reaction-silent` (the member decides that no words are needed: the presence goes and nothing is left), `reaction-ask` (a 👎 shows the presence, then the member asks what was wrong) and `reaction-changed` (another emoji ends the analysis under way: one presence, never two). Private
 model context and room transcripts label reactions as metadata, never approval or
 instructions. No reaction answers a permission, owner question or draft.
 
-Most reactions get no words. A negative one (👎 and the angry, unamused, rolling-eyed, facepalm, cross and pile
-emoji of `agent/reaction_asks.py`) to a member's own finished reply, left standing 4 seconds, makes that member
-ask once what was wrong: a normal turn of the member's own on its own model, with no owner message above it
-(the thread shows only the member's question), no tool and no other model; Raphael does the same. In a group room
-only the author of the reacted message asks, in the same thread. Nothing is asked for 👍 ❤️ 😂 🎉 or any other
-positive emoji, for one taken back or changed within the 4 seconds, for the owner's own message, or twice for
-one message. The mock core of `look` adds that turn for `reaction-ask`; the model path is the tests of
-`core/tests/members/test_reaction_ask.py`, with fake models only.
+Every reaction is analysed, at once (R-REACT-01, owner 2026-11-14: no 4 second wait, no fixed list of emoji; Grok
+shows 「思考中」 for each). A reaction to a member's own finished reply (Raphael's too) starts that member's own turn
+(`agent/reaction_asks.py`, `AgentService._ask_about_reaction`) on its own model with no tool and no other model, and
+no owner message above it. The thread shows the member's usual presence under the reply while it thinks. The member's
+own model reads the emoji, its reply and the few turns before, as data, and either says one or two sentences (ask
+what was wrong, a few words, the obvious next step) or answers exactly `(pass)`, the group rooms' own pass: then the
+turn is taken out of the thread and nothing is left (no message, card, failure or notice). Each reaction is one model
+call. A reaction taken back, or changed to another emoji, while its turn runs ends that turn (the new emoji starts its
+own); the owner writing in the conversation ends it too. The same emoji on the same message is analysed once; another
+emoji is a new reaction. A member working for the owner starts none (skipped, not queued, and not recorded). Never
+analysed: the owner's own message, a member's answer to a reaction, a quick conversation, an unfinished reply. In a
+group room only the author of the reacted message thinks, in the same thread, and what it makes is no discussion of
+the room. The mock core of `look` simulates the member's decision for `reaction-thinking`, `reaction-silent`,
+`reaction-ask` and `reaction-changed` (`reactionAsk`: "silent" or "words", ended by `reactionEnds`); the model path is
+the tests of `core/tests/members/test_reaction_ask.py`, with fake models only. Not proved by either: a real model
+choosing well between words and a pass.
 
 Room action rows open a side thread. The main room keeps only an N-reply chip under
 the root; rooms.messages defaults to the main thread. The existing room worker and
@@ -215,7 +223,7 @@ Voice memos and manual read-aloud were removed on 2026-11-07 and every other voi
 above): no reply carries a Play/Pause control or transcript, and nothing speaks.
 
 ```powershell
-npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-replaced reaction-taken-back reaction-ask reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
+npm run look -- message-hugs-bubble reaction-picker reaction-row reaction-owner reaction-signin reaction-replaced reaction-taken-back reaction-thinking reaction-silent reaction-ask reaction-changed reaction-not-approval room-thread-open room-thread-chip slack-draft calm-thread --theme both --width 1120,720,1920x1080
 ```
 
 Synthetic zh-TW fixtures replace only native IPC. Inspect all contact sheets and every

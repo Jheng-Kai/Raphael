@@ -139,7 +139,7 @@ test("a late command save cannot erase the next subpage after the editor is dest
 test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]] as const)("learned skills use the %s UI date and reading the editor never writes or notifies", async (locale, date) => {
   setLocale(locale);
   const skill = { id: 12, name: "research-summary", description: "Check sources", source: "learned", provenance: "learned" as const, learned_at: "2026-10-29T12:00:00", enabled: true };
-  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [skill], undo: "revision-1" });
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [skill] });
   vi.mocked(api.core).mockResolvedValue({ skill: { ...skill, revision: "document-hash" }, text: "Instructions" });
   const root = document.createElement("div"); document.body.append(root);
   const changed = vi.fn();
@@ -162,8 +162,6 @@ test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]
   fill(root, "#mp-skill-text", "Updated instructions");
   click(root, '[data-res="skill-save"]'); await flush();
   expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, id: 12, text: "Updated instructions", expected_hash: "document-hash" });
-  click(root, '[data-res="skill-undo"]'); await flush();
-  expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, undo: "revision-1" });
   editor.destroy();
 });
 
