@@ -991,10 +991,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
-            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}:${state.editing.text}` : ""],
-            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));
+            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}:${state.editing.text}` : "",
+            item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}` : ""],
+            () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together, part: item.part }));
         })(), turnId: item.turn.id },
-    );
+    // A stretch of a turn with nothing in it yet (owner messages that joined its work, threadItems) has no line.
+    ).filter(line => line.html !== "");
     renderedTurns.retain(new Set(out.map(line => line.key)));
     const boundary = unreadFrom;
     if (boundary !== null) {
@@ -1800,8 +1802,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     reveal: key => { if (turnWindow.focus(key.replace(/^turn:/, ""))) render(); },
     revealWork: id => {
       state.thinkingOpen.set(id, true);
-      // Search opens this body in place; acknowledge that state without replacing its marks or face.
-      const line = lines().find(line => line.turnId === id), node = thread.querySelector(`.tn[data-id="${id}"]`);
+      // Search opens this body in place; acknowledge that state without replacing its marks or face. The body is in the
+      // turn's last line: owner messages that joined its work break it into several (threadItems).
+      const shown = lines().filter(line => line.turnId === id), drawn = thread.querySelectorAll(`.tn[data-id="${id}"]`);
+      const line = shown[shown.length - 1], node = drawn[drawn.length - 1];
       if (line && node) drawnHTML.set(node, threadLineIdentity(line.html));
     },
     changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {

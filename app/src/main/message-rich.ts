@@ -103,9 +103,10 @@ function queueRichCorrection(root: HTMLElement, state: ReadingAnchor, trace?: Sc
     if (state.follows) { root.scrollTop = 1e9; return; }
     let anchor = state.node;
     if (anchor && !anchor.isConnected) {
-      const turn = state.turnId ? root.querySelector<HTMLElement>(`.tn[data-id="${CSS.escape(state.turnId)}"]`)
-        : state.roomId ? root.querySelector<HTMLElement>(`.tn[data-room-message="${CSS.escape(state.roomId)}"]`) : null;
-      anchor = [...turn?.querySelectorAll<HTMLElement>(ANCHOR_CONTENT) ?? []]
+      // A turn that owner messages joined is drawn in several lines (conversation.ts threadItems): look in each.
+      const turns = state.turnId ? root.querySelectorAll<HTMLElement>(`.tn[data-id="${CSS.escape(state.turnId)}"]`)
+        : state.roomId ? root.querySelectorAll<HTMLElement>(`.tn[data-room-message="${CSS.escape(state.roomId)}"]`) : [];
+      anchor = [...turns].flatMap(turn => [...turn.querySelectorAll<HTMLElement>(ANCHOR_CONTENT)])
         .find(node => (node.dataset.source ?? node.textContent) === state.content);
     }
     if (!anchor || state.position === undefined) return;

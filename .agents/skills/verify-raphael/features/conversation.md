@@ -1669,7 +1669,7 @@ Unverified by definition: a real model choosing the new fields, and a real Teleg
 ## Owner input (2026-11-01)
 
 ```powershell
-npm run look -- owner-addition --theme both --width 1120,720,1920x1080
+npm run look -- owner-addition owner-addition-answered composer-send-while-working --theme both --width 1120,720,1920x1080
 ```
 
 An owner message in an active private conversation is an ordinary owner bubble and
@@ -1681,6 +1681,17 @@ call to Raphael's tools, or, when no call follows, in the next turn that resumes
 existing native session (see Durable owner inbox). Background tasks use the same
 inbox inside the worker process, through internal task.steer admission.
 Accepted owner-only history rows use owner_input and render no empty member reply.
+Such a row stands where it was sent, inside the line of the work it joined (R-QUEUE-09,
+conversation.ts threadItems): the work's line breaks at the row's time into stretches
+(`TurnPart`), what the work said before it above and what it made or said after it,
+the reply included, below; the turn's question opens its first stretch and only the last
+holds its cards, work, slime and after-lines. Each stretch is a `.tn` with the turn's
+`data-id`, the later ones with `data-after` naming the owner row and standing under it at
+the turn's inner spacing, as a reply under its question. A row the running work has shown
+nothing after yet (no reply or file; its steps alone do not count), and queued words, stay
+below the whole line. On 2026-11-14 the
+owner's mid-work message (read by Claude Code at its next tool result) stood last, under
+the reply that answered it. `owner-addition-answered` checks the finished order.
 CLI handoffs preserve accepted input in their saved continuation.
 Room messages use that inbox for a single active recipient in the same room and
 thread. Several addressees, files or a sealed inbox start a new room turn without
@@ -1699,7 +1710,7 @@ Offline contracts: core/tests/agent/test_steering.py,
 core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
 core/tests/background/test_steering.py, core/tests/messaging/test_outgoing_files.py,
 core/tests/agent/test_scrub.py.
-Selected real-entry scene: owner-addition, both themes, 1120, 720 and 1920x1080.
+Selected real-entry scenes: owner-addition, owner-addition-answered and composer-send-while-working, both themes, 1120, 720 and 1920x1080.
 Fake Telegram and fake CLI are not live or native acceptance.
 
 

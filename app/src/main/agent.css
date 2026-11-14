@@ -162,6 +162,9 @@
 /* a turn: the person on the right, Raphael on the left */
 .tn { display: flex; flex-direction: column; gap: var(--pa-gap-in); }
 .thread > .tn.is-owner-only + .tn.is-owner-only { margin-top: calc(var(--sp-1) - var(--pa-gap)); }
+/* What the work made after an owner message that joined it (threadItems, R-QUEUE-09) answers that message: it stands
+   under it as a turn's reply stands under its question. */
+.thread > .tn.is-owner-only + .tn[data-after] { margin-top: calc(var(--pa-gap-in) - var(--pa-gap)); }
 .tn.is-owner-only > .ra:not(:has(.live-presence, .conversation-card, .chat-message, .work-section, .turn-question)) { display: none; }
 .queued-mark { color: var(--text-3); font: var(--fs-2xs)/1.4 var(--ui); margin-inline-end: var(--sp-2); }
 .message-actions:has(.queued-mark) { opacity: 1; }

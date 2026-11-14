@@ -17,11 +17,18 @@ export const TYPED = "app";
 /** Where a turn came from: `voice`, `app` (typed in the page) or the chat app (`telegram`). */
 export const sourceOf = (turn: AgentTurn): string => turn.source || VOICE;
 
-/** One line of the thread: the heading of a day, a turn, or what one colleague asked in a row. */
+/**
+ * The stretch of a turn's messages one line draws when owner messages joined that turn's work (`joinedWork`): from `from`,
+ * the moment the message it follows (`after`) was sent, until `until`, the moment the next one was. A line without `from`
+ * holds the turn's own question, one without `until` everything that ends the turn (its cards, its work, its slime).
+ */
+export interface TurnPart { from?: number; until?: number; after?: number }
+
+/** One line of the thread: the heading of a day, a turn (or a stretch of it), or what one colleague asked in a row. */
 export type ThreadItem =
   | { kind: "day"; key: string; label: string }
   /** `together`: the earlier exchanges with the same colleague in a row, drawn in this turn's one line. */
-  | { kind: "turn"; key: string; turn: AgentTurn; together?: AgentTurn[] };
+  | { kind: "turn"; key: string; turn: AgentTurn; together?: AgentTurn[]; part?: TurnPart };
 
 /** An exchange that is only its line: nothing waits for the owner under it. */
 const bareExchange = (turn: AgentTurn): boolean => exchangeTurn(turn) && turn.status !== "confirm" &&
@@ -57,29 +64,68 @@ export function visibleTurn(turn: AgentTurn): boolean {
 }
 
 /**
+ * The owner messages that joined each turn's work while it ran (the core's `owner_input` rows: words the work read at its
+ * next step, R-BATCH-01, R-QUEUE-08), by the id of that turn: the turn just before them, when it is the owner's own work (not
+ * queued words, which are answered as a turn of their own, nor a colleague's question). Only the messages the work showed
+ * something after are in it (a reply or a file, or anything once the work is over): the newest may still be on its way to
+ * the model, and it stays below the whole line until then, with the slime under it.
+ */
+function joinedWork(oldestFirst: readonly AgentTurn[]): Map<number, AgentTurn[]> {
+  const joined = new Map<number, AgentTurn[]>();
+  let work: AgentTurn | undefined;
+  for (const turn of oldestFirst) {
+    if (turn.route !== "owner_input") { work = turn.status === "queued" || exchangeTurn(turn) ? undefined : turn; continue; }
+    const over = work?.status !== "running" && work?.status !== "confirm";
+    const shown = (work?.messages ?? []).some(message => message.at_ms >= turn.created_at_ms && (over || message.kind === "reply" || message.kind === "media"));
+    if (work && shown) joined.set(work.id, [...joined.get(work.id) ?? [], turn]);
+  }
+  return joined;
+}
+
+/**
  * The thread: the turns (in any order) oldest first, each day under its heading (「今天」, 「昨天」, the
  * date). A turn's key is its id, so that the page can tell the lines it drew before. What one
  * colleague asked or handed this member, several times in a row on one day, is one line.
+ * A message the owner sent while a turn worked, and that the work took in, stands where it was sent: the turn's line
+ * breaks there into stretches (`TurnPart`), what the work said before it above the message and what it said after,
+ * the reply that answers it among them, below it (owner, 2026-11-14: his words mid-work stood last, under the reply).
  */
 export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadItem[] {
-  const oldestFirst = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+  const oldestFirst = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id).filter(visibleTurn);
+  const joined = joinedWork(oldestFirst);
+  const placed = new Set<number>();
   const items: ThreadItem[] = [];
   let previous: number | null = null;
-  for (const turn of oldestFirst) {
-    if (!visibleTurn(turn)) continue;
+  const dated = (turn: AgentTurn): void => {
     if (previous === null || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
       const label = dayLabel(turn.created_at_ms, nowMs);
       items.push({ kind: "day", key: `time:${turn.id}`, label });
     }
+    previous = turn.created_at_ms;
+  };
+  for (const turn of oldestFirst) {
+    if (placed.has(turn.id)) continue;
+    dated(turn);
     // The same colleague again, right after its last exchange on the same day: one line 「與 X 的 4 則訊息」.
     const last = items[items.length - 1];
     if (last?.kind === "turn" && bareExchange(turn) && bareExchange(last.turn) && (last.turn.peer_id ?? 0) === (turn.peer_id ?? 0)) {
       items[items.length - 1] = { kind: "turn", key: `turn:${turn.id}`, turn, together: [...(last.together ?? []), last.turn] };
-      previous = turn.created_at_ms;
       continue;
     }
-    items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
-    previous = turn.created_at_ms;
+    const inputs = joined.get(turn.id);
+    if (!inputs) {
+      items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
+      continue;
+    }
+    items.push({ kind: "turn", key: `turn:${turn.id}`, turn, part: { until: inputs[0]!.created_at_ms } });
+    inputs.forEach((input, index) => {
+      dated(input);
+      items.push({ kind: "turn", key: `turn:${input.id}`, turn: input });
+      placed.add(input.id);
+      const until = inputs[index + 1]?.created_at_ms;
+      items.push({ kind: "turn", key: `turn:${turn.id}:after:${input.id}`, turn,
+        part: { from: input.created_at_ms, ...(until === undefined ? {} : { until }), after: input.id } });
+    });
   }
   return items;
 }

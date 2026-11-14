@@ -3270,6 +3270,23 @@ export function checkRendered(name, context = {}) {
     require(presence.length === 1 && presence[0].getBoundingClientRect().top >= newest.getBoundingClientRect().bottom, "live work stays under the newest addition");
     return {check:name,at};
   }
+  if (name === "owner-addition-in-place") {
+    // The question, the message sent while the member worked, then the picture and the reply made after it (R-QUEUE-09).
+    const lines = [...document.querySelectorAll('.thread > li.tn')];
+    const asked = lines.findIndex(line => line.matches('[data-id="802"]:not([data-after])') && line.querySelector('.owner-message'));
+    const steer = lines.findIndex(line => line.matches('[data-id="810"]') && line.querySelector('.owner-message'));
+    const answer = lines.findIndex(line => line.matches('[data-id="802"][data-after="810"]'));
+    require(asked >= 0 && steer === asked + 1 && answer === steer + 1 && answer === lines.length - 1, `question, message, then the answer as the last line: ${[asked, steer, answer, lines.length]}`);
+    require(!lines[asked].querySelector('.ra') && lines[steer].classList.contains('is-owner-only'), "nothing was said before the message, so the two owner bubbles stand together");
+    const bubble = lines[steer].querySelector('.owner-message').getBoundingClientRect();
+    const picture = lines[answer].querySelector('img[data-attachment]'), reply = lines[answer].querySelector('.chat-message[data-reply]');
+    require(visible(picture) && visible(reply) && picture.getBoundingClientRect().top >= bubble.bottom && reply.getBoundingClientRect().top >= picture.getBoundingClientRect().bottom, "the picture and the reply stand under the message");
+    // As a reply stands under its question: the turn's own inner spacing, not the space between turns.
+    const under = lines[answer].getBoundingClientRect().top - lines[steer].getBoundingClientRect().bottom, inner = parseFloat(getComputedStyle(lines[answer]).rowGap);
+    require(Math.abs(under - inner) <= 1, `the answer stands ${under}px under the message, a turn's inner ${inner}px`);
+    require(document.querySelectorAll('.thread .owner-message').length === 2 && !lines[answer].querySelector('.owner-message'), "each owner message once, none repeated in the answer");
+    return {check:name,lines:lines.length};
+  }
   if (name === "link-chips") {
     // As inline source chips: each link once, in the words, with no row of cards under the reply.
     const reply = [...document.querySelectorAll('.thread .chat-message[data-reply]')].filter(visible).at(-1);

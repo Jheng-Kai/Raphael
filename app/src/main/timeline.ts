@@ -28,7 +28,7 @@ import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
 import { messageExpandHTML } from "./message-preview";
-import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf, type TurnPart } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
 import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
@@ -628,6 +628,8 @@ export interface TurnLook {
   answerable?: (cardId: string) => boolean;
   /** Whom the owner's words may address: each `@Name` among them is drawn as a chip. */
   mentions?: readonly MentionTarget[];
+  /** The stretch of the turn this line draws, when owner messages that joined its work stand inside it (threadItems). */
+  part?: TurnPart;
 }
 
 /**
@@ -987,18 +989,25 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
   );
 }
 
-/** Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies). */
-function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false, latestFailure = false): string {
+/**
+ * Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies), or those of one
+ * stretch of it (`part`): which reply is the first or the last is the whole turn's, and only the last stretch ends the turn.
+ */
+function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false, latestFailure = false, part?: TurnPart): string {
   const ordered = [...(turn.messages ?? [])].sort((a, b) => a.seq - b.seq);
   const replies = ordered.filter(m => m.kind === "reply");
   const said = new Map(plainReplies(replies.map(m => m.text)).map((text, index) => [replies[index].seq, text.trim()]));
   const lastReply = [...replies].reverse().find(m => said.get(m.seq))?.seq;
-  const work = workSectionHTML(turn, state, query, revealing, waitingForOwner);
+  const until = part?.until, ends = until === undefined;
+  const work = ends ? workSectionHTML(turn, state, query, revealing, waitingForOwner) : "";
   const settledDraft = isSettledDraftTurn(turn);
   // A question the owner has settled stands where it was asked, among the replies (permission-card.ts settledQuestions).
   const asked = settledQuestions(turn);
+  // Those settled before this stretch stand in the one before it.
+  if (part?.from !== undefined) asked(part.from - 1);
+  const inStretch = (at: number): boolean => (part?.from === undefined || at >= part.from) && (until === undefined || at < until);
   const inline = publicEventsHTML(turn, true, "inline");
-  return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media" || (message.kind === "event" && inline.has(message.seq))).map(message => {
+  return settled + ordered.filter(message => inStretch(message.at_ms) && ((message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media" || (message.kind === "event" && inline.has(message.seq)))).map(message => {
     if (message.kind === "event") return inline.get(message.seq) ?? "";
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
@@ -1012,7 +1021,7 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
     }
     // A card asked in the same millisecond as a reply (the words that come with it) stands after it.
     return asked(message.at_ms - 1) + `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply, message.seq === replies.find(reply => said.get(reply.seq))?.seq, message.seq === lastReply, latestFailure)}</div>`;
-  }).join("") + asked(Infinity) + (replies.length ? "" : fallback) + work;
+  }).join("") + asked(until === undefined ? Infinity : until - 1) + (ends && !replies.length ? fallback : "") + work;
 }
 
 /**
@@ -1161,8 +1170,14 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // A draft handed to this chat (`route` "draft") is a card, and what it is told is for the model, not for the page.
   const textAnswer = turn.status === "confirm" || settledDraft || turn.route === "draft" || !turn.text.trim()
     ? "" : messageBlockHTML(turn, "reply", turn.text, turn.created_at_ms, query, state, true, regenerate, true, true, turn.id === look.signinTurnId);
-  return (
-    `<li class="tn${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
+  const name = turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title");
+  // Owner messages that joined the work stand inside its line (threadItems): the turn's own words open its first stretch,
+  // and only its last one holds what ends the turn.
+  const part = look.part, first = part?.from === undefined, ends = part?.until === undefined;
+  const settledCards = first ? permissionCardsHTML(turn, look.answerable, true, name) : "";
+  const line = (classes: string, body: string): string => `<li class="tn${classes}" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}` +
+    `${part?.after !== undefined ? ` data-after="${esc(part.after)}"` : ""}>${body}</li>`;
+  const head = !first ? "" :
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
@@ -1174,25 +1189,32 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
         withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))), turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
         `</div>`
       : "") +
-    turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look) +
+    turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look);
+  if (!ends) {
+    // A stretch before an owner message that joined the work: what the work said in it, and nothing that ends the turn.
+    const stretch = hasMsgs ? turnMessagesHTML(turn, state, query, regenerate, revealing, settledCards, "", waitingForOwner, turn.id === look.signinTurnId, part) : "";
+    if (!stretch && !head) return "";
+    return line(stretch ? "" : " is-owner-only", head + (stretch ? `<div class="ra"><div class="ra-body">${stretch}</div></div>` : ""));
+  }
+  return line(`${turn.id === look.latestFailedTurnId ? " is-latest-failure" : ""}${turn.status === "queued" || turn.route === "owner_input" || (live && !hasMsgs) ? " is-owner-only" : ""}`,
+    head +
     (turn.route === "owner_input" || turn.status === "queued" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
     `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
-      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner, turn.id === look.signinTurnId)
-      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
+      ? turnMessagesHTML(turn, state, query, regenerate, revealing, settledCards, textAnswer, waitingForOwner, turn.id === look.signinTurnId, part)
+      : settledCards + ownerQuestionsHTML(turn, true) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
-    permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
+    permissionCardsHTML(turn, look.answerable, false, name) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn, false) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (want && !look.deferPresence && (look.presenceTurnId === undefined || look.presenceTurnId === turn.id) ? livePresenceHTML(look, latestProgress(turn), want === "words") : "") +
     `</div></div>`) +
     // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.
-    [...publicEventsHTML(turn, true).values()].join("") + `</li>`
-  );
+    [...publicEventsHTML(turn, true).values()].join(""));
 }
 
 /** The heading of a day in the thread. */
