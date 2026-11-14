@@ -54,3 +54,26 @@ performed. This does not establish real model vision quality or provider availab
 The existing Guardian manifest now maps room_list and room_post to
 S21.meetings.list and S21.meetings.post. Those live cells remain unimplemented;
 the mapping guard is offline coverage metadata, never a live acceptance claim.
+
+## A member does what its owner asks, and says plainly what it did not (R-WORK-16 through R-WORK-20, 2026-11-14)
+
+Owner: a language-teaching member, asked for daily reading pages from real news for his own study in his own app, refused on copyright,
+delivered a headline, closed every reply with a disclaimer, and did not open a blocked page in its own computer though told to.
+A core-only unit: prompt words and one card line, no page, RPC or schema change; every check is offline.
+
+- Prompt causes, found in `agent/persona.py`: no word of copyright anywhere (the refusals were the model's own, with nothing saying this
+  is the owner's own app); a report "with checks and anything unfinished" (task, CLI task, routine) and a part-answer that must "name the
+  gap" (the closing disclaimers); a closed page to be replaced by "another source … rewritten simply for a learner" (the thin pages and
+  the browser not opened). Not changed: `READ_NEEDS_BROWSER` and the wake policy (R-COMP-WAKE-01), the secret check of pages
+  (R-PAGE-05), the report page's "recorded facts" line (R-PAGE-01).
+- `_OWNER_WORK` ("Doing the owner's work") is in every member's reply prompt (API, narrated, CLI conversation), every member task and
+  routine prompt and the chief's task prompt. The chief's conversation prompt carries only the shortened gap rule: the default prompt is
+  held to a size budget (`core/tests/members/test_management_discovery.py`, before 15902 / 15166 tokens, after 15909 / 15174, limits 16048 / 15212).
+- A page the member wrote is a card line in the turns its later turns read (`agent/card_context.py`): title, page_id, revision, when made
+  (and changed), and the first 360 characters of its visible text ("It begins: ..."); a plugin's page keeps title and ids only. There is
+  still no tool that reads a page back whole; `update_page` with the id replaces it.
+- A routine's run gets `ROUTINE_REPORT` after its task (never in the system prompt, R-CACHE-02).
+
+Offline: `core/tests/agent/test_member_behaviour.py`, `core/tests/agent/test_card_context.py`, `core/tests/background/test_routine_report.py`,
+and the default prompt budget (`npm run verify -- --contract`). Not covered offline, left to a live brain run: whether a given model, told
+all this, still refuses; that needs a paid run on the owner's own models.

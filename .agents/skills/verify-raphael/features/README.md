@@ -119,7 +119,7 @@ the integrator retains normal/slow counts and pre-first-show suspension evidence
 
 ## Delegated work and run endings (2026-11-04)
 
-See [Work truth](work-truth.md) for R-WORK-06 through R-WORK-15: private/exchange history, earlier files, local commands, task recovery, existing room posts, search cooldowns, CLI progress, routine steps and capability inventory. This core-only unit uses offline tests; no UI, native or live-provider acceptance is implied.
+See [Work truth](work-truth.md) for R-WORK-06 through R-WORK-15: private/exchange history, earlier files, local commands, task recovery, existing room posts, search cooldowns, CLI progress, routine steps and capability inventory. This core-only unit uses offline tests; no UI, native or live-provider acceptance is implied. R-WORK-16 through R-WORK-20 (2026-11-14) add how a member treats what its owner asks (in full, no repeated reservation or disclaimer, its own browser before giving up), the pages it made in its later turns and what a routine's report names.
 
 ## Idle native runtime (2026-11-04)
 

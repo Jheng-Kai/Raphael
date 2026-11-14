@@ -1,6 +1,7 @@
 """Synthetic cards and fixed clocks; capture the actual next-turn model prompt."""
 
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -137,8 +138,9 @@ def test_every_window_card_has_a_safe_projection_and_owner_answers_are_untrusted
                    "Owner question", "Connection setup", "template export/publish", "Page card", "Synthetic answer", "handoff declined"):
         assert phrase in text
     assert "PRIVATE" not in text and "SYNTHETIC-PAIRING-CODE" not in text
-    # A page's card names its id, which is what update_page takes; its html and tool data stay out.
-    assert 'Page card for "Synthetic page" (page_id=page): shown (mcp, revision 2).' in text
+    # A page's card names its id, which is what update_page takes, and when it was made; a plugin's html and tool data stay out.
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(NOW_MS / 1000))
+    assert f'Page card for "Synthetic page" (page_id=page): shown (mcp, revision 2, made {when}, changed {when}).' in text
     assert text.count("</tool_result>") == 1 and "<question>" not in text
 
 

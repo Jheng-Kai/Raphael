@@ -1,11 +1,17 @@
 """Read-only, allowlisted card facts for the conversation the model is reading.
 
-Card stores remain the authority. No credentials, pairing codes, HTML, tool arguments or
-raw errors are projected. Display strings and owner answers are untrusted data.
+Card stores remain the authority. No credentials, pairing codes, raw HTML, tool arguments or
+raw errors are projected. Display strings and owner answers are untrusted data. The one place a
+card carries content is a page the member itself wrote (source html): its title, when it was made
+and the start of its visible text, so that a later turn can say what it made and update it (owner,
+2026-11-14: a member asked for the title of the page it had made that morning answered that it had no record).
 """
 
+import html as html_lib
 import json
+import re
 import sqlite3
+import time
 from collections.abc import Iterable
 
 from ..worker.guards import wrap_untrusted
@@ -25,7 +31,9 @@ _FIELDS = {
     "owner_questions": "kind, payload, result",
     "connection_proposals": "fields, state",
     "member_template_cards": "template, state",
-    "pages": "id, title, source, rev",
+    # `head` is the start of the page's html (its visible text is read from it), `report` the first bytes of its tool input.
+    "pages": "id, title, source, rev, fallback, created_at_ms, updated_at_ms, substr(html, 1, 24000) AS head, "
+             "substr(tool_input, 1, 12) AS report",
 }
 def _source(table):
     if table == "email_drafts":
@@ -38,6 +46,39 @@ def _source(table):
 
 
 CARD_TURNS_SQL = " UNION ".join(f"SELECT turn_id FROM {_source(table)}" for table in _FIELDS)
+
+
+def _split(fields):
+    """The fields of `_FIELDS` as written: a comma inside a call's brackets is not a split."""
+    found, depth, start = [], 0, 0
+    for at, char in enumerate(fields):
+        depth += (char == "(") - (char == ")")
+        if char == "," and depth == 0:
+            found.append(fields[start:at])
+            start = at + 1
+    return [*found, fields[start:]]
+
+
+# What a later turn is told of a page the member wrote: the most of its visible text, in characters.
+PAGE_TEXT_CHARS = 360
+_NOT_TEXT = re.compile(r"<(script|style|head|svg|template)\b.*?(?:</\1\s*>|\Z)|<!--.*?(?:-->|\Z)", re.I | re.S)
+_TAG = re.compile(r"<[^>]*(?:>|\Z)")
+
+
+def page_text(head, fallback, report, limit=PAGE_TEXT_CHARS):
+    """The start of a page's visible text, in one line: the plain rendition of a report, else the text of its html (what a
+    reader sees, without scripts, styles or tags), else the fallback the member gave. Never raw html."""
+    text = (fallback or "") if report else ""
+    if not text.strip():
+        text = html_lib.unescape(_TAG.sub(" ", _NOT_TEXT.sub(" ", head or "")))
+    if not text.strip():
+        text = fallback or ""
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit].rstrip() + "…"
+
+
+def _moment(ms):
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(ms / 1000))
 
 
 def _object(value):
@@ -107,7 +148,11 @@ def _fact(table, row, now_ms):
         state = "draft; pending export/publish" if state == "draft" else state
         return f"Member template export/publish card for {_label(_object(row['template']).get('name', ''))}: {state}."
     # The id is what update_page takes: a member that cannot read it in a later turn can only show another page.
-    return f"Page card for {_label(row['title'])} (page_id={row['id']}): shown ({row['source']}, revision {row['rev']})."
+    made = f", made {_moment(row['created_at_ms'])}" + (f", changed {_moment(row['updated_at_ms'])}" if row["rev"] > 1 else "")
+    line = f"Page card for {_label(row['title'])} (page_id={row['id']}): shown ({row['source']}, revision {row['rev']}{made})."
+    # What a plugin's page holds is the plugin's data and stays out; the member's own page is what it wrote.
+    text = page_text(row["head"], row["fallback"], row["report"].startswith('{"report"')) if row["source"] == "html" else ""
+    return line + (f" It begins: {json.dumps(text, ensure_ascii=False)}" if text else "")
 
 
 def card_outcomes(conn: sqlite3.Connection, turn_ids: Iterable[int], now_ms: int) -> dict[int, list[str]]:
@@ -118,7 +163,7 @@ def card_outcomes(conn: sqlite3.Connection, turn_ids: Iterable[int], now_ms: int
         chunk = ids[start:start + 500]
         marks = ",".join("?" * len(chunk))
         for table, fields in _FIELDS.items():
-            selected = ", ".join(f"c.{field.strip()}" for field in fields.split(","))
+            selected = ", ".join(f"c.{field.strip()}" if field.strip().isidentifier() else field.strip() for field in _split(fields))
             # The history reader supplies scoped turn IDs. Also reject mismatched ownership
             # in legacy/corrupt rows; draft views name their author or current holder.
             rows = conn.execute(f"SELECT c.turn_id, t.status AS turn_status, {selected} FROM {_source(table)} c JOIN agent_turns t ON t.id=c.turn_id"

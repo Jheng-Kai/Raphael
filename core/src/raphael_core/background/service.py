@@ -219,6 +219,13 @@ HANDED_WORK_BACK = (
     "only the owner can settle. Then tell the owner briefly what finished and where to read each colleague's work in their private conversation. "
     "Keep the chief's conversation brief; do not copy colleagues' full work here. Include checks, artifact handles and anything unfinished."
 )
+# What a routine's last message is (owner, 2026-11-14: the report of a daily reading page was one thin line he could not act on):
+# the owner reads only it, so it names what the run made.
+ROUTINE_REPORT = (
+    "\nThis run is a routine, and the owner reads only your last message. Do the whole of what the routine asks, then end with "
+    "two or three lines that name what you made (its title and what it contains: the source, how many items, which parts) and "
+    "anything the owner must know. Never a one-line receipt such as \"delivered\"."
+)
 HANDLES_REQUEST = (
     "\nWhen you report, give handles anyone can check: the URL, the id or the absolute path of what you made or changed. "
     "Your summary is your own claim, and whoever asked will verify it."
@@ -1691,6 +1698,7 @@ class BackgroundService:
         user += "\n" + source_text(origin.source if origin else "")
         if task.routine_id is not None:
             user += self._last_run(task)
+            user += ROUTINE_REPORT  # with the task, never in the system prompt (R-CACHE-02)
         if current := getattr(self, "messaging_context", None):
             user += current(speaker.id)
         from ..brain.owner import owner_context
