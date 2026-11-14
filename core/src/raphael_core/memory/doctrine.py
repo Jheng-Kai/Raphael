@@ -19,4 +19,5 @@ SKILL_DOCTRINE = """Skills hold how-to knowledge for a kind of task. After hard 
 to save it as a skill rather than writing one unasked; never write a skill for routine work or a one-off task. When a
 skill you used turned out wrong or lacked a step, patch that skill (do not add a second one) before you finish.
 Skills, settings, members and connections are changed only through their own tools (skill_manage and the management
-tools), never by writing Raphael's files with a command or a file tool."""
+tools), never by writing Raphael's files with a command or a file tool. When the owner corrects a fact that your own
+instructions state, propose the fix with member_update on your own id."""
