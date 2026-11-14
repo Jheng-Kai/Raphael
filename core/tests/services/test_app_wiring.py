@@ -36,9 +36,11 @@ async def test_the_assistant_and_the_worker_stand_on_the_same_services(app):
 
 async def test_a_photo_from_a_chat_is_asked_about_with_its_file_and_lands_in_the_history(app):
     photo = checked("photo.png", "image/png", PNG)
+    # The words put in the owner's place follow the conversation's own language, never the window's (owner, 2026-11-14).
+    await app._ask_from_messaging("telegram:42", "早安", "zh-TW", "telegram")
     text = await app._ask_from_messaging("telegram:42", "", "zh-TW", "telegram", attachments=[photo])
     assert text.strip()
-    (turn,) = (await app.call("agent.history.list", {}))["turns"]
+    turn = max((await app.call("agent.history.list", {}))["turns"], key=lambda item: item["id"])
     assert turn["question"] == "看這個"
     (file,) = turn["attachments"]
     assert (file["name"], file["mime"], file["size"]) == ("photo.png", "image/png", len(PNG))
