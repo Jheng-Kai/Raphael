@@ -9,21 +9,40 @@
 .rp-scroll:focus { outline: none; }
 
 .rp-doc { max-width: var(--pa-colw); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) 0 calc(2 * var(--sp-6)); }
-.rp-title { margin: 0; font: var(--weight-medium) var(--fs-h1)/1.35 var(--ui); overflow-wrap: anywhere; }
-.rp-sub { margin: var(--sp-1) 0 0; color: var(--text-3); font-size: var(--fs-sm); }
-.rp-toc { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-5); padding: var(--sp-2) 0; border-block: 1px solid var(--line); font-size: var(--fs-sm); }
-.rp-toc-h { color: var(--text-3); font-size: var(--fs-xs); }
-.rp-toc a { color: var(--text-2); text-decoration: none; }
-.rp-toc a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+/* A document's title is large, as Grok Bot's pages have it (the owner's picture: about 32 px: 1.45 times the app's 22 px heading, the type scale
+   having no size of its own for it), then one line of what it holds. */
+/* (`.page h1` of styles.css is as specific as a class and a tag: the title says where it stands.) */
+.rp-head .rp-title { margin: 0; font: var(--weight-medium) calc(var(--fs-h1) * 1.45)/1.25 var(--ui); letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.rp-sub { margin: var(--sp-2) 0 0; color: var(--text-3); font-size: var(--fs-sm); }
+/* The member's own summary is what the page says, not small print. */
+.rp-sub.is-summary { color: var(--text); font-size: var(--fs-md); line-height: 1.6; overflow-wrap: anywhere; }
+/* The contents are a box that lists the sections, 「本頁內容」 over them (beside the page, a column: below). */
+.rp-toc { display: block; margin-top: var(--sp-5); padding: var(--sp-4) var(--sp-5); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-sm); }
+.rp-toc-h { display: block; margin-bottom: var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); }
+.rp-toc ul { margin: 0; padding: 0; list-style: none; }
+.rp-toc li { padding: 3px 0; line-height: 1.5; }
+.rp-toc a { color: var(--text); font-weight: var(--weight-medium); text-decoration: none; overflow-wrap: anywhere; }
+.rp-toc a:hover { text-decoration: underline; text-underline-offset: 3px; }
 :where(:root[data-keys]) .rp-toc a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
 
-.rp-sec { margin-top: calc(var(--sp-6) + var(--sp-1)); }
-.rp-h2 { margin: 0 0 var(--sp-3); font: var(--weight-medium) var(--fs-lg)/1.4 var(--ui); }
+.rp-sec { margin-top: calc(var(--sp-6) + var(--sp-3)); }
+.rp-h2 { margin: 0 0 var(--sp-3); font: var(--weight-medium) var(--fs-h1)/1.35 var(--ui); }
 .rp-p { margin: 0 0 var(--sp-2); color: var(--text-2); font-size: var(--fs-md); line-height: 1.7; overflow-wrap: anywhere; }
 
 .rp-callout { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--panel); }
 .rp-callout > .i { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--text-2); }
 .rp-callout p { margin: 0; font-size: var(--fs-sm); line-height: 1.6; overflow-wrap: anywhere; }
+/* A note section: an icon and a heading in its tone's colour on a tint of it (the owner's blue 「說明」 box on Grok Bot's page). */
+.rp-note { --tone: var(--link); display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); border-radius: var(--r-md); background: var(--panel); }
+@supports (background: color-mix(in srgb, red 10%, blue)) {
+  .rp-note { background: color-mix(in srgb, var(--tone) 12%, var(--content)); }
+}
+.rp-note[data-tone="warn"] { --tone: var(--warn); }
+.rp-note[data-tone="ok"] { --tone: var(--ok); }
+.rp-note > .i { flex: none; width: 18px; height: 18px; margin-top: 3px; color: var(--tone); }
+.rp-note > div { min-width: 0; }
+.rp-note b { display: block; color: var(--tone); font-weight: var(--weight-medium); font-size: var(--fs-md); line-height: 1.6; }
+.rp-note p { margin: 0; color: var(--text); font-size: var(--fs-md); line-height: 1.7; overflow-wrap: anywhere; }
 
 .rp-items { list-style: none; margin: var(--sp-2) 0 0; padding: 0; }
 .rp-items > li { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
@@ -40,12 +59,22 @@
 .rp-st[data-tone="muted"] { color: var(--text-3); }
 
 .rp-table-box > .tabs { margin-bottom: var(--sp-2); }
+/* The dropdown over a table: the column's name small above it, as Grok Bot's 「區域」 over its table. */
+.rp-filter { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); margin-bottom: var(--sp-3); }
+.rp-filter-l { color: var(--text-3); font-size: var(--fs-xs); }
 .rp-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); line-height: 1.5; }
 .rp-table th { padding: var(--sp-2) var(--sp-3) var(--sp-2) 0; text-align: start; font-weight: var(--weight-regular); font-size: var(--fs-xs); color: var(--text-3); border-bottom: 1px solid var(--line); }
 .rp-table td { padding: var(--sp-2) var(--sp-3) var(--sp-2) 0; vertical-align: top; color: var(--text-2); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .rp-table td:first-child { color: var(--text); }
 .rp-table tbody tr:last-child td { border-bottom: 0; }
 .rp-table tr[hidden] { display: none; }
+/* A column of figures is set at the right; a link is a link (the theme's blue), and opens in the browser. */
+.rp-table [data-num] { text-align: end; font-variant-numeric: tabular-nums; }
+.rp-table [data-short] { white-space: nowrap; }
+.rp-link { color: var(--link); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.rp-link:hover { text-decoration-thickness: 2px; }
+:where(:root[data-keys]) .rp-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
+.rp-table .rp-none td { color: var(--text-3); }
 .rp-dot { display: inline-block; width: 8px; height: 8px; margin-inline-end: var(--sp-2); border-radius: var(--r-pill); background: var(--rp-c); vertical-align: 1px; }
 
 .rp-team { margin-top: var(--sp-2); }
@@ -68,6 +97,8 @@
 .rp-view .rp-head { padding-inline-end: calc(36px + var(--sp-4)); }
 @container (max-width: 640px) {
   .rp-doc { padding-bottom: var(--sp-6); }
+  .rp-head .rp-title { font-size: calc(var(--fs-h1) * 1.2); }
+  .rp-h2 { font-size: var(--fs-lg); }
 }
 /* A narrow page lists a status over its words, and a table's rows as name and value. */
 @container (max-width: 560px) {
@@ -78,6 +109,8 @@
   .rp-table tbody tr:last-child { border-bottom: 0; }
   .rp-table td { display: grid; grid-template-columns: calc(3 * var(--sp-6)) minmax(0, 1fr); gap: var(--sp-2); padding: 2px 0; border: 0; }
   .rp-table td::before { content: attr(data-col); color: var(--text-3); font-size: var(--fs-xs); }
+  .rp-table td[data-num] { text-align: start; }
+  .rp-table .rp-none td { display: block; }
 }
 /* A page as wide as the composer's whole column (960 px, --layout-thread-max) keeps its contents in a column of their
    own at the right, in sight while it scrolls, under share (which then leaves the title its width). */
@@ -85,7 +118,10 @@
   .rp-doc { display: grid; grid-template-columns: minmax(0, 1fr) calc(6 * var(--sp-6)); column-gap: var(--sp-6); align-items: start; }
   .rp-head, .rp-body { grid-column: 1; }
   .rp-view .rp-head { padding-inline-end: 0; }
-  .rp-toc { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--sp-6) + var(--sp-2)); flex-direction: column; align-items: flex-start; gap: var(--sp-2); margin: 0; padding: 0 0 0 var(--sp-4); border-block: 0; border-inline-start: 1px solid var(--line); }
+  .rp-toc { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: calc(var(--sp-6) + var(--sp-2)); margin: 0; padding: 0 0 0 var(--sp-4); border-radius: 0; box-shadow: none; border-inline-start: 1px solid var(--line); }
+  .rp-toc li { padding: var(--sp-1) 0; }
+  .rp-toc a { color: var(--text-2); font-weight: var(--weight-regular); }
+  .rp-toc a:hover { color: var(--text); }
 }
 
 /* A long list of contents (a daily overview's) is left out where it would stand above the page: the page is read at a glance. */
