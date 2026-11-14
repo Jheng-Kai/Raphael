@@ -46,6 +46,9 @@
   --pa-chat-pad: calc(24px + 8 * var(--pa-u));
   --pa-colw: var(--layout-thread-max);
   --pa-bw: 60ch;
+  /* A thumbnail of several pictures sent together (R-ATTACH-02): a little under Claude's 120 px, so that four stand side by side in
+     the column a bubble has beside its actions (452 px in a 1120 px window) and twelve take three rows, not four. */
+  --pa-pic: calc(4 * var(--sp-5));
   --pa-ctl: calc(30px + 4 * var(--pa-u));
   /* The top row: the conversation's header, the details panel's and a side thread's are the window's own top row, with the buttons of
      the window at their right. The pill and the round buttons are centred in it, 30 px from the window's top, as Grok Bot's
@@ -555,6 +558,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 @media (prefers-reduced-motion: reduce) { .composer .cmp-pair .btn.cmp-send, .composer .cmp-pair .cmp-voice { animation: none; } }
 /* while its picture is up (voice-mode.ts) the button stays, and keeps the focus; only its picture is hidden */
 .vm-away > * { visibility: hidden; }
+/* The files wait in one row that the mouse wheel scrolls sideways (chip-scroll.ts, R-ATTACH-01); the row stands only while it holds some. */
+.cmp-files:has(> .cmp-file[hidden]) { display: none; }
 .cmp-file { display: flex; flex-wrap: nowrap; gap: var(--sp-2); min-width: 0; overflow-x: auto; padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-2); }
 .cmp-chip { display: flex; flex: 0 0 220px; align-items: center; gap: var(--sp-2); height: 52px; min-width: 0; max-width: 100%; padding: var(--sp-1); border-radius: var(--r-md); background: var(--surface-2); font-size: var(--pa-sys); color: var(--text-2); }
 .cmp-tile { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; overflow: hidden; border-radius: var(--r-sm); background: var(--panel); }
@@ -601,6 +606,13 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .chat-message[data-picture] .attachment-image { overflow: visible; }
 .attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
+/* Several pictures sent together are small squares side by side, in as many rows as they need and right-aligned with the bubble,
+   as Claude, ChatGPT and Grok show them (owner, 2026-11-15, R-ATTACH-02); each still opens large. One picture keeps its size (R-UI-149). */
+.me-files:has(> .attachment-thumbs) { width: auto; }
+.attachment-thumbs { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); max-width: 100%; }
+.attachment-thumbs > .attachment-image { flex: none; width: var(--pa-pic); height: var(--pa-pic); background: var(--surface-2); }
+.attachment-thumbs .btn.attachment-picture { height: 100%; }
+.attachment-thumbs .attachment-picture img { height: 100%; max-height: none; object-fit: cover; }
 .btn.attachment-open { position: absolute; top: 6px; right: 6px; width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
 .me-file:hover > .attachment-open, .me-file:focus-within > .attachment-open { opacity: 1; pointer-events: auto; }
 .attachment-audio { display: flex; align-items: center; gap: var(--sp-2); width: 320px; height: 64px; padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-2); border-radius: var(--r-pill); background: var(--surface-2); }

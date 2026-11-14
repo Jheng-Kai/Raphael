@@ -647,13 +647,19 @@ export function routineLineHTML(turn: AgentTurn): string {
 }
 
 /**
- * Visual media share a grid; audio and documents stack underneath it.
+ * Several pictures stand side by side as small square thumbnails, in as many rows as they need, as Claude, ChatGPT and Grok
+ * show the pictures a person sent (R-ATTACH-02); one picture keeps its own size (R-UI-149). Other visual media share a grid;
+ * audio and documents stack underneath.
  */
 export function filesHTML(files: readonly TurnAttachment[] | undefined): string {
   if (!files || files.length === 0) return "";
-  const visual = files.filter(file => ["image", "video"].includes(fileKind(file.mime)) && (file.id || file.preview));
-  const rest = files.filter(file => !visual.includes(file));
-  return `<div class="me-files">${visual.length ? `<div class="attachment-grid${visual.length > 1 ? " is-multiple" : ""}">${visual.map(sentFileHTML).join("")}</div>` : ""}${rest.map(sentFileHTML).join("")}</div>`;
+  const drawn = (file: TurnAttachment): boolean => !!(file.id || file.preview);
+  const pictures = files.filter(file => fileKind(file.mime) === "image" && drawn(file));
+  const thumbs = pictures.length > 1 ? pictures : [];
+  const visual = files.filter(file => !thumbs.includes(file) && ["image", "video"].includes(fileKind(file.mime)) && drawn(file));
+  const rest = files.filter(file => !thumbs.includes(file) && !visual.includes(file));
+  return `<div class="me-files">${thumbs.length ? `<div class="attachment-thumbs">${thumbs.map(sentFileHTML).join("")}</div>` : ""}` +
+    `${visual.length ? `<div class="attachment-grid${visual.length > 1 ? " is-multiple" : ""}">${visual.map(sentFileHTML).join("")}</div>` : ""}${rest.map(sentFileHTML).join("")}</div>`;
 }
 
 /** Background task controls without raw tool labels or a collapsed steps box. */

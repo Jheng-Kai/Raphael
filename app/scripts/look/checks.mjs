@@ -9736,12 +9736,98 @@ export function checkRendered(name, context = {}) {
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
+  if (name === "composer-pictures-start" || name === "composer-pictures-end") {
+    // R-ATTACH-01: twelve pictures wait in the composer in one row, inside it; the mouse wheel takes the row sideways to its last
+    // picture, whose × can still be pressed, and moves nothing else. In a 1920 px window the twelve fit: no arrow, no fade, and the wheel leaves the row.
+    const composer = [...document.querySelectorAll('.composer')].find(visible);
+    require(composer, 'a composer is on screen');
+    const row = composer.querySelector(':scope > .cmp-files[data-chip-row]'), strip = row?.querySelector(':scope > .cmp-file[data-chip-scroll]');
+    require(strip && visible(strip), "the files stand in the composer's own row");
+    const chips = [...strip.querySelectorAll(':scope > .cmp-chip')];
+    require(chips.length === 12 && chips.every(chip => chip.querySelector('.cmp-pic img.cmp-thumb[src]')), `twelve pictures with their thumbnails (${chips.length})`);
+    const tops = new Set(chips.map(chip => Math.round(chip.getBoundingClientRect().top)));
+    require(tops.size === 1, `the pictures keep one row (tops ${[...tops].join(', ')})`);
+    const c = composer.getBoundingClientRect(), s = strip.getBoundingClientRect(), high = chips[0].getBoundingClientRect().height;
+    require(s.left >= c.left - 0.5 && s.right <= c.right + 0.5, `the row stays inside the composer (${Math.round(s.left)} to ${Math.round(s.right)} in ${Math.round(c.left)} to ${Math.round(c.right)})`);
+    require(s.height <= high + 16, `the row is one picture high (${Math.round(s.height)} px for ${Math.round(high)} px pictures)`);
+    const fits = strip.scrollWidth <= strip.clientWidth + 1;
+    require(!fits || innerWidth >= 1400, `twelve pictures are wider than the composer, so the row scrolls (${strip.scrollWidth} in ${strip.clientWidth})`);
+    require(strip.offsetHeight - strip.clientHeight < 1, `no scrollbar shows under the row (${strip.offsetHeight - strip.clientHeight} px)`);
+    const inside = element => { const r = element.getBoundingClientRect(); return r.left >= s.left - 0.5 && r.right <= s.right + 0.5; };
+    const arrow = step => row.querySelector(`:scope > [data-chip-step="${step}"]`);
+    const pageTop = document.scrollingElement.scrollTop, threadTop = [...document.querySelectorAll('.ra-scroll')].filter(visible).map(thread => Math.round(thread.scrollTop));
+    if (fits) {
+      require(strip.scrollLeft <= 1 && !row.hasAttribute('data-more-after') && !row.hasAttribute('data-more-before') && !visible(arrow(1)) && !visible(arrow(-1)), 'all twelve show, with no arrow or fade');
+      require(chips.every(inside), 'every picture shows whole');
+      if (name === "composer-pictures-start") { window.__look.pictureStrip = { pageTop, threadTop }; return { check: name, fits, scrollWidth: strip.scrollWidth, clientWidth: strip.clientWidth }; }
+      const before = window.__look.pictureStrip;
+      require(before && pageTop === before.pageTop && JSON.stringify(threadTop) === JSON.stringify(before.threadTop), 'the wheel moved neither the page nor the thread');
+      return { check: name, fits, scrollLeft: Math.round(strip.scrollLeft) };
+    }
+    if (name === "composer-pictures-start") {
+      require(strip.scrollLeft <= 1 && row.hasAttribute('data-more-after') && !row.hasAttribute('data-more-before'), 'it starts at its first picture, with more past its right end');
+      require(visible(arrow(1)) && !visible(arrow(-1)), 'only the right arrow shows');
+      require(inside(chips[0]) && !inside(chips[11]), 'the first picture shows whole and the last is past the right end');
+      window.__look.pictureStrip = { pageTop, threadTop };
+      return { check: name, scrollWidth: strip.scrollWidth, clientWidth: strip.clientWidth };
+    }
+    const end = strip.scrollWidth - strip.clientWidth;
+    require(strip.scrollLeft >= end - 1, `the wheel took the row to its end (${Math.round(strip.scrollLeft)} of ${end})`);
+    require(row.hasAttribute('data-more-before') && !row.hasAttribute('data-more-after'), 'more lies before its left end and none after its right');
+    require(visible(arrow(-1)) && !visible(arrow(1)), 'only the left arrow shows');
+    const last = chips[11], remove = last.querySelector('.chip-x'), r = remove.getBoundingClientRect();
+    require(inside(last) && inside(remove) && visible(remove), 'the last picture and its × show whole');
+    require(remove.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)), 'its × is what a press there reaches');
+    const before = window.__look.pictureStrip;
+    require(before && pageTop === before.pageTop && JSON.stringify(threadTop) === JSON.stringify(before.threadTop), 'the wheel moved the row alone, not the page or the thread');
+    return { check: name, scrollLeft: Math.round(strip.scrollLeft), end };
+  }
+  if (name === "owner-pictures-row") {
+    // R-ATTACH-02: several pictures the owner sent are 96 px squares side by side, full rows first, right-aligned with his bubble, and the
+    // block is no taller than its rows.
+    return (async () => {
+    const line = [...document.querySelectorAll('.tn')].filter(visible).find(item => item.querySelector('.owner-message .attachment-thumbs'));
+    require(line, "the owner's message with several pictures");
+    const message = line.querySelector('.owner-message'), files = message.querySelector('.me-files'), row = files.querySelector(':scope > .attachment-thumbs');
+    const tiles = [...row.children], images = tiles.map(tile => tile.querySelector('.attachment-picture img'));
+    require(tiles.length >= 2 && tiles.every(tile => tile.matches('.me-file.attachment-image')) && images.every(Boolean), `the pictures are its thumbnails (${tiles.length})`);
+    require(files.querySelectorAll('.attachment-image').length === tiles.length, 'every picture of the message is in the row');
+    const end = performance.now() + 4000;
+    while (!images.every(image => image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
+    require(images.every(image => image.complete && image.naturalWidth > 0 && visible(image)), 'every thumbnail is drawn');
+    const rects = tiles.map(tile => tile.getBoundingClientRect());
+    const side = 96;
+    require(rects.every(r => Math.abs(r.width - side) <= 1 && Math.abs(r.height - side) <= 1), `every thumbnail is a ${side} px square (${rects.map(r => `${Math.round(r.width)}x${Math.round(r.height)}`).join(' ')})`);
+    require(images.every(image => getComputedStyle(image).objectFit === 'cover'), 'each picture fills its square');
+    const rows = [];
+    for (const r of rects) { const same = rows.find(item => Math.abs(item.top - r.top) <= 1); if (same) same.items.push(r); else rows.push({ top: r.top, items: [r] }); }
+    const across = rows[0].items.length;
+    require(rows.length === Math.ceil(tiles.length / across) && rows.slice(0, -1).every(item => item.items.length === across), `full rows first, then the rest (${rows.map(item => item.items.length).join(', ')})`);
+    require(across >= Math.min(tiles.length, 3), `at least three side by side when there are three (${across})`);
+    const block = row.getBoundingClientRect();
+    require(rows.length === 1 || (across + 1) * side + across * 8 > block.width + 1, `as many side by side as the bubble's column holds (${across} in ${Math.round(block.width)} px)`);
+    require(block.height <= rows.length * side + (rows.length - 1) * 8 + 1, `the pictures take no more than their rows (${Math.round(block.height)} px for ${rows.length} rows)`);
+    const bubble = message.querySelector('.bubble'), edge = (bubble ?? files).getBoundingClientRect().right;
+    require(rows.every(item => Math.abs(Math.max(...item.items.map(r => r.right)) - edge) <= 1.5), `every row ends at the bubble's right edge (${rows.map(item => Math.round(Math.max(...item.items.map(r => r.right)))).join(', ')} vs ${Math.round(edge)})`);
+    if (bubble) require(bubble.getBoundingClientRect().top >= block.bottom - 1, 'the bubble stands under the pictures');
+    const thread = line.closest('.ra-scroll'), t = thread?.getBoundingClientRect();
+    require(!t || rects.every(r => r.left >= t.left && r.right <= t.right), 'the pictures stay inside the thread');
+    return { check: name, pictures: tiles.length, rows: rows.length, across, height: Math.round(block.height) };
+    })();
+  }
+  if (name === "owner-pictures-lightbox") {
+    // A press on one of several thumbnails opens that picture large, in the app's own viewer (R-ATTACH-02).
+    const large = document.querySelector('.media-lightbox .lb-img'), pressed = document.querySelector('.tn[data-id="8201"] .attachment-thumbs > .attachment-image:nth-child(3) img');
+    require(visible(large) && pressed && large.getAttribute('src') === pressed.getAttribute('src'), 'the third picture opens large');
+    return { check: name };
+  }
   if (name === "owner-picture-bubble") {
     // R-UI-149: the owner's message with a picture: the picture keeps its size and the bubble under it keeps the width it has without one.
     return (async () => {
     const line = [...document.querySelectorAll('.thread > .tn, .thread .tn')].find(item => item.querySelector('.me-files .attachment-picture img') && item.querySelector('.owner-message .bubble'));
     require(line, 'a message with a picture and words');
-    const picture = line.querySelector('.me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
+    // Several pictures are a row of thumbnails (R-ATTACH-02), measured as one block; one picture is the grid of one.
+    const picture = line.querySelector('.me-files .attachment-thumbs, .me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
     const end = performance.now() + 4000;
     while (!(image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
     require(image.complete && image.naturalWidth > 0 && visible(image), 'the picture is drawn');
@@ -9759,7 +9845,7 @@ export function checkRendered(name, context = {}) {
     reference.remove();
     const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = field ? 2 : 1;
     require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
-    require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
+    if (picture.matches('.attachment-grid')) require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
     if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);
