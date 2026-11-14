@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -18,16 +18,18 @@ const light = block(styles, /^:root\s*\{/m);
 const dark = block(styles, /^:root\[data-theme="dark"\]\s*\{/m);
 const token = (body: string, name: string): string | undefined => new RegExp(`--${name}:\\s*([^;]+);`).exec(body)?.[1]?.trim();
 
-/** The floating surfaces and the file and selector whose rule draws each one. */
-const SURFACES: [file: string, selector: string, scope: string][] = [
-  ["styles.css", ".menu", ".menu"],
-  ["styles.css", ".modal", ".modal"],
-  ["members.css", ".mb-dialog", ".mb-dialog"],
-  ["connections.css", ".cs-dialog", ".cs-dialog"],
-  ["automations.css", ".au-pop", ".au-pop"],
-  ["composer-brain.css", ".cb-card", ".cb-card"],
-  ["agent.css", ".link-hover", ".link-hover"],
-  ["agent.css", ".message-tooltip", ".message-tooltip"],
+/** The floating surfaces, the file and selector whose rule draws each one, and its layer: a dialog is the middle layer (--dialog); a menu, a popover, a floating card and a tooltip the card layer (--float). */
+const SURFACES: [file: string, selector: string, scope: string, layer: "dialog" | "float"][] = [
+  ["styles.css", ".menu", ".menu", "float"],
+  ["styles.css", ".modal", ".modal", "dialog"],
+  ["members.css", ".mb-dialog", ".mb-dialog", "dialog"],
+  ["members.css", ".menu.side-search", ".menu", "dialog"],
+  ["connections.css", ".cs-dialog", ".cs-dialog", "dialog"],
+  ["avatar.css", ".av-crop", ".av-crop", "dialog"],
+  ["automations.css", ".au-pop", ".au-pop", "float"],
+  ["composer-brain.css", ".cb-card", ".cb-card", "float"],
+  ["agent.css", ".link-hover", ".link-hover", "float"],
+  ["agent.css", ".message-tooltip", ".message-tooltip", "float"],
 ];
 
 const ruleOf = (file: string, selector: string): string => {
@@ -40,12 +42,15 @@ const ruleOf = (file: string, selector: string): string => {
 
 describe("everything that floats", () => {
   test("the tokens are Grok Bot's measured values in the dark theme and a white surface in the light one", () => {
+    // Settings in Grok Bot's dark theme: the dialog and its nav #121212, the cards on it #1f1f1f with a #2b2b2b edge (owner, 2026-11-14).
+    expect(token(dark, "dialog")).toBe("#121212");
     expect(token(dark, "float")).toBe("#1f1f1f");
-    expect(token(dark, "float-edge")).toBe("#353535");
+    expect(token(dark, "float-edge")).toBe("#2b2b2b");
     expect(token(dark, "float-ctl")).toBe("#282828");
     expect(token(dark, "float-hover")).toBe("#292929");
     expect(token(dark, "float-sel")).toBe("#f5f5f5");
     expect(token(dark, "float-on-sel")).toBe("#0a0a0a");
+    expect(token(light, "dialog")).toBe("#f5f5f5");
     expect(token(light, "float")).toBe("#ffffff");
     expect(token(light, "float-edge")).toBe("#e5e5e5");
     expect(token(light, "float-sel")).toBe("#0a0a0a");
@@ -54,7 +59,7 @@ describe("everything that floats", () => {
     expect(token(light, "menu")).toBe("var(--float)");
     expect(token(dark, "menu")).toBe("var(--float)");
     // Both themes say every token of the rule.
-    for (const name of ["float", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed", "float-sel", "float-on-sel"]) {
+    for (const name of ["dialog", "float", "float-edge", "float-ctl", "float-ctl-hover", "float-hover", "float-pressed", "float-sel", "float-on-sel"]) {
       expect(token(light, name), `light --${name}`).toBeTruthy();
       expect(token(dark, name), `dark --${name}`).toBeTruthy();
     }
@@ -67,14 +72,32 @@ describe("everything that floats", () => {
     const body = scope![2]!;
     // Inside a floating surface the ordinary tokens point at the floating ones.
     for (const pair of ["--btn: var(--float-ctl)", "--hover: var(--float-hover)", "--edge: var(--float-edge)", "--line: var(--float-edge)", "--panel: var(--float)", "--field: var(--float-ctl)"]) expect(body).toContain(pair);
-    for (const [file, selector, name] of SURFACES) {
+    for (const [file, selector, name, layer] of SURFACES) {
       expect(listed, `${selector} is in the scope`).toContain(name);
       const rule = ruleOf(file, selector);
-      expect(rule, `${file}: ${selector} background`).toMatch(/background:\s*var\(--float\)/);
+      expect(rule, `${file}: ${selector} background`).toMatch(new RegExp(`background:\\s*var\\(--${layer}\\)`));
       expect(rule, `${file}: ${selector} must not draw its own surface`).not.toMatch(/background:\s*var\(--(?:panel|content|menu|side|surface-2)\)/);
       // A tooltip may go without an edge (the home chart's has a shadow) but never with another colour of it.
       expect(rule, `${file}: ${selector} edge`).not.toMatch(/border(?:-color)?:[^;]*var\(--(?:edge|line|btn-edge|edge-rim)\)/);
     }
+  });
+
+  test("no later rule gives a dialog another surface: in every stylesheet a dialog is on --dialog", () => {
+    // A later duplicate rule wins, so every rule of every stylesheet whose last compound is a dialog says --dialog (or nothing, or transparent).
+    const dialogs = /\.(?:modal|mb-dialog|cs-dialog|av-crop)(?![\w-])|\.menu\.side-search(?![\w-])/;
+    const seen: string[] = [];
+    for (const file of readdirSync(__dirname).filter((name) => name.endsWith(".css"))) {
+      for (const [, selectors, body] of strip(read(file)).matchAll(/(?:^|\n)([^{}@\n][^{}]*)\{([^{}]*)\}/g)) {
+        for (const selector of selectors!.split(/,(?![^(]*\))/)) {
+          const last = selector.trim().split(/\s*>\s*|\s+/).filter(Boolean).pop() ?? "";
+          const given = /(?:^|;|\s)background(?:-color)?:\s*([^;]+)/.exec(body!)?.[1]?.trim();
+          if (!dialogs.test(last) || !given) continue;
+          seen.push(`${file}: ${selector.trim()} ${given}`);
+          expect(given, `${file}: ${selector.trim()}`).toMatch(/^(?:var\(--dialog\)|transparent)$/);
+        }
+      }
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(6);
   });
 
   test("the chosen chip, a button on a floating surface and the white tile of a mark use the rule's tokens", () => {

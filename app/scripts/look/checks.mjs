@@ -6883,7 +6883,9 @@ export function checkRendered(name, context = {}) {
     const lum = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
     const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
     const dark = document.documentElement.dataset.theme === 'dark';
-    const surfaces = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog')].filter(node => visible(node) && getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)');
+    // A dialog is the middle layer and a card on it the lightest (owner, 2026-11-14): a box standing on the dialog is the card colour with its hairline, never a grey of its own.
+    const dialogRgb = colourOf('backgroundColor', '--dialog'), cardRgb = colourOf('backgroundColor', '--float');
+    const surfaces = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .av-crop')].filter(node => visible(node) && getComputedStyle(node).backgroundColor !== 'rgba(0, 0, 0, 0)');
     require(surfaces.length > 0, "something floats in this picture");
     const control = 'button, input, textarea, select, .btn, .sel, .field, .tab, .tg, .mb-fin, .mail-in, [role="switch"], [role="tab"], [role="menuitem"], [role="option"], [role="slider"], .mc-range, .mc-track, .emoji-find, .chip, .cs-chip, kbd, .cs-cap';
     const selected = '[aria-pressed="true"], [aria-selected="true"], [aria-current], [aria-checked="true"], [data-on="true"], .is-selected, .is-active, .active, .on, [data-selected]';
@@ -6904,7 +6906,11 @@ export function checkRendered(name, context = {}) {
         || /inset 0px 0px 0px 1px/.test(style.boxShadow);
       const c = ratio(fill, ground), darker = lum(fill) < lum(ground) - 0.0005, isControl = node.matches(control);
       if (node.matches(selected)) continue;
-      const hole = dark && darker && c > 1.03 && !node.matches('input, textarea, .field, .mb-fin, .mail-in, select, .mc-range');
+      const groundRgb = `rgb(${ground.r}, ${ground.g}, ${ground.b})`;
+      const onDialog = groundRgb === dialogRgb, onCard = groundRgb === cardRgb;
+      // a darker hole (in the dark theme) and, in either theme, the dialog's own colour dug into a card
+      const hole = (dark && darker && c > 1.03 && !node.matches('input, textarea, .field, .mb-fin, .mail-in, select, .mc-range')) || (onCard && style.backgroundColor === dialogRgb);
+      if (onDialog && !isControl && style.backgroundColor === cardRgb && edge) continue;
       // a card is the surface itself with an edge (c ~ 1): any grey between is the near-identical one; a control is told from what it stands on by its fill
       const same = isControl ? (c < 1.06 && !edge) : (c < 1.02 ? !edge : c < 1.45);
       if (hole || same) bad.push(`${node.tagName.toLowerCase()}.${String(node.className).split(' ')[0]} ${Math.round(box.width)}x${Math.round(box.height)} ${style.backgroundColor} on ${ground.r},${ground.g},${ground.b} (${c.toFixed(2)}${hole ? ', darker' : ''})`);
@@ -6912,14 +6918,49 @@ export function checkRendered(name, context = {}) {
     require(bad.length === 0, `${bad.length} inner element(s) lose their background or stand as a near-identical grey without an edge: ${bad.slice(0, 14).join(' | ')}`);
     return { check: name, surfaces: surfaces.length };
   }
+  if (name === "dialog-layers") {
+    // Three layers (owner, 2026-11-14: 「最外層最深 ( dialog 外 )，再來是內層，再來是內容」): the window under the scrim, the dialog and its nav, a card on it, each lighter than the one outside it, in both themes.
+    const channels = value => { const m = value.match(/[\d.]+/g)?.map(Number); return m && m.length >= 3 ? { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 } : null; };
+    const lum = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
+    const hex = ({ r, g, b }) => '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+    const scrim = [...document.querySelectorAll('.modal-scrim')].find(visible);
+    const dialog = scrim?.querySelector('.modal');
+    require(visible(dialog), "a dialog is open");
+    const dim = channels(getComputedStyle(scrim).backgroundColor), page = channels(getComputedStyle(document.querySelector('.main')).backgroundColor);
+    require(dim && page && dim.a > 0 && dim.a < 1, "the window is dimmed by the scrim, not hidden");
+    const outside = { r: page.r * (1 - dim.a), g: page.g * (1 - dim.a), b: page.b * (1 - dim.a) };
+    const middle = channels(getComputedStyle(dialog).backgroundColor);
+    require(middle.a === 1 && getComputedStyle(dialog).backgroundColor === colourOf('backgroundColor', '--dialog'), `the dialog is the middle layer, --dialog (${getComputedStyle(dialog).backgroundColor})`);
+    const nav = dialog.querySelector('.modal-nav');
+    if (visible(nav)) require(['rgba(0, 0, 0, 0)', 'transparent', getComputedStyle(dialog).backgroundColor].includes(getComputedStyle(nav).backgroundColor), `the nav is the dialog's own colour (${getComputedStyle(nav).backgroundColor})`);
+    // the lightest layer is a card (a settings group, an app's information box); the list of apps in 連結應用程式 has none and shows the dialog with the controls on it
+    const card = [...dialog.querySelectorAll('.slist, .cs-box')].find(visible) ?? null;
+    require(card || !visible(nav), "a settings pane shows its groups as cards");
+    const control = card ? null : [...dialog.querySelectorAll('.cs-connect, .cs-chip:not([aria-pressed="true"])')].find(visible) ?? null;
+    // the order of lightness, outside < dialog < card, with room enough to be seen (the card's hairline carries the rest in the light theme)
+    require(lum(outside) < lum(middle) && ratio(outside, middle) >= 1.05, `outside ${hex(outside)} is darker than the dialog ${hex(middle)} (${ratio(outside, middle).toFixed(2)})`);
+    let lightest = null;
+    if (card) {
+      lightest = channels(getComputedStyle(card).backgroundColor);
+      require(lightest.a === 1 && getComputedStyle(card).backgroundColor === colourOf('backgroundColor', '--float'), `the card is --float (${getComputedStyle(card).backgroundColor})`);
+      require(getComputedStyle(card).borderTopColor === colourOf('borderTopColor', '--float-edge') && parseFloat(getComputedStyle(card).borderTopWidth) === 1, "the card has its hairline");
+      require(lum(middle) < lum(lightest) && ratio(middle, lightest) >= 1.05, `outside ${hex(outside)} < dialog ${hex(middle)} < card ${hex(lightest)} (${ratio(middle, lightest).toFixed(2)})`);
+    } else if (control) {
+      lightest = channels(getComputedStyle(control).backgroundColor);
+      require(getComputedStyle(control).backgroundColor === colourOf('backgroundColor', '--float-ctl') && ratio(middle, lightest) >= 1.05, `a control on the dialog is --float-ctl and is told from it (${getComputedStyle(control).backgroundColor})`);
+    }
+    return { check: name, outside: hex(outside), dialog: hex(middle), lightest: lightest ? hex(lightest) : null, lightestIs: card ? 'card' : control ? 'control (this list has no card)' : 'none (this list has no card)' };
+  }
   if (name === "float-surface") {
     // Whatever floats in this picture stands on the floating surface and its edge, and a control on it is filled with the control colour.
-    const surface = colourOf('backgroundColor', '--float'), edge = colourOf('borderTopColor', '--float-edge'), control = colourOf('backgroundColor', '--float-ctl');
-    const found = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .link-hover')].filter(node => visible(node) && (getComputedStyle(node).position !== 'static' || node.matches('.cb-card, .mb-dialog, .cs-dialog')));
+    const surface = colourOf('backgroundColor', '--float'), dialogLayer = colourOf('backgroundColor', '--dialog'), edge = colourOf('borderTopColor', '--float-edge'), control = colourOf('backgroundColor', '--float-ctl');
+    const found = [...document.querySelectorAll('.menu:not(.cb-menu), .cb-card, .mb-dialog, .modal, .au-pop, .cs-dialog, .av-crop, .link-hover')].filter(node => visible(node) && (getComputedStyle(node).position !== 'static' || node.matches('.cb-card, .mb-dialog, .cs-dialog, .av-crop')));
     require(found.length > 0, "something floats in this picture");
+    // A dialog stands on the middle layer; a menu, a popover and a card on the lightest one.
     for (const node of found) {
-      const style = getComputedStyle(node);
-      require(style.backgroundColor === surface, `${node.className.split(' ')[0]} stands on the floating surface (${style.backgroundColor}, not ${surface})`);
+      const style = getComputedStyle(node), layer = node.matches('.mb-dialog, .modal, .cs-dialog, .av-crop, .menu.side-search') ? dialogLayer : surface;
+      require(style.backgroundColor === layer, `${node.className.split(' ')[0]} stands on the ${layer === dialogLayer ? 'dialog' : 'card'} layer (${style.backgroundColor}, not ${layer})`);
       require(style.borderTopColor === edge && parseFloat(style.borderTopWidth) === 1, `${node.className.split(' ')[0]} has the floating edge (${style.borderTopColor} ${style.borderTopWidth})`);
     }
     // A text button standing on the surface is filled with the control colour (its frame), unless it is the primary or a bare icon.
@@ -6972,7 +7013,7 @@ export function checkRendered(name, context = {}) {
     const done = view.querySelector('.cs-card .cs-state');
     require(done && !done.closest('.cs-card').querySelector('button.cs-connect') && done.textContent.includes('已連結'), "a connected app says 已連結 in quiet words and has no button");
     const surface = getComputedStyle(modal);
-    require(surface.backgroundColor === colourOf('backgroundColor', '--float') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the floating surface and its edge");
+    require(surface.backgroundColor === colourOf('backgroundColor', '--dialog') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the dialog layer and its edge");
     const body = modal.querySelector('.modal-body');
     require(body.scrollWidth <= body.clientWidth + 1 && results.scrollWidth <= results.clientWidth + 1, "the dialog never scrolls sideways");
     require(results.getBoundingClientRect().bottom <= frame.bottom + 1 && results.getBoundingClientRect().top > chips.getBoundingClientRect().bottom - 1, "the list scrolls between the chips and the dialog's lower edge");
