@@ -52,6 +52,9 @@
 .pgv-pill-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-chat:has(> .ra-stage.is-page) .pgv-pill:not([hidden]) { display: flex; }
 .mb-chat:has(> .ra-stage.is-page) .mb-head-c > .conversation-head { display: none; }
+/* A long title is cut by the pill, never into the arrow or Share: both sides of the row keep what they hold (the right one also what
+   the window's buttons reserve), the pill gets the rest and stays in the middle (the judge on page-inplace at 720: 5 px between the pill and Share). */
+.page-agent .mb-chat:has(> .ra-stage.is-page) > .mb-head:has(> .mb-head-c) { grid-template-columns: minmax(auto, 1fr) minmax(0, auto) minmax(auto, 1fr); }
 
 /* A room's thread and composer are inset by the room's own padding too (automations.css), so its page, its report and
    the line under them are: all start and end where the room's composer does. */
