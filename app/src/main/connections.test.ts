@@ -436,6 +436,13 @@ describe("the search", () => {
     expect(sectionsOf(blank)).toEqual(sectionsOf(connectionsHTML(view())));
   });
 
+  test("the app whose name is what was typed comes first, then names that start with it or hold it, then the rest", () => {
+    // Owner, 2026-11-14: 「line」 listed apps whose descriptions say "timeline" or "online" before LINE itself.
+    const catalog = [service("timely", "Timely"), service("onliner", "Onliner"), service("linear", "Linear"), service("line", "LINE")];
+    expect(found("line", { catalog }).slice(0, 3)).toEqual(["LINE", "Linear", "Onliner"]);
+    expect(found("line", { catalog })).toContain("Timely"); // its description still finds it, last
+  });
+
   test("a typo or swapped letters still finds the app by its name, after what it finds as typed", () => {
     const catalog = [service("gmail", "Gmail", { icon: "gmail" }), service("gmailer", "Mailer Gmail Tools"), ...CATALOG];
     expect(found("gamil", { catalog })).toEqual(["Gmail", "Mailer Gmail Tools"]);
@@ -546,9 +553,12 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    const back = d.querySelector(".cs-top > button")!;
+    // The chevron and the title are one button (owner, 2026-11-14): its name is the title, its tooltip says where it goes.
+    const back = d.querySelector(".cs-top-t > button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
-    expect(back.getAttribute("aria-label")).toBe("返回");
+    expect(back.getAttribute("title")).toBe("返回");
+    expect(back.querySelector("svg.i")).not.toBeNull();
+    expect(d.querySelector(".cs-top > .btn.icon")).toBeNull();
     expect(d.querySelector(".cs-top-t")!.textContent).toBe("已連結");
     expect(d.querySelectorAll(".cs-body > .cs-grid")).toHaveLength(1);
     const [notion, files] = rows(html);
@@ -704,19 +714,21 @@ describe("a connected row and the back chevron", () => {
     expect(state.closest("[data-conn]")!.getAttribute("data-conn")).toBe("open-store");
     expect(state.closest(".btn.cs-main")).toBe(card.querySelector(".cs-main"));
     expect(card.querySelectorAll("button")).toHaveLength(1);
-    expect(rule(".cs-card .btn.cs-main:hover > .cs-state")).toMatch(/color:/);
+    expect(rule(".cs-card:hover .cs-state")).toMatch(/color:/);
     // an app that is not connected: 連結 still joins, and the rest of its row opens the page
     const linear = cardOf("linear");
     expect(linear.querySelector(".cs-connect")!.closest("[data-conn]")!.getAttribute("data-conn")).toBe("join");
     expect(linear.querySelector(".cs-main")!.getAttribute("data-conn")).toBe("open-store");
   });
 
-  test("a row says it can be pressed: the pointer over the whole row, and a hover fill of the floating surface clear of its words, in the connected list and the main view alike", () => {
-    expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer/);
-    expect(rule(".cs-card .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled)")).toMatch(/background:\s*var\(--float-hover\)/);
-    expect(rule(".cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled)")).toMatch(/background:\s*var\(--pressed\)/);
-    // 8 px of padding all round the words (R-UI-53), cancelled on the left by the margin so the mark stays on the content's edge.
-    expect(rule(".cs-card .btn.cs-main, .cs-linked .btn.cs-main")).toMatch(/padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*calc\(var\(--sp-2\) \* -1\) 0/);
+  test("a row is one button: the pointer and one hover fill over the whole row, with 連結 or its switch on it, in the connected list and the main view alike", () => {
+    // One fill over the whole row (owner, 2026-11-14), 8 px of padding given back by the margin so the mark stays on the content's edge.
+    expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer;\s*padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*calc\(var\(--sp-2\) \* -1\);\s*border-radius:\s*var\(--r-md\)/);
+    expect(rule(".cs-card:hover, .cs-linked:hover")).toMatch(/background:\s*var\(--float-hover\)/);
+    expect(rule(".cs-card:has(> .btn.cs-main:active), .cs-linked:has(> .btn.cs-main:active)")).toMatch(/background:\s*var\(--pressed\)/);
+    expect(rule(".cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled)")).toMatch(/background:\s*transparent/);
+    // The list gives the fill room, so its corners are never cut square.
+    expect(rule(".cs-results")).toMatch(/padding-inline:\s*var\(--sp-2\)/);
   });
 
   test("the back chevron is the dialog ✕'s own control: 36 px, round, bare, with an 18 px glyph", () => {
@@ -1145,7 +1157,7 @@ describe("the rules for this dialog", () => {
   });
 
   test("the icon-only buttons (back, the menu of an app) are named in their label and tooltip", () => {
-    for (const html of [groupPage("ab12"), groupPage("ab12", { toolsOpen: true }), appPage("linear"), connectedList()]) {
+    for (const html of [groupPage("ab12"), groupPage("ab12", { toolsOpen: true }), appPage("linear")]) {
       const tags = html.match(/<button[^>]*class="btn icon[ "][^>]*>/g)!;
       expect(tags.length).toBeGreaterThan(0);
       for (const tag of tags) expect(tag).toMatch(/aria-label="[^"]+" title="[^"]+"/);

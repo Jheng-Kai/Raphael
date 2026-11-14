@@ -109,6 +109,8 @@ def public_app(app: Mapping) -> dict:
             "tools": app["tools"] if type(app.get("tools")) is int else 0, "connected": state == READY,
             **({"last_used_at": app["last_used_at"]} if type(app.get("last_used_at")) is int else {}),
             **({"plugin": app["plugin"][:100]} if isinstance(app.get("plugin"), str) else {}),
+            # A public https picture of the app's mark (the catalog's), the one source every place draws it from.
+            **({"logo": app["logo"][:500]} if isinstance(app.get("logo"), str) and app["logo"].startswith("https://") else {}),
             **({"aliases": list(app["services"])} if app.get("services") else {})}
 
 

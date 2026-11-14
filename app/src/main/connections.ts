@@ -16,7 +16,7 @@ import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
-import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNear } from "./store-finder";
+import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNameRank, storeNear } from "./store-finder";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
@@ -342,9 +342,10 @@ function everyApp(v: ConnectionsView): StoreService[] {
   return [...(Array.isArray(v.catalog) ? v.catalog : []), ...presetEntries(v), ...uniqueComposio(v)];
 }
 
-/** What a search finds over the whole catalog: as typed first, then the apps whose names it only nearly spells, nearest first. */
+/** What a search finds over the whole catalog: as typed first, the app whose name it is before the ones whose names only hold it and
+ *  those whose descriptions do (`storeNameRank`), then the apps whose names it only nearly spells, nearest first. */
 function searchApps(apps: StoreService[], query: string): StoreService[] {
-  const found = apps.filter((s) => storeMatches(s, query)).sort(byRank);
+  const found = apps.filter((s) => storeMatches(s, query)).sort((a, b) => storeNameRank(a, query) - storeNameRank(b, query) || byRank(a, b));
   const have = new Set(found);
   const near = apps.filter((s) => !have.has(s)).map((s) => [s, storeNear(s, query)] as const).filter(([, score]) => score < Infinity);
   return [...found, ...near.sort((a, b) => a[1] - b[1] || a[0].name.localeCompare(b[0].name)).map(([s]) => s)];
@@ -573,6 +574,9 @@ export const connectionsAddHTML = (): string =>
 
 /** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
 const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back"', "cs-back");
+/** The connected list's title is its way back: the chevron and the title are one button (owner, 2026-11-14, asked more than three times). */
+const backTitleHTML = (title: string): string =>
+  btn(`${ico("left")}<span>${esc(title)}</span>`, "cs-back cs-back-title", ` data-conn="back" data-k="cs-back" title="${esc(t("conn.back"))}"`);
 
 // ---------- the connected apps: one list ----------
 
@@ -909,7 +913,7 @@ export function connectionsHTML(v: ConnectionsView, heading = ""): string {
   const target = openTarget(v);
   if (target) return `<div class="cs cs-page">${quietHeading(heading)}${appPageHTML(target.entry, target.group, v)}</div>` + key;
   if (v.screen === "connected" && Array.isArray(v.groups) && v.groups.length) {
-    return `<div class="cs cs-connected"><div class="cs-top">${backHTML()}<h2 class="cs-top-t">${esc(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}${deviceHTML(v)}` +
+    return `<div class="cs cs-connected"><div class="cs-top"><h2 class="cs-top-t">${backTitleHTML(t("conn.tab.installed"))}</h2></div>${quietHeading(heading)}${deviceHTML(v)}` +
       `<div class="cs-body" data-cs-body>${installedHTML(v)}</div></div>` + key;
   }
   // The connected apps could not be read: the chip that would open them says so instead, with the way to read them again.
