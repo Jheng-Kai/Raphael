@@ -33,8 +33,9 @@ def test_worker_prompt_gives_an_html_file_as_its_source_and_says_where_a_long_on
     files = [checked("small.html", "text/html", page.encode()),
              replace(checked("long.html", "text/html", long.encode()), stored_id=stored)]
     _, user = _prompts("Copy the design", {}, [], RunLimits(), attachments=files, paths={stored: where})
-    assert page in user and "bytes were cut" in user
-    assert where + "." in user
+    # The short file is pasted; the long one is a file to read, with the way to read it and where it is stored.
+    assert page in user and "Not pasted" in user and "read_attachment (index 2, offset 1)" in user
+    assert where in user and ".a{color:red}\n.a{color:red}" not in user
 
 
 async def test_worker_reads_an_earlier_source_conversation_file_by_index(make_rig, conn, tmp_path):

@@ -130,13 +130,17 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
             "Read a file the user handed over with the task, by its number (1 for "
             "the first): images, PDF/text/Office documents, or transcribed audio/video. Unsupported "
             "formats return metadata and a reading limitation. Ask a question about it to "
-            "say what to look for."
+            "say what to look for. A text file comes as numbered lines (cat -n), 2000 lines at most "
+            "from line offset (1-based, default 1; limit sets how many); when there is more, the result "
+            "says the offset to go on from."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "index": {"type": "integer", "description": "The file's number, from 1."},
                 "question": {"type": "string", "description": "What to look for in it."},
+                "offset": {"type": "integer", "description": "Text file: the line to start from (1-based)."},
+                "limit": {"type": "integer", "description": "Text file: how many lines to read (default 2000)."},
             },
             "required": ["index"],
         },

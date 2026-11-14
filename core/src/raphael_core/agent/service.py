@@ -166,6 +166,7 @@ from ..services.attachment_store import AttachmentStore
 from .attachment_inputs import earlier_files, text_context
 from ..worker.guards import neutralize, wrap_untrusted
 from ..services.attachments import MAX_ATTACHMENTS, Attachment, AttachmentError, from_wire
+from ..services.file_reader import read_window
 from ..services.urls import urls_in
 from ..services.urls import SeenUrls
 from ..messaging.words import compose
@@ -2343,7 +2344,7 @@ class AgentService:
                     {"index": len(ask.attachments) + n, "name": neutralize(f["name"]), "mime": f["mime"], "path": f["path"]}
                     for n, f in enumerate(earlier, 1)
                 ], ensure_ascii=False)
-                user += "\nUse read_attachment by index to read one of them again."
+                user += "\nUse read_attachment by index to read one of them again (a text file in numbered lines: offset, limit)."
             if ask.attachments or earlier:
                 user += ("\nA file's path is its whole stored copy on this computer: read it with your own file tools"
                          " when read_attachment or an excerpt cuts it short.")
@@ -2557,8 +2558,11 @@ class AgentService:
                             except OSError:
                                 return ToolOutcome(False, "unavailable")
                             attachment = Attachment(item["name"], item["mime"], data, item["id"])
+                        window = read_window(args)
+                        if window is None:
+                            return ToolOutcome(False, "bad_arguments")
                         result = await self._tool(ask, self._tools.read_attachment(
-                            attachment, str(args.get("question") or ask.text), ledger, number=number
+                            attachment, str(args.get("question") or ask.text), ledger, number=number, **window
                         ), name)
                     elif name == "history_search":
                         reply = Reply("", "", None, search=str(args.get("query", "")))

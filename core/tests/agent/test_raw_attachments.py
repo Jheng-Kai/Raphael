@@ -119,7 +119,10 @@ async def test_the_reader_and_the_read_attachment_tool_give_the_same_source(name
     kind, found = await read_file(attachment)
     assert kind == "text" and found["text"] == source and found["truncated"] is False
     result = await Tools(object()).read_attachment(attachment, "", Ledger(SpendTracker(conn)))
-    assert result.ok and result.untrusted and result.data["text"] == source
+    # The tool gives numbered lines, as Claude Code's Read does; without the numbers they are the file's lines.
+    numbered = result.data["text"].split("\n")
+    assert result.ok and result.untrusted and [line.split("\t", 1)[1] for line in numbered] == source.removesuffix("\n").split("\n")
+    assert [line.split("\t", 1)[0].strip() for line in numbered] == [str(n) for n in range(1, len(numbered) + 1)]
 
 
 def big_page():
@@ -129,21 +132,20 @@ def big_page():
             + "</style></head><body><h1>授業</h1><script>const END_OF_PAGE = 1;</script></body></html>")
 
 
-def test_a_file_over_the_limit_gives_its_start_verbatim_and_says_what_was_cut_and_where_the_rest_is():
+def test_a_file_over_the_limit_is_a_file_to_read_with_its_facts_and_where_it_is():
     source = big_page()
     data = source.encode()
     assert len(source) > 80000
     where = "C:\\Raphael\\attachments\\" + STORED
     attachment = replace(checked("design.html", "text/html", data), stored_id=STORED)
     prompt = text_context([attachment], {STORED: where})
-    body = prompt[prompt.index("\n<!doctype html>") + 1:prompt.index("\n[Cut short:")]
-    assert source.startswith(body) and len(body) > 20000
-    assert f"the file has {len(data)} bytes" in prompt
-    assert f"the first {len(body.encode())} are shown" in prompt
-    assert f"the last {len(data) - len(body.encode())} bytes were cut" in prompt
-    assert where in prompt
-    assert "END_OF_PAGE" not in prompt and "cut_short=true" not in prompt
-    assert len(prompt) <= 40000
+    # Not a pasted body: the name, type, size and lines, how to read it by number, and its stored path.
+    facts = json.loads(prompt[prompt.index('{"file"'):].split("\n", 1)[0])
+    assert facts["name"] == "design.html" and facts["mime"] == "text/html" and facts["size"] == len(data)
+    assert facts["lines"] == 3001 and facts["pasted"] is False and "truncated" not in facts
+    assert "read_attachment (index 1, offset 1)" in prompt and where in prompt
+    assert ".card-0{" not in prompt and "END_OF_PAGE" not in prompt and "cut_short=true" not in prompt
+    assert len(prompt) < 3000
 
 
 def test_the_note_is_beside_the_text_never_inside_it():
