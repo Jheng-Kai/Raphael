@@ -52,6 +52,18 @@ watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
 常被聽成 in the Dictionary row (`dictionary.list` `heard`), and a replacement rule when the same pair is seen again.
 
+Follow-up from the owner's 113 dictations of the same day (R-DICT-SPELL-02, R-DICT-HINT-01, R-LEARN-FORM-01,
+R-DICT-KANA-01), all core text steps proved by pytest, none by the app:
+
+- The respelling never turns 「SpaceX」 into 「Space」 (a longer word that holds a dictionary word is right), keeps a
+  plural's ending (「grokbots」), and respells a real word such as 「Cloud」 only where a rule or a correction's form is
+  on record. A form seen once is evidence for it, though it is no rule yet: the Dictionary row still shows it under
+  常被聽成, and `dictionary.misheard` stays empty until the pair is seen twice.
+- The cleanup prompt lists a dictionary word with Chinese characters for a Chinese transcript only when a form it is
+  heard as is in it, so 「讀寫」 and 「本地端」 are not offered words one character away. The phrase list is unchanged.
+- A Chinese text with one or two stray kana is converted to the chosen script, in the transcript and after cleanup;
+  Japanese (a tenth hiragana, three at least) stays as it is.
+
 Proof, in this order:
 
 ```powershell

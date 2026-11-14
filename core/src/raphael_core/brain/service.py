@@ -486,7 +486,7 @@ class Brain:
 
         # An English name inside Chinese as the dictionary spells it: in its letter case, joined, or
         # spelled right where speech-to-text wrote it as a name it did not know (`respell_dictionary_words`).
-        text = respell_dictionary_words(text, self._dictionary.hint_words())
+        text = respell_dictionary_words(text, self._dictionary.hint_words(), self._dictionary.hint_forms())
         text = remove_dictation_fillers(text)
         if chinese is not None:
             text = finish_chinese_dictation(text)

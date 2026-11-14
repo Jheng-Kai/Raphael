@@ -202,7 +202,6 @@ def test_the_edit_distance_counts_insertions_deletions_and_substitutions(first, 
         ("MCP", "plugins、NCP servers 之類的"),
         ("claude", "打開 Claude Code"),
         ("computer use", "還有 Computer News 這些"),
-        ("拉斐爾", "拉菲爾老師"),
         ("拉斐爾", "no Chinese here at all"),
     ],
 )
@@ -223,6 +222,14 @@ def test_a_word_said_or_misheard_may_be_in_the_transcript(word, text):
 )
 def test_a_latin_word_with_nothing_like_it_in_the_transcript_is_not(word, text):
     assert not mishearing.may_be_heard_in(word, text)
+
+
+def test_a_cjk_word_may_be_in_a_chinese_transcript_only_through_a_form_it_is_heard_as():
+    # R-DICT-HINT-01: a word one character away is a word the speaker said (本地端 for 本機端).
+    assert not mishearing.may_be_heard_in("拉斐爾", "拉菲爾老師")
+    assert not mishearing.may_be_heard_in("本機端", "本地端的設定", ["本機"])
+    assert mishearing.may_be_heard_in("拉斐爾", "拉菲爾老師", ["拉菲爾"])
+    assert mishearing.may_be_heard_in("拉斐爾", "no Chinese here at all")
 
 
 def test_a_known_misheard_form_in_the_transcript_counts():
@@ -271,6 +278,10 @@ def test_what_speech_to_text_wrote_for_grokbot_is_found(text, found):
         ("grokbot", "像是 grokbot 這樣子"),
         # A plural is the speaker's word: "Grokbots" stays for the model to judge with the rest.
         ("grokbot", "像是Grokbots這樣子"),
+        # A longer word that holds the dictionary word is right as it stands (R-DICT-SPELL-02).
+        ("Space", "我看了 SpaceX 的發射"),
+        ("Space", "那個 Spacer 很好用"),
+        ("grokbot", "我用 grokbotz 試試"),
         # A run that only begins with the word, and words of the history that are other words.
         ("grokbot", "我記得 Grok 是可以自己喚醒自己的"),
         ("GitHub", "我們應該快要可以包新的 GitHub repo"),

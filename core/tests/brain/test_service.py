@@ -155,6 +155,26 @@ async def test_a_short_sentence_that_spells_the_dictionary_right_keeps_the_short
     assert fake_client.calls == []
 
 
+async def test_a_correction_is_kept_as_a_form_and_the_next_dictation_respells_it(
+    router, fake_client, keys
+):
+    # R-LEARN-FORM-01: the first correction keeps its form (evidence, shown on the page, a hint for
+    # the models) and no rule yet; the paste writes the word in Chinese text, where it is on record.
+    keys.set(KEY)
+    await router.call("dictionary.add", {"word": "claude"})
+    learned = await router.call("dictionary.learn", {"corrections": [{"word": "claude", "misheard": "Cloud"}]})
+    assert learned["learned"] == ["claude"]
+    [entry] = (await router.call("dictionary.list", {}))["entries"]
+    assert entry["misheard"] == [] and entry["heard"] == ["Cloud"]
+    text = "為什麼這邊顯示的是Cloud的用量，我不是有連線Codex嗎？"
+    fake_client.next_completion = completion({"text": text})
+    result = await finalize(router, raw_text=text)
+    assert result["text"] == "為什麼這邊顯示的是claude的用量，我不是有連線Codex嗎？"
+    english = "Move the files to the Cloud for the night."
+    fake_client.next_completion = completion({"text": english})
+    assert (await finalize(router, raw_text=english))["text"] == english
+
+
 @pytest.mark.parametrize("text", [
     "hello world", "Um, hello world.", "不對，明天見。", "I I agree.",
     "First, open it. Second, close it.", "Run `rm`.", "A sentence. Another sentence.",

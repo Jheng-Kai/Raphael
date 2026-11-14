@@ -78,10 +78,17 @@ def test_delimiters_spaces_and_line_breaks_are_kept_exactly(text, expected):
 
 
 def test_a_sentence_with_at_least_ten_percent_hiragana_is_japanese():
-    # One hiragana among 10 CJK characters is exactly 10 %: Japanese, so left alone.
-    assert to_taiwan_traditional("软" * 9 + "の") == "软" * 9 + "の"
-    # Among 11 it is under 10 %: Chinese, so converted.
-    assert to_taiwan_traditional("软" * 10 + "の") == "軟" * 10 + "の"
+    # Three hiragana among 30 CJK characters are exactly 10 %: Japanese, so left alone.
+    assert to_taiwan_traditional("软" * 27 + "ののの") == "软" * 27 + "ののの"
+    # Among 31 it is under 10 %: Chinese, so converted.
+    assert to_taiwan_traditional("软" * 28 + "ののの") == "軟" * 28 + "ののの"
+
+
+@pytest.mark.parametrize("kana", ["の", "のは", "ラファエル", "のラファエル"])
+def test_a_stray_kana_or_two_in_chinese_does_not_make_it_japanese(kana):
+    # One or two hiragana in a short Chinese sentence are over 10 %, and no Japanese: the Chinese
+    # is converted all the same (R-DICT-KANA-01).
+    assert to_taiwan_traditional("我想用这个" + kana + "功能") == "我想用這個" + kana + "功能"
 
 
 @pytest.mark.parametrize(
@@ -93,10 +100,10 @@ def test_a_sentence_with_at_least_ten_percent_hiragana_is_japanese():
     ],
 )
 def test_katakana_counts_as_a_cjk_character_but_not_as_hiragana(katakana):
-    # 11 CJK characters, one of them hiragana: under 10 %. Were the katakana not counted, the
-    # sentence would be 1 in 10 and count as Japanese.
-    sentence = "软" * 9 + "の" + katakana
-    assert to_taiwan_traditional(sentence) == "軟" * 9 + "の" + katakana
+    # 31 CJK characters, three of them hiragana: under 10 %. Were the katakana not counted, the
+    # sentence would be 3 in 30 and count as Japanese.
+    sentence = "软" * 27 + "ののの" + katakana
+    assert to_taiwan_traditional(sentence) == "軟" * 27 + "ののの" + katakana
 
 
 @pytest.mark.parametrize(
@@ -108,9 +115,9 @@ def test_katakana_counts_as_a_cjk_character_but_not_as_hiragana(katakana):
     ],
 )
 def test_han_characters_of_every_block_count_as_cjk_characters(han):
-    # 11 CJK characters, one of them hiragana: Chinese. Were the Han characters not counted, only
-    # 软 and の would remain and the sentence would count as Japanese.
-    assert to_taiwan_traditional("软" + han * 9 + "の").startswith("軟")
+    # 31 CJK characters, three of them hiragana: Chinese. Were the Han characters not counted, only
+    # 软 and ののの would remain and the sentence would count as Japanese.
+    assert to_taiwan_traditional("软" + han * 27 + "ののの").startswith("軟")
 
 
 def test_a_sentence_without_hiragana_is_never_japanese():
@@ -727,6 +734,11 @@ OWNER_WORDS = ["grokbot", "GitHub", "computer use", "OpenRouter", "Space", "clau
         ("你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下", "你這邊的話就是跟grokbot一樣，設計是滑鼠滾輪往下"),
         ("你可以看一下Grokbox是怎麼做的", "你可以看一下grokbot是怎麼做的"),
         ("幫我用 Herder 開兩個分頁", "幫我用 herdr 開兩個分頁"),
+        # A plural keeps its ending (R-DICT-SPELL-02).
+        ("像是Grokbots這樣子", "像是grokbots這樣子"),
+        ("跟 Grok Bots 一樣", "跟 grokbots 一樣"),
+        ("接上 OpenRouters 就好", "接上 OpenRouters 就好"),
+        ("接上 openrouters 就好", "接上 OpenRouters 就好"),
     ],
 )
 def test_a_dictionary_word_inside_chinese_is_written_as_the_dictionary_spells_it(text, expected):
@@ -743,8 +755,11 @@ def test_a_dictionary_word_inside_chinese_is_written_as_the_dictionary_spells_it
         "上傳到 github.com 就好",
         "用 Claude Code 寫",
         "打開 Space key 的設定",
-        # Not the word: a plural, letters of a longer word, a word too far from any.
-        "像是Grokbots這樣子", "我的iCloud空間", "我記得 Grok 是可以的", "上傳到 Drive 就好",
+        # Not the word: letters of a longer word, a word too far from any.
+        "我的iCloud空間", "我記得 Grok 是可以的", "上傳到 Drive 就好",
+        # A longer word that holds a dictionary word, or is held by one, is right as it stands
+        # (R-DICT-SPELL-02): SpaceX is no misspelling of Space.
+        "我看了 SpaceX 的發射", "那個 Spacer 很好用", "跟 Spaced 一樣",
         # A word in lower case is ordinary English the speaker said.
         "幫我用 herder 開兩個分頁", "跟 grabbot 一樣",
         # A word of the dictionary is never another one's misspelling.
@@ -766,3 +781,52 @@ def test_the_first_word_of_the_dictionary_wins_two_that_spell_alike():
     assert textnorm.respell_dictionary_words("用 Claude 寫", ["CLAUDE", "claude"]) == "用 CLAUDE 寫"
     assert textnorm.respell_dictionary_words("用 Claude 寫", []) == "用 Claude 寫"
     assert textnorm.respell_dictionary_words("用 拉菲爾 寫", ["拉斐爾"]) == "用 拉菲爾 寫"
+
+
+# R-DICT-SPELL-02: a real word is a misspelling of a dictionary word only where the dictionary
+# records it. "Cloud" is Claude for the owner who corrected it, and a cloud for everybody else.
+
+
+def test_a_real_word_is_respelled_only_where_it_is_on_record():
+    words = ["claude", "bot"]
+    text = "為什麼這邊顯示的是Cloud的用量，還有 Butt 的設定"
+    assert textnorm.respell_dictionary_words(text, words) == text
+    forms = [("Cloud", "claude"), ("Butt", "bot")]
+    assert textnorm.respell_dictionary_words(text, words, forms) == (
+        "為什麼這邊顯示的是claude的用量，還有 bot 的設定"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "words", "forms"),
+    [
+        # English text keeps its words.
+        ("Move it to the Cloud for a while", ["claude"], [("Cloud", "claude")]),
+        # A form needs four letters, to sound or look like its word, and to be no dictionary word.
+        ("那個 box 很大", ["bot"], [("box", "bot")]),
+        ("用 Apple 打開", ["claude"], [("Apple", "claude")]),
+        ("接上 Cloud 就好", ["claude", "Cloud"], [("Cloud", "claude")]),
+        # A part of a longer word is not the form.
+        ("我的iCloud空間", ["claude"], [("Cloud", "claude")]),
+    ],
+)
+def test_a_recorded_form_is_taken_only_as_evidence_that_holds(text, words, forms):
+    assert textnorm.respell_dictionary_words(text, words, forms) == text
+
+
+# R-DICT-KANA-01: the cleanup model gave a Chinese dictation back unchanged, in Simplified
+# characters, and a kana in it kept the whole text from the conversion.
+
+
+@pytest.mark.parametrize("chinese", ["zh-TW", "zh-HK", "yue-HK"])
+def test_a_chinese_text_with_a_stray_kana_is_converted_after_the_cleanup(chinese):
+    text = "我想用这个の功能，开发的软件很好用。"
+    cleaned = textnorm.finish_cleaned_text(text, [], chinese=chinese)
+    assert "这" not in cleaned and "开" not in cleaned and "の" in cleaned
+    assert textnorm.normalize_transcript(text, [], chinese=chinese) == cleaned
+
+
+def test_a_japanese_text_is_left_alone_after_the_cleanup():
+    text = "明日は学校に行きます。会议の資料です。"
+    assert textnorm.finish_cleaned_text(text, [], chinese="zh-TW") == text
+    assert textnorm.normalize_transcript(text, [], chinese="zh-TW") == text
