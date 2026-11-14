@@ -244,7 +244,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .wbody { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); height: 100%; min-height: 0; }
 
 .side { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-2) var(--sp-3); min-height: 0; overflow-x: hidden; overflow-y: auto; }
-.app-icon { display: block; width: 40px; height: 40px; flex: none; object-fit: contain; object-position: center; border-radius: 0; background: transparent; }
+.app-icon { display: block; width: 40px; height: 40px; flex: none; object-fit: contain; object-position: center; border-radius: 0; background: transparent; user-select: none; }
 .nav { position: relative; display: flex; align-items: center; gap: var(--sp-2); min-height: 38px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; font-size: var(--fs-md); line-height: 1.4; color: var(--text-2); width: 100%; }
 .nav:hover { background: var(--hover); color: var(--text); }
 .nav:active { background: var(--pressed); color: var(--text); }

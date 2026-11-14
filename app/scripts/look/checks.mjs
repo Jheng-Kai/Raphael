@@ -2536,8 +2536,8 @@ export function checkRendered(name, context = {}) {
     require(visible(pane.querySelector('[data-pane][aria-current="page"]')), 'Safety is open');
     require(!pane.querySelector('[data-k="local-commands"]'), 'there is no local commands control');
     require(!/本機指令|Local commands|Ask every time|每次詢問/.test(pane.textContent), `no word of it is left in Safety: ${pane.textContent.slice(0, 120)}`);
-    const last = [...pane.querySelectorAll('.sgroup')].at(-1);
-    require(visible(last) && last.querySelectorAll('.slist > *').length >= 1, 'the computer section still has its row (the apps always allowed, or the note that there are none)');
+    // Owner, 2026-11-14: the 電腦操作 section (the apps always allowed) is gone too; the computer lives in a member's third tab.
+    require(!/電腦操作|Computer use/.test(pane.textContent) && !pane.querySelector('[data-act="computer-menu"]'), 'Safety has no 電腦操作 section');
     return {check:name};
   }
   if (name === "local-command-card" || name === "local-command-settled") {
@@ -3594,6 +3594,29 @@ export function checkRendered(name, context = {}) {
     if (name.endsWith('local')) require(!panel.querySelector('input') && document.querySelector('[data-computer-location]').textContent.includes('本機'), "the header names the local host without repeating it in the popover");
     else require(panel.querySelector('input')?.value === 'studio-mini' && visible(panel.querySelector('[role="alert"]')), "remote failure stays in its host popover");
     return {check:name};
+  }
+  if (name === "owner-about-typing" || name === "owner-about-rest") {
+    // 關於我 (owner, 2026-11-14): never dragged to a size; four lines at rest with the rest folded; while written, every line in sight.
+    const about = document.querySelector('[data-owner="owner_about"]'), style = getComputedStyle(about);
+    const line = parseFloat(style.lineHeight), pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const rest = 4 * line + pad + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth), box = about.getBoundingClientRect();
+    require(visible(about) && style.resize === 'none', `no drag handle (resize ${style.resize})`);
+    require(about.value.length > 200, `the long text is in the field (${about.value.length} characters)`);
+    if (name === 'owner-about-typing') {
+      require(document.activeElement === about, 'the field is being written');
+      require(box.height > rest + line && about.scrollHeight <= about.clientHeight + 1, `the box grows with its words (${Math.round(box.height)} px against ${Math.round(rest)} at rest; ${about.scrollHeight} of ${about.clientHeight} in sight)`);
+    } else {
+      require(document.activeElement !== about, 'the field was left');
+      require(Math.abs(box.height - rest) <= 1.5, `four lines at rest (${Math.round(box.height)} px against ${Math.round(rest)})`);
+      require(about.scrollHeight > about.clientHeight + line && about.scrollTop === 0 && style.overflowY === 'hidden', `the rest is folded, its start in sight, no scroll bar (top ${about.scrollTop}, overflow ${style.overflowY})`);
+    }
+    return { check: name, height: Math.round(box.height), rest: Math.round(rest) };
+  }
+  if (name === "about-brand-unselectable") {
+    // The about tab's mark and name are the app's face, not text: a drag over them selects nothing (owner, 2026-11-14).
+    const brand = document.querySelector('.about-brand'), parts = [brand, brand?.querySelector('.about-name'), brand?.querySelector('img')];
+    require(parts.every(part => part && visible(part) && getComputedStyle(part).userSelect === 'none'), `the mark and the name select nothing (${parts.map(part => part && getComputedStyle(part).userSelect).join(', ')})`);
+    return { check: name };
   }
   if (["settings-owner", "settings-tools", "settings-draft-grouped"].includes(name)) {
     if (name === 'settings-owner') {
@@ -7379,6 +7402,9 @@ export function checkRendered(name, context = {}) {
     require(connectBox.height === 26 && connectBox.width < 120, `its height is the control token and its width hugs its words (${connectBox.width}x${connectBox.height})`);
     const done = view.querySelector('.cs-card .cs-state');
     require(done && !done.closest('.cs-card').querySelector('button.cs-connect') && done.textContent.includes('已連結'), "a connected app says 已連結 in quiet words and has no button");
+    // Owner, 2026-11-14: the row's button and its 已連結 are one piece: the check stands inside the button, whose fill runs past it.
+    const one = done.closest('.btn.cs-main[data-conn="open-store"]'), oneBox = one?.getBoundingClientRect(), doneBox = done.getBoundingClientRect();
+    require(one && oneBox.right >= doneBox.right + 4 && oneBox.left <= doneBox.left, `已連結 is part of the row's one button (button ${oneBox && Math.round(oneBox.right)}, check ${Math.round(doneBox.right)})`);
     const surface = getComputedStyle(modal);
     require(surface.backgroundColor === colourOf('backgroundColor', '--dialog') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the dialog layer and its edge");
     const body = modal.querySelector('.modal-body');

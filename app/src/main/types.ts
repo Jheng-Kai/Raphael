@@ -1257,8 +1257,6 @@ export interface AppContext {
   refreshDevice(): Promise<DeviceSettings>;
   /** Changes some device settings; rejects with the reason. */
   setDevice(patch: Partial<DeviceSettings>): Promise<DeviceSettings>;
-  /** Takes one app off the always-allowed list (`device_computer_app_remove`); rejects with the reason. */
-  removeComputerApp(exe: string): Promise<DeviceSettings>;
   /** Hears the events of the core (microphone level, model download). Returns how to stop hearing. */
   onEvent(handler: (event: MainEvent) => void): () => void;
   /** Things that happen only after 10 seconds, with 「復原」. */

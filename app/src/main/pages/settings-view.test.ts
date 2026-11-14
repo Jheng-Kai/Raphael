@@ -17,7 +17,6 @@ import {
   PANES,
   canonicalPane,
   RETENTIONS,
-  computerApps,
   type SettingsView,
   loadingHTML,
   settingsMicrophones,
@@ -669,57 +668,12 @@ describe("while the core does not answer", () => {
   });
 });
 
-describe("電腦操作", () => {
-  const EXCEL = { exe: "excel.exe", name: "Microsoft Excel" };
-  const CALC = { exe: "calculatorapp.exe", name: "Calculator" };
-  const withApps = (apps: DeviceSettings["computer_apps"]) => tab("safety", { device: { ...device, computer_apps: apps } });
-
-  test("is the last section of Raphael: a row per always-allowed app with an overflow menu", () => {
-    const html = withApps([EXCEL, CALC]);
-    expect(html).toContain("<h2>電腦操作</h2>");
-    expect(html.lastIndexOf("<h2>")).toBe(html.indexOf("<h2>電腦操作</h2>"));
-    expect(names(html).slice(-2)).toEqual(["Microsoft Excel", "Calculator"]);
-    const excel = rowOf(html, "Microsoft Excel");
-    expect(excel).toContain('data-act="computer-menu"');
-    expect(excel).toContain('data-exe="excel.exe"');
-    expect(excel).toContain('aria-label="「Microsoft Excel」的選項"');
-    // An overflow icon only: no word beside it, no helper text anywhere.
-    expect(excel.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("Microsoft Excel");
-    expect(described(html)).toEqual([]);
-    expect(buttons(html).filter((b) => b.includes("computer-menu"))).toHaveLength(2);
-  });
-
-  test("with no app: one muted row, nothing else", () => {
-    for (const apps of [[], undefined as unknown as DeviceSettings["computer_apps"]]) {
-      const html = withApps(apps);
-      expect(html).toContain('<span class="val">沒有一律允許的 App</span>');
-      expect(html).not.toContain("computer-menu");
-    }
-    setLocale("en");
-    expect(withApps([])).toContain("No apps are always allowed");
-    setLocale("ja");
-    expect(withApps([])).toContain("常に許可されたアプリはありません");
-  });
-
-  test("an app name is escaped", () => {
-    const html = withApps([{ exe: 'x".exe', name: "<b>Evil</b>" }]);
-    expect(html).not.toContain("<b>Evil</b>");
-    expect(html).toContain("&lt;b&gt;Evil&lt;/b&gt;");
-    expect(html).toContain('data-exe="x&quot;.exe"');
-  });
-
-  test("settings from before the feature have no always-allowed app", () => {
-    const old = { ...device } as Partial<DeviceSettings>;
-    delete old.computer_apps;
-    expect(computerApps(old as DeviceSettings)).toEqual([]);
-  });
-
-  test("the settings wire the button to the removal of that one app, never a whole list", () => {
-    // two apps removed quickly must not compute both lists from the settings the window had
-    const source = readFileSync(path.resolve(import.meta.dirname, "settings.ts"), "utf8");
-    expect(source).toContain('case "computer-menu"');
-    expect(source).toContain("removeComputerApp(exe)");
-    expect(source).not.toContain("computer_apps: computerAppsWithout");
+describe("電腦", () => {
+  test("the safety tab has no 電腦操作 section and no per-app menu (owner, 2026-11-14)", () => {
+    const html = tab("safety", { device: { ...device, computer_apps: [{ exe: "excel.exe", name: "Microsoft Excel" }] } });
+    expect(html).not.toContain("電腦操作");
+    expect(html).not.toContain("computer-menu");
+    expect(html).not.toContain("Microsoft Excel");
   });
 
   test("the computer's location is not a Settings row", () => {

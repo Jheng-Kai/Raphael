@@ -10,7 +10,10 @@
 .owner-profile label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); font-size: var(--fs-sm); }
 /* On the section's card the fields keep the page's own ground, so they read as fields. */
 .owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--field, var(--content)); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
-.owner-profile textarea { resize: vertical; min-height: 110px; }
+/* 關於我 is never dragged to a size (owner, 2026-11-14). At rest it is four whole lines (no bottom padding, so no fifth line shows cut in half) and the rest is out of sight, so the settings
+   under it stay in reach; while it is written it grows with its words, up to most of the window. */
+.owner-profile textarea.field { --about-rest: calc(4lh + var(--sp-2) + 2px); resize: none; height: var(--about-rest); padding-bottom: 0; line-height: 1.5; overflow: hidden; }
+.owner-profile textarea.field:focus { field-sizing: content; height: auto; min-height: var(--about-rest); max-height: 60vh; padding-bottom: var(--sp-2); overflow-y: auto; }
 /* The output folder: the button names the folder; its whole path stands under the row's name. */
 .output-path { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .btn.output-chosen { max-width: 220px; }

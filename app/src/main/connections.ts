@@ -400,21 +400,22 @@ const inChat = (s: StoreService): boolean => !!PRESET_FORMS[s.id] || s.id === OW
 const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
 
 /**
- * A row of the dialog: the mark on its tile and the name open the app's page, and so does the rest of the row, 「✓ 已連結」 included (owner,
- * 2026-11-14: 已連結 also has to be pressable, see `click`); 「連結」 is the one control in it that does something else.
+ * A row of the dialog: the mark on its tile and the name open the app's page. A connected app's 「✓ 已連結」 is part of that one button, its
+ * fill running under the check (owner, 2026-11-14: the button and 已連結 are one, not two pieces); 「連結」 is the one control beside it.
  */
 function appRowHTML(s: StoreService, v: ConnectionsView): string {
   const here = v.login?.target === s.id;
   const wait = here ? `<span class="sub wait">${esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` : "";
   const summary = words(s.summary);
+  const state = s.server_id ? joinControl(s, v) : "";
   return (
     `<div class="cs-card">` +
     btn(
-      `${tileHTML(storeMark(s))}<span class="tx"><span class="nm">${esc(s.name)}</span>${wait}</span>`,
+      `${tileHTML(storeMark(s))}<span class="tx"><span class="nm">${esc(s.name)}</span>${wait}</span>${state}`,
       "cs-main",
       ` data-conn="open-store" data-id="${esc(s.id)}" data-k="cs-store:${esc(s.id)}"${summary ? ` title="${esc(summary)}"` : ""}`,
     ) +
-    `${joinControl(s, v)}</div>`
+    `${state ? "" : joinControl(s, v)}</div>`
   );
 }
 

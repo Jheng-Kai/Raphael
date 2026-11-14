@@ -1,6 +1,8 @@
 import { scene, click, hover, type, wait, waitGone, codexArrives, page, settings, scroll, key, check, member, rightClick } from "./steps.mjs";
 
 const connections = settings("connections");
+// A long 關於我: eight sentences, more than the four lines the field shows at rest.
+const aboutLong = Array.from({ length: 8 }, (_, at) => `第 ${at + 1} 句：我在做一個語言學習的產品，希望大家像學母語一樣，透過長時間的環境和使用自然學會一種語言。`).join("");
 const add = [...connections, click('[data-k="conn-add"]')];
 const custom = [...add, click('.menu [data-value="custom"]')];
 // One view (R-APPS-01): the apps are what 連結應用程式 opens on, and the chip at the top right opens the connected ones.
@@ -23,8 +25,11 @@ export default [
 
 
   scene("settings-owner", "Owner identity leads General, with no weather city to set", [...settings("general"), wait('[data-owner="owner_name"]'), check('settings-owner')]),
+  scene("settings-owner-about-typing", "關於我 being written: no drag handle, and the box grows with every line of a long text", [...settings("general"), wait('[data-owner="owner_about"]'), type('[data-owner="owner_about"]', aboutLong), check('owner-about-typing')]),
+  scene("settings-owner-about-rest", "關於我 left with a long text: four lines and its start in sight, the rest folded, the settings under it in reach", [...settings("general"), wait('[data-owner="owner_about"]'), type('[data-owner="owner_about"]', aboutLong), click('[data-owner="owner_name"]'), check('owner-about-rest')]),
+  scene("settings-about-brand", "The about tab's mark and name cannot be selected", [...settings("about"), wait('.about-brand'), check('about-brand-unselectable')]),
 
-  scene("local-command-settings-gone", "Safety has no local commands row (owner, 2026-11-14): only the rules and the always-allowed apps are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
+  scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section (owner, 2026-11-14): only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
   scene("model-sync", "Raphael's model is chosen on his own page; Settings hold only his quick question", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
