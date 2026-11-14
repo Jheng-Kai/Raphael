@@ -367,7 +367,7 @@ INTERACTION_RPCS = {
     **dict.fromkeys(("attachments.info", "attachments.upload"),
                    "Owner composer file selection and bounded upload; not model management tools."),
     "routines.run": "Only the owner's explicit routine test starts a manual run through the existing worker.",
-    **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract",
+    **dict.fromkeys(("members.viewing", "members.greet", "rooms.send", "rooms.transcribe", "agent.history.stop", "agent.history.retract", "agent.history.send_now",
                      "worker.cancel", "worker.rerun", "pages.open", "pages.viewing"),
                    "Existing owner conversation, work or presentation entry; not team administration."),
     **dict.fromkeys(("calendar.add", "calendar.update", "calendar.delete"), "Shared calendar work tools retain their existing gate for every member."),

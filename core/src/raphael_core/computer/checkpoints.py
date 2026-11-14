@@ -240,18 +240,30 @@ class CheckpointStore:
                 continue
             if (old and (old["digest"], old["mode"])) == (new and (new["digest"], new["mode"])):
                 continue
-            diff = ""
+            diff, added, removed = "", None, None
             if time.monotonic() < deadline and len(files) < 20:
                 try:
                     left = self._bytes(old)
                     right = self._bytes(new) if new and self._object(new["digest"]).exists() else self._read(path, deadline)[1] if new else b""
                     if b"\0" in left + right:
                         raise UnicodeError()
-                    diff = "\n".join(difflib.unified_diff(left.decode().splitlines(), right.decode().splitlines(), fromfile="before", tofile="after", lineterm=""))[:12000]
+                    lines = list(difflib.unified_diff(left.decode().splitlines(), right.decode().splitlines(), fromfile="before", tofile="after", lineterm=""))
+                    # The two header lines are not content. The counts come from the whole diff, not from the shortened text kept below.
+                    body = [line for line in lines[2:] if not line.startswith("@@")]
+                    added, removed = sum(line.startswith("+") for line in body), sum(line.startswith("-") for line in body)
+                    diff = "\n".join(lines)[:12000]
                 except (UnicodeError, OSError, ValueError, TimeoutError):
                     pass
-            files.append({"path": path, "before": old, "after": new, "diff": diff})
+            # `added` and `removed` stay None where no text could be compared (a picture, a large file, past the twentieth file): the owner is
+            # told such a file is new, gone or changed, never "+0 -0".
+            files.append({"path": path, "before": old, "after": new, "diff": diff, "added": added, "removed": removed})
         return files
+
+    @staticmethod
+    def _view(file):
+        """What the owner is shown of one changed file. A file kept before `added` and `removed` existed has no counts."""
+        change = "added" if not file.get("before") else "removed" if not file.get("after") else "changed"
+        return {"path": file["path"], "diff": file["diff"], "change": change, "added": file.get("added"), "removed": file.get("removed")}
 
     def list(self, *, member):
         records = self._records()
@@ -283,7 +295,7 @@ class CheckpointStore:
                 self._write(data["id"], data)
             output.append({key: data[key] for key in ("id", "member", "turn", "created", "state")} | {
                 "partial": incomplete, "uncovered": omitted, "review_token": token,
-                "files": [{"path": file["path"], "diff": file["diff"]} for file in files]})
+                "files": [self._view(file) for file in files]})
         return list(reversed(output))[:MAX_CHECKPOINTS]
 
     def restore(self, identifier, *, member, review_token=None):

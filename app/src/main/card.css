@@ -132,3 +132,23 @@
 .template-next { margin: 0; }
 .template-where { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); color: var(--text-2); }
 .template-path { overflow-wrap: anywhere; user-select: text; }
+
+/* The result of work that changed files (task-result.ts): a well of rows, one per file, with hairlines as the question card's rows have. A row is
+   the file's name, the folder it is in (quiet) and, at the right, what happened to it. A file with text to read opens under its row. */
+.task-result .tr-files { display: flex; flex-direction: column; }
+.task-result .tr-file { min-width: 0; font-size: var(--fs-sm); }
+.task-result .tr-file > summary, .task-result .tr-file.tr-plain { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; list-style: none; }
+.task-result .tr-file > summary { cursor: pointer; }
+.task-result .tr-file > summary::-webkit-details-marker { display: none; }
+.task-result .tr-chev { display: inline-flex; flex: 0 0 16px; width: 16px; height: 16px; color: var(--text-3); }
+.task-result .tr-chev > svg { width: 16px; height: 16px; }
+.task-result .tr-file[open] > summary .tr-chev > svg { rotate: 90deg; }
+.task-result .tr-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.task-result .tr-dir { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-xs); }
+.task-result .tr-state { flex: 0 0 auto; margin-inline-start: auto; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.task-result .tr-add { color: var(--ok); }
+.task-result .tr-del { color: var(--err); }
+.task-result .tr-file pre { margin: 0; padding: 0 12px 12px 36px; white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; font-size: var(--fs-xs); }
+.task-result .tr-file .foot { margin: 0; padding: 0 12px 12px 36px; }
+/* Once undone, the rows stay to read but no longer say what is in the files now. */
+.task-result.is-restored .tr-name { color: var(--text-2); }

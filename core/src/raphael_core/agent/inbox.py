@@ -50,6 +50,20 @@ class AgentInbox:
             )
             return self.get(row['turn_id']) if claimed.rowcount else None
 
+    def promote(self, turn_id):
+        """Put a queued row ahead of the others of its conversation, so that the next claim takes it. Whether it was queued."""
+        with self.conn:
+            row = self.get(turn_id)
+            if not row or row['state'] != 'queued':
+                return False
+            first = self.conn.execute(
+                "SELECT MIN(seq) FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued'",
+                (row['member_id'], row['conversation_id']),
+            ).fetchone()[0]
+            if first < row['seq']:
+                self.conn.execute("UPDATE agent_inbox SET seq=? WHERE turn_id=?", (first - 1, turn_id))
+            return True
+
     def transfer(self, turn_id):
         with self.conn:
             self.conn.execute("UPDATE agent_inbox SET state='steering',boot_id=? WHERE turn_id=? AND state='queued'", (self.boot_id, turn_id))
