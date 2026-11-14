@@ -110,6 +110,36 @@ the give-back fails (`releaseFails`), 6 s later the view watches with the failur
 holds the lease (`data-desktop-state="owner"`) and 接手控制 is shown and enabled. The check `desktop-watch` no longer skips
 the button when the lease is the owner's. Native, not run: the owner's own real take-over of a seat after a failed one.
 
+## Ending control is not ending watching; a running computer's preview is never a black frame (owner, 2026-11-14)
+
+R-COMP-RELEASE-01, R-COMP-PREVIEW-01. The owner's picture: the Computer tab's preview, 執行中 above it, a black screen with only
+the 開啟 pill. His words: 「有時候畫面會變成這樣子，你可能要確定一下為什麼。就是我結束的時候，而且結束控制不代表我要結束觀看，
+所以不要跳掉。你這邊哪裡邏輯怪怪的」. (His build predates #99, which removed the Details computer row; the preview never
+depended on that row's background stream, so the fix is the same on main.)
+
+Two causes, both in `desktop-viewer.ts`, none in the core (`viewer.py::_control` keeps the session on release).
+- The pill's 停止 (after 接手控制) called `handback()`, the path of a sign-in request's 我完成了: it asked the core to release,
+  folded the larger view, closed the stream and, in a window under 1440 px or when the panel had been closed, closed the panel.
+  Now `release()` asks the core to release and does nothing else: the view stays, the stream stays, the screen is view-only,
+  the pill reads 觀看中 and 接手控制 is offered. A refused stop leaves the pill on 你正在控制 and gives the screen his input
+  again. 我完成了 (a request a member waits on) still goes back to the conversation through `handback()` (R-COMP-3-03).
+- `handback()` also set `suspended` (so a returned request's card does not reopen its stream) and never cleared it for a
+  panel that stays visible: in a wide window the panel stayed open on the third tab with a running computer, no stream and no
+  picture until he pressed the screen, which clears `suspended` (the press that enlarges it). A handback that leaves the panel
+  visible now streams again at once (the discarded demonstration and the returned sign-in request take that path).
+Reproduced before the fix: `computer-release-keeps-watching` red at 1920 and 720 (the view left), `computer-preview-running`
+red at 1920 (no iframe in the tab after the handback), and the vitest cases listed in the rules.
+
+```powershell
+npm run look -- computer-release-keeps-watching computer-preview-running takeover-handback desktop-handback desktop-takeover-done desktop-teach-discard desktop-watch desktop-watch-collapse --theme both --width 1120,720,1920x1080
+```
+
+`computer-release-keeps-watching`: take control, press 停止, the larger view is open, the pill reads 觀看中, 接手控制 is
+offered and enabled, the frame is visible and connected (one `viewer_open`, no `viewer_close`, one release).
+`computer-preview-running`: a demonstration is discarded (a handback that leaves a wide panel open), the Computer tab shows the
+live stream or the last picture (the check fails on a black frame with only 開啟). `takeover-handback` and `desktop-handback`
+now end by folding back, not by the stop. Native, not run: the owner's own real take, stop and fold on his seat.
+
 ## The disk notice names the disk that is full (owner, 2026-11-14)
 
 R-COMP-DISK-01. A member told the owner 電腦磁碟快滿了 and named `.browser-profiles` (326 MiB), `.raphael-checkpoints` (12 MiB)

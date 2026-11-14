@@ -928,6 +928,33 @@ export function checkRendered(name, context = {}) {
     window.__look.desktopStream = { frame, document: frame.contentDocument, opens: window.__look.calls.filter(call => call.method === 'computer.viewer_open').length, closes: window.__look.calls.filter(call => call.method === 'computer.viewer_close').length };
     return {check:name};
   }
+  // R-COMP-RELEASE-01 (owner, 2026-11-14: 「結束控制不代表我要結束觀看，所以不要跳掉」): Stop only hands the computer back.
+  if (name === 'release-keeps-watching') {
+    const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls, frame = panel.querySelector('iframe');
+    const dock = panel.querySelector('.desktop-dock'), take = dock.querySelector('[data-desktop="take"]'), screen = panel.querySelector('.desktop-screen').getBoundingClientRect();
+    require(panel.hasAttribute('data-expanded') && document.documentElement.hasAttribute('data-desktop-watch'), 'the larger view is still open');
+    require(dock.querySelector('.desktop-mode-label').textContent === '觀看中' && dock.querySelector('.desktop-mode-label').dataset.mode === 'watching', 'the pill says Watching');
+    require(visible(take) && take.textContent === '接手控制' && !take.disabled, 'Take control is offered again');
+    require(!visible(dock.querySelector('[data-desktop="return"]')), 'Stop is gone with the control it ended');
+    require(visible(frame) && frame.contentWindow.__desktopConnections === 1 && screen.width > 200 && screen.height > 100, 'the frame is visible and connected');
+    require(panel.dataset.interactive === 'false' && getComputedStyle(frame).pointerEvents === 'none', 'the screen is view-only again');
+    require(panel.dataset.desktopState === 'member', `the computer is the member's again (${panel.dataset.desktopState})`);
+    require(calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1 && !calls.some(call => call.method === 'computer.viewer_close'), 'one release and no closed stream');
+    require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === 1).length === 1, 'the same stream, never reopened');
+    require(!visible(panel.querySelector('.desktop-error')), 'nothing is said about it');
+    return {check: name};
+  }
+  // R-COMP-PREVIEW-01 (owner, 2026-11-14): a running computer's preview is its screen, never a black frame with only Open.
+  if (name === 'preview-running') {
+    const panel = document.querySelector('.desktop-panel'), frame = panel.querySelector('iframe'), picture = panel.querySelector('.desktop-last');
+    const screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), calls = window.__look.calls;
+    require(visible(panel) && panel.closest('.mb-det') && !panel.hasAttribute('data-expanded') && screen.width > 200 && screen.height > 100, 'the Computer tab shows its preview');
+    const live = visible(frame) && frame.contentWindow.__desktopConnections === 1, last = visible(picture) && !!picture.getAttribute('src');
+    require(live || last, `the preview is the live stream or the last picture, never a black frame with only Open (live ${live}, picture ${last}, state ${panel.dataset.desktopState})`);
+    require(panel.dataset.desktopState === 'member', `the running computer is the member's (${panel.dataset.desktopState})`);
+    require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === 1).length <= 2, 'one stream, or one stream reopened after the handback');
+    return {check: name, live, last};
+  }
   if (name === 'desktop-watch' || name === 'desktop-watch-collapse' || name === 'desktop-watch-retake') {
     const panel = document.querySelector('.desktop-panel'), calls = window.__look.calls;
     // An earlier take-over (desktop-watch-retake) has asked the core for the lease; every other watch has not.
@@ -1351,12 +1378,18 @@ export function checkRendered(name, context = {}) {
       if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="files"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds files and teaching');
     } else if (name === 'level-reopen') {
       const frame = desktop.querySelector('iframe'), current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
-      require(desktop.hasAttribute('data-expanded') && desktop.dataset.interactive === 'true' && frame.contentWindow.__desktopConnections === 1, 'a fresh connected stream accepts the new takeover');
-      require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 2, 'reopening creates exactly one fresh member stream');
-    } else if (name.startsWith('level-handback')) {
-      require(!desktop.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'handback returns to the conversation');
-      if (innerWidth < 1440) require(document.querySelector('.conversation-trigger').getAttribute('aria-expanded') === 'false', 'handback closes the compact preview');
-      require(calls.filter(call => call.method === 'computer.viewer_control' && !call.params.held).length === (name.endsWith('second') ? 2 : 1) && calls.some(call => call.method === 'computer.viewer_close'), 'each handback releases once and closes the stream');
+      require(desktop.hasAttribute('data-expanded') && desktop.dataset.interactive === 'true' && frame.contentWindow.__desktopConnections === 1, 'the same connected stream accepts the new takeover');
+      require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && !calls.some(call => call.method === 'computer.viewer_close'), 'stopping and taking again opens and closes no stream');
+    } else if (name === 'level-handback') {
+      // Stop is not leaving (owner, 2026-11-14): the view stays open on the same stream, watching.
+      const frame = desktop.querySelector('iframe'), dock = desktop.querySelector('.desktop-dock'), current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
+      require(desktop.hasAttribute('data-expanded') && document.documentElement.hasAttribute('data-desktop-watch') && visible(frame) && frame.contentWindow.__desktopConnections === 1, 'stopping keeps the larger view open on its connected stream');
+      require(dock.querySelector('.desktop-mode-label').textContent === '觀看中' && visible(dock.querySelector('[data-desktop="take"]')), 'the pill watches again and offers Take control');
+      require(calls.filter(call => call.method === 'computer.viewer_control' && !call.params.held).length === 1 && !calls.some(call => call.method === 'computer.viewer_close') && calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1, 'one release, and the stream is neither closed nor reopened');
+    } else if (name === 'level-handback-second') {
+      // Folding back is what returns to the conversation; the stream is kept for a moment, as after any watch.
+      require(!desktop.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'folding back returns to the conversation');
+      require(calls.filter(call => call.method === 'computer.viewer_control' && !call.params.held).length === 2 && !calls.some(call => call.method === 'computer.viewer_close'), 'each stop released once and neither closed the stream');
     }
     return {check: name};
   }
@@ -3357,7 +3390,8 @@ export function checkRendered(name, context = {}) {
       return {check:name,clickToInteractiveMs:latency,connections:1};
     }
     if(name==='desktop-handback') {
-      require(panel.dataset.interactive==='false' && !frame && calls.some(call=>call.method==='computer.viewer_close'), 'handback closes the stream and returns to the conversation');
+      // Stop kept the view open and watching; folding back is what returned to the conversation, and the stream stays for a moment.
+      require(panel.dataset.interactive==='false' && frame && !panel.hasAttribute('data-expanded') && calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held).length===1 && !calls.some(call=>call.method==='computer.viewer_close'), 'Stop released once, kept the stream, and folding back returned to the conversation');
       return {check:name};
     }
       if(name==='desktop-viewer'){
