@@ -44,15 +44,15 @@ WHEN = {
         "filter": {"type": "object", "properties": {"field": {"type": "string"}, "equals": {"type": "string"}, "operator": {"type": "string", "enum": ["equals", "contains"], "description": "Default equals. Use contains on Slack text for a literal phrase or <@USER_ID> mention."}}, "required": ["field", "equals"]}},
     "required": ["app", "event", "filter"],
 }
-PRECHECK = {"type": "object", "description": "Scheduled routines only: a read-only call {app, tool: mcp:server/tool, arguments} made with no model before each run; the run is skipped while its result is unchanged. {} removes it."}
+PRECHECK = {"type": "object", "description": "Schedule only: read call {app, tool: mcp:server/tool, arguments} before each run; same result skips it."}
 ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What to do when due, with the learning goal. The run has no owner at the keyboard: name only tools a routine's run has (find_tools finds them; self_check reads the app's own state and recent failures, skill_read with reference reads a skill's template), or none. A name it will not have is refused."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}, "precheck": PRECHECK}
 # routine_update takes routine_create's fields; each rule is said once, in routine_create (the list is paid on every call).
 _AS_CREATE = "As in routine_create."
 ROUTINE_UPDATE_FIELDS = {
-    **ROUTINE_FIELDS, "prompt": {"type": "string", "description": _AS_CREATE},
+    # The default prompt's budget: a precheck is set when a routine is made, and changed through the owner's management tools.
+    **{key: value for key, value in ROUTINE_FIELDS.items() if key != "precheck"}, "prompt": {"type": "string", "description": _AS_CREATE},
     "schedule": {**SCHEDULE, "description": _AS_CREATE},
     "when": {"oneOf": [{**WHEN, "description": _AS_CREATE}, ROUTINE_FIELDS["when"]["oneOf"][1]]},
-    "precheck": {**PRECHECK, "description": _AS_CREATE},
 }
 
 
@@ -174,7 +174,7 @@ DEFINITIONS = {
     CALENDAR_LIST: definition(
         f"Read the owner's calendar in this app ({CALENDAR_WORDS}). It answers with everything the calendar shows, each entry marked with its "
         "source: own events, routine occurrences and Google events when connected. Without start and end (dates): today and the next six days. "
-        f"At most {LIST_MAX_DAYS} days: a longer period is cut and the result says so. "
+        f"At most {LIST_MAX_DAYS} days; longer is cut. "
         "Only source own can be changed, by its id. The field google says whether Google could be read: not_connected or unreadable is not an empty calendar.",
         {"start": {"type": "string", "description": "YYYY-MM-DD"}, "end": {"type": "string", "description": "YYYY-MM-DD, included."}}),
     CALENDAR_ADD: definition(

@@ -1,6 +1,6 @@
 # Connections and MCP
 
-## A connector's argument shape, and the end of a loop (2026-11-14)
+## A connector's argument shape, and a failure repeated (2026-11-14)
 
 Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a
 connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind

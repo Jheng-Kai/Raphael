@@ -50,7 +50,7 @@ async def test_a_list_longer_than_the_limit_is_cut_and_says_from_which_date_to_w
 
     rig, _ = setup
     calendar = rig.service._calendar
-    assert LIST_MAX_DAYS == 62 and f"At most {LIST_MAX_DAYS} days" in DEFINITIONS["calendar_list"]["description"]
+    assert LIST_MAX_DAYS == 62 and f"At most {LIST_MAX_DAYS} days; longer is cut" in DEFINITIONS["calendar_list"]["description"]
     whole = await calendar.listing({"start": "2026-10-21", "end": "2026-12-21"})  # 62 days, both ends in
     assert (whole["start"], whole["end"]) == ("2026-10-21", "2026-12-21") and "cut" not in whole
     cut = await calendar.listing({"start": "2026-10-21", "end": "2027-03-01"})
