@@ -1668,6 +1668,8 @@ export const fr = {
   "reminder.waiting": "{p0} vous attend",
   "reminder.open": "Ouvrir",
   "members.unread": "Nouveaux messages",
+  "members.lightDone": "Terminé",
+  "members.lightFailed": "À consulter",
   "members.pick": "Choisir un membre",
   "members.panel": "Détails du membre",
   "members.close": "Fermer les détails",

@@ -1668,6 +1668,8 @@ export const tr = {
   "reminder.waiting": "{p0} sizi bekliyor",
   "reminder.open": "Aç",
   "members.unread": "Yeni mesajlar",
+  "members.lightDone": "Tamamlandı",
+  "members.lightFailed": "Göz atmanız gerek",
   "members.pick": "Üye seç",
   "members.panel": "Üye ayrıntıları",
   "members.close": "Ayrıntıları kapat",

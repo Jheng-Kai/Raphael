@@ -19,6 +19,33 @@ function pathHTML(path: string, query: string): string {
   return fileChipHTML(highlightHTML(path.slice(path.lastIndexOf("/") + 1), query), ` data-act="team-file-open" data-path="${esc(path)}"`);
 }
 
+/**
+ * The files a conversation knows, by stored id: the only ids an `attachment:<id>` link may open. A model writes such a link to a
+ * file it delivered (the core reads the same form, members/library.py); the app opens it only when that file is the conversation's
+ * own, and never by a path.
+ */
+export type KnownFiles = ReadonlyMap<string, { name: string }>;
+const ATTACHMENT_LINK = /^(?:attachment:(?:attachments\/)?|attachments\/)([a-f0-9]{32}\.[a-z0-9]{1,12})$/;
+/** The stored id a link's target names, or null for any other target. */
+export const attachmentTarget = (target: string): string | null => ATTACHMENT_LINK.exec(target.trim())?.[1] ?? null;
+/** The known ids that words mention: a kept reply stays as drawn only while they are the same. */
+export function fileLinkStamp(text: string, files: KnownFiles | undefined): string {
+  if (!files?.size || !text.includes("attachment")) return "";
+  const ids = new Set<string>();
+  for (const found of text.matchAll(/[a-f0-9]{32}\.[a-z0-9]{1,12}/g)) if (files.has(found[0])) ids.add(found[0]);
+  return [...ids].sort().join(",");
+}
+/** Whether a link's target is of the `attachment:` kind, whatever follows: it never shows as raw text. */
+const isAttachmentLink = (target: string): boolean => attachmentTarget(target) !== null || /^attachments?:/i.test(target.trim());
+/** A link to a file of the conversation is its chip, which opens the file as every other chip of a file does; any other is its words alone. */
+function attachmentLinkHTML(target: string, label: string, files: KnownFiles | undefined, query: string): string {
+  const id = attachmentTarget(target);
+  const known = id ? files?.get(id) : undefined;
+  const words = label.trim();
+  if (!known) return words ? highlightHTML(label, query) : "";
+  return fileChipHTML(highlightHTML(words || known.name, query), ` data-act="attachment-open" data-id="${esc(id!)}" data-attachment-link`);
+}
+
 export function messageUrl(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > 8192 || /[\u0000-\u0020\u007f]/.test(raw)) return null;
   try {
@@ -76,7 +103,7 @@ function linkChipHTML(url: string, labelHTML: string | null, query: string): str
     `${labelHTML === null ? ` data-link-bare${local ? "" : " data-link-title"}` : ""} rel="noreferrer noopener">${siteMark(url)}<span class="link-name">${name}</span></a>`;
 }
 
-function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = []): string {
+function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = [], files?: KnownFiles): string {
   let out = "", at = 0, plain = "";
   const flush = (): void => { out += mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query); plain = ""; };
   const link = (raw: string, label?: string): string | null => {
@@ -110,6 +137,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           const target = text.slice(middle + 2, end - 1);
           const html = link(target, text.slice(at + 1, middle));
           if (html) { flush(); out += html; at = end; continue; }
+          if (isAttachmentLink(target)) { flush(); out += attachmentLinkHTML(target, text.slice(at + 1, middle), files, query); at = end; continue; }
           // A file on a computer has no address to open: its path is what the owner can use, not the markdown around it.
           if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) { flush(); out += pathHTML(target, query); at = end; continue; }
         }
@@ -126,7 +154,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
       const end = text.indexOf(marker, at + marker.length);
       if (end > at + marker.length) {
         flush(); const tag = marker === "~~" ? "del" : marker.length === 2 ? "strong" : "em";
-        out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1, mentions)}</${tag}>`;
+        out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1, mentions, files)}</${tag}>`;
         at = end + marker.length; continue;
       }
     }
@@ -205,7 +233,7 @@ export function parseMessageBlocks(text: string, streaming = false): MessageBloc
   flush(); return blocks;
 }
 
-function textHTML(text: string, query: string, urls: Set<string>, depth = 0): string {
+function textHTML(text: string, query: string, urls: Set<string>, depth = 0, files?: KnownFiles): string {
   const lines = text.split("\n");
   let out = "", paragraph: string[] = [];
   const lists: { tag: string; indent: number }[] = [];
@@ -220,28 +248,28 @@ function textHTML(text: string, query: string, urls: Set<string>, depth = 0): st
       if (!lists.length || lists[lists.length - 1].indent < indent) { lists.push({ tag, indent }); out += `<${tag}${item[3] ? ` start="${Number(item[3])}"` : ""}>`; }
       else out += "</li>";
       const task = /^\[([ xX])\]\s+(.*)$/.exec(item[4]);
-      out += `<li${task ? ' class="message-task"' : ""}>${task ? `<input type="checkbox" disabled${task[1] !== " " ? " checked" : ""} aria-label="${esc(task[2])}">` : ""}${inline(task ? task[2] : item[4], query, true, urls)}`;
+      out += `<li${task ? ' class="message-task"' : ""}>${task ? `<input type="checkbox" disabled${task[1] !== " " ? " checked" : ""} aria-label="${esc(task[2])}">` : ""}${inline(task ? task[2] : item[4], query, true, urls, 0, [], files)}`;
     } else {
       closeList();
       const heading = /^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line);
-      if (heading) { flush(); out += `<h${heading[1].length}>${inline(heading[2], query, true, urls)}</h${heading[1].length}>`; }
+      if (heading) { flush(); out += `<h${heading[1].length}>${inline(heading[2], query, true, urls, 0, [], files)}</h${heading[1].length}>`; }
       else if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); out += "<hr>"; }
       else if (depth < 8 && /^\s*>/.test(line)) {
         flush(); const quote: string[] = [line.replace(/^\s*> ?/, "")];
         while (i + 1 < lines.length && /^\s*>/.test(lines[i + 1])) quote.push(lines[++i].replace(/^\s*> ?/, ""));
-        out += `<blockquote>${textHTML(quote.join("\n"), query, urls, depth + 1)}</blockquote>`;
+        out += `<blockquote>${textHTML(quote.join("\n"), query, urls, depth + 1, files)}</blockquote>`;
       }
       else if (!line.trim()) flush();
-      else paragraph.push(inline(line, query, true, urls));
+      else paragraph.push(inline(line, query, true, urls, 0, [], files));
     }
   }
   flush(); closeList(); return out;
 }
 
-function blockHTML(block: MessageBlock, query: string, urls: Set<string>, streaming = false): string {
-  if (block.type === "text") return textHTML(block.source, query, urls);
+function blockHTML(block: MessageBlock, query: string, urls: Set<string>, streaming = false, files?: KnownFiles): string {
+  if (block.type === "text") return textHTML(block.source, query, urls, 0, files);
   if (block.type === "table") {
-    const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}">${inline(cell, query, true, urls)}</${tag}>`).join("");
+    const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}">${inline(cell, query, true, urls, 0, [], files)}</${tag}>`).join("");
     return `<section class="rich-block message-table" data-source="${esc(block.source)}"><header class="rich-head"><span>${esc(t("chat.table"))}</span>${iconBtn("copy", t("chat.copyTable"), ' data-rich-act="copy-table"')}</header><div class="rich-scroll" tabindex="0" role="region" aria-label="${esc(t("chat.table"))}"><table${block.headers.length > 6 ? ` style="min-width:${block.headers.length * 96}px"` : ""}><thead><tr>${cells(block.headers, "th")}</tr></thead><tbody>${block.rows.map(row => `<tr>${cells(row, "td")}</tr>`).join("")}</tbody></table></div></section>`;
   }
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
@@ -257,8 +285,8 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
 }
 
 /** `mentions` are the addresses of the owner's words, drawn as chips (a reply's `@` is just text). */
-export const messageHTML = (text: string, query = "", markdown = false, mentions: readonly MentionTarget[] = []): string => markdown
-  ? parseMessageBlocks(composioText(text)).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set(), 0, mentions);
+export const messageHTML = (text: string, query = "", markdown = false, mentions: readonly MentionTarget[] = [], files?: KnownFiles): string => markdown
+  ? parseMessageBlocks(composioText(text)).map(block => blockHTML(block, query, new Set(), false, files)).join("") : inline(text, query, false, new Set(), 0, mentions);
 
 /** A thread is drawn again on every change, and a reply that has finished reads the same each time. */
 const finished = new Map<string, string>();
@@ -272,11 +300,11 @@ function remembered(key: string, make: () => string): string {
 }
 
 /** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
-export function replyContentHTML(text: string, query = "", streaming = false, renderText?: (source: string) => string): string {
+export function replyContentHTML(text: string, query = "", streaming = false, renderText?: (source: string) => string, files?: KnownFiles): string {
   const draw = (): string => parseMessageBlocks(composioText(text), streaming).map(block => block.type === "text"
-    ? `<div class="ans"><div class="message-text">${renderText ? renderText(block.source) : textHTML(block.source, query, new Set())}</div></div>` : blockHTML(block, query, new Set(), streaming)).join("");
+    ? `<div class="ans"><div class="message-text">${renderText ? renderText(block.source) : textHTML(block.source, query, new Set(), 0, files)}</div></div>` : blockHTML(block, query, new Set(), streaming, files)).join("");
   // A forecast card marks today, so a kept reply lasts the day.
-  return streaming || renderText ? draw() : remembered(`reply\0${new Date().toDateString()}\0${getLocale()}\0${query}\0${text}`, draw);
+  return streaming || renderText ? draw() : remembered(`reply\0${new Date().toDateString()}\0${getLocale()}\0${query}\0${fileLinkStamp(text, files)}\0${text}`, draw);
 }
 export function messageUrls(text: string): string[] {
   const urls = new Set<string>(); parseMessageBlocks(text).forEach(block => { if (block.type === "text" || block.type === "table") blockHTML(block, "", urls); }); return [...urls];

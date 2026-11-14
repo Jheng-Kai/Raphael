@@ -1442,6 +1442,8 @@ export const zhTW = {
   "reminder.waiting": "{p0} 等你回答",
   "reminder.open": "查看",
   "members.unread": "有新訊息",
+  "members.lightDone": "已完成",
+  "members.lightFailed": "需要你看一下",
   "members.pick": "選擇成員",
   "members.panel": "成員的詳細資訊",
   "members.close": "關閉詳細資訊",

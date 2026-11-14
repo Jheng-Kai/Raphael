@@ -11,6 +11,7 @@
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
 import { createMessageSearch } from "./message-search";
+import { lightHTML, lightOf } from "./sidebar-light";
 import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
@@ -32,11 +33,9 @@ export interface ColumnView {
   fresh: ReadonlySet<number>;
 }
 
-const memberDot = (member: Member): string => member.waiting
-  ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>`
-  : member.unread
-    ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>`
-    : "";
+/** The row's one light (sidebar-light.ts); the open conversation has read what it shows but a waiting question. */
+const memberDot = (member: Member, v: Pick<ColumnView, "current" | "active">): string =>
+  lightHTML(lightOf(member, v.active !== false && member.id === v.current));
 
 /** A pinned member leaves the rows for the top of the list: a larger face centered above the name. */
 function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
@@ -44,7 +43,7 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   return (
     `<div class="mb-item" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row mb-tile${top ? " mb-chief" : ""}" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}" aria-label="${esc(role ? `${member.name} · ${role}` : member.name)}">` +
-    faceHTML(member, 64, { moving: true }) + `<b>${esc(member.name)}</b>${memberDot(member)}</button>` +
+    faceHTML(member, 64, { moving: true }) + `<b>${esc(member.name)}</b>${memberDot(member, v)}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
     `</div>`
   );
@@ -54,7 +53,7 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
  *  actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
   const preview = previewOf(member, v.previews.get(member.id));
-  const dot = memberDot(member);
+  const dot = memberDot(member, v);
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +

@@ -1443,6 +1443,8 @@ export const ja = {
   "reminder.waiting": "{p0} が返答を待っています",
   "reminder.open": "開く",
   "members.unread": "新着あり",
+  "members.lightDone": "完了",
+  "members.lightFailed": "確認が必要",
   "members.pick": "メンバーを選ぶ",
   "members.panel": "メンバーの詳細",
   "members.close": "詳細を閉じる",

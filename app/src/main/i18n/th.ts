@@ -1668,6 +1668,8 @@ export const th = {
   "reminder.waiting": "{p0} กำลังรอคุณ",
   "reminder.open": "เปิด",
   "members.unread": "ข้อความใหม่",
+  "members.lightDone": "เสร็จแล้ว",
+  "members.lightFailed": "ต้องการให้คุณดู",
   "members.pick": "เลือกสมาชิก",
   "members.panel": "รายละเอียดสมาชิก",
   "members.close": "ปิดรายละเอียด",

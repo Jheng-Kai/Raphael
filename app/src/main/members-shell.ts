@@ -25,7 +25,7 @@ import type { MentionTarget } from "./mention-text";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
-import { createDetails } from "./member-details";
+import { createDetails, type DetailsTab } from "./member-details";
 import { createMemberSettings, type MemberSettings } from "./member-settings";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 
@@ -47,6 +47,7 @@ import { movedGroup, movedMember, withoutPlaces } from "./member-order";
 import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
+import { lightClass, lightName, lightOf, strongest } from "./sidebar-light";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList, NewMember } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
 
@@ -57,6 +58,8 @@ const REFRESH_DELAY_MS = 300;
 
 export interface MembersHost {
   onOpenConversation?(member: number, conversation: number, turn?: number): void;
+  /** A page of the open member's Library was pressed: it opens itself in the area beside the sidebar (R-PAGE-08). */
+  onOpenPage?(member: number, page: { id: string; title: string; conversation?: number; turn: number }): void;
   /** The conversation open with this member, undefined for their default. */
   conversationOf?(member: number): number | undefined;
   app: AppContext;
@@ -82,6 +85,10 @@ export interface MembersShell {
   openSettings(): void;
   /** Leaves the settings page for the conversation and puts the details panel back as it was. */
   closeSettings(): void;
+  /** An open page takes the whole area (R-PAGE-08): the details panel folds away, remembered as it stood. */
+  foldForPage(): void;
+  /** The page is put away: the panel comes back as it stood, on the tab it was on, if it stood open. */
+  unfoldAfterPage(): void;
   computer(): void;
   /** The narrow windows' dropdown of members, for the left of the chat's top row. */
   readonly picker: HTMLElement;
@@ -141,6 +148,8 @@ export function createMembers(host: MembersHost): MembersShell {
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
   /** Whether the details panel was open when the settings page folded it away; null while the page is closed. */
   let panelBeforeSettings: boolean | null = null;
+  /** The same for an open page (R-PAGE-08): whether the panel stood open and on which tab; null while no page is open. */
+  let panelBeforePage: { open: boolean; tab: DetailsTab } | null = null;
   let stopLeaving: (() => void) | null = null;
   let panelRead = false;
   let refreshOnShow = false;
@@ -198,6 +207,7 @@ export function createMembers(host: MembersHost): MembersShell {
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
     conversationOf: member => host.conversationOf?.(member),
     openTurn: (member, conversation, turn) => host.onOpenConversation?.(member, conversation!, turn),
+    openPage: page => host.onOpenPage?.(current, page),
   });
 
   // The member settings page: where the conversation is, over it, while it is open.
@@ -251,8 +261,9 @@ export function createMembers(host: MembersHost): MembersShell {
     const m = member();
     // The header pill: the face and name, and a › that slides in under the pointer (the pill opens the panel).
     patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span><span class="mb-pill-go" aria-hidden="true">${ico("right")}</span>`);
-    const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
-    patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
+    // One dot for all the other members, the strongest of their lights (sidebar-light.ts).
+    const light = strongest((list?.members ?? []).filter((other) => other.id !== current).map((other) => lightOf(other)));
+    patchHTML(picker, `<span>${esc(m.name)}</span>${light ? `<i class="mb-dot ${lightClass(light)}" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
   }
 
@@ -351,7 +362,7 @@ export function createMembers(host: MembersHost): MembersShell {
     const m = member();
     if (host.visible() && currentRoomId() === null) host.onReadThread?.(m);
     if (!host.visible() || !m.unread) return;
-    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null } : other)) };
+    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null, unread_kind: null } : other)) };
     column.draw();
     // Raphael's thread is told read as every member's is: the core also clears it when the viewing is told, but that is
     // sent once per visit and only after a roster read succeeded, so his boundary could outlive the visit it was shown in.
@@ -435,12 +446,15 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   picker.addEventListener("click", () => {
-    const people: Choice[] = orderedMembers(list).map((m) => ({
-      value: String(m.id),
-      label: m.name,
-      ...(memberRole(m) ? { detail: memberRole(m) } : {}),
-      ...(m.waiting ? { tag: t("members.waitingShort") } : m.unread ? { tag: t("members.unread") } : {}),
-    }));
+    const people: Choice[] = orderedMembers(list).map((m) => {
+      const light = lightOf(m, m.id === current);
+      return {
+        value: String(m.id),
+        label: m.name,
+        ...(memberRole(m) ? { detail: memberRole(m) } : {}),
+        ...(light ? { tag: lightName(light) } : {}),
+      };
+    });
     openMenu(picker, people, String(current), (value) => select(Number(value)), undefined, [
       { label: t("chat.searchAll"), icon: "search", run: () => column.openSearch(picker) },
       { label: t("rooms.title"), icon: "chat", run: () => { closeMenu(); void openRoomsMenu(picker); } },
@@ -637,6 +651,15 @@ export function createMembers(host: MembersHost): MembersShell {
       panelBeforeSettings = null;
       settings.close();
       if (wasOpen && restore) setDetails(true);
+    },
+    foldForPage() {
+      panelBeforePage ??= { open, tab: (details.el.dataset.detailsTab as DetailsTab | undefined) ?? 'details' };
+      setDetails(false);
+    },
+    unfoldAfterPage() {
+      const was = panelBeforePage;
+      panelBeforePage = null;
+      if (was?.open && !open) { setDetails(true); details.select(was.tab); }
     },
     computer() { setDetails(true); details.select('computer'); },
     picker,
