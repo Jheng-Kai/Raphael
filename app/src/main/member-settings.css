@@ -86,6 +86,11 @@
 .btn.ms-open > small { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
 .btn.ms-open > .i { flex: none; color: var(--text-3); }
 .ms-row > .btn.ms-open { width: auto; }
+/* A row that opens something is lit as one: the fill is the row's, and a switch in it stands on that fill, never beside a
+   lit button (owner, 2026-11-14, after Connect Apps: 「不是說都不要這樣分開來 toggle 跟原本的 button 嗎」; R-UI-157). */
+.ms-row:has(> .btn.ms-open:not(:disabled)):hover { background: var(--hover); }
+.ms-row:has(> .btn.ms-open:active:not(:disabled)) { background: var(--pressed); }
+.ms-row > .btn.ms-open:is(:hover, :active):not(:disabled) { background: transparent; }
 .ms-row > .tg { margin-right: var(--sp-1); }
 
 /* An app the member may use: its own mark before its name, so the list is read by its pictures. */

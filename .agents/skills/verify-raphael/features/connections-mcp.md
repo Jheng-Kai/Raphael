@@ -831,5 +831,5 @@ A row of Connect Apps is one button with 連結, 「✓ 已連結」 or its swit
 list's chevron and title are one back button; a search orders apps by how well their names answer it; the @ menu draws the logo the list draws.
 
 ```powershell
-npm run look -- connect-apps-back-title connect-apps-back-title-press connect-apps-row-hover connect-apps-connected-hover connect-apps-connected-rows --theme both --width 1120,720,1920x1080
+npm run look -- connect-apps-connect-hover connect-apps-back-title connect-apps-back-title-press connect-apps-row-hover connect-apps-connected-hover connect-apps-connected-rows --theme both --width 1120,720,1920x1080
 ```

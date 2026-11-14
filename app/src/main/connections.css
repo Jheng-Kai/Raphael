@@ -94,6 +94,10 @@
 .btn.cs-connect.pri { border-color: var(--accent); }
 /* On a row under the pointer the row's fill is the control colour itself, so 連結 steps up a shade to stay a button (owner, 2026-11-14). */
 .cs-card:hover .btn.cs-connect:not(.pri) { background: var(--float-ctl-raised); }
+/* Under the pointer itself 連結 steps up once more, and again as it is pressed: the row is lit, and the button says it is the one
+   being pressed (owner, 2026-11-14). */
+.cs-card .btn.cs-connect:not(.pri):hover:not(:disabled) { background: var(--float-ctl-raised-hover); }
+.cs-card .btn.cs-connect:not(.pri):active:not(:disabled) { background: var(--float-ctl-raised-press); }
 /* Connected: quiet words with a check, and no button. */
 .cs-state { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; }
 .cs-state > .i { color: var(--ok); }
