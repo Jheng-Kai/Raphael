@@ -19,6 +19,9 @@ EXECUTABLE = {"claude": "claude", "codex": "codex", "gemini": "agy"}
 # The CLIs asked for their models in the background.
 MODEL_LISTS = ("claude", "codex", "gemini")
 DISCOVERY_TTL_S = 60
+# A CLI whose sign-in was refused is not asked to start a routine again for this long, unless its credentials change or a
+# sign-in finishes first: after that the next run asks the CLI itself, so a sign-in done anywhere is found out (R-CLI-SIGNIN-03).
+SIGNIN_LOST_S = 30 * 60
 
 
 def brain_ref(value):
@@ -72,6 +75,8 @@ class CliBrains:
         self._signing = {}
         self._signed = {}
         self._cancelled = set()
+        # A CLI that refused its sign-in during a run: name -> (cause, when, credential stamp).
+        self._lost = {}
         self._previous = None
         self._lock = asyncio.Lock()
         self._watcher = None
@@ -125,22 +130,56 @@ class CliBrains:
                     continue
         return None
 
-    def logged_in(self, name):
+    def _credential_files(self, name):
         claude = Path(self.environ.get("CLAUDE_CONFIG_DIR", self.home / ".claude"))
         codex = Path(self.environ.get("CODEX_HOME", self.home / ".codex"))
         gemini = self.home / ".gemini"
-        files = {
+        return {
             "claude": (claude / ".credentials.json", claude / "credentials.json"),
             "codex": (codex / "auth.json",),
             "gemini": (gemini / "google_accounts.json", gemini / "oauth_creds.json"),
-        }
+        }[name]
+
+    def logged_in(self, name):
         try:
-            if any(path.is_file() for path in files[name]):
+            if any(path.is_file() for path in self._credential_files(name)):
                 return True
         except OSError:
             return None
         # Claude also uses OS credential storage. Settings alone do not establish a Google login.
         return None if name == "claude" else False
+
+    def _credential_stamp(self, name):
+        """When the CLI's credential files last changed (never what they hold): a sign-in done anywhere moves it."""
+        stamp = []
+        for path in self._credential_files(name):
+            try:
+                stamp.append(path.stat().st_mtime_ns)
+            except OSError:
+                stamp.append(None)
+        return tuple(stamp)
+
+    def sign_in_lost(self, name, cause):
+        """A run of this CLI was refused for its sign-in (`expired` or `signed_out`): routines that start next are not run
+        into the same refusal (`sign_in_missing`)."""
+        if name in NAMES and cause in ("expired", "signed_out"):
+            self._lost[name] = (cause, self._clock(), self._credential_stamp(name))
+
+    def sign_in_back(self, name):
+        """A run of this CLI took its turn, or its sign-in finished: it is signed in."""
+        self._lost.pop(name, None)
+
+    def sign_in_missing(self, name):
+        """`expired` or `signed_out` while this CLI's last run was refused for its sign-in and nothing since says it is back
+        (a sign-in that finished, a run that was answered, other credential files, or `SIGNIN_LOST_S`), else None."""
+        lost = self._lost.get(name)
+        if lost is None:
+            return None
+        cause, at, stamp = lost
+        if self._clock() - at >= SIGNIN_LOST_S or self._credential_stamp(name) != stamp:
+            del self._lost[name]
+            return None
+        return cause
 
     def disconnected(self, name):
         if self.settings is not None:
@@ -389,6 +428,7 @@ class CliBrains:
             done = code == 0 and (name != "gemini" or self.logged_in(name) is True)
             self._signed[name] = "done" if done else "stopped"
             if done:
+                self.sign_in_back(name)
                 self._reconnect(name)
         self._previous = None
         if self.notify:

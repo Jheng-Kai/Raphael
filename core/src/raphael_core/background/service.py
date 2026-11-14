@@ -120,6 +120,7 @@ from ..agent.steps import REFUSED_REASONS, step_view as _step_view
 from ..agent.team import CONSULTED, Team, handoff_refused, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools, without_internal_ids
 from ..brain.catalog import CatalogEntry, context_window
+from ..brain.model_ref import CLI_NAMES
 from ..brain.pricing import builtin_catalog
 from ..brain.providers.base import ModelProvider
 from ..brain.settings import DEFAULTS, SettingsStore
@@ -154,6 +155,13 @@ logger = logging.getLogger(__name__)
 MAX_PARALLEL = 3
 # Short meeting speech has its own small pool, including CLI brains.
 ROOM_PARALLEL = 2
+# How many routine runs work at once, of the MAX_PARALLEL places: the rest of what is due waits its turn, in the order it came, and
+# one place is always left for what the owner asked for. Five routines due at 07:00 used to start together on a PC that was
+# starting up (a weather check timed out); a routine's run is nobody's emergency (owner, 2026-11-14).
+ROUTINE_PARALLEL = 2
+# Routine runs on one subscription CLI start at least this far apart (seconds): a refused sign-in shows in the first one's
+# first seconds, and the ones after it are not started into it.
+ROUTINE_CLI_GAP_S = 10.0
 # A reply in a room has no clock of its own (Hermes, tools/delegate_tool.py): it goes on while it makes progress (a word or
 # a step of its CLI, a model's reply, a tool coming back, a new attempt) and ends after this long with none. A chosen wait
 # before another attempt is not a stall. A total of 60 seconds used to cut long rooms off mid-reply.
@@ -442,6 +450,7 @@ class BackgroundService:
         self._spend = SpendTracker(conn, now_ms, tz)
         self._room_slots = asyncio.Semaphore(ROOM_PARALLEL)
         self._queue: deque[int] = deque()
+        self._cli_routine_at: dict[str, float] = {}
         # task id -> the model it runs on (the assistant's model, as it was when it was handed over)
         self._models: dict[int, str] = {}
         # task id -> how deep in a chain of `ask_member` its speaker was asked, and by whom (the
@@ -1424,14 +1433,23 @@ class BackgroundService:
     def _executing(self) -> bool:
         return bool(self._active)
 
+    def _provider_of(self, task: Task) -> str | None:
+        """The subscription CLI (`cli:claude`) a task is to run on, as far as can be told before it starts."""
+        model = (self._speaker(task.member_id) or RAPHAEL).model or self._models.get(task.id) or task.model_ref or ""
+        return ":".join(model.split(":", 2)[:2]) if model.startswith("cli:") else None
+
     def _ensure_pump(self) -> None:
-        """Admit ordinary work by member and capacity, and short speech through its independent pool."""
+        """Admit ordinary work by member and capacity, and short speech through its independent pool. Routine runs take at most
+        `ROUTINE_PARALLEL` of the places, and wait their turn behind the owner's own work, so five routines due at one time do
+        not start together and never hold a place the owner's task needs (R-ROUTINE-09)."""
         if self._closing:
             return
         active = [self._store.get(identifier) for identifier in self._active]
         speech = sum(task is not None and task.scope == 'room' for task in active)
         work = len(active)-speech
+        routines = sum(task is not None and task.scope != 'room' and task.routine_id is not None for task in active)
         busy = {task.member_id for task in active if task is not None and task.scope != 'room'}
+        waiting = []
         for task_id in list(self._queue):
             task = self._store.get(task_id)
             if task is None or task.state != QUEUED:
@@ -1439,20 +1457,53 @@ class BackgroundService:
                 self._attachments.pop(task_id,None)
                 self._room_context.pop(task_id,None)
                 continue
+            waiting.append(task)
+        # What the owner asked for goes first; each kind keeps its order of arrival.
+        waiting.sort(key=lambda task: task.routine_id is not None and task.scope != 'room')
+        for task in waiting:
+            task_id = task.id
             room_speech = task.scope == 'room'
+            routine = task.routine_id is not None and not room_speech
             if room_speech:
                 if speech >= ROOM_PARALLEL:
                     continue
                 speech += 1
             else:
-                if work >= MAX_PARALLEL or task.member_id in busy:
+                if work >= MAX_PARALLEL or task.member_id in busy or (routine and routines >= ROUTINE_PARALLEL):
+                    continue
+                if routine and (hold := self._cli_stagger(task)):
+                    self._wake_pump(hold)
                     continue
                 work += 1
+                routines += routine
                 busy.add(task.member_id)
             self._queue.remove(task_id)
             running = asyncio.ensure_future(self._carry_out(task_id))
             self._active[task_id] = (running, task.member_id)
             running.add_done_callback(lambda _, task_id=task_id: self._over(task_id))
+
+    def _cli_stagger(self, task: Task) -> float:
+        """How long a routine run on a subscription CLI still waits for the one started before it on the same CLI: a CLI that
+        refuses its sign-in says so in seconds, and the runs after it are then not made into the same refusal (R-CLI-SIGNIN-03).
+        Zero when it may start now, which it is told to have done."""
+        provider = self._provider_of(task)
+        if provider is None or ROUTINE_CLI_GAP_S <= 0:
+            return 0.0
+        try:
+            now = asyncio.get_running_loop().time()
+        except RuntimeError:
+            return 0.0
+        left = self._cli_routine_at.get(provider, -ROUTINE_CLI_GAP_S) + ROUTINE_CLI_GAP_S - now
+        if left > 0:
+            return left
+        self._cli_routine_at[provider] = now
+        return 0.0
+
+    def _wake_pump(self, seconds: float) -> None:
+        try:
+            asyncio.get_running_loop().call_later(seconds + 0.01, self._ensure_pump)
+        except RuntimeError:
+            pass
 
     def _over(self, task_id: int) -> None:
         active = self._active.pop(task_id, None)
@@ -1573,6 +1624,8 @@ class BackgroundService:
         ledger.member_id = task.member_id
         selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model") or DEFAULTS["agent_model"])
         selected_model = speaker.model or selected_model
+        if task.routine_id is not None and self._sign_in_gate(task, selected_model):
+            return
         recovered = json.loads(task.continuation) if task.continuation else None
         # A conversation turn that consulted colleagues answers the owner with what came back, on
         # its own brain; any other continuation goes on from the run that paused.
@@ -2393,6 +2446,25 @@ class BackgroundService:
             self._expiry.cancel()
             self._expiry = None
 
+    def _sign_in_gate(self, task: Task, model: str) -> bool:
+        """Whether a routine's run ends here, unstarted, because its subscription CLI has just refused its sign-in and nothing
+        says it is back (`CliBrains.sign_in_missing`). The run is not made into the same refusal: it ends at once with the
+        cause the first one told, the same words and the same button under them (R-CLI-SIGNIN-03)."""
+        from ..agent.cli.discovery import brain_ref
+        reference = brain_ref(model)
+        gate = getattr(self._cli_brains, "sign_in_missing", None)
+        missing = gate(reference[0]) if reference and gate is not None else None
+        if missing is None:
+            return False
+        language = task.language
+        failure = Failure("auth_expired", "CLI sign-in was refused earlier", cause=missing)
+        provider = ":".join(model.split(":", 2)[:2])
+        logger.info("A routine run was not started: %s sign-in is missing (%s)", provider, missing)
+        self._conclude(task, None, "failed", PREFIXES[language].negative,
+                       failure.sentence(CLI_NAMES[reference[0]], language), None,
+                       "cli_login_skipped", failure=turn_failure("auth_expired", provider, failure))
+        return True
+
     def _interrupt_closing(self, task: Task, run: TaskRun) -> None:
         """The task that ran when the core closed: told of at the next hello, in its own language."""
         if task.id in self._discarded:
@@ -2745,6 +2817,7 @@ class BackgroundService:
         reason: str | None,
         *,
         replies: Sequence[str] = (),
+        failure: dict | None = None,
     ) -> None:
         """Write the end of a task: its row, the turn of the history that handed it over, and the
         report to the app. `prefix` is a prefix of the task's language (《告》, 《否》 ...); a
@@ -2803,8 +2876,8 @@ class BackgroundService:
                     self._history.publish_terminal(task.turn_id,prefix=prefix,text=turn_text,detail=turn_detail,
                         status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - prior_cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
-                        failure=turn_failure(reason, run.model if run is not None else task.model_ref,
-                                             getattr(run, "model_failure", None)) if state == "failed" else None,
+                        failure=(failure or turn_failure(reason, run.model if run is not None else task.model_ref,
+                                                         getattr(run, "model_failure", None))) if state == "failed" else None,
                         replies=pending_replies(
                             [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
                             [compose(prefix,line,None) for line in terminal_replies if line]))

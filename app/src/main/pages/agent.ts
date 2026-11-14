@@ -89,7 +89,7 @@ import { openPeerChat, type PeerChatView } from "../peer-chat";
 import { exchangeView } from "../exchange-line";
 import { dayLabel, describeError } from "../format";
 import { CHATGPT_USAGE_URL } from "../cli-brains";
-import { createCliSignin } from "../cli-signin";
+import { createCliSignin, signinRetry } from "../cli-signin";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -582,7 +582,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     redraw: () => { if (visible) render(); },
     retry: async turnId => {
       const turn = turns.find(item => item.id === turnId);
-      if (turn && turn.status === "error" && look().regenerateTurnId === turnId) await regenerateTurn(turn);
+      if (!turn || turn.status !== "error" || look().regenerateTurnId !== turnId) return;
+      const again = signinRetry(turn);
+      if (again.kind === "rerun") await rerunTask(again.task); else await regenerateTurn(turn);
     },
   });
   const measureAllMessages = messagePreviewMeasure(thread);
@@ -2005,7 +2007,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   async function rerun(button: HTMLElement): Promise<void> {
-    const asked = requestRerun(state, Number(button.dataset.task), api.workerRerun);
+    await rerunTask(Number(button.dataset.task));
+  }
+
+  async function rerunTask(taskId: number): Promise<void> {
+    const asked = requestRerun(state, taskId, api.workerRerun);
     render(); // the button is off
     const outcome = await asked;
     if (outcome.error !== undefined) toaster.info(describeError(outcome.error));
