@@ -34,7 +34,8 @@ def test_the_rest_of_the_reply_object_written_into_its_words_is_never_shown(plai
     assert reply.text == words
     assert all('"messages"' not in message and "\\n" not in message for message in reply.messages)
     # Words that only quote such fields, or carry more after them, stay as they were written.
-    for authored in ('Write it as {"text":"hi","messages":["hi"]} and send it.', 'It ends with ","memory":[]} then more words'):
+    for authored in ('Write it as {"text":"hi","messages":["hi"]} and send it.', 'It ends with ","memory":[]} then more words',
+                     'Here is the result: {"text": "Done.", "detail": ""}'):
         assert parse_reply({"text": authored, "messages": [authored]}, "en", plain=plain, long=True).text == authored
 
 
