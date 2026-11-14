@@ -56,13 +56,13 @@ const press = async (selector: string): Promise<void> => {
   target.click();
   await flush();
 };
-const open = async (mode: "first" | "rerun" = "first"): Promise<void> => {
+const open = async (): Promise<void> => {
   const app = {
     device: () => ({ ui_language: "en", onboarded: false }),
     setDevice,
     onEvent: () => () => {},
   } as unknown as AppContext;
-  mountOnboarding(root, { mode, onDone: done as never }, app);
+  mountOnboarding(root, { onDone: done as never }, app);
   await flush();
 };
 const text = (selector: string): string => root.querySelector(selector)?.textContent ?? "";
@@ -166,20 +166,6 @@ describe("the guide", () => {
     expect(root.querySelector('[data-ob="back"]')).toBeNull();
   });
 
-  test("a rerun's welcome is the first run's own: the one pill, with no × beside it", async () => {
-    await open("rerun");
-    const controls = [...root.querySelectorAll<HTMLElement>(".ob-foot .btn")];
-    expect(controls.map(control => control.dataset.ob)).toEqual(["next"]);
-    expect(root.querySelector('.ob-foot [data-ob="back"], .ob-foot .icon, .ob-foot [aria-label="Cancel"]')).toBeNull();
-    expect(text('[data-ob="next"]')).toBe("Start");
-    expect(done).not.toHaveBeenCalled();
-    await press('[data-ob="next"]');
-    expect(root.dataset.step).toBe("tools");
-    await press('.ob-foot [data-ob="back"]');
-    expect(root.dataset.step).toBe("welcome");
-    expect(root.querySelector('.ob-foot [data-ob="back"]')).toBeNull();
-  });
-
   test("a first run saves onboarded once, on the last step, and tells who opened it", async () => {
     await open();
     for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
@@ -190,17 +176,6 @@ describe("the guide", () => {
     expect(setDevice).toHaveBeenCalledWith({ onboarded: true });
     expect(done).toHaveBeenCalledWith({ finished: true });
     expect(root.children).toHaveLength(0);
-  });
-
-  test("a rerun saves nothing, and its welcome has no way out", async () => {
-    await open("rerun");
-    for (let i = 0; i < 3; i++) await press('[data-ob="next"]');
-    await press('[data-ob="next"]');
-    expect(setDevice).not.toHaveBeenCalled();
-    expect(done).toHaveBeenCalledWith({ finished: true });
-    await open("rerun");
-    expect(root.querySelector('[data-ob="back"]')).toBeNull();
-    expect(done).toHaveBeenCalledTimes(1);
   });
 
   test("a failed save keeps the guide open and says why", async () => {
