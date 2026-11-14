@@ -77,7 +77,7 @@
      middle, and the cards and groups inside it (--float) the lightest. The light theme keeps the order of lightness: the outside is dimmed, the dialog a quiet
      off-white, the cards white with a hairline. A menu, a popover and a tooltip are on --float too, told from a card by their edge and shadow. */
   --dialog: #f5f5f5;
-  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #ececec; --float-ctl-hover: #e3e3e3; --float-hover: #eaeaea; --float-pressed: #e3e3e3;
+  --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #ececec; --float-ctl-hover: #e3e3e3; --float-ctl-raised: #d6d6d6; --float-hover: #eaeaea; --float-pressed: #e3e3e3;
   --float-ctl-edge: #e0e0e0; --float-sel: #0a0a0a; --float-on-sel: #ffffff;
   /* The white rounded tile an app's mark stands on in 連結應用程式 (Grok Bot's), the same in both themes: the marks are drawn for a white ground. */
   --tile: #ffffff; --on-tile: #0a0a0a; --tile-edge: rgba(0, 0, 0, 0.08);
@@ -132,7 +132,7 @@
   /* Measured from Grok Bot's dark theme (Settings, 2026-11-14): the window under the scrim is #050505, the dialog and its nav #121212, the cards in it #1f1f1f with a
      #2b2b2b edge; a menu is #1f1f1f with a #292929 edge, a control on a card #282828, a hovered row #292929, the chosen chip a light fill with dark words. */
   --dialog: #121212;
-  --float: #1f1f1f; --float-edge: #2b2b2b; --float-ctl: #282828; --float-ctl-hover: #303030; --float-hover: #292929; --float-pressed: #303030;
+  --float: #1f1f1f; --float-edge: #2b2b2b; --float-ctl: #282828; --float-ctl-hover: #303030; --float-ctl-raised: #3d3d3d; --float-hover: #292929; --float-pressed: #303030;
   --float-ctl-edge: #282828; --float-sel: #f5f5f5; --float-on-sel: #0a0a0a;
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);

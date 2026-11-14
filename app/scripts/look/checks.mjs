@@ -7510,6 +7510,8 @@ export function checkRendered(name, context = {}) {
     const hovered = list.querySelector('.cs-linked:nth-child(2)'), style = getComputedStyle(hovered);
     require(hovered.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and one hover fill of the floating surface (${style.backgroundColor}, ${style.cursor})`);
     const box = hovered.getBoundingClientRect(), tile = hovered.querySelector('.cs-tile').getBoundingClientRect();
+    const lane = list.querySelector('.cs-grid').getBoundingClientRect();
+    require(box.left >= lane.left - 0.5 && box.right <= lane.right + 0.5, `the fill stays inside the list (${Math.round(box.left)} against ${Math.round(lane.left)})`);
     require(tile.left - box.left >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the mark (${tile.left - box.left})`);
     const switchBox = hovered.querySelector('[role="switch"]').getBoundingClientRect();
     require(box.right - switchBox.right >= 6 && parseFloat(style.borderTopLeftRadius) >= 6, `the switch stands on the row's fill, 6 px or more inside its end (${Math.round(box.right - switchBox.right)})`);
@@ -7540,7 +7542,7 @@ export function checkRendered(name, context = {}) {
     require(back && back.matches('button[data-conn="back"]') && back.querySelector('svg.i') && back.textContent.trim().length > 0, "the chevron and the title are one button");
     require(modal.querySelector('.cs-top-t')?.contains(back) && !modal.querySelector('.cs-connected .btn.icon.cs-back'), "no separate chevron beside the title");
     const style = getComputedStyle(back);
-    require(back.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover'), `under the pointer the whole button, chevron and title, has the hover fill (${style.backgroundColor})`);
+    require(back.matches(':hover') && style.color === colourOf('color', '--text') && /rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor), `drawn as the connected chip: no fill, its words brighten under the pointer (${style.color}, ${style.backgroundColor})`);
     return { check: name };
   }
   if (name === "app-row-hover") {
