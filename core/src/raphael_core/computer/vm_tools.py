@@ -35,6 +35,8 @@ _TURN = ContextVar("computer_turn", default=(0, False, None))
 _NOTE = ContextVar("computer_note", default=(None, "en"))
 _REPAIRS = ContextVar("computer_repairs", default=None)
 _NOTICE = ContextVar("computer_notice", default=None)
+# Where the quiet line of a wake goes: a line of its own in the conversation, never a reply (R-TEXT-08).
+_WOKE = ContextVar("computer_woke", default=None)
 # Whose tool call is starting a sleeping computer right now: (member id, tool name). Unset for every other start.
 _WAKE = ContextVar("computer_wake", default=None)
 logger = logging.getLogger(__name__)
@@ -68,7 +70,8 @@ ENGINE_STARTING = with_ui_words({
 
 # The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01, owner, 2026-11-14: the
 # computer wakes when a member decides a task needs it, or when he starts it, and never silently). One quiet line in the
-# conversation, naming the member and why; no toast. The status's `woken` is no longer read by the app (R-PANEL-06).
+# conversation, naming the member and why; no toast, and never a reply bubble (R-TEXT-08). The status's `woken` is no
+# longer read by the app (R-PANEL-06).
 WOKE = {reason: with_ui_words(table) for reason, table in {
     "page": {"zh-TW": "{who}為了開網頁喚醒了電腦", "ja": "{who}がウェブページを開くためにコンピューターを起こしました",
              "en": "{who} woke the computer to open a web page"},
@@ -113,11 +116,14 @@ ENGINE_FAILURES = {
 
 
 @contextmanager
-def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, language="en"):
+def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, woke=None, language="en"):
+    """`notice` is something the owner has to answer (the disk is nearly full), said as the member's own words; `woke` is
+    the quiet line that a start by the member's own tool leaves, which is nothing the member said."""
     token = _SCOPE.set(owner)
     turn = _TURN.set((turn_id, private, task))
     note = _NOTE.set((progress, language))
     public_notice = _NOTICE.set(notice)
+    public_woke = _WOKE.set(woke)
     try:
         yield
     finally:
@@ -125,6 +131,7 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
         _TURN.reset(turn)
         _NOTE.reset(note)
         _NOTICE.reset(public_notice)
+        _WOKE.reset(public_woke)
 
 
 # A computer tool's description is shown to a model whole (PluginTool.whole) and says what the tool is for first.
@@ -304,7 +311,7 @@ class VmTools:
         reason = wake_reason(tool)
         self.vm.woken[target.state_key] = {"member": member, "name": who, "reason": reason}
         progress, language = _NOTE.get()
-        publish = _NOTICE.get() or progress
+        publish = _WOKE.get() or progress
         if publish:
             table = WOKE[reason]
             publish(table.get(language, table["en"]).format(who=who))

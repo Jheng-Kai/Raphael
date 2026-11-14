@@ -19,8 +19,8 @@ computer for a page read; and nothing counted the owner's open stream as activit
   instruction. An awake computer is still used for a short page: nothing is started, the gate, the audit, the owner hold and the
   cookie rule are the same, so there is nothing to decide against.
 - A start by a member's own tool is never silent. `LocalVm._start` calls `wake_notice` once when a computer that was asleep (or
-  never made) has been started; `VmTools._wake_notice` writes one line in that member's conversation (a notice, or the progress
-  line where a task has no conversation), naming the member and why in the member's language: a page (any browser tool), a
+  never made) has been started; `VmTools._wake_notice` writes one quiet line in that member's conversation (an event `computer_woke`, drawn like a rename and
+  never a reply, R-TEXT-08; the progress line where a task has no conversation), naming the member and why in the member's language: a page (any browser tool), a
   command (`vm_exec`) or using the computer (anything else): 「小晴為了開網頁喚醒了電腦」. No toast, no card. The same record
   (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs (the member's panel showed it in its
   computer row until 2026-11-14; the app no longer reads it, and the line in the conversation is the one notice). It is dropped when
@@ -37,7 +37,7 @@ Evidence: `tests/computer/test_wake.py`, `test_viewer.py::test_a_computer_the_ow
 npm run look -- computer-wake-line member-panel-details-no-computer-running member-panel-computer-live computer-low-disk --theme both --width 1120,720,1920x1080
 ```
 
-`computer-wake-line` is the conversation's line (one normal message, no toast, no alert); `member-panel-details-no-computer-running`
+`computer-wake-line` is the conversation's line (one quiet centred line, no member message, no toast, no alert); `member-panel-details-no-computer-running`
 asserts Details carries no second copy of it. Native, not run: a member's real browser_open on a
 sleeping computer, and a real routine waking one.
 

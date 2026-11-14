@@ -14,6 +14,11 @@ describe("plainReplies", () => {
     expect(plainReplies(["《了。已建立。》", "《答。好的》"])).toEqual(["已建立。", "好的"]);
   });
 
+  test("a frame quoted inside a line that is still open is the line's words: the outermost wins", () => {
+    expect(plainReplies(["《答。前言", "《答。請問這個介面支援串流嗎？》", "結尾》"])).toEqual(["前言", "《答。請問這個介面支援串流嗎？》", "結尾"]);
+    expect(plainReplies(["《答。第一則》", "《答。第二則》"])).toEqual(["第一則", "第二則"]);
+  });
+
   test("plain words, a title in 《》 and an unknown head stay exactly as they were", () => {
     const kept = ["推薦你看《三體》", "《三體》是一部小說。", "《Hello》"];
     expect(plainReplies(kept)).toEqual(kept);

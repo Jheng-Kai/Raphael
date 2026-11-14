@@ -1509,7 +1509,7 @@ class BackgroundService:
                  status=lambda self, result, task, files=(): getattr(self._store.get(task.id), "state", "cancelled"))
     async def _execute(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         from ..computer.vm_tools import vm_scope
-        with vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), language=task.language):
+        with vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), woke=lambda text: self._computer_woke(task, text), language=task.language):
             await self._execute_scoped(task, files)
 
     async def _execute_scoped(self, task: Task, files: Sequence[Attachment] = ()) -> None:
@@ -1660,7 +1660,7 @@ class BackgroundService:
         if task.routine_id is not None and task.session_id.startswith(f"routine:{task.routine_id}:event:"):
             run._memory_untrusted = True
         from ..computer.vm_tools import vm_scope
-        run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), language=language)
+        run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), notice=lambda text: self._computer_notice(task, text), woke=lambda text: self._computer_woke(task, text), language=language)
         if recovered is not None:
             run.model_calls,run.tool_calls = task.model_calls,task.tool_calls
             # A continuation from before it kept whether the task acted (`restore_continuation`) takes any call to have.
@@ -2540,6 +2540,13 @@ class BackgroundService:
         if task.id in self._discarded or task.scope != 'private' or not self._has_linked_turn(task):
             return
         self._history.add_message(task.turn_id, 'reply', text)
+        self._changed(task.id, RUNNING)
+
+    def _computer_woke(self, task: Task, text: str) -> None:
+        """The quiet line of a computer a task's own tool started: an event of the conversation, never a reply (R-TEXT-08)."""
+        if task.id in self._discarded or task.scope != 'private' or not self._has_linked_turn(task):
+            return
+        self._history.add_message(task.turn_id, 'event', json.dumps({'type': 'computer_woke', 'text': text}, ensure_ascii=False))
         self._changed(task.id, RUNNING)
 
     def _conclude_run(self, task: Task, run: TaskRun, reply: dict) -> None:

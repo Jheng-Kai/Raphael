@@ -142,6 +142,7 @@ from ..background.tasks import Refused
 from ..background.snapshot import FIND, MCP, NOTHING_FITS, USE, USE_REFUSALS, USE_TOOL, take_snapshot
 from ..brain.catalog import CatalogEntry, LLM, context_window, find
 from ..brain.pricing import builtin_catalog
+from ..brain.reasoning import split_notes
 from ..brain.model_ref import split_api_ref
 from ..clock import wall_clock_ms
 from ..computer.run import ComputerRun, ComputerRuns, Final, Handback, Question, conversation_block
@@ -513,8 +514,9 @@ class _Ask:
     # What the owner said no to in this request: (tool key, the rule that had it asked). Nothing else that
     # needs their yes is asked after it, and the tool is not tried again, whichever other tool is tried.
     declined: list[tuple[str, str | None]] = field(default_factory=list)
-    # How many calls of this request the data floor has refused. The first is told to the model, which can
-    # go on with the right tool; a second ends the request in the owner's words (`protected_data`).
+    # How many calls of this request the data floor has refused. Each of the first `FLOOR_REFUSALS` is told to the model,
+    # which goes on with the right tool or with what it can still answer; one past them ends the request in the owner's
+    # words (`protected_data`).
     floor_refusals: int = 0
     # A reaction's analysis whose member decided that no words are needed: nothing of its turn is left.
     silent: bool = False
@@ -629,6 +631,11 @@ OWN_CALENDAR_NOTE = (
     "calendar_update and calendar_delete. Connect nothing for it."
 )
 # What the model is told when one of Raphael's own tools refuses it, by the kind of the refusal.
+# How many refusals of the data floor a request gets told to its model before it ends in the owner's words (R-FLOOR-03).
+FLOOR_REFUSALS = 3
+FLOOR_AGAIN = (" This is the second refusal: do not try another command or path. Answer the owner now, in their language, "
+               "with what you can: say in one plain sentence what you could not do, and go on with the rest of what they asked.")
+
 _HARNESS_NOTES = {
     "owner_private_chat_only": "Management tools require the owner's interactive private chat or an approved background member action.",
     "owner_model_request_required": "Only change a model or effort when the owner explicitly asks for that change. A failure does not authorize switching models.",
@@ -2124,6 +2131,11 @@ class AgentService:
         """Publish only public words; each commit is visible before the next model/tool call."""
         if not ask.turn_id or not text.strip():
             return
+        if kind == "reply":
+            # Whatever loop made it, planning the model wrote to itself is never stored as a reply (R-TEXT-05).
+            text = split_notes(text, ask.language)[0]
+            if not text.strip():
+                return
         if kind in ("progress", "thinking", "reply"):
             text = authored_chinese(text, chinese_variant(self._settings.get("languages")))
         if kind == "progress" and prefix:
@@ -3216,15 +3228,17 @@ class AgentService:
         # made: one that a rule forbids ends the turn with Raphael saying so, and no call is made.
         if screenings is None:
             screenings = await asyncio.gather(*(self._screen_call(ask, c, ledger) for c in calls))
-        if ask.floor_refusals == 0 and any(s.verdict == DENY and s.protected for s in screenings):
-            # The data floor is not a rule of the owner's. The first refusal is a tool result: the model is told
-            # to use its own tools (skill_manage, the management tools) and goes on. Nothing is written.
+        if ask.floor_refusals < FLOOR_REFUSALS and any(s.verdict == DENY and s.protected for s in screenings):
+            # The data floor is not a rule of the owner's. A refusal is a tool result: the model is told to use its own
+            # tools (skill_manage, the management tools), and from the second on to answer with what it can, and goes on.
+            # Nothing is written.
             blocked = [i for i, s in enumerate(screenings) if s.verdict == DENY and s.protected]
             ask.floor_refusals += 1
             for index in blocked:
                 call = calls[index]
                 ask.steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), "protected_data"))
-                results.append(ToolResult(_label(call), False, None, "protected_data", instruction=screenings[index].rule))
+                told = (screenings[index].rule or "") + (FLOOR_AGAIN if ask.floor_refusals > 1 else "")
+                results.append(ToolResult(_label(call), False, None, "protected_data", instruction=told))
             kept = [i for i in range(len(calls)) if i not in blocked]
             calls = [calls[i] for i in kept]
             screenings = [screenings[i] for i in kept]
@@ -3365,6 +3379,7 @@ class AgentService:
                       private=ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER,
                       task=self._inflight.get(ask.session_id), language=ask.language,
                       notice=lambda text: self._message(ask, "reply", text),
+                      woke=lambda text: self._message(ask, "event", json.dumps({"type": "computer_woke", "text": text}, ensure_ascii=False)),
                       progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice)):
             result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:
