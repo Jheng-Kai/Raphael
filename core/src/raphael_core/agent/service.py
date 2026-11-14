@@ -99,7 +99,7 @@ The voice alone may use the fast router, with recent conversation included. The 
 let any assistant ask any other (`ask_member`), and add a member at the owner's request
 (`create_member`, 《了。已建立「…」。》). The one asked answers through `answer_for`, as itself and
 never on the desktop, within a chain at most two deep and with no cycle (`Speaker.can_ask`); the
-exchange is the asker's record, on the asked member's page only if it is handed work. Nobody waits at the overlay for such an answer, so
+exchange is kept in both members' records: the asker keeps the receipt and the respondent keeps the question and answer in its own thread. Nobody waits at the overlay for such an answer, so
 when one of its calls needs a yes (a tier, or a safety rule that asks) none of its calls is made
 there: the request goes to the background as a task of the one asked (`ask_in_background`), which
 stops at that call with a question waiting in that thread, answered in the app alone (the

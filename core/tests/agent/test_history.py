@@ -77,6 +77,15 @@ def test_members_recall_only_their_own_exchanges(history, clock, conversation):
     assert [t.id for t in history.recent(10, member_id=1, **params)] == [own]
 
 
+def test_member_history_lists_its_received_exchange_and_never_another_members(history, clock):
+    own = add(history, clock, "Received ask", member_id=1, peer_id=0,
+        scope="exchange", route="exchange", source="member")
+    add(history, clock, "Another member's ask", member_id=2, peer_id=0,
+        scope="exchange", route="exchange", source="member")
+    assert [turn.id for turn in history.list(member_id=1, exchanges=True)] == [own]
+    assert [turn.id for turn in history.after(0, member_id=1, exchanges=True)] == [own]
+
+
 def test_messages_are_immediately_readable_in_order_and_cleared_with_their_thread(history, clock):
     first = add(history, clock, status="running", member_id=1)
     other = add(history, clock, member_id=2)
