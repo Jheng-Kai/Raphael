@@ -65,6 +65,7 @@ from ..agent.gate import ToolGate
 from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
 from ..agent.plugins import PluginResult
+from ..agent.progress_updates import ProgressUpdates
 from ..worker.guards import argument_limit
 from ..brain.prompt_cache import cache_options
 from ..agent.steps import reason_of
@@ -364,6 +365,9 @@ class TaskRun:
         self._city = city
         self._changed = changed
         self._progress, self._reply = progress, reply
+        # When the owner was last shown a message of the task (agent/progress_updates.py), set by the service for a task
+        # the owner reads as it works; None owes no word (a meeting's reply, a routine). A CLI task's loop keeps it too.
+        self.updates: ProgressUpdates | None = None
         self.public_progress = ""
         self.action = lambda name, arguments: nullcontext()
         self._clock = clock
@@ -477,6 +481,8 @@ class TaskRun:
         self.timed_out = self.stalled = False
         self.waiting = None
         self.pool = McpPool()
+        if self.updates is not None:
+            self.updates.restart()
 
     # --- the steps ------------------------------------------------------------------------------
 
@@ -690,11 +696,18 @@ class TaskRun:
         if turn.calls and turn.content.strip():
             from ..agent.answers import public_reply
             authored = public_reply(turn.content, self.language, plain=True, explicit=True)
+            # What it says with its next steps is progress, unless the owner has heard nothing for a while: then it is
+            # the update its last result asked for (`reminded`), and a message, as on a CLI brain.
+            update = authored is None and self._reply is not None and self.updates is not None and self.updates.due()
+            if update:
+                authored = public_reply(turn.content, self.language, plain=True)
             if authored is not None and self._reply is not None:
                 self._reply(authored)
+                if self.updates is not None:
+                    self.updates.shown()
             text = " ".join(turn.content.split())[:200]
             text = public_line(text, "auto")
-            if text:
+            if text and not (update and authored is not None):
                 self._progress(text)
         return {
             "content": turn.content,
@@ -724,6 +737,14 @@ class TaskRun:
             if not isinstance(used, str):
                 params = {**params, "name": used[0], "arguments": used[1]}
         return await self._call(params)
+
+    def reminded(self, reply: dict) -> dict:
+        """`reply` for the worker's loop, with the line that asks for a word to the owner when one is owed (`note`, which
+        the loop puts after the result: agent/progress_updates.py). The tool events were kept before, as the tool said
+        them. A CLI task's loop asks on its own (agent/cli/loop.py)."""
+        if self._reply is None or self.updates is None or not (reminder := self.updates.reminder()):
+            return reply
+        return {**reply, "note": reminder}
 
     @tool_step(lambda self, params: params.get("name", ""), scope=lambda self, params: self.activity)
     @command_context(lambda self, *args, **kwargs: run_context(self))
