@@ -86,6 +86,7 @@ from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
+from ..services.file_reader import read_window
 from ..services.urls import SeenUrls
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, FINAL_REPORT, ToolOutcome, result_text
@@ -1309,10 +1310,13 @@ class TaskRun:
             return ToolResult("read_attachment", False, None, "bad_arguments")
         question = arguments.get("question")
         question = question.strip() if isinstance(question, str) and question.strip() else ""
+        window = read_window(arguments)
+        if window is None:
+            return ToolResult("read_attachment", False, None, "bad_arguments")
         attachment = self.attachments[index - 1]
         return await self._guarded(
             self._tools.read_attachment(
-                attachment, question or "What does this file hold?", self.ledger, number=index
+                attachment, question or "What does this file hold?", self.ledger, number=index, **window
             )
         )
 

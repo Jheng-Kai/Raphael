@@ -18,7 +18,7 @@
   look scene `computer-wake-line` asserts one such line and no reply of the member's.
 - **A data-floor refusal does not end the turn (R-FLOOR-04).** The model is told up to three times, and answers with what it can.
 
-## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02)
+## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02, R-ATTACH-RAW-03)
 
 Owner: 「傳送檔案不是會傳送原始檔嗎? 應該要是 raw data 才對」. A member (a Japanese teacher) was given an `.html` file to copy
 its design and received only the page's visible text: `services/file_reader.py` (`read_text`) ran `.html` through a text
@@ -27,10 +27,14 @@ extension set, `text/*`, JSON, XML, YAML, JavaScript) is read as its source, cha
 `read_text`: the inline context of an API or CLI turn (`agent/service.py`, the background worker's `_prompts`) and the
 `read_attachment` tool. In the inline context a line of facts is followed by the raw text (never inside a JSON string, so no
 quote or line end is escaped), inside the same untrusted wrapper; the prompt's own delimiter tags are neutralized. A file over
-the limit gives its start and a note beside it with the file's bytes, the bytes shown, the bytes cut and the stored path
-(`cut_note`); a CLI brain opens that stored path with its own file tools and finds the original file. Images, PDF, Office
+the limit is not pasted (R-ATTACH-RAW-02): the facts line (`lines`, `pasted: false`) and a note (`reference_note`) name
+`read_attachment (index N, offset 1)` and the stored path; a CLI brain opens that path with its own Read. `read_attachment`
+reads a text file like Claude Code's Read (R-ATTACH-RAW-03, `read_lines`): `offset` (1-based line) and `limit`, 2000 lines by
+default, `cat -n` numbering, a line over 2000 characters cut with a note (base64 inside it shown as a marker first), a
+60,000-character cap per call, and `next_offset` with a note when there is more. Images, PDF, Office
 documents and media keep their readers. Offline evidence: `core/tests/agent/test_raw_attachments.py` (API and CLI brains,
-every text type, cut, encodings), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
+every text type), `core/tests/agent/test_attachment_read_on.py` (a 100 KB embedded font, long lines, paging, edges, the tool
+call), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
 Not covered: a real model's use of the source, a native attach in the running app.
 
 ```powershell

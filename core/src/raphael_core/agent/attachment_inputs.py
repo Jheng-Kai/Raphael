@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping, Sequence
 
 from ..services.attachments import Attachment
-from ..services.file_reader import cut_note, is_text, read_text
+from ..services.file_reader import is_text, line_count, read_text, reference_note
 from ..worker.guards import wrap_untrusted
 
 INLINE_FILE_CHARS = 24_000
@@ -17,21 +17,26 @@ _WRAPPER_CHARS = len(wrap_untrusted("read_attachment", "", ok=True)) + len(" cut
 
 
 def _file_block(number: int, attachment: Attachment, budget: int, where: str | None) -> str:
-    """One text file: a line of facts, then its text exactly as written, then (when the rest was cut) the note that says
-    how much and where the whole is. The text is never put through JSON, which would escape its quotes and lines."""
+    """One text file. A file that fits the message: a line of facts, then its text exactly as written (never put through
+    JSON, which would escape its quotes and lines). A longer one is not pasted: the line of facts (with its lines) and
+    the note that says how to read it with `read_attachment` and where the whole is, as a file to open."""
     # Everything but the text has its size worked out first (at its longest), so that the text takes what is left.
     size = len(attachment.data)
     longest = {"file": number, "kind": "text", "name": attachment.name, "mime": attachment.mime, "size": size,
-               "encoding": "utf-16-be", "truncated": True, "shown_bytes": size, "cut_bytes": size}
-    overhead = _WRAPPER_CHARS + len(json.dumps(longest, ensure_ascii=False)) + len(cut_note(longest, where)) + 8
+               "encoding": "utf-16-be", "truncated": True}
+    overhead = _WRAPPER_CHARS + len(json.dumps(longest, ensure_ascii=False)) + 8
     found = read_text(attachment, budget=max(budget - overhead, 0), where=where)
-    facts = {"file": number, "kind": "text", **{key: value for key, value in found.items() if key not in ("text", "note")}}
-    lines = [json.dumps(facts, ensure_ascii=False)]
-    if "text" in found:
-        lines.append(found["text"])
-    if found.get("note"):
-        lines.append(found["note"])
-    return wrap_untrusted("read_attachment", "\n".join(lines), ok=True, limit=budget - _WRAPPER_CHARS)
+    facts = {"file": number, "kind": "text", **{key: value for key, value in found.items()
+                                                if key not in ("text", "note", "shown_bytes", "cut_bytes")}}
+    body = []
+    if found.get("truncated"):
+        facts.pop("truncated")
+        facts.update(pasted=False, lines=line_count(attachment))
+        body = [reference_note(found, where, number, facts["lines"])]
+    elif "text" in found:
+        body = [found["text"]]
+    return wrap_untrusted("read_attachment", "\n".join([json.dumps(facts, ensure_ascii=False), *body]), ok=True,
+                          limit=budget - _WRAPPER_CHARS)
 
 
 def text_context(attachments: Sequence[Attachment], paths: Mapping[str, str] | None = None) -> str:

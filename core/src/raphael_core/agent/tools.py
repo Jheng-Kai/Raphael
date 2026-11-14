@@ -38,7 +38,7 @@ import httpx
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..services.attachments import Attachment
-from ..services.file_reader import read_text
+from ..services.file_reader import read_lines
 from ..services.common import ServiceError
 from .cities import city_key, geocoding_queries
 from .ledger import Ledger
@@ -438,12 +438,15 @@ class Tools:
                           untrusted=True, detail=service)
 
     async def read_attachment(
-        self, attachment: Attachment, question: str, ledger: Ledger, *, number: int = 1
+        self, attachment: Attachment, question: str, ledger: Ledger, *, number: int = 1,
+        offset: int | None = None, limit: int | None = None,
     ) -> ToolResult:
         """Read a supplied file through its configured reader. `number` identifies it among the
-        request's files. Paid vision calls use `ledger`; every result remains untrusted data."""
+        request's files. Paid vision calls use `ledger`; every result remains untrusted data.
+        A text file comes as numbered lines, from line `offset` (from 1), `limit` lines at most, like Claude Code's
+        Read, with where to go on when there is more."""
         kind = "pdf" if attachment.is_pdf else "image" if attachment.is_image else "file"
-        if (found := read_text(attachment)) is not None:
+        if (found := read_lines(attachment, number=number, offset=offset, limit=limit)) is not None:
             return ToolResult("read_attachment", True, {"file": number, "kind": "text", **found}, untrusted=True, detail="text")
         if self.services is None:
             return self._failed("read_attachment", "unavailable", kind)
