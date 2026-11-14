@@ -13,7 +13,7 @@ offers Claude Code's file tools beside `vm_exec`, with Claude Code's parameters 
 | `edit_file {path, old_string, new_string, replace_all?}` | Edit | exact text, unique unless `replace_all`; read in this run first, refused if changed since; keeps BOM and CRLF; returns the edited lines numbered |
 | `write_file {path, content}` | Write | a whole file; over an existing one only after a read in this run and if unchanged since; folders made |
 | `glob {pattern, path?}` | Glob | `rg --files`, newest first, 100 at most |
-| `grep {pattern, path?, glob?, type?, output_mode?, -i, -n, -A, -B, -C, context, multiline, head_limit, offset}` | Grep | ripgrep; files_with_matches (default, newest first), content or count; 250 entries a page by default |
+| `grep {pattern, path?, glob?, type?, output_mode?, ignore_case, line_numbers, after, before, context, multiline, head_limit, offset}` | Grep | ripgrep; files_with_matches (default, newest first), content or count; 250 entries a page by default |
 
 Where they live: `computer/file_tools.py` (definitions, the run's read state `FileReads`, edit and read logic, ripgrep's
 command line and output), `computer/files_guest.py` (the guest's reads and compare-and-rename writes, standard library only,

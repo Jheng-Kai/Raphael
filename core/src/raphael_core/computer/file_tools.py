@@ -96,9 +96,9 @@ _COUNT = {"type": "integer", "minimum": 0, "maximum": 1000}
 GREP = {
     "description": "Search file contents in your computer with ripgrep, as Claude Code's Grep: pattern is a regular "
                    "expression (ripgrep syntax), path a file or folder (the workspace by default); glob (e.g. *.{ts,tsx}) "
-                   "or type (e.g. py) picks files; -i ignores case; multiline lets . match newlines. output_mode: "
-                   "files_with_matches (default: paths, newest first), content (matching lines; -n line numbers, on by "
-                   "default; -A, -B, -C or context lines around them) or count. head_limit (default 250, 0 for all) and "
+                   "or type (e.g. py) picks files; ignore_case; multiline lets . match newlines. output_mode: "
+                   "files_with_matches (default: paths, newest first), content (matching lines; line_numbers, on by "
+                   "default; after, before or context lines around them) or count. head_limit (default 250, 0 for all) and "
                    "offset page the results. Skips what glob skips. Use it rather than grep or rg in vm_exec.",
     "parameters": {"type": "object", "properties": {
         "pattern": {"type": "string", "minLength": 1, "maxLength": 4000},
@@ -106,8 +106,10 @@ GREP = {
         "glob": {"type": "string", "minLength": 1, "maxLength": 1000},
         "type": {"type": "string", "pattern": "^[A-Za-z0-9_+-]{1,40}$"},
         "output_mode": {"type": "string", "enum": ["files_with_matches", "content", "count"]},
-        "-i": {"type": "boolean"}, "-n": {"type": "boolean"},
-        "-A": _COUNT, "-B": _COUNT, "-C": _COUNT, "context": _COUNT,
+        # Claude Code's Grep names these -i, -n, -A, -B and -C. A name that starts with a dash is not one every model
+        # provider takes in a tool's schema, and this list goes with every request of a member with a computer.
+        "ignore_case": {"type": "boolean"}, "line_numbers": {"type": "boolean"},
+        "after": _COUNT, "before": _COUNT, "context": _COUNT,
         "multiline": {"type": "boolean"},
         "head_limit": {"type": "integer", "minimum": 0}, "offset": {"type": "integer", "minimum": 0}},
         "required": ["pattern"], "additionalProperties": False}}
@@ -463,7 +465,7 @@ def grep_flags(arguments):
     """Claude Code's Grep options as ripgrep's flags."""
     mode = arguments.get("output_mode", "files_with_matches")
     flags = ["--hidden", "--null", "--no-messages", "--color=never"]
-    if arguments.get("-i"):
+    if arguments.get("ignore_case"):
         flags.append("--ignore-case")
     if arguments.get("multiline"):
         flags += ["--multiline", "--multiline-dotall"]
@@ -475,11 +477,11 @@ def grep_flags(arguments):
         flags += ["--count-matches", "--with-filename", "--sort=path"]
     else:
         flags += ["--with-filename", "--no-heading", "--sort=path", "--max-columns=2000", "--max-columns-preview",
-                  "--line-number" if arguments.get("-n", True) else "--no-line-number"]
-        for key, flag in (("-A", "--after-context"), ("-B", "--before-context")):
+                  "--line-number" if arguments.get("line_numbers", True) else "--no-line-number"]
+        for key, flag in (("after", "--after-context"), ("before", "--before-context")):
             if arguments.get(key) is not None:
                 flags += [flag, str(arguments[key])]
-        context = arguments.get("-C", arguments.get("context"))
+        context = arguments.get("context")
         if context is not None:
             flags += ["--context", str(context)]
     return mode, [*flags, *_skipping(arguments.get("glob")), "--regexp", arguments["pattern"]]

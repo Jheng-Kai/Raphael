@@ -67,7 +67,7 @@ async def test_grep_content_gives_numbered_lines_and_context_as_ripgrep_does(com
     rows = ("./app.py\x003-import os", "./app.py\x004:def main():", "./app.py\x005-    pass", "--",
             "./lib/x.py\x0010:def main_loop():")
     result, rg = await search(hub, runtime, "grep", answer(*rows, separator="\n"), pattern="def main",
-                              output_mode="content", path="src", **{"-A": 1, "-B": 1, "-i": True, "type": "py"})
+                              output_mode="content", path="src", after=1, before=1, ignore_case=True, type="py")
     assert result.ok
     assert result.text.splitlines() == [f"{GUEST}/app.py-3-import os", f"{GUEST}/app.py:4:def main():",
                                         f"{GUEST}/app.py-5-    pass", "--", f"{GUEST}/lib/x.py:10:def main_loop():"]
@@ -81,10 +81,10 @@ async def test_grep_content_gives_numbered_lines_and_context_as_ripgrep_does(com
 
 async def test_grep_context_multiline_and_no_line_numbers_are_passed_on(computer):
     hub, runtime = computer
-    for arguments, expected, absent in (({"-C": 2}, ["--context", "2"], "--line-number"),
+    for arguments, expected, absent in (({"context": 2}, ["--context", "2"], "--line-number"),
                                         ({"context": 3}, ["--context", "3"], "--line-number"),
                                         ({"multiline": True}, ["--multiline", "--multiline-dotall"], "--no-line-number")):
-        options = {"-n": False} if absent == "--line-number" else {}
+        options = {"line_numbers": False} if absent == "--line-number" else {}
         result, rg = await search(hub, runtime, "grep", answer("./a.txt\x00x", separator="\n"), pattern="a.b",
                                   output_mode="content", **options, **arguments)
         assert result.ok
@@ -170,7 +170,7 @@ async def test_the_searches_are_reads_listed_whole(computer):
     for name in ("glob", "grep"):
         assert tools[name].whole and tools[name].pinned and "Claude Code" in tools[name].description
         assert hub.kind_of("computer", name) == "read"
-    for option in ("-i", "-n", "-A", "-B", "-C", "context", "output_mode", "head_limit", "offset", "glob", "type", "multiline"):
+    for option in ("ignore_case", "line_numbers", "after", "before", "context", "output_mode", "head_limit", "offset", "glob", "type", "multiline"):
         assert option in tools["grep"].schema["properties"]
 
 
