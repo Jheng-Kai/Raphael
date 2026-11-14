@@ -347,3 +347,104 @@ def test_the_checkpoints_marker_for_a_carried_folder_is_the_one_the_carry_over_w
     source = Path(carry_runtime.__file__).read_text(encoding="utf-8")
     assert f"folder / '{checkpoints.CARRIED}'" in source and "write_text(args['key'])" in source
     assert checkpoints.CARRIED == ".raphael-carried-member"
+
+
+def tool_leftovers(root):
+    """What tools leave in a workspace while a member works, as the owner's card showed it (2026-11-14: thirty files named by bare
+    hashes, the content store of `npm i --cache /home/cua/workspace/.npm-cache`), with other stores, caches and temporary files."""
+    digest = "acc20f9519bca6400afa6a868abca8258e7bc15ef7d0b1e2" * 2
+    leftovers = [
+        ".npm-cache/_cacache/content-v2/sha512/ac/c2/" + digest[4:], ".npm-cache/_cacache/index-v5/5f/d9/" + digest[:60],
+        "npm-store/_cacache/tmp/a1b2c3", "film/node_modules/remotion/package.json", "film/src/__pycache__/render.cpython-313.pyc",
+        "venv/lib/python3.13/site-packages/numpy/__init__.py", "film/.next/cache/webpack/client.pack", "film/.git/objects/3f/" + digest[:38],
+        "film/tool.egg-info/PKG-INFO", "film/tmp/frame-0001.png", "film/Cache/state.bin", "film/package-lock.json", "film/yarn.lock",
+        "film/draft.mp4.part", "Downloads/clip.mp4.crdownload", "film/.Promo.tsx.swp", "film/render.pid", "notes.txt~",
+        digest[:64], digest[:32] + ".json", digest[:40].upper() + ".tar.gz",
+    ]
+    for name in leftovers:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_bytes(b"\0tool")
+    return [str(root / name) for name in leftovers]
+
+
+def test_a_turn_whose_only_changes_are_what_tools_leave_behind_has_no_work_card(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    (root / "brief.md").write_text("kept\n")
+    store = CheckpointStore(tmp_path / "archive", [root])
+    store.begin(member=2, turn=7)
+    tool_leftovers(root)
+    assert store.list(member=2) == []
+
+
+def test_the_card_lists_the_works_files_and_none_of_what_tools_left_beside_them(tmp_path):
+    root, team = tmp_path / "workspace", tmp_path / "team"
+    root.mkdir(); team.mkdir()
+    store = CheckpointStore(tmp_path / "archive", [root, team])
+    store.begin(member=2, turn=7)
+    tool_leftovers(root)
+    tool_leftovers(team)
+    (root / "film" / "src" / "Promo.tsx").write_text("export const Promo = () => null;\n")
+    (root / "film" / "package.json").write_text("{}\n")
+    (root / "film" / ".gitignore").write_text("node_modules\n")
+    (team / "film" / "launch-film.mp4").write_bytes(b"\0video")
+    (team / "film" / "frames").mkdir()
+    (team / "film" / "frames" / "0001.png").write_bytes(b"\0png")
+    work = {".gitignore", "0001.png", "Promo.tsx", "launch-film.mp4", "package.json"}
+    view = store.list(member=2)[0]
+    assert sorted(Path(file["path"]).name for file in view["files"]) == sorted(work)
+    assert not view["partial"] and view["uncovered"] == []
+    # What tools keep is not even walked or stored: it cannot fill the walk's bound or the archive.
+    store.begin(member=2, turn=8)
+    record = max((json.loads(path.read_text()) for path in store.archive.glob("*.json")), key=lambda item: item["order"])
+    assert {Path(path).name for path in record["manifest"]} == work
+
+
+def test_a_name_is_a_bare_hash_only_when_it_is_all_hex_of_thirty_two_or_more():
+    from raphael_core.computer.checkpoints import noise_file, noise_folder
+    hashed = ["a" * 32, "0123456789ABCDEF" * 2 + ".mp4", "5fd9c360eeb8025899f109d27e177577f4ef2285bdfb" + ".tar.gz"]
+    named = ["0123456789abcdef0123456789abcde.png", "report-" + "a" * 32 + ".png", "g" * 40, "launch-film.mp4", "README", ".gitignore"]
+    assert all(noise_file(name) for name in hashed) and not any(noise_file(name) for name in named)
+    assert all(noise_folder(name) for name in [".npm-cache", "node_modules", "__pycache__", "venv", "_cacache", "Cache", "TMP", "pkg.egg-info"])
+    assert not any(noise_folder(name) for name in ["src", "film", "frames", "dist", "build", "out", "Downloads"])
+
+
+def test_undoing_the_changes_leaves_what_tools_left_alone_even_in_a_review_kept_before(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    (root / "a.txt").write_text("before")
+    store = CheckpointStore(tmp_path / "archive", [root])
+    ticket = store.begin(member=2, turn=7)
+    (root / "a.txt").write_text("after")
+    (root / "new.txt").write_text("new")
+    leftovers = tool_leftovers(root)
+    store.list(member=2)
+    # A review an older core kept lists the npm store and the other leftovers as new files: undo still deletes none of them.
+    path = store.archive / (ticket + ".json")
+    data = json.loads(path.read_text())
+    real = next(file for file in data["review"] if file["path"].endswith("new.txt"))
+    data["review"] += [{**real, "path": name} for name in leftovers]
+    data["reviews"] = {key: data["review"] for key in data["reviews"]}
+    path.write_text(json.dumps(data))
+    result = store.restore(ticket, member=2, review_token=next(iter(data["reviews"])))
+    assert (root / "a.txt").read_text() == "before" and not (root / "new.txt").exists()
+    assert all(Path(name).exists() for name in leftovers) and set(result["restored"]) == {str(root / "a.txt"), str(root / "new.txt")}
+    assert result["skipped"] == []
+
+
+def test_a_review_kept_before_lists_none_of_what_tools_left_once_read_again(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    store = CheckpointStore(tmp_path / "archive", [root])
+    ticket = store.begin(member=2, turn=7)
+    (root / "a.txt").write_text("a\n")
+    store.begin(member=2, turn=8)
+    (root / "b.txt").write_text("b\n")
+    store.list(member=2)
+    # Turn 7's window is closed, so its review is kept and handed back as it is: the npm store an older core put in it is left out.
+    path = store.archive / (ticket + ".json")
+    data = json.loads(path.read_text())
+    assert data["review_after"]
+    data["review"] += [{"path": name, "before": None, "diff": "", "added": None, "removed": None,
+                        "after": {"digest": "0" * 64, "mode": 0o644, "size": 5, "mtime": 1}} for name in tool_leftovers(root)]
+    path.write_text(json.dumps(data))
+    views = store.list(member=2)
+    assert [Path(file["path"]).name for file in views[1]["files"]] == ["a.txt"]
+    assert views[1]["review_token"] in json.loads(path.read_text())["reviews"]

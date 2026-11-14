@@ -13,6 +13,10 @@ from ..services.attachment_store import ID
 
 LINK = re.compile(r'!?\[([^\]\n]{0,320})\]\((?:<([^>\n]+)>|([^\s)]+))(?:\s+"[^"\n]*")?\)')
 SCAN_LIMIT = 1000
+# The turns that speak to the owner in the member's own conversation: the owner's requests, and the member's own background work,
+# whose turn names the member itself in `peer_id` (owner, 2026-11-14: two videos a member attached from its background work were
+# missing). A colleague's hand-off names another member (agent/attribution.py `from_colleague`) and hands its files to that colleague.
+TO_OWNER = "t.scope='private' AND (t.peer_id IS NULL OR t.peer_id=t.member_id)"
 
 
 # The panel's chips follow the kind: pages are published pages, media are images, video and audio, files are the rest
@@ -116,7 +120,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
     # Owner uploads live in agent_turns.attachments and are deliberately not read.
     for row in conn.execute(
         "SELECT m.kind,m.text,m.at_ms,t.id AS turn_id,t.conversation_id FROM agent_messages m "
-        "JOIN agent_turns t ON t.id=m.turn_id WHERE t.member_id=? AND t.scope='private' AND t.peer_id IS NULL "
+        "JOIN agent_turns t ON t.id=m.turn_id WHERE t.member_id=? AND " + TO_OWNER + " "
         "AND m.kind IN ('media','reply') ORDER BY m.at_ms DESC,m.seq DESC LIMIT ?", (member, SCAN_LIMIT)):
         if row['kind'] == 'media':
             try:
@@ -132,7 +136,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
     # Older turns can predate the durable reply-message stream.
     for row in conn.execute(
         "SELECT t.id AS turn_id,t.conversation_id,t.text,t.created_at_ms AS at_ms FROM agent_turns t "
-        "WHERE t.member_id=? AND t.scope='private' AND t.peer_id IS NULL AND t.status='done' "
+        "WHERE t.member_id=? AND " + TO_OWNER + " AND t.status='done' "
         "AND NOT EXISTS(SELECT 1 FROM agent_messages m WHERE m.turn_id=t.id AND m.kind='reply') "
         "ORDER BY t.id DESC LIMIT ?", (member, SCAN_LIMIT)):
         for title, link in _links(row['text']):
@@ -140,7 +144,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
 
     for row in conn.execute(
         "SELECT p.id,p.title,p.turn_id,p.conversation_id,p.created_at_ms FROM pages p JOIN agent_turns t ON t.id=p.turn_id "
-        "WHERE p.member_id=? AND t.member_id=? AND t.scope='private' AND t.peer_id IS NULL "
+        "WHERE p.member_id=? AND t.member_id=? AND " + TO_OWNER + " "
         "ORDER BY p.created_at_ms DESC LIMIT ?", (member, member, SCAN_LIMIT)):
         keep('page:' + row['id'], identifier=row['id'], name=row['title'], mime='text/html', kind='page', row=row,
              at_ms=row['created_at_ms'], open={'method': 'pages.open', 'params': {'id': row['id']}})
@@ -152,7 +156,7 @@ def snapshot(conn, member, workspaces=(), limit=12, *, output_folder='', tz=None
         for row in conn.execute(
             "SELECT e.id,e.task_id,e.workspace,e.uri,e.verified_at_ms,w.turn_id,t.conversation_id FROM task_evidence e "
             "JOIN worker_tasks w ON w.id=e.task_id JOIN agent_turns t ON t.id=w.turn_id "
-            "WHERE w.member_id=? AND t.member_id=? AND w.scope='private' AND t.scope='private' AND t.peer_id IS NULL "
+            "WHERE w.member_id=? AND t.member_id=? AND w.scope='private' AND " + TO_OWNER + " "
             "AND e.kind='artifact' AND e.verdict='verified' AND w.state='done' AND w.announced=1 "
             "ORDER BY e.verified_at_ms DESC LIMIT ?", (member, member, SCAN_LIMIT)):
             try:
