@@ -121,7 +121,7 @@ def _sentence(tool, arguments, language, *, server=None):
         action = "write" if "write" in short.lower() else "edit" if short in ("Edit", "edit_file", "apply_patch") else "read"
         path = args.get("path", args.get("file_path", args.get("filename", "")))
         target = _safe(str(path).replace("\\", "/").rsplit("/", 1)[-1]) or with_ui_words({"en": "a file", "ja": "ファイル"}).get(language, "檔案")
-    elif short in ("web_search", "search_query", "search_code", "code_search", "Grep", "grep", "rg"):
+    elif short in ("web_search", "search_query", "search_code", "code_search", "Grep", "grep", "rg", "Glob", "glob"):
         action = "search"
         target = _safe(args.get("query", args.get("pattern", ""))) or with_ui_words({"en": "information", "ja": "情報"}).get(language, "資料")
     elif short in ("web_read", "WebFetch", "fetch_url"):

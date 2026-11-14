@@ -232,6 +232,10 @@ async def test_the_summariser_is_told_the_shape_and_the_rounds_are_data():
     ("memory_update", {"op": "add", "name": "reference-tea"}, "t" * 300, True, "[memory_update] add note reference-tea"),
     ("Notion__fetch", {"id": "page-1", "deep": True, "more": 1}, "t" * 2000, True, "[Notion__fetch] id=page-1 deep=True (2,000 chars result)"),
     ("computer__click", {"x": 1, "y": 2}, "t" * 900, True, "[computer__click] x=1 y=2 (900 chars result)"),
+    ("computer__write_file", {"path": "notes/plan.md", "content": "x" * 9000}, "File created successfully at: /home/cua/workspace/notes/plan.md", True, "[computer__write_file] wrote notes/plan.md"),
+    ("computer__edit_file", {"path": "/home/cua/workspace/app.py", "old_string": "a", "new_string": "b"}, "The file /home/cua/workspace/app.py has been updated.", True, "[computer__edit_file] edited /home/cua/workspace/app.py"),
+    ("computer__grep", {"pattern": "def main", "output_mode": "content"}, "t" * 700, True, "[computer__grep] searched files for 'def main' (700 chars)"),
+    ("computer__glob", {"pattern": "**/*.py"}, "t" * 80, True, "[computer__glob] listed files matching '**/*.py' (80 chars)"),
 ])
 def test_an_old_result_says_what_the_call_was_and_how_it_went(name, arguments, content, ok, expected):
     line = one_line(name, json.dumps(arguments), wrap_untrusted(name, content, ok=ok))
@@ -443,7 +447,8 @@ async def test_when_the_summary_call_fails_a_static_summary_keeps_the_work_and_t
     keeper.saw(total_tokens(messages), messages)
     await keeper.fit(messages)
     assert len(calls) == 1
-    assert "name=Alice" in messages[1]["content"] and "path=f200" in messages[1]["content"]
+    # A computer's read_file has a line of its own ("read f200"); any other tool shows its first arguments.
+    assert "name=Alice" in messages[1]["content"] and "read f200" in messages[1]["content"]
     # After the pause it is tried again, and the ladder climbs.
     now[0] += context_module.SUMMARY_PAUSES_S[0] + 1
     messages.extend(rounds(60, start=300))

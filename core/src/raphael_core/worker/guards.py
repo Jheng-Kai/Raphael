@@ -38,6 +38,16 @@ CUT_MARK = (
 # half of the 32,767 a Windows command line holds for the `docker exec` that carries it, the other half
 # being room for quoting. A larger file is written in parts.
 MAX_ARGUMENT_CHARS = 16000
+# A computer's write_file and edit_file carry a file's text to the computer over stdin, never on a command line, so they
+# may be as long as a reply can make them (Claude Code's Write and Edit have no cap of their own). Still bounded: a call
+# the core refuses is one the model wrote in vain, and the computer MCP server takes a body of at most 1 MiB.
+FILE_ARGUMENT_CHARS = 200_000
+FILE_ARGUMENT_TOOLS = frozenset({"computer__write_file", "computer__edit_file"})
+
+
+def argument_limit(name: object) -> int:
+    """The most the arguments of a call of the tool listed as `name` may come to, as JSON, in characters."""
+    return FILE_ARGUMENT_CHARS if name in FILE_ARGUMENT_TOOLS else MAX_ARGUMENT_CHARS
 
 # The tags the prompts are built from. A text that holds one is changed so that it does not close,
 # or open, what it is inside of.

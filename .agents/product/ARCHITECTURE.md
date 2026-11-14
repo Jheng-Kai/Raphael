@@ -786,6 +786,12 @@ remote target keys include the alias; stale tool routes fail closed. SSH aliases
 are validated in settings and before argv construction. Remote workspace and team
 storage are engine-owned named volumes; compatibility checks compare volume names,
 never Windows `Path.resolve()`. Attachments still traverse the bounded guest read.
+A member's file tools (`computer/file_tools.py`: read_file, edit_file, write_file, glob, grep, as Claude Code's;
+R-FILE-01 to R-FILE-05) cross the same argv boundary: `LocalVm.file_request` runs the standard-library guest helper
+`files_guest.py` with `python -c`, as checkpoints do, and sends the request and a file's bytes over `docker exec -i`
+stdin (`Docker.__call__(input=…)`), never on the command line; glob and grep run the image's ripgrep through
+`exec_args`. They are computer tools in `VmTools`' catalog and gate, not screen work; no RPC, setting, worker or model
+loop is added (A-01/A-03/A-04/A-08).
 `ssh_tunnel.py` forwards only a validated private container address to a random
 IPv4 loopback port, with noninteractive SSH and managed process cleanup. Viewer
 session expiry/close, container stop and VM shutdown dispose of owned forwards.

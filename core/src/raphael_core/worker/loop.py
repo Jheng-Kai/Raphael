@@ -49,6 +49,7 @@ from ..failures import CORRECTIVE_NOTE, failure_ledger, tool_failure, redact
 from .context import CONTEXT_OVERFLOW, ContextKeeper
 from .guards import (
     MAX_ARGUMENT_CHARS,
+    argument_limit,
     canonical,
     result_limit,
     wrap_untrusted,
@@ -559,7 +560,7 @@ def _refusal(call: Call, offered: set[str], *, cut: bool) -> str | None:
         return NOT_LISTED if "use_tool" in offered else UNKNOWN_TOOL
     if not isinstance(call.arguments, dict):
         return CUT_OFF if cut else BAD_ARGUMENTS
-    if len(canonical(call.arguments)) > MAX_ARGUMENT_CHARS:
+    if len(canonical(call.arguments)) > argument_limit(call.name):
         return TOO_LONG
     return None
 

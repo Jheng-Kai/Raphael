@@ -171,7 +171,7 @@ from ..services.urls import urls_in
 from ..services.urls import SeenUrls
 from ..messaging.words import compose
 from ..worker.loop import Stop, ToolOutcome, WAITING
-from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
+from ..worker.guards import MAX_ARGUMENT_CHARS, argument_limit, canonical
 from .answers import Reply, Voice, build_user_message, owner_script, parse_reply, turn_text
 from .attribution import labelled_lines, owner_lines, owner_words, relayed_answer
 from .narration import NarratedLoop
@@ -2427,7 +2427,7 @@ class AgentService:
                     checked_batch = loop.batch_calls
                     batch = [(call.id, planned) for call in loop.batch_calls
                              if isinstance(call.arguments, dict)
-                             and len(canonical(call.arguments)) <= MAX_ARGUMENT_CHARS
+                             and len(canonical(call.arguments)) <= argument_limit(call.name)
                              and (planned := plan(call.name, call.arguments)) is not None]
                     judged = await asyncio.gather(*(
                         self._screen_call(ask, planned, ledger) for _, planned in batch
@@ -3456,7 +3456,8 @@ class AgentService:
                       task=self._inflight.get(ask.session_id), language=ask.language,
                       notice=lambda text: self._message(ask, "reply", text),
                       woke=lambda text: self._message(ask, "event", json.dumps({"type": "computer_woke", "text": text}, ensure_ascii=False)),
-                      progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice)):
+                      progress=lambda text: self._message(ask, "progress", text, PREFIXES[ask.language].notice),
+                      see=(lambda: self._reads_images(ask), lambda images: self._describe_images(ask, images, ledger))):
             result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:
             from .harness_tools import definitions_for
@@ -3465,6 +3466,24 @@ class AgentService:
             self._tool_observer(call.tool.key, call.arguments, self._loop_result(result),
                                 ask.speaker.id, ask.conversation_id, schema)
         return result
+
+    def _reads_images(self, ask: _Ask) -> bool:
+        """Whether the model answering `ask` reads a picture itself: a CLI brain does; an API model as OpenRouter's list
+        says, and one the list does not know is sent the picture, as a computer's screenshots are."""
+        try:
+            model = self._read_settings(ask.speaker, ask.conversation_id).model
+            if brain_ref(model):
+                return True
+            services = self._tools.services
+            return services is None or services.reads_images(self._on_its_service(model)) is not False
+        except Exception as exc:  # what the catalog knows must not stop a read
+            logger.warning("Could not tell whether a model reads pictures: %s", type(exc).__name__)
+            return True
+
+    async def _describe_images(self, ask: _Ask, images: list[Attachment], ledger: Ledger) -> tuple[bool, str, str | None]:
+        """What the owner's vision service sees in pictures a member read from its computer, for a model that reads none."""
+        found = await self._tools.look(images, ask.text, ledger)
+        return found.ok, str((found.data or {}).get("text") or ""), found.error
 
     async def _make_call_result(
         self,

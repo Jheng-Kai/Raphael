@@ -139,6 +139,11 @@ _TEMPLATES = {
     "memory_log": "wrote to the daily log",
     "read_attachment": "read attachment {index} ({size:,} chars)",
     "attach_file": "copied {path} into the attachments",
+    "read_file": "read {path} ({size:,} chars)",
+    "write_file": "wrote {path}",
+    "edit_file": "edited {path}",
+    "glob": "listed files matching '{pattern}' ({size:,} chars)",
+    "grep": "searched files for '{pattern}' ({size:,} chars)",
 }
 _WRAPPED = re.compile(r'\A<tool_result [^>]*status="(ok|error)"[^>]*>\n(.*)\n</tool_result>\s*\Z', re.DOTALL)
 _REFUSED = re.compile(

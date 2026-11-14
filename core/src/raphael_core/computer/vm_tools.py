@@ -27,6 +27,8 @@ from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
 from . import seat_view
+from . import file_tools
+from .file_tools import FILE_READS, FILE_TOOLS, FileReads
 from ..worker.computer_verification import meaningful_expectation
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -126,10 +128,12 @@ ENGINE_FAILURES = {
 
 
 @contextmanager
-def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, woke=None, language="en"):
+def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notice=None, woke=None, language="en", see=None):
     """`notice` is something the owner has to answer (the disk is nearly full), said as the member's own words; `woke` is
-    the quiet line that a start by the member's own tool leaves, which is nothing the member said."""
+    the quiet line that a start by the member's own tool leaves, which is nothing the member said. `see` is how a picture
+    read_file finds reaches the model: (whether it reads pictures, what describes one when it does not)."""
     token = _SCOPE.set(owner)
+    seeing = file_tools.SEE.set(see)
     turn = _TURN.set((turn_id, private, task))
     note = _NOTE.set((progress, language))
     public_notice = _NOTICE.set(notice)
@@ -142,6 +146,7 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
         _NOTE.reset(note)
         _NOTICE.reset(public_notice)
         _WOKE.reset(public_woke)
+        file_tools.SEE.reset(seeing)
 
 
 # A computer tool's description is shown to a model whole (PluginTool.whole) and says what the tool is for first.
@@ -149,12 +154,13 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
 # thirty-three tools read as its same opening words and not one said what it did (a member sent PowerShell to its
 # Linux shell). How to work on the computer (look before acting, where files are kept) is in the member's
 # instructions once (agent/persona.py), not on every tool.
-VM_CONTRACT = (
-    "VM sandbox: no per-action approval; owner control blocks all calls. Before sending a message/email, "
-    "publishing/posting, deleting outside the workspace, or paying/buying, call approve (CLI) or the API "
-    "harness equivalent and wait for the owner's yes for the exact action/target. If unavailable, denied "
-    "or expired, stop. Sandbox success is not approval."
-)
+# The outward-action rule is said whole once, in the shared contract every prompt carries (agent/persona.py: no
+# per-action approval in the sandbox, nothing while the owner holds control, approve or the API equivalent for the
+# exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, as Claude Code keeps
+# a tool's description about the tool and its policy in the system prompt: the 350 characters it was, on 34 listed
+# tools, were about 1,560 tokens more in every request of a member with a computer (measured 2026-11-14).
+VM_CONTRACT = ("Outward acts (send a message, post, delete outside the workspace, pay) need the owner's yes for the exact "
+               "act first (approve on CLI); sandbox success is not approval.")
 # Named: "files shared" beside vm_exec's "your own files are in /home/cua/workspace" read as two things.
 SHARED_CONTRACT = (" Shared with other members, a screen each: /home/cua/workspace, the clipboard and sign-ins."
                    " The shell has no screen here; open a window with launch_app.")
@@ -170,7 +176,7 @@ RUN_STEPS = {"description": "Perform 1–10 short driver actions, then return on
             "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
         "required": ["steps", "observation"], "additionalProperties": False}}
 
-EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it. " + VM_CONTRACT,
+EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for programs, never to fetch a page in place of opening it in the browser. For files use read_file, grep, glob, edit_file and write_file, not cat, find, sed or heredocs. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it. " + VM_CONTRACT,
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
@@ -294,6 +300,7 @@ class VmTools:
         self.page_refs = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
         self.checkpointed, self.checkpoint_locks = set(), {}
+        self.file_reads = FileReads()  # what each run read of each file, for edit_file and write_file
         self.refreshes = {}
         self.step_gate = None
         self.vm.rebuild_notice = self._rebuild_notice
@@ -475,6 +482,7 @@ class VmTools:
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
                            vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
+        definitions.update(file_tools.DEFINITIONS)
         from .datasets import DEFINITION
         definitions["dataset"] = DEFINITION
         keys = []
@@ -581,7 +589,7 @@ class VmTools:
 
     def kind_of(self, server, name):
         if server == "computer":
-            return "read" if name in READS or name in ("attach_file", "vault_entries") else "write"
+            return "read" if name in READS or name in FILE_READS or name in ("attach_file", "vault_entries") else "write"
         return self.delegate.kind_of(server, name)
 
     def kind_for_call(self, server, name, arguments):
@@ -649,7 +657,9 @@ class VmTools:
                 result.text = self.logins.redact(identifier, result.text)
                 if result.kind:
                     result.kind = self.logins.redact(identifier, result.kind)
-        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or result.blocks:
+        # A picture read from a file is no picture of the screen: the private-page rules are about the screen.
+        screen_picture = bool(result.blocks) and not (key in self.tools and self.tools[key].name in FILE_TOOLS)
+        if (reading and result.ok and (picture_target.container != "shared" or result.kind not in NOTICES)) or screen_picture:
             if picture_target != self.vm.target(member):
                 return PluginResult(False, "computer_changed")
             private_after = await self._private_picture(picture_target, arguments)
@@ -673,8 +683,15 @@ class VmTools:
                 result.blocks = []
         return result
 
+    def _file_run(self, target, member, owner, turn):
+        """The run a file read belongs to: a task, or a turn (its id, else its scope). A read in one run is not a read in
+        another: a model that did not see the file this run has not read it."""
+        return (target.key, member, owner[:2] if owner and owner[0] == "task" else turn[0] or owner)
+
     async def _checkpoint(self, target, member, turn, owner, command):
-        if plain_read(command):
+        """The run's first file checkpoint, before its first change: a command that only reads (`plain_read`) takes
+        none; `command` None is a file tool's write, which always does."""
+        if command is not None and plain_read(command):
             return
         ticket = (target.key, member, turn or owner)
         async with self.checkpoint_locks.setdefault(target.state_key, asyncio.Lock()):
@@ -846,7 +863,7 @@ class VmTools:
             if tool.name == "vault_entries":
                 choices = self.logins.choices(member) if self.logins and hasattr(self.logins, "choices") else []
                 return PluginResult(True, text=json.dumps({"entries": choices}, ensure_ascii=False))
-            if target.key in self.payment_holds and tool.name not in READS | {"request_takeover"}:
+            if target.key in self.payment_holds and tool.name not in READS | FILE_READS | {"request_takeover"}:
                 return PluginResult(False, "owner_payment_required", "The owner must finish payment through request_takeover. No further member action is allowed on this computer.")
             owner = _SCOPE.get() or ("async", asyncio.current_task())
             turn = _TURN.get()
@@ -857,8 +874,9 @@ class VmTools:
                 if origin:
                     owner = ("task", task_id, origin["member_id"], origin["conversation_id"])
                     turn = (origin["turn_id"], True, None)
-            # Only the screen is shared out: a command in the workspace takes nobody's turn, and no turn waits for one.
-            screen = tool.name not in ("vm_exec", "attach_file")
+            # Only the screen is shared out: a command or a file in the workspace takes nobody's turn, and no turn waits
+            # for one.
+            screen = tool.name not in ("vm_exec", "attach_file", *FILE_TOOLS)
             if screen and (busy := await self._take_screen(target, owner)) is not None:
                 result = busy
                 return result
@@ -902,7 +920,8 @@ class VmTools:
                     await lock.acquire()
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
             self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
-            command = tool.name == "vm_exec"
+            # Not input at the screen: the owner's press to take control does not wait for these.
+            command = tool.name == "vm_exec" or tool.name in FILE_TOOLS
             if command:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
@@ -928,6 +947,16 @@ class VmTools:
                         data = await self.vm.execute(target, arguments["command"], wait)
                     # A command that ran and exited non-zero (tests that fail) is what the model asked to find out, not a broken tool.
                     result = PluginResult(True, None, json.dumps(data), data.get("truncated", False))
+                elif tool.name in FILE_TOOLS:
+                    async def checkpoint():
+                        # Before the first change of the run, as a command's: the card of changed files and its undo.
+                        await self._checkpoint(target, member, turn[0], owner, None)
+                        if target != self.vm.target(member):
+                            raise VmError("computer_changed")
+                        if target.key in self.vm.held:
+                            raise VmError("owner_holds_control")
+                    result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
+                                                   self._file_run(target, member, owner, turn), checkpoint)
                 elif tool.name == "attach_file":
                     data = await self.vm.read_file(target, arguments["path"], limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name

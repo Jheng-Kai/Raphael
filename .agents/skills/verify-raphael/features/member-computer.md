@@ -1,5 +1,39 @@
 # Member computer (Phases A and B)
 
+## A member's files, as Claude Code works on them (owner, 2026-11-14)
+
+R-TOOL-03, R-FILE-01 to R-FILE-05. The owner: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member read, searched
+and changed the files of its computer through `vm_exec` (`cat`, `sed`, heredocs): the head of the output only, no numbers, no
+paging, nothing that checked the text it replaced, and whole files under the 16,000-character argument cap. Its computer now
+offers Claude Code's file tools beside `vm_exec`, with Claude Code's parameters and words:
+
+| Tool | Copies | What it does here |
+| --- | --- | --- |
+| `read_file {path, offset?, limit?, pages?}` | Read | `cat -n` lines, 2000 from `offset`, a line over 2000 characters cut, 60,000 characters a read, the offset to go on from; a picture as an image (or what the owner's vision service sees in it, for a model that reads no pictures); a PDF as the text of its pages, 20 a call |
+| `edit_file {path, old_string, new_string, replace_all?}` | Edit | exact text, unique unless `replace_all`; read in this run first, refused if changed since; keeps BOM and CRLF; returns the edited lines numbered |
+| `write_file {path, content}` | Write | a whole file; over an existing one only after a read in this run and if unchanged since; folders made |
+| `glob {pattern, path?}` | Glob | `rg --files`, newest first, 100 at most |
+| `grep {pattern, path?, glob?, type?, output_mode?, ignore_case, line_numbers, after, before, context, multiline, head_limit, offset}` | Grep | ripgrep; files_with_matches (default, newest first), content or count; 250 entries a page by default |
+
+Where they live: `computer/file_tools.py` (definitions, the run's read state `FileReads`, edit and read logic, ripgrep's
+command line and output), `computer/files_guest.py` (the guest's reads and compare-and-rename writes, standard library only,
+sent like `checkpoints.py`), `services/lines.py` (the line reader, shared), `LocalVm.file_request` and `Docker.__call__`'s
+`input` (the request and the file over `docker exec -i` stdin), `VmTools._call` (dispatch, the checkpoint before a write, not
+screen work), `worker.guards.argument_limit` (200,000 characters for `write_file` and `edit_file` only). A run is a turn (its
+id) or a task; what it read is the file's sha256. Paths are absolute or taken from `/home/cua/workspace`; in the workspace and
+the team folder the guest opens each component without following a link. Searches skip `.git`, `.browser-profiles`,
+`.raphael-checkpoints` and `.raphael-jobs` and honour `.gitignore`; they search hidden files. Results pass the same login
+redaction as every computer tool. No card asks for any of these in the member's own computer; the CLI vendors' own Read,
+Write, Edit, Glob, Grep and shell stay off (R-PC-01): a CLI brain gets these through the `computer` MCP server.
+
+Offline evidence (fake docker `Runtime`; the guest helper itself runs on a folder of the test; ripgrep's answers are scripted):
+`core/tests/computer/test_file_read.py`, `test_file_tools.py`, `test_file_search.py`, and `test_catalog_stays.py` (the
+catalog's descriptions: 17,756 characters per member before R-TOOL-03, 11,132 after it, 13,446 with the five tools; at a
+seat 18,364, 11,740 and 14,054; ceiling 14,500).
+No UI changes, so no look run. Not run: a real computer (`verify -- --computer` was not run: no image change), ripgrep's
+own flags against the image's ripgrep, a live turn of each brain (`verify -- --live`), the providers' acceptance of the
+dashed parameter names (`-i`, `-A`) that Claude Code's Grep uses.
+
 ## The first call after a wake is waited for; "your computer" is the member's (owner, 2026-11-14)
 
 R-COMP-FIRST-01, R-COMP-OWN-01. From the owner's own conversations: a member's first computer action after a sleep failed with
