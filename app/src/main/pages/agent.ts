@@ -2052,8 +2052,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
     if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
-    // A message that waits its turn can be read now: the running work ends as Stop ends it and the message starts (R-QUEUE-05).
-    if (ownerAct === "cancel" && control.dataset.queued === "true") items.push({ id: "send-now", label: t("chat.sendNow"), icon: "send" });
+    // 立即送出 stands beside 「排隊中」 itself, not in this menu (R-QUEUE-05).
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
     openActions(control, items, pick => {
@@ -2061,7 +2060,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       else if (pick === "reply") replyMessage(control);
       else if (pick === "edit") void editMessage(control);
       else if (pick === "cancel") void cancelMessage(control);
-      else if (pick === "send-now") void sendNow(control);
       else void copyMessage(message?.querySelector<HTMLElement>('[data-act="copy-message"]') ?? control);
     }, reactions && source ? { html: menuReactionsHTML(reactions), onPick: lead => {
       const react = (emoji: string): void => {
@@ -2530,6 +2528,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "cancel-message":
         void cancelMessage(act);
+        break;
+      case "send-now":
+        void sendNow(act);
         break;
       case "drop-missing":
         missingFiles.splice(Number(act.dataset.index), 1);

@@ -3102,11 +3102,13 @@ export function checkRendered(name, context = {}) {
     return {check:name,place};
   }
   if (name === "composer-queued-sendnow-menu") {
+    // 立即送出 is the exception and stands in sight beside 「排隊中」, as Claude Code's (owner, 2026-11-14); the menu does not repeat it.
     const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => `${node.dataset.pick}:${node.textContent.trim()}`);
-    require(labels.filter(item => item.startsWith("send-now:")).length === 1 && labels.some(item => item.startsWith("send-now:") && item.endsWith(":立即送出")),
-      `a queued bubble's menu offers 立即送出 once: ${labels}`);
-    const order = labels.map(item => item.split(":")[0]);
-    require(order.indexOf("send-now") > order.indexOf("copy") && order.indexOf("send-now") < order.indexOf("cancel"), `send now sits between copy and cancel: ${order}`);
+    require(!labels.some(item => item.startsWith("send-now:")) && labels.some(item => item.startsWith("cancel:")), `the menu keeps Cancel and has no 立即送出: ${labels}`);
+    const mark = document.querySelector('.tn[data-id="901"] .queued-mark'), button = document.querySelector('.tn[data-id="901"] .message-actions [data-act="send-now"]');
+    require(visible(mark) && visible(button) && button.textContent.trim() === "立即送出" && mark.nextElementSibling === button, "立即送出 stands in sight right after 排隊中");
+    const box = button.getBoundingClientRect(), bubble = document.querySelector('.tn[data-id="901"] .bubble').getBoundingClientRect();
+    require(box.right <= bubble.left + 1 && Math.abs((box.top + box.bottom) / 2 - (bubble.top + bubble.bottom) / 2) <= bubble.height / 2, "beside the bubble, on its line");
     const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
     require(new Set(icons).size === icons.length, "each menu action has its own icon");
     require(!document.querySelector('.tn[data-id="902"]'), "only the one queued bubble exists");

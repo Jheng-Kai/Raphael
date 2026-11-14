@@ -1926,7 +1926,8 @@ Owner, 2026-11-14: 「我可能傳一封訊息給一個成員，然後突然想�
 queue 了一個新的訊息。…理論上你應該要跟 claude code 設計的一樣，我們可以自己選擇立即送出，就會直接
 打斷目前的工作，然後加上這個 context，或者是另外一個就是，claude 它會自己判斷它什麼時候該加進來。」
 Both halves are built: the model takes a new message at its next step, and 「立即送出」 on a
-queued bubble (its ⋯ menu, between Copy and Cancel) interrupts the work now. R-QUEUE-05:
+queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu:
+「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣」) interrupts the work now. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
 running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
 Antigravity child is ended and the next turn resumes its stored native session; an API loop's
