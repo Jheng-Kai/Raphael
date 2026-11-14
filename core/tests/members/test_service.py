@@ -320,3 +320,27 @@ async def test_deleting_a_member_takes_its_conversation_memory_and_routines(rig,
     assert history.list(member_id=member_id) == []
     assert not folder.exists()
     assert rig.service.store.routines(member_id) == []
+
+async def test_one_update_puts_a_member_in_a_folder_at_a_place_among_all_members_and_numbers_them_again(rig):
+    """What the sidebar relies on when a row is dropped (app/src/main/member-order.ts has the same table): `position` counts every
+    member but Raphael, in the folders' order, and the places are numbered again from 0, so a drop is one request."""
+    one = (await rig.call("groups.create", {"name": "學習"}))["group"]["id"]
+    two = (await rig.call("groups.create", {"name": "工作"}))["group"]["id"]
+    ids = []
+    for name, group in (("甲", one), ("乙", one), ("丙", one), ("丁", two), ("戊", two), ("己", None)):
+        ids.append((await rig.call("members.create", {"name": name, "group_id": group}))["member"]["id"])
+    a, b, c, d, e, f = ids
+
+    async def places():
+        return {m["id"]: (m["group_id"], m["position"]) for m in (await rig.call("members.list"))["members"] if m["id"] != 0}
+
+    await rig.call("members.update", {"id": a, "position": 1})
+    assert await places() == {b: (one, 0), a: (one, 1), c: (one, 2), d: (two, 3), e: (two, 4), f: (None, 5)}
+    await rig.call("members.update", {"id": a, "position": 0})
+    await rig.call("members.update", {"id": b, "group_id": two, "position": 3})
+    assert await places() == {a: (one, 0), c: (one, 1), d: (two, 2), b: (two, 3), e: (two, 4), f: (None, 5)}
+    await rig.call("members.update", {"id": f, "group_id": one, "position": 99})
+    assert (await places())[f] == (one, 5)  # past the end is the last place
+    await rig.call("groups.update", {"id": two, "position": 0})
+    listed = await rig.call("members.list")
+    assert [(g["id"], g["position"]) for g in listed["groups"]] == [(two, 0), (one, 1)]

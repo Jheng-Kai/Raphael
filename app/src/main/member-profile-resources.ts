@@ -36,7 +36,6 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let command: Omit<MemberCommand, "id"> & { id?: number } = { name: "", description: "", template: "" };
   let suggested = false;
   let source = "";
-  let undo: string | null = null;
   let editing: { id?: number; text: string; revision?: string } | null = host.draft ? { text: host.draft.text } : null;
   const counts = (): void => { host.onCount?.({ skills: skills.length, commands: commands.length }); };
   const empty = (text: string): string => `<p class="mp-empty">${esc(text)}</p>`;
@@ -57,7 +56,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b>${s.description ? `<p>${esc(s.description)}</p>` : ""}<p data-skill-provenance>${esc(skillOriginLabel(s))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${s.shared ? "" : iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
       (skills.length || host.draft ? "" : empty(t("members.profile.noSkills"))) +
       (editing ? `<label class="mp-label"><span>${esc(t("skills.instructions"))}</span><textarea id="mp-skill-text" class="mb-fin mb-ta" rows="12" spellcheck="false"${off}>${esc(editing.text)}</textarea></label><div class="mp-end">${btn(esc(t("common.cancel")), "sm", ` data-res="skill-cancel"${off}`)}${btn(esc(t("skills.save")), "sm", ` data-res="skill-save"${off}`)}</div>` : "") +
-      (undo ? `<div class="mp-end">${btn(esc(t("skills.undo")), "sm", ` data-res="skill-undo"${off}`)}</div>` : "") + `</section>`;
+      `</section>`;
     const commandsHTML = `<section class="mp-card"><h3>${esc(t("members.profile.commands"))}</h3>` +
       commands.map(c => `<div class="mp-resource"><div><b>/${esc(c.name)}</b><p>${esc(c.description)}</p></div>${iconButton("more", t("members.more", { p0: c.name }), ` data-res="command-menu" data-id="${c.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
       (commands.length ? "" : empty(t("members.profile.noCommands"))) +
@@ -73,7 +72,6 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       const [s, c] = await Promise.all(fromEvent ? [eventRead(`members.skills.list:${host.memberId}`,()=>api.membersSkillsList(host.memberId),host.scope ?? container),eventRead(`members.commands.list:${host.memberId}`,()=>api.membersCommandsList(host.memberId),host.scope ?? container)] : [api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
       if (!alive || mine !== generation) return;
       skills = s.skills;
-      undo = s.undo ?? null;
       commands = c.commands;
       if (suggested && command.id === undefined && command.name) command.id = commands.find(saved => saved.name === command.name)?.id;
       counts();
@@ -117,10 +115,6 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       if (action === "skill-save" && editing) {
         if (host.draft) { await host.draft.save(editing.text); editing = null; return; }
         await api.core("members.skills.update", { member_id: host.memberId, id: editing.id, text: editing.text, expected_hash: editing.revision });
-        editing = null;
-        await refresh();
-      } else if (action === "skill-undo" && undo) {
-        await api.core("members.skills.update", { member_id: host.memberId, undo });
         editing = null;
         await refresh();
       } else if (action === "import") {

@@ -43,6 +43,7 @@ import {
 import { openMemberCreator } from "./member-creator";
 import { openMemberStore } from "./member-store";
 import { previewTemplateFile } from "./member-templates";
+import { movedGroup, movedMember, withoutPlaces } from "./member-order";
 import { RAPHAEL_ID, faceHTML, isMemberNameTaken, memberOf, orderedMembers, memberRole, raphaelOf, stableMember } from "./members";
 import { memberColor, nameAccent } from "./owner-bubble";
 import { followSlimeRoster, setSlimeState } from "./slime";
@@ -143,6 +144,9 @@ export function createMembers(host: MembersHost): MembersShell {
   let stopLeaving: (() => void) | null = null;
   let panelRead = false;
   let refreshOnShow = false;
+  /** Saves of a move that the core has not answered yet, and the one they queue behind (R-SIDE-03). */
+  let saving = 0;
+  let saved: Promise<unknown> = Promise.resolve();
 
   const member = (): Member => memberOf(list, current) ?? raphaelOf(list);
   /** The panel's face as it is drawn, but for the words of its tooltip: those are put on the face where it stands (slime.ts). */
@@ -168,20 +172,17 @@ export function createMembers(host: MembersHost): MembersShell {
     renameGroup: (id) => void renameGroup(id),
     editSources: (id) => void sources(id),
     deleteGroup: (id) => void deleteGroup(id),
+    // A row or folder dropped stands where it was dropped before the core has heard of it, and is saved with one request (R-SIDE-03).
     async dropMember(id, groupId, beforeId) {
-      const peers = (list?.members ?? []).filter(m => m.id !== id && m.id !== 0 && m.group_id === groupId).sort((a, b) => a.position - b.position);
-      const at = beforeId === undefined ? peers.length : peers.findIndex(m => m.id === beforeId);
-      const moving = list?.members.find(m => m.id === id); if (!moving) return;
-      peers.splice(at < 0 ? peers.length : at, 0, moving);
-      await groupChange(async () => { for (const [position, m] of peers.entries()) await api.membersUpdate(m.id, { group_id: groupId, position }); });
+      const move = list && movedMember(list, id, groupId, beforeId);
+      if (!move) return;
+      const moving = list?.members.find(m => m.id === id);
+      await reorder(move.list, () => api.membersUpdate(id, { ...(moving?.group_id === groupId ? {} : { group_id: groupId }), position: move.position }));
     },
     async reorderGroup(id, beforeId) {
-      const groups = [...(list?.groups ?? [])].sort((a, b) => a.position - b.position);
-      const moving = groups.find(g => g.id === id); if (!moving) return;
-      const next = groups.filter(g => g.id !== id);
-      const at = beforeId === null ? -1 : next.findIndex(g => g.id === beforeId);
-      next.splice(at < 0 ? next.length : at, 0, moving);
-      await groupChange(async () => { for (const [position, group] of next.entries()) await api.groupsUpdate(group.id, { position }); });
+      const move = list && movedGroup(list, id, beforeId);
+      if (!move) return;
+      await reorder(move.list, () => api.groupsUpdate(id, { position: move.position }));
     },
   });
 
@@ -270,6 +271,9 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- reading ----------
 
   async function load(fromEvent = false): Promise<void> {
+    // A move is on its way to the core: what is read now may be from before it and would put the row back. The read that confirms
+    // the move follows its answer (reorder).
+    if (saving) return;
     const mine = ++loads;
     // the panel reads Raphael's routines the first time the page is on screen, not when the app starts
     if (!panelRead) {
@@ -295,6 +299,13 @@ export function createMembers(host: MembersHost): MembersShell {
     if (json === listJSON) {
       void readThread();
       if (host.visible()) tellViewing(current);
+      return;
+    }
+    // Only where members and folders stand has changed (a move made here, saved and read back; or made by another way): the column
+    // follows it and nothing else is drawn or asked (R-SIDE-03, R-SLIME-02).
+    // (A restarted core clears `listJSON` to have everything read and told again: that is not this.)
+    if (list !== null && listJSON !== "" && withoutPlaces(list) === withoutPlaces(read)) {
+      place(read, json);
       return;
     }
     // What the panel and the settings page draw from (stableMember), and whether it moved: a new last line, a step or an
@@ -325,6 +336,14 @@ export function createMembers(host: MembersHost): MembersShell {
     host.onUpdate?.();
     void readThread();
     if (host.visible()) tellViewing(current);
+  }
+
+  /** Takes `next` for the list when only the sidebar's order has changed: the column is patched, and its unchanged rows and faces stay. */
+  function place(next: MembersList, json: string): void {
+    list = next;
+    listJSON = json;
+    stableJSON = JSON.stringify([next.members.map(stableMember), next.groups]);
+    column.draw();
   }
 
   /** The open thread is read: the core forgets that it was unread. */
@@ -536,6 +555,29 @@ export function createMembers(host: MembersHost): MembersShell {
       await work();
     } catch (err) {
       toaster.info(describeError(err));
+    }
+    await load();
+  }
+
+  /**
+   * A move of a row or a folder: the column shows `next` at once, `save` follows, and the core's answer is read once it is made.
+   * A save that fails puts the column back as it was and says why. Moves wait for each other, so the core hears them in order.
+   */
+  async function reorder(next: MembersList, save: () => Promise<unknown>): Promise<void> {
+    const before = list;
+    // A read that is out now began before the move: its answer must not be drawn.
+    loads++;
+    saving++;
+    place(next, JSON.stringify(next));
+    try {
+      const turn = saved.then(save);
+      saved = turn.catch(() => {});
+      await turn;
+    } catch (err) {
+      if (before && list === next) place(before, JSON.stringify(before));
+      toaster.info(describeError(err));
+    } finally {
+      saving--;
     }
     await load();
   }
