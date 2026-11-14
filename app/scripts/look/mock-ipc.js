@@ -1529,6 +1529,20 @@ export function installMock(fixture, config = {}, target = window) {
         }
         return { stopped: true, ...(returned.length ? {returned} : {}) };
       }
+      // 「立即送出」: the core ends the work running in the conversation as Stop does (denied, its steps kept) and the queued message starts as its own turn.
+      case "agent.history.send_now": {
+        const target = data.turns.find(turn => turn.id === p.turn_id && turn.session_id === p.session_id && (turn.member_id ?? 0) === (p.member_id ?? 0));
+        if (!target || target.status !== "queued") throw new Error("send now must identify a queued message of this private conversation");
+        const ended = data.turns.filter(turn => turn.member_id === target.member_id && turn.conversation_id === target.conversation_id && ["running", "confirm"].includes(turn.status));
+        for (const turn of ended) {
+          pendingReplies.get(turn.session_id)?.(); pendingReplies.delete(turn.session_id);
+          Object.assign(turn, { status: "denied", prefix: "了", text: "已取消。", messages: turn.messages.filter(message => message.kind !== "reply") });
+          notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        }
+        Object.assign(target, { status: "running" });
+        notify("AgentTurn", { turn_id: target.id, member_id: target.member_id });
+        return { sent: true, stopped: ended.length > 0 };
+      }
       case "worker.cancel": {
         for (const turn of data.turns.filter(item => item.task?.id === p.task_id)) turn.task.state = "cancelled";
         notify("WorkerChanged");
@@ -2021,8 +2035,28 @@ export function installMock(fixture, config = {}, target = window) {
         return {ok:true,status:connected};
       }
       case "computer.checkpoints": {
-        const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:variant.roomOwnerCard === 'result' ? 950 : variant.cardTaskResult || variant.cardDeck ? 980 : 7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:[{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
-        if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:[checkpoint.files[0].path],skipped:[]}; }
+        // The shapes of 2026-11-14: a typical few files, 53 with nothing to count (the owner's card), and files that are only new.
+        const text = (path, change, added, removed, diff) => ({path, change, added, removed, diff});
+        const picture = (path, change) => ({path, change, added: null, removed: null, diff: ''});
+        const shapes = {
+          few: [
+            text('/home/cua/workspace/週報.md', 'changed', 12, 3, '--- before\n+++ after\n@@ -1,4 +1,13 @@\n-上週進度：整理資料\n+本週進度：整理資料並寫出摘要\n+下週計畫：校對與寄出\n'),
+            text('/home/cua/workspace/研究/來源清單.csv', 'added', 2, 0, '--- before\n+++ after\n@@ -0,0 +1,2 @@\n+名稱,網址\n+範例,https://example.com\n'),
+            picture('/home/cua/workspace/研究/封面.png', 'added'),
+            text('/home/cua/team/舊版草稿.txt', 'removed', 0, 4, '--- before\n+++ after\n@@ -1,4 +0,0 @@\n-第一段\n-第二段\n-第三段\n-第四段\n'),
+          ],
+          many: [
+            text('/home/cua/workspace/README.md', 'changed', 4, 1, '--- before\n+++ after\n@@ -1 +1,4 @@\n-舊說明\n+新說明\n+第二行\n+第三行\n+第四行\n'),
+            picture('/home/cua/workspace/預算.xlsx', 'changed'), picture('/home/cua/workspace/簡報.pptx', 'changed'),
+            ...Array.from({length: 50}, (_, index) => picture(`/home/cua/workspace/截圖/畫面-${String(index + 1).padStart(2, '0')}.png`, 'added')),
+          ],
+          new: [
+            text('/home/cua/workspace/簡報大綱.md', 'added', 3, 0, '--- before\n+++ after\n@@ -0,0 +1,3 @@\n+# 簡報大綱\n+一、背景\n+二、做法\n'),
+            picture('/home/cua/workspace/預算.xlsx', 'added'), picture('/home/cua/team/封面.png', 'added'),
+          ],
+        };
+        const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:variant.roomOwnerCard === 'result' ? 950 : variant.cardTaskResult || variant.cardDeck ? 980 : 7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:shapes[variant.checkpointShape] ?? [{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
+        if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:checkpoint.files.map(file => file.path),skipped:[]}; }
         return {checkpoints:variant.checkpoints || variant.cardDeck ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
       }
       case "messaging.telegram.remove_user": data.messaging.allowed = data.messaging.allowed.filter(user => user.user_id !== p.user_id); return data.messaging;

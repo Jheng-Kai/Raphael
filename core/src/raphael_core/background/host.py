@@ -137,6 +137,7 @@ class ProcessLink:
         self.process = process
         self.peer = Peer(self._write)
         self._tasks: list[asyncio.Task[None]] = []
+        self._stop_task: asyncio.Task[None] | None = None
 
     def _write(self, line: str) -> None:
         stdin = self.process.stdin
@@ -207,12 +208,35 @@ class ProcessLink:
         ]
 
     async def stop(self) -> None:
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._stop())
+        task = self._stop_task
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Shutdown can itself be interrupted. Once the caller has given up,
+            # end the child now and keep owning its pipes until cleanup completes.
+            self.kill()
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+            task.result()
+            raise
+
+    async def _stop(self) -> None:
         stdin = self.process.stdin
         if stdin is not None and not stdin.is_closing():
             with contextlib.suppress(OSError):
                 stdin.close()
-        await self._reap()
-        await self._finish()
+        try:
+            await self._reap()
+        finally:
+            if getattr(self.process, "returncode", 0) is None:
+                self.kill()
+            await self.process.wait()
+            await self._finish()
 
     def kill(self) -> None:
         if self.process.returncode is None:
@@ -244,7 +268,15 @@ class ProcessLink:
         transport = getattr(self.process, "_transport", None)
         if transport is not None:
             transport.close()
-            await asyncio.sleep(0)
+            # On Windows, closing the subprocess transport schedules connection_lost on
+            # each pipe transport, which then schedules the subprocess transport's own
+            # connection_lost. A single loop turn can finish the pipes but leave the
+            # subprocess transport attached to the loop that is about to close. A bounded
+            # number of turns: a transport that never lets go must not hold shutdown.
+            for _ in range(200):
+                if getattr(transport, "_loop", None) is None:
+                    break
+                await asyncio.sleep(0)
 
 
 async def connect_process(command: Sequence[str] | None = None) -> Link:

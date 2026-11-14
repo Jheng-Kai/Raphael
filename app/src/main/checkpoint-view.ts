@@ -4,7 +4,7 @@ import { openDialog } from "./member-dialogs";
 import { btn, esc, toaster } from "./ui";
 import { describeError } from "./format";
 
-function fileName(path: string): string {
+export function fileName(path: string): string {
   for (const [root, label] of [["/home/cua/team/", t("files.team")], ["/home/cua/workspace/", t("files.workspace")]]) {
     if (path === root.slice(0, -1)) return label;
     if (path.startsWith(root)) return `${label} / ${path.slice(root.length)}`;
@@ -17,7 +17,7 @@ function changedAt(value: number): string {
   return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function diffHTML(diff: string): string {
+export function diffHTML(diff: string): string {
   const lines = diff.split("\n").filter(line => !/^(--- before|\+\+\+ after|@@)/.test(line));
   if (!diff) return `<p class="foot">${esc(t("files.noPreview"))}</p>`;
   return `<pre><code>${lines.map(line => `<span class="checkpoint-line${line.startsWith("-") ? " is-removed" : line.startsWith("+") ? " is-added" : ""}">${esc(line.startsWith("-") ? `− ${line.slice(1)}` : line.startsWith("+") ? `+ ${line.slice(1)}` : line)}</span>`).join("\n")}</code></pre>`;
