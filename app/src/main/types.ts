@@ -146,6 +146,8 @@ export interface CliModel {
   id: string;
   name: string;
   provider?: string;
+  /** What the CLI also takes for this model and a member may have been saved with: Claude Code's `opus` is its newest Opus. */
+  aliases?: string[];
   effort_models?: Record<string, string>;
   description?: string;
   is_default?: boolean;
@@ -158,6 +160,7 @@ export interface CatalogModel {
   per_image?: number | null;
   per_request?: number | null;
   image_output_per_mtok?: number | null;
+  aliases?: string[];
   effort_models?: Record<string, string>;
   description?: string;
   is_default?: boolean;

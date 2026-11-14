@@ -54,6 +54,17 @@ export default [
   scene("chatgpt-signed-out", "ChatGPT sign-in is the first subscription account", [...settings("models"), scroll(".cli-accounts"), wait('[data-chatgpt="sign-in"]')]),
   scene("chooser-chatgpt-signed-out", "Choosing a model, ChatGPT is a subscription that says what signing in means and has the button for it", [...modelChooser("answer"), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), check("chooser-chatgpt")]),
   scene("chooser-chatgpt-signed-in", "Signing in from the chooser brings the plan's models into it", [...modelChooser("answer"), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), click('.model-chooser [data-dlg="chatgpt"]'), wait('.model-chooser [data-model="@chatgpt:gpt-6-sol"]'), check("chooser-chatgpt-models")]),
+  scene("chooser-claude-models", "Claude Code lists every model it runs with its version in the name and the exact model in each row, in the shape of the Codex list", [
+    ...modelChooser("answer"), click('.model-chooser [data-source="cli:claude"]'), wait('.model-chooser [data-model="cli:claude:claude-opus-5-5"]'), check("chooser-claude"),
+    click('.model-chooser [data-source="cli:codex"]'), wait('.model-chooser [data-model="cli:codex:gpt-6.1"]'), check("chooser-claude-style"),
+    // the picture ends on the Claude Code tab
+    click('.model-chooser [data-source="cli:claude"]'), wait('.model-chooser [data-model="cli:claude:claude-opus-5-5"]'), check("chooser-claude")]),
+  scene("chooser-claude-older", "The end of Claude Code's list, its oldest models with their dated ids, still whole in the row at every width", [
+    ...modelChooser("answer"), click('.model-chooser [data-source="cli:claude"]'), wait('.model-chooser [data-model="cli:claude:claude-haiku-4-5-20251001"]'),
+    scroll('.model-chooser [data-model="cli:claude:claude-haiku-4-5-20251001"]'), check("chooser-claude")]),
+  scene("composer-model-alias", "A member saved with Claude Code's alias reads the model it is on, with its version, and its row is the one checked", [
+    member(3), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), click('.cb-pick'),
+    click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]'), check("composer-claude-alias-row"), check("composer-claude-alias")], { claudeAlias: true }),
   scene("chatgpt-signed-in", "A signed-in ChatGPT account shows its email and a menu", [...settings("models"), scroll(".cli-accounts"), click('[data-chatgpt="sign-in"]'), wait("[data-chatgpt-menu]")]),
   scene("cli-account-menu", "Connected CLI account row actions", [...cliMenu, check("cli-account-menu")]),
   scene("cli-account-disconnected", "Disconnect only in Raphael and offer reconnection", [...cliDisconnected, check("cli-account-disconnected")]),

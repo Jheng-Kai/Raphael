@@ -320,6 +320,8 @@ export function installMock(fixture, config = {}, target = window) {
     for (let index = 1; index <= 40; index++) data.catalog.llm.push({ ...data.catalog.llm[0], id: `maker/model-${index}`, name: `Model ${index}`, created_at_ms: index });
     data.catalog.llm.push({ ...data.catalog.llm[0], id: "maker/no-depth", name: "Model 99", created_at_ms: 99, reasoning_efforts: [], default_effort: null });
   }
+  // A member saved before Claude Code's list named exact models: it holds the alias the CLI takes for its newest Haiku.
+  if (variant.claudeAlias) data.members.find(member => member.id === 3).model = "cli:claude:haiku";
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
   // The owner's primary contact: Raphael until another member is chosen (`primaryMember` seeds it). The roster says it, as the core does.
   data.primaryId = variant.primaryMember ?? 0;

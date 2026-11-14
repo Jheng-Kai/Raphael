@@ -6515,6 +6515,47 @@ export function checkRendered(name, context = {}) {
     require(!/token/i.test(document.querySelector(".mc-pane-head").textContent), "no per-token price");
     return { check: name };
   }
+  if (name === "chooser-claude") {
+    const pane = document.querySelector(".model-chooser .mc-pane"), list = pane.querySelector(".mc-list"), rows = [...list.querySelectorAll(".mc-row")];
+    const shown = rows.map(row => row.querySelector(".mc-model-line strong").textContent.trim());
+    require(rows.length >= 8, `Claude Code has many models, not three: ${rows.length}`);
+    require(shown.every(text => /^Claude (Opus|Fable|Sonnet|Haiku) \d+(\.\d+)?$/.test(text)), `every model says its version: ${shown.join(", ")}`);
+    require(new Set(shown).size === shown.length, "no two rows share a name");
+    require(rows.every(row => /^cli:claude:claude-[a-z0-9-]+$/.test(row.dataset.model)), "each row is the exact model it runs, never an alias");
+    require(shown.slice(0, 4).join() === "Claude Opus 5.5,Claude Fable 5.2,Claude Sonnet 5.5,Claude Haiku 5.5", `the CLI's own four come first, in its order: ${shown.slice(0, 4)}`);
+    require(shown.indexOf("Claude Opus 4.8") > shown.indexOf("Claude Opus 5"), "older models follow, the newest of a family first");
+    const box = list.getBoundingClientRect();
+    require(rows.every(row => { const strong = row.querySelector("strong"); return strong.scrollWidth <= strong.clientWidth + 1; }), "every name is whole, none cut with an ellipsis");
+    require(rows.every(row => row.getBoundingClientRect().left >= box.left - 1 && row.getBoundingClientRect().right <= box.right + 1), "every row is inside the list");
+    require(list.scrollWidth <= list.clientWidth + 1 && pane.scrollWidth <= pane.clientWidth + 1, "nothing scrolls sideways");
+    require(rows.filter(row => row.getAttribute("aria-checked") === "true").length <= 1, "no more than one model is checked");
+    const row = rows[0], strong = row.querySelector("strong");
+    window.__claudeRow = { height: Math.round(row.getBoundingClientRect().height), name: getComputedStyle(strong).fontSize + getComputedStyle(strong).fontWeight,
+      parts: [...row.children].map(part => part.className.split(" ")[0]).join(), mark: !!row.querySelector(".mono svg, .mono img, svg") };
+    return { check: name, rows: rows.length };
+  }
+  if (name === "chooser-claude-style") {
+    const was = window.__claudeRow, row = document.querySelector(".model-chooser .mc-list .mc-row"), strong = row.querySelector("strong");
+    require(was, "the Claude Code list was measured first");
+    const now = { height: Math.round(row.getBoundingClientRect().height), name: getComputedStyle(strong).fontSize + getComputedStyle(strong).fontWeight,
+      parts: [...row.children].map(part => part.className.split(" ")[0]).join(), mark: !!row.querySelector(".mono svg, .mono img, svg") };
+    require(was.parts === now.parts && was.name === now.name && was.mark === now.mark, `a Claude Code row is made as a Codex row: ${JSON.stringify(was)} / ${JSON.stringify(now)}`);
+    require(Math.abs(was.height - now.height) <= 2, `and as tall (${was.height} / ${now.height} px)`);
+    return { check: name };
+  }
+  if (name === "composer-claude-alias") {
+    const face = document.querySelector(".composer .cmp-model .mp-tname")?.textContent.trim();
+    require(face === "Claude Haiku 5.5", `a member saved as 「haiku」 reads the model it is on: ${face}`);
+    require(window.__look.data.members.find(member => member.id === 3).model === "cli:claude:haiku", "and is still saved with its alias");
+    return { check: name };
+  }
+  if (name === "composer-claude-alias-row") {
+    const row = document.querySelector('.cb-menu [data-model="cli:claude:claude-haiku-5-5"]');
+    require(row?.getAttribute("aria-checked") === "true", "the row of the model its alias is, is the one checked");
+    require(document.querySelectorAll('.cb-menu .cb-list [aria-checked="true"]').length === 1, "and only that one");
+    require(!document.querySelector('.cb-menu [data-model="cli:claude:haiku"]'), "no row stands for the alias itself");
+    return { check: name };
+  }
   if (name === "composer-model-small" || name === "composer-model-browse") {
     const menu = document.querySelector(".cb-menu"), now = menu.querySelector(".cb-now"), list = menu.querySelector(".cb-body");
     require(visible(now) !== visible(list), "the card shows one view at a time");

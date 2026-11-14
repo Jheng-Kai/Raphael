@@ -57,6 +57,13 @@ const connectionId = (model: CatalogModel): string => model.provider_id ?? (mode
 const connectionName = (model: CatalogModel): string => model.provider_name ?? (connectionId(model) === "openrouter" ? "OpenRouter" : connectionId(model));
 
 /**
+ * What a model can be saved as: its id, and the aliases its CLI also takes for it (Claude Code's `opus`, which is
+ * whatever its newest Opus is). A member, a star or a setting saved before the list named exact models holds the alias,
+ * and finds its model by it.
+ */
+export const refsOf = (model: CatalogModel): string[] => [modelRef(model), ...(model.aliases ?? []).map((alias) => `${connectionId(model)}:${alias}`)];
+
+/**
  * Whether `model` reads images, as OpenRouter's list says (`input_modalities`). A model of a catalog
  * that says nothing of what its models read (a core from before it sent it) is taken to: the core
  * still refuses an image to a model that cannot take it (`vision_unsupported`).
@@ -232,7 +239,7 @@ export function pickerRows(models: CatalogModel[], role: PickerRole, state: Pick
     .filter((model) => (!state.connection || connectionId(model) === state.connection) && (state.provider === "" || model.provider === state.provider) && matches(searched(model)))
     // a subscription lists its models in the CLI's own order (strongest first), not by name
     .sort(subscription ? () => 0 : ORDERS[state.sort])
-    .map((model) => ({ model: { ...model, id: modelRef(model) }, usable: usableFor(model, role), favorite: starred.has(modelRef(model)) }));
+    .map((model) => ({ model: { ...model, id: modelRef(model) }, usable: usableFor(model, role), favorite: refsOf(model).some((ref) => starred.has(ref)) }));
   const query = squeeze(state.query.trim().toLowerCase());
   const searching = state.query.trim() !== "";
   const rank = (model: CatalogModel): number => {
@@ -554,7 +561,7 @@ export const concreteModel = (o: ModelPickerLook, models: CatalogModel[]): strin
 function concreteCurrent(o: ModelPickerLook, models = pickerModels(o)): string {
   const ref = baseRef(o.current);
   return /^cli:[^:]+$/.test(ref) ? models.find((m) => connectionId(m) === ref && m.is_default)?.id ?? ref :
-    models.find((m) => Object.values(m.effort_models ?? {}).includes(ref))?.id ?? ref;
+    models.find((m) => Object.values(m.effort_models ?? {}).includes(ref))?.id ?? models.find((m) => refsOf(m).includes(ref))?.id ?? ref;
 }
 
 /** The same model name and connection source for picker buttons and read-only cards. */
@@ -690,7 +697,8 @@ export function listHTML(list: PickerList, selected = list.current, models: read
   return list.rows.map(({ model, usable, lead }) => {
     const chosen = model.id === selected;
     const descriptions = { "cli:claude:sonnet": "chooser.sonnet", "cli:claude:opus": "chooser.opus", "cli:claude:fable": "chooser.fable", "cli:claude:haiku": "chooser.haiku" } as const;
-    const key = descriptions[model.id as keyof typeof descriptions];
+    const key = refsOf(model).map((ref) => descriptions[ref as keyof typeof descriptions]).find(Boolean);
+    const starred = refsOf(model).some((ref) => list.favorites.includes(ref));
     const description = key ? t(key) : getLocale() === "en" ? model.description : "";
     const sub = [description || [model.provider, model.context_length ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
       !usable ? reasonText(fitFor(model, list.role).reason) : ""].filter(Boolean).join(" · ");
@@ -698,7 +706,7 @@ export function listHTML(list: PickerList, selected = list.current, models: read
     return `<div class="mc-item"><button type="button" role="radio" class="mc-row mp-opt${lead ? " mp-lead" : ""}" aria-checked="${chosen}" data-model="${esc(model.id)}" data-id="${esc(model.id)}"${chosen ? ' data-current="true"' : ""}${!usable ? ' disabled aria-disabled="true"' : ""}>` +
       `<span class="mc-radio" aria-hidden="true"></span>${lead ? "" : modelMark(model)}<span class="mc-model"><span class="mc-model-line"><strong>${esc(model.name)}</strong></span>` +
       `<span class="mc-description">${esc(sub)}</span></span>${price ? `<span class="mc-price num">${esc(price)}</span>` : ""}</button>` +
-      (stars && !lead ? `<button type="button" class="mp-star" data-star="${esc(model.id)}" aria-pressed="${list.favorites.includes(model.id)}" aria-label="${esc(t(list.favorites.includes(model.id) ? "picker.favRemove" : "picker.favAdd", { p0: model.name }))}">${ico("star")}</button>` : "") + `</div>`;
+      (stars && !lead ? `<button type="button" class="mp-star" data-star="${esc(model.id)}" aria-pressed="${starred}" aria-label="${esc(t(starred ? "picker.favRemove" : "picker.favAdd", { p0: model.name }))}">${ico("star")}</button>` : "") + `</div>`;
   }).join("");
 }
 
@@ -843,7 +851,8 @@ class MountedPicker implements ModelPicker {
       const makers = providerChoices(source.models);
       // the app's own dropdowns (ui.ts `sel` and its menu), as everywhere else, never the system's list
       pane.innerHTML += `<div class="mc-tools"><input type="search" class="mc-search" aria-label="${esc(t("chooser.search"))}" placeholder="${esc(t("chooser.search"))}" value="${esc(this.query)}">` +
-        sel(sortChoices(), this.sort, t("chooser.sort"), " data-sort") + (makers.length > 2 ? sel(makers, this.maker, t("chooser.maker"), " data-maker") : "") + `</div>`;
+        // a subscription lists its models in the CLI's own order (`pickerRows`), so there is no order to choose
+        (source.group === "subscriptions" ? "" : sel(sortChoices(), this.sort, t("chooser.sort"), " data-sort")) + (makers.length > 2 ? sel(makers, this.maker, t("chooser.maker"), " data-maker") : "") + `</div>`;
     }
     pane.innerHTML += `<div class="mc-scroll"><div class="mc-list" role="radiogroup" aria-label="${esc(t("chooser.title"))}"></div></div><div class="mc-effort"></div>`;
     this.paintRows();
@@ -933,9 +942,13 @@ class MountedPicker implements ModelPicker {
       this.paintRows(); this.paintFooter();
     }
     if (target.dataset.star) {
-      const id = target.dataset.star, on = !this.o.favorites?.includes(id);
-      this.o.favorites = withFavorite(this.o.favorites ?? [], id, on);
-      this.paintRows(); this.o.onFavorite?.(id, on);
+      // A model starred under an alias is starred: pressing it takes that star away, whatever its ref, and a new star is its id.
+      const id = target.dataset.star, held = refsOf(pickerModels(this.o).find((m) => m.id === id) ?? { id } as CatalogModel).filter((ref) => this.o.favorites?.includes(ref));
+      for (const ref of held.length ? held : [id]) {
+        this.o.favorites = withFavorite(this.o.favorites ?? [], ref, !held.length);
+        this.o.onFavorite?.(ref, !held.length);
+      }
+      this.paintRows();
     }
     const act = target.dataset.act, name = target.dataset.name;
     if (act === "use" && name) { this.localDraft = name; this.paintRows(); }
@@ -953,8 +966,13 @@ class MountedPicker implements ModelPicker {
     }
     const model = pickerModels(this.o).find((m) => m.id === this.draft);
     const effort = this.effortModel()?.reasoning_efforts?.includes(this.effort) ? this.effort : "";
-    const ref = model?.effort_models?.[effort] ?? (effort ? `${this.draft}?effort=${effort}` : this.draft);
-    this.close(); if (ref !== this.o.current || this.o.local?.active) this.o.onChoose(ref);
+    // A member saved with Claude Code's alias that presses 使用 on the model the alias is stays on the alias: nothing is
+    // saved when its depth is the same, and a new depth is saved on the alias, never on another id.
+    const base = baseRef(this.o.current), alias = !!model && refsOf(model).slice(1).includes(base);
+    const kept = alias ? base : this.draft;
+    const ref = model?.effort_models?.[effort] ?? (effort ? `${kept}?effort=${effort}` : kept);
+    const same = ref === this.o.current || (alias && effort === (effortOf(this.o.current, [model!]) || model?.default_effort || ""));
+    this.close(); if (!same || this.o.local?.active) this.o.onChoose(ref);
   }
   /** Whether the inheritance lead is chosen, for a picker whose lead stands for another model (快速提問's 「與回答相同」). */
   private inherits(): boolean { return !!this.o.inheritFrom && this.draft === this.o.lead?.id; }
