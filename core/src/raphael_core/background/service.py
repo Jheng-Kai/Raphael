@@ -1487,8 +1487,8 @@ class BackgroundService:
         refuses its sign-in says so in seconds, and the runs after it are then not made into the same refusal (R-CLI-SIGNIN-03).
         Zero when it may start now, which it is told to have done."""
         provider = self._provider_of(task)
-        if provider is None or ROUTINE_CLI_GAP_S <= 0:
-            return 0.0
+        if provider is None or ROUTINE_CLI_GAP_S <= 0 or task.started_at_ms is not None:
+            return 0.0  # a run that already started (it waited for the owner's answer and is queued again) is not a new start
         try:
             now = asyncio.get_running_loop().time()
         except RuntimeError:
