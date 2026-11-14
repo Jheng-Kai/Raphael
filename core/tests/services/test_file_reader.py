@@ -19,7 +19,7 @@ from raphael_core.services.keys import memory_keys
 
 
 @pytest.mark.parametrize(("name", "mime", "data", "expected"), [
-    ("page.html", "text/html", b"<p>Hello &amp; world</p><script>secret()</script><style>hidden</style>", "Hello & world"),
+    ("page.html", "text/html", b"<p>Hello &amp; world</p><script>secret()</script><style>hidden</style>", "<script>secret()</script><style>hidden</style>"),
     ("rows.csv", "text/csv", b"name,count\npear,3", "pear,3"),
     ("data.json", "application/json", b'{"count": 3}', '"count": 3'),
     ("source.rs", "text/plain", b"fn main() {}", "fn main"),
@@ -28,8 +28,8 @@ from raphael_core.services.keys import memory_keys
 async def test_text_readers(name, mime, data, expected):
     kind, result = await read_file(checked(name, mime, data))
     assert kind == "text" and expected in result["text"]
-    assert "secret" not in result["text"] and "hidden" not in result["text"]
-    assert "<p>" not in result["text"]
+    # A text file reaches the reader as it was written.
+    assert result["text"] == (data.decode("utf-16") if name == "log.txt" else data.decode())
 
 
 def archive(parts):

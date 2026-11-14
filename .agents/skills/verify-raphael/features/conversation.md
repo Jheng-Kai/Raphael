@@ -1,5 +1,24 @@
 # Conversation
 
+## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02)
+
+Owner: 「傳送檔案不是會傳送原始檔嗎? 應該要是 raw data 才對」. A member (a Japanese teacher) was given an `.html` file to copy
+its design and received only the page's visible text: `services/file_reader.py` (`read_text`) ran `.html` through a text
+extractor and `agent/attachment_inputs.py` (`text_context`) wrapped the result in JSON. Now a text file (`is_text`: the
+extension set, `text/*`, JSON, XML, YAML, JavaScript) is read as its source, character for character, by every consumer of
+`read_text`: the inline context of an API or CLI turn (`agent/service.py`, the background worker's `_prompts`) and the
+`read_attachment` tool. In the inline context a line of facts is followed by the raw text (never inside a JSON string, so no
+quote or line end is escaped), inside the same untrusted wrapper; the prompt's own delimiter tags are neutralized. A file over
+the limit gives its start and a note beside it with the file's bytes, the bytes shown, the bytes cut and the stored path
+(`cut_note`); a CLI brain opens that stored path with its own file tools and finds the original file. Images, PDF, Office
+documents and media keep their readers. Offline evidence: `core/tests/agent/test_raw_attachments.py` (API and CLI brains,
+every text type, cut, encodings), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
+Not covered: a real model's use of the source, a native attach in the running app.
+
+```powershell
+node scripts\verify.mjs --contract
+```
+
 ## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
 
 Owner, with a picture of a card titled 「工作結果」, a green 「● 完成」, 「53 個檔案變更 +0 −0」, 「顯示內容」, 「還原檔案」 and 「查看」:
