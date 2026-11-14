@@ -8,7 +8,7 @@ const BACK: FlowEvent = { type: "BACK" };
 describe("the order of the guide", () => {
   test("a welcome, then the AI tools, the services and the abilities: three choices", () => {
     expect(STEPS).toEqual(["welcome", "tools", "services", "abilities"]);
-    expect(initialState("first").step).toBe("welcome");
+    expect(initialState().step).toBe("welcome");
   });
 
   test("there are no lessons: no step asks for a key press or speech", () => {
@@ -17,17 +17,17 @@ describe("the order of the guide", () => {
   });
 
   test("next and back walk the steps in order", () => {
-    const state = run(initialState("first"), NEXT, NEXT);
+    const state = run(initialState(), NEXT, NEXT);
     expect(state.step).toBe("services");
     expect(run(state, BACK).step).toBe("tools");
   });
 
   test("a step can be gone past without choosing anything", () => {
-    expect(run(initialState("first"), NEXT, NEXT, NEXT).step).toBe("abilities");
+    expect(run(initialState(), NEXT, NEXT, NEXT).step).toBe("abilities");
   });
 
   test("back from the welcome and next from the last step stay where they are", () => {
-    const welcome = initialState("first");
+    const welcome = initialState();
     expect(reduce(welcome, BACK)).toBe(welcome);
     const last = run(welcome, NEXT, NEXT, NEXT);
     expect(reduce(last, NEXT)).toBe(last);
@@ -37,9 +37,6 @@ describe("the order of the guide", () => {
     expect(STEPS.filter((step) => isLast({ step }))).toEqual(["abilities"]);
   });
 
-  test("the mode is kept", () => {
-    expect(run(initialState("rerun"), NEXT).mode).toBe("rerun");
-  });
 });
 
 describe("the bar", () => {

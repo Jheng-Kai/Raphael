@@ -1263,8 +1263,6 @@ export interface AppContext {
   cleared: Cleared;
   /** Closes the settings panel (it opens with `go("settings")`). */
   closeSettings(): void;
-  /** Opens the first-run guide again over the window (the settings close first); it does not clear `onboarded`. */
-  rerunGuide(): void;
 }
 
 // ---------- connections (the plugins of the core and the store) ----------
