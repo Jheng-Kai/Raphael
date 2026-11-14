@@ -106,6 +106,8 @@
 .cs-card:has(> .btn.cs-main:active), .cs-linked:has(> .btn.cs-main:active) { background: var(--pressed); }
 .cs-card:hover .cs-state { color: var(--text-2); }
 .cs-card .btn.cs-main, .cs-linked .btn.cs-main { padding-inline: 0; margin-inline: 0; }
+/* The connected list gives its rows the same room, so their fill never runs past the dialog. */
+.cs-connected .cs-grid { padding-inline: var(--sp-2); }
 .cs-card .btn.cs-main:is(:hover, :active):not(:disabled), .cs-linked .btn.cs-main:is(:hover, :active):not(:disabled) { background: transparent; }
 
 /* An app's page: a bare back chevron at the top left (the dialog's own ✕ is at the other corner), the mark on a white tile with the name beside
@@ -117,7 +119,7 @@
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }
 .cs-connected > .cs-top > .btn.icon.cs-back { margin: 0 0 0 -9px; }
 /* The connected list's chevron and title are one button, its hover fill under both; the glyph stays on the content's edge. */
-.cs .btn.cs-back-title { display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; height: 36px; margin: 0 0 0 -9px; padding: 0 var(--sp-3) 0 9px; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit; font: inherit; }
+.cs .btn.cs-back-title { display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; height: var(--h-field); margin: 0 0 0 -9px; padding: 0 var(--sp-3) 0 9px; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit; font: inherit; }
 .cs .btn.cs-back-title:hover:not(:disabled) { background: var(--float-hover); }
 .cs .btn.cs-back-title:active:not(:disabled) { background: var(--pressed); }
 .cs .btn.cs-back-title .i { flex: none; width: 18px; height: 18px; }
