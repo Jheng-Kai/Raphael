@@ -33,6 +33,7 @@ class FakeBackground:
         self.submitted = []
         self.attached = []
         self.forgotten = []
+        self.cancelled = []
         self.refuse = None
 
     def submit(self, *, session_id, text, language, model, member_id=0, routine_id=None, **_):
@@ -59,6 +60,10 @@ class FakeBackground:
 
     def forget_member(self, member_id):
         self.forgotten.append(member_id)
+
+    async def cancel_session(self, session_id):
+        self.cancelled.append(session_id)
+        return True
 
 
 class QuietModel:

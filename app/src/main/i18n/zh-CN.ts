@@ -1572,7 +1572,6 @@ export const zhCN = {
   "skills.learned": "自行学会",
   "skills.imported": "导入",
   "skills.owner": "主人提供",
-  "skills.undo": "复原上次变更",
   "skills.instructions": "技能内容",
   "skills.save": "保存技能",
   "members.more": "「{p0}」的选项",

@@ -345,7 +345,7 @@ export function checkRendered(name, context = {}) {
     require(chips.map(chip => chip.dataset.reaction).join(' ') === '🎉', `the one reaction is there, never a second (${chips.map(chip => chip.dataset.reaction).join(' ')})`);
     return { check: name };
   }
-  if (['reaction-bar-given', 'reaction-replaced', 'reaction-taken-back', 'reaction-ask'].includes(name)) {
+  if (['reaction-bar-given', 'reaction-replaced', 'reaction-taken-back', 'reaction-ask', 'reaction-thinking', 'reaction-silent', 'reaction-changed'].includes(name)) {
     // One reaction per message (owner, 2026-11-14): another emoji replaces the one given, the same again takes it back.
     const calls = window.__look.calls.filter(call => call.method === 'agent.react'), message = document.querySelector('.tn[data-id="8201"]');
     const chips = [...message.querySelectorAll('[data-reaction]')].map(chip => chip.dataset.reaction);
@@ -363,12 +363,36 @@ export function checkRendered(name, context = {}) {
       require(chips.length === 0 && !message.querySelector('.message-reactions'), 'the same emoji again takes the reaction back and leaves no chip');
       require(calls.length === 1 && calls[0].params.emoji === '👍' && calls[0].params.active === false, 'the call was the removal of that emoji');
     }
+    const owner_said_nothing = () => !window.__look.calls.some(call => ['agent.ask', 'agent.confirm', 'owner_questions.answer'].includes(call.method));
     if (name === 'reaction-ask') {
       const ask = document.querySelector('.tn[data-id="8202"]');
       require(chips.join(' ') === '👎', `the reply keeps its thumbs down (${chips.join(' ')})`);
       require(ask && visible(ask.querySelector('.chat-message[data-reply]')) && ask.textContent.includes(window.__look.data.chatMetadataSample.askWhatWasWrong), 'the member asks what was wrong, as a message of its own');
       require(!ask.querySelector('.owner-message, .me'), 'the ask carries no message of the owner');
-      require(!window.__look.calls.some(call => ['agent.ask', 'agent.confirm', 'owner_questions.answer'].includes(call.method)), 'the owner said nothing and answered nothing');
+      require(!ask.querySelector('.live-presence') && !ask.dataset.live, 'the member is no longer shown at work once it has spoken');
+      require(owner_said_nothing(), 'the owner said nothing and answered nothing');
+    }
+    if (name === 'reaction-thinking') {
+      // The reaction is analysed at once (owner, 2026-11-14): the member's usual presence stands under the reply while it thinks.
+      const turn = document.querySelector('.tn[data-id="8202"]'), presence = turn?.querySelector('.live-presence');
+      require(turn && turn.dataset.live === 'true' && visible(presence), 'the member shows at work at once');
+      require(presence.textContent.trim().length > 0 && visible(presence.querySelector('.live-action')), 'the presence says what the member is doing');
+      require(!turn.querySelector('.owner-message, .me, .chat-message[data-reply], .message-text'), 'it has said nothing yet and carries no message of the owner');
+      require(chips.length === 1 && calls.length === 1, `the reply carries the one reaction (${chips.join(' ')})`);
+      require(owner_said_nothing() && !document.querySelector('.toast'), 'the owner said nothing, and nothing was announced');
+    }
+    if (name === 'reaction-silent') {
+      // A member that needs no words leaves nothing behind: no turn, presence, message, card, failure or notice.
+      require(!document.querySelector('.tn[data-id="8202"]') && !document.querySelector('.live-presence') && !document.querySelector('[data-live="true"]'), 'the member is no longer shown at work and no turn is left');
+      require(document.querySelectorAll('.tn').length === 1, `the thread holds only the reply that was reacted to (${document.querySelectorAll('.tn').length})`);
+      require(chips.join(' ') === '👍' && visible(message.querySelector('.message-reactions')), 'the reaction stays on the reply');
+      require(!document.querySelector('.toast, .is-latest-failure, .turn-signin, .failure-detail, [data-act="rerun"], [data-act="regenerate"]'), 'no notice, failure or button stands in its place');
+      require(owner_said_nothing(), 'the owner said nothing and answered nothing');
+    }
+    if (name === 'reaction-changed') {
+      require(chips.join(' ') === '👎' && calls.length === 2, `the reply carries only the new emoji (${chips.join(' ')})`);
+      require(document.querySelectorAll('.live-presence').length === 1 && document.querySelectorAll('.tn[data-live="true"]').length === 1, 'one analysis is under way, never two');
+      require(owner_said_nothing(), 'the owner said nothing and answered nothing');
     }
     return { check: name };
   }
@@ -3496,8 +3520,17 @@ export function checkRendered(name, context = {}) {
     require(meta.textContent.split('自行學會').length === 2 && meta.textContent.includes('自行學會 · 2026/10/29'), "a learned skill has exactly one localized origin and date line");
     const calls = window.__look.calls;
     require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
-    if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
-    else require(calls.some(c => c.method === "members.skills.delete") && calls.some(c => c.method === "members.skills.update" && c.params.undo), "Raphael deletes and restores through the same owner boundary");
+    require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
+    return { check: name };
+  }
+  if (name === "skill-deleted-final") {
+    // Owner, 2026-11-14: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」. The delete asked twice, went through the
+    // same owner boundary, and nothing in the list offers to bring the skill back.
+    const pane = document.querySelector('.ms-pane'), calls = window.__look.calls;
+    require(calls.some(c => c.method === "members.skills.delete" && c.params.id === 31), "Raphael deletes the skill through the same owner boundary");
+    require(!calls.some(c => c.method === "members.skills.update" && "undo" in c.params), "no call asks the core to restore a skill");
+    require(!pane.querySelector('[data-ms="skill-open"][data-id="31"]') && pane.querySelector('[data-ms="skill-open"][data-id="32"]'), "the deleted skill is gone and the shared one stays");
+    require(!pane.querySelector('[data-ms="skill-undo"]') && !/復原|undo/i.test(pane.textContent), "the list has no way to bring the skill back");
     return { check: name };
   }
   if (name === "confirm-menu-label" || name === "confirm-menu-asks") {
@@ -6163,6 +6196,80 @@ export function checkRendered(name, context = {}) {
     require(asked.length === 1 && JSON.stringify(asked[0]).includes("把輕量後背包加入購物車"), "only the owner's send submits the placed text once");
     require(![...document.querySelectorAll('.cmp-page-note')].some(visible), "the submitted draft no longer shows a page note");
     return { check: name };
+  }
+  if (name.startsWith("page-document")) {
+    // A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list; report-page.ts): a large title, one line of summary, a box that
+    // lists the sections, notes with an icon, tables with a dropdown, tabs, figures at the right and a column of links.
+    const view = document.querySelector(".page-agent .rp-view");
+    require(view && visible(view), "the document is open in the conversation's place");
+    const scroller = view.querySelector(":scope > .rp-scroll"), doc = view.querySelector(".rp-doc");
+    require(scroller.scrollWidth <= scroller.clientWidth + 1, "nothing runs out sideways");
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    const tokens = dark ? { link: "rgb(122, 174, 245)", text: "rgb(245, 245, 245)" } : { link: "rgb(31, 99, 209)", text: "rgb(10, 10, 10)" };
+    const column = scroller.clientWidth - parseFloat(getComputedStyle(scroller).paddingLeft) - parseFloat(getComputedStyle(scroller).paddingRight);
+    const title = view.querySelector(".rp-title");
+    require(title.textContent === "東京行程候選清單" && Math.abs(parseFloat(getComputedStyle(title).fontSize) - (column <= 640 ? 26.4 : 31.9)) < 0.2, `a large title: ${getComputedStyle(title).fontSize} in ${Math.round(column)} px`);
+    const sub = view.querySelector(".rp-sub");
+    require(sub.classList.contains("is-summary") && sub.textContent === "46 個景點、39 間餐廳、15 間咖啡甜點、11 個購物點，用篩選慢慢挑。", "one line of the member's summary under the title");
+    require(!doc.textContent.includes("只寫有紀錄的事實") && getComputedStyle(sub).color === tokens.text, "it takes the place of the promise, in the text's own colour");
+    // The contents are a box with a list in it (a column of its own beside a page 960 px wide).
+    const toc = view.querySelector("nav.rp-toc"), links = [...toc.querySelectorAll("ul > li > a")];
+    require(links.map(link => link.textContent).join("|") === "景點／體驗|餐廳|參考來源" && toc.querySelector(".rp-toc-h")?.textContent === "本頁內容", "the box says 本頁內容 over three sections");
+    require(links.every((link, index) => index === 0 || link.getBoundingClientRect().top > links[index - 1].getBoundingClientRect().bottom - 2), "a list down the page, not a row of chips");
+    const aside = getComputedStyle(toc).position === "sticky", box = toc.getBoundingClientRect(), body = view.querySelector(".rp-body").getBoundingClientRect();
+    if (aside) require(box.left >= body.right, "beside the page it is its own column");
+    else {
+      require(parseFloat(getComputedStyle(toc).borderTopLeftRadius) >= 12 && getComputedStyle(toc).boxShadow !== "none" && getComputedStyle(toc).paddingLeft !== "0px", "above the page it is a box");
+      require(box.bottom <= body.top && Math.abs(box.width - doc.getBoundingClientRect().width) <= 1, `a box as wide as the page, above its sections: ${Math.round(box.width)} and ${Math.round(doc.getBoundingClientRect().width)}`);
+    }
+    // Notes: an icon and a heading in the tone's colour on a tint of it; the three tones are three colours.
+    const notes = [...view.querySelectorAll(".rp-note")];
+    require(notes.map(note => note.dataset.tone).join() === "info,warn,ok" && notes.every(visible), "three notes: info, warn and ok");
+    const tones = notes.map(note => getComputedStyle(note.querySelector(":scope > svg.i")).color);
+    require(new Set(tones).size === 3 && tones[0] === tokens.link, `each tone is its own colour, info the link's blue: ${tones}`);
+    require(getComputedStyle(notes[0].querySelector("b")).color === tones[0] && getComputedStyle(notes[0]).backgroundColor !== "rgba(0, 0, 0, 0)", "the heading takes the tone's colour on a tint of it");
+    require(notes.every(note => note.getBoundingClientRect().width >= body.width - 1), "a note is as wide as the page's sections");
+    // The first table: a dropdown with its label, tabs for its groups, figures at the right, a link on every row.
+    const table = view.querySelector(".rp-sec[data-kind=table] .rp-table-box"), grid = table.querySelector("table");
+    const dropdown = table.querySelector(".rp-filter button.sel[data-report-filter]");
+    require(dropdown && table.querySelector(".rp-filter-l")?.textContent === "區域" && dropdown.getAttribute("aria-label") === "區域", "a dropdown named 區域");
+    require(table.querySelectorAll('.tabs [role="tab"]').length === 8 && table.querySelectorAll("tbody tr").length >= 1, "tabs for the groups, and the rows");
+    const figures = [...grid.querySelectorAll("th[data-num]")];
+    require(figures.map(head => head.textContent).join("|") === "門票（日圓）|從大塚（分）", `two columns of figures: ${figures.map(head => head.textContent)}`);
+    if (getComputedStyle(grid).display !== "block" && grid.getBoundingClientRect().width > 560) {
+      require(figures.every(head => ["right", "end"].includes(getComputedStyle(head).textAlign)) && [...grid.querySelectorAll("td[data-num]")].every(cell => ["right", "end"].includes(getComputedStyle(cell).textAlign)), "figures are set at the right");
+    }
+    const anchors = [...grid.querySelectorAll("td a.rp-link")];
+    require(anchors.length === 12 && anchors.every(anchor => anchor.href.startsWith("https://") && getComputedStyle(anchor).color === tokens.link && getComputedStyle(anchor).textDecorationLine === "underline"), "twelve links, in the link's blue and underlined");
+    require(grid.getBoundingClientRect().right <= table.getBoundingClientRect().right + 1, "the table stays inside the page");
+    if (name === "page-document-menu") {
+      const menu = document.querySelector(".menu");
+      require(menu && visible(menu), "the dropdown's values are open");
+      const values = [...menu.querySelectorAll(".menu-choice")].map(item => item.dataset.value);
+      require(values.length === 9 && values[0] === "" && values.includes("原宿"), `全部 and the eight areas: ${values}`);
+      const at = menu.getBoundingClientRect(), from = dropdown.getBoundingClientRect();
+      require(at.left >= 0 && at.right <= innerWidth && at.bottom <= innerHeight + 1 && Math.abs(at.left - from.left) <= 8, "the menu hangs from the dropdown and is whole on screen");
+      return { check: name, values: values.length };
+    }
+    if (name === "page-document-filter") {
+      const shown = [...grid.querySelectorAll("tbody tr")].filter(row => !row.hidden).map(row => row.firstElementChild.textContent);
+      require(shown.join("|") === "明治神宮 Meiji Jingu" && dropdown.textContent === "原宿", `one row of 原宿 in 經典名勝: ${shown}`);
+      require(table.querySelector('.tabs [aria-selected="true"]')?.dataset.reportTab === "g0" && !grid.querySelector(".rp-none"), "the tab is the one chosen");
+      return { check: name };
+    }
+    require(table.querySelector('.tabs [aria-selected="true"]')?.dataset.reportTab === "all" && dropdown.textContent === "全部", "it opens on every row");
+    const calls = window.__look.calls.filter(call => call.command === "report_save");
+    require(calls.length === 0, "nothing is saved by looking");
+    return { check: name, column: Math.round(column), aside };
+  }
+  if (name === "page-base") {
+    // An HTML page that writes no style of its own, opened in the conversation's place: its frame is the composer's column (the frame's own
+    // measures are `checkFrame`).
+    const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe");
+    require(stage.classList.contains("is-page") && frame && visible(frame), "the page is open in the conversation's place");
+    const composer = stage.querySelector(".ra-dock .composer").getBoundingClientRect(), box = frame.getBoundingClientRect();
+    require(Math.abs(box.left - composer.left) <= 2 && Math.abs(box.right - composer.right) <= 2 && box.height > 300, `as wide as the composer: ${Math.round(box.width)} and ${Math.round(composer.width)}`);
+    return { check: name, width: Math.round(box.width) };
   }
   if (name.startsWith("page-dashboard")) {
     // Raphael's daily overview (owner, 2026-11-14; report-chart.ts): today's figures and every kind of chart on one report,
@@ -9205,4 +9312,52 @@ export function checkRendered(name, context = {}) {
     return { check: name, editor: Math.round(b.width), height: Math.round(b.height), words: field.value.length };
   }
   throw new Error(`Unknown rendered check: ${name}`);
+}
+
+/**
+ * Browser assertions run inside a page frame (the `frame-check` step): a member's HTML page is another origin, so the app's own checks
+ * cannot read it. Self-contained, as `checkRendered` is: it is sent to the frame as text.
+ */
+export function checkFrame(name) {
+  const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  const style = (selector, pseudo) => getComputedStyle(document.querySelector(selector), pseudo);
+  const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
+  // The words of the theme the page is given (core agent/pages.py THEME), as colours.
+  const words = dark ? { bg: "rgb(10, 10, 10)", fg: "rgb(245, 245, 245)", surface: "rgb(22, 22, 22)", muted: "rgb(153, 153, 153)", link: "rgb(122, 174, 245)", line: "rgb(38, 38, 38)" }
+    : { bg: "rgb(255, 255, 255)", fg: "rgb(10, 10, 10)", surface: "rgb(247, 247, 247)", muted: "rgb(89, 89, 89)", link: "rgb(31, 99, 209)", line: "rgb(235, 235, 235)" };
+  if (name === "page-base") {
+    // An HTML page that writes no style of its own is drawn by the app's base style (core agent/page_style.py, R-PAGE-06): the owner's
+    // Grok Bot page, in type, table, note, contents box, tabs, cards and figures; and its one rule of its own (h3) wins over it.
+    const body = style("body");
+    require(body.backgroundColor === words.bg && body.color === words.fg, `the theme's page: ${body.color} on ${body.backgroundColor}`);
+    require(body.lineHeight === "24px" && body.fontSize === "15px", `readable type, 15 px on 1.6: ${body.fontSize} / ${body.lineHeight}`);
+    require(style("h1").fontSize === "32px" && style("h1").fontWeight === "600" && style("h2").fontSize === "22px", `a 32 px title and 22 px sections: ${style("h1").fontSize}, ${style("h2").fontSize}`);
+    require(style("h3").fontSize === "19px", `the page's own rule wins over the base's 17 px: ${style("h3").fontSize}`);
+    require(style("p").maxWidth === "660px", `a line stays readable: ${style("p").maxWidth}`);
+    require(document.documentElement.getBoundingClientRect().width <= 1120.5 && document.documentElement.scrollWidth <= innerWidth + 1, "a sensible width, nothing runs out sideways");
+    const table = style("table"), head = style("th"), cell = style("td");
+    require(table.borderTopWidth === "1px" && table.borderTopColor === words.line && table.borderTopLeftRadius === "12px", "a table with a hairline outline and round corners");
+    require(head.backgroundColor === words.surface && head.fontWeight === "600" && cell.borderBottomWidth === "1px", "a header row on the surface, hairlines between rows");
+    const narrow = innerWidth <= 720;
+    require(table.display === (narrow ? "block" : "table") && (!narrow || table.overflowX === "auto"), `${narrow ? "scrolls inside itself" : "fills the page"} at ${innerWidth} px: ${table.display}`);
+    const numbers = [...document.querySelectorAll(".num")];
+    require(numbers.length === 12 && numbers.every(item => ["right", "end"].includes(getComputedStyle(item).textAlign)), "figures marked num are set at the right, head and cells");
+    require(style("td.num").fontVariantNumeric.includes("tabular-nums"), "figures line up");
+    require(style("td a").color === words.link && style("td a").textDecorationLine === "underline", "links are the theme's blue");
+    const info = style(".callout.info");
+    require(info.borderTopLeftRadius === "12px" && info.backgroundColor !== "rgba(0, 0, 0, 0)" && info.backgroundColor !== words.surface, `a note on a tint: ${info.backgroundColor}`);
+    require(style(".callout.info strong").color === words.link && style(".callout.info", "::before").content === '"i"' && style(".callout.warn", "::before").content === '"!"', "info's mark is an i in the link's blue and warn's a !");
+    require(style(".callout.warn", "::before").color !== style(".callout.info", "::before").color, "warn is not info's colour");
+    const toc = style(".toc"), items = [...document.querySelectorAll(".toc li a")];
+    require(toc.borderTopWidth === "1px" && toc.borderTopLeftRadius === "12px" && items.length === 3 && items.every(link => getComputedStyle(link).fontWeight === "600"), "a boxed 「本頁內容」 list");
+    require(items.every((link, index) => index === 0 || link.getBoundingClientRect().top > items[index - 1].getBoundingClientRect().bottom - 2), "its entries are one under another");
+    const on = style(".chips .on"), other = style(".chips button:not(.on)");
+    require(style(".chips").display === "flex" && on.fontWeight === "600" && on.borderBottomColor === words.fg && other.color === words.muted && other.backgroundColor === "rgba(0, 0, 0, 0)", "tabs: the chosen word bold and underlined, the others quiet and flat");
+    const cards = style(".cards"), tracks = cards.gridTemplateColumns.split(" ").length, room = document.querySelector(".cards").getBoundingClientRect().width;
+    require(cards.display === "grid" && tracks === Math.max(1, Math.min(3, Math.floor((room + 16) / 256))) && style(".cards > div").backgroundColor === words.surface, `cards in a grid that fills the width: ${tracks} columns in ${Math.round(room)} px`);
+    require(style(".kpis b").fontSize === "28px" && style(".kpis").display === "grid", "figures in tiles of large numbers");
+    require(style("blockquote").borderInlineStartWidth === "3px" && style("code").backgroundColor === words.surface, "a quote with its rule, code on the surface");
+    return { check: name, dark, width: innerWidth, table: table.display, tracks };
+  }
+  throw new Error(`Unknown frame check: ${name}`);
 }

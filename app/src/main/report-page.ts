@@ -13,9 +13,9 @@ import { formatClock, formatDate } from "./format";
 import { t } from "./i18n";
 import { ownerName } from "./owner-avatar";
 import { chartHTML, mountChartHover, statsHTML } from "./report-chart";
-import type { Report, ReportEdge, ReportItem, ReportNode, ReportRow, ReportSection, ReportStatus } from "./types";
+import type { Report, ReportCell, ReportEdge, ReportItem, ReportNode, ReportRow, ReportSection, ReportStatus } from "./types";
 import type { PageView } from "./page-view";
-import { esc, ico, tabs, toaster } from "./ui";
+import { esc, ico, openMenu, sel, tabs, toaster } from "./ui";
 
 /** Who a member is on a report: its name and its colour, as the conversation's own roster has them now. */
 export interface ReportPeople {
@@ -35,8 +35,13 @@ const TONES: Record<ReportStatus, "ok" | "warn" | "err" | "muted"> = {
 const statusHTML = (status: ReportStatus, label?: string): string =>
   `<span class="rp-st" data-tone="${TONES[status]}">${esc(label || t(STATUS_WORDS[status]))}</span>`;
 
-/** The time the report's data is from, in the window's language: 「資料截至 2026/11/10 09:30」. */
+/**
+ * The line under the title. The member's own summary when it gave one (the owner, 2026-11-14, after Grok Bot's pages: one line
+ * of what the page holds); else the time the report's data is from, in the window's language, with the promise that it only
+ * states recorded facts: 「資料截至 2026/11/10 09:30 · 只寫有紀錄的事實」.
+ */
 function subtitle(report: Report): string {
+  if (report.summary) return report.summary;
   const at = Date.parse(report.as_of);
   const facts = t("page.report.facts");
   return Number.isFinite(at) ? `${t("page.report.asOf", { p0: `${formatDate(at)} ${formatClock(at)}` })} · ${facts}` : facts;
@@ -50,24 +55,80 @@ function findingsHTML(section: Extract<ReportSection, { kind: "findings" }>): st
     (section.items.length ? `<ul class="rp-items${statuses ? " has-status" : ""}">${section.items.map(item).join("")}</ul>` : "");
 }
 
+const words = (cell: ReportCell): string => (typeof cell === "string" ? cell : cell.text);
+/** A number with its sign, currency or unit, and an empty cell's dash. */
+const FIGURE = /^[+\-−–]?\s?(?:NT\$|US\$|[$¥€£])?\s?\d[\d,.]*\s?(?:%|％|[A-Za-z°]{1,3}|元|件|分|萬|億|筆|人|次)?$/;
+const BLANK = /^[—–-]?$/;
+
+/** The columns of figures: every cell with words in it is a number. They are set at the right, as Grok Bot's table has them. */
+export function figureColumns(section: Extract<ReportSection, { kind: "table" }>): boolean[] {
+  return section.columns.map((_, at) => at > 0 && section.rows.some(row => !BLANK.test(words(row.cells[at] ?? "").trim())) &&
+    section.rows.every(row => { const value = words(row.cells[at] ?? "").trim(); return BLANK.test(value) || FIGURE.test(value); }));
+}
+
+/** The columns of short words (areas, kinds, links, figures): they keep to one line, so a long column beside them cannot squeeze them. */
+const SHORT = 12;
+function shortColumns(section: Extract<ReportSection, { kind: "table" }>, figures: readonly boolean[]): boolean[] {
+  return section.columns.map((_, at) => at > 0 && (figures[at] || section.rows.every(row => [...words(row.cells[at] ?? "")].length <= SHORT)));
+}
+
 function tableHTML(section: Extract<ReportSection, { kind: "table" }>, people: ReportPeople, tabbed: boolean): string {
   const groups = [...new Set(section.rows.flatMap(row => (row.group ? [row.group] : [])))];
   const statuses = section.rows.some(row => row.status);
   const columns = [...section.columns, ...(statuses ? [section.status_title || t("page.report.status")] : [])];
+  const figures = figureColumns(section), short = shortColumns(section, figures);
+  const marks = (at: number): string => `${figures[at] ? " data-num" : ""}${short[at] ? " data-short" : ""}`;
+  // A dropdown over one column's values (the owner's 「區域」 over Grok Bot's table): a choice needs at least two values, and a
+  // file has nothing to run it with.
+  const filterAt = tabbed && section.filter ? section.columns.indexOf(section.filter) : -1;
+  const values = filterAt < 0 ? [] : [...new Set(section.rows.map(row => words(row.cells[filterAt] ?? "").trim()).filter(Boolean))];
+  const dropdown = values.length > 1 ? `<div class="rp-filter"><span class="rp-filter-l">${esc(section.filter!)}</span>` +
+    `${sel(filterChoices(values), "", section.filter!, " data-report-filter")}</div>` : "";
   // A tab per group, as Grok Bot's report has over its table; only where there is more than one group to choose.
   const filter = tabbed && groups.length > 1 ? tabs([
     { id: "all", label: t("page.report.all"), count: section.rows.length, attrs: ' data-report-tab="all"' },
     ...groups.map((group, index) => ({ id: `g${index}`, label: group, count: section.rows.filter(row => row.group === group).length, attrs: ` data-report-tab="g${index}"` })),
   ], "all", { label: section.title || t("page.report.all"), kind: "nav", plain: true }) : "";
-  // A cell's words are one piece, so a narrow page can set its column's name beside them.
-  const cell = (row: ReportRow, value: string, index: number): string => {
+  // A cell's words are one piece, so a narrow page can set its column's name beside them. A link opens in the owner's browser.
+  const cell = (row: ReportRow, value: ReportCell, index: number): string => {
     const dot = index === 0 && row.member_id !== undefined ? `<span class="rp-dot" style="--rp-c:${esc(people.colorOf(row.member_id))}"></span>` : "";
-    return `<td data-col="${esc(columns[index] ?? "")}"><span>${dot}${esc(value)}</span></td>`;
+    const said = typeof value === "string" ? esc(value) : `<a class="rp-link" href="${esc(value.url)}" rel="noopener noreferrer" data-report-link>${esc(value.text)}</a>`;
+    return `<td data-col="${esc(columns[index] ?? "")}"${marks(index)}><span>${dot}${said}</span></td>`;
   };
-  const rows = section.rows.map(row => `<tr${row.group ? ` data-group="g${groups.indexOf(row.group)}"` : ""}>` +
+  const rows = section.rows.map(row => `<tr${row.group ? ` data-group="g${groups.indexOf(row.group)}"` : ""}${filterAt >= 0 ? ` data-f="${esc(words(row.cells[filterAt] ?? "").trim())}"` : ""}>` +
     row.cells.map((value, index) => cell(row, value, index)).join("") +
     (statuses ? `<td data-col="${esc(columns[columns.length - 1]!)}"><span>${row.status ? statusHTML(row.status, row.label) : ""}</span></td>` : "") + `</tr>`).join("");
-  return `<div class="rp-table-box">${filter}<table class="rp-table"><thead><tr>${columns.map(name => `<th scope="col">${esc(name)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="rp-table-box">${dropdown}${filter}<table class="rp-table"><thead><tr>${columns.map((name, at) => `<th scope="col"${marks(at)}>${esc(name)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/** 「全部」 and each value of the filtered column. */
+const filterChoices = (values: readonly string[]): { value: string; label: string }[] => [{ value: "", label: t("page.report.all") }, ...values.map(value => ({ value, label: value }))];
+
+/** A note with an icon and a heading of its own, in the tone of what it says (info, warn or ok). */
+function calloutHTML(section: Extract<ReportSection, { kind: "callout" }>): string {
+  const icon = section.tone === "warn" ? "alert" : section.tone === "ok" ? "success" : "info";
+  return `<div class="rp-note" data-tone="${section.tone}">${ico(icon)}<div>${section.heading ? `<b>${esc(section.heading)}</b>` : ""}<p>${esc(section.text)}</p></div></div>`;
+}
+
+/**
+ * The rows a table shows: those of the chosen tab and the chosen value of its dropdown. What the two leave may be none (a tab
+ * and a value that no row has together): then the table says so, in a row where the rows were.
+ */
+function showRows(box: HTMLElement): void {
+  const tab = box.dataset.tab ?? "all", value = box.dataset.filter ?? "";
+  let shown = 0;
+  box.querySelectorAll<HTMLTableRowElement>("tbody tr:not(.rp-none)").forEach(row => {
+    row.hidden = (tab !== "all" && row.dataset.group !== tab) || (value !== "" && row.dataset.f !== value);
+    if (!row.hidden) shown++;
+  });
+  let none = box.querySelector<HTMLTableRowElement>("tbody .rp-none");
+  if (shown > 0) none?.remove();
+  else if (!none) {
+    none = document.createElement("tr");
+    none.className = "rp-none";
+    none.innerHTML = `<td colspan="${box.querySelectorAll("thead th").length}">${esc(t("conn.noMatch"))}</td>`;
+    box.querySelector("tbody")!.append(none);
+  }
 }
 
 /** What a team box says: a member by its current name, the owner by the owner's own, anyone else by the given name. */
@@ -92,6 +153,7 @@ function sectionHTML(section: ReportSection, index: number, people: ReportPeople
     : section.kind === "team" ? teamHTML(section, index, people, file)
     : section.kind === "stats" ? statsHTML(section, statusHTML, half)
     : section.kind === "chart" ? chartHTML(section, index, people, Boolean(file), half)
+    : section.kind === "callout" ? calloutHTML(section)
     : section.text.split("\n").filter(line => line.trim()).map(line => `<p class="rp-p">${esc(line)}</p>`).join("");
   return `<section class="rp-sec" id="rp-s${index}" data-kind="${section.kind}"${half ? ' data-span="half"' : ""}>` +
     `${section.title ? `<h2 class="rp-h2">${esc(section.title)}</h2>` : ""}${body}</section>`;
@@ -125,10 +187,11 @@ export function reportHTML(title: string, report: Report, people: ReportPeople, 
   const titled = report.sections.flatMap((section, index) => (section.title ? [{ title: section.title, index }] : []));
   const contents = t("page.report.contents");
   // A long list of contents (more than six titles, as a daily overview has) shows only beside the page, never above it.
-  const toc = titled.length > 1 ? `<nav class="rp-toc"${titled.length > 6 ? " data-many" : ""} aria-label="${esc(contents)}"><span class="rp-toc-h">${esc(contents)}</span>` +
-    titled.map(entry => `<a href="#rp-s${entry.index}" data-report-goto="rp-s${entry.index}">${esc(entry.title)}</a>`).join("") + `</nav>` : "";
+  // A box that lists the sections, as Grok Bot's 「On this page」 does.
+  const toc = titled.length > 1 ? `<nav class="rp-toc"${titled.length > 6 ? " data-many" : ""} aria-label="${esc(contents)}"><span class="rp-toc-h">${esc(contents)}</span><ul>` +
+    titled.map(entry => `<li><a href="#rp-s${entry.index}" data-report-goto="rp-s${entry.index}">${esc(entry.title)}</a></li>`).join("") + `</ul></nav>` : "";
   const paired = halves(report.sections);
-  return `<header class="rp-head"><h1 class="rp-title">${esc(title)}</h1><p class="rp-sub">${esc(subtitle(report))}</p></header>${toc}` +
+  return `<header class="rp-head"><h1 class="rp-title">${esc(title)}</h1><p class="rp-sub${report.summary ? " is-summary" : ""}">${esc(subtitle(report))}</p></header>${toc}` +
     `<div class="rp-body">${report.sections.map((section, index) => sectionHTML(section, index, people, paired.has(index), file)).join("")}</div>`;
 }
 
@@ -615,11 +678,32 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
         if (section) scroller()?.scrollTo({ top: section.offsetTop - 40, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
         return;
       }
+      const link = target.closest<HTMLAnchorElement>("a[data-report-link]");
+      if (link) {
+        // The window never navigates to it: the owner's own browser does.
+        event.preventDefault();
+        void api.openExternalUrl(link.getAttribute("href") ?? "").catch(() => toaster.show(t("page.failed")));
+        return;
+      }
       const tab = target.closest<HTMLButtonElement>("[data-report-tab]");
       if (tab) {
-        const box = tab.closest<HTMLElement>(".rp-table-box")!, wanted = tab.dataset.reportTab!;
+        const box = tab.closest<HTMLElement>(".rp-table-box")!;
+        box.dataset.tab = tab.dataset.reportTab!;
         box.querySelectorAll<HTMLButtonElement>("[data-report-tab]").forEach(other => other.setAttribute("aria-selected", String(other === tab)));
-        box.querySelectorAll<HTMLTableRowElement>("tbody tr").forEach(row => { row.hidden = wanted !== "all" && row.dataset.group !== wanted; });
+        showRows(box);
+      }
+      const choose = target.closest<HTMLButtonElement>("[data-report-filter]");
+      if (choose) {
+        const box = choose.closest<HTMLElement>(".rp-table-box")!;
+        const values = [...new Set([...box.querySelectorAll<HTMLElement>("tbody tr[data-f]")].map(row => row.dataset.f!))];
+        const choices = filterChoices(values);
+        openMenu(choose, choices, box.dataset.filter ?? "", value => {
+          box.dataset.filter = value;
+          const shown = choices.find(choice => choice.value === value)!.label;
+          choose.querySelector("span")!.textContent = shown;
+          choose.title = shown;
+          showRows(box);
+        });
       }
     });
     new ResizeObserver(() => layout()).observe(view);

@@ -1572,7 +1572,6 @@ export const id = {
   "skills.learned": "Dipelajari sendiri",
   "skills.imported": "Diimpor",
   "skills.owner": "Dari pemilik",
-  "skills.undo": "Urungkan perubahan terakhir",
   "skills.instructions": "Instruksi keterampilan",
   "skills.save": "Simpan keterampilan",
   "members.more": "Opsi untuk {p0}",

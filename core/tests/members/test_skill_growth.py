@@ -14,7 +14,7 @@ DOCUMENT = "---\nname: research-summary\ndescription: Summarize research with ch
     f"## {section}\nCheck the sources." for section in ("When to use", "Procedure", "Pitfalls", "Verification"))
 
 
-async def test_member_learns_updates_and_undoes_without_read_notifications(rig):
+async def test_member_learns_and_updates_without_read_notifications(rig):
     member = (await rig.call("members.create", {"name": "Ada"}))["member"]["id"]
     cap = rig.service.capabilities
     learned = cap.manage_skill(member, {"text": DOCUMENT, "provenance": "learned"})
@@ -32,13 +32,25 @@ async def test_member_learns_updates_and_undoes_without_read_notifications(rig):
         await rig.call("members.skills.update", {"member_id": member, "id": learned["id"], "text": DOCUMENT,
                                                  "expected_hash": learned["revision"]})
     assert cap.document(member, learned["id"])[1] != DOCUMENT
-    cap.undo_skills(member, cap.undo_revision(member))
-    assert cap.document(member, learned["id"])[1] == DOCUMENT
+    assert changed["revision"] != learned["revision"]
     cap.delete_skill(member, learned["id"])
-    cap.undo_skills(member, cap.undo_revision(member))
-    assert cap.document(member, learned["id"])[1] == DOCUMENT
+    assert not any(skill["id"] == learned["id"] for skill in cap.skills(member))
     other = (await rig.call("members.create", {"name": "Other"}))["member"]["id"]
     assert rig.service.skill_read(other, learned["name"]) is None
+
+
+async def test_a_skill_has_no_undo_anywhere_and_a_delete_is_final(rig):
+    # Owner, 2026-11-14: the "undo last change" of skills is gone from every place (R-SKILL-01).
+    from raphael_core.management import REGISTRY
+    cap = rig.service.capabilities
+    skill = cap.manage_skill(0, {"text": DOCUMENT})
+    assert "undo" not in await rig.call("members.skills.list", {"member_id": 0})
+    with pytest.raises(RpcError):
+        await rig.call("members.skills.update", {"member_id": 0, "undo": "any-revision"})
+    assert "member_skill_undo" not in REGISTRY
+    assert not hasattr(cap, "undo_skills") and not hasattr(cap, "undo_revision") and not hasattr(cap, "revert_state")
+    await rig.call("members.skills.delete", {"member_id": 0, "id": skill["id"]})
+    assert cap.skills(0) == []
 
 
 async def test_generated_skill_requires_sections_and_bounded_safe_references(rig):
@@ -82,27 +94,13 @@ async def test_newline_normalization_and_learning_provenance_alone_do_not_make_a
     assert not rig.service._history.messages([turn]).get(turn)
 
 
-async def test_learning_an_imported_skill_preserves_source_and_undo_restores_crlf(rig):
+async def test_learning_an_imported_skill_preserves_its_source(rig):
     cap = rig.service.capabilities
     original = DOCUMENT.replace("\n", "\r\n")
     skill = cap.keep_skill(0, "owner/repository", original)
     learned = cap.manage_skill(0, {"id": skill["id"], "expected_hash": skill["revision"], "text": DOCUMENT + "\nNew reusable check."})
     assert learned["source"] == "owner/repository" and learned["provenance"] == "learned"
     assert learned["learned_at"]
-    cap.undo_skills(0, cap.undo_revision(0))
-    assert cap._path(0, skill["id"]).read_bytes() == original.encode("utf-8")
-    assert cap.skills(0)[0]["provenance"] == "imported"
-
-
-async def test_undo_never_overwrites_an_unjournaled_document_edit(rig):
-    cap = rig.service.capabilities
-    skill = cap.manage_skill(0, {"text": DOCUMENT})
-    revision = cap.undo_revision(0)
-    path = cap._path(0, skill["id"])
-    path.write_text("External edit", encoding="utf-8")
-    with pytest.raises(HomeError, match="changed"):
-        cap.undo_skills(0, revision)
-    assert path.read_text(encoding="utf-8") == "External edit"
 
 
 # Skill learning follows Hermes Agent's nudge (R-SKILL-09, R-SKILL-10): real work counts, a review is rare, and a skill is not a diary.

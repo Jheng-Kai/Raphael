@@ -69,21 +69,6 @@ async def test_raphael_has_the_same_skill_store_and_home(rig):
     assert rig.service.capabilities._path(0, skill["id"]).is_relative_to(rig.local / "bots" / "0" / "skills")
 
 
-async def test_skill_enable_revision_can_be_reverted_without_changing_the_document(rig):
-    from raphael_core.bots.homes import HomeError, digest
-    capabilities = rig.service.capabilities
-    skill = capabilities.keep_skill(0, "owner", "---\nname: review\ndescription: Review work\n---\nRead carefully.\n")
-    capabilities.update_skill(0, skill["id"], False)
-    entry = capabilities.homes.journal(0)[-1]
-    state = capabilities.homes.state(0) / "skills.json"
-    current = digest(state.read_bytes())
-    with pytest.raises(HomeError):
-        capabilities.revert_state(0, entry["id"], expected_hash="stale")
-    capabilities.revert_state(0, entry["id"], expected_hash=current)
-    assert capabilities.skills(0)[0]["enabled"]
-    assert capabilities.read_skill(0, "review").endswith("Read carefully.\n")
-
-
 async def test_owner_can_explicitly_share_a_team_decision(rig):
     assert rig.memory.apply_edits([Edit("user", "add", "We decided the team reviews this plan on Friday.")], 0, share=True).written
     assert "Friday" in (rig.local / "shared/USER.md").read_text(encoding="utf-8")

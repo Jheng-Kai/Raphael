@@ -40,6 +40,17 @@ const requireFromApp = createRequire(join(app, "package.json"));
 // while 25.16.0 was installed).
 export const REQUIRED_PUPPETEER = `puppeteer-core@${requireFromApp("./package.json").devDependencies["puppeteer-core"]}`;
 
+/**
+ * What the core serves of an HTML page that writes no style of its own, for each theme (core agent/pages.py `document`, R-PAGE-06): the
+ * page with the app's base style in front of it. The core makes it, so a scene sees the style the owner's page gets, never a copy.
+ */
+export async function pageBaseDocuments(html, python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe")) {
+  const code = "import json,sys; from raphael_core.agent.pages import document; page={'title':'page','html':sys.argv[1],'source':'html'}; print(json.dumps({theme: document(page, theme) for theme in ('light', 'dark')}))";
+  const { stdout } = await promisify(execFile)(python, ["-c", code, html], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" } });
+  return JSON.parse(stdout);
+}
+
 export const needsDesktopFixture = selected => selected.some(scene => scene.fixture?.desktop || scene.fixture?.cardDeck || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
 
 export function browserPath() {
@@ -90,6 +101,7 @@ export async function run(options) {
         [base + "core/rfb.js"]: { contentType: "text/javascript", body: await readFile(join(import.meta.dirname, "fixtures/desktop-rfb.js"), "utf8") },
       };
     }
+    if (options.selected.some(scene => scene.fixture?.pageBase)) fixture.pageBaseDocs = await pageBaseDocuments(fixture.pageBaseHtml);
     // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
     if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;
     // Recorded public artwork keeps catalog URLs realistic while the look run stays offline.

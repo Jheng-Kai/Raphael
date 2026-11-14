@@ -147,6 +147,34 @@ at every width of the list.
 npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row panel-widest sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
 ```
 
+### Reordering the sidebar follows the pointer (owner, 2026-11-14, R-SIDE-03)
+
+「為什麼它只是調順序而已也會卡」: a drop used to send one `members.update` for each member of the folder (or one `groups.update` for each folder), wait for
+each, and draw the panel, the settings page and the conversation again for every change the core announced. Now `dropMember` and `reorderGroup` in
+`members-shell.ts` work out the list the core will answer (`member-order.ts`: `movedMember`, `movedGroup`, the numbering of `store.py _move`), draw it
+at once (`place`: only the column is patched), and save with one request through `reorder`. While a save is out no roster read is drawn (`saving`; a read
+that began before is dropped by `loads`); afterwards one read confirms, and a roster that differs only in places, folders and the roster's order or revision
+(`withoutPlaces`) is followed by the column alone. A save that fails puts the old list back and toasts the error.
+Facts to keep: `position` counts every member but Raphael across all folders; the core numbers them again from 0; dropping on the hidden folder is not a drop;
+a row that would stand where it stands asks nothing.
+
+`sidebar-reorder-members` (a row down its folder), `sidebar-reorder-across` (a row into another folder) and `sidebar-reorder-folder` (a folder above another) run the
+`drag-probe` step (`app/scripts/look/drag-probe.mjs`) with a real pointer on fifteen members in three folders (`sidebarDrag`, a mock core that answers in 16 ms
+and numbers places as the core does) with the slimes moving. It keeps a Chrome trace of the press beside the report
+(`drag-probe-*.trace.json`) and fails on: the row standing later than 150 ms after the drop (`orderMs`), more than one distinct order shown, more than one save or two
+roster reads, a main-thread task over 100 ms, any element made new or removed in the conversation, and any row, folder or face of the list that is another node afterwards
+except the moved row. Measured before and after (mock core at 16 ms per call, light, 1120 x 800, the row standing after the drop / saves / roster reads): row down its folder 369 ms, 5, 3 then 9 ms, 1, 1;
+folder above another 361 ms, 3, 3 then 12 ms, 1, 1; row into another folder 402 ms, 6, 3 then 48 ms, 1, 1 (the longer one is the style recalculation of the moved row's new
+nodes and the focus the list gives back to it; its slime node is the one that was there). At 4 x CPU slowdown (`LOOK_CPU_SLOWDOWN=4`): 649, 861 and 468 ms before, 83, 367 and 65 ms after.
+The same press has a task of about 350 ms at 4 x (24 ms at 1 x) at its first hover and drag start, from restyling the list (983 elements), before and after this change: it is not the drop, and
+`limits` is read at 1 x. The real core takes about 16 ms for each members.update or groups.update (a fresh database with fifteen members: `sync_homes` rewrites every member's home on each change) and 3 ms for members.list.
+Read the report's `assertions` for `dragPhase`, `dropPhase` (script, layout, style and task ms),
+`dragoverMaxMs`, `longTasks`, `orders`, `replaced` and `trace`.
+
+```powershell
+npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row --theme both --width 1120,720,1920x1080
+```
+
 Select a member, then click the stacked header title for details.
 At compact width press a member's face in the rail to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
@@ -227,7 +255,7 @@ selection. Native proof must also relaunch the isolated dev instance and confirm
 persistence, then remove test data.
 
 Routine, skill and command rows put edit/delete in their overflow menus
-(R-UI-11). Routine switches remain on their rows. Existing edit, approval and undo
+(R-UI-11). Routine switches remain on their rows. Existing edit and approval
 behavior remains in the shared editors and controllers.
 
 ## Gotchas
@@ -602,10 +630,13 @@ used for review. `skill_manage` is offered for a request about skills and on the
 workers' fixed tool set, not merely because a skill is enabled.
 
 The existing member Skills pane shows provenance and learning date, opens an editable
-document, deletes and undoes the latest change (including deletion) through existing RPCs.
+document and deletes through existing RPCs. Nothing restores a skill: since 2026-11-14 there is no
+"復原上次變更" button, no `undo` field in `members.skills.list`, no `undo` parameter of
+`members.skills.update` and no `member_skill_undo` tool, so a delete (asked twice) is final
+(owner: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」).
 The owner editor supplies its read revision to prevent overwriting a background update.
-The host journal/mirror records revisions outside bot-writable homes; read/list/index and
-undo discovery never mutate or notify. A learned skill adds one localized conversation
+The host journal/mirror records revisions outside bot-writable homes; read/list/index
+discovery never mutates or notifies. A learned skill adds one localized conversation
 event line without exposing its internal event payload. zh-TW and Japanese memory headings
 join the member name directly to the possessive particle.
 
@@ -615,7 +646,7 @@ npm run look -- details-skills raphael-skills member-text details-commands --the
 npm run native -- skill-growth
 ```
 
-The selected scenes cover learned provenance, silent reading, delete/undo, conversation
+The selected scenes cover learned provenance, silent reading, a final delete, conversation
 notices and the ordinary command editor comparison. The native journey checks the real
 heading, ten persisted tool calls, a background-generated home skill, and a successful
 skill_read on the next similar request, with zero fake-provider spend. This proves host
@@ -857,7 +888,7 @@ SkillHomes maps them to shared/skills. The existing owner RPCs select that scope
 with shared:true and a real member_id, never a negative public ID. Migration 61
 adds individual member_skill_grants; absence means enabled, subject to the
 library's global switch. A member can toggle shared access; shared documents are
-edited/deleted in the library only. Own skill edits/undo never include inherited
+edited/deleted in the library only. Own skill edits never include inherited
 skills. Name collisions share the existing slash namespace.
 
 Raphael gets the same import, command-template, slash discovery and expansion

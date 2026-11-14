@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 from ..clock import wall_clock_ms
 from ..memory.scan import find_secret
 from ..protocol import INTERNAL_ERROR, NOT_FOUND, RpcError, invalid_params
+from .page_style import BASE
 
 HTML_BYTES = 256 * 1024
 MCP_MIME = "text/html;profile=mcp-app"
@@ -180,9 +181,12 @@ def document(page, theme):
         if content == before:
             break
     variables = ";".join(f"--{key}:{value}" for key, value in {**THEME[theme], "font": FONT}.items())
+    # The app's base style (page_style.py) for the pages a member writes, ahead of the page's own, which wins over it; a
+    # plugin's page comes with its own design and is left as it is.
+    base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            "body{background:var(--bg);color:var(--fg);font-family:var(--font)}</style>" + _HELPER + content)
+            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + _HELPER + content)
 
 
 class PageStore:

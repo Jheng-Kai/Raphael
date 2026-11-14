@@ -17,7 +17,6 @@ EFFECTS = {
     "room_members": ("Replace the group chat's members", "替換群聊成員", "グループのメンバーを置換"),
     "room_delete": ("Delete the group chat and all its messages", "刪除群聊及全部訊息", "グループと全メッセージを削除"),
     "conversation_clear": ("Clear all records of this conversation", "清除此對話的全部紀錄", "会話の全記録を消去"),
-    "member_skill_undo": ("Undo the last change to a skill", "還原技能的上一次修改", "スキルの直前の変更を元に戻す"),
     "member_skill_delete": ("Delete the skill and its permissions", "刪除技能套件與授權", "スキルと権限を削除"),
     "member_command_delete": ("Delete the member's command", "刪除成員指令", "コマンドを削除"),
     "member_routine_delete": ("Delete the routine and its schedule", "刪除例行任務及排程", "定期タスクと予定を削除"),

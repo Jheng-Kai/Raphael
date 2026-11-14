@@ -1,10 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
-import { checkRendered } from "./checks.mjs";
+import { checkFrame, checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
+import { dragProbe } from "./drag-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 /**
@@ -516,6 +517,8 @@ export async function perform(page, step, evidenceDirectory) {
       await new Promise(resolve => setTimeout(resolve, 500));
       break;
     }
+    // What the frame itself shows, which the app cannot read: a check of checks.mjs `checkFrame` runs inside it (a page's own style, R-PAGE-06).
+    case "frame-check": return (await waitForPageFrame(page)).evaluate(checkFrame, step.name);
     case "frame-expect": {
       const deadline = Date.now() + 8000;
       for (;;) {
@@ -690,6 +693,7 @@ export async function perform(page, step, evidenceDirectory) {
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
+    case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
       await page.evaluate(ms => { window.__look.now = Date.now() + ms; }, step.ms);

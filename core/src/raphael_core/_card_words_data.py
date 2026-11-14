@@ -69,13 +69,6 @@ _ROWS = {
         "Удалить все записи этого разговора", "Xóa toàn bộ bản ghi của cuộc hội thoại này",
         "ล้างบันทึกทั้งหมดของการสนทนานี้", "Hapus semua catatan percakapan ini",
         "Bu konuşmanın tüm kayıtlarını sil"),
-    "Undo the last change to a skill": (
-        "撤销技能的上一次修改", "스킬의 마지막 변경 되돌리기", "Deshacer el último cambio de una habilidad",
-        "Annuler la dernière modification d'une compétence", "Die letzte Änderung an einer Fähigkeit rückgängig machen",
-        "Desfazer a última alteração de uma habilidade", "Annullare l'ultima modifica di una competenza",
-        "Отменить последнее изменение навыка", "Hoàn tác thay đổi gần nhất của một kỹ năng",
-        "ยกเลิกการเปลี่ยนแปลงล่าสุดของทักษะ", "Batalkan perubahan terakhir pada sebuah keahlian",
-        "Bir becerideki son değişikliği geri al"),
     "Delete the skill and its permissions": (
         "删除技能及其授权", "스킬과 권한 삭제", "Eliminar la habilidad y sus permisos",
         "Supprimer la compétence et ses autorisations", "Die Fähigkeit und ihre Berechtigungen löschen",

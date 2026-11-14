@@ -1572,7 +1572,6 @@ export const de = {
   "skills.learned": "Selbst gelernt",
   "skills.imported": "Importiert",
   "skills.owner": "Vom Besitzer",
-  "skills.undo": "Letzte Änderung rückgängig machen",
   "skills.instructions": "Anweisungen der Fähigkeit",
   "skills.save": "Fähigkeit speichern",
   "members.more": "Optionen für {p0}",
