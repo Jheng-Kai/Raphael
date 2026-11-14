@@ -417,8 +417,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .media-lightbox .lb-card { position: relative; max-width: 100%; max-height: 100%; overflow: hidden; border-radius: var(--r-lg); background: var(--surface-2); box-shadow: var(--pop); }
 .media-lightbox .lb-img { display: block; min-width: 160px; min-height: 120px; max-width: min(1400px, calc(100vw - 2 * var(--sp-4))); max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); object-fit: contain; }
 .media-lightbox .lb-card > .btn.icon.lb-close { position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 1; width: 32px; min-height: 32px; border-radius: var(--r-pill); background: var(--photo-dim); color: var(--photo-mark); }
-/* Over a video's full screen its mark stays white under the pointer: the card under it is dark in both themes. */
-.media-lightbox .lb-card.lb-video > .btn.icon.lb-close[data-lb="close"]:is(:hover, :active):not(:disabled) { color: var(--photo-mark); }
 .tn[data-status="error"] .ans, .tn[data-status="denied"] .ans, .tn[data-status="expired"] .ans { color: var(--text-2); }
 .tn mark { background: var(--selection); color: var(--on-selection); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
 .tn-detail { padding: var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--surface-2); font-size: var(--pa-fs-d); line-height: 1.75; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -648,10 +646,22 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* A member's video is a message of its own (R-MEDIA-02): it keeps its own shape, its reaction stands on its corner. */
 .chat-message[data-video] .attachment-video { width: fit-content; max-width: 100%; overflow: visible; }
 .chat-message[data-video] .attachment-video video { width: auto; max-width: 100%; }
-/* The app's own full screen of a video: the lightbox, as large as the window allows. */
-.media-lightbox .lb-card.lb-video { width: min(1400px, calc(100vw - 2 * var(--sp-4))); background: var(--photo-dim); }
-.media-lightbox .lb-video .attachment-video, .media-lightbox .lb-video .mp-bar { border-radius: 0; }
-.media-lightbox .lb-video video { width: 100%; max-height: calc(100vh - var(--window-controls-height) - 3 * var(--sp-4)); border-radius: 0; background: transparent; }
+/* The app's own full screen of a video: the lightbox filling the window under the caption strip at every size, the video as large as
+   it fits inside it, on an opaque dark ground (the page under it never shows through). */
+/* Nothing of the page shows around it: the caption strip above is a clean band of the page's own surface (its window buttons keep
+   their colours), and the player is the dark ground below it. */
+.mb-scrim.media-lightbox:has(> .lb-video) { padding: var(--window-controls-height) 0 0; background: linear-gradient(var(--content) 0 var(--window-controls-height), var(--photo-ground) 0); }
+.media-lightbox .lb-card.lb-video { width: 100%; height: 100%; border-radius: 0; background: var(--photo-ground); box-shadow: none; }
+.media-lightbox .lb-video .attachment-video { height: 100%; border-radius: 0; }
+.media-lightbox .lb-video video { width: 100%; height: 100%; max-height: none; border-radius: 0; background: transparent; object-fit: contain; }
+/* The window is the player now: its controls a size up, with room at the edges, and its × a soft round button on the dark ground. */
+.media-lightbox .lb-video .mp-bar { gap: var(--sp-2); padding: var(--sp-6) clamp(var(--sp-4), 2.5vw, var(--sp-6) + var(--sp-2)) var(--sp-4); border-radius: 0; }
+.media-lightbox .lb-video .mp-bar > .mp-time { font-size: clamp(var(--fs-xs), 1vw, var(--fs-md)); }
+.media-lightbox .lb-video .mp-bar .btn.icon.mp-btn { width: 32px; min-height: 32px; }
+.media-lightbox .lb-video .mp-bar .btn.icon.mp-btn > .i { width: 20px; height: 20px; }
+/* Its bar's own button leaves it (with Escape), as a player's full screen does: no second × over a picture whose edges move with its
+   shape (judge, 2026-11-15: a × straddling a pillarboxed video's edge). */
+.media-lightbox .lb-card.lb-video > .btn.icon.lb-close { display: none; }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
 .btn.attachment-open { position: absolute; top: 6px; right: 6px; width: var(--h-ctl); min-height: var(--h-ctl); border-radius: var(--r-sm); background: var(--panel); color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
 .me-file:hover > .attachment-open, .me-file:focus-within > .attachment-open { opacity: 1; pointer-events: auto; }

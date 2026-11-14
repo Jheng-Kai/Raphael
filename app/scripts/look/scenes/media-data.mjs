@@ -40,13 +40,13 @@ const missing = kind => {
 
 // Our own players (owner, 2026-11-15: 「不要用系統 default 的比較好，我們就直接自己增加一些 custom 的東西」, R-MEDIA-01): a video a member
 // sent, a message of its own (R-MEDIA-02), a sound the owner sent, and files that show a mark by their kind.
-const tour = { id: `${"c".repeat(32)}.mp4`, name: "office-tour.mp4", mime: "video/mp4", size: 29086 };
+const tour = { id: `${"c".repeat(32)}.mp4`, name: "office-tour.mp4", mime: "video/mp4", size: 56034 };
 const memo = { id: `${"d".repeat(32)}.m4a`, name: "會議重點.m4a", mime: "audio/mp4", size: 11688 };
 const storedFiles = { [tour.id]: { mime: tour.mime, data: clip }, [memo.id]: { mime: memo.mime, data: voice } };
 const said = (id, session, question, text, extra) => ({ id, member_id: 1, conversation_id: 11, session_id: session, created_at_ms: 1792807154000,
   question, route: "answer", source: "app", prefix: "", text, status: "done", cost_usd: 0, steps: [], attachments: [], reactions: {},
   messages: [{ seq: 2, kind: "reply", text, at_ms: 1792807160100 }], ...extra });
-const videoTurn = said(824, "member-video", "幫我做一段辦公室導覽影片。", "影片做好了，大約六秒。");
+const videoTurn = said(824, "member-video", "幫我做一段辦公室導覽影片。", "影片做好了，大約三十秒。");
 videoTurn.messages.unshift({ seq: 1, kind: "media", text: JSON.stringify({ attachment: tour }), at_ms: 1792807160000 });
 const audioTurn = said(825, "owner-audio", "幫我聽這段錄音，整理重點。", "重點有三個：預算、時程和人力。", { attachments: [memo] });
 const documents = [["報價單.pdf", "application/pdf"], ["素材.zip", "application/zip"], ["首頁草稿.html", "text/html"]]

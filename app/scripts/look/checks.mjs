@@ -2015,7 +2015,7 @@ export function checkRendered(name, context = {}) {
     require(bar.querySelector('.mp-seek') && bar.querySelector('.mp-time') && bar.querySelector('.mp-volume'), 'the bar has the scrubber, the time and the volume');
     const toggle = bar.querySelector('[data-mp-act="toggle"]');
     if (name === 'video-player-rest') {
-      require(shown(big) && !shown(bar) && shown(length) && length.textContent === '0:06', `at rest: the play mark and the length, no bar (${length.textContent})`);
+      require(shown(big) && !shown(bar) && shown(length) && length.textContent === '0:30', `at rest: the play mark and the length, no bar (${length.textContent})`);
       require(video.paused && video.readyState >= 1 && video.currentTime < 0.1, 'at rest on its first frame');
     }
     if (name === 'video-player-hover') require(shown(bar) && !shown(length) && shown(big), 'pointing at it shows the bar over the play mark');
@@ -2039,9 +2039,11 @@ export function checkRendered(name, context = {}) {
     require(box && large && visible(large), 'the full screen is the lightbox with our player');
     require(!large.controls && large.src === inline.src && /nodownload/.test(large.getAttribute('controlslist') ?? ''), 'the same video, with no browser controls');
     require(inline.paused, 'the video in the thread waits meanwhile');
-    require(box.querySelector('.lb-video [data-mp-act="full"]') && box.querySelector('[data-lb="close"]'), 'it is left by its button or its ×');
-    const width = large.getBoundingClientRect().width;
-    require(width >= Math.min(innerWidth - 2 * 32, 1400) - 2, `it is as wide as the window allows (${width})`);
+    // It is left by its bar's own button (and Escape); the lightbox's × stays hidden over a picture whose edges move with its shape.
+    require(visible(box.querySelector('.lb-video [data-mp-act="full"]')) && !visible(box.querySelector('[data-lb="close"]')), 'it is left by its bar\'s button, with no second × over the video');
+    // It is the window under the caption strip at every size: edge to edge, down to the window's bottom (judge, 2026-11-15).
+    const card = box.querySelector('.lb-card.lb-video').getBoundingClientRect(), width = large.getBoundingClientRect().width;
+    require(card.left <= 1 && card.right >= innerWidth - 1 && card.bottom >= innerHeight - 1 && card.top <= 60, `it fills the window (${Math.round(card.left)},${Math.round(card.top)} ${Math.round(card.width)} x ${Math.round(card.height)})`);
     if (name === 'video-lightbox-playing') require(!large.paused && large.currentTime > 1, `it plays on from where it was (${large.currentTime})`);
     return { check: name, width, time: Number(large.currentTime.toFixed(2)) };
   }
@@ -2073,6 +2075,9 @@ export function checkRendered(name, context = {}) {
     const choices = [...document.querySelectorAll('#app-popover .menu-choice')];
     require(choices.map(choice => choice.dataset.value).join() === '0.5,0.75,1,1.25,1.5,2', 'six speeds in the app menu');
     require(choices.find(choice => choice.getAttribute('aria-checked') === 'true')?.dataset.value === '1', 'the current speed is checked');
+    // It opens below the whole row, never over the row's own time or name (judge, 2026-11-15).
+    const row = document.querySelector('.tn[data-id="825"] .attachment-audio').getBoundingClientRect(), menu = document.querySelector('#app-popover').getBoundingClientRect();
+    require(menu.top >= row.bottom || menu.bottom <= row.top, `the menu clears the row (${Math.round(menu.top)} under ${Math.round(row.bottom)})`);
     return { check: name };
   }
   if (name === 'file-card-kinds') {

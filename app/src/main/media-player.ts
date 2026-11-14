@@ -190,9 +190,17 @@ export function bindPlayer(player: HTMLElement): void {
         sound.muted = silent;
         break;
       }
-      case "rate":
-        openMenu(act, RATES.map(rate => ({ value: String(rate), label: rateLabel(rate) })), String(media.playbackRate), value => { media.playbackRate = Number(value); wake(); });
+      case "rate": {
+        // The speeds open below the whole player (above it when there is no room), at the chip's side, so they never lie over
+        // the player's own words: its time, its name.
+        const below = (): DOMRect => {
+          const chip = act.getBoundingClientRect(), box = player.getBoundingClientRect();
+          return new DOMRect(chip.left, box.top, chip.width, box.height);
+        };
+        openMenu(act, RATES.map(rate => ({ value: String(rate), label: rateLabel(rate) })), String(media.playbackRate), value => { media.playbackRate = Number(value); wake(); },
+          undefined, [], { anchorRect: below });
         break;
+      }
       case "full": openFull(player); break;
     }
   });

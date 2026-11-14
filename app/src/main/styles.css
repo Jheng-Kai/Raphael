@@ -38,8 +38,8 @@
   --brand-telegram: #26a5e4;
   /* marks drawn over a photo (the picture crop frame): one set for both themes, as the photo under them is the same */
   --photo-mark: #ffffff; --photo-edge: rgba(255, 255, 255, 0.72); --photo-grid: rgba(255, 255, 255, 0.55); --photo-dim: rgba(0, 0, 0, 0.52);
-  /* the unplayed rail of a video's scrubber, on the photo scrim (media-player.ts) */
-  --photo-rail: rgba(255, 255, 255, 0.3);
+  /* the unplayed rail of a video's scrubber, on the photo scrim, and the ground of a video's full screen (media-player.ts) */
+  --photo-rail: rgba(255, 255, 255, 0.3); --photo-ground: #050505;
   /* Chinese uses Noto Sans TC first; JhengHei is the fallback when it is not installed. */
   --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
   --display: var(--ui);
