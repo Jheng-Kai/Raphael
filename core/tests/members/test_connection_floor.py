@@ -69,8 +69,8 @@ async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, mo
     from raphael_core.worker.loop import Stop
     rig, team = setup
     rig.settings.set("action_mode", "bypass")
-    ordinary = SimpleNamespace(source="app", quick=False, nested=False, declined=False, language="en")
-    ask = SimpleNamespace(source="overlay", quick=True, nested=False, declined=False, language="en")
+    ordinary = SimpleNamespace(source="app", quick=False, nested=False, declined=False, language="en", own_computer=False)
+    ask = SimpleNamespace(source="overlay", quick=True, nested=False, declined=False, language="en", own_computer=False)
     loop = SimpleNamespace(response=None)
     cards = []
     followup = SimpleNamespace(loop=None)

@@ -20,7 +20,7 @@ _ROWS = {
         "¿Lo abro en este PC o en el ordenador propio de {who}?", "Dois-je l’ouvrir sur ce PC ou sur l’ordinateur de {who} ?",
         "Soll es auf diesem PC oder auf dem eigenen Computer von {who} geöffnet werden?", "Abro neste PC ou no computador próprio de {who}?",
         "Lo apro su questo PC o sul computer di {who}?", "Открыть на этом компьютере или на собственном компьютере {who}?",
-        "Mở trên PC này hay trên máy tính riêng của {who}?", "จะเปิดบนพีซีเครื่องนี้ หรือบนคอมพิวเตอร์ของ {who} เอง",
+        "Mở trên PC này hay trên máy tính riêng của {who}?", "จะเปิดบนพีซีเครื่องนี้ หรือบนคอมพิวเตอร์ของ {who} เอง?",
         "Buka di PC ini, atau di komputer milik {who} sendiri?", "Bu bilgisayarda mı, yoksa {who} adlı üyenin kendi bilgisayarında mı açılsın?"),
 }
 
