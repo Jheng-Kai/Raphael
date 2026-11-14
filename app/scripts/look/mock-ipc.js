@@ -316,6 +316,29 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
+  // The one light of a row (sidebar-light.ts, owner 2026-11-14): `sidebarLights` maps a member id to what that member is in. A member that
+  // thinks has said nothing, so it has no news; one that waits for the owner has news too, which its orange question outranks.
+  if (variant.sidebarLights) {
+    const states = {
+      thinking: { activity: "thinking", activity_label: "思考中", unread: false, unread_kind: null, waiting: false },
+      message: { unread: true, unread_kind: "message" },
+      done: { unread: true, unread_kind: "done" },
+      failed: { unread: true, unread_kind: "failed" },
+      waiting: { waiting: true, activity: "blocked", activity_label: "等你回答", unread: true, unread_kind: "message" },
+    };
+    for (const [id, state] of Object.entries(variant.sidebarLights)) Object.assign(data.members.find(member => member.id === Number(id)), states[state]);
+    // What the scene's check expects, said here by the owner's rule and not read back from the app: thinking is no light, a question is orange.
+    data.expectedLights = { members: Object.fromEntries(data.members.map(member => [member.id, { thinking: null, message: "message", done: "done", failed: "failed", waiting: "waiting" }[variant.sidebarLights[member.id]] ?? null])), rooms: {} };
+  }
+  // The group chats of the same sidebar: room 1 has a message (the fixture's own), room 2 a meeting that ended, room 3 a question that waits.
+  if (variant.sidebarLightRooms) {
+    data.expectedLights ??= { members: {}, rooms: {} };
+    const next = Math.max(...data.messages.map(message => message.id)) + 1, spoken = { ...data.messages.find(message => message.member_id != null), status: "done" };
+    data.rooms.push({ ...structuredClone(data.rooms[1]), id: 3, name: "周會準備" });
+    data.rooms[1].unread_kind = "done";
+    data.messages.push({ ...spoken, id: next, room_id: 2, text: "會議結束，結論已整理好" }, { ...spoken, id: next + 1, room_id: 3, text: "要先確認預算嗎？" });
+    Object.assign(data.expectedLights.rooms, { 1: "message", 2: "done", 3: "waiting" });
+  }
   // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by his own setting): the core lists the pinned first, then by
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
   if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
@@ -373,6 +396,18 @@ export function installMock(fixture, config = {}, target = window) {
     if (variant.stopBackground) {
       runningTurn.status = "done";
       runningTurn.task = { id: 71, state: "running", started_at_ms: data.now - 5000, finished_at_ms: null };
+    }
+    if (variant.oneSlime) {
+      // The owner's picture of 2026-11-14 (R-SLIME-03): a reply that queued research in the background, its task that waits (an empty
+      // slime under the reply) and a task that works with its progress words. One member, one working slime: only the line that works.
+      const sample = data.presenceSample;
+      runningTurn.status = "done";
+      runningTurn.text = sample.backgroundReply;
+      runningTurn.messages = [{ seq: 1, kind: "reply", text: sample.backgroundReply, at_ms: data.now - 9000 }];
+      runningTurn.steps = [];
+      runningTurn.task = { id: 71, state: "waiting", started_at_ms: data.now - 8000, finished_at_ms: null };
+      data.turns.push({ ...structuredClone(runningTurn), id: Math.max(...data.turns.map(turn => turn.id)) + 1, session_id: `${runningTurn.session_id}-background`, created_at_ms: data.now - 4000,
+        question: "", text: "", messages: [], task: { id: 72, state: "running", started_at_ms: data.now - 4000, finished_at_ms: null, progress: sample.backgroundProgress } });
     }
     if (variant.linkedThread) {
       // A long conversation the way a team leaves it: earlier replies hold links, and the newest turn's work is still running.
@@ -635,6 +670,12 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: opening, at_ms: data.now - 60000 }, { seq: 2, kind: "reply", text: done, at_ms: data.now }], attachments: [],
       pages: [{ id: "page-report", title: data.pageReport.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageReport.title, kind: "report" }] });
   }
+  // `libraryOlder`: the pages were made in an older conversation of the member, not the one that is open (a page opened from
+  // the Library then takes its own conversation, and putting it away brings back the one that was open).
+  if (variant.libraryOlder) {
+    data.conversations.push({ id: 12, member_id: 1, title: "較早的整理", is_default: false, kind: "standard", created_at_ms: data.now - 9 * 86400000, updated_at_ms: data.now - 8 * 86400000 });
+    for (const turn of data.turns) if ([801, 802, 803].includes(turn.id)) turn.conversation_id = 12;
+  }
   // A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list) and an HTML page that writes no style of its own, so that
   // only the app's base style (core agent/page_style.py) draws it: each is a member's turn with the page's card.
   for (const [flag, id, title, kind, text] of [["documentTurn", "page-document", () => data.pageDocument.title, "report", "整理好了，點開就能用篩選慢慢挑。"],
@@ -657,6 +698,19 @@ export function installMock(fixture, config = {}, target = window) {
       routine: { id: 4, member_id: 0, title: "每日總覽", prompt: "問重要成員今天的狀況，整理成一頁總覽。", schedule: { kind: "daily", time: "07:00" }, enabled: true },
       messages: [{ seq: 1, kind: "reply", text: said, at_ms: start.getTime() }],
       pages: [{ id: "page-dashboard", title: data.pageDashboard.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageDashboard.title, kind: "report" }] });
+  }
+  if (variant.attachmentLink) {
+    // The owner's picture of 2026-11-14 (R-MSG-LINK-01): a routine's message that ends with a model's markdown link to the file it delivered
+    // in the same turn, `[words](attachment:<id>)`, and one to a file no turn of the conversation holds.
+    const sample = data.presenceSample;
+    const base = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11);
+    const at = data.now - 60000;
+    const said = `7 點同步未完成：無法讀取 Windows 本機與指定報告路徑，因此修改 0 張卡；[${sample.attachmentWords}](attachment:${sample.attachmentId})，另見[${sample.attachmentOtherWords}](attachment:${sample.attachmentOtherId})`;
+    data.turns.push({ ...structuredClone(base), id: 806, created_at_ms: at, session_id: "routine-attachment-link", source: "routine", route: "routine", question: "Notion 專案進度同步與排期（07:00 完整盤點）",
+      text: said, status: "done", steps: [], attachments: [], task: null,
+      routine: { id: 5, member_id: 1, title: "Notion 專案進度同步與排期（07:00 完整盤點）", prompt: "同步專案進度。", schedule: { kind: "daily", time: "07:00" }, enabled: true },
+      messages: [{ seq: 1, kind: "media", text: JSON.stringify({ attachment: { id: sample.attachmentId, name: sample.attachmentFile, mime: "text/markdown", size: 12288 } }), at_ms: at },
+        { seq: 2, kind: "reply", text: said, at_ms: at + 1 }] });
   }
   if (variant.roomOwnerCard) {
     const kind = variant.roomOwnerCard;
@@ -1222,6 +1276,11 @@ export function installMock(fixture, config = {}, target = window) {
         const items = [
           ...[0, 1, 2].map(index => ({ id: `attachment:${picture(index)}`, attachment_id: picture(index), title: `版面草圖 ${index + 1}.png`, kind: "image", mime: "image/png", at_ms: now - index * 60000, turn_id: 2, conversation_id: 11 })),
           { id: "page:weekly", title: sample.page, kind: "page", at_ms: now - hour, turn_id: 2, conversation_id: 11 },
+          // `libraryPages`: the pages the page scenes' replies hold (`pageTurn`, `reportTurn`), so a press can open them.
+          ...(variant.libraryPages ? [
+            { id: "page:page-news", title: "每日新聞日文學習 2026-11-11", kind: "page", at_ms: now - 30 * 60000, turn_id: 803, conversation_id: variant.libraryOlder ? 12 : 11 },
+            { id: "page:page-report", title: data.pageReport.title, kind: "page", at_ms: now - 40 * 60000, turn_id: 802, conversation_id: variant.libraryOlder ? 12 : 11 },
+          ] : []),
           { id: "delivered-file:notes", title: sample.files[0], kind: "document", at_ms: now - 2 * hour, turn_id: 2, conversation_id: 11 },
           { id: "delivered-file:bundle", title: "交付素材.zip", kind: "archive", at_ms: now - dayMs, turn_id: 2, conversation_id: 11 },
           { id: "attachment:demo.mp4", title: "操作示範.mp4", kind: "video", mime: "video/mp4", at_ms: now - dayMs - 30 * 60000, turn_id: 2, conversation_id: 11 },
@@ -1261,9 +1320,9 @@ export function installMock(fixture, config = {}, target = window) {
         } };
       }
       case "members.viewing": case "members.read": {
-        if (variant.unreadDivider) {
+        if (variant.unreadDivider || variant.sidebarLights) {
           const member = data.members.find(member => member.id === p.id);
-          if (member) Object.assign(member, { unread: false, unread_from: null });
+          if (member) Object.assign(member, { unread: false, unread_from: null, unread_kind: null });
         }
         return {};
       }
@@ -1597,8 +1656,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.list": return { rooms: data.rooms.map(room => {
         const messages = data.messages.filter(message => message.room_id === room.id && (message.member_id == null || message.status === "done" && message.text.trim() && !/^[(（]?\s*pass\s*[)）]?[.。]?$/i.test(message.text.trim()))).sort((a, b) => b.id - a.id);
         const latest = messages[0];
-        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
-          unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
+        const unread = messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0));
+        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: (!!variant.roomQuestion && room.id === 1) || (!!variant.sidebarLightRooms && room.id === 3),
+          unread, unread_kind: unread ? room.unread_kind ?? "message" : null };
       }) };
       case "rooms.react": {
         const message = data.messages.find(item=>item.id===p.message_id && item.room_id===p.room_id);
@@ -2211,6 +2271,7 @@ export function installMock(fixture, config = {}, target = window) {
         state.urls.push(args.url); return;
       }
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
+      if (command === "open_attachment") { (state.openedAttachments ??= []).push(args.id); return; }
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
       // A report saved as a file (report_save, which the core writes): in Downloads, as when no output folder is chosen.
       if (command === "report_save") return { place: "downloads", folder: "Downloads" };

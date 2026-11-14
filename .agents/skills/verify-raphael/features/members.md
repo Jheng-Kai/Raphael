@@ -175,6 +175,30 @@ Read the report's `assertions` for `dragPhase`, `dropPhase` (script, layout, sty
 npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row --theme both --width 1120,720,1920x1080
 ```
 
+### The sidebar's lights: one dot, one meaning (owner, 2026-11-14, R-SIDE-04)
+
+「他們如果在思考的情況下，不要有提示他們有新的動作，因為我這樣點過去，他們其實是沒有任何內容。只有他們真正傳出訊息的時候，我左邊才會有提示」, and
+「有可能會有不同顏色的，像是白色 maybe 是它傳了一個新的 message，然後綠色可能是他完成任務之類的。可能要有一套邏輯」. Why a thinking member had a dot: `MembersService.turn_arrived`
+marked a thread unread at every `agent.turn` event of a private turn that is written, whatever its status, and a running turn is written when it starts and again at each
+step (a routine's turn the moment the routine starts), so a member that only thought had a dot and an empty thread behind it. Now a turn that is still running marks its thread
+only once it has sent a reply (`_has_reply`; a progress line is not one).
+
+One dot per row (a member, a group chat, a pinned face; on the rail the face's corner), the strongest of: orange `--wait` (a question or an approval waits for the owner: `waiting` or the
+activity `blocked`; it stays until answered), red `--err` (`unread_kind` `failed`, or a run that failed unseen: the activity `error`), green `--ok` (`done`: a task or routine that ended well, a group
+chat whose meeting ended), white `--text` (`message`), none (a member that is thinking or working: its slime shows the work). The core says what the unseen news is (`unread_kind`, `members.list` and `rooms.list`;
+`unread_kind()` in `members/service.py` ranks failed over done over message over the unseen turns); `sidebar-light.ts` `lightOf(row, open)` picks the light and `lightHTML` draws it, for the list, the
+rail, the pinned tiles and group chats alike. The open conversation has read white, green and red (the core clears them with `members.read`) and keeps only orange. The dot keeps its size and place, never
+animates, has no tooltip and names itself (等你處理, 需要你看一下, 已完成, 有新訊息). The header's member picker shows the strongest light of the other members.
+`sidebarLightRules` in `checks.mjs` runs inside `sidebar-shell` in every sidebar scene (at most one dot a row, one of four lights, named, still, and no dot for a member that only thinks). `sidebar-lights` draws
+a thinking member, a message, a task that ended, a failure, a question that waits and three group chats (a message, a meeting that ended, a question) and checks each against what the roster earns, in the
+colour of its token; `sidebar-lights-rail` the same on the rail, `sidebar-lights-pinned` on pinned tiles, `sidebar-lights-thinking` four members that only think (no dot at all), `sidebar-lights-open` opening the
+white, the green and the orange row (white and green go, orange stays). The palette check holds the four colours at 3:1 on every row surface in both themes. Gotchas: a fixture gives `unread_kind` per member
+(`sidebarLights` in `mock-ipc.js`, which also says what each row must earn in `data.expectedLights`), and the real core's `members.read` clears it, not the app alone.
+
+```powershell
+npm run look -- sidebar-lights sidebar-lights-rail sidebar-lights-pinned sidebar-lights-thinking sidebar-lights-open sidebar-unread sidebar-rail --theme both --width 1120,720,1920x1080
+```
+
 Select a member, then click the stacked header title for details.
 At compact width press a member's face in the rail to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows

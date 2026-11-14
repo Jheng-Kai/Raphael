@@ -1661,6 +1661,8 @@ export const zhCN = {
   "reminder.waiting": "{p0} 等你回答",
   "reminder.open": "查看",
   "members.unread": "有新消息",
+  "members.lightDone": "已完成",
+  "members.lightFailed": "需要你看一下",
   "members.pick": "选择成员",
   "members.panel": "成员的详细信息",
   "members.close": "关闭详细信息",
