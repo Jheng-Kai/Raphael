@@ -1,5 +1,23 @@
 # Conversation
 
+## Words meant for the model stay out of what the owner reads (owner, 2026-11-14)
+
+- **A page shown is no question (R-PAGE-09).** A task that shows an HTML page (`show_page`) goes on: the page is already a card in
+  the thread, and the core no longer makes an owner question (`kind` show_page, the 「我完成了」 card) of it. Before, the model's
+  own note, "The owner can see the page in this conversation.", was that card's title. The note is now a plain fact for the
+  model; a member that needs a choice from the owner asks with `ask_owner`. Older question rows of that kind still draw.
+  Evidence: `core/tests/agent/test_owner_questions.py` (the page tests).
+- **A note to itself is no reply (R-TEXT-05).** In a Chinese, Japanese or Korean conversation, English planning that leads a reply
+  (`brain/reasoning.py::split_notes`) is taken off in the CLI loop (`_publish`, `_unthought`) and where every reply is stored
+  (`AgentService._message`). Tests: `core/tests/agent/test_output_hygiene.py`.
+- **The outermost frame wins (R-TEXT-06).** `parse_reply` takes the 《答。…》 frame off the whole authored message before it is cut into
+  pieces; `plain_replies` (core) and `plainReplies` (`app/src/shared/anime.ts`) open a line only where none is open.
+- **No pointer to `detail` (R-TEXT-07).** The conversation folds `detail` away, so `parse_reply` takes 「見 detail」 out and says what
+  the field held in the reply.
+- **The wake line is an event, not a reply (R-TEXT-08).** `computer_woke` is drawn by `publicEventsHTML` as `.bot-renamed[data-computer-woke]`;
+  look scene `computer-wake-line` asserts one such line and no reply of the member's.
+- **A data-floor refusal does not end the turn (R-FLOOR-04).** The model is told up to three times, and answers with what it can.
+
 ## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
 
 Owner, with a picture of a card titled 「工作結果」, a green 「● 完成」, 「53 個檔案變更 +0 −0」, 「顯示內容」, 「還原檔案」 and 「查看」:

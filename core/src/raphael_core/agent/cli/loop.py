@@ -20,7 +20,7 @@ from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, 
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
 from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
-from ...brain.reasoning import split_reasoning
+from ...brain.reasoning import split_notes, split_reasoning
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
@@ -335,6 +335,8 @@ class CliLoop:
         (`final`) is shown at once, after anything held; other speech waits for the next event."""
         if self._publish_reply is None:
             return
+        # What the model wrote to itself before its answer is no reply of the owner's (R-TEXT-05).
+        text = split_notes(text, self.language)[0]
         reply = (self._written_reply(text)
                  if text.strip() and self.structured is None
                  else public_reply(text, self.language, plain=self.plain))
@@ -360,7 +362,7 @@ class CliLoop:
         words, thought = split_reasoning(text)
         if thought := " ".join(thought.split()):
             self.thinking(thought[-240:])
-        return words
+        return split_notes(words, self.language)[0]
 
     def _show(self, reply, lines):
         self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))

@@ -2,7 +2,8 @@
 plain words in their own language, never a safety rule around an English sentence.
 
 Owner, 2026-11-11: the refusal reached him in English inside a Chinese conversation, in the frame of
-「安全規則「…」不准此操作。未執行。」, and the turn ended there.
+「安全規則「…」不准此操作。未執行。」, and the turn ended there. 2026-11-14: a refusal no longer ends the turn at the second
+try either; the member is told again and answers with what it can (R-FLOOR-04).
 """
 
 import json
@@ -64,10 +65,23 @@ async def test_the_first_refusal_is_given_to_the_model_which_goes_on(floor_rig, 
     assert PHRASES["en"].protected_data not in handed
 
 
+async def test_a_second_refusal_is_told_to_the_model_which_answers_with_what_it_can(floor_rig, client):
+    # The owner asked why the computer would not start; the member went looking in the app's own files, was refused twice,
+    # and the whole of its reply was the refusal. It answers what it can.
+    said = "I could not read the app's files, but Docker was not running when it tried."
+    client.chats = [chat("Looking in the log.", ("local__local_exec", {"command": COMMAND})),
+                    chat("Trying another way.", ("local__local_exec", {"command": COMMAND + " again"})),
+                    chat(json.dumps({"text": said})), chat(json.dumps({"text": said}))]  # the loop asks once more after a failed tool
+    result = await ask(floor_rig, "en", "Why will the computer not start?")
+    assert result["status"] == "done" and result["text"] == said
+    floor_rig.host.execute.assert_not_awaited()
+    handed = json.dumps(client.chat_calls[-1]["messages"], ensure_ascii=False)
+    assert "This is the second refusal" in handed and "go on with the rest of what they asked" in handed
+
+
 @pytest.mark.parametrize("language", ["zh-TW", "en", "ja"])
-async def test_a_second_refusal_ends_the_turn_in_the_owners_words(floor_rig, client, language):
-    client.chats = [chat("Writing the file.", ("local__local_exec", {"command": COMMAND})),
-                    chat("Trying another way.", ("local__local_exec", {"command": COMMAND + " again"}))]
+async def test_a_model_that_keeps_trying_is_ended_in_the_owners_words_and_never_in_the_rule(floor_rig, client, language):
+    client.chats = [chat("Writing.", ("local__local_exec", {"command": COMMAND + f" {n}"})) for n in range(4)]
     result = await ask(floor_rig, language)
     assert result["text"] == PHRASES[language].protected_data
     floor_rig.host.execute.assert_not_awaited()

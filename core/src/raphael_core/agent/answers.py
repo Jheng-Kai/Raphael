@@ -318,6 +318,47 @@ def split_messages(text):
     return chunks
 
 
+def _outer_frames(bodies: list[str], prefix: object) -> tuple[list[str], object]:
+    """The display frame 《prefix。…》 of authored messages, taken off whole, before any message is cut into pieces: the
+    opening of the first and the closing mark of the last when one reply is spread over several messages, and each
+    message that is a frame of its own. A frame that stands inside the words (an example the reply quotes, a book's title
+    that ends a piece) is words, and the frame that wins is the outermost one (R-TEXT-06)."""
+    bodies = [body for body in bodies if body]
+    if (len(bodies) > 1 and not _REPLY_FRAME.fullmatch(bodies[0]) and (opening := _REPLY_OPEN.match(bodies[0]))
+            and bodies[-1].endswith("》")):
+        prefix = prefix or opening[1]
+        bodies[0] = bodies[0][opening.end():].strip()
+        bodies[-1] = bodies[-1][:-1].strip()
+    framed = [_REPLY_FRAME.fullmatch(body) for body in bodies]
+    if framed and framed[0] is not None and not prefix:
+        prefix = framed[0][1]
+    return [match[2].strip() if match else body for body, match in zip(bodies, framed)], prefix
+
+
+# Where a reply sends the owner to its `detail` field, which the conversation keeps folded away (R-TEXT-07): 「見 detail」,
+# 「完整內容見 `detail`」, "see the `detail` field". Only a pointer as plain as that: the word in ordinary prose is the word.
+_DETAIL_POINTER = re.compile(
+    r"(?:詳見|詳情見|請見|參見|參閱|請看|查看|見|看|放在|寫在|附在|附於)\s*[「『\"'`]?detail[」』\"'`]?(?:\s*(?:欄位|欄|區塊|區|裡面|裡|中|內))?"
+    r"|\b(?:see|check|refer to)\s+(?:the\s+)?[\"'`]?detail[\"'`]?\s+(?:field|section)\b"
+    r"|\b(?:see|check|refer to|in)\s+(?:the\s+)?[\"'`]detail[\"'`]", re.I)
+_SENTENCE_END = re.compile(r"[。！？!?\n]|\.(?=\s|$)")
+
+
+def _unpointed(text: str) -> tuple[str, bool]:
+    """`text` without the sentences that send the reader to the `detail` field, and whether any did."""
+    pointed = False
+    cursor = 0
+    while match := _DETAIL_POINTER.search(text, cursor):
+        if text.count("```", 0, match.start()) % 2:
+            cursor = match.end()  # inside a quoted block of code: the words of the example
+            continue
+        begin = max((end.end() for end in _SENTENCE_END.finditer(text, 0, match.start())), default=0)
+        stop = _SENTENCE_END.search(text, match.end())
+        text = text[:begin] + text[stop.end() if stop else len(text):]
+        pointed, cursor = True, begin
+    return (re.sub(r"\n{3,}", "\n\n", text).strip(), True) if pointed else (text, False)
+
+
 def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool = False) -> dict:
     """Accept an envelope (including a fenced one) or ordinary prose at one boundary."""
     text = value.strip()
@@ -384,28 +425,37 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     search = _need(data.get("need"))
     words_of = _one_line_text if literal else _reply_words
     items = data.get("messages")
-    messages = (
-        [text for item in items for text in split_messages(_plain_text(words_of(item)))]
-        if isinstance(items, list) else []
-    )
+    prefix = data.get("prefix")
+    # Some CLI models supply the display frame despite being asked for bare message bodies.
+    # Normalize only recognized persona labels, preserving ordinary quoted book titles. The frame goes before any
+    # message is cut into pieces, so that a piece which happens to stand as a frame is never taken for one.
+    unframe = long and not plain
+    messages: list[str] = []
+    if isinstance(items, list):
+        bodies = [_plain_text(words_of(item)) for item in items]
+        if unframe:
+            bodies, prefix = _outer_frames(bodies, prefix)
+        messages = [text for body in bodies for text in split_messages(body)]
     words = words_of(data.get("text"))
     explicit_messages = bool(messages) or len(message_parts(words)) > 1
     full = _plain_text(words)
-    prefix = data.get("prefix")
-    if long and not plain:
-        # Some CLI models supply the display frame despite being asked for bare message bodies.
-        # Normalize only recognized persona labels, preserving ordinary quoted book titles.
-        if (len(messages) > 1 and not _REPLY_FRAME.fullmatch(messages[0])
-                and (opening := _REPLY_OPEN.match(messages[0])) and messages[-1].endswith("》")):
-            prefix = prefix or opening[1]
-            messages[0] = messages[0][opening.end():].strip()
-            messages[-1] = messages[-1][:-1].strip()
-        framed = [_REPLY_FRAME.fullmatch(text) for text in messages or [full]]
-        if framed and framed[0] is not None and not prefix:
-            prefix = framed[0][1]
-        messages = [match[2].strip() if match else text for text, match in zip(messages, framed)]
-        if match := _REPLY_FRAME.fullmatch(full):
-            full = match[2].strip()
+    if unframe and not messages and (match := _REPLY_FRAME.fullmatch(full)):
+        prefix = prefix or match[1]
+        full = match[2].strip()
+    detail = _one_line_text(data.get("detail")).strip()
+    # The conversation folds `detail` away: a reply that sends the owner to it points at nothing he can open. What it
+    # pointed at is said where he reads, and the pointing sentence goes.
+    pointed = False
+    if messages:
+        cleaned = [_unpointed(text) for text in messages]
+        pointed = any(flag for _, flag in cleaned)
+        messages = [text for text, _ in cleaned if text]
+    elif full:
+        full, pointed = _unpointed(full)
+    if pointed and detail and detail != full:
+        full = f"{full}\n\n{detail}".strip()
+        messages = [*messages, *split_messages(detail)] if messages else messages
+        detail = ""
     if not messages and full and (plain or long or len(message_parts(full)) > 1):
         messages = split_messages(full)
     if messages:
@@ -414,7 +464,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         logger.warning("The model's reply said nothing")
         raise AgentFailure("error")
     if plain:
-        detail = _one_line_text(data.get("detail")).strip()
         return Reply(
             prefix="",
             text=full,
@@ -425,7 +474,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
             explicit_messages=explicit_messages,
         )
     line = full
-    detail = _one_line_text(data.get("detail")).strip()
     return Reply(
         prefix=canonical_prefix(prefix, language, default=PREFIXES[language].answer),
         text=line,

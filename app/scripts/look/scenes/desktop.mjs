@@ -23,7 +23,7 @@ export default [
   scene('computer-low-disk', 'The member names the largest folders once and asks before any deletion', [member(1),wait('.chat-message[data-reply="true"]'),check('computer-low-disk')], {...computer(),lowDisk:true}),
   // R-COMP-WAKE-01: the computer wakes when a member's own tool needs it, and then the conversation says who and why, once, in a
   // normal line (no toast, no card); the panel's Details tab says nothing about it, the computer lives in its own tab.
-  scene('computer-wake-line', 'A member that wakes the sleeping computer leaves one line naming itself and why', [member(1),wait('.chat-message[data-reply="true"]'),check('computer-wake-line')], {...computer(),wokeLine:true}),
+  scene('computer-wake-line', 'A member that wakes the sleeping computer leaves one line naming itself and why', [member(1),wait('[data-computer-woke]'),check('computer-wake-line')], {...computer(),wokeLine:true}),
   scene('desktop-host-health', 'The remote check explains the problem without starting anything', hostHealth),
   scene('desktop-host-repair', 'Scroll to the manual repair and copy its exact command', [...hostHealth,scroll('[data-computer-host-repair]'),click('[data-computer-host-repair] [data-act="copy-code"]'),wait('[data-computer-host-repair] [aria-label="已複製"]'),check('desktop-host-repair')]),
   scene('member-delete-ask-computer', 'A member with a computer on a host is asked about as any other: its name, one sentence, Cancel and Delete, and nothing about the computer', [member(1),click('[data-member-more="1"]'),click('[data-pick="delete"]'),wait('.mb-dialog.mb-confirm'),check('member-delete-ask'),check('delete-confirmation')], {...computer(),computerHost:'studio-mini'}),

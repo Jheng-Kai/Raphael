@@ -896,9 +896,10 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name === 'computer-wake-line') {
-    const lines = [...document.querySelectorAll('.chat-message[data-reply="true"]')].filter(line => line.textContent.includes('喚醒了電腦'));
+    const lines = [...document.querySelectorAll('[data-computer-woke]')];
     require(lines.length === 1 && lines[0].textContent.trim() === '小晴為了開網頁喚醒了電腦', `the conversation says who woke the computer and why, once (${lines.map(line => line.textContent.trim())})`);
-    require(visible(lines[0]) && lines[0].scrollWidth <= lines[0].clientWidth + 1, 'the line is a normal message and fits its column');
+    require(!document.querySelector('.chat-message[data-reply="true"]'), 'the wake line is no reply of the member');
+    require(visible(lines[0]) && lines[0].scrollWidth <= lines[0].clientWidth + 1, 'the line is the quiet centred line of the conversation and fits its column');
     require(!document.querySelector('.toast, [role="alert"]:not([hidden])'), 'no toast and no alert says it');
     require(!window.__look.calls.some(call => call.method === 'computer.lifecycle'), 'saying so performs no maintenance');
     return {check:name};

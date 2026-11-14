@@ -110,7 +110,8 @@ def plain_replies(texts: Sequence[str]) -> list[str]:
     """The stored messages of one reply without the 《prefix。…》 frame the app strips (the same
     rule as `plainReplies` in app/src/shared/anime.ts): the first message of a line opens with
     《prefix。 and the last one before the next opening ends with 》. Anything else, a 》 that closes
-    a book's title included, stays."""
+    a book's title included, stays. A 《prefix。 that starts a piece while the line is still open (the piece before it does
+    not end with 》) is the words of that line, a quoted example, and the outermost line wins (R-TEXT-06)."""
     from ..agent.persona import PREFIXES
 
     names = "|".join(re.escape(p) for prefixes in PREFIXES.values() for p in prefixes)
@@ -125,6 +126,8 @@ def plain_replies(texts: Sequence[str]) -> list[str]:
     for index, text in enumerate(texts):
         found = opening.match(text.lstrip())
         if found is None:
+            continue
+        if open_at >= 0 and index > open_at and not texts[index - 1].rstrip().endswith("》"):
             continue
         close(index - 1)
         open_at = index
