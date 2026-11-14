@@ -1055,7 +1055,7 @@ export interface TeamContextSnapshot {
 export type AppState = "ready" | "duplicate" | "disabled" | "no_tools" | "needs_sign_in" | "needs_secret" | "error" | "unchecked" | "unknown";
 
 /** One app of the owner's inventory: only its name, its state and how many of its tools can be called now. */
-export interface InventoryApp { id: string; name: string; enabled: boolean; state: AppState; tools: number; connected: boolean; aliases?: string[]; plugin?: string; last_used_at?: number }
+export interface InventoryApp { id: string; name: string; enabled: boolean; state: AppState; tools: number; connected: boolean; aliases?: string[]; plugin?: string; last_used_at?: number; logo?: string }
 
 /** `integrations.inventory`: the owner's apps and how many are connected (`count` is null unless `state` is `complete`). */
 export interface AppsInventory { state: "complete" | "partial" | "unknown"; count: number | null; apps: InventoryApp[] }

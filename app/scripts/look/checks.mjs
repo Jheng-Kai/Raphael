@@ -7439,7 +7439,7 @@ export function checkRendered(name, context = {}) {
     require(done && !done.closest('.cs-card').querySelector('button.cs-connect') && done.textContent.includes('已連結'), "a connected app says 已連結 in quiet words and has no button");
     // Owner, 2026-11-14: the row's button and its 已連結 are one piece: the check stands inside the button, whose fill runs past it.
     const one = done.closest('.btn.cs-main[data-conn="open-store"]'), oneBox = one?.getBoundingClientRect(), doneBox = done.getBoundingClientRect();
-    require(one && oneBox.right >= doneBox.right + 4 && oneBox.left <= doneBox.left, `已連結 is part of the row's one button (button ${oneBox && Math.round(oneBox.right)}, check ${Math.round(doneBox.right)})`);
+    require(one && oneBox.right >= doneBox.right && oneBox.left <= doneBox.left, `已連結 is part of the row's one button (button ${oneBox && Math.round(oneBox.right)}, check ${Math.round(doneBox.right)})`);
     const surface = getComputedStyle(modal);
     require(surface.backgroundColor === colourOf('backgroundColor', '--dialog') && surface.borderTopColor === colourOf('borderTopColor', '--float-edge'), "the dialog stands on the dialog layer and its edge");
     const body = modal.querySelector('.modal-body');
@@ -7515,13 +7515,13 @@ export function checkRendered(name, context = {}) {
     require(visible(list) && !modal.querySelector('.cs-page') && rows.length >= 3, "the list is on screen and no app's page opened from a press on a switch");
     const notion = list.querySelector('.cs-linked[data-id="composio:notion"] [role="switch"]');
     require(notion.getAttribute('aria-checked') === 'true', "the switch only turned the app off and on");
-    const main = list.querySelector('.cs-linked:nth-child(2) .cs-main'), style = getComputedStyle(main);
-    require(main.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and the hover fill of the floating surface (${style.backgroundColor}, ${style.cursor})`);
-    require(getComputedStyle(main.closest('.cs-linked')).cursor === 'pointer', "the whole row has the pointer");
-    const box = main.getBoundingClientRect(), tile = main.querySelector('.cs-tile').getBoundingClientRect(), text = main.querySelector('.tx').getBoundingClientRect();
-    require(tile.left - box.left >= 6 && box.right - text.right >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the words and the mark (${tile.left - box.left}, ${box.right - text.right})`);
-    const switchBox = main.closest('.cs-linked').querySelector('[role="switch"]').getBoundingClientRect();
-    require(switchBox.left - box.right >= 8, `the fill stops 8 px or more before the switch (${switchBox.left - box.right})`);
+    // Owner, 2026-11-14: the row is one button whose fill runs under its switch.
+    const hovered = list.querySelector('.cs-linked:nth-child(2)'), style = getComputedStyle(hovered);
+    require(hovered.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and one hover fill of the floating surface (${style.backgroundColor}, ${style.cursor})`);
+    const box = hovered.getBoundingClientRect(), tile = hovered.querySelector('.cs-tile').getBoundingClientRect();
+    require(tile.left - box.left >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the mark (${tile.left - box.left})`);
+    const switchBox = hovered.querySelector('[role="switch"]').getBoundingClientRect();
+    require(box.right - switchBox.right >= 6 && parseFloat(style.borderTopLeftRadius) >= 6, `the switch stands on the row's fill, 6 px or more inside its end (${Math.round(box.right - switchBox.right)})`);
     return { check: name, rows: rows.length };
   }
   if (name === "owner-list") {
@@ -7543,14 +7543,26 @@ export function checkRendered(name, context = {}) {
     require(hit && card.contains(hit) && !hit.closest('[data-conn="join"]'), "a press on the words lands in the row, not on another control");
     return { check: name };
   }
+  if (name === "connected-back-title") {
+    // Owner, 2026-11-14 (asked more than three times): the connected list's chevron and its title are one button.
+    const modal = connectModal(), back = modal.querySelector('.cs-connected .cs-back-title');
+    require(back && back.matches('button[data-conn="back"]') && back.querySelector('svg.i') && back.textContent.trim().length > 0, "the chevron and the title are one button");
+    require(modal.querySelector('.cs-top-t')?.contains(back) && !modal.querySelector('.cs-connected .btn.icon.cs-back'), "no separate chevron beside the title");
+    const style = getComputedStyle(back);
+    require(back.matches(':hover') && style.backgroundColor === colourOf('backgroundColor', '--float-hover'), `under the pointer the whole button, chevron and title, has the hover fill (${style.backgroundColor})`);
+    return { check: name };
+  }
   if (name === "app-row-hover") {
-    const modal = connectModal(), row = modal.querySelector('.cs-card .cs-main:hover');
+    // Owner, 2026-11-14: a row is one button, its fill over the whole row with 連結 standing on it, and its corners round, never cut.
+    const modal = connectModal(), row = modal.querySelector('.cs-card:hover');
     require(row && visible(row), "a row of the main view is under the pointer");
-    const style = getComputedStyle(row), box = row.getBoundingClientRect(), tile = row.querySelector('.cs-tile').getBoundingClientRect(), text = row.querySelector('.tx').getBoundingClientRect();
+    const style = getComputedStyle(row), box = row.getBoundingClientRect(), tile = row.querySelector('.cs-tile').getBoundingClientRect();
     require(style.backgroundColor === colourOf('backgroundColor', '--float-hover') && style.cursor === 'pointer', `a row under the pointer has the pointer and the hover fill of the floating surface, as a connected row has (${style.backgroundColor}, ${style.cursor})`);
-    require(tile.left - box.left >= 6 && box.right - text.right >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the words and the mark (${tile.left - box.left}, ${box.right - text.right})`);
-    const join = row.parentElement.querySelector('.cs-connect, .cs-state');
-    require(!join || join.getBoundingClientRect().left - box.right >= 8, "the fill stops 8 px or more before the 連結 button");
+    require(tile.left - box.left >= 6 && tile.top - box.top >= 6 && box.bottom - tile.bottom >= 6, `the fill stands 6 px or more clear of the mark (${tile.left - box.left})`);
+    const join = row.querySelector('.cs-connect, .cs-state'), joinBox = join?.getBoundingClientRect();
+    require(!join || (joinBox.left > tile.right && box.right - joinBox.right >= 6), `連結 stands on the row's one fill, 6 px or more inside its end (${joinBox && Math.round(box.right - joinBox.right)})`);
+    const list = modal.querySelector('.cs-results').getBoundingClientRect();
+    require(box.left >= list.left && box.right <= list.right && parseFloat(style.borderTopLeftRadius) >= 6, `the fill's corners are round and inside the list, never cut square (${Math.round(box.left)} against ${Math.round(list.left)})`);
     return { check: name };
   }
   if (name === "connect-app-oauth" || name === "connect-app-key" || name === "connect-app-connected") {

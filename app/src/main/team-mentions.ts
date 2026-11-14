@@ -1,4 +1,4 @@
-import { iconHTML } from "./connections";
+import { entryIcon } from "./service-mark";
 import { RECALL } from "./composer-history";
 import { catalogs, getLocale, t } from "./i18n";
 import { faceHTML, primaryFirst, primaryIdOf, RAPHAEL_ID } from "./members";
@@ -34,7 +34,7 @@ export function mentionTargets(list: MembersList, allowed?: number[]): TargetRos
     ...people.filter(m => !allowed || allowed.includes(m.id)).map(m => ({ id: m.id, name: m.name, kind: "member" as const, aliases: m.id === RAPHAEL_ID ? RAPHAEL : [],
       mark: (size: number) => faceHTML(list.members.find(other => other.id === m.id) ?? m, size) })),
     ...(!allowed ? list.groups.map(g => ({ name: g.name, kind: "group" as const, mark: team })) : []),
-    ...[...(list.team_context?.apps ?? [])].sort((a, b) => Number(b.state === "ready") - Number(a.state === "ready") || (b.last_used_at ?? 0) - (a.last_used_at ?? 0)).map(app => ({ name: app.name, kind: "app" as const, aliases: app.aliases, source: app.plugin, state: app.state, mark: () => iconHTML(app.name, app.id === "google" ? "gmail" : serviceIconOf({ name: app.name }), "md"),
+    ...[...(list.team_context?.apps ?? [])].sort((a, b) => Number(b.state === "ready") - Number(a.state === "ready") || (b.last_used_at ?? 0) - (a.last_used_at ?? 0)).map(app => ({ name: app.name, kind: "app" as const, aliases: app.aliases, source: app.plugin, state: app.state, mark: () => entryIcon({ name: app.name, logo: app.logo, icon: app.id === "google" ? "gmail" : serviceIconOf({ name: app.name }) }, "md"),
       tag: app.state === "needs_sign_in" ? t("rooms.appSignIn") : app.state === "needs_secret" ? t("rooms.appKey") : undefined })),
   ];
   if (targetRosters.size >= 8) targetRosters.delete(targetRosters.keys().next().value!);

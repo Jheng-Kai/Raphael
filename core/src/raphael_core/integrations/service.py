@@ -712,6 +712,8 @@ class IntegrationsService:
                 "state": app_state(enabled=entry.enabled, status=status, error=error, tools=len(ready), waiting=waiting),
                 "services": services, "source": entry.kind,
                 "accounts": [{"id": a["id"], "status": a["status"], "label": a.get("label", "")} for a in entry.accounts],
+                # The app's own mark, so every place that names it (the @ menu, the list, a card) draws the same one.
+                **({"logo": entry.logo} if getattr(entry, "logo", "") else {}),
                 **({"last_used_at": entry.last_used_at} if entry.last_used_at else {})}
 
     async def _inventory(self, params: dict) -> dict:

@@ -8,6 +8,24 @@ const indexed = new WeakMap<StoreService, string>();
 const preparedNames = new WeakMap<StoreService, PreparedName[]>();
 const normalize = (text: string): string => text.normalize("NFKC").toLowerCase().trim();
 
+/**
+ * How well a found app's own names answer the query, best first (owner, 2026-11-14: 「line」 listed apps whose descriptions
+ * say "timeline" or "online" before LINE itself): 0 the name (or id, or another name) is the query, 1 the name starts with
+ * it, 2 a word of the name starts with it, 3 the name holds it, 4 its id, publisher or other names hold it, 5 only its
+ * description does.
+ */
+export function storeNameRank(item: StoreService, query: string): number {
+  const q = normalize(query);
+  const name = normalize(item.name);
+  const others = [item.id, item.publisher ?? "", data.aliases[item.id as keyof typeof data.aliases] ?? ""].map(normalize);
+  if (name === q || others.some(other => other === q || other.split(/[\s,]+/).includes(q))) return 0;
+  if (name.startsWith(q)) return 1;
+  if (name.split(/[\s\-_./()]+/).some(word => word.startsWith(q))) return 2;
+  if (name.includes(q)) return 3;
+  if (others.some(other => other.includes(q))) return 4;
+  return 5;
+}
+
 export function storeMatches(item: StoreService, query: string): boolean {
   let text = indexed.get(item);
   if (text === undefined) {
