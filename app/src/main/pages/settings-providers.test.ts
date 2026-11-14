@@ -15,6 +15,10 @@ const api = vi.hoisted(() => ({
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
   chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })),
   usageAllowances: vi.fn(),
+  // The read-ahead after start-up also reads 連接 (connections.ts load); here that core does not answer it.
+  toolsetsList: vi.fn(async () => { throw new Error("offline"); }), connectorsStatus: vi.fn(async () => { throw new Error("offline"); }),
+  integrationsAudit: vi.fn(async () => { throw new Error("offline"); }), integrationsInventory: vi.fn(async () => { throw new Error("offline"); }),
+  integrationsCatalog: vi.fn(async () => { throw new Error("offline"); }),
 }));
 vi.mock("../api", () => api);
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "test" }));

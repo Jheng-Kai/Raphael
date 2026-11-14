@@ -1,9 +1,20 @@
+/** No new core call for this long before the send: the window's start-up reads are done. */
+export const QUIET_BEFORE_SEND_MS = 500;
+const QUIET_WAIT_MS = 8000;
+
 /** Press Enter on the real composer while the fake core publishes an ordinary turn, and time what the owner feels. */
 export async function sendProbe(page, { selector = ".mb-chat:not([hidden]) .cmp-input", memberId = 0, seconds = 6, throttle = 1, limits = {} } = {}) {
   const client = await page.createCDPSession();
   await client.send("Performance.enable");
   if (throttle > 1) await client.send("Emulation.setCPUThrottlingRate", { rate: throttle });
   const read = async () => Object.fromEntries((await client.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
+  // The window's optional reads start once the first view is answered (startup-reads.ts) and run one at a time; on a busy machine
+  // they used to land inside the measured send and count as its reads (43 against 27 on the same code). Measure from a quiet core.
+  await page.waitForFunction(quietMs => {
+    const look = window.__look, now = performance.now();
+    if (look.quietCalls !== look.calls.length) { look.quietCalls = look.calls.length; look.quietSince = now; }
+    return now - look.quietSince >= quietMs;
+  }, { polling: 50, timeout: QUIET_WAIT_MS }, QUIET_BEFORE_SEND_MS).catch(() => { /* A core that never goes quiet is measured as it is. */ });
   await page.focus(selector);
   await page.keyboard.type("Sample question");
   await page.evaluate(selector => {
