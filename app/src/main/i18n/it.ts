@@ -1572,7 +1572,6 @@ export const it = {
   "skills.learned": "Appreso autonomamente",
   "skills.imported": "Importato",
   "skills.owner": "Dal proprietario",
-  "skills.undo": "Annulla ultima modifica",
   "skills.instructions": "Istruzioni dell’abilità",
   "skills.save": "Salva abilità",
   "members.more": "Opzioni di {p0}",

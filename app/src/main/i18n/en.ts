@@ -1332,7 +1332,6 @@ export const en = {
   "skills.learned": "Self-taught",
   "skills.imported": "Imported",
   "skills.owner": "From owner",
-  "skills.undo": "Undo last change",
   "skills.instructions": "Skill instructions",
   "skills.save": "Save skill",
   "mem.save": "Save",

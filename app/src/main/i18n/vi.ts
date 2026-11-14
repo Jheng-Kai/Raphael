@@ -1572,7 +1572,6 @@ export const vi = {
   "skills.learned": "Tự học",
   "skills.imported": "Đã nhập",
   "skills.owner": "Từ chủ sở hữu",
-  "skills.undo": "Hoàn tác thay đổi cuối",
   "skills.instructions": "Hướng dẫn kỹ năng",
   "skills.save": "Lưu kỹ năng",
   "members.more": "Tùy chọn cho {p0}",

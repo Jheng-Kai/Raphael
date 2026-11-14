@@ -829,7 +829,7 @@ class MembersService:
 
     async def _skills_list(self, params: dict) -> dict:
         member_id = self._skill_scope(params)
-        result = {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
+        result = {"skills": self._cap(self.capabilities.skills, member_id)}
         result["sets"] = self._cap(self.capabilities.plugin_sets) if member_id == -1 or params.get("discover") is True else []
         if params.get("discover") is True:
             result["sources"] = self._cap(self.capabilities.plugin_sources)
@@ -880,11 +880,6 @@ class MembersService:
         """The skill switched on or off (`enabled`), its document edited (`text`), or both: the switch is
         checked first, so that a refused edit changes nothing."""
         member_id = self._skill_scope(params)
-        if "undo" in params:
-            self._cap(self.capabilities.undo_skills, member_id, params["undo"])
-            self._changed("members.skills.changed", member_id)
-            self._changed()
-            return {"skills": self.capabilities.skills(member_id), "undo": self.capabilities.undo_revision(member_id)}
         skill_id = _whole(params, "id", least=1)
         enabled = params.get("enabled")
         if "text" in params:

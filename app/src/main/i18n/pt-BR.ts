@@ -1572,7 +1572,6 @@ export const ptBR = {
   "skills.learned": "Aprendido sozinho",
   "skills.imported": "Importado",
   "skills.owner": "Do proprietário",
-  "skills.undo": "Desfazer última alteração",
   "skills.instructions": "Instruções da habilidade",
   "skills.save": "Salvar habilidade",
   "members.more": "Opções de {p0}",

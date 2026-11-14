@@ -6,6 +6,7 @@ import time
 import pytest
 
 from raphael_core.agent.answers import build_user_message
+from raphael_core.agent.conversations import Conversations
 from raphael_core.agent.history import Turn
 from raphael_core.agent.ledger import Ledger
 from raphael_core.agent.steps import Step
@@ -152,6 +153,38 @@ def test_the_context_is_the_summary_and_the_answered_turns_after_it(conversation
     context = conversation.context()
     assert context.summary == "Ongoing:\n- 規劃週末"
     assert [t.question for t in context.turns] == ["q0", "q1", "q2", "q3", "q4"]
+
+
+def test_a_member_context_keeps_its_received_exchange_and_excludes_other_members(conn, clock, history):
+    conversations = Conversations(conn, clock.ms)
+    own_conversation = conversations.main(1)
+    other_member_conversation = conversations.main(2)
+    received = history.add(session_id="ask_member", question="What is the weather?", route="exchange",
+        prefix="", text="It will rain.", status="done", source="member", member_id=1, peer_id=0,
+        conversation_id=own_conversation, scope="exchange")
+    history.add(session_id="other", question="Private question", route="exchange", prefix="", text="Private answer",
+        status="done", source="member", member_id=2, peer_id=0, conversation_id=other_member_conversation, scope="exchange")
+    history.add(session_id="later", question="What should I bring?", route="chat", prefix="", text="An umbrella.",
+        status="done", member_id=1, conversation_id=own_conversation)
+    member = Conversation(conn, FakeModel(), now_ms=clock.ms, clock=clock.mono,
+        member_id=1, conversation_id=own_conversation)
+
+    context = member.context()
+    rendered = "\n".join(turn_text(item, detail=False) for item in context.turns)
+
+    assert received in ids(context.turns)
+    assert "What is the weather?" in rendered and "It will rain." in rendered
+    assert "Private question" not in rendered
+
+
+def test_an_askers_context_includes_the_other_members_answer(conn, clock, history):
+    source = history.add(session_id="owner-chat", question="Ask the weather member", route="chat", prefix="", text="Rain expected.", status="done")
+    history.add(session_id="ask_member", question="What is the weather?", route="exchange", prefix="", text="It will rain.",
+        status="done", source="member", member_id=1, peer_id=0, source_turn_id=source, scope="exchange")
+    context = Conversation(conn, FakeModel(), now_ms=clock.ms, clock=clock.mono).context()
+
+    rendered = "\n".join(turn_text(item, detail=False) for item in context.turns)
+    assert "Other member's answer" in rendered and "It will rain." in rendered
 
 
 def test_context_keeps_all_turns_below_the_model_budget(conversation, history):

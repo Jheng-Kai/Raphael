@@ -629,7 +629,7 @@ beforeEach(() => { localStorage.clear();
   api.membersRead.mockResolvedValue({});
   api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["web_search", "weather"], connections: [] });
-  api.membersSkillsList.mockResolvedValue({ skills: [], undo: null }); api.membersCommandsList.mockResolvedValue({ commands: [] });
+  api.membersSkillsList.mockResolvedValue({ skills: [] }); api.membersCommandsList.mockResolvedValue({ commands: [] });
   api.toolsetsList.mockResolvedValue({ groups: [] });
   api.routinesList.mockResolvedValue({ routines: [] });
   api.modelsCatalog.mockResolvedValue(null);

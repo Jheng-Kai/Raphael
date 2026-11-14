@@ -122,9 +122,9 @@ async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_spea
     if source == "voice":
         scope["conversation_id"] = rig.service.conversations.quick()
     assert not any(t["route"] == "exchange" for t in (await rig.call("agent.history.list", scope))["turns"])
-    # The asked member's chat stays what the owner said to it: the question is the asker's record.
+    # Both sides keep the exchange (owner, 2026-11-14): the asked member's chat holds the question it was asked.
     taught = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    assert not any(t["route"] == "exchange" for t in taught)
+    assert [t["question"] for t in taught if t["route"] == "exchange"] == [request]
     [exchange] = [AgentHistory(rig.conn).get(r[0]) for r in rig.conn.execute("SELECT id FROM agent_turns WHERE scope='exchange'")]
     # The record keeps the plain words; only the tool data the asker reads carries the speakers.
     assert (exchange.question, exchange.text) == (request, answer)

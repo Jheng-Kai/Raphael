@@ -521,7 +521,8 @@ wmctrl() {{
         assert 2 <= took < 20, took  # by the clock: three seconds here, however many looks that took
     else:
         assert result.returncode == 0 and result.stdout.strip() == "found 0x5", result
-        assert took < 2
+        # It stops at the look that finds the window, counted rather than timed: a loaded CI runner took 8.8 s over one look.
+        assert int((tmp_path / "looks").read_text()) == after + 1
 
 
 @pytest.mark.parametrize("late", [False, True])
