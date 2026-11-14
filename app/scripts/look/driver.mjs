@@ -737,6 +737,14 @@ export async function perform(page, step, evidenceDirectory) {
       await click(".conversation-trigger");
       await visible('.mb-det:not([hidden])');
       break;
+    case "open-computer":
+      // The panel as the owner left it, or opened on the third tab if it was closed (a window too narrow to keep it open).
+      await visible(".conversation-trigger");
+      if (!await page.$('.conversation-trigger[aria-expanded="true"]')) await click(".conversation-trigger");
+      await visible('.mb-det:not([hidden])');
+      // Pressing the tab of the page already shown would show it again, which is not what an owner who stayed does.
+      if (!await page.$('.mb-tabs [data-tab="computer"][aria-selected="true"]')) await click('.mb-tabs [data-tab="computer"]');
+      break;
     case "close-details-if-open":
       // The settings page closes a panel that would cover it (a narrow window), so only an open one is closed.
       if (await page.$('.mb-det:not([hidden]) [data-det="close"]')) { await click('.mb-det [data-det="close"]'); await page.waitForSelector('.conversation-trigger[aria-expanded="false"]'); }
