@@ -413,7 +413,9 @@ export interface PageCard {
 /** A report page's content as the core keeps it (core agent/report_page.py): every value is plain text. */
 export type ReportStatus = "running" | "done" | "pending" | "waiting" | "blocked" | "paused" | "failed";
 export interface ReportItem { title: string; text?: string; status?: ReportStatus; label?: string }
-export interface ReportRow { cells: string[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
+/** A table cell: its words, or a link (an https address the owner's browser opens). */
+export type ReportCell = string | { text: string; url: string };
+export interface ReportRow { cells: ReportCell[]; group?: string; member_id?: number; status?: ReportStatus; label?: string }
 export interface ReportNode { id: string; member_id?: number; owner?: true; name?: string; note?: string }
 export interface ReportEdge { from: string; to: string; label?: string }
 /** A figure on a tile: what it is, its value as written, its unit, its change ("+1.35%"), a few words, its recent values. */
@@ -425,13 +427,16 @@ export type ReportChart = { kind: "chart"; title?: string; span?: "half"; type: 
 export type ReportStats = { kind: "stats"; title?: string; span?: "half"; tiles: ReportTile[] };
 export type ReportSection = (
   | { kind: "findings"; title?: string; callout?: string; items: ReportItem[] }
-  | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string }
+  | { kind: "table"; title?: string; columns: string[]; rows: ReportRow[]; status_title?: string; filter?: string }
   | { kind: "team"; title?: string; nodes: ReportNode[]; edges: ReportEdge[]; notes?: { label: string; text: string }[] }
   | { kind: "text"; title?: string; text: string }
+  | { kind: "callout"; title?: string; tone: ReportTone; heading?: string; text: string }
   | ReportStats
   | ReportChart
 ) & { span?: "half" };
-export interface Report { as_of: string; sections: ReportSection[] }
+export type ReportTone = "info" | "warn" | "ok";
+/** `summary`: the member's one line under the title, in place of the date and the promise of recorded facts. */
+export interface Report { as_of: string; summary?: string; sections: ReportSection[] }
 export interface ReportOpened { kind: "report"; title: string; rev: number; report: Report }
 /** Where a report's file went (`report_save`): the owner's output folder, by its name, or Downloads. */
 export interface ReportSaved { place: "output" | "downloads"; folder: string }

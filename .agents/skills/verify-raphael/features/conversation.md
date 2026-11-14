@@ -2311,6 +2311,56 @@ keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attr
 Native boundary: a real Raphael turn on a real model building the page and the routine is proven
 in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
 
+## Pages that read as documents, as Grok Bot's do (owner, 2026-11-14)
+
+R-PAGE-06, R-PAGE-07. The owner put Grok Bot's page beside ours (a Tokyo list: a 32 px title, one line of summary, an
+「On this page」 box, a blue note with an icon, a dropdown 「區域」 and category tabs over a wide table with figures at the right
+and a column of links) and said the gap is real (「你也可以看到 grokBots 跟我們實質性的差距…他們內部的 page，我覺得他們做得非常的好」).
+Two halves of the page's own drawing changed; how a page opens and its frame did not (another change).
+
+- **HTML pages.** Core `agent/page_style.py` `BASE`, injected by `pages.document` after the theme's words and before the page's own
+  style, for the pages a member writes (not a plugin's). Type (15 px on 1.6; h1 32, h2 22, h3 17), the root at most 1120 px and
+  centred with a gutter, tables (header on the surface, hairlines, round corners, `.num` at the right; under 720 px the table scrolls
+  inside itself), links, code, quotes, lists, plain controls; the classes `.callout` (`.info` `.warn` `.ok`), `.toc`, `.chips`,
+  `.cards`, `.kpis`. All of it in `:where()`, so a page's own rule wins; only the theme's words; no address. The tool names the
+  classes in one clause.
+- **Reports.** `summary` (one line under the title, in place of the date and the promise of recorded facts, which stay the default);
+  the contents as a box with a list (`.rp-toc`, a column beside a 960 px page); a `callout` section (`.rp-note`, tone and icon from
+  the icon set's `alert`, `success`, `info`); table cells that are `{text, url}` links (`a.rp-link`, https only, opened by
+  `open_external_url`), a table `filter` (a `.sel` dropdown, `openMenu`, with the group tabs through `showRows`), columns of figures
+  at the right (`data-num`) and of short words on one line (`data-short`); 100 rows and 160 characters a cell. The saved file has
+  neither dropdown nor tabs, and its links stay links (core `checked_file` takes an https `href` and `rel`).
+- **Tool words.** About 25 words on show_page for the base classes and in REPORT's description for the new fields; the lengths the
+  checker already refuses on left the schema, and the three copies of the status words became one, so the default prompt's budget
+  (`test_management_discovery.py`) holds.
+
+How to get to it: in a member's conversation, ask for a list or comparison with filters (the member gives `report` with `summary`,
+`callout`, a table with `filter` and link cells, or an `html` page that uses the base classes); press the page card.
+
+```powershell
+npm run look -- page-document page-document-menu page-document-filter page-base page-base-table page-base-end --theme both --width 1120,720,1920x1080
+```
+
+page-document checks the large title (31.9 px, 26.4 under 640), the summary in the text's colour with no promise, the contents box (a
+list down the page, a box as wide as the page, or the column beside a 960 px page), three notes in three tone colours with the
+heading in the tone, a dropdown named 區域 and eight tabs, two columns of figures at the right, twelve links in the theme's blue
+underlined, nothing wider than the page; page-document-menu the nine values hanging from the dropdown, whole on screen;
+page-document-filter one row left by 原宿 and 經典名勝 and the tab chosen. page-base runs `frame-check` (`checkFrame`, inside the
+page's own frame) for the measures of the base style in the frame's theme: the page's colours, 15/24 type, the sizes of h1 to h3 and
+the page's own h3 winning, a 660 px line, a table with its outline, header and rows, `.num` at the right, links, the notes' tint
+and marks, the boxed list, tabs, cards in as many columns as fit, tiles, quote and code, and a table that is a block that scrolls
+at 720 px or less; page-base-table and page-base-end read the same page down to its table and to its end. Their pages come from
+the core itself (`runner.mjs pageBaseDocuments` calls `agent.pages.document` for each theme), so a scene sees what the owner's
+page gets. Compare page-document at 1920 with Grok Bot's picture: title, summary, box, note, dropdown, tabs and table in the same
+order, and compare the page-document note with the findings callout (`page-report`), the dropdown with the connection page's
+`.sel`, and the link colour with the conversation's.
+
+Tests: core `tests/agent/test_pages.py` (the base style's order, selectors, words and measures; the classes the tool names; the
+summary, callout, links, filter and limits, every refusal; the file's links); `app/src/main/report-page.test.ts` (summary, box,
+notes, figures, links, dropdown, file) and `page-theme.test.ts` (the base style reads only the theme's words). Native boundary: a
+real member turn on a real model writing such a page is not proven here (no model call was made); the fixture draws the pages the
+checker keeps.
+
 ## Diagnostic credential security (2026-11-05)
 
 R-SEC-LOG-01: core/tests/test_security_redaction.py covers complete quoted passwords,

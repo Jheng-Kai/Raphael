@@ -25,6 +25,8 @@ export const lookCall = (name, ...args) => ({ action: "look-call", name, args })
 // A page open in the conversation's place: wheel over it, and what it must show once it has (frame-expect: its words, how far down it is).
 export const frameScroll = deltaY => ({ action: "frame-scroll", deltaY });
 export const frameExpect = (text, scrollAtLeast) => ({ action: "frame-expect", ...(text ? { text } : {}), ...(scrollAtLeast !== undefined ? { scrollAtLeast } : {}) });
+// What the page's own frame shows: a check run inside it (checks.mjs `checkFrame`).
+export const frameCheck = name => ({ action: "frame-check", name });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
