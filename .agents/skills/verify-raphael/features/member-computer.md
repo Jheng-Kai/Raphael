@@ -46,7 +46,11 @@ scratchpad, `probe_now.py` and `probe_new.py`): pictures of seat 1 looked at one
   window open adds a New Tab and no window (also when the window was minimized); x.com's login page in a new tab fills the
   screen above the panel with its tab strip, back button and window buttons whole; restored and maximized by the browser
   (twice) and by the window manager it is 0,0 1280x851 at once; dragged to 700,100 (half on screen 2) it was back at 284,100 in
-  3 s. A stuck 1312x893 window made by hand was put right by the watch within about 1.5 s.
+  3 s. A stuck 1312x893 window made by hand was put right by the watch within about 1.5 s. A terminal pushed to 1900,500 (half
+  over screen 3 and under the panel) was back with its frame at 1733,334, exactly inside screen 2 above the panel, in 3 s.
+- `wmctrl -lG` lists a decorated window at its frame's corner plus twice its decoration (frame at 0,0 with 5, 5, 29, 5 is listed
+  at 10,58; `xwininfo` gives the client at 5,29) and `wmctrl -e` places the frame. The first acceptance run of layer 12 failed
+  "shared seat displacement" because the watch had mixed the two and left a seat's terminal 5 px over the free screen.
 
 ```powershell
 $env:RAPHAEL_CORE_PYTHON = "D:\Documentation\github_repos\Raphael\core\.venv\Scripts\python.exe"

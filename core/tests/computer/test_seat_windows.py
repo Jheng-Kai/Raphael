@@ -100,6 +100,7 @@ def test_the_window_manager_draws_no_compositor_so_the_browser_draws_no_shadow(m
 
 STUCK = "_NET_WM_STATE(ATOM) = _NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT\n_GTK_FRAME_EXTENTS:  not found.\n"
 SHADOWED = "_NET_WM_STATE(ATOM) = \n_GTK_FRAME_EXTENTS(CARDINAL) = 16, 16, 10, 32\n_NET_FRAME_EXTENTS(CARDINAL) = 0, 0, 0, 0\n"
+DECORATED = "_NET_WM_STATE(ATOM) = \n_NET_FRAME_EXTENTS(CARDINAL) = 5, 5, 29, 5\n"
 
 
 @pytest.mark.parametrize("place,properties,expected", [
@@ -112,6 +113,10 @@ SHADOWED = "_NET_WM_STATE(ATOM) = \n_GTK_FRAME_EXTENTS(CARDINAL) = 16, 16, 10, 3
     ((2544, 890, 1400, 1000), SHADOWED, "fill"),  # larger than the screen: filled
     ((3200, 950, 1200, 780), "_NET_WM_STATE(ATOM) = _NET_WM_STATE_HIDDEN\n", None),
     ((2560, 900, 1280, 900), "_NET_WM_STATE(ATOM) = _NET_WM_STATE_FULLSCREEN\n", None),
+    # A decorated window is listed at its frame's corner plus twice its decoration (measured: frame at 0,0 listed at
+    # 10,58), and is moved by its frame's corner: inside as listed here, and one 5 px over the next screen put back.
+    ((2570, 958, 817, 483), DECORATED, None),
+    ((3028, 1321, 817, 483), DECORATED, ("move", 3013, 1234)),
 ])
 def test_what_is_seen_of_a_window_stays_inside_its_screen_above_the_panel(place, properties, expected):
     row = dict(zip(("x", "y", "width", "height"), place), id="0x1", **{"class": "google-chrome"})
@@ -145,7 +150,7 @@ def test_a_window_is_put_back_only_after_two_looks_in_the_same_place(monkeypatch
     screens.keep_windows_inside(rectangles, looks)
     # The browser maximizes its own window again; another window is moved back inside its screen, frame and all.
     assert ran == [["raphael-browser-tabs", "fit", "0x01e00003", "0", "0", "1280", "900"]]
-    assert ["wmctrl", "-i", "-r", "0x01e00005", "-e", "0,276,100,-1,-1"] in calls
+    assert ["wmctrl", "-i", "-r", "0x01e00005", "-e", "0,272,44,-1,-1"] in calls
     # The panels and the desktop are never looked at as a person's windows.
     assert not [args for args in calls if args[0] == "xprop" and args[2] in ("0x00a00028", "0x00c00003", "0x00c00007")]
 

@@ -1338,6 +1338,16 @@ class Acceptance:
         async def geometry_is(rectangle):
             return await geometry() == rectangle
 
+        async def seen_inside():
+            # What is seen of it: its rectangle less the shadow the browser draws round it. A window the core fitted
+            # inside its screen (a moved private window) is not maximized, and is as right as a maximized one.
+            x0, y0, w0, h0 = await geometry()
+            found = re.search(r"\((?:CARDINAL)\) = (\d+), (\d+), (\d+), (\d+)",
+                              await self.text(target, ["xprop", "-id", hex(window), "_GTK_FRAME_EXTENTS"]))
+            left, right, top, bottom = map(int, found.groups()) if found else (0, 0, 0, 0)
+            return (work[0] <= x0 + left and work[1] <= y0 + top and x0 + w0 - right <= work[0] + work[2]
+                    and y0 + h0 - bottom <= work[1] + work[3])
+
         async def wait(condition, seconds, detail):
             until = time.monotonic() + seconds
             while not await condition():
@@ -1345,7 +1355,7 @@ class Acceptance:
                 await asyncio.sleep(.25)
         compositor = (await self.text(target, ["xfconf-query", "-c", "xfwm4", "-p", "/general/use_compositing"])).strip()
         require(compositor == "false", f"Expected the window manager without a compositor, observed {compositor!r}")
-        await wait(lambda: geometry_is(work), 10, lambda: f"Expected the seat's window to fill {work} above the panel")
+        await wait(seen_inside, 10, lambda: f"Expected the seat's window inside {work} above the panel")
         listed = await tabs()
         marked = [tab for tab in listed["tabs"] if "raphael-seat-" in tab["url"] + tab["title"]]
         require(not marked, f"Expected no marker page on screen {target.screen}, observed {marked}")
@@ -1371,7 +1381,7 @@ class Acceptance:
         await self.guest(target, ["python3", "-c", X_ICONIFY, str(window)])
 
         async def hidden():
-            return "_NET_WM_STATE_HIDDEN" in await self.text(target, ["xprop", "-id", str(window), "_NET_WM_STATE"])
+            return "_NET_WM_STATE_HIDDEN" in await self.text(target, ["xprop", "-id", hex(window), "_NET_WM_STATE"])
         await wait(hidden, 5, lambda: "Expected the window minimized")
         port, password = await self.machine.viewer_connection(target)
         sock, client = await asyncio.to_thread(self.connect, port, f"/websockify?token=screen-{target.screen}", password)
@@ -1404,7 +1414,7 @@ class Acceptance:
         await asyncio.sleep(1)
         await self.guest(target, ["wmctrl", "-i", "-r", str(window), "-b", "add,maximized_vert,maximized_horz"])
         await wait(lambda: geometry_is(work), 10, lambda: f"Expected the window maximized again to fill {work}")
-        return (f"screen {target.screen}: the window fills {work} with no marker; a new tab from browser_open and the first "
+        return (f"screen {target.screen}: the window inside {work} with no marker; a new tab from browser_open and the first "
                 "brought back by browser_tabs; minimized and back from the panel with its page; the Browser icon added a tab "
                 "and no window; maximized again it fills the screen; no compositor")
 
@@ -2191,7 +2201,8 @@ class Acceptance:
                 require(leftover not in {row['window_id'] for row in listed} and not any(
                     seat_view.overlaps(row['bounds'], 3, 6) and row['app_name'].lower() not in machine.DESKTOP_WINDOWS
                     and row['window_id'] != beside['window_id'] for row in listed),
-                    'Free screen was handed over with a leftover window')
+                    f'Free screen was handed over with a leftover window: leftover {leftover}, beside {beside["window_id"]}, on screen 3 '
+                    f'{[(row["window_id"], row["app_name"], row["bounds"]) for row in listed if seat_view.overlaps(row["bounds"], 3, 6)]}')
                 require(beside['window_id'] in {row['window_id'] for row in listed},
                         "A seated member's window was closed because a colleague sat down beside it")
                 await machine.fit_window(seat_two, placed)

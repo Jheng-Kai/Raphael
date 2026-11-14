@@ -577,24 +577,26 @@ def placement(row, properties, area):
     """What to do with a window so that what is seen of it stays inside its screen above the panel: None, 'fill' (maximize
     it again, by the browser itself for a browser) or ('move', x, y).
 
-    What is seen of a window is its own rectangle less the shadow the browser draws around itself (_GTK_FRAME_EXTENTS:
-    left, right, top, bottom) and with the frame the window manager draws (_NET_FRAME_EXTENTS). A maximized browser
-    window that kept its shadow is 1312x893, 16 px left of and 10 px above its screen (measured 2026-11-14); a window
-    dragged half onto another screen shows half on each."""
+    What is seen of a window is its frame (the window manager's decoration, _NET_FRAME_EXTENTS: left, right, top, bottom)
+    less the shadow the browser draws round itself (_GTK_FRAME_EXTENTS, the same order). `wmctrl -lG` gives a decorated
+    window's place as its frame's plus twice the decoration (measured: a terminal whose frame is at 0,0 with 5, 5, 29, 5
+    is listed at 10,58), and `wmctrl -e` places the frame: the move is said in that place. A maximized browser window that
+    kept its shadow is 1312x893, 16 px left of and 10 px above its screen (measured 2026-11-14); a window dragged half
+    onto another screen shows half on each."""
     if '_NET_WM_STATE_HIDDEN' in properties or '_NET_WM_STATE_FULLSCREEN' in properties:
         return None
     maximized = '_NET_WM_STATE_MAXIMIZED_VERT' in properties and '_NET_WM_STATE_MAXIMIZED_HORZ' in properties
     shadow = extents(properties, '_GTK_FRAME_EXTENTS')
     frame = extents(properties, '_NET_FRAME_EXTENTS')
-    seen = (row['x'] + shadow[0] - frame[0], row['y'] + shadow[2] - frame[2],
-            row['width'] - shadow[0] - shadow[1] + frame[0] + frame[1],
-            row['height'] - shadow[2] - shadow[3] + frame[2] + frame[3])
+    left, top = row['x'] - 2 * frame[0], row['y'] - 2 * frame[2]  # the frame's own corner
+    seen = (left + shadow[0], top + shadow[2], row['width'] + frame[0] + frame[1] - shadow[0] - shadow[1],
+            row['height'] + frame[2] + frame[3] - shadow[2] - shadow[3])
     if inside(seen, area):
         return None
     if maximized or seen[2] > area[2] or seen[3] > area[3]:
         return 'fill'
-    x = min(max(seen[0], area[0]), area[0] + area[2] - seen[2]) - (seen[0] - row['x'])
-    y = min(max(seen[1], area[1]), area[1] + area[3] - seen[3]) - (seen[1] - row['y'])
+    x = min(max(seen[0], area[0]), area[0] + area[2] - seen[2]) - shadow[0]
+    y = min(max(seen[1], area[1]), area[1] + area[3] - seen[3]) - shadow[2]
     return ('move', x, y)
 
 
@@ -608,7 +610,8 @@ def keep_windows_inside(rectangles, looks):
         if row['class'].startswith(DESKTOP_CLASSES) or row['width'] <= 10 or row['height'] <= 10:
             continue
         screen = screen_of(row, rectangles)
-        if screen is None or inside((row['x'], row['y'], row['width'], row['height']), areas[screen]):
+        # Listed well inside (room left for a decoration the list does not show), a window needs no closer look.
+        if screen is None or inside((row['x'] - 12, row['y'] - 64, row['width'] + 24, row['height'] + 64), areas[screen]):
             continue
         place = (row['x'], row['y'], row['width'], row['height'])
         outside[row['id']] = place
