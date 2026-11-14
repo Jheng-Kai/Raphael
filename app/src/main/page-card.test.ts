@@ -524,7 +524,7 @@ test("a page asked for by its id opens whole once its card has read the page, an
   loaded(frame);
   expect(await opening).toBe(true);
   expect(stage.querySelector(".pgv-frame-box > iframe")).toBe(frame);
-  expect(pages.shown()).toEqual({ id: "p1", kind: "page" });
+  expect(pages.shown()).toMatchObject({ id: "p1", kind: "page" });
   expect(done).not.toHaveBeenCalled();
   back().click();
   expect(done).toHaveBeenCalledOnce();

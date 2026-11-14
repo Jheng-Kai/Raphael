@@ -1,31 +1,45 @@
-// The way back through the main window, as in a browser: the places the person has been, in the
-// order they went, and a step back or forward through them. The mouse's side buttons and
-// Alt+Left / Alt+Right take the steps (nav-input.ts); main.ts says where the window is and puts it
-// where a step lands. Nothing here reads the page, so the rules can be tested without a browser.
+// The way back through the main window, as in a browser: every screen the person has been on, in the
+// order they went, and a step back or forward through them. A screen is any view the person goes into,
+// however small: another conversation, a page opened in it, a tab of the settings or of a member's
+// settings page, a skill's page, an app's page in Connect Apps (owner, 2026-11-14: 「真的是再小的進到下個畫面
+// 都要可以用側鍵返回」). The mouse's side buttons and Alt+Left / Alt+Right take the steps (nav-input.ts);
+// main.ts says where the window is and puts it where a step lands. Nothing here reads the page, so the
+// rules can be tested without a browser.
 
 import type { DictationTab, PageId, SettingsPane } from "./types";
 
 /** How many places are kept; the oldest go first. */
 export const NAV_LIMIT = 50;
 
+/** How long after a press the window is looked at again, for a view that comes in after a read. */
+export const NOTE_LATE_MS = 350;
+
 /** One place of the window: a page, and what is needed to show it again the same way. */
 export interface Place {
   /** The page on screen, which is the page under the settings panel while the panel is open. */
   page: Exclude<PageId, "settings">;
+  /**
+   * What the page shows inside it, in the page's own words (the agent page: the conversation, a page open in its place,
+   * the member settings page and the view in it). Opaque here: only the page reads it.
+   */
+  view?: string;
   /** The tab of the settings panel, while the panel is open over the page. */
   pane?: SettingsPane;
+  /** What that tab shows inside it (a sub-tab, a dialog, an app's page), in the panel's own words. */
+  paneView?: string;
   /** The one day, `2026-10-14`, that the history shows; absent for all days, and on any other page. */
   day?: string;
   tab?: DictationTab;
-  /** The member whose settings page is open over their conversation (member-settings.ts); absent for the conversation. */
-  member?: number;
 }
 
-/** Whether the page on screen is the same, whatever is open over it. */
-export const samePage = (a: Place, b: Place): boolean => a.page === b.page && a.day === b.day && a.tab === b.tab && a.member === b.member;
+const sameWords = (a: string | undefined, b: string | undefined): boolean => (a ?? "") === (b ?? "");
 
-/** Whether the window looks the same at both: the same page, and the same tab open over it if any. */
-export const samePlace = (a: Place, b: Place): boolean => samePage(a, b) && a.pane === b.pane;
+/** Whether the page on screen is the same, whatever is open over it. */
+export const samePage = (a: Place, b: Place): boolean =>
+  a.page === b.page && a.day === b.day && a.tab === b.tab && sameWords(a.view, b.view);
+
+/** Whether the window looks the same at both: the same page, and the same tab and view open over it if any. */
+export const samePlace = (a: Place, b: Place): boolean => samePage(a, b) && a.pane === b.pane && sameWords(a.paneView, b.paneView);
 
 export type NavStep = "back" | "forward";
 
@@ -40,30 +54,34 @@ export class NavHistory {
 
   constructor(private readonly limit = NAV_LIMIT) {}
 
-  /** The person went to `place`. Going to the place it is at adds nothing. */
-  push(place: Place): void {
+  /**
+   * The window is at `place`. The place it is at already adds nothing. The window's own way back (an arrow, Escape,
+   * a close button: `back`) that lands on the place before is that step back, as a page's back arrow is in a browser,
+   * so the side button and the arrow walk the same history. Anything else is a new place.
+   */
+  arrive(place: Place, back = false): void {
     if (this.at >= 0 && samePlace(this.places[this.at], place)) return;
+    if (back && this.at > 0 && samePlace(this.places[this.at - 1], place)) {
+      this.at--;
+      return;
+    }
     this.places.splice(this.at + 1, this.places.length, { ...place });
     if (this.places.length > this.limit) this.places.shift();
     this.at = this.places.length - 1;
   }
 
   /**
-   * The window is at `place` now without a step having taken it there: a tab was chosen in the
-   * panel, or the panel was closed with its own button. The place it is at follows. When that
-   * makes it the same as the place before or after it (the panel is closed, so it is the page
-   * under it again), the two are one: going back to the page you are on would change nothing.
+   * A step was taken to the place it is at, and the window could not show it all (a member or an app that is gone): the
+   * place is what the window shows instead. One that looks like a neighbour is one with it, so no step lands nowhere new.
    */
-  replace(place: Place): void {
+  correct(place: Place): void {
     if (this.at < 0) return;
     this.places[this.at] = { ...place };
     if (this.at > 0 && samePlace(this.places[this.at - 1], place)) {
       this.places.splice(this.at, 1);
       this.at--;
     }
-    if (this.at < this.places.length - 1 && samePlace(this.places[this.at + 1], place)) {
-      this.places.splice(this.at + 1, 1);
-    }
+    if (this.at < this.places.length - 1 && samePlace(this.places[this.at + 1], place)) this.places.splice(this.at + 1, 1);
   }
 
   /** The place before this one, which the window is at from now on; null when there is none. */
@@ -92,30 +110,64 @@ export interface NavTarget {
   show(place: Place): void;
 }
 
-/** The history of the main window: it records what the person does and takes the steps back and forward. */
+/**
+ * The history of the main window. It looks at where the window is after each thing the person does (`heard`), after a
+ * move it asked for (`visit`) and before each step, so every view a press leads into is a place, with no view having to
+ * report itself.
+ */
 export class Navigation {
   private readonly history: NavHistory;
+  /** A step is putting the window somewhere: what it changes on the way is no move of the person's. */
+  private restoring = false;
+  /** The press being handled now is a way back (`heard`): a move it makes through `visit` is that step back. */
+  private pressBack = false;
 
   constructor(private readonly target: NavTarget, limit = NAV_LIMIT) {
     this.history = new NavHistory(limit);
   }
 
+  /** Records where the window is, if that is somewhere new; `back` when the window's own way back took it there. */
+  note(back = false): void {
+    if (this.restoring || this.target.inGuide()) return;
+    const here = this.target.where();
+    if (here) this.history.arrive(here, back);
+  }
+
+  /**
+   * The person pressed or typed something that may take the window elsewhere (`back`: one of the window's own ways
+   * back). Where it went is noted once the page has done it, and again a moment later for a view that comes in after
+   * a read.
+   */
+  heard(back: boolean): void {
+    this.pressBack = back;
+    setTimeout(() => {
+      this.note(back);
+      this.pressBack = false;
+    }, 0);
+    setTimeout(() => this.note(back), NOTE_LATE_MS);
+  }
+
   /** Runs `change`, a move to another page or tab that the person asked for, and records where it led. */
   visit(change: () => void): void {
-    const left = this.target.where();
-    // The place being left may differ from what was recorded: a tab was chosen, the panel was closed.
-    if (left) this.history.replace(left);
+    // A view the person went into since the last look is a place of its own, before this move leaves it.
+    this.note();
     change();
-    const arrived = this.target.where();
-    if (arrived) this.history.push(arrived);
+    this.note(this.pressBack);
   }
 
   /** Takes one step. The window shows the place it lands on and nothing is recorded. */
   step(direction: NavStep): void {
     if (this.target.inGuide()) return;
-    const here = this.target.where();
-    if (here) this.history.replace(here);
+    this.note();
     const place = this.history[direction]();
-    if (place) this.target.show(place);
+    if (!place) return;
+    this.restoring = true;
+    try {
+      this.target.show(place);
+    } finally {
+      this.restoring = false;
+    }
+    const shown = this.target.where();
+    if (shown && !samePlace(shown, place)) this.history.correct(shown);
   }
 }

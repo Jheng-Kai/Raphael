@@ -618,7 +618,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(true,false); if (!event || event.type !== "WorkerChanged" || event.state === "waiting") void questions.load(); }, 300);
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   onAvatarChange(()=>{if(opened && el.isConnected)draw();});
-  return {el,close,refresh,async open(id:number){
+  return {el,close,refresh,
+    /** The page open in the room's thread place, for the way back (nav-history.ts), and how a step opens or puts one away. */
+    page:()=>pagesHost.shown(),showPage:(id:string,title:string)=>void pagesHost.show(id,title,()=>{}),closePage:()=>pagesHost.close(),
+    async open(id:number){
     closeSideThread?.(); closeSideThread = undefined;
     if (meetingPanel?.isConnected) closeMenu();
     meetingRow.hidden = true;

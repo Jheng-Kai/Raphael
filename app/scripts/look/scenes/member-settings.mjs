@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scene, member, click, hover, wait, check, key, scroll, waitScrollEnd, type } from './steps.mjs';
+import { scene, member, click, hover, wait, check, key, scroll, waitScrollEnd, type, sideButton, settings } from './steps.mjs';
 import { learnedSkill, sharedSourceSkill } from './chat.mjs';
 
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, '../fixture.json'), 'utf8'));
@@ -42,8 +42,29 @@ const personaScenes = [
   scene('member-persona-saved', 'Enter on one line saves it: the row is back with the new words, the pencil is back and nothing is said', [...soul, ...edit('personality'), type('.ms-pane #ms-personality', manner), key('Enter'), wait('.ms-pane [data-ms="edit"][data-field="personality"]:not([aria-busy])'), check('member-settings-persona-saved')], persona('', job)),
   scene('member-persona-escape', 'Escape puts the old words back, saves nothing and says nothing', [...soul, ...edit('instructions'), type('.ms-pane #ms-instructions', '全部改掉'), key('Escape'), wait('.ms-pane [data-ms="edit"][data-field="instructions"]'), check('member-settings-persona-escape')], persona(manner, job)),
 ];
+// The mouse's side buttons walk back through every view the owner went into, however small (owner, 2026-11-14: 「從工具到個性與指示
+// 要可以倒退 進到記憶畫面倒退會回到技能與指令的頁面」), and forward again: R-NAV-03.
+const intoSkill = [...page, ...kind('soul', '.ms-pane [data-k="ms-personality"]'), ...kind('skills', '.ms-pane [data-ms="skill-open"]'), click('.ms-pane [data-ms="skill-open"]'), wait('.ms-pane #ms-skill-text')];
+const stepScenes = [
+  scene('nav-steps-member-settings', 'Back from a skill\'s page is its tab; back again walks the tabs the owner opened, then the conversation; forward goes in again', [
+    ...intoSkill, sideButton('back'), check('nav-ms-skills'), sideButton('back'), check('nav-ms-soul'), sideButton('back'), check('nav-ms-tools'),
+    sideButton('back'), check('nav-conversation-1'), sideButton('forward'), check('nav-ms-tools'), sideButton('forward'), check('nav-ms-soul'),
+  ], filled),
+  scene('nav-steps-skill-arrow', 'The page\'s own arrow is the same step back as the side button, so forward opens the skill again', [
+    ...intoSkill, click('.ms-pane [data-ms="back"]'), wait('.ms-pane[data-view="main"]'), check('nav-ms-skills'), sideButton('forward'), wait('.ms-pane #ms-skill-text'), check('nav-ms-skill'),
+  ], filled),
+  scene('nav-steps-settings', 'In Settings back walks the tabs the owner opened before it closes them, and never moves the page underneath', [
+    member(1), ...settings('tools'), click('.modal-scrim [data-pane="about"]'), wait('.modal-scrim [data-pane="about"][aria-current="page"]'),
+    sideButton('back'), check('nav-settings-tools'), sideButton('back'), check('nav-settings-general'), sideButton('back'), check('nav-settings-closed'), check('nav-conversation-1'),
+  ], filled),
+  scene('nav-steps-conversations', 'Each conversation opened from the sidebar is a step', [
+    member(1), wait('.mb-col [data-member="1"][aria-current="true"]'), member(2), wait('.mb-col [data-member="2"][aria-current="true"]'),
+    sideButton('back'), check('nav-conversation-1'), sideButton('forward'), check('nav-conversation-2'),
+  ], filled),
+];
 export default [
   ...personaScenes,
+  ...stepScenes,
   scene('member-settings', 'The gear opens the member as a page: a cover it can change, the face across it, name and role in place, the kinds of settings on the left and only the chosen one beside them', [...page, check('member-settings')], filled),
   scene('member-settings-raphael', 'Raphael has the same page and the same kinds as every member: tools, skills and commands, personality and instructions, notifications', [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), wait('.ms-pane .ms-nav [data-cat="tools"][aria-current="page"]'), check('member-settings'), check('member-settings-raphael')], filled),
   scene('member-settings-skills', 'Skills and commands: names with switches and pluses, nothing else on the page', [...page, ...kind('skills', '.ms-pane [data-k="ms-skills"]'), check('member-settings')], filled),
