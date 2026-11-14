@@ -6242,19 +6242,24 @@ export function checkRendered(name, context = {}) {
     require(Math.round(shareBox.width) === 36 && Math.round(shareBox.height) === 36 && Math.abs((shareBox.top + shareBox.bottom) - (arrow.top + arrow.bottom)) <= 2 && head.right - shareBox.right < head.width / 4, "36 px, level with the arrow, at the header's right");
     const memberShare = pane.querySelector('.mb-head [data-act="share-member"]');
     require(!memberShare || !visible(memberShare), "the member's share waits while a page stands in the thread's place");
-    // The area: right of the sidebar and to the window's right, the page as wide as it allows (`--pgv-w`, 1280 px) between the thread's gutters,
-    // with no frame, no corner and no edge of its own, and scrolling as a whole.
+    // The area, since R-PAGE-10 (owner, 2026-11-14: the page as Chrome shows a file): the whole view right of the sidebar to the window's right edge,
+    // and the page edge to edge in it, with no margin, frame, corner or edge of its own, scrolling as a whole. It ends where the composer's row
+    // begins, so no part of the page is ever under the composer.
     const areaBox = area.getBoundingClientRect(), shown = box.getBoundingClientRect(), side = document.querySelector("#nav")?.getBoundingClientRect();
-    const edgeLeft = parseFloat(getComputedStyle(pane).paddingLeft) || 0, edgeRight = parseFloat(getComputedStyle(pane).paddingRight) || 0;
-    require(areaBox.left - paneBox.left <= edgeLeft + 1 && paneBox.right - areaBox.right <= edgeRight + 1 && (!side || areaBox.left >= side.right - 1), `the page fills the area beside the sidebar: ${Math.round(areaBox.left)}-${Math.round(areaBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
-    const space = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6")), cap = 40 * space, gutter = parseFloat(getComputedStyle(area).paddingLeft);
-    require(Math.abs(shown.width - Math.min(cap, areaBox.width - 2 * gutter)) <= 1, `as wide as the area allows up to ${cap}: ${Math.round(shown.width)} in ${Math.round(areaBox.width)}`);
-    require(Math.abs((shown.left + shown.right) / 2 - (areaBox.left + areaBox.right) / 2) <= 1, "in the middle of the area");
-    const boxStyle = getComputedStyle(box);
-    require(parseFloat(boxStyle.borderRadius) === 0 && boxStyle.borderTopWidth === "0px" && boxStyle.overflow === "visible" && boxStyle.boxShadow === "none", "no frame: no corner, edge or clip around the page");
-    require(getComputedStyle(area).overflowY === "auto" && area.contains(box), "the whole area scrolls");
-    require(shown.height >= area.clientHeight - parseFloat(getComputedStyle(area).paddingTop) - parseFloat(getComputedStyle(area).paddingBottom) - 1, `the page is at least as tall as the area: ${Math.round(shown.height)}`);
-    require(areaBox.bottom <= dock.getBoundingClientRect().top + 1, "the area ends where the composer begins: nothing is covered");
+    const frameBox = frame.getBoundingClientRect(), dockBox = dock.getBoundingClientRect(), composerBox = composer.getBoundingClientRect();
+    require((!side || areaBox.left >= side.right - 1) && Math.abs(areaBox.left - paneBox.left) <= 1 && Math.abs(areaBox.right - paneBox.right) <= 1, `the area is the whole view beside the sidebar: ${Math.round(areaBox.left)}-${Math.round(areaBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
+    require(Math.abs(frameBox.left - paneBox.left) <= 1 && Math.abs(frameBox.right - paneBox.right) <= 1 && Math.abs(shown.left - frameBox.left) <= 1 && Math.abs(shown.right - frameBox.right) <= 1, `the page spans the full width of the view, no margin either side: ${Math.round(frameBox.left)}-${Math.round(frameBox.right)} of ${Math.round(paneBox.left)}-${Math.round(paneBox.right)}`);
+    require(Math.abs(frameBox.right - innerWidth) <= 1, `and reaches the window's right edge: ${Math.round(frameBox.right)} of ${innerWidth}`);
+    const boxStyle = getComputedStyle(box), areaStyle = getComputedStyle(area);
+    require(parseFloat(boxStyle.borderRadius) === 0 && boxStyle.borderTopWidth === "0px" && boxStyle.overflow === "visible" && boxStyle.boxShadow === "none" && boxStyle.maxWidth === "none", "no frame: no corner, edge, clip or width cap around the page");
+    require(parseFloat(areaStyle.paddingLeft) === 0 && parseFloat(areaStyle.paddingRight) === 0 && parseFloat(areaStyle.paddingBottom) === 0, "the area has no side or bottom padding");
+    require(areaStyle.overflowY === "auto" && area.contains(box), "the whole area scrolls");
+    require(shown.height >= area.clientHeight - parseFloat(areaStyle.paddingTop) - parseFloat(areaStyle.paddingBottom) - 1, `the page is at least as tall as the area: ${Math.round(shown.height)}`);
+    // It reaches the bottom of its view (the composer's row stands below it), and nothing of the composer is over it.
+    require(Math.abs(areaBox.bottom - dockBox.top) <= 1, `the page reaches the composer's row, with no strip between: ${Math.round(areaBox.bottom)} against ${Math.round(dockBox.top)}`);
+    const over = (one, two) => one.left < two.right - 0.5 && two.left < one.right - 0.5 && one.top < two.bottom - 0.5 && two.top < one.bottom - 0.5;
+    const visibleFrame = { left: frameBox.left, right: frameBox.right, top: Math.max(frameBox.top, areaBox.top), bottom: Math.min(frameBox.bottom, areaBox.bottom) };
+    require(!over(visibleFrame, composerBox) && !over(visibleFrame, dockBox) && areaBox.bottom <= dockBox.top + 1, "no part of the composer overlaps the page");
     require(!view.querySelector(".pgv-title"), "the title is the pill's, not a line of the page");
     require(view.querySelector(".pgv-status")?.hidden !== false || name !== "page-inplace", "nothing waits under the page before anything is sent");
     require(document.documentElement.scrollWidth <= innerWidth, "nothing runs out sideways");
@@ -6554,13 +6559,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, column: Math.round(column), aside };
   }
   if (name === "page-base") {
-    // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-08 its frame is as wide as the area
-    // allows up to `--pgv-w`, in the middle (the frame's own measures are `checkFrame`).
+    // An HTML page that writes no style of its own, opened in the conversation's place: since R-PAGE-10 its frame is the whole area, edge to edge
+    // (its own style, page_style.py, keeps the lines readable inside it; the frame's own measures are `checkFrame`).
     const stage = document.querySelector(".page-agent .ra-stage"), frame = stage.querySelector(".pgv-frame-box iframe"), area = stage.querySelector(".pgv-page");
     require(stage.classList.contains("is-page") && frame && visible(frame) && area, "the page is open in the conversation's place");
-    const areaBox = area.getBoundingClientRect(), box = frame.getBoundingClientRect(), gutter = parseFloat(getComputedStyle(area).paddingLeft) || 0;
-    const cap = 40 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sp-6"));
-    require(Math.abs(box.width - Math.min(cap, areaBox.width - 2 * gutter)) <= 2 && Math.abs((box.left + box.right) / 2 - (areaBox.left + areaBox.right) / 2) <= 2 && box.height > 300, `as wide as the area allows up to ${cap}, in the middle: ${Math.round(box.width)} in ${Math.round(areaBox.width)}`);
+    const pane = stage.parentElement.getBoundingClientRect(), box = frame.getBoundingClientRect(), dock = stage.querySelector(":scope > .ra-dock").getBoundingClientRect();
+    require(Math.abs(box.left - pane.left) <= 1 && Math.abs(box.right - pane.right) <= 1 && box.height > 300, `the page spans the full width of the view: ${Math.round(box.left)}-${Math.round(box.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
+    require(area.getBoundingClientRect().bottom <= dock.top + 1, "and ends where the composer begins");
     return { check: name, width: Math.round(box.width) };
   }
   if (name.startsWith("page-dashboard")) {
@@ -6758,6 +6763,10 @@ export function checkRendered(name, context = {}) {
     const column = composer.getBoundingClientRect(), doc = view.querySelector(".rp-doc").getBoundingClientRect();
     require(Math.abs(doc.left - column.left) <= 1 && Math.abs(doc.right - column.right) <= 1, `the report's column is the composer's: ${Math.round(doc.left)}-${Math.round(doc.right)} and ${Math.round(column.left)}-${Math.round(column.right)}`);
     const page = view.querySelector(":scope > .rp-scroll");
+    // R-PAGE-10: the report's background fills the whole view beside the sidebar to the window's edge; only its column keeps a readable width.
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible).getBoundingClientRect(), fill = page.getBoundingClientRect(), viewBox = view.getBoundingClientRect();
+    require(Math.abs(fill.left - pane.left) <= 1 && Math.abs(fill.right - pane.right) <= 1 && Math.abs(viewBox.left - pane.left) <= 1 && Math.abs(viewBox.right - pane.right) <= 1, `the report fills the full width of the view: ${Math.round(fill.left)}-${Math.round(fill.right)} of ${Math.round(pane.left)}-${Math.round(pane.right)}`);
+    require(Math.abs(fill.right - innerWidth) <= 1 && fill.bottom <= dock.getBoundingClientRect().top + 1 && !(fill.bottom > composer.getBoundingClientRect().top + 0.5), "to the window's right edge, and no part of it is under the composer");
     require(page.scrollWidth <= page.clientWidth + 1, "nothing runs out sideways");
     require(getComputedStyle(page).maskImage.includes("gradient"), "what scrolls away fades before the header, as the thread does");
     if (name === "page-report-open") {
