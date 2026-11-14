@@ -6023,6 +6023,49 @@ export function checkRendered(name, context = {}) {
     require(open && visible(open), "the title stays in sight");
     return { check: name, samples: watch.samples };
   }
+  // The owner speaks with a page open in the thread's place (voice-mode.ts, page-view.css; owner, 2026-11-14: 「拉菲爾大師還是會顯示在最前面，
+  // 他永遠是最前面的」): the thread, and the "hearing" line in it, is hidden under the page, so the flyer is the only sign he is heard.
+  if (name === "voice-over-page-listening" || name === "voice-over-page-hearing" || name === "voice-over-page-gone") {
+    const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
+    const view = stage.querySelector(":scope > .pgv"), dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer"), flyer = stage.querySelector(":scope > .ra-flyer");
+    require(stage.classList.contains("is-page") && visible(view), "a page stands in the thread's place");
+    const frame = view.querySelector("iframe"), frameBox = view.querySelector(".pgv-frame-box");
+    require(visible(frame), "the page's own frame is drawn");
+    if (name === "voice-over-page-gone") {
+      require(!flyer && !stage.classList.contains("is-voice") && !composer.querySelector(".vm-away"), "when it ends the flyer is gone and the button is its own again");
+      require(composer.dataset.taskState === "idle", `the composer is at rest: ${composer.dataset.taskState}`);
+      return { check: name };
+    }
+    require(visible(flyer), "the flyer is drawn in front of the page");
+    const canvas = flyer.querySelector("canvas.ra-flyer-emblem");
+    require(canvas && visible(canvas) && !flyer.querySelector("img"), "it is the live emblem, the one the voice mode always draws");
+    const box = flyer.getBoundingClientRect(), page = frameBox.getBoundingClientRect(), field = composer.getBoundingClientRect(), main = stage.getBoundingClientRect();
+    require(Math.round(box.width) === 132 && Math.round(box.height) === 132, `at its own size: ${box.width} x ${box.height}`);
+    require(box.left >= main.left - 1 && box.right <= main.right + 1 && box.top >= page.top - 1, "inside the stage and over the page");
+    require(box.bottom <= field.top + 1, `it does not cover the composer: ${Math.round(box.bottom)} against ${Math.round(field.top)}`);
+    require(Math.abs((box.left + box.right) / 2 - (main.left + main.right) / 2) <= 2, "in the middle of the stage");
+    // Nothing paints over it: with the flyer made hit-testable for a moment, the point at its centre and at four points of its ring is the flyer.
+    const was = flyer.style.pointerEvents;
+    flyer.style.pointerEvents = "auto";
+    const cx = (box.left + box.right) / 2, cy = (box.top + box.bottom) / 2, reach = 44;
+    const hits = [[0, 0], [reach, 0], [-reach, 0], [0, reach], [0, -reach]].map(([dx, dy]) => document.elementFromPoint(cx + dx, cy + dy));
+    flyer.style.pointerEvents = was;
+    require(hits.every(hit => hit && (hit === flyer || flyer.contains(hit))), `the top layer at its centre and ring is the flyer: ${hits.map(hit => hit?.className || hit?.tagName)}`);
+    // It takes no pointer, so the page scrolls and works under it.
+    require(getComputedStyle(flyer).pointerEvents === "none", "it takes no pointer over the page");
+    require(document.elementFromPoint(cx, cy) !== flyer && !flyer.contains(document.elementFromPoint(cx, cy)), "a pointer over it reaches what is under it");
+    const scroll = stage.querySelector(":scope > .ra-scroll");
+    require(getComputedStyle(scroll).visibility === "hidden", "the thread, and the hearing line in it, is hidden under the page: this is the only sign");
+    if (name === "voice-over-page-listening") {
+      require(composer.dataset.taskState === "recording", `the composer is recording: ${composer.dataset.taskState}`);
+      return { check: name, flyer: [Math.round(box.left), Math.round(box.top)] };
+    }
+    require(composer.dataset.taskState === "ack", `the words are being heard: ${composer.dataset.taskState}`);
+    const line = scroll.querySelector('[data-key="hearing"]');
+    require(line && getComputedStyle(line).visibility === "hidden", "the thread's own hearing line is there and cannot be seen");
+    require(!composer.querySelector(".vm-away"), "the button is the slot's again, with the hand to stop");
+    return { check: name, flyer: [Math.round(box.left), Math.round(box.top)] };
+  }
   // The same page asked to change from under it: what the member does shows under the page, then its reply (page-view.ts).
   if (name === "page-inplace-working" || name === "page-inplace-answered") {
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");

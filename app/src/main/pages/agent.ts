@@ -712,7 +712,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     stage,
     button: () => (voiceButton.isConnected && !composer.hidden && !voiceButton.hidden ? voiceButton : null),
     composer: () => (composer.isConnected && !composer.hidden ? composer : null),
-    target: () => (empty.hidden || !inRaphael() ? null : hero.querySelector<HTMLElement>(".av")),
+    // Under a page the empty page is hidden: the flyer stands above the composer, over the page.
+    target: () => (empty.hidden || !inRaphael() || stage.classList.contains("is-page") ? null : hero.querySelector<HTMLElement>(".av")),
     face: () => avatarHTML({ size: 132, loop: true }),
     live: () => currentAvatar() === null,
     onClick: () => void endVoice(),
@@ -1388,11 +1389,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       hearingTimer = undefined;
       if (!hearing) return;
       hearing = null;
+      if (voice.isHeld) voice.down();
       if (visible) render();
     }, HEARING_MAX_MS);
   }
   function stopHearing(): void {
     hearing = null;
+    if (voice.isHeld) voice.down();
     clearTimeout(hearingTimer);
     hearingTimer = undefined;
   }
@@ -1690,7 +1693,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       listening = false;
       clearTimeout(listenTimer);
       listenTimer = setTimeout(() => {
-        if (!listening) voice.down();
+        // Not while the words are being heard: the flyer held over a page is the one sign of it.
+        if (!listening && !voice.isHeld) voice.down();
       }, LISTEN_WAIT_MS);
     }
     // In toggle mode the press made while recording is the one that ends it (in hold mode, the release is: `voiceUp`).
@@ -2233,7 +2237,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       note = document.createElement("div"); note.dataset.conversationMissing = ""; composer.append(note);
     }
     if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
-    if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
+    if (task) { if ((!listening || voiceMember !== memberId()) && !(voice.isHeld && voiceMember === memberId())) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
   }
 
@@ -2792,6 +2796,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         voiceMember = member;
         if(!listening)listeningRun++;
         listening = true;
+        clearTimeout(listenTimer);
         if (visible && !question && voiceMember === memberId()) drawComposerTask();
       } else {
         if (event.phase === "processing") {
@@ -2801,7 +2806,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
         listening = false;
         voiceRequested = false;
-        voice.down();
+        // A page in the thread's place hides the thread's own hearing line: the flyer stays in front of it while the words are heard.
+        if (!(event.phase === "processing" && visible && (event.member_id ?? RAPHAEL_ID) === memberId() && voice.hold())) voice.down();
         if (event.phase === "cancelled" || event.phase === "failed") takeBackVoiceDraft();
         drawComposerTask();
         if (event.phase === "processing") {
