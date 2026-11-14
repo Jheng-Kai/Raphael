@@ -111,7 +111,8 @@ def owner_replaced(old_text: str, content: str, owner_text: str) -> bool:
 
     A correction like 仁愛路 -> 信愛路 is said as the new street, never as the whole entry, so
     `owner_stated` cannot see it. Here every span the replace writes (and every span it takes out) has
-    to stand in the owner's words (a span replaced by another needs only the new one), with up to two
+    to stand in the owner's words together with at least one neighbouring character of the entry (a span replaced by
+    another needs only the new one), and up to two
     neighbouring characters for context. Words the owner
     never said, such as an instruction from a web page, never pass, so a model cannot rewrite a
     confirmed entry from outside content."""
@@ -124,7 +125,7 @@ def owner_replaced(old_text: str, content: str, owner_text: str) -> bool:
         if not span.strip():
             return True
         return any(len((variant := before[len(before) - k:] + span if side == "before" else span + after[:k]).strip()) >= 2
-                   and variant in said for k in (0, 1, 2) for side in ("before", "after"))
+                   and variant in said for k in (1, 2) for side in ("before", "after"))
 
     matcher = difflib.SequenceMatcher(None, old_text, content, autojunk=False)
     changed = False
@@ -459,7 +460,7 @@ class MemoryFile:
                 index, ambiguous = _find_unique_match(working, old_text)
                 patched = working[index].replace(old_text, content, 1) if index is not None and not ambiguous else ""
                 confirmed = action == "replace" and owner_stated(patched, owner_text)
-                owner_edit = action == "replace" and not confirmed and owner_replaced(old_text, content, owner_text)
+                owner_edit = action == "replace" and not confirmed and bool(patched) and owner_replaced(working[index], patched, owner_text)
                 self._edit(working, action, old_text, content, where, mark="" if confirmed else mark,
                            told=told, alone=len(ops) == 1, confirmed=confirmed, owner_edit=owner_edit)
             else:
