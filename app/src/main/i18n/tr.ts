@@ -1170,6 +1170,7 @@ export const tr = {
   "history.sentTo": "{p0} alıcısına",
   "history.003": "Kopyala",
   "chat.copy": "Kopyala",
+  "chat.copyImage": "Görseli kopyala",
   "setup.copy": "Kopyala",
   "history.005": "<div class=\"hdetail\"{p0}><h4>Ham döküm</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>Geçmiş</h1></div>",

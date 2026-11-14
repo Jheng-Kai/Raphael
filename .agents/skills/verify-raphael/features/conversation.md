@@ -1,5 +1,37 @@
 # Conversation
 
+## A picture a member sends is a message (owner, 2026-11-14, R-UI-156)
+
+Owner: 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」. A member's pictures (a media message whose
+`{attachment}` is a stored image, `mediaPicture` in `picture-message.ts`; two drawn pictures before the words of a reply, say) stood above its
+reply with nothing beside them. Now each picture is a message of its own (`artifactHTML` in `timeline.ts`, `.chat-message[data-picture]` keyed
+by the media message's `seq`): the very row of a reply stands beside it (`messageActionsHTML`: react, reply and ⋯, bare, 28 px, shown on
+hover or focus, centred on it), its own reaction stands on its top-right corner, a right click opens its ⋯. The picture keeps its own shape
+(`width: auto` on its image), so the actions stand against what is seen and never across an empty band. Its ⋯ is a reply's menu (its
+reactions first) with 回覆 and 複製圖片; 複製圖片 puts the picture itself on the clipboard (`copyPicture`: the stored copy through
+`attachments.get`, PNG as it is and any other image drawn once to PNG, one `ClipboardItem` handed over at the press). Reply quotes it as a link
+to its stored file, `[name](attachment:<id>)` (no interface words reach the member; the core already reads that form), which `quoteHTML` draws
+as the picture's 36 px thumbnail, the author and 「圖片」, in the composer and in the sent bubble; the quote finds its picture again. A reaction
+to it names its `seq`: the core takes a media message's reaction (`set_reaction`) and tells the member it was the file it sent, by name and
+type (`_ask_about_reaction`). In a group room (and a side thread) the picture of a member's room message stands with that room message's own
+row (`pictureActionsHTML`): its Copy is 複製圖片 (`copy-picture`), react, thread and reply act on the room message. A video, a document and an
+older URL card are unchanged; there is no save, since the app has no save path for a stored file (opening one is `attachment-open`).
+
+```powershell
+npm run look -- picture-message picture-message-menu picture-message-reply room-picture-message generated-image message-hugs-bubble reaction-row room-text --theme both --width 1120,720,1920x1080
+```
+
+`picture-message` (a square and a landscape picture before the reply, the landscape one with ❤️) asserts both pictures carry the reply's
+actions in its order and drawn as its buttons (28 px, same colours), each picture box keeps the picture's own shape, the actions stand 0 to
+8 px from the picture and are centred on it, and the reaction stands on the picture's corner clear of them; `picture-message-hover` (a step of
+the scene, with the reply scrolled into view) points at the landscape picture and requires its actions shown beside its ❤️ and the
+other's hidden. `picture-message-menu` opens the picture's ⋯:
+回覆 and 複製圖片 under the reactions. `picture-message-reply` presses Reply: the composer's quote shows the loaded thumbnail, 小晴 and 圖片,
+never the link or the file name, and the composer has the focus. `room-picture-message` hovers the picture of a room message: copy-picture,
+react, thread and reply beside it, the words keeping their own row. Vitest: `pages/agent-picture-message.test.ts` (the page),
+`group-picture-message.test.ts` (the room), `picture-message.test.ts` (quote, clipboard). Core: `tests/agent/test_emoji_reactions.py`,
+`tests/members/test_reaction_ask.py`. Not covered offline: the native clipboard of WebView2 (that a pasted picture arrives in another program).
+
 ## Words meant for the model stay out of what the owner reads (owner, 2026-11-14)
 
 - **A page shown is no question (R-PAGE-09).** A task that shows an HTML page (`show_page`) goes on: the page is already a card in

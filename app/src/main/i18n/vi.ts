@@ -1170,6 +1170,7 @@ export const vi = {
   "history.sentTo": "Đến {p0}",
   "history.003": "Sao chép",
   "chat.copy": "Sao chép",
+  "chat.copyImage": "Sao chép hình ảnh",
   "setup.copy": "Sao chép",
   "history.005": "<div class=\"hdetail\"{p0}><h4>Bản chép lời gốc</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>Lịch sử</h1></div>",

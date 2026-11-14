@@ -1170,6 +1170,7 @@ export const zhCN = {
   "history.sentTo": "传给 {p0}",
   "history.003": "拷贝",
   "chat.copy": "拷贝",
+  "chat.copyImage": "拷贝图片",
   "setup.copy": "拷贝",
   "history.005": "<div class=\"hdetail\"{p0}><h4>原始辨识</h4><div class=\"raw\">{p1}</div></div>",
   "history.006": "<div class=\"page-head\"><h1>历史纪录</h1></div>",
