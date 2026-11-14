@@ -48,7 +48,7 @@ import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
-import { keepBottomOnResize, keepReadingPlace } from "../reading-place";
+import { keepReadingPlace } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
@@ -277,9 +277,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const scroller = el.querySelector<HTMLElement>(".ra-scroll")!;
   const older = el.querySelector<HTMLElement>(".ra-older")!;
   const thread = el.querySelector<HTMLOListElement>(".thread")!;
-  // A panel dragged wider or narrower, or a dock that grows under it, leaves the reading place where it was (reading-place.ts).
+  // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts); a dock that grows or shrinks
+  // under a thread that follows its bottom is followed by the thread's one stick to the bottom (message-rich.ts).
   keepReadingPlace(scroller, ".thread > li");
-  keepBottomOnResize(scroller, () => followRichScroll(scroller));
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;
