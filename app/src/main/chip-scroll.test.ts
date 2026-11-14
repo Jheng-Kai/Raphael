@@ -81,6 +81,18 @@ test("a row drawn later is measured when it gets its size and again as it scroll
   expect([line.hasAttribute("data-more-before"), line.hasAttribute("data-more-after")]).toEqual([true, false]);
 });
 
+test("chips added to a row that keeps its size mark the end with more behind it", async () => {
+  const { row: line, scroller } = row();
+  Object.defineProperty(scroller, "scrollWidth", { configurable: true, value: 300 });
+  chipEdges(scroller);
+  await flush();
+  expect(line.hasAttribute("data-more-after")).toBe(false);
+  Object.defineProperty(scroller, "scrollWidth", { configurable: true, value: 900 });
+  scroller.append(document.createElement("button"));
+  await flush();
+  expect([line.hasAttribute("data-more-before"), line.hasAttribute("data-more-after")]).toEqual([false, true]);
+});
+
 test("the arrows are real named buttons that move the row by most of its width", async () => {
   const { scroller } = row(300);
   await flush();

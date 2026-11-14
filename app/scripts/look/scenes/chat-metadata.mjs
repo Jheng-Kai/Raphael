@@ -1,10 +1,12 @@
-import { scene, member, room, wait, waitGone, hover, click, check, type, key, lookCall, paste } from "./steps.mjs";
+import { scene, member, room, wait, waitGone, hover, click, check, type, key, lookCall, paste, dropFile } from "./steps.mjs";
 const reply = '.tn[data-id="8201"] .chat-message[data-reply]';
 const thinking = '.tn[data-id="8202"] .live-presence';
 const reactButton = `${reply} [data-act="react-message"]`;
 const owner = '.tn[data-id="8201"] .chat-message.owner-message';
 const signin = '.chat-message[data-reply] > .turn-signin [data-act="cli-signin"]';
 const privateOpen = [member(1), wait(reply)];
+// The owner's several pictures, the last of them drawn: the thumbnails load as they come near the view.
+const picturesShown = [wait(`${owner} .attachment-thumbs > .attachment-image:last-child img[src]`)];
 const root = '[data-room-message="8202"]';
 const roomOpen = [room(1), wait(root)];
 const ownerMenu = `${owner} [data-act="more-message"]`, editField = '.tn[data-id="8201"] [data-edit-input]';
@@ -18,6 +20,20 @@ export default [
   scene('owner-picture-short', "A short message with a picture: the bubble under the picture has its own width, not the picture's", [...privateOpen, wait(`${owner} .attachment-picture img`), check('owner-picture-bubble'), hover('.composer')], {chatMetadata:'reaction', ownerPicture:true}),
   scene('owner-picture-long', "A long message with a picture: the bubble is as wide as without the picture, wider than the picture, and cut with 顯示全部", [...privateOpen, wait(`${owner} .attachment-picture img`), check('owner-picture-bubble'), hover('.composer')], {chatMetadata:'reaction', ownerEdit:'long', ownerPicture:true}),
   scene('owner-picture-pending', "A message with a picture on its way: its bubble has its own width under the picture", [member(1), wait('.cmp-input'), paste('.cmp-input', { image: 'clipboard.png' }), wait('.composer .cmp-chip img.cmp-thumb'), type('.cmp-input', '請看這張畫面'), key('Enter'), wait('.tn.is-pending .attachment-picture img'), check('owner-picture-bubble'), hover('.ra-scroll')], {chatMetadata:'reaction', askUntilAnswered:true}),
+  // Owner, 2026-11-15: twelve pictures in his message stood as a two-column grid of large tiles, several screens tall, and in the
+  // composer they ran past its right edge out of reach. Several pictures are now small squares side by side, in as many rows as they
+  // need, right-aligned with his bubble, as Claude, ChatGPT and Grok show them (R-ATTACH-02); the composer's row scrolls under the wheel (R-ATTACH-01).
+  scene('owner-pictures-four', "Four pictures sent with words stand side by side as small squares, right-aligned over the bubble", [...privateOpen, ...picturesShown, check('owner-pictures-row'), check('owner-picture-bubble'), hover('.composer')], {chatMetadata:'reaction', ownerPictures:4}),
+  scene('owner-pictures-twelve', "Twelve pictures sent with words wrap into a few rows of small squares, no taller than their rows", [...privateOpen, ...picturesShown, check('owner-pictures-row'), check('owner-picture-bubble'), hover('.composer')], {chatMetadata:'reaction', ownerPictures:12}),
+  scene('owner-pictures-mixed', "Three pictures and a document sent with words: the pictures' row, the document's card, then the bubble", [...privateOpen, ...picturesShown, check('owner-pictures-row'), check('owner-picture-bubble'), hover('.composer')], {chatMetadata:'reaction', ownerPictures:3, ownerFile:true}),
+  scene('owner-pictures-open', "A press on one of several thumbnails opens that picture large", [...privateOpen, ...picturesShown, click(`${owner} .attachment-thumbs > .attachment-image:nth-child(3) .attachment-picture`), wait('.media-lightbox .lb-img[src]'), check('owner-pictures-lightbox')], {chatMetadata:'reaction', ownerPictures:4}),
+  scene('owner-pictures-pending', "Three pictures pasted and sent stand as small squares while the message is on its way", [member(1), wait('.cmp-input'),
+    ...[1, 2, 3].map(n => paste('.cmp-input', { image: `畫面-${n}.png`, fill: `hsl(${n * 110}, 45%, 42%)`, label: String(n) })), wait('.composer .cmp-chip:nth-child(3) img.cmp-thumb'),
+    type('.cmp-input', '請看這三張畫面'), key('Enter'), wait('.tn.is-pending .attachment-thumbs .attachment-picture img'), check('owner-pictures-row'), check('owner-picture-bubble'), hover('.ra-scroll')], {chatMetadata:'reaction', askUntilAnswered:true}),
+  scene('composer-pictures-strip', "Twelve pictures wait in the composer in one row that the mouse wheel scrolls sideways to the last one", [
+    ...Array.from({ length: 12 }, (_, i) => dropFile('.composer', `畫面-${i + 1}.png`, { fill: `hsl(${i * 30}, 50%, 42%)`, label: String(i + 1) })),
+    wait('.composer .cmp-chip:nth-child(12) img.cmp-thumb[src]'), check('composer-pictures-start'),
+    { action: 'wheel', selector: '.composer .cmp-file', deltaY: 2400 }, check('composer-pictures-end'), hover('.ra-scroll')]),
   scene('message-edit-picture', "A message with a picture, edited in its own bubble: the bubble keeps the width it has without the picture, the picture stays", [...openEditor, check('owner-picture-bubble'), check('message-edit-open'), hover('.ra-scroll')], {chatMetadata:'reaction', ownerEdit:'short', ownerPicture:true}),
   scene('reaction-picker', 'One reaction control opens the compact five-reaction pill', [...privateOpen, hover(reply), click(`${reply} [data-act="react-message"]`), check('reaction-picker')], {chatMetadata:'reaction'}),
   scene('message-hugs-bubble', 'A long reply is only as wide as its bubble and actions: the room beside it answers neither the pointer nor a right click', [...privateOpen, hover(reply), check('message-hugs-bubble'), hover('.composer')], {chatMetadata:'long'}),
