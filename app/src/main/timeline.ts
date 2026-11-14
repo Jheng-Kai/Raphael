@@ -31,7 +31,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { messageHTML, replyContentHTML } from "./message-content";
+import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
@@ -256,6 +256,38 @@ export function workMs(turn: AgentTurn, nowMs: number): number {
 /** A step's own key, by which the page knows which steps it has drawn before. */
 export const stepKey = (turn: AgentTurn, index: number): string => `${turn.id}:${index}`;
 
+const STORED_FILE = /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/;
+const filesOfTurn = new WeakMap<AgentTurn, TurnAttachment[]>();
+/** The stored files a turn holds: what the owner sent with it, and what the member delivered in it (its media messages). */
+function turnFiles(turn: AgentTurn): TurnAttachment[] {
+  let files = filesOfTurn.get(turn);
+  if (!files) {
+    files = (turn.attachments ?? []).filter(file => typeof file.id === "string" && STORED_FILE.test(file.id) && typeof file.name === "string");
+    for (const message of turn.messages ?? []) {
+      if (message.kind !== "media") continue;
+      try {
+        const file = JSON.parse(message.text)?.attachment as TurnAttachment | undefined;
+        if (file && typeof file.id === "string" && STORED_FILE.test(file.id) && typeof file.name === "string") files.push(file);
+      } catch { /* Not a delivered file. */ }
+    }
+    filesOfTurn.set(turn, files);
+  }
+  return files;
+}
+
+/** The files of a conversation by stored id: an `attachment:<id>` link opens one of these and nothing else (R-MSG-LINK-01). */
+export function knownFiles(turns: readonly AgentTurn[]): KnownFiles {
+  const known = new Map<string, TurnAttachment>();
+  for (const turn of turns) for (const file of turnFiles(turn)) known.set(file.id!, file);
+  return known;
+}
+
+/** What a turn's words say of the conversation's files, for the identity of its drawing. */
+export function fileLinks(turn: AgentTurn, files: KnownFiles | undefined): string {
+  if (!files?.size) return "";
+  return [turn.text, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.text)].map(text => fileLinkStamp(text, files)).filter(Boolean).join(";");
+}
+
 /** What the page keeps between draws. */
 export interface TimelineState {
   /** Turns whose steps the reader opened or closed: their choice beats the default. */
@@ -280,6 +312,8 @@ export interface TimelineState {
   expandedMessages: Set<string>;
   /** The owner's message open as an editor in its place, if any (message-edit.ts). */
   editing: OwnerEditing | null;
+  /** The files of the open conversation by stored id (`knownFiles`): what an `attachment:<id>` link in a reply may open. Left out, none. */
+  files?: KnownFiles;
 }
 
 export const emptyTimelineState = (): TimelineState => ({
@@ -650,7 +684,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   const retry = reply && last ? rerunActionHTML(turn, state, regenerate) : "";
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
-    withReactions(reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
+    withReactions(reply ? replyContentHTML(text, query, turn.status === "running", undefined, state.files) : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
     (reply && last ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
     // Its links are chips in its words, with no row of cards under it.
     messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;

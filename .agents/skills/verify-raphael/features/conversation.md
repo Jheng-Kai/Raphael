@@ -1,5 +1,22 @@
 # Conversation
 
+## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
+
+Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with
+`[已查核的部分紀錄](attachment:4e43d6d3fd9d47fab8b552f849c3c48b.md)` as written: a model links the file it delivered by its stored id
+(the core already reads that form, members/library.py), and the renderer (`message-content.ts`) only knew `http(s)` targets, so the
+whole link showed as text. Now `[words](attachment:<id>)` is the file's chip (the `fileChipHTML` of the team folder's files, inline in the
+words) that opens that file through `attachment-open` when the id is a file of the conversation (`knownFiles` in `timeline.ts`:
+what the owner attached, what a member delivered in a media message, over every turn, put in `TimelineState.files` by `lines()`);
+any other `attachment:` target is its words alone, and a renderer that is not given the files (a group, search, copy) shows
+the words alone. `message-attachment-link` mirrors the picture (the file's card, the routine line, the message with a known link and a
+link to a file no turn holds) and presses the chip: no raw target in the words, one chip with its words standing in the line, the
+file card above, and one `open_attachment` call with that id. Not covered: the native open of the file itself.
+
+```powershell
+npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
+```
+
 ## One member, one working slime (owner, 2026-11-14, R-SLIME-03)
 
 Owner, with a picture of a reply that queued research in the background (an empty slime under the reply, a task line with the

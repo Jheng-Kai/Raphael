@@ -106,6 +106,8 @@ import {
   latestProgress,
   presenceWant,
   standingPresence,
+  knownFiles,
+  fileLinks,
   livePresenceHTML,
   parseMediaPayload,
   requestRerun,
@@ -939,6 +941,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // One member shows at most one working slime in its conversation (R-SLIME-03): the tail of the thread (what the owner just sent,
     // or is saying) takes it as the newest thing there is, else the newest turn that is at work, a task line with its words before a
     // face that only waits.
+    // The files of this conversation are what a reply's `attachment:<id>` links may open (R-MSG-LINK-01).
+    state.files = knownFiles(chronological);
     const hearingHere = hearingBelongs();
     const tail = additions || sentHere.length > 0 || hearingHere;
     const standing = standingPresence(chronological, shape);
@@ -967,7 +971,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
-            turnLook.presenceTurnId === turn.id, live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
+            turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
             state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together }));

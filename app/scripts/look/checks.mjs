@@ -4752,6 +4752,23 @@ export function checkRendered(name, context = {}) {
     require(waiting && !waiting.querySelector('.live-presence'), "the turn of the waiting task draws no slime of its own");
     return { check: name, lines: lines.length, moving: moving.length };
   }
+  if (name === "message-attachment-link") {
+    // R-MSG-LINK-01: the link of a model's message to a file it delivered is that file's chip, never the raw `attachment:<id>` text.
+    const sample = window.__look.data.presenceSample;
+    const thread = document.querySelector('.mb-chat:not([hidden]) .thread');
+    const reply = [...thread.querySelectorAll('.chat-message[data-reply]')].find(node => node.textContent.includes(sample.attachmentWords));
+    require(visible(reply), "the routine's message is on screen");
+    require(!/attachment/i.test(reply.textContent) && !reply.textContent.includes(sample.attachmentId.slice(0, 8)) && !reply.textContent.includes(sample.attachmentOtherId.slice(0, 8)), `no raw target in the words: ${reply.textContent.slice(-80)}`);
+    const chips = [...reply.querySelectorAll('[data-attachment-link]')];
+    require(chips.length === 1 && visible(chips[0]) && chips[0].dataset.id === sample.attachmentId && chips[0].textContent.trim() === sample.attachmentWords, "the delivered file's link is one chip with its words");
+    const line = parseFloat(getComputedStyle(reply.querySelector('.message-text')).lineHeight) || 26, box = chips[0].getBoundingClientRect();
+    require(box.height <= line * 1.6, `the chip stands in the line of the words (${box.height} of ${line})`);
+    require(reply.textContent.includes(sample.attachmentOtherWords), "a file no turn holds keeps its words, with no chip");
+    const card = thread.querySelector(`.attachment-file[data-id="${sample.attachmentId}"]`);
+    require(visible(card), "the file's own card stays above the words");
+    require(JSON.stringify(window.__look.openedAttachments) === JSON.stringify([sample.attachmentId]), `pressing the chip opens that one file: ${JSON.stringify(window.__look.openedAttachments)}`);
+    return { check: name, chip: chips[0].textContent.trim() };
+  }
   if (name === "work-dots" || name === "pending-work") {
     const section = document.querySelector(`${name === "pending-work" ? '.tn.is-pending ' : ''}.live-presence`);
     require(visible(section), "one live avatar shows pending work");

@@ -651,6 +651,19 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: said, at_ms: start.getTime() }],
       pages: [{ id: "page-dashboard", title: data.pageDashboard.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageDashboard.title, kind: "report" }] });
   }
+  if (variant.attachmentLink) {
+    // The owner's picture of 2026-11-14 (R-MSG-LINK-01): a routine's message that ends with a model's markdown link to the file it delivered
+    // in the same turn, `[words](attachment:<id>)`, and one to a file no turn of the conversation holds.
+    const sample = data.presenceSample;
+    const base = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11);
+    const at = data.now - 60000;
+    const said = `7 點同步未完成：無法讀取 Windows 本機與指定報告路徑，因此修改 0 張卡；[${sample.attachmentWords}](attachment:${sample.attachmentId})，另見[${sample.attachmentOtherWords}](attachment:${sample.attachmentOtherId})`;
+    data.turns.push({ ...structuredClone(base), id: 806, created_at_ms: at, session_id: "routine-attachment-link", source: "routine", route: "routine", question: "Notion 專案進度同步與排期（07:00 完整盤點）",
+      text: said, status: "done", steps: [], attachments: [], task: null,
+      routine: { id: 5, member_id: 1, title: "Notion 專案進度同步與排期（07:00 完整盤點）", prompt: "同步專案進度。", schedule: { kind: "daily", time: "07:00" }, enabled: true },
+      messages: [{ seq: 1, kind: "media", text: JSON.stringify({ attachment: { id: sample.attachmentId, name: sample.attachmentFile, mime: "text/markdown", size: 12288 } }), at_ms: at },
+        { seq: 2, kind: "reply", text: said, at_ms: at + 1 }] });
+  }
   if (variant.roomOwnerCard) {
     const kind = variant.roomOwnerCard;
     const base = kind === "connect" ? data.connectorTurns.gmail : kind === "secret" ? data.secretTurns.notion : kind === "mail" ? data.mailTurns.draft : data.turns.at(-1);
@@ -2182,6 +2195,7 @@ export function installMock(fixture, config = {}, target = window) {
         state.urls.push(args.url); return;
       }
       if (command === "open_team_file") { state.openedTeamFile = args.path; return; }
+      if (command === "open_attachment") { (state.openedAttachments ??= []).push(args.id); return; }
       if (command === "open_library_file") { state.openedLibraryFile = { member_id: args.memberId, id: args.id }; return; }
       // A report saved as a file (report_save, which the core writes): in Downloads, as when no output folder is chosen.
       if (command === "report_save") return { place: "downloads", folder: "Downloads" };
