@@ -42,9 +42,6 @@ HISTORY = 64
 # A call that failed with the same arguments, or a tool that failed in a row.
 EXACT_NOTE_AT = 2
 SAME_TOOL_NOTE_AT = 3
-# One tool that fails with the same words of an error, in a row (whatever it was called with): a task nobody is in ends at
-# the third. A turn with the owner in it gets the notes above, which already say so (R-TOOL-02).
-SAME_ERROR_STOP_AT = 3
 # What ends a task nobody is in.
 REPEAT_STOP_AT = 5
 EXACT_STOP_AT = 5
@@ -73,8 +70,6 @@ class Verdict:
 
     note: str = ""
     halt: bool = False
-    # Why a task is to end: "same_error" (one tool, the same error, in a row) or "repeat" (the other loops).
-    why: str = ""
 
 
 def _base(name: str) -> str:
@@ -123,8 +118,6 @@ class ToolGuardrails:
         self._changed: dict[tuple[str, str], bool] = {}  # a failed call -> something changed since
         self._same: dict[str, int] = {}  # a tool -> its failures in a row
         self._last: tuple[tuple[str, str], str] | None = None
-        self._error: tuple[str, str] | None = None  # the last call's tool and the digest of its error, when it failed
-        self._error_run = 0
         self._run = 0
         self._history: deque[tuple[tuple[str, str], str]] = deque(maxlen=HISTORY)
 
@@ -134,25 +127,10 @@ class ToolGuardrails:
             return Verdict()
         call = (name, _digest(canonical(arguments)))
         notes: list[str] = []
-        bad = failed(name, outcome)
-        halt = self._failures(name, call, bad, outcome.kind in THROTTLED, notes)
+        halt = self._failures(name, call, failed(name, outcome), outcome.kind in THROTTLED, notes)
         # A screen is not words: a call that returns one never makes a streak.
         halt = self._repeats(name, call, None if outcome.blocks else outcome.content or "", notes) or halt
-        same = self._same_error(name, outcome, bad)
-        return Verdict("\n\n".join(notes), (halt or same) and self._hard, "same_error" if same and self._hard else "repeat" if halt else "")
-
-    def _same_error(self, name: str, outcome, bad: bool) -> bool:
-        """Whether the tool has now failed with the same error as its last call, `SAME_ERROR_STOP_AT` times in a row. Any other
-        call, a call that went well, one the service asked to wait before repeating, and a tool whose failure is normal work
-        (`FAILURE_TOLERANT`) is not part of a run."""
-        text = (outcome.content or "").strip()
-        if not bad or not text or outcome.kind in THROTTLED or _base(name) in FAILURE_TOLERANT:
-            self._error, self._error_run = None, 0
-            return False
-        key = (name, _digest(text[:2000]))
-        self._error_run = self._error_run + 1 if key == self._error else 1
-        self._error = key
-        return self._error_run >= SAME_ERROR_STOP_AT
+        return Verdict("\n\n".join(notes), halt and self._hard)
 
     def _failures(self, name: str, call, bad: bool, throttled: bool, notes: list[str]) -> bool:
         if not bad:

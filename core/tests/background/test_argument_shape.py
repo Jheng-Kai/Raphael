@@ -74,21 +74,49 @@ async def test_a_server_that_refuses_the_arguments_is_told_to_the_model_with_the
     assert json.dumps(rig.steps()[0].__dict__).find("validation error") < 0, "a step keeps the kind, never the words"
 
 
-async def test_a_background_task_whose_tool_fails_the_same_way_three_times_ends_and_says_which_tool(make_rig):
-    """R-TOOL-02: the task is ended by the loop that runs it, and its report names the tool in the owner's language."""
-    from raphael_core.agent.persona import phrase
-    from raphael_core.ui_languages import LANGUAGES
 
-    from .conftest import turn, until, use
+async def test_the_same_call_that_failed_twice_with_the_same_error_is_not_made_again_and_the_run_goes_on(rig):  # noqa: F811
+    """R-TOOL-02: it is told why, what shape fits and to find another way; nothing ends the run but its own budget."""
+    await rig.plugins.connect(look="T0", broken="T0")
+    rig.resnap()
+    fake_server.CALLS.clear()
+    first = await rig.tool("Notes__broken", {}, call_id="c1")
+    second = await rig.tool("Notes__broken", {}, call_id="c2")
+    assert first["kind"] == second["kind"] == "tool_error" and fake_server.CALLS == ["broken", "broken"]
+    third = await rig.tool("Notes__broken", {}, call_id="c3")
+    assert (third["ok"], third["kind"]) == (False, "repeat_failed") and fake_server.CALLS == ["broken", "broken"], "not sent"
+    assert "already failed 2 times with the same error" in third["instruction"]
+    assert "Try a different way: other arguments, another tool, or another source" in third["instruction"]
+    assert "It said: " in third["instruction"], "what it said is told"
+    shown = result_text("Notes__broken", ToolOutcome(False, third["kind"], third["content"], instruction=third["instruction"]))
+    assert "different way" in shown
+    # The same tool with other arguments, or another tool, is made; so is a call that goes well, and nothing was ended.
+    assert (await rig.tool("Notes__look", {"topic": "tea"}, call_id="c4"))["ok"]
+    again = await rig.tool("Notes__broken", {}, call_id="c5")
+    assert again["kind"] == "repeat_failed", "a call that went well elsewhere does not make the failed one new"
+    # A refused repeat is a call like any other for the budget, and is no refusal that fails the routine.
+    assert rig.run.tool_calls == 5 and rig.run.last_refused is None
+
+
+async def test_a_call_that_fails_in_the_shape_it_takes_is_told_the_shape_again_when_it_is_repeated(rig):  # noqa: F811
+    await rig.plugins.connect(look="T0")
+    rig.resnap()
+    for number in (1, 2):
+        wrapped = await rig.tool("Notes__look", {"data": {"topic": "x"}}, call_id=f"c{number}")
+        assert wrapped["kind"] == "bad_arguments"
+    third = await rig.tool("Notes__look", {"data": {"topic": "x"}}, call_id="c3")
+    assert third["kind"] == "repeat_failed" and "topic (string, required)" in third["instruction"]
+    assert (await rig.tool("Notes__look", {"topic": "x"}, call_id="c4"))["ok"]
+
+
+async def test_a_background_task_goes_on_after_a_repeated_failure_and_ends_only_by_its_own_report(make_rig):
+    from .conftest import report, turn, until, use
 
     rig = make_rig()
-    await rig.plugins.connect(broken="T0")
-    rig.client.replies = [turn("", [use("Notes__broken", {}, f"c{n}")]) for n in range(8)]
+    await rig.plugins.connect(look="T0", broken="T0")
+    rig.client.replies = [*[turn("", [use("Notes__broken", {}, f"c{n}")]) for n in range(4)],
+                          turn("", [use("Notes__look", {"topic": "tea"}, "c5")]), report("Found it another way.")]
     task = rig.submit(language="en")
-    await until(lambda: rig.task(task).state == "failed", timeout=20)
-    assert rig.task(task).reason == "tool_error_loop"
-    assert rig.task(task).report_text == phrase("en", "worker_tool_error_loop", tool="Notes__broken")
-    assert "Notes__broken failed three times in a row with the same error" in rig.task(task).report_text
-    assert len(rig.client.chat_calls) == 3, "no model call was made after the third failure"
-    for language in LANGUAGES:
-        assert "Notes__broken" in phrase(language, "worker_tool_error_loop", tool="Notes__broken")
+    await until(lambda: rig.task(task).state == "done", timeout=20)
+    assert rig.task(task).report_text == "Found it another way."
+    assert len(rig.client.chat_calls) == 6

@@ -6,9 +6,8 @@ from .ui_languages import LANGUAGES, normalize_language
 from ._ui_words_data import WORDS as _WORDS
 from ._card_words_data import CARD_WORDS
 from ._computer_words_data import COMPUTER_WORDS
-from ._reliability_words_data import RELIABILITY_WORDS
 
-WORDS = {**_WORDS, **CARD_WORDS, **COMPUTER_WORDS, **RELIABILITY_WORDS}
+WORDS = {**_WORDS, **CARD_WORDS, **COMPUTER_WORDS}
 NEW_LANGUAGES = tuple(language for language in LANGUAGES if language not in ("zh-TW", "en", "ja"))
 
 

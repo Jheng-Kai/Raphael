@@ -40,7 +40,6 @@ result.
 import asyncio
 import json
 import math
-import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -435,9 +434,7 @@ async def _run_task(
                         tool_failure(outcome.kind, outcome.content)  # noted for self_check
                     verdict = guardrails.after_call(tool, arguments, outcome)
                     if verdict.halt:
-                        # One tool, the same error again and again: the stop names the tool (R-TOOL-02); the other loops do not.
-                        named = re.sub(r"[^\w.:-]", "", tool)[:80]
-                        raise Stop("failed", f"tool_error_loop:{named}" if verdict.why == "same_error" and named else "tool_loop")
+                        raise Stop("failed", "tool_loop")
                     if verdict.note:  # after the result, outside the wrapper that marks it as data
                         content += "\n\n" + verdict.note
                     if outcome.replace_tools:

@@ -137,7 +137,6 @@ class Phrases:
     worker_disabled: str  # the worker was switched off for crashing too often
     worker_model: str  # the answer model takes no tools, so the worker cannot work
     worker_model_error: str  # the selected model failed without a more specific diagnosis
-    worker_tool_error_loop: str  # one tool failed three times in a row with the same error: the task stopped ({tool})
     worker_done: str  # the worker finished and its report said nothing
     worker_interrupted: str  # the worker stopped without a report: {steps}
     worker_cancelled: str  # the user stopped the task: {steps}
@@ -235,7 +234,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         worker_disabled="背景處理因反覆中斷而停用。重新啟動後可再使用。",
         worker_model="目前模型無法呼叫工具，請開啟成員的「大腦」改選支援工具的模型後再執行。",
         worker_model_error="目前模型發生錯誤，工作未完成。請檢查模型連線後再重試。",
-        worker_tool_error_loop="{tool} 連續三次以同樣的錯誤失敗，任務已停止，沒有再消耗額度。請確認 {tool} 需要的設定後再執行一次。",
         worker_done="任務完成。",
         worker_interrupted="任務中斷。已執行 {steps} 次工具呼叫。",
         worker_cancelled="任務已中止。已執行 {steps} 次工具呼叫。",
@@ -319,10 +317,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         ),
         worker_model="This model cannot call tools. Open the member's Brain, select a tool-capable model and run the task again.",
         worker_model_error="The selected model failed and the work is incomplete. Check its connection before trying again.",
-        worker_tool_error_loop=(
-            "{tool} failed three times in a row with the same error, so the task stopped instead of using up more of its allowance. "
-            "Check what {tool} needs, then run the task again."
-        ),
         worker_done="The task is complete.",
         worker_interrupted="The task was interrupted. Tool calls made: {steps}.",
         worker_cancelled="The task was stopped. Tool calls made: {steps}.",
@@ -403,7 +397,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         worker_disabled="中断が続いたため、バックグラウンド処理を停止しました。再起動で復旧します。",
         worker_model="このモデルはツールを呼び出せません。メンバーのブレインでツール対応モデルを選んで再実行してください。",
         worker_model_error="モデルでエラーが発生し、作業は未完了です。接続を確認して再試行してください。",
-        worker_tool_error_loop="{tool} が同じエラーで 3 回続けて失敗したため、これ以上利用枠を使わないようタスクを止めました。{tool} に必要なものを確認して、もう一度実行してください。",
         worker_done="タスクが完了しました。",
         worker_interrupted="タスクが中断されました。ツール呼び出し {steps} 回。",
         worker_cancelled="タスクを中止しました。ツール呼び出し {steps} 回。",

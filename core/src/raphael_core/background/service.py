@@ -2698,11 +2698,6 @@ class BackgroundService:
             self._conclude(task, run, "failed", negative, phrase(language, "no_answer"), None, "missing_terminal")
         elif status == "stopped" and kind == "failed":
             detail = reply.get("detail")
-            if isinstance(detail, str) and detail.startswith("tool_error_loop:"):
-                # One tool failed with the same error three times in a row and the task was ended by it: it says which (R-TOOL-02).
-                self._conclude(task, run, "failed", negative,
-                               phrase(language, "worker_tool_error_loop", tool=detail.partition(":")[2] or "?"), None, "tool_error_loop")
-                return
             if str(detail).startswith("cli_"):  # the CLI loop's own words already say what happened
                 self._conclude(task, run, "failed", negative, reply.get("final") or phrase(language, "error"), reply.get("diagnostic_detail"), detail)
                 return

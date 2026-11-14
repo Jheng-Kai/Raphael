@@ -2,11 +2,9 @@
 
 ## A connector's argument shape, and the end of a loop (2026-11-14)
 
-Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`, `tests/worker/test_loop.py`). A call of a
+Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a
 connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind
-`bad_arguments`), as is a server's own refusal of arguments. A background task or routine whose tool fails three times in a row
-with the same error ends with a report that names the tool (`worker_tool_error_loop`). No scene draws either; the report is the
-task's ordinary failed reply.
+`bad_arguments`), as is a server's own refusal of arguments. A connected app's call that has failed twice with the same error is not made a third time: the model is told what it said, the shape and to try another way, and the run goes on (only its step budget ends it). No scene draws either; the refusal is a tool result inside the run.
 
 ## Connect apps as Grok Bot's, one view (2026-11-12): read this first
 
