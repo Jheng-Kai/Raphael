@@ -1,5 +1,39 @@
 # Conversation
 
+## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
+
+Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with
+`[已查核的部分紀錄](attachment:4e43d6d3fd9d47fab8b552f849c3c48b.md)` as written: a model links the file it delivered by its stored id
+(the core already reads that form, members/library.py), and the renderer (`message-content.ts`) only knew `http(s)` targets, so the
+whole link showed as text. Now `[words](attachment:<id>)` is the file's chip (the `fileChipHTML` of the team folder's files, inline in the
+words) that opens that file through `attachment-open` when the id is a file of the conversation (`knownFiles` in `timeline.ts`:
+what the owner attached, what a member delivered in a media message, over every turn, put in `TimelineState.files` by `lines()`);
+any other `attachment:` target is its words alone, and a renderer that is not given the files (a group, search, copy) shows
+the words alone. `message-attachment-link` mirrors the picture (the file's card, the routine line, the message with a known link and a
+link to a file no turn holds) and presses the chip: no raw target in the words, one chip with its words standing in the line, the
+file card above, and one `open_attachment` call with that id. Not covered: the native open of the file itself.
+
+```powershell
+npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
+```
+
+## One member, one working slime (owner, 2026-11-14, R-SLIME-03)
+
+Owner, with a picture of a reply that queued research in the background (an empty slime under the reply, a task line with the
+slime and its progress words under that): 「這邊為什麼會有兩個史萊姆？理論上它不管怎麼樣都只會有一個史萊姆在運作才對，你可能確定一下」.
+A reply and the task it handed to the background are separate turns of one conversation, each of which drew its own working slime
+(`turnHTML`): the earlier one waited (a task or card waiting on the owner), so its face had no words, and the newer task line worked.
+`standingPresence` (timeline.ts) now decides for the whole thread, in `lines()` of `pages/agent.ts`: the newest turn that works
+stands (a task line with progress words wins over a face that only waits), every other turn draws none (`TurnLook.presenceTurnId`),
+and what the owner has just sent or is saying is newer than all of them and takes the slime under the newest bubble, with the working
+turn's words. `slime-one-working` mirrors the picture (a reply, a task that waits, a task that works) and counts the working slimes
+in the thread: exactly one, on the line that works with its words, none under the reply. Before the fix the same scene drew two
+(2 lines, 2 moving). A group's thinking lines are per member and per message and are not part of this rule.
+
+```powershell
+npm run look -- slime-one-working composer-stop-background composer-queued composer-send-while-working composer-stop-pending transcript-working running --theme both --width 1120,720,1920x1080
+```
+
 ## The owner edits a sent message in its own bubble (owner, 2026-11-14, R-UI-148)
 
 Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」.
