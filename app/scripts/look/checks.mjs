@@ -9517,34 +9517,74 @@ export function checkRendered(name, context = {}) {
       return { check: name, opens: watch.opens, pressedAt: pressed.hit, overScrim: pressed.overScrim, width: innerWidth };
     })();
   }
+  if (name === "owner-picture-bubble") {
+    // R-UI-149: the owner's message with a picture: the picture keeps its size and the bubble under it keeps the width it has without one.
+    return (async () => {
+    const line = [...document.querySelectorAll('.thread > .tn, .thread .tn')].find(item => item.querySelector('.me-files .attachment-picture img') && item.querySelector('.owner-message .bubble'));
+    require(line, 'a message with a picture and words');
+    const picture = line.querySelector('.me-files .attachment-grid'), bubble = line.querySelector('.owner-message .bubble'), image = line.querySelector('.me-files img');
+    const end = performance.now() + 4000;
+    while (!(image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
+    require(image.complete && image.naturalWidth > 0 && visible(image), 'the picture is drawn');
+    const field = bubble.querySelector('[data-edit-input]'), text = field ? field.value : bubble.querySelector('.message-text').textContent;
+    // The same words in a bubble with no picture, drawn in the same line and measured, is what the bubble's width must be.
+    const reference = document.createElement('div');
+    reference.className = 'me'; reference.style.visibility = 'hidden';
+    reference.innerHTML = '<div class="chat-message owner-message"><div class="bubble"><div class="message-text"></div></div></div>';
+    reference.querySelector('.message-text').textContent = text;
+    // The message's actions stand beside its bubble and take their share of the column, with or without a picture: the same ones here.
+    const actions = bubble.closest('.owner-message').querySelector(':scope > .message-actions');
+    if (actions) reference.querySelector('.owner-message').prepend(actions.cloneNode(true));
+    line.querySelector('.me').after(reference);
+    const bare = reference.querySelector('.bubble').getBoundingClientRect().width;
+    reference.remove();
+    const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = field ? 2 : 1;
+    require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
+    require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
+    if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
+    if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
+    require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);
+    return { check: name, bubble: Math.round(b.width * 10) / 10, without: Math.round(bare * 10) / 10, picture: Math.round(p.width), editing: !!field, pending: line.classList.contains('is-pending') };
+    })();
+  }
+  if (name === "message-edit-before") {
+    // The sent message's bubble as it is: the editor must be this bubble, not another box.
+    const bubble = document.querySelector('.tn[data-id="8201"] .owner-message .bubble'), r = bubble.getBoundingClientRect(), style = getComputedStyle(bubble);
+    window.__look.beforeBubble = { rect: { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }, style: Object.fromEntries(["backgroundColor", "color", "borderRadius", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "fontFamily", "lineHeight", "fontWeight", "borderTopWidth", "boxShadow"].map(key => [key, style[key]])) };
+    return { check: name, width: Math.round(r.width) };
+  }
   if (name === "message-edit-open" || name === "message-edit-armed" || name === "message-edit-sent") {
-    // R-UI-148: the owner's message is edited in its own place; the composer is not touched and what is sent is the composer's own edit.
+    // R-UI-148: the owner's message is edited in its own bubble, in its place; the composer is not touched and what is sent is the composer's own edit.
     const turn = document.querySelector('.tn[data-id="8201"]'), composerField = document.querySelector('.cmp-input');
     require(composerField && composerField.value === '', 'the composer keeps its own (empty) draft: nothing of the message went into it');
     if (name === "message-edit-sent") {
       const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
       const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
       require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words && asks[0].memberId === 1, 'Enter asks once, with the edited words and the message it replaces, as the composer\'s edit did');
-      require(!document.querySelector('[data-edit-input], .msg-editor') && !document.querySelector('.tn[data-id="8201"]'), 'the editor is gone with the message it replaced');
+      require(!document.querySelector('[data-edit-input], [data-msg-editor]'), 'the editor is gone');
       const bubbles = [...document.querySelectorAll('.thread .owner-message .bubble')];
       require(bubbles.length === 1 && bubbles[0].querySelector('.message-text').textContent.trim() === words && visible(bubbles[0]), 'the edited message stands in its bubble, once');
-      require(!document.querySelector('.tn.is-pending'), 'nothing is left waiting beside it');
+      require(document.querySelectorAll('.tn[data-id="8201"]').length === 1 && !document.querySelector('.tn.is-pending'), 'it is the same message, in its place, and nothing is left waiting beside it');
       return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
     }
-    const field = turn.querySelector('[data-edit-input]'), box = turn.querySelector('.msg-editor'), me = turn.querySelector('.me');
-    require(visible(field) && visible(box), 'the bubble is an editor');
+    const field = turn.querySelector('[data-edit-input]'), message = turn.querySelector('.owner-message[data-msg-editor]'), bubble = field.closest('.bubble'), me = turn.querySelector('.me');
+    require(visible(field) && visible(bubble) && message && message.classList.contains('is-editing'), 'the message is open as an editor');
+    require(!turn.querySelector('.msg-editor') && !bubble.querySelector('.btn'), 'the bubble is not wrapped in another box and holds no button');
     require(document.activeElement === field && (name === "message-edit-armed" || field.selectionStart === field.value.length && field.selectionEnd === field.value.length), 'the field has the focus, the caret after its words');
-    require(!turn.querySelector('.owner-message .bubble') && !turn.querySelector('.owner-message .message-actions'), 'the editor takes the bubble\'s place: no bubble and no actions beside it');
-    const b = box.getBoundingClientRect(), m = me.getBoundingClientRect();
-    require(Math.abs(b.right - m.right) <= 1, `the editor ends where the bubble ended (${Math.round(b.right)} vs ${Math.round(m.right)})`);
-    require(b.width <= m.width && b.width >= Math.min(m.width * .6, 300), `the editor is as wide as the bubble's column (${Math.round(b.width)} of ${Math.round(m.width)})`);
+    require(!turn.querySelector('.owner-message .message-actions:not([inert])') && [...turn.querySelectorAll('.owner-message .message-actions')].every(held => getComputedStyle(held).visibility === 'hidden'), 'no action can be pressed beside the bubble while it is edited (its room is held)');
+    const before = window.__look.beforeBubble, b = bubble.getBoundingClientRect(), style = getComputedStyle(bubble), m = me.getBoundingClientRect();
+    require(before, 'the sent bubble was measured before it opened');
+    for (const [key, value] of Object.entries(before.style)) require(style[key] === value, `the editor is the bubble's own: ${key} is ${style[key]}, it was ${value}`);
+    require(Math.abs(b.right - before.rect.right) <= 1 && Math.abs(b.top - before.rect.top) <= 1, `the bubble stays where it stood (right ${Math.round(b.right)} vs ${Math.round(before.rect.right)}, top ${Math.round(b.top)} vs ${Math.round(before.rect.top)})`);
+    require(b.right <= m.right + 1, 'the bubble ends inside its column');
+    if (name === "message-edit-open" && field.value.length < 40) require(Math.abs(b.width - before.rect.width) <= 2 && Math.abs(b.height - before.rect.height) <= 2, `a short message keeps its bubble's size (${Math.round(b.width)}x${Math.round(b.height)} vs ${Math.round(before.rect.width)}x${Math.round(before.rect.height)})`);
     require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
-    const buttons = [...box.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
+    const under = turn.querySelector('.msg-editor-under'), buttons = [...under.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
     require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, 'Cancel and, last, the primary Send, ready');
-    const [cancel, send] = buttons.map(button => button.getBoundingClientRect());
+    const [cancel, send] = buttons.map(button => button.getBoundingClientRect()), u = under.getBoundingClientRect();
     require(cancel.right <= send.left && Math.abs(cancel.height - send.height) < .5 && Math.abs(send.height - 30) < .5, `Cancel and Send are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
-    const pad = parseFloat(getComputedStyle(box).paddingRight);
-    require(Math.abs(send.right - (b.right - 1 - pad)) <= 1.5, 'Send stands at the right edge of the editor');
+    const box = getComputedStyle(under);
+    require(Math.abs(send.right - b.right) <= 1.5 && cancel.top >= b.bottom - 1 && box.borderTopWidth === '0px' && /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(box.backgroundColor), `Send ends at the bubble's right edge and under it, in no box (${Math.round(send.right)} vs ${Math.round(b.right)})`);
     require(!document.querySelector('.tn.is-pending'), 'nothing was sent');
     if (name === "message-edit-armed") {
       const armed = buttons[0];
@@ -9552,7 +9592,23 @@ export function checkRendered(name, context = {}) {
     } else {
       require(!buttons[0].dataset.cancelArmed, 'Cancel is not armed');
     }
-    return { check: name, editor: Math.round(b.width), height: Math.round(b.height), words: field.value.length };
+    return { check: name, bubble: `${Math.round(b.width)}x${Math.round(b.height)}`, was: `${Math.round(before.rect.width)}x${Math.round(before.rect.height)}`, words: field.value.length, underTop: Math.round(u.top) };
+  }
+  if (name === "message-edit-pending" || name === "message-edit-written" || name === "message-edit-answered") {
+    // R-UI-148: an edit stands where its message stood (the thread has routine turns after it), on its way, written and answered; never at the end, never twice.
+    const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
+    const lines = [...document.querySelectorAll('.thread > .tn')].map(line => line.classList.contains('is-pending') ? 'pending' : line.dataset.id);
+    const mine = [...document.querySelectorAll('.thread .owner-message .message-text')].filter(node => node.textContent.trim() === words);
+    require(mine.length === 1 && visible(mine[0]), `the edited words stand once in the thread (${mine.length}): ${lines.join(',')}`);
+    require(lines.length === 3 && lines[1] === '8203' && lines[2] === '8204' && lines[0] === (name === "message-edit-pending" ? 'pending' : '8201'), `the edit stands first, before the 07:00 and 08:00 routine turns that came after its message: ${lines.join(',')}`);
+    const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+    require(asks.length === 1 && asks[0].replaceTurnId === 8201, 'one edit was sent, naming the message it replaces');
+    require(!document.querySelector('[data-edit-input]'), 'no editor is left open');
+    const line = document.querySelector('.thread > .tn'), bubble = mine[0].closest('.bubble').getBoundingClientRect(), later = document.querySelector('.tn[data-id="8203"]').getBoundingClientRect();
+    require(bubble.bottom <= later.top, 'the edit is above the routine turns on screen');
+    if (name === "message-edit-written") require(line.dataset.status === 'running' && !document.querySelector('.is-pending'), 'the member is answering the written message: nothing waits beside it');
+    if (name === "message-edit-answered") require(line.dataset.status === 'done' && line.textContent.includes('照新的說法整理好了') && !document.querySelector('.is-pending'), 'the answer stands under the edited message, above the routine turns');
+    return { check: name, order: lines.join(',') };
   }
   throw new Error(`Unknown rendered check: ${name}`);
 }
