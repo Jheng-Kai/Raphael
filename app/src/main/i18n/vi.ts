@@ -1942,7 +1942,6 @@ export const vi = {
   "rooms.blockedStalled": "Quá lâu không có tiến triển",
   "rooms.blockedTooLong": "Quá nhiều nội dung để đọc một lần",
   "overview.used": "Đã dùng {p0}%",
-  "account.resets": "Đặt lại {p0}",
   "account.reset": "Đã đặt lại",
   "account.unreadable": "Không đọc được",
   "account.thisMonth": "Tháng này",

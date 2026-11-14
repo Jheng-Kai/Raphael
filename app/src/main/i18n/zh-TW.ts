@@ -1770,7 +1770,6 @@ export const zhTW = {
   "rooms.blockedStalled": "太久沒有進展",
   "rooms.blockedTooLong": "內容太長，一次讀不下",
   "overview.used": "已使用 {p0}%",
-  "account.resets": "{p0}重置",
   "account.reset": "已重置",
   "account.unreadable": "無法讀取",
   "account.thisMonth": "本月",

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
-import { accountMenuHTML, forgetUsageReadings, openAccountMenu, resetsIn, usageSubmenuHTML } from "./account-menu";
+import { accountMenuHTML, forgetUsageReadings, openAccountMenu, usageSubmenuHTML } from "./account-menu";
 import type { ChatGptStatus, Status } from "./types";
 import { closeMenu } from "./ui";
 import type { CliAllowances } from "./usage-analytics-types";
@@ -39,15 +39,6 @@ test("each subscription gives its window with the most used, in the reading's or
   expect(read({ brains: [stale.brains[0]!, allowances().brains[1]!] }).map(row => row.name)).toEqual(["Claude 每週", "Codex 每週"]);
 });
 
-test("the reset is said in the nearest whole unit, in the language of the window", () => {
-  expect(resetsIn((NOW + 6 * DAY) / 1000, NOW)).toBe("6 天後重置");
-  expect(resetsIn((NOW + 5 * 3_600_000) / 1000, NOW)).toBe("5 小時後重置");
-  expect(resetsIn((NOW + 20 * 60_000) / 1000, NOW)).toBe("20 分鐘後重置");
-  expect(resetsIn((NOW - 1000) / 1000, NOW)).toBe("1 分鐘後重置");
-  setLocale("en");
-  expect(resetsIn((NOW + 6 * DAY) / 1000, NOW)).toBe("Resets in 6 days");
-});
-
 test("the rows are 用量 with a chevron and no number, 聽寫, 行事曆, a hairline and 設定, and with no window known 用量 has no chevron and no submenu", () => {
   const known = document.createElement("div");
   known.innerHTML = accountMenuHTML([block({}), block({ id: "claude", name: "Claude 每週", used: 97, value: "已使用 97%" })]);
@@ -67,7 +58,7 @@ test("the rows are 用量 with a chevron and no number, 聽寫, 行事曆, a hai
   expect(icons.every(Boolean) && new Set(icons).size).toBe(4);
 });
 
-test("the submenu has a block for each provider with its words, number and reset, then 管理用量", () => {
+test("the submenu has a block for each provider with its words and number, no reset time, then 管理用量", () => {
   const sub = document.createElement("div");
   sub.innerHTML = usageSubmenuHTML([
     block({ id: "claude", name: "Claude 每週", used: 97, value: "已使用 97%", resetsAt: (NOW + 3 * DAY) / 1000 }),
@@ -75,11 +66,12 @@ test("the submenu has a block for each provider with its words, number and reset
     block({ id: "gemini", name: "Antigravity", state: "unreadable", used: undefined, value: "無法讀取" }),
     block({ id: "claude", name: "Claude 5 小時", state: "reset", used: undefined, value: "已重置" }),
     block({ id: "openrouter", name: "OpenRouter 本月", state: "spend", used: undefined, value: "US$3.21", detail: "US$16.79 剩餘" }),
-  ], NOW);
+  ]);
   const blocks = [...sub.querySelectorAll(".account-window")];
   expect(blocks.map(row => row.querySelector(".account-window-name")!.textContent)).toEqual(["Claude 每週", "Codex 5 小時", "Antigravity", "Claude 5 小時", "OpenRouter 本月"]);
   expect(blocks.map(row => row.querySelector(".account-window-used")!.textContent)).toEqual(["已使用 97%", "已使用 24%", "無法讀取", "已重置", "US$3.21"]);
-  expect(blocks.map(row => row.querySelector(".account-window-reset")?.textContent ?? null)).toEqual(["3 天後重置", "5 小時後重置", null, null, "US$16.79 剩餘"]);
+  expect(blocks.map(row => row.querySelector(".account-window-reset")?.textContent ?? null)).toEqual([null, null, null, null, "US$16.79 剩餘"]);
+  expect(blocks.slice(0, 2).map(row => row.textContent)).toEqual(["Claude 每週已使用 97%", "Codex 5 小時已使用 24%"]);
   expect(blocks.map(row => (row as HTMLElement).dataset.state)).toEqual(["percent", "percent", "unreadable", "reset", "spend"]);
   expect(sub.querySelector('[data-account="manage"] .mt')!.textContent).toBe("管理用量");
   expect(sub.querySelector(".menu-sep")!.nextElementSibling).toBe(sub.querySelector('[data-account="manage"]'));

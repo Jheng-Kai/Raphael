@@ -1942,7 +1942,6 @@ export const ru = {
   "rooms.blockedStalled": "Слишком долго без прогресса",
   "rooms.blockedTooLong": "Слишком много текста за раз",
   "overview.used": "Использовано {p0}%",
-  "account.resets": "Сброс {p0}",
   "account.reset": "Сброшено",
   "account.unreadable": "Не удаётся прочитать",
   "account.thisMonth": "В этом месяце",

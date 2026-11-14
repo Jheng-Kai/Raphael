@@ -1942,7 +1942,6 @@ export const ptBR = {
   "rooms.blockedStalled": "Tempo demais sem progresso",
   "rooms.blockedTooLong": "Texto demais de uma vez",
   "overview.used": "Usado {p0}%",
-  "account.resets": "Redefine {p0}",
   "account.reset": "Redefinida",
   "account.unreadable": "Não é possível ler",
   "account.thisMonth": "Este mês",

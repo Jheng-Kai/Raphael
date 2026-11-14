@@ -1942,7 +1942,6 @@ export const id = {
   "rooms.blockedStalled": "Terlalu lama tanpa kemajuan",
   "rooms.blockedTooLong": "Terlalu banyak teks sekaligus",
   "overview.used": "Terpakai {p0}%",
-  "account.resets": "Reset {p0}",
   "account.reset": "Sudah direset",
   "account.unreadable": "Tidak dapat dibaca",
   "account.thisMonth": "Bulan ini",

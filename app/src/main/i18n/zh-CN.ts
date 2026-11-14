@@ -1942,7 +1942,6 @@ export const zhCN = {
   "rooms.blockedStalled": "太久没有进展",
   "rooms.blockedTooLong": "内容太长，一次读不下",
   "overview.used": "已使用 {p0}%",
-  "account.resets": "{p0}重置",
   "account.reset": "已重置",
   "account.unreadable": "无法读取",
   "account.thisMonth": "本月",

@@ -1942,7 +1942,6 @@ export const ko = {
   "rooms.blockedStalled": "오랫동안 진행이 없었습니다",
   "rooms.blockedTooLong": "한 번에 읽기에는 내용이 너무 깁니다",
   "overview.used": "{p0}% 사용",
-  "account.resets": "{p0} 재설정",
   "account.reset": "재설정됨",
   "account.unreadable": "읽을 수 없음",
   "account.thisMonth": "이번 달",

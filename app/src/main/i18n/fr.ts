@@ -1942,7 +1942,6 @@ export const fr = {
   "rooms.blockedStalled": "Aucun progrès depuis trop longtemps",
   "rooms.blockedTooLong": "Trop de texte d’un coup",
   "overview.used": "{p0} % utilisé",
-  "account.resets": "Réinitialisation {p0}",
   "account.reset": "Réinitialisée",
   "account.unreadable": "Illisible",
   "account.thisMonth": "Ce mois-ci",
