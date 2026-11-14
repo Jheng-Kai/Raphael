@@ -332,7 +332,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
 
   // Dragging a member or a folder shows one line where it will land, between two rows: no box around a folder, and no see-through copy of the row over the others, only the row itself dimmed.
   let drag: { kind: "member" | "group"; id: number; source: HTMLElement } | null = null;
-  let landing: { group: HTMLElement; before: number | null } | null = null;
+  let landing: { group: HTMLElement; before: number | null; lineY: number } | null = null;
   const line = document.createElement("div");
   line.className = "mb-drop-line";
   line.hidden = true;
@@ -348,7 +348,8 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   function landingAt(target: Element, y: number): { group: HTMLElement; before: number | null; lineY: number; box: DOMRect } | null {
     if (!drag) return null;
     if (drag.kind === "member") {
-      const group = target.closest<HTMLElement>(".mb-sec[data-group]");
+      // Not the hidden folder: a member is hidden by its menu, and no folder of that name takes a drop.
+      const group = target.closest<HTMLElement>(".mb-sec[data-group]:not(.mb-hidden)");
       if (!group) return null;
       const rows = [...group.querySelectorAll<HTMLElement>("[data-member-item]")].filter(row => Number(row.dataset.memberItem) !== drag!.id && row.getBoundingClientRect().height > 0);
       const box = group.getBoundingClientRect();
@@ -384,7 +385,9 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     const next = landingAt(event.target as Element, event.clientY);
     if (!next) { clearDrop(); return; }
     event.preventDefault();
-    landing = { group: next.group, before: next.before };
+    // The browser repeats dragover while the pointer rests: the line is written only when the row would land somewhere else.
+    if (landing && !line.hidden && landing.group === next.group && landing.before === next.before && landing.lineY === next.lineY) return;
+    landing = { group: next.group, before: next.before, lineY: next.lineY };
     showLine(next.lineY, next.box);
   });
   const endDrag = (): void => { drag?.source.classList.remove("is-dragged"); drag = null; clearDrop(); };
