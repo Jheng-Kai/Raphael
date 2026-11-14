@@ -193,6 +193,8 @@ for line in sys.stdin:
     assert overrides["mcp_servers.raphael.omit_tools_from"] == '["deferred", "code_mode"]'
     assert overrides["mcp_servers.raphael.required"] == "true"
     assert overrides["mcp_servers.raphael.startup_readiness"] == '"catalog"'
+    # Codex's default is 60 s: a call of ours that takes longer would be given up while it still runs.
+    assert overrides["mcp_servers.raphael.tool_timeout_sec"] == "7200"
     assert overrides["project_doc_max_bytes"] == "0"
     assert overrides["skills.include_instructions"] == "false"
     assert overrides["features.skip_host_skill_discovery"] == "true"
@@ -215,7 +217,7 @@ for line in sys.stdin:
         "cli_auth_credentials_store",
         "mcp_servers.raphael.omit_tools_from", "mcp_servers.raphael.url",
         "mcp_servers.raphael.bearer_token_env_var",
-        "mcp_servers.raphael.required", "mcp_servers.raphael.startup_readiness",
+        "mcp_servers.raphael.required", "mcp_servers.raphael.startup_readiness", "mcp_servers.raphael.tool_timeout_sec",
     }
     assert result["auth"]["tokens"] == {"id_token": "synthetic-id", "access_token": "synthetic-access",
                                         "refresh_token": "", "account_id": "account"}
@@ -357,6 +359,7 @@ def send(value):
 assert all(key not in os.environ for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"))
 if name == "claude":
     assert sys.argv[sys.argv.index("--setting-sources") + 1] == ""
+    assert os.environ["MCP_TOOL_TIMEOUT"] == "7200000"
     assert "--disable-slash-commands" in sys.argv
     assert "--resume" in sys.argv and "previous" in sys.argv
     assert sys.argv[sys.argv.index("--model")+1] == "chosen-model"
@@ -857,3 +860,9 @@ async def test_a_cli_brain_gives_way_to_the_owners_window(monkeypatch):
     with pytest.raises(OSError):
         await cli_process.Child(["sample"]).start()
     assert seen["creationflags"] & subprocess.BELOW_NORMAL_PRIORITY_CLASS
+
+
+def test_a_vendor_cli_waits_for_our_tools_as_long_as_the_loop_gives_a_call_in_flight():
+    from raphael_core.agent.cli.drivers import MCP_TOOL_S
+    from raphael_core.agent.cli.loop import CLI_TOOL_S
+    assert MCP_TOOL_S == CLI_TOOL_S

@@ -31,6 +31,10 @@ CODEX_SESSION_PREFIX = "raphael-codex-v1:"
 # stall_s) decides far sooner; this is for the rest, so that no read waits for ever. It is above the longest window the
 # loops give a call in flight (`CLI_TOOL_S`), since a CLI waiting for a tool of ours says nothing meanwhile.
 READ_LIMIT_S = 3 * 3600.0
+# How long a vendor CLI waits for one call to Raphael's MCP tools: the window the loops give a call in flight
+# (`loop.CLI_TOOL_S`). The vendors' own default is 60 s, and a picture that took 62 s was made and shown while Claude Code
+# had already told the member the tool timed out (owner, 2026-11-14), so the member said it had failed and drew it by hand.
+MCP_TOOL_S = 7200
 
 
 def toml_value(value) -> str:
@@ -64,6 +68,7 @@ CODEX_ISOLATION = {
     "mcp_servers.raphael.omit_tools_from": ["deferred", "code_mode"],
     "mcp_servers.raphael.required": True,
     "mcp_servers.raphael.startup_readiness": "catalog",
+    "mcp_servers.raphael.tool_timeout_sec": MCP_TOOL_S,
 }
 
 
@@ -214,6 +219,7 @@ class Driver:
                             "--include-partial-messages", "--append-system-prompt-file", prompt_file,
                             "--mcp-config", config, "--strict-mcp-config", "--tools", "Skill" if skill_paths else "",
                             "--allowedTools", ("Skill," if skill_paths else "") + ("mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*")]
+                environ["MCP_TOOL_TIMEOUT"] = str(MCP_TOOL_S * 1000)
                 if skill_paths:
                     command += ["--plugin-dir", str(plugin), "--settings", '{"disableAllHooks":true}']
                 else:
@@ -254,6 +260,7 @@ class Driver:
                     overrides.update({"mcp_servers.computer.url": computer_endpoint,
                         "mcp_servers.computer.bearer_token_env_var": "RAPHAEL_MCP_TOKEN",
                         "mcp_servers.computer.required": True, "mcp_servers.computer.startup_readiness": "catalog",
+                        "mcp_servers.computer.tool_timeout_sec": MCP_TOOL_S,
                         "mcp_servers.computer.omit_tools_from": ["deferred", "code_mode"]})
                 command += ["app-server", "--strict-config"]
                 for key, value in overrides.items():

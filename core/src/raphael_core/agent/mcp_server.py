@@ -19,6 +19,10 @@ class RaphaelMcp:
     def __init__(self, definitions, execute):
         self.definitions, self.execute = definitions, execute
         self.token = secrets.token_urlsafe(32)
+        # A request's id is only its endpoint's own count, and /mcp and /computer both count from 1 (as does a CLI that
+        # started again in the same turn): a call is recorded under this server's, the endpoint's and the request's ids,
+        # or one tool's record replaced another's (owner's data, 2026-11-14: a picture's result over a command's).
+        self._calls = secrets.token_hex(4)
         self.server = None
         self.url = ""
         self.computer_url = ""
@@ -132,7 +136,7 @@ class RaphaelMcp:
             if not isinstance(args, dict) or len(canonical(args)) > argument_limit(params["name"]):
                 return {"error": {"code": -32602, "message": "Invalid arguments"}}
             try:
-                result = await self.execute(str(packet["id"]), params["name"], args)
+                result = await self.execute(f"{'computer' if computer else 'raphael'}-{self._calls}-{packet['id']}", params["name"], args)
             except Exception as exc:
                 from ..failures import classify
                 failure = classify(exc)
