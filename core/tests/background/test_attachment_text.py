@@ -32,7 +32,7 @@ def test_worker_prompt_gives_an_html_file_as_its_source_and_says_where_a_long_on
     where = "C:\\data\\attachments\\" + stored
     files = [checked("small.html", "text/html", page.encode()),
              replace(checked("long.html", "text/html", long.encode()), stored_id=stored)]
-    _, user = _prompts("en", "Copy the design", {}, [], RunLimits(), attachments=files, paths={stored: where})
+    _, user = _prompts("Copy the design", {}, [], RunLimits(), attachments=files, paths={stored: where})
     assert page in user and "bytes were cut" in user
     assert where + "." in user
 
