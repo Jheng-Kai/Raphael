@@ -57,7 +57,7 @@ PROFILE = {
     "position": {"type": "integer"}, "group_id": NULL_ID,
 }
 ROUTINE = {**{key: TEXT for key in ("title", "prompt")}, "enabled": BOOL,
-           "schedule": {"type": "object"}, "when": {"type": "object"}, "member_id": MEMBER_ID}
+           "schedule": {"type": "object"}, "when": {"type": "object"}, "precheck": {"type": "object"}, "member_id": MEMBER_ID}
 ROOM = {"name": TEXT, "member_ids": IDS, "default_responder": TEXT, "group_id": NULL_ID}
 
 

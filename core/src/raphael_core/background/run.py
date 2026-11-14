@@ -971,6 +971,7 @@ class TaskRun:
             "kind": result.kind,
             "content": text,
             "truncated": cut or result.truncated,
+            **({"instruction": result.text} if result.kind == "bad_arguments" and result.text else {}),
             **({"blocks": result.blocks} if result.blocks else {}),
             **({"billing": result.billing} if result.billing else {}),
         }

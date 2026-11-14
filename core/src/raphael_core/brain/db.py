@@ -2080,6 +2080,17 @@ PRAGMA user_version = 83;
 COMMIT;
 """
 
+# A routine's precheck (members/events.py `clean_precheck`): a read tool the scheduler calls without a model before a run, the
+# hash of what it returned last time, and when a run was last skipped because it had not changed.
+_MIGRATIONS[84] = """
+BEGIN;
+ALTER TABLE routines ADD COLUMN precheck_json TEXT;
+ALTER TABLE routines ADD COLUMN precheck_hash TEXT;
+ALTER TABLE routines ADD COLUMN last_skipped_ms INTEGER;
+PRAGMA user_version = 84;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

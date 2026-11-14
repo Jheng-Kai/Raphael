@@ -393,6 +393,9 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     if outcome.ok:
         data = {"content": outcome.text, "cut_short": outcome.truncated}
         return ToolResult(_label(call), True, data, untrusted=True, blocks=outcome.blocks)
+    if outcome.kind == "bad_arguments" and outcome.text:
+        # The core's own words for the shape that fits (agent/plugins.py `shape_problem`): shown whole, never cut as a service's are.
+        return ToolResult(_label(call), False, None, "bad_arguments", instruction=outcome.text)
     if outcome.text:
         failure = classify({"message": outcome.text, "kind": outcome.kind if outcome.kind != "tool_error" else None})
         return ToolResult(

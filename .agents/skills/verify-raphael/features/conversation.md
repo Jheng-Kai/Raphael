@@ -1,5 +1,14 @@
 # Conversation
 
+## A sign-in the CLI refused is mended once for every routine (2026-11-14, R-CLI-SIGNIN-03)
+
+Routine runs that would start on a CLI that has just refused its sign-in end unstarted with the same sentence and the same
+turn failure `cause`, so the one button of R-CLI-SIGNIN-02 stands under each of them (the newest answered reply of its
+conversation). A sign-in finished from that button under a task's reply (a routine's run) runs the failed task again through
+the core (`signinRetry` in `cli-signin.ts`) in place of asking the routine's title as a question. The scenes
+`chat-cli-expired` and `chat-cli-signin-flow` still stand for the button; the retry choice is covered by
+`cli-signin.test.ts`, and the native sign-in console and a real routine are unverified offline.
+
 ## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
 
 Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with

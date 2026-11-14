@@ -401,6 +401,34 @@ async def test_a_turn_with_the_owner_in_it_is_never_stopped_by_failures_however_
     assert outcome.status == "done" and outcome.tool_calls == 12
 
 
+async def test_a_task_nobody_is_in_stops_at_the_third_failure_of_a_tool_with_the_same_error_and_names_the_tool():
+    """R-TOOL-02: a ChatGPT brain sent a connector's arguments in a wrong wrapper five times, then went on for 143 steps."""
+    from raphael_core.worker.tool_guardrails import ToolGuardrails
+
+    same = lambda name, arguments: ToolOutcome(False, "tool_error", "Invalid arguments: the query has no `data` field")  # noqa: E731
+    wrapped = lambda count: [Turn("", [ask("Notes__look", {"data": {"topic": f"d{n}"}}, f"c{n}")]) for n in range(count)]  # noqa: E731
+    outcome = await run(FakeHost(wrapped(12), answer=same), guardrails=ToolGuardrails(hard_stop=True))
+    assert (outcome.status, outcome.kind, outcome.detail) == ("stopped", "failed", "tool_error_loop:Notes__look")
+    assert outcome.tool_calls == 3
+    # With the owner in the turn nothing ends it, as before.
+    outcome = await run(FakeHost([*wrapped(6), report()], answer=same))
+    assert outcome.status == "done" and outcome.tool_calls == 6
+
+
+async def test_the_same_error_is_a_run_only_when_it_comes_from_one_tool_in_a_row():
+    from raphael_core.worker.tool_guardrails import ToolGuardrails
+
+    def answer(name, arguments):
+        return ToolOutcome(True, None, "fine") if arguments.get("ok") else ToolOutcome(False, "tool_error", "same words")
+
+    # A call that went well, or another tool's, between them breaks the run.
+    turns = [Turn("", [ask("Notes__look", {"n": 1}, "c1")]), Turn("", [ask("Notes__look", {"n": 2}, "c2")]),
+             Turn("", [ask("Notes__look", {"ok": True}, "c3")]), Turn("", [ask("Notes__look", {"n": 4}, "c4")]),
+             Turn("", [ask("local_time", {"n": 5}, "c5")]), Turn("", [ask("Notes__look", {"n": 6}, "c6")]), report()]
+    outcome = await run(FakeHost(turns, answer=answer), guardrails=ToolGuardrails(hard_stop=True))
+    assert outcome.status == "done" and outcome.tool_calls == 6
+
+
 async def test_a_task_nobody_is_in_stops_when_it_repeats_the_same_call_with_the_same_result():
     from raphael_core.worker.tool_guardrails import ToolGuardrails
 
@@ -414,7 +442,8 @@ async def test_a_task_nobody_is_in_stops_when_it_repeats_the_same_call_with_the_
 async def test_a_task_nobody_is_in_stops_when_one_tool_fails_again_and_again_but_not_a_command():
     from raphael_core.worker.tool_guardrails import ToolGuardrails
 
-    failing = lambda name, arguments: ToolOutcome(False, "tool_error", "boom")  # noqa: E731
+    # Each failure says something of its own: the same words three times in a row are the other rule's (below).
+    failing = lambda name, arguments: ToolOutcome(False, "tool_error", f"boom {arguments['topic']}")  # noqa: E731
     turns = [Turn("", [ask("Notes__look", {"topic": f"t{n}"}, f"c{n}")]) for n in range(12)]
     outcome = await run(FakeHost(turns, answer=failing), guardrails=ToolGuardrails(hard_stop=True))
     assert (outcome.status, outcome.kind, outcome.detail) == ("stopped", "failed", "tool_loop")

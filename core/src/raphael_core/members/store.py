@@ -177,6 +177,11 @@ class Routine:
     poll_initialized: bool = False
     poll_failures: int = 0
     app_name: str = ""
+    # A read tool the scheduler calls before a run, without a model: {"app", "tool", "arguments"}. The run wakes the model only
+    # when what it returns differs from what it returned before (`precheck_hash`); `last_skipped_ms` is the last time it did not.
+    precheck: dict | None = None
+    precheck_hash: str | None = None
+    last_skipped_ms: int | None = None
 
 
 # --- checking what the owner wrote -----------------------------------------------------------------
@@ -353,7 +358,7 @@ _MEMBER_COLUMNS = (
 )
 _ROUTINE_COLUMNS = (
     "id, member_id, title, prompt, schedule, enabled, last_run_ms, next_run_ms, created_at_ms,"
-    "when_json,last_checked_ms,last_error,poll_initialized,poll_failures,app_name"
+    "when_json,last_checked_ms,last_error,poll_initialized,poll_failures,app_name,precheck_json,precheck_hash,last_skipped_ms"
 )
 # What `update_member` changes, and how each is checked.
 _MEMBER_FIELDS: dict[str, Callable[[Any], Any]] = {
@@ -378,6 +383,8 @@ def _routine(row: sqlite3.Row) -> Routine | None:
     data = dict(row)
     try:
         raw_when = data.pop("when_json")
+        raw_precheck = data.pop("precheck_json")
+        data["precheck"] = json.loads(raw_precheck) if raw_precheck else None
         data["when"] = json.loads(raw_when) if raw_when else None
         data["schedule"] = None if data["when"] else parse_schedule(json.loads(data["schedule"]))
     except (ValueError, ScheduleError):
@@ -697,22 +704,26 @@ class MemberStore:
         app_name: str = "",
         enabled: Any = True,
         next_run_ms: int | None,
+        precheck: Any = None,
     ) -> Routine:
         if not self.exists(member_id):
             raise MemberError("not_found", "there is no such member")
         if type(enabled) is not bool:
             raise MemberError("enabled", "enabled must be true or false")
-        from .events import clean_when
+        from .events import clean_precheck, clean_when
         if (schedule is None) == (when is None):
             raise MemberError("when", "Choose either a schedule or when")
         trigger = clean_when(when) if when is not None else None
+        check = clean_precheck(precheck) if precheck is not None else None
+        if check is not None and trigger is not None:
+            raise MemberError("precheck", "A precheck belongs to a routine with a schedule, not to an event")
         values = (clean_title(title), clean_prompt(prompt), clean_schedule(schedule) if trigger is None else None)
         if len(self.routines(member_id)) >= MAX_ROUTINES:
             raise MemberError("full", f"a member has at most {MAX_ROUTINES} routines")
         with self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO routines (member_id, title, prompt, schedule, enabled, next_run_ms,"
-                " created_at_ms,when_json,app_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " created_at_ms,when_json,app_name,precheck_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     member_id,
                     values[0],
@@ -723,6 +734,7 @@ class MemberStore:
                     self._now_ms(),
                     json.dumps(trigger) if trigger else None,
                     app_name if trigger else "",
+                    json.dumps(check) if check else None,
                 ),
             )
         routine = self.routine(int(cursor.lastrowid or 0))
@@ -740,6 +752,7 @@ class MemberStore:
         app_name: str | None = None,
         enabled: Any = None,
         next_run: Callable[[Schedule], int | None],
+        precheck: Any = None,
     ) -> Routine:
         """Change the fields given. A routine whose schedule changed, or that was switched on, is
         next due when `next_run` says for its schedule as it is now; one switched off is due never."""
@@ -751,9 +764,16 @@ class MemberStore:
             changes["title"] = clean_title(title)
         if prompt is not None:
             changes["prompt"] = clean_prompt(prompt)
-        from .events import clean_when
+        from .events import clean_precheck, clean_when
         if schedule is not None and when is not None:
             raise MemberError("when", "Choose either a schedule or when")
+        if precheck is not None:
+            # An empty object takes the precheck away; a new one starts from nothing seen, so its first run is made.
+            check = clean_precheck(precheck)
+            if check != routine.precheck:
+                changes.update(precheck_json=json.dumps(check) if check else None, precheck_hash=None)
+            if check is not None and (when is not None or routine.when is not None and schedule is None):
+                raise MemberError("precheck", "A precheck belongs to a routine with a schedule, not to an event")
         plan, trigger = routine.schedule, routine.when
         if when is not None:
             trigger = clean_when(when)
