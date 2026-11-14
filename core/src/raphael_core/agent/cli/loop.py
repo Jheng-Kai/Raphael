@@ -18,6 +18,7 @@ from ...worker.guards import wrap_untrusted
 from ...worker.tool_guardrails import ToolGuardrails
 from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
+from ..failure import AgentFailure
 from ..mcp_server import RaphaelMcp
 from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
 from ...brain.reasoning import split_notes, split_reasoning
@@ -199,8 +200,11 @@ class CliLoop:
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None, only=(),
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
                  context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
-                 acted=None, stall_s=None, tool_s=None):
+                 acted=None, stall_s=None, tool_s=None, updates=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
+        # When the owner was last shown a message of this run, where the owner reads it (agent/progress_updates.py): None
+        # for a run that owes no word while it works (a meeting's reply, a routine, a greeting, a memory pass).
+        self.updates = updates
         # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it. Told too before
         # a wait the loop chooses (`waiting`, in seconds), which is no stall.
         self.alive = alive
@@ -369,15 +373,24 @@ class CliLoop:
     def _show(self, reply, lines):
         self._publish_reply(replace(reply, messages=lines, text="\n\n".join(lines)))
         self._published.extend(lines)
+        if self.updates is not None:
+            self.updates.shown()
+
+    def _update_due(self):
+        """Whether the owner has heard nothing of this run for too long: what it says while working is then a message
+        (agent/progress_updates.py)."""
+        return self.updates is not None and self._publish_reply is not None and self.updates.due()
 
     def _release_held(self, *, answer):
         """What the model said since its last step. Followed by the end of its turn (`answer`), it stands as
         said. Followed by more work, it was said while working: only one short opening before the first step
         reaches the owner, as Grok Bot's 「可以，我先…」, and the rest is progress in the folded work (owner,
-        2026-11-09: 「不會太多不重要的思考文字 然後重點都有說到」)."""
+        2026-11-09: 「不會太多不重要的思考文字 然後重點都有說到」), unless the owner has heard nothing for a while
+        (`_update_due`, owner 2026-11-14: 「我可能會覺得它是不是當機了」): then it is a message too."""
         held, self._held = self._held, []
+        due = not answer and self._update_due()
         for reply, lines in held:
-            if answer:
+            if answer or due:
                 self._show(reply, lines)
                 continue
             for line in lines:
@@ -388,12 +401,21 @@ class CliLoop:
                     self.progress(text[:400])
 
     def _progress(self):
-        if said := self._buffer.strip():
+        said = self._buffer.strip()
+        if said:
             self.last_speech = said
-        if line := public_line(self._buffer, "auto"):
-            self.progress(line[:400])
+        # Plain speech between steps is progress, but when an update is owed it is the update (`_release_held`).
+        if not (said and self._update_due() and self._shown_as_update(said)):
+            if line := public_line(self._buffer, "auto"):
+                self.progress(line[:400])
         self._buffer = ""
         self._completed_buffer, self._separated = False, []
+
+    def _shown_as_update(self, said):
+        try:
+            return bool(self._publish(said, settled=True))
+        except AgentFailure:
+            return False
 
     def _mcp_tools(self):
         tools = getattr(self, 'refresh_tools', lambda: self.tools)()
@@ -460,6 +482,10 @@ class CliLoop:
             if said:
                 self.tool_messages.extend(said)
                 note = (note + "\n\n" if note else "") + OWNER_NOW + "\n" + "\n\n".join(message["content"] for message in said)
+            # The owner has heard nothing for a while: the result asks for a word (agent/progress_updates.py). Only the
+            # model reads it: the receipts and the tool conversation keep the result as it came.
+            if self._publish_reply is not None and self.updates is not None and (reminder := self.updates.reminder()):
+                note = (note + "\n\n" if note else "") + reminder
             return ToolOutcome(result.ok, result.kind, shown + ("\n\n" + note if note else ""), blocks=result.blocks,
                                tools=result.tools, replace_tools=result.replace_tools)
 

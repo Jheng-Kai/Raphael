@@ -175,6 +175,7 @@ from ..worker.guards import MAX_ARGUMENT_CHARS, argument_limit, canonical
 from .answers import Reply, Voice, build_user_message, owner_script, parse_reply, turn_text
 from .attribution import labelled_lines, owner_lines, owner_words, relayed_answer
 from .narration import NarratedLoop
+from .progress_updates import ProgressUpdates
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from ..members.store import MemberError
 from .actions import action_call
@@ -2660,6 +2661,9 @@ class AgentService:
                 thinking=lambda text: self._message(ask, "thinking", text),
                 reply=lambda value: self._publish_reply(ask, value),
                 execute=bridged_execute,
+                # The owner's own turn tells them how long work goes (agent/progress_updates.py); a colleague's question
+                # is answered to the colleague.
+                updates=ProgressUpdates(self._clock) if ask.scope == "private" and not ask.nested else None,
             )
             if brain_ref(settings.model):
                 common["execute"] = cli_execute
