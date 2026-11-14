@@ -2,13 +2,11 @@
 
 import asyncio
 import io
-import re
 import shutil
 import subprocess
 import tempfile
 import zipfile
 from collections.abc import Awaitable, Callable
-from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -27,97 +25,79 @@ TEXT_EXTENSIONS = {
 }
 
 
-class ReadableHTML(HTMLParser):
-    BLOCKS = {"p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "blockquote", "pre", "ul", "ol"}
-
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.hidden = 0
-        self.rp_depth = 0
-        self.ruby_readings: list[bool] = []
-        self.parts: list[str] = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag in ("script", "style", "template", "noscript"):
-            self.hidden += 1
-        if not self.hidden:
-            if tag == "rp":
-                self.rp_depth += 1
-            elif self.rp_depth:
-                return
-            elif tag == "ruby":
-                self.ruby_readings.append(False)
-            elif tag == "rt" and self.ruby_readings:
-                self._end_reading()
-                self.parts.append("（")
-                self.ruby_readings[-1] = True
-            elif tag in self.BLOCKS:
-                self.parts.append("\n\n")
-            elif tag == "br":
-                self.parts.append("\n")
-
-    def handle_endtag(self, tag):
-        if tag in ("script", "style", "template", "noscript"):
-            self.hidden = max(0, self.hidden - 1)
-        if not self.hidden:
-            if tag == "rp":
-                self.rp_depth = max(0, self.rp_depth - 1)
-            elif self.rp_depth:
-                return
-            elif tag == "rt":
-                self._end_reading()
-            elif tag == "ruby" and self.ruby_readings:
-                self._end_reading()
-                self.ruby_readings.pop()
-            elif tag in self.BLOCKS:
-                self.parts.append("\n\n")
-
-    def _end_reading(self):
-        if self.ruby_readings and self.ruby_readings[-1]:
-            self.parts.append("）")
-            self.ruby_readings[-1] = False
-
-    def handle_data(self, data):
-        if not self.hidden and not self.rp_depth:
-            self.parts.append(data)
-
-
-def decode(data: bytes) -> str | None:
+def decoded(data: bytes, *, partial: bool = False) -> tuple[str, str] | None:
+    """`data` as text and the codec that read it. `partial` says `data` is only the start of a longer file, so a
+    character the cut split in two is left out rather than taken for a bad encoding."""
     for encoding in ("utf-8-sig", "utf-16" if data.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8", "big5", "cp1252"):
         try:
-            text = data.decode(encoding)
+            try:
+                text = data.decode(encoding)
+            except UnicodeDecodeError as error:
+                if not (partial and error.end >= len(data) and error.start >= len(data) - 4):
+                    raise
+                text = data[:error.start].decode(encoding)
         except UnicodeError:
             continue
         if not text or sum(c < " " and c not in "\n\r\t" for c in text) / len(text) < 0.02:
-            return text
+            return text, encoding
     return None
 
 
-def read_text(attachment: Attachment, *, budget: int = TEXT_BUDGET) -> dict | None:
-    """Extract known text locally. Inline callers can override the ordinary reader's budget."""
+def decode(data: bytes) -> str | None:
+    found = decoded(data)
+    return found[0] if found else None
+
+
+def width(text: str, encoding: str, data: bytes) -> int:
+    """How many bytes of the file `data` the start `text` is, in the codec that read it."""
+    if encoding == "utf-8-sig":
+        return len(text.encode("utf-8")) + (3 if data.startswith(b"\xef\xbb\xbf") else 0)
+    if encoding == "utf-16":
+        return len(text.encode("utf-16-be" if data.startswith(b"\xfe\xff") else "utf-16-le")) + 2
+    return len(text.encode(encoding))
+
+
+def is_text(attachment: Attachment) -> bool:
+    """Whether the reader takes `attachment` for a text file, by its extension or its type."""
     if attachment.is_image or attachment.is_pdf:
+        return False
+    return (Path(attachment.name).suffix.lower() in TEXT_EXTENSIONS or attachment.mime.startswith("text/")
+            or attachment.mime in ("application/json", "application/xml", "application/xhtml+xml",
+                                   "application/yaml", "application/javascript"))
+
+
+def read_text(attachment: Attachment, *, budget: int = TEXT_BUDGET, where: str | None = None) -> dict | None:
+    """A text file as the owner wrote it. Its source is data the owner handed over: HTML keeps its style and
+    script, SVG and XML their markup, code its code, and nothing is turned into "readable" text in its place. A file
+    longer than `budget` characters gives its start, whole and in order, and says how many bytes were cut;
+    the note, which says where the whole file is (`where`, else its stored copy), is kept beside the text, never inside it."""
+    if not is_text(attachment):
         return None
-    extension = Path(attachment.name).suffix.lower()
-    known = extension in TEXT_EXTENSIONS or attachment.mime.startswith("text/") or attachment.mime in (
-        "application/json", "application/xml", "application/xhtml+xml", "application/yaml", "application/javascript",
-    )
-    if not known:
-        return None
-    data = attachment.data[:MAX_EXTRACT_BYTES]
-    text = decode(data)
-    facts = {"name": attachment.name, "mime": attachment.mime, "size": len(attachment.data)}
-    if text is None:
+    size = len(attachment.data)
+    # Four bytes hold any character, so this much always reaches the budget.
+    data = attachment.data[:min(size, MAX_EXTRACT_BYTES, budget * 4 + 4)]
+    facts = {"name": attachment.name, "mime": attachment.mime, "size": size}
+    found = decoded(data, partial=len(data) < size)
+    if found is None:
         return {**facts, "limitation": "The text encoding could not be decoded."}
-    if extension in (".html", ".htm") or attachment.mime in ("text/html", "application/xhtml+xml"):
-        html = ReadableHTML()
-        html.feed(text)
-        html.close()
-        text = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", "".join(html.parts)).strip()
-    text, cut = fit(text, budget)
-    truncated = cut or len(data) < len(attachment.data)
-    if len(data) < len(attachment.data):
-        text += "\n[Cut short: remaining file bytes exceed the extraction limit.]"
-    return {**facts, "text": text, "truncated": truncated}
+    text, encoding = found
+    shown = text[:budget]
+    cut = size - width(shown, encoding, data)
+    # A prefix that stopped short of the file's end is cut even when every character of it fits the budget.
+    result = {**facts, "encoding": "utf-8" if encoding == "utf-8-sig" else encoding, "text": shown, "truncated": cut > 0}
+    if cut > 0:
+        result.update(shown_bytes=size - cut, cut_bytes=cut)
+        result["note"] = cut_note(result, where or (str(attachment.source_path) if attachment.source_path else None))
+    return result
+
+
+def cut_note(found: dict, where: str | None = None) -> str:
+    """The words that go beside a file's start when the rest was cut: what was shown, what was left out, where the whole is."""
+    place = (f"The complete original file is stored on this computer at {where}." if where
+             else "The complete original file is kept on this computer as it was attached.")
+    return (f"[Cut short: the file has {found['size']} bytes; the first {found['shown_bytes']} are shown above exactly as "
+            f"written and the last {found['cut_bytes']} bytes were cut. {place} Read the rest from there with a file tool, "
+            "or ask the owner.]")
 
 
 def office_text(data: bytes | Path, extension: str) -> str:

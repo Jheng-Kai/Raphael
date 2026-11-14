@@ -45,11 +45,13 @@ async def test_a_chip_only_pasted_article_reaches_the_member_and_the_real_attach
 
 
 def assert_article(prompt):
-    assert "First paragraph." in prompt and "link text" in prompt
-    assert "SECRET_SCRIPT" not in prompt and "SECRET_STYLE" not in prompt
+    """The owner's HTML arrives as the owner wrote it: markup, style and script included, not a readable rendition."""
+    assert HTML.decode("utf-8") in prompt
+    assert "<style>SECRET_STYLE</style>" in prompt and "<script>SECRET_SCRIPT</script>" in prompt
+    assert '<p>Second <a href="https://example.test">link text</a>.</p>' in prompt
     assert '<tool_result untrusted="true"' in prompt
-    assert "MIDDLE_LONG_ARTICLE" in prompt and "東京大学（とうきょうだいがく）" in prompt
-    assert "cut_short=true" not in prompt
+    assert "MIDDLE_LONG_ARTICLE" in prompt and "<rt>とうきょうだいがく</rt>" in prompt
+    assert "cut_short=true" not in prompt and "Cut short" not in prompt
 
 
 @pytest.mark.parametrize("member_id", [0, 1])
@@ -96,9 +98,11 @@ else:
     assert not rig.history.steps([result["turn_id"]]).get(result["turn_id"])
 
 
-async def test_html_keeps_block_boundaries():
-    _, result = await read_file(checked("article.html", "text/html", HTML))
-    assert "Daily article\n\nFirst paragraph.\n\nSecond link text." in result["text"]
+async def test_html_is_read_as_its_source_not_as_a_readable_page():
+    kind, result = await read_file(checked("article.html", "text/html", HTML))
+    assert kind == "text" and result["text"] == HTML.decode("utf-8")[:len(result["text"])]
+    assert result["text"].startswith("<h1>Daily article</h1><p>First paragraph.</p>")
+    assert "<script>SECRET_SCRIPT</script><style>SECRET_STYLE</style>" in result["text"]
 
 
 async def test_local_text_reader_needs_no_service_or_model(conn):
@@ -119,27 +123,26 @@ def test_attached_instructions_cannot_close_the_untrusted_wrapper_and_size_is_bo
     prompt = text_context([checked("notes.txt", "text/plain", data)])
     assert prompt.count("</tool_result>") == 1
     assert "<question>" not in prompt
-    assert 'cut_short=true' in prompt and "characters left out" in prompt
+    assert "bytes were cut" in prompt and "cut_short=true" not in prompt
     assert len(prompt[prompt.index("<tool_result"):]) <= 24000
     assert len(prompt) <= 40000
 
 
-@pytest.mark.parametrize("body,expected", [
-    ("<ruby>東京大学<rp>(</rp><rt>とうきょうだいがく</rt><rp>)</rp></ruby>", "東京大学（とうきょうだいがく）"),
-    ("<ruby>東京<rt>とうきょう</rt>大学<rt>だいがく</rt></ruby>", "東京（とうきょう）大学（だいがく）"),
-    ("<ruby><rb>東京大学</rb><rt><span>とうきょうだいがく</span></rt></ruby>", "東京大学（とうきょうだいがく）"),
-    ("<ruby>東京<rp>DROP_RP</rp><rt>とうきょう</rt></ruby><ruby>大学<rt>だいがく</rt></ruby>", "東京（とうきょう）大学（だいがく）"),
+@pytest.mark.parametrize("body", [
+    "<ruby>東京大学<rp>(</rp><rt>とうきょうだいがく</rt><rp>)</rp></ruby>",
+    "<ruby>東京<rt>とうきょう</rt>大学<rt>だいがく</rt></ruby>",
+    "<ruby><rb>東京大学</rb><rt><span>とうきょうだいがく</span></rt></ruby>",
 ])
-async def test_html_ruby_keeps_readings_separate_and_drops_rp(body, expected):
+async def test_html_ruby_keeps_its_markup_and_readings_as_written(body):
     _, found = await read_file(checked("ruby.html", "text/html", body.encode()))
-    assert found["text"] == expected
-    assert expected in text_context([checked("ruby.html", "text/html", body.encode())])
+    assert found["text"] == body
+    assert body in text_context([checked("ruby.html", "text/html", body.encode())])
 
 
 def test_normal_article_exceeds_old_reader_budget_without_being_cut():
     article = "Article start. " + "A" * 16000 + " MIDDLE_ARTICLE " + "B" * 4000 + " Article end."
     prompt = text_context([checked("article.html", "text/html", f"<p>{article}</p>".encode())])
-    assert article in prompt
+    assert f"<p>{article}</p>" in prompt
     assert "cut_short=true" not in prompt and '"truncated": false' in prompt
     assert len(prompt) <= 24000
 
@@ -153,8 +156,9 @@ def test_each_inline_file_and_the_combined_message_have_separate_budgets():
     assert len(blocks[0]) > 23000
     for number, block in enumerate(blocks):
         assert len('<tool_result untrusted="true"' + block.rstrip()) <= 24000
-        assert f'START_{number}' in block and f'END_{number}' in block
-        assert "cut_short=true" in block and "characters left out" in block
+        # The start of the file, verbatim; the end is cut and the note says how much.
+        assert f'START_{number}' in block and f"END_{number}" not in block
+        assert "bytes were cut" in block and "cut_short=true" not in block
 
 
 def test_small_files_do_not_reduce_a_normal_articles_budget():
@@ -170,7 +174,8 @@ async def test_inline_budget_does_not_enlarge_tool_result_or_reader_budgets():
 
     article = "A" * 20000
     _, read = await read_file(checked("article.txt", "text/plain", article.encode()))
-    assert read["truncated"] and "Cut short" in read["text"]
+    assert read["truncated"] and read["text"] == article[:len(read["text"])] and read["cut_bytes"] == 20000 - len(read["text"])
+    assert "Cut short" in read["note"] and "bytes were cut" in read["note"]
     for tool in ("read_attachment", "web_read", "web_search"):
         shown = wrap_untrusted(tool, "A" * (MAX_RESULT_CHARS * 2), ok=True)
         assert len(shown) < MAX_RESULT_CHARS + 200 and "cut_short=true" in shown

@@ -21,6 +21,22 @@ def test_worker_prompt_names_earlier_files_with_the_shared_budget():
     assert '<tool_result untrusted="true"' in user
 
 
+def test_worker_prompt_gives_an_html_file_as_its_source_and_says_where_a_long_one_is_stored():
+    from dataclasses import replace
+    from raphael_core.background.service import _prompts
+    from raphael_core.background.run import RunLimits
+    from raphael_core.services.attachments import checked
+    page = "<style>.a{color:red}</style><script>go()</script>"
+    long = "<style>" + ".a{color:red}\n" * 4000 + "</style>"
+    stored = "0123456789abcdef0123456789abcdef.html"
+    where = "C:\\data\\attachments\\" + stored
+    files = [checked("small.html", "text/html", page.encode()),
+             replace(checked("long.html", "text/html", long.encode()), stored_id=stored)]
+    _, user = _prompts("en", "Copy the design", {}, [], RunLimits(), attachments=files, paths={stored: where})
+    assert page in user and "bytes were cut" in user
+    assert where + "." in user
+
+
 async def test_worker_reads_an_earlier_source_conversation_file_by_index(make_rig, conn, tmp_path):
     from raphael_core.agent.history import AgentHistory
     from raphael_core.services.attachment_store import AttachmentStore
@@ -62,7 +78,7 @@ async def test_room_html_reaches_the_speaker_without_a_tool_call(make_rig, conn,
     await until(lambda: bool(rig.client.chat_calls))
     await until(lambda: not rig.service._executing)
     prompt = rig.client.chat_calls[0]["messages"][1]["content"]
-    assert "Readable article body." in prompt and "SECRET_SCRIPT" not in prompt
+    assert "<h1>Room article</h1><p>Readable article body.</p><script>SECRET_SCRIPT</script>" in prompt
     assert '<tool_result untrusted="true"' in prompt
     messages = (await rig.rpc.call("rooms.messages", {"room_id": room["id"]}))["messages"]
     assert sent["message_id"] == messages[0]["id"]
