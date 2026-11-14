@@ -334,7 +334,7 @@ class RpcDriver:
             async def team_state():
                 roster = await self.app.call("members.list", {})
                 for member in roster["members"]:
-                    for field in ("waiting", "unread", "unread_from", "preview", "last_at", "activity", "activity_label"):
+                    for field in ("waiting", "unread", "unread_from", "unread_kind", "preview", "last_at", "activity", "activity_label"):
                         member.pop(field, None)
                 return roster
 

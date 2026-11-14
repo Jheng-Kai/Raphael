@@ -60,6 +60,9 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   // The status colours are read on a floating surface and on the control standing on it (a connected app's 「已連結」, an error under a field in a dialog).
   contrast.status = Object.fromEntries(["ok", "warn", "err"].map(name => [name, Object.fromEntries(["float", "dialog", "float-ctl"].map(surface => [surface, +ratio(palette[name], palette[surface]).toFixed(2)]))]));
   if (Object.values(contrast.status).some(on => Object.values(on).some(value => value < 4.5))) process.exitCode = 1;
+  // The lights of a sidebar row (sidebar-light.ts) are read on every surface a row stands on, selected, hovered and pressed too.
+  contrast.sidebarLights = Object.fromEntries(["wait", "err", "ok", "text"].map(name => [name, Math.min(...["side", "content", "panel", "hover", "pressed", "selected"].map(surface => +ratio(palette[name], palette[surface]).toFixed(2)))]));
+  if (Object.values(contrast.sidebarLights).some(value => value < 3)) process.exitCode = 1;
   contrast.sendIcon = Object.fromEntries(["panel", "hover", "pressed"].map(surface => [surface, +ratio(palette["accent-icon"], palette[surface]).toFixed(2)]));
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
   contrast.computerActive = Object.fromEntries(["side", "content", "hover", "pressed"].map(surface => [surface, +ratio(palette["computer-active"], palette[surface]).toFixed(2)]));

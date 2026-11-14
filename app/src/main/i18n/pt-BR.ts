@@ -1661,6 +1661,8 @@ export const ptBR = {
   "reminder.waiting": "{p0} está esperando você",
   "reminder.open": "Abrir",
   "members.unread": "Novas mensagens",
+  "members.lightDone": "Concluído",
+  "members.lightFailed": "Precisa de uma olhada",
   "members.pick": "Escolher membro",
   "members.panel": "Detalhes do membro",
   "members.close": "Fechar detalhes",

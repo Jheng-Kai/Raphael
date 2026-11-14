@@ -1661,6 +1661,8 @@ export const ru = {
   "reminder.waiting": "{p0} ждёт вас",
   "reminder.open": "Открыть",
   "members.unread": "Новые сообщения",
+  "members.lightDone": "Готово",
+  "members.lightFailed": "Нужно взглянуть",
   "members.pick": "Выбрать участника",
   "members.panel": "Сведения об участнике",
   "members.close": "Закрыть сведения",
