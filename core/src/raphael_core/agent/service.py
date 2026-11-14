@@ -3674,7 +3674,7 @@ class AgentService:
             else:
                 page = self.pages.store.update(page_id, args.get("html"), title, tool_input={})
         self.pages.changed(page)
-        # For the model alone: a plain fact, with nothing in it to ask or to say to the owner (R-PAGE-08).
+        # For the model alone: a plain fact, with nothing in it to ask or to say to the owner (R-PAGE-09).
         note = ("The report is in the conversation as a link card that opens over it. It needs no word from you about it."
                 if is_report(page) else "The page is in the conversation as a card. It needs no word from you about it.")
         return {"page_id": page["id"], "rev": page["rev"], "note": note}
@@ -3997,7 +3997,7 @@ class AgentService:
             drafts = self._drafts.store.shown_in([task.turn_id]).get(task.turn_id, [])
             card = {"kind": name, "id": drafts[-1].id}
         # A page shown is already a card in the thread: the work goes on without asking the owner to confirm that they can
-        # see it (R-PAGE-08), and no sentence meant for the model is ever the words of a card. A member that needs the owner's
+        # see it (R-PAGE-09), and no sentence meant for the model is ever the words of a card. A member that needs the owner's
         # choice asks with ask_owner, in its own words.
         elif name == "add_mcp_server" and ask.owner_card_ids:
             card = {"kind": name, "id": ask.owner_card_ids[0]}
