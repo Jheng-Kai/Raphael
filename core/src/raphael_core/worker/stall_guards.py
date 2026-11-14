@@ -33,11 +33,17 @@ LOOPED = (
 # Only the tail of a reply that announces the next step counts, so "I will" in the middle of a sentence never
 # does. A longer reply is an answer, not a dangling "let me".
 _MAX_CHARS = 400
+# A step announced with a verb of looking or doing counts too (R-PERSIST-04, owner, 2026-11-14: 「我先去看看今天的新聞。」
+# ended a turn with nothing done): "I'll first check", 「我先查」, 「先看一下」, 「接著打開」, 「まず確認します」.
+_STEP = r"(?:看|查|找|讀|读|開|开|打開|打开|搜|試|试|確認|确认|檢查|检查|讀取|读取|下載|下载|整理|處理|处理|做)"
 _INTENT = re.compile(
     r"(?:\blet me now\b|\bi(?:['’])?ll now\b|\bi will now\b|\bnow i(?:['’]ll| will)\b|\bnext[,:] i\b"
+    r"|\blet me (?:first |quickly )?(?:check|look|open|read|search|try|fetch|find|pull)\b"
+    r"|\bi(?:['’]ll| will) (?:first |go ahead and |quickly )?(?:check|look|open|read|search|try|fetch|find|pull)\b"
     r"|讓我(?:先|來|現在|接著|馬上|立刻)|我(?:現在|馬上|立刻|接著)(?:就)?(?:來|去|會|將|開始)"
     r"|接下來(?:我)?(?:會|將|要|來)|現在(?:就)?(?:來|開始)"
-    r"|(?:これから|次に)[^。！？\n]{0,40}(?:します|いたします|いきます|みます))"
+    rf"|我先(?:來|去)?{_STEP}|(?:^|[，,。！？\s])先(?:來|去)?{_STEP}|接著(?:我)?(?:會|將|要|來|去)?{_STEP}"
+    r"|(?:これから|次に|まず)[^。！？\n]{0,40}(?:します|いたします|いきます|みます))"
     r"[^.!?。！？\n]{0,100}[.:：…。]?\s*$",
     re.IGNORECASE,
 )

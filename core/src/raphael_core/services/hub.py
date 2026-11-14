@@ -90,6 +90,9 @@ READ_OPTIONS = (
     *(Option(row.id, bool(row.key_service), row.key_optional) for row in backends.READ if row.id != "firecrawl"),
 )
 PDF_OPTIONS = (Option("builtin"), Option("openrouter"))
+# A read that failed as a whole, which another reader may get past: not an address that is wrong, forbidden or too big.
+WHOLE_READ_FAILURES = frozenset(("timeout", "network", "http_error", "bad_response", "auth", "credits", "rate_limit",
+                                 "missing_secret", "redirects", "not_found"))
 
 # The capabilities that can be turned off, and the setting that holds the switch of each.
 CAPABILITIES = {
@@ -231,14 +234,39 @@ class ServiceHub:
         return service, found
 
     async def read(self, url: str) -> tuple[str, dict]:
-        """(the service, the page at `url`) with the reading service chosen. ServiceError."""
+        """(the service, the page at `url`) with the reading service chosen. When that reader fails as a whole (it timed
+        out, could not be reached, answered with an error or with nothing a page is made of), the page is read once more by
+        the next reader the owner set up (`backup_reader`), and the result says so (`reader_fallback`); the next read goes
+        to the chosen reader again (Hermes's rescue of a failed extract, R-PERSIST-06). A reader is a service: the model
+        is never switched. ServiceError of the first reader when both fail."""
         service = self.read_service()
+        try:
+            return service, await self._read_with(service, url)
+        except ServiceError as error:
+            backup = self.backup_reader(service) if error.kind in WHOLE_READ_FAILURES else None
+            if backup is None:
+                raise
+            try:
+                page = await self._read_with(backup, url)
+            except ServiceError:
+                raise error from None
+            return backup, {**page, "reader_fallback": {"chosen": service, "failed": error.kind}}
+
+    def backup_reader(self, service: str) -> str | None:
+        """The reader tried after `service` failed: the built-in one after a service, and after the built-in one the first
+        reading service whose key the owner stored. None when there is none: a URL goes to no service the owner did not
+        set up."""
+        if service != "builtin":
+            return "builtin"
+        return next((option.id for option in READ_OPTIONS
+                     if option.id != "builtin" and option.id in KEYED_SERVICES and self._keys.has(option.id)), None)
+
+    async def _read_with(self, service: str, url: str) -> dict:
         key = self._keys.get(service) if service in KEYED_SERVICES else None
-        page = await web.read(
+        return await web.read(
             service, url, http=self._client(), fetcher=self.fetcher, read_pdf=pdf.read_pdf, key=key,
             firecrawl_url=self._optional_text("firecrawl_url"),
         )
-        return service, page
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger

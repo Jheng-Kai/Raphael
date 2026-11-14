@@ -12,12 +12,15 @@ def unfinished_note(turn: Turn) -> str:
     """What stands for Raphael's words in a turn that ended without an answer: that it did not finish
     and why, and what it already did (`Turn.work`). The line it ended with is an apology or a refusal,
     not an answer, so it is only quoted as the reason of a failure."""
+    said = " ".join((turn.text or turn.prefix or "").split())[:WHY_CHARS]
     if turn.status == "denied":
         why = "the owner said no or stopped it"
     elif turn.status == "expired":
         why = "nobody answered it before the app closed or time ran out"
+    elif turn.stopped:
+        # An answer that gave up after a failed call (R-PERSIST-05): what failed then is no rule for now.
+        why = f"it stopped after calls that failed ({turn.stopped}) and said it could not go on. Other ways were not ruled out"
     else:
-        said = " ".join((turn.text or turn.prefix or "").split())[:WHY_CHARS]
         why = f'it failed ("{said}")' if said else "it failed"
     return f"[This request did not finish: {why}.{' ' + turn.work if turn.work else ''}]"
 

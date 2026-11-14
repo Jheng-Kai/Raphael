@@ -60,6 +60,13 @@ EXACT = (
     "<harness_note>{tool} has failed {count} times with the same arguments. This looks like a loop: read "
     "the error and change the approach instead of trying it unchanged.</harness_note>"
 )
+# Calls of different tools that failed one after another (R-PERSIST-04): web_read, then show_page, then a command is
+# the usual way a model gives up, and no one tool's count sees it. Hermes's words: keep using tools, diagnose first.
+STREAK_NOTE_AT = 3
+STREAK = (
+    "<harness_note>The last {count} calls failed ({tools}). Do not switch to text-only replies; keep using tools, "
+    "but diagnose first: read each error, then try other arguments, another source or another tool.</harness_note>"
+)
 
 _EXIT_CODE = re.compile(r'^\s*\{\s*"exit_code":\s*(-?\d+)')
 
@@ -103,7 +110,7 @@ def _diagnose(name: str, count: int) -> str:
     else:
         text += (
             "Then try different arguments, a narrower query or path, or another tool that can make progress. "
-            "If the blocker is outside your reach, report it plainly after one check instead of repeating "
+            "When no way within your reach is left, say exactly what blocks it instead of repeating "
             "the same failing path."
         )
     return f"<harness_note>{text}</harness_note>"
@@ -120,6 +127,7 @@ class ToolGuardrails:
         self._last: tuple[tuple[str, str], str] | None = None
         self._run = 0
         self._history: deque[tuple[tuple[str, str], str]] = deque(maxlen=HISTORY)
+        self._streak: list[str] = []  # the tools of the calls that failed one after another, of any tool
 
     def after_call(self, name: str, arguments, outcome) -> Verdict:
         """The note to put after the result of a call that was made, and whether the task must end."""
@@ -127,7 +135,9 @@ class ToolGuardrails:
             return Verdict()
         call = (name, _digest(canonical(arguments)))
         notes: list[str] = []
-        halt = self._failures(name, call, failed(name, outcome), outcome.kind in THROTTLED, notes)
+        bad = failed(name, outcome)
+        halt = self._failures(name, call, bad, outcome.kind in THROTTLED, notes)
+        self._across(name, bad, notes)
         # A screen is not words: a call that returns one never makes a streak.
         halt = self._repeats(name, call, None if outcome.blocks else outcome.content or "", notes) or halt
         return Verdict("\n\n".join(notes), halt and self._hard)
@@ -154,6 +164,17 @@ class ToolGuardrails:
         elif same >= SAME_TOOL_NOTE_AT:
             notes.append(_diagnose(name, same))
         return False
+
+    def _across(self, name: str, bad: bool, notes: list[str]) -> None:
+        """A note when calls of more than one tool have failed one after another, every STREAK_NOTE_AT of them, unless a
+        note of this call already says it. Never a reason to end a task: varied failures are diagnosis."""
+        if not bad:
+            self._streak.clear()
+            return
+        self._streak.append(name)
+        tools = list(dict.fromkeys(self._streak))
+        if not notes and len(tools) > 1 and len(self._streak) % STREAK_NOTE_AT == 0:
+            notes.append(STREAK.format(count=len(self._streak), tools=", ".join(tools[-STREAK_NOTE_AT * 2:])))
 
     def _repeats(self, name: str, call, result: str | None, notes: list[str]) -> bool:
         if result is None:

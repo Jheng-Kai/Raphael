@@ -77,3 +77,35 @@ A core-only unit: prompt words and one card line, no page, RPC or schema change;
 Offline: `core/tests/agent/test_member_behaviour.py`, `core/tests/agent/test_card_context.py`, `core/tests/background/test_routine_report.py`,
 and the default prompt budget (`npm run verify -- --contract`). Not covered offline, left to a live brain run: whether a given model, told
 all this, still refuses; that needs a paid run on the owner's own models.
+
+## A failure is information (R-PERSIST-01 through R-PERSIST-08, 2026-11-14)
+
+Owner: members give up too fast; like Hermes Agent, a member keeps trying the next plausible way and asks only for what only
+he can give. A core-only unit: harness words, the failure text, two notes, a reader fallback and a history projection. No
+page, RPC, schema or stored member data (routines, skills, instructions, memory) changes; every check is offline.
+
+- The rule lives once, in `agent/self_check.DOCTRINE` (part of the shared contract every prompt reads). The caps it replaced
+  were in `ABOUT_INDEX`, `DOCTRINE`, `failures.CORRECTIVE_NOTE`, `data_floor.WRITE_REFUSAL`, `tool_guardrails._diagnose`
+  and `persona._WORK_RULES`; `narration.NARRATION_RULES` lost "Only open a browser when the owner asks". The default prompt
+  test measures the budget (API / CLI: 15939 / 15204 before, 15929 / 15206 after, limits 16048 / 15212).
+- How a failure reads: `worker.loop.failure_text`, used by `result_text` (API turns, background API runs, a paused call's
+  answer) and by `agent/cli/loop.CliLoop._tool` (interactive and background CLI). `REFUSED` (owner and safety rules),
+  `NOT_MADE` (held back by the harness), everything else "failed" with the harness's words of what to do instead (no code
+  beside them) or its own kind and words (2000 characters, redacted), and "Another way may still work." `worker/context.py` still tells refused and failed calls apart by these words.
+- The note before a turn may end: `failures.failure_ledger`, sent by `run_task` once for each round of failed calls
+  (`corrective_rounds`: 1 in a narrated turn, 2 in `worker/runner.py`) and by `CliLoop._ledger` with a tool's first
+  failure. `OWNER_DENIED` stops it; `NOT_MADE` kinds never start it. Background tests that script a run ending on a
+  failed call give the model one more reply for it (`test_handoff`, `test_routine_health`).
+- Guards: `worker/stall_guards._INTENT` (announced steps) and `ToolGuardrails._across` (failures of different tools).
+- Replayed turns: `AgentHistory.with_work` sets `Turn.stopped` for a short "could not" reply whose last step failed
+  (`history.gave_up_words`); `memory.conversation.turn_text` and `attribution.unfinished_note` read it. The fold's
+  instructions (`_SUMMARY_SYSTEM`) and `SUMMARY_HEADER` (API `build_user_message`, CLI `fresh_user` / `resumed_user`).
+- Reading: `ServiceHub.read` / `backup_reader` (`WHOLE_READ_FAILURES`), `tools.web_read` (`BROWSER_MAY_READ`,
+  `READ_CAUSES`), `services/web.needs_rendered_read` (consent and terms words).
+- `self_check.own_connections` adds `your_connections` to the snapshot.
+
+Offline: `core/tests/agent/test_persistence.py`, `core/tests/worker/test_persistence_guards.py`,
+`core/tests/services/test_read_fallback.py`, the existing worker, agent, memory, services and background folders, and
+`npm run verify -- --contract` (scenario drivers and the prompt budget). Not covered offline, left to a live brain run on the
+owner's own models: whether a given model, told all this, now opens its browser or tries another source instead of
+stopping; a live read of a real consent page; a real reading service's fallback.

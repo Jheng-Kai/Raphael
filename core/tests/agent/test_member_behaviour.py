@@ -87,7 +87,9 @@ def test_the_words_that_taught_the_boilerplate_are_gone(path):
 
 
 def test_a_gap_is_named_once_and_only_when_it_matters_for_every_speaker():
-    assert "answer with what you have; name the gap once, at the end, only if it matters" in persona.system_prompt("en", "answer")
+    # The rest is looked for first (R-PERSIST-01); a gap left is named once.
+    assert ("look for the rest first; answer with what you have and name a gap left once, at the end, only if it matters"
+            in persona.system_prompt("en", "answer"))
 
 
 @pytest.mark.parametrize("path", ["task", "cli task", "chief's task"])
