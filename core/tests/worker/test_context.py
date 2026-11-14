@@ -234,6 +234,8 @@ async def test_the_summariser_is_told_the_shape_and_the_rounds_are_data():
     ("computer__click", {"x": 1, "y": 2}, "t" * 900, True, "[computer__click] x=1 y=2 (900 chars result)"),
     ("computer__write_file", {"path": "notes/plan.md", "content": "x" * 9000}, "File created successfully at: /home/cua/workspace/notes/plan.md", True, "[computer__write_file] wrote notes/plan.md"),
     ("computer__edit_file", {"path": "/home/cua/workspace/app.py", "old_string": "a", "new_string": "b"}, "The file /home/cua/workspace/app.py has been updated.", True, "[computer__edit_file] edited /home/cua/workspace/app.py"),
+    ("computer__grep", {"pattern": "def main", "output_mode": "content"}, "t" * 700, True, "[computer__grep] searched files for 'def main' (700 chars)"),
+    ("computer__glob", {"pattern": "**/*.py"}, "t" * 80, True, "[computer__glob] listed files matching '**/*.py' (80 chars)"),
 ])
 def test_an_old_result_says_what_the_call_was_and_how_it_went(name, arguments, content, ok, expected):
     line = one_line(name, json.dumps(arguments), wrap_untrusted(name, content, ok=ok))

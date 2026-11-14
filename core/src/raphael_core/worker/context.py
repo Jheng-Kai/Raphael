@@ -141,6 +141,8 @@ _TEMPLATES = {
     "attach_file": "copied {path} into the attachments",
     "write_file": "wrote {path}",
     "edit_file": "edited {path}",
+    "glob": "listed files matching '{pattern}' ({size:,} chars)",
+    "grep": "searched files for '{pattern}' ({size:,} chars)",
 }
 _WRAPPED = re.compile(r'\A<tool_result [^>]*status="(ok|error)"[^>]*>\n(.*)\n</tool_result>\s*\Z', re.DOTALL)
 _REFUSED = re.compile(

@@ -1,4 +1,4 @@
-"""A member's file tools on its own computer, as Claude Code's Edit and Write.
+"""A member's file tools on its own computer, as Claude Code's Edit, Write, Glob and Grep.
 
 Owner, 2026-11-14: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member changed its files
 through `vm_exec` (`sed`, heredocs): nothing checked that the text it replaced was the text it had read, and a whole
@@ -6,16 +6,18 @@ file had to fit a 16,000-character command. These tools copy Claude Code's seman
 replaced, unique unless `replace_all`; a file read in this run before it is changed and refused when it changed since
 (on a shared computer another member may have edited it; Hermes Agent's read-before-write guard is the same idea);
 a whole file sent over stdin. Each takes the turn's file checkpoint first, so the card of changed files and its undo
-see the change as they see a command's.
+see the change as they see a command's. Files are found and searched with ripgrep, which is in the computer image, with
+Claude Code's options and output modes; a search that finds nothing is an answer, not a failure.
 """
 
 import base64
 import hashlib
 import posixpath
+import re
 from collections import OrderedDict
 
 from ..agent.plugins import PluginResult
-from .vm import GUEST, VmError
+from .vm import GUEST, VmError, exec_args
 
 # The largest file edit_file changes in place: its text travels to the core and back.
 MAX_EDIT_BYTES = 10 * 1024 * 1024
@@ -23,6 +25,15 @@ MAX_EDIT_BYTES = 10 * 1024 * 1024
 QUOTE_CHARS = 400
 # How many runs (turns and tasks) keep what they read: a run that ended long ago has nothing to edit.
 KEPT_RUNS = 64
+# Glob's and Grep's bounds, as Claude Code's: 100 files a glob, 250 entries a search page unless head_limit says.
+GLOB_LIMIT = 100
+HEAD_LIMIT = 250
+# The most of ripgrep's answer read from the computer: a page is cut from it, the rest only counted.
+SEARCH_CHARS = 2_000_000
+SEARCH_SECONDS = 55
+# Folders a search skips: the browser's profile, the core's checkpoints and job logs (size and noise, R-COMP-DISK-01),
+# and git's own. Given after the member's glob, so they win (ripgrep lets the later glob decide).
+SKIPPED = (".git", ".browser-profiles", ".raphael-checkpoints", ".raphael-jobs")
 
 WRITE_FILE = {
     "description": "Write a whole file in your computer, as Claude Code's Write: path absolute or relative to "
@@ -45,8 +56,38 @@ EDIT_FILE = {
         "replace_all": {"type": "boolean"}},
         "required": ["path", "old_string", "new_string"], "additionalProperties": False}}
 
-DEFINITIONS = {"write_file": WRITE_FILE, "edit_file": EDIT_FILE}
-FILE_READS = frozenset()
+GLOB = {
+    "description": "Find files in your computer by name, as Claude Code's Glob: pattern is a glob such as **/*.py or "
+                   "src/**/*.{ts,tsx} (gitignore style: one without / matches at any depth), under path (a folder, "
+                   "absolute or relative to /home/cua/workspace; the workspace by default). Newest first, 100 at most. "
+                   "Hidden files are listed; .gitignore'd files and " + ", ".join(SKIPPED) + " are skipped.",
+    "parameters": {"type": "object", "properties": {
+        "pattern": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "path": {"type": "string", "minLength": 1, "maxLength": 4096}},
+        "required": ["pattern"], "additionalProperties": False}}
+_COUNT = {"type": "integer", "minimum": 0, "maximum": 1000}
+GREP = {
+    "description": "Search file contents in your computer with ripgrep, as Claude Code's Grep: pattern is a regular "
+                   "expression (ripgrep syntax), path a file or folder (the workspace by default); glob (e.g. *.{ts,tsx}) "
+                   "or type (e.g. py) picks files; -i ignores case; multiline lets . match newlines. output_mode: "
+                   "files_with_matches (default: paths, newest first), content (matching lines; -n line numbers, on by "
+                   "default; -A, -B, -C or context lines around them) or count. head_limit (default 250, 0 for all) and "
+                   "offset page the results. Searches hidden files; skips .gitignore'd ones and " + ", ".join(SKIPPED) +
+                   ". Use it rather than grep or rg in vm_exec.",
+    "parameters": {"type": "object", "properties": {
+        "pattern": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "glob": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "type": {"type": "string", "pattern": "^[A-Za-z0-9_+-]{1,40}$"},
+        "output_mode": {"type": "string", "enum": ["files_with_matches", "content", "count"]},
+        "-i": {"type": "boolean"}, "-n": {"type": "boolean"},
+        "-A": _COUNT, "-B": _COUNT, "-C": _COUNT, "context": _COUNT,
+        "multiline": {"type": "boolean"},
+        "head_limit": {"type": "integer", "minimum": 0}, "offset": {"type": "integer", "minimum": 0}},
+        "required": ["pattern"], "additionalProperties": False}}
+
+DEFINITIONS = {"write_file": WRITE_FILE, "edit_file": EDIT_FILE, "glob": GLOB, "grep": GREP}
+FILE_READS = frozenset({"glob", "grep"})
 FILE_WRITES = frozenset({"write_file", "edit_file"})
 FILE_TOOLS = FILE_READS | FILE_WRITES
 
@@ -271,7 +312,152 @@ class Files:
                                        f"edit:\n{numbered(changed, first - 4, last + 4)}")
 
 
+# --- glob and grep, on ripgrep --------------------------------------------------------------------------------------
+
+# In the folder searched (or a file's own folder, with the file named alone), the folder said first, then ripgrep with
+# its paths relative to it: a glob such as src/**/*.ts is matched from there, as Claude Code's are. 3 is a path that
+# does not exist; ripgrep's own 1 is "nothing found" and 2 an error.
+SEARCH = ('if [ -d "$1" ]; then cd "$1" || exit 3; shift; set -- "$@" .; '
+          'elif [ -e "$1" ]; then cd "$(dirname "$1")" || exit 3; base=$(basename "$1"); shift; set -- "$@" -- "$base"; '
+          'else exit 3; fi; printf "%s\\n" "$PWD"; '
+          f'exec timeout --signal=TERM --kill-after=1 {SEARCH_SECONDS} rg "$@"')
+_NUMBERED = re.compile(r"(\d+)([:-])")
+
+
+def _skipping(chosen=None):
+    globs = ["--glob", chosen] if chosen else []
+    for name in SKIPPED:
+        globs += ["--glob", "!" + name]
+    return globs
+
+
+def grep_flags(arguments):
+    """Claude Code's Grep options as ripgrep's flags."""
+    mode = arguments.get("output_mode", "files_with_matches")
+    flags = ["--hidden", "--null", "--no-messages", "--color=never"]
+    if arguments.get("-i"):
+        flags.append("--ignore-case")
+    if arguments.get("multiline"):
+        flags += ["--multiline", "--multiline-dotall"]
+    if arguments.get("type"):
+        flags += ["--type", arguments["type"]]
+    if mode == "files_with_matches":
+        flags += ["--files-with-matches", "--sortr=modified"]
+    elif mode == "count":
+        flags += ["--count-matches", "--with-filename", "--sort=path"]
+    else:
+        flags += ["--with-filename", "--no-heading", "--sort=path", "--max-columns=2000", "--max-columns-preview",
+                  "--line-number" if arguments.get("-n", True) else "--no-line-number"]
+        for key, flag in (("-A", "--after-context"), ("-B", "--before-context")):
+            if arguments.get(key) is not None:
+                flags += [flag, str(arguments[key])]
+        context = arguments.get("-C", arguments.get("context"))
+        if context is not None:
+            flags += ["--context", str(context)]
+    return mode, [*flags, *_skipping(arguments.get("glob")), "--regexp", arguments["pattern"]]
+
+
+def _absolute(base, relative):
+    return posixpath.normpath(posixpath.join(base, relative))
+
+
+def _paged(entries, offset, limit, cut):
+    """A page of `entries` and the note that says where the next page starts, when there is one."""
+    page = entries[offset:offset + limit] if limit else entries[offset:]
+    end = offset + len(page)
+    if end < len(entries) or cut and page:
+        total = f"{len(entries):,}{'+' if cut else ''}"
+        return page, f"[Showing results {offset + 1}-{end} of {total}. Call again with offset {end} for the next ones.]"
+    return page, ""
+
+
+class Search:
+    """One ripgrep run in the computer: the folder it ran from and what it printed, the last piece dropped if cut."""
+
+    def __init__(self, base, out, cut):
+        self.base, self.out, self.cut = base, out, cut
+
+    def items(self, separator):
+        rows = self.out.split(separator)
+        if rows and (self.cut or rows[-1] == ""):
+            rows.pop()  # The empty end after the last separator, or a piece cut off in the middle.
+        return [row for row in rows if row]
+
+
+async def search(vm, target, path, flags):
+    folder = guest_path(path or GUEST)
+    result = await vm.run_for(target, exec_args(target, ["sh", "-c", SEARCH, "sh", folder, *flags]),
+                              timeout=SEARCH_SECONDS + 5, limit=SEARCH_CHARS)
+    if result.code == 3:
+        raise Refused("path_missing", f"Path does not exist: {folder}")
+    if result.code == 124:
+        raise Refused("search_timeout", f"The search took longer than {SEARCH_SECONDS} seconds. Narrow path, glob or type.")
+    base, _, out = result.stdout.partition("\n")
+    if result.code not in (0, 1) and not out.strip("\0\n"):
+        words = result.stderr.strip()[:QUOTE_CHARS] or f"ripgrep ended with code {result.code}."
+        raise Refused("search_failed", words)
+    return Search(base or folder, out if result.code != 1 else "", result.truncated)
+
+
+async def glob_files(vm, target, arguments):
+    try:
+        found = await search(vm, target, arguments.get("path"), ["--files", "--hidden", "--null", "--sortr=modified",
+                                                                  *_skipping(arguments["pattern"])])
+    except Refused as error:
+        return _refusal(error)
+    files = [_absolute(found.base, row) for row in found.items("\0")]
+    if not files:
+        return PluginResult(True, text="No files found")
+    text = "\n".join(files[:GLOB_LIMIT])
+    if len(files) > GLOB_LIMIT or found.cut:
+        text += "\n(Results are truncated. Consider using a more specific path or pattern.)"
+    return PluginResult(True, text=text)
+
+
+async def grep_files(vm, target, arguments):
+    mode, flags = grep_flags(arguments)
+    try:
+        found = await search(vm, target, arguments.get("path"), flags)
+    except Refused as error:
+        return _refusal(error)
+    offset, limit = arguments.get("offset", 0), arguments.get("head_limit", HEAD_LIMIT)
+    if mode == "files_with_matches":
+        files = [_absolute(found.base, row) for row in found.items("\0")]
+        if not files:
+            return PluginResult(True, text="No files found")
+        page, note = _paged(files, offset, limit, found.cut)
+        head = f"Found {len(files):,}{'+' if found.cut else ''} file{'s' if len(files) != 1 else ''}"
+        return PluginResult(True, text="\n".join([head, *page, *([note] if note else [])]))
+    rows = []
+    for row in found.items("\n"):
+        name, separator, rest = row.partition("\0")
+        if not separator:
+            if mode == "content":
+                rows.append(row)  # ripgrep's "--" between groups of context
+            continue
+        where = _absolute(found.base, name)
+        if mode == "count":
+            rows.append((where, int(rest) if rest.isdigit() else 0))
+            continue
+        numbered = _NUMBERED.match(rest)
+        rows.append(f"{where}{numbered.group(2) if numbered else ':'}{rest}")
+    if not rows:
+        return PluginResult(True, text="No matches found")
+    page, note = _paged(rows, offset, limit, found.cut)
+    if mode == "count":
+        counted = rows
+        text = "\n".join(f"{where}:{count}" for where, count in page)
+        text += (f"\n\nFound {sum(count for _, count in counted):,} total occurrences across {len(counted):,} "
+                 f"file{'s' if len(counted) != 1 else ''}.")
+        return PluginResult(True, text=text + (f"\n{note}" if note else ""))
+    return PluginResult(True, text="\n".join([*page, *([note] if note else [])]))
+
+
 async def call(vm, target, name, arguments, reads, run, checkpoint):
+    if name == "glob":
+        return await glob_files(vm, target, arguments)
+    if name == "grep":
+        return await grep_files(vm, target, arguments)
     files = Files(vm, target, reads, run, checkpoint)
     if name == "write_file":
         return await files.write_file(arguments)

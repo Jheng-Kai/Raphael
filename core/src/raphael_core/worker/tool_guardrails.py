@@ -27,7 +27,7 @@ READ_ONLY = frozenset({
     "web_search", "web_read", "read_attachment", "weather", "local_time", "memory_read", "history_search",
     "session_search", "session_read", "skill_read", "self_check", "raphael_help", "find_tools",
     "get_guide", "get_desktop_state", "get_window_state", "get_cursor_position", "list_apps", "list_windows",
-    "clipboard_read", "verify_state", "get_browser_state",
+    "clipboard_read", "verify_state", "get_browser_state", "glob", "grep",
 })
 # A call that failed because the service asked to wait is not a replay when it is tried again.
 THROTTLED = frozenset({"rate_limit", "rate_limited", "overloaded"})
