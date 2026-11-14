@@ -27,6 +27,8 @@ from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
 from . import seat_view
+from . import file_tools
+from .file_tools import FILE_READS, FILE_TOOLS, FileReads
 from ..worker.computer_verification import meaningful_expectation
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -295,6 +297,7 @@ class VmTools:
         self.page_refs = {}
         self.payment_holds = set() if conn is None else {row[0] for row in conn.execute("SELECT target FROM computer_payment_holds")}
         self.checkpointed, self.checkpoint_locks = set(), {}
+        self.file_reads = FileReads()  # what each run read of each file, for edit_file and write_file
         self.refreshes = {}
         self.step_gate = None
         self.vm.rebuild_notice = self._rebuild_notice
@@ -476,6 +479,7 @@ class VmTools:
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
                            vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN, run_steps=RUN_STEPS)
+        definitions.update(file_tools.DEFINITIONS)
         from .datasets import DEFINITION
         definitions["dataset"] = DEFINITION
         keys = []
@@ -582,7 +586,7 @@ class VmTools:
 
     def kind_of(self, server, name):
         if server == "computer":
-            return "read" if name in READS or name in ("attach_file", "vault_entries") else "write"
+            return "read" if name in READS or name in FILE_READS or name in ("attach_file", "vault_entries") else "write"
         return self.delegate.kind_of(server, name)
 
     def kind_for_call(self, server, name, arguments):
@@ -674,8 +678,15 @@ class VmTools:
                 result.blocks = []
         return result
 
+    def _file_run(self, target, member, owner, turn):
+        """The run a file read belongs to: a task, or a turn (its id, else its scope). A read in one run is not a read in
+        another: a model that did not see the file this run has not read it."""
+        return (target.key, member, owner[:2] if owner and owner[0] == "task" else turn[0] or owner)
+
     async def _checkpoint(self, target, member, turn, owner, command):
-        if plain_read(command):
+        """The run's first file checkpoint, before its first change: a command that only reads (`plain_read`) takes
+        none; `command` None is a file tool's write, which always does."""
+        if command is not None and plain_read(command):
             return
         ticket = (target.key, member, turn or owner)
         async with self.checkpoint_locks.setdefault(target.state_key, asyncio.Lock()):
@@ -847,7 +858,7 @@ class VmTools:
             if tool.name == "vault_entries":
                 choices = self.logins.choices(member) if self.logins and hasattr(self.logins, "choices") else []
                 return PluginResult(True, text=json.dumps({"entries": choices}, ensure_ascii=False))
-            if target.key in self.payment_holds and tool.name not in READS | {"request_takeover"}:
+            if target.key in self.payment_holds and tool.name not in READS | FILE_READS | {"request_takeover"}:
                 return PluginResult(False, "owner_payment_required", "The owner must finish payment through request_takeover. No further member action is allowed on this computer.")
             owner = _SCOPE.get() or ("async", asyncio.current_task())
             turn = _TURN.get()
@@ -858,8 +869,9 @@ class VmTools:
                 if origin:
                     owner = ("task", task_id, origin["member_id"], origin["conversation_id"])
                     turn = (origin["turn_id"], True, None)
-            # Only the screen is shared out: a command in the workspace takes nobody's turn, and no turn waits for one.
-            screen = tool.name not in ("vm_exec", "attach_file")
+            # Only the screen is shared out: a command or a file in the workspace takes nobody's turn, and no turn waits
+            # for one.
+            screen = tool.name not in ("vm_exec", "attach_file", *FILE_TOOLS)
             if screen and (busy := await self._take_screen(target, owner)) is not None:
                 result = busy
                 return result
@@ -903,7 +915,8 @@ class VmTools:
                     await lock.acquire()
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
             self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
-            command = tool.name == "vm_exec"
+            # Not input at the screen: the owner's press to take control does not wait for these.
+            command = tool.name == "vm_exec" or tool.name in FILE_TOOLS
             if command:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
@@ -929,6 +942,16 @@ class VmTools:
                         data = await self.vm.execute(target, arguments["command"], wait)
                     # A command that ran and exited non-zero (tests that fail) is what the model asked to find out, not a broken tool.
                     result = PluginResult(True, None, json.dumps(data), data.get("truncated", False))
+                elif tool.name in FILE_TOOLS:
+                    async def checkpoint():
+                        # Before the first change of the run, as a command's: the card of changed files and its undo.
+                        await self._checkpoint(target, member, turn[0], owner, None)
+                        if target != self.vm.target(member):
+                            raise VmError("computer_changed")
+                        if target.key in self.vm.held:
+                            raise VmError("owner_holds_control")
+                    result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
+                                                   self._file_run(target, member, owner, turn), checkpoint)
                 elif tool.name == "attach_file":
                     data = await self.vm.read_file(target, arguments["path"], limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name

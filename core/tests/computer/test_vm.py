@@ -873,9 +873,10 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
     deferred = {"vault_entries", "fill_contact", "fill_card"}
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"} | deferred
+    from raphael_core.computer.file_tools import DEFINITIONS as FILE_DEFINITIONS
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"} | deferred | set(FILE_DEFINITIONS)
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"}
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "run_steps", "dataset"} | set(FILE_DEFINITIONS)
     assert set(snapshot.hidden()) == {"computer__" + name for name in deferred}
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -1040,6 +1041,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
 
 
 async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(desktop, tmp_path):
+    from raphael_core.computer.file_tools import DEFINITIONS as FILE_DEFINITIONS, FILE_TOOLS
     from raphael_core.computer.vm_tools import ATTACH
 
     vm, target, runtime = desktop
@@ -1066,6 +1068,10 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
             continue
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
+            continue
+        if tool.name in FILE_TOOLS:
+            # A file in the member's own computer is no outward act: these say what they do, and no rule after it.
+            assert tool.description == FILE_DEFINITIONS[tool.name]["description"]
             continue
         if tool.name == "request_takeover":
             assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]

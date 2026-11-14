@@ -52,8 +52,11 @@ logger = logging.getLogger(__name__)
 # The most unpinned plugin tools shown without choosing first, and the most calls.
 MAX_OFFERED = 40
 MAX_CALLS = 3
-# The most the arguments of one call may come to, as JSON, in characters.
+# The most the arguments of one call may come to, as JSON, in characters; a computer's write_file and edit_file, whose
+# text goes over stdin, more (`worker.guards.FILE_ARGUMENT_CHARS`, which a test keeps the same).
 MAX_ARGUMENT_CHARS = 16000
+FILE_ARGUMENT_CHARS = 200_000
+FILE_ARGUMENT_NAMES = frozenset({"write_file", "edit_file"})
 # What of a tool's description a model is shown, in characters.
 DESCRIPTION_CHARS = 400
 # How long a model that refused tools although the catalog said it takes them is remembered as
@@ -303,7 +306,7 @@ def resolve_calls(offer: Offer, requested: list[tuple[str, Any]]) -> list[Planne
         tool = offer.by_alias.get(alias)
         if tool is None or not isinstance(arguments, dict):
             continue
-        if len(json.dumps(arguments, ensure_ascii=False)) > MAX_ARGUMENT_CHARS:
+        if len(json.dumps(arguments, ensure_ascii=False)) > (FILE_ARGUMENT_CHARS if tool.server == "computer" and tool.name in FILE_ARGUMENT_NAMES else MAX_ARGUMENT_CHARS):
             continue
         planned.append(PlannedCall(tool, arguments))
         if len(planned) == MAX_CALLS:

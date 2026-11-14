@@ -64,7 +64,8 @@ from ..failures import Failure
 from ..agent.gate import ToolGate
 from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
-from ..agent.plugins import MAX_ARGUMENT_CHARS, PluginResult
+from ..agent.plugins import PluginResult
+from ..worker.guards import argument_limit
 from ..brain.prompt_cache import cache_options
 from ..agent.steps import reason_of
 from ..agent.policy import Action, Approval, NotApproved, Tier, UnknownTool
@@ -762,7 +763,7 @@ class TaskRun:
         self._check(tool=True, paid=paying)
         self.tool_calls += 1
         began = time.perf_counter()
-        if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > MAX_ARGUMENT_CHARS:
+        if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > argument_limit(name):
             # Not a tool the task was given: nothing to call, and nothing to audit.
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
             if ref is None:

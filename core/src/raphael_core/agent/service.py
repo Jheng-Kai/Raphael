@@ -170,7 +170,7 @@ from ..services.urls import urls_in
 from ..services.urls import SeenUrls
 from ..messaging.words import compose
 from ..worker.loop import Stop, ToolOutcome, WAITING
-from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
+from ..worker.guards import MAX_ARGUMENT_CHARS, argument_limit, canonical
 from .answers import Reply, Voice, build_user_message, owner_script, parse_reply, turn_text
 from .attribution import labelled_lines, owner_lines, owner_words, relayed_answer
 from .narration import NarratedLoop
@@ -2426,7 +2426,7 @@ class AgentService:
                     checked_batch = loop.batch_calls
                     batch = [(call.id, planned) for call in loop.batch_calls
                              if isinstance(call.arguments, dict)
-                             and len(canonical(call.arguments)) <= MAX_ARGUMENT_CHARS
+                             and len(canonical(call.arguments)) <= argument_limit(call.name)
                              and (planned := plan(call.name, call.arguments)) is not None]
                     judged = await asyncio.gather(*(
                         self._screen_call(ask, planned, ledger) for _, planned in batch

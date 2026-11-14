@@ -9,7 +9,7 @@ import hmac
 import json
 import secrets
 
-from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
+from ..worker.guards import argument_limit, canonical
 
 MAX_BODY = 1024 * 1024
 VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
@@ -129,7 +129,7 @@ class RaphaelMcp:
                     "inputSchema": item.get("parameters", {"type": "object"})} for item in tools.values()]}}
         if method == "tools/call" and isinstance(params.get("name"), str) and params["name"] in tools:
             args = params.get("arguments", {})
-            if not isinstance(args, dict) or len(canonical(args)) > MAX_ARGUMENT_CHARS:
+            if not isinstance(args, dict) or len(canonical(args)) > argument_limit(params["name"]):
                 return {"error": {"code": -32602, "message": "Invalid arguments"}}
             try:
                 result = await self.execute(str(packet["id"]), params["name"], args)
