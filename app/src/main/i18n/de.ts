@@ -1950,7 +1950,6 @@ export const de = {
   "rooms.blockedStalled": "Zu lange kein Fortschritt",
   "rooms.blockedTooLong": "Zu viel Text auf einmal",
   "overview.used": "{p0}% verbraucht",
-  "account.resets": "Zurücksetzung {p0}",
   "account.reset": "Zurückgesetzt",
   "account.unreadable": "Nicht lesbar",
   "account.thisMonth": "Diesen Monat",

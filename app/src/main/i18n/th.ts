@@ -1950,7 +1950,6 @@ export const th = {
   "rooms.blockedStalled": "ไม่มีความคืบหน้านานเกินไป",
   "rooms.blockedTooLong": "ข้อความยาวเกินกว่าจะอ่านได้ในครั้งเดียว",
   "overview.used": "ใช้ไป {p0}%",
-  "account.resets": "รีเซ็ต{p0}",
   "account.reset": "รีเซ็ตแล้ว",
   "account.unreadable": "อ่านไม่ได้",
   "account.thisMonth": "เดือนนี้",
