@@ -43,6 +43,8 @@ export interface DetailsHost {
   openSettings?(): void;
   openConversation?(member: number, conversation: number): void;
   openTurn?(member: number, conversation: number | undefined, turn: number): void;
+  /** A page of the Library was pressed: it opens itself, whole, in the area beside the sidebar (R-PAGE-06). */
+  openPage?(page: { id: string; title: string; conversation?: number; turn: number }): void;
   /** The conversation open with this member, undefined for their default. */
   conversationOf?(member: number): number | undefined;
 }
@@ -263,14 +265,19 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (filter) { libraryFilter = filter.dataset.libFilter as LibraryFilter; draw(); return; }
     const fileButton = target.closest<HTMLElement>('[data-panel-file]');
     if (fileButton) {
-      // A deliverable opens as it was handed over: a picture large, a page at the reply that published it, a link in the
+      // A deliverable opens as it was handed over: a picture large, a page itself, whole (R-PAGE-06), a link in the
       // browser, an attachment or a delivered file with the computer's own program.
       const file = work?.files.find(file => file.id === fileButton.dataset.panelFile);
       const unavailable = (): void => { toaster.info(t('agent.fileUnavailable')); };
       const picture = fileButton.querySelector<HTMLImageElement>('img[src]');
       if (!file) return;
       if (file.kind === 'image' && picture) openMediaLightbox(fileButton, picture.src);
-      else if (file.kind === 'page' && file.turn_id) host.openTurn?.(host.member().id, file.conversation_id ?? undefined, file.turn_id);
+      // A page opens as the page itself (R-PAGE-06): the area beside the sidebar shows it whole, as Grok Bot's Library does.
+      else if (file.kind === 'page' && file.turn_id) {
+        const page = { id: file.id.replace(/^page:/, ''), title: file.title, conversation: file.conversation_id ?? undefined, turn: file.turn_id };
+        if (host.openPage) host.openPage(page);
+        else host.openTurn?.(host.member().id, page.conversation, page.turn);
+      }
       else if (file.kind === 'link' && file.url) void api.openExternalUrl(file.url).catch(unavailable);
       else if (file.attachment_id) void api.openAttachment(file.attachment_id).catch(unavailable);
       else void api.openLibraryFile(host.member().id, file.id).catch(unavailable);

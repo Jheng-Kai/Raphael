@@ -626,6 +626,12 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: opening, at_ms: data.now - 60000 }, { seq: 2, kind: "reply", text: done, at_ms: data.now }], attachments: [],
       pages: [{ id: "page-report", title: data.pageReport.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageReport.title, kind: "report" }] });
   }
+  // `libraryOlder`: the pages were made in an older conversation of the member, not the one that is open (a page opened from
+  // the Library then takes its own conversation, and putting it away brings back the one that was open).
+  if (variant.libraryOlder) {
+    data.conversations.push({ id: 12, member_id: 1, title: "較早的整理", is_default: false, kind: "standard", created_at_ms: data.now - 9 * 86400000, updated_at_ms: data.now - 8 * 86400000 });
+    for (const turn of data.turns) if ([801, 802, 803].includes(turn.id)) turn.conversation_id = 12;
+  }
   // Raphael's daily overview (owner, 2026-11-14: the old home is now this page, sent by a 07:00 routine to his conversation):
   // a routine's turn that says in a few words what it did, and the page.
   if (variant.dashboardTurn) {
@@ -1184,6 +1190,11 @@ export function installMock(fixture, config = {}, target = window) {
         const items = [
           ...[0, 1, 2].map(index => ({ id: `attachment:${picture(index)}`, attachment_id: picture(index), title: `版面草圖 ${index + 1}.png`, kind: "image", mime: "image/png", at_ms: now - index * 60000, turn_id: 2, conversation_id: 11 })),
           { id: "page:weekly", title: sample.page, kind: "page", at_ms: now - hour, turn_id: 2, conversation_id: 11 },
+          // `libraryPages`: the pages the page scenes' replies hold (`pageTurn`, `reportTurn`), so a press can open them.
+          ...(variant.libraryPages ? [
+            { id: "page:page-news", title: "每日新聞日文學習 2026-11-11", kind: "page", at_ms: now - 30 * 60000, turn_id: 803, conversation_id: variant.libraryOlder ? 12 : 11 },
+            { id: "page:page-report", title: data.pageReport.title, kind: "page", at_ms: now - 40 * 60000, turn_id: 802, conversation_id: variant.libraryOlder ? 12 : 11 },
+          ] : []),
           { id: "delivered-file:notes", title: sample.files[0], kind: "document", at_ms: now - 2 * hour, turn_id: 2, conversation_id: 11 },
           { id: "delivered-file:bundle", title: "交付素材.zip", kind: "archive", at_ms: now - dayMs, turn_id: 2, conversation_id: 11 },
           { id: "attachment:demo.mp4", title: "操作示範.mp4", kind: "video", mime: "video/mp4", at_ms: now - dayMs - 30 * 60000, turn_id: 2, conversation_id: 11 },

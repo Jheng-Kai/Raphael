@@ -13,7 +13,7 @@ from mcp.server.mcpserver import MCPServer
 
 from raphael_core.agent.harness_tools import definitions_for, tool
 from raphael_core.agent.history import AgentHistory
-from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains
+from raphael_core.agent.pages import HTML_BYTES, MCP_MIME, PageError, PageHost, PageStore, domains, page_csp, page_file
 from raphael_core.agent.permissions import PermissionCards
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.report_page import FILE_POLICY, file_name
@@ -672,16 +672,70 @@ async def test_a_report_file_where_anything_could_run_or_load_is_refused_and_not
     assert list(tmp_path.iterdir()) == []
 
 
-async def test_only_a_report_is_saved_as_a_file(make_rig, tmp_path):
+async def test_a_page_the_core_cannot_find_or_a_plugins_page_is_not_saved_as_a_file(make_rig, tmp_path):
     rig = make_rig()
-    page = stored(rig.conn)
+    plugin = stored(rig.conn, source="mcp", server="demo", tool="show")
     with pytest.raises(RpcError) as error:
-        await rig.call("pages.export", {"id": page["id"], "html": _file(), "downloads": str(tmp_path)})
-    assert error.value.data == {"kind": "not_report"}
+        await rig.call("pages.export", {"id": plugin["id"], "html": _file(), "downloads": str(tmp_path)})
+    assert error.value.data == {"kind": "not_shareable"}
     with pytest.raises(RpcError) as error:
         await rig.call("pages.export", {"id": "missing", "html": _file(), "downloads": str(tmp_path)})
     assert error.value.data == {"kind": "page_gone"}
     assert list(tmp_path.iterdir()) == []
+
+
+# --- an HTML page shared as a file (pages.page_file, pages.export; R-PAGE-06) ----------------------------
+
+def _page_file(**overrides):
+    return page_file({"title": "Product", "html": "<button>Choose</button>", "source": "html", "network": {}, **overrides})
+
+
+def test_an_html_page_file_is_the_page_without_the_window_helper_under_the_pages_own_policy():
+    text = _page_file(html="<h1>Hello</h1><script>document.title = 'x'</script>")
+    # The page itself, and the theme words every page has, in both themes.
+    assert "<h1>Hello</h1><script>document.title = 'x'</script>" in text and "<title>Product</title>" in text
+    assert "--bg:#ffffff" in text and "@media (prefers-color-scheme:dark){:root{--bg:#0a0a0a" in text
+    # Nothing that speaks to the window: the helper is not in the file.
+    assert "parent.postMessage" not in text and "window.raphael" not in text
+    # The page's policy stands first in its head: the same sources, no connection, no form, no frame; no sandbox (a header's).
+    head = text.index("<meta http-equiv=\"Content-Security-Policy\"")
+    assert head < text.index("<title>") < text.index("<h1>")
+    policy = re.search(r'content="([^"]+)"', text[head:])[1].replace("&#x27;", "'")
+    assert policy == "; ".join(part for part in page_csp({"source": "html", "network": {}}).split("; ") if not part.startswith("sandbox"))
+    for wanted in ("default-src 'none'", "connect-src 'none'", "form-action 'none'", "frame-src 'none'", "base-uri 'none'"):
+        assert wanted in policy
+    assert "sandbox" not in policy and "https://cdnjs.cloudflare.com" in policy
+    assert text.index('<meta charset="utf-8">') < head
+
+
+async def test_a_shared_html_page_is_saved_from_what_is_stored_never_from_text_the_window_gives(make_rig, tmp_path):
+    rig = make_rig()
+    page = stored(rig.conn, title="Tokyo: a/b", html="<h1>Tokyo</h1>")
+    downloads = tmp_path / "Downloads"
+    saved = await rig.call("pages.export", {"id": page["id"], "html": "<script>alert(1)</script>", "downloads": str(downloads)})
+    assert saved == {"path": str(downloads / "Tokyo a b.html"), "place": "downloads", "folder": "Downloads"}
+    written = (downloads / "Tokyo a b.html").read_text("utf-8")
+    assert "<h1>Tokyo</h1>" in written and "alert(1)" not in written and "parent.postMessage" not in written
+    # With no `html` at all, as the window sends it for a page, and again: never over another file.
+    again = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
+    assert again["path"] == str(downloads / "Tokyo a b (2).html")
+    # The owner's output folder first.
+    rig.settings.set("owner_output_folder", str(tmp_path / "Out"))
+    chosen = await rig.call("pages.export", {"id": page["id"], "downloads": str(downloads)})
+    assert chosen == {"path": str(tmp_path / "Out" / "Tokyo a b.html"), "place": "output", "folder": "Out"}
+
+
+async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_stops_the_file(make_rig, tmp_path):
+    rig = make_rig()
+    page = stored(rig.conn, html="<p>first</p>")
+    PageStore(rig.conn).update(page["id"], "<p>second</p>")
+    saved = await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
+    assert "<p>second</p>" in open(saved["path"], encoding="utf-8").read()
+    # A page that the scanner would not take is not written as a file either, even if it got into the store.
+    rig.conn.execute("UPDATE pages SET html=? WHERE id=?", ("<p>sk-ant-api03-" + "a1B2c3D4" * 8 + "</p>", page["id"]))
+    with pytest.raises(RpcError) as error:
+        await rig.call("pages.export", {"id": page["id"], "downloads": str(tmp_path)})
+    assert error.value.code == INVALID_PARAMS and len(list(tmp_path.iterdir())) == 1
 
 
 @pytest.mark.parametrize("title,name", [

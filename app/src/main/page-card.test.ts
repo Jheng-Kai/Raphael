@@ -24,21 +24,23 @@ const pointerAt = (x: number, y: number): void => { window.dispatchEvent(new Mou
 function mount(cards: PageCard[] = [card]) {
   const pane = document.createElement("section");
   pane.className = "mb-chat";
-  pane.innerHTML = `<div class="page-head mb-head"><span class="mb-head-l"><button type="button" class="btn icon" data-act="search"></button></span></div>` +
+  pane.innerHTML = `<div class="page-head mb-head"><span class="mb-head-l"><button type="button" class="btn icon" data-act="search"></button></span>` +
+    `<span class="mb-head-c"><div class="conversation-head"></div></span><div class="ra-tools"></div></div>` +
     `<div class="ra-stage"><div class="ra-scroll"><ol class="thread"></ol></div><div class="ra-dock"><textarea></textarea></div></div>`;
   document.body.append(pane);
   const stage = pane.querySelector<HTMLElement>(".ra-stage")!;
   const thread = stage.querySelector<HTMLElement>(".thread")!;
   thread.innerHTML = pageCardsHTML(turn(cards));
   const place = vi.fn(() => true);
-  const pages = mountPages(thread, { place });
+  const shell = { fold: vi.fn(), unfold: vi.fn() };
+  const pages = mountPages(thread, { place, shell });
   pages.sync();
   const frame = thread.querySelector("iframe")!;
   // The test window loads no frames, so each is given a window of its own for messages to come from.
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   focusOn(frame);
   pointerAt(10, 10);
-  return { thread, place, pages, frame, stage };
+  return { thread, place, pages, frame, stage, shell };
 }
 
 /** A message from the frame, as `window` would deliver it. */
@@ -324,13 +326,32 @@ test("the way back is the round arrow at the header's top left, named 返回, wh
   expect(arrow.hidden).toBe(false);
   expect(arrow.classList.contains("icon") && arrow.getAttribute("aria-label") === "返回" && arrow.textContent === "").toBe(true);
   expect(arrow.querySelector("svg")).not.toBeNull();
-  // The search is the thread's, and the thread is not in sight: the css puts it away, and the page's title is in sight.
+  // The search is the thread's, and the thread is not in sight: the css puts it away, and the page's title is in sight in the header's pill.
   const css = readFileSync(join(__dirname, "page-view.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   expect(css).toContain('.mb-chat:has(> .ra-stage.is-page) .mb-head [data-act="search"] { display: none; }');
-  expect(document.querySelector(".pgv .pgv-title")!.textContent).toBe("藍色背包 <b>");
+  const pill = document.querySelector<HTMLElement>(".mb-head-c > .pgv-pill")!;
+  expect(pill.hidden).toBe(false);
+  expect(pill.textContent).toBe("藍色背包 <b>");
+  expect(pill.querySelector("svg")).not.toBeNull();
+  expect(document.querySelector(".pgv-title")).toBeNull();
   expect(document.querySelector(".pgv")!.getAttribute("aria-label")).toBe("藍色背包 <b>");
   arrow.click();
   expect(arrow.hidden).toBe(true);
+  // The member's pill comes back with the thread: the page's own is put away.
+  expect(pill.hidden).toBe(true);
+});
+
+test("an open page takes the whole area: the details panel is folded while it stands and is given back when it is put away", async () => {
+  const { thread, frame, shell } = mount();
+  await flush();
+  loaded(frame);
+  expect(shell.fold).not.toHaveBeenCalled();
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  expect(shell.fold).toHaveBeenCalledOnce();
+  expect(shell.unfold).not.toHaveBeenCalled();
+  back().click();
+  expect(shell.unfold).toHaveBeenCalledOnce();
+  expect(shell.fold).toHaveBeenCalledOnce();
 });
 
 test("a page in the conversation's place has no dialog: its css has no scrim, no × and no dialog box", () => {
@@ -341,42 +362,57 @@ test("a page in the conversation's place has no dialog: its css has no scrim, no
   expect(source.match(/openDialog\(/g)).toHaveLength(1);
 });
 
-test("a page is as tall in its place as the place is: what it says changes nothing there, and the card follows once it is back", async () => {
+test("a page is as tall in the whole area as it says (past its card's 2400 px), the card follows once it is back", async () => {
   const { thread, frame, stage } = mount();
   await flush();
   const card = thread.querySelector<HTMLElement>(".pg-card")!;
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  const box = stage.querySelector<HTMLElement>(".pgv-frame-box")!;
+  // Until it says, the box is as tall as its card was; then as tall as the page, the area scrolling and not the page.
+  expect(box.style.getPropertyValue("--pgv-h")).toBe("400px");
   fromFrame(frame, { raphaelPage: 1, type: "height", height: 243.4 });
+  expect(box.style.getPropertyValue("--pgv-h")).toBe("244px");
+  fromFrame(frame, { raphaelPage: 1, type: "height", height: 9000 });
+  expect(box.style.getPropertyValue("--pgv-h")).toBe("9000px");
+  fromFrame(frame, { raphaelPage: 1, type: "height", height: 99999 });
+  expect(box.style.getPropertyValue("--pgv-h")).toBe("20000px");
+  // The card keeps its own height while the page is out, and takes the page's up to its own bound once it is back.
   expect(card.style.getPropertyValue("--pg-h")).toBe("400px");
-  expect(stage.querySelector<HTMLElement>(".pgv-frame-box")!.style.height).toBe("");
   back().click();
+  expect(card.style.getPropertyValue("--pg-h")).toBe("2400px");
   fromFrame(frame, { raphaelPage: 1, type: "height", height: 300 });
   expect(card.style.getPropertyValue("--pg-h")).toBe("300px");
 });
 
-test("going back puts the card's preview at the top of the page and keeps where the owner was reading for the next time", async () => {
-  const { thread, frame } = mount();
+test("the area scrolls, not the page: where the owner read is kept for the next time, and the page's own scroll tells nothing", async () => {
+  const { thread, frame, stage } = mount();
   await flush();
   loaded(frame);
   const posted = vi.mocked(frame.contentWindow!.postMessage);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 520 });
+  const area = stage.querySelector<HTMLElement>(".pgv-page")!;
+  area.scrollTop = 520;
+  area.dispatchEvent(new Event("scroll"));
+  // A scroll the page reports of itself (it has none to make: it is as tall as it says) is not where the owner is reading.
+  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 7 });
   back().click();
-  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 0 }, "*");
-  // The page's own answer to that scroll is not where the owner was reading.
-  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 0 });
+  // The card shows the page from its top without the page being told anything: the frame in a card is as tall as its page.
+  expect(posted).not.toHaveBeenCalled();
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  expect(posted).toHaveBeenLastCalledWith({ raphaelPage: 1, type: "scroll-to", y: 520 }, "*");
+  expect(stage.querySelector<HTMLElement>(".pgv-page")!.scrollTop).toBe(520);
+  expect(posted).not.toHaveBeenCalled();
   back().click();
 });
 
-test("a page changed while it stands in the conversation's place loads beside it, goes back to where it was read and takes its place: one card, one frame, nothing closes", async () => {
+test("a page changed while it stands in the whole area loads beside it, takes its place once it has drawn, and the area keeps its scroll: one card, one frame, nothing closes", async () => {
   const { thread, frame, pages, stage } = mount();
   await flush();
   loaded(frame);
   thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
-  fromFrame(frame, { raphaelPage: 1, type: "scroll", y: 420 });
+  const area = stage.querySelector<HTMLElement>(".pgv-page")!, box = stage.querySelector<HTMLElement>(".pgv-frame-box")!;
+  area.scrollTop = 420;
+  area.dispatchEvent(new Event("scroll"));
   vi.mocked(api.pagesOpen).mockResolvedValueOnce({ ...opened, url: "http://127.0.0.1:9/p/changed?theme=light", rev: 1 });
   thread.querySelector<HTMLElement>(".pg-card")!.dataset.pageRev = "1";
   pages.sync();
@@ -390,12 +426,17 @@ test("a page changed while it stands in the conversation's place loads beside it
   expect(next.style.visibility).toBe("hidden");
   expect(next.hasAttribute("inert")).toBe(false);
   Object.defineProperty(next, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  // It says how tall it is while it loads; that is the height it takes its place with. Nothing is told to scroll: the area stays where it was.
+  fromFrame(next, { raphaelPage: 1, type: "height", height: 1500 });
+  expect(box.style.getPropertyValue("--pgv-h")).toBe("400px");
   next.dispatchEvent(new Event("load"));
-  expect(next.contentWindow!.postMessage).toHaveBeenCalledExactlyOnceWith({ raphaelPage: 1, type: "scroll-to", y: 420 }, "*");
+  expect(next.contentWindow!.postMessage).not.toHaveBeenCalled();
   expect(frame.isConnected).toBe(true);
-  fromFrame(next, { raphaelPage: 1, type: "scroll", y: 420 });
+  await new Promise(resolve => setTimeout(resolve, 300));
   expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([next]);
   expect(next.style.visibility).toBe("");
+  expect(box.style.getPropertyValue("--pgv-h")).toBe("1500px");
+  expect(area.scrollTop).toBe(420);
   expect(stage.classList.contains("is-page") && !stage.querySelector<HTMLElement>(".pgv")!.hidden).toBe(true);
   expect(thread.querySelectorAll(".pg-card")).toHaveLength(1);
   // Going back, the card holds the changed page.
@@ -404,7 +445,7 @@ test("a page changed while it stands in the conversation's place loads beside it
   expect(api.pagesOpen).toHaveBeenCalledTimes(2);
 });
 
-test("a changed page that was not being read shows the moment it has drawn, and one that cannot be read stays as it was", async () => {
+test("a changed page that cannot be read stays as it was, and one that never says it has drawn takes its place all the same", async () => {
   const { thread, frame, pages, stage } = mount();
   await flush();
   loaded(frame);
@@ -420,8 +461,109 @@ test("a changed page that was not being read shows the moment it has drawn, and 
   const next = stage.querySelectorAll<HTMLIFrameElement>(".pgv iframe")[1]!;
   Object.defineProperty(next, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
   next.dispatchEvent(new Event("load"));
+  await new Promise(resolve => setTimeout(resolve, 300));
   expect([...stage.querySelectorAll(".pgv iframe")]).toEqual([next]);
   expect(next.contentWindow!.postMessage).not.toHaveBeenCalled();
+});
+
+// Share (R-PAGE-06): one button at the header's right on every page; the core builds the file of the page it keeps.
+test("an HTML page has Share at the header's right: it saves the page by its id, with no text of the window's, and says where it went", async () => {
+  const { thread, frame } = mount();
+  await flush();
+  loaded(frame);
+  vi.spyOn(api, "pageSave").mockResolvedValue({ place: "downloads", folder: "Downloads" });
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  const share = document.querySelector<HTMLButtonElement>(".mb-head .ra-tools > [data-page-act]")!;
+  expect(share.getAttribute("aria-label")).toBe(t("page.report.share"));
+  expect(share.querySelector("svg")).not.toBeNull();
+  share.click();
+  share.click();
+  expect(api.pageSave).toHaveBeenCalledExactlyOnceWith("p1");
+  await flush();
+  expect(document.querySelector(".toast")?.textContent).toContain(t("page.report.downloads"));
+  back().click();
+  // It left with the page: no button of Share's stands in the header of the thread.
+  expect(document.querySelector(".mb-head .ra-tools > [data-page-act]")).toBeNull();
+});
+
+test("a page that cannot be saved says so and stays open", async () => {
+  const { thread, frame, stage } = mount();
+  await flush();
+  loaded(frame);
+  vi.spyOn(api, "pageSave").mockRejectedValue(new Error("no"));
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  document.querySelector<HTMLButtonElement>(".mb-head .ra-tools > [data-page-act]")!.click();
+  await flush();
+  expect(document.querySelector(".toast")?.textContent).toBe(t("page.report.saveFailed"));
+  expect(stage.classList.contains("is-page")).toBe(true);
+  back().click();
+});
+
+test("a plugin's page, which needs its host to work, has no Share: a file does not have one", async () => {
+  vi.mocked(api.pagesOpen).mockResolvedValue({ ...opened, source: "mcp" });
+  const { thread, frame } = mount([{ ...card, source: "mcp" }]);
+  await flush();
+  loaded(frame);
+  thread.querySelector<HTMLElement>('[data-page-act="expand"]')!.click();
+  expect(document.querySelectorAll(".mb-head .ra-tools > [data-page-act]")).toHaveLength(0);
+  expect(document.querySelector(".mb-head-c > .pgv-pill")).not.toBeNull();
+  back().click();
+});
+
+// The Library's press (R-PAGE-06): the page opens from wherever its card stands in the thread.
+test("a page asked for by its id opens whole once its card has read the page, and the view stands at once", async () => {
+  const { thread, pages, frame, stage, shell } = mount();
+  const done = vi.fn();
+  const opening = pages.show("p1", "藍色背包", done);
+  // The view is up with the page's title before its card is ready; the thread's card closing nothing.
+  expect(stage.classList.contains("is-page") && document.querySelector(".pgv-pill")?.textContent === "藍色背包").toBe(true);
+  expect(shell.fold).toHaveBeenCalledOnce();
+  pages.sync();
+  expect(stage.classList.contains("is-page")).toBe(true);
+  await flush();
+  loaded(frame);
+  expect(await opening).toBe(true);
+  expect(stage.querySelector(".pgv-frame-box > iframe")).toBe(frame);
+  expect(pages.shown()).toEqual({ id: "p1", kind: "page" });
+  expect(done).not.toHaveBeenCalled();
+  back().click();
+  expect(done).toHaveBeenCalledOnce();
+  expect(shell.unfold).toHaveBeenCalledOnce();
+  expect(thread.querySelector(".pg-body iframe")).toBe(frame);
+});
+
+test("a page whose card never comes, or that cannot be read, leaves nothing open and says the way back has run", async () => {
+  vi.useFakeTimers();
+  try {
+    const { pages, stage } = mount();
+    const done = vi.fn();
+    const opening = pages.show("gone", "沒有的頁面", done);
+    expect(stage.classList.contains("is-page")).toBe(true);
+    await vi.advanceTimersByTimeAsync(10500);
+    expect(await opening).toBe(false);
+    expect(stage.classList.contains("is-page")).toBe(false);
+    expect(done).toHaveBeenCalledOnce();
+  } finally { vi.useRealTimers(); }
+  vi.mocked(api.pagesOpen).mockRejectedValue(new Error("gone"));
+  const second = mount([{ ...card, id: "p3" }]);
+  const done = vi.fn();
+  const opening = second.pages.show("p3", "讀不出的頁面", done);
+  await flush();
+  expect(await opening).toBe(false);
+  expect(second.stage.classList.contains("is-page")).toBe(false);
+  expect(done).toHaveBeenCalledOnce();
+});
+
+test("the owner going back while the card is still on its way opens nothing afterwards", async () => {
+  const { pages, stage, frame } = mount();
+  const done = vi.fn();
+  const opening = pages.show("p1", "藍色背包", done);
+  back().click();
+  expect(done).toHaveBeenCalledOnce();
+  await flush();
+  loaded(frame);
+  expect(await opening).toBe(false);
+  expect(stage.classList.contains("is-page")).toBe(false);
 });
 
 test("Escape goes back and leaves the composer's draft alone, except where a task's Stop has the Escape first", async () => {

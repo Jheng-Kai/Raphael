@@ -18,6 +18,15 @@ export class TranscriptWindow {
   reset(): void { this.keys = []; this.start = this.end = undefined; this.following = true; this.startIndex = this.endIndex = 0; }
   latest(): void { this.start = this.end = undefined; this.following = true; }
 
+  /** The window as it is: put back with `restore`, once the keys it spans are drawn again (a page opened from the Library). */
+  snapshot(): { start?: string; end?: string; following: boolean } { return { start: this.start, end: this.end, following: this.following }; }
+  /** Puts a window back; false (nothing changed) when a turn it spans is not among the turns now known. */
+  restore(was: { start?: string; end?: string; following: boolean }): boolean {
+    if ((was.start !== undefined && !this.keys.includes(was.start)) || (was.end !== undefined && !this.keys.includes(was.end))) return false;
+    this.start = was.start; this.end = was.end; this.following = was.following;
+    return true;
+  }
+
   select<T>(items: readonly T[], key: (item: T) => string, follow = false): T[] {
     if (follow) this.following = true;
     const keys = items.map(key);

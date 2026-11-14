@@ -625,7 +625,7 @@ member-panel-work.ts now draws the same:
   for the look audit's language check (`.lib-title`).
 - Everything at once up to the core's bound of 100, scrolling inside the panel; there is no 「顯示更多」 (owner, 2026-11-08).
   The empty and failed sentences are unchanged, and now stand under the four chips.
-- A press opens a picture in the lightbox, a page at the reply that published it, an attachment with `open_attachment`, and a
+- A press opens a picture in the lightbox, a page itself, whole, in the area beside the sidebar (R-PAGE-06, 2026-11-14: it was the reply that published the page, where the card still had to be pressed; see Conversation), an attachment with `open_attachment`, and a
   delivered file with the `open_library_file` command, which hands the member id and the Library handle to
   `members.library_file` (never a path, never `computer.team_file`).
 
@@ -635,7 +635,7 @@ deliverables are all media; the four chips still show, 全部 lists the five) an
 scripts/look/checks.mjs read the chips, groups, card, row, mark and empty-line geometry.
 
 ```powershell
-npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty details --theme both --width 1120,720,1920x1080
+npm run look -- member-panel-library member-panel-library-pages member-panel-library-media member-panel-library-files member-panel-library-single member-panel-library-single-pages member-panel-library-long member-panel-library-open member-panel-library-empty page-library-open page-library-report page-library-back page-library-older details --theme both --width 1120,720,1920x1080
 ```
 
 ## Bare screen while the computer is not showing its screen (owner, 2026-11-07)
