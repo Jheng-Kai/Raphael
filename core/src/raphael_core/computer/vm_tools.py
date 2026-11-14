@@ -184,7 +184,7 @@ EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside th
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
-BROWSER_OPEN = {"description": "Open an http/https URL in the member's persistent browser and return its semantic page references without a screenshot. " + NEW_TAB + "Use the typed browser tools for follow-ups. " + VM_CONTRACT,
+BROWSER_OPEN = {"description": "Open an http/https URL in your browser and return its page references, no screenshot. " + NEW_TAB + "Use the typed browser tools for follow-ups. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
         "query": {"type": "string"}, "scope_ref": {"type": "string"}, "new_tab": {"type": "boolean"}}, "required": ["url"], "additionalProperties": False}}
 FILL_LOGIN = {"description": "Use vault_entries labels and owner hints to choose a saved login; if two fit, ask_owner. Fill only the current exact HTTPS origin. Never submit or request private values in chat; use request_takeover for owner-only steps. Legacy request_secret(site) references still work. " + VM_CONTRACT,

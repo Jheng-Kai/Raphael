@@ -7,14 +7,13 @@ computer's image does both through the browser's own DevTools port (`raphael-bro
 site goes to is the member's decision: nothing here names a site or a task.
 """
 
-NEW_TAB = ("new_tab true opens it in a new tab of your window and shows that tab, leaving the others as they are: use it "
-           "when the tab shown holds a page that is not this step's (the owner's, another task's, one you may come back "
-           "to), as a person opens a tab for a new site. Otherwise the tab shown is reused. ")
+# Short, as every computer tool's words are: they go with every request of every member (the catalogue's ceiling,
+# tests/computer/test_catalog_stays.py).
+NEW_TAB = "new_tab: a new tab, when the shown one holds another page (the owner's, another task's, one to return to). "
 
 BROWSER_TABS = {
-    "description": "List the tabs of your browser window and which one is shown on your screen (what the owner sees), or "
-                   "bring one to the front with show, as a person clicks a tab. Each tab's tab_id works with the target_id "
-                   "it returns in the typed browser tools; open a page in a new tab with browser_open and new_tab.",
+    "description": "List your window's tabs and which one is shown (what the owner sees), or bring one to the front with "
+                   "show. A tab_id is the target_id of the typed browser tools.",
     "parameters": {"type": "object", "properties": {
         "show": {"type": "string", "minLength": 1, "maxLength": 200, "description": "A tab_id from this list or from browser_open."}},
         "additionalProperties": False}}
