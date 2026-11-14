@@ -10,8 +10,10 @@ first live input of PortAudio's own order, Stereo Mix included (it is live whene
 microphone remembered by a name whose 「3- 」 Windows renumbers. Which of the headset, Stereo Mix and the array won
 depended on what was playing and what was listed first. R-MIC-AUTO-01 and R-MIC-AUTO-02: the order and its memory are
 `device/mic_choice.py` (an attached microphone before a built-in array, never a loopback, the same one while it is plugged
-in, a new attached one takes over, one that was heard is not left for being quiet), used by `audio.py`'s
-`_pick_device`, `_find_live_input` and `automatic_device_name` (the menu's 「目前」 label).
+in, a new attached one takes over; nothing at a recording's start moves it, and only two whole silent recordings of one
+never heard pass it over), used by `audio.py`'s `_pick_device`, `MicRecorder.stop` (which tells it what the recording was)
+and `automatic_device_name` (the menu's 「目前」 label). Since 2026-11-14 evening nothing is probed: the owner's quiet
+HyperX lost to the array at every start of the first fix.
 
 ```powershell
 cd core; $env:PYTHONPATH="$PWD\src"; .\.venv\Scripts\python.exe -m pytest tests/device -q

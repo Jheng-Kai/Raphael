@@ -902,33 +902,6 @@ def feed_milliseconds(stream, milliseconds, amplitude):
         stream.feed(block)
 
 
-def test_automatic_replaces_a_digitally_silent_default_and_preserves_probe_audio(fake_sd, caplog):
-    fake_sd.rates_at_16k = {1: True, 2: True}
-    got = []
-    rec = MicRecorder(got.append)
-    with caplog.at_level(logging.INFO, logger=audio.logger.name):
-        rec.start()
-        default = fake_sd.streams[0]
-        feed_milliseconds(default, 280, 0.000015)
-        assert len(fake_sd.streams) == 1
-        feed_milliseconds(default, 20, 0.000015)
-        try:
-            wait_for_audio(lambda: len(fake_sd.streams) == 2)
-            candidate = fake_sd.streams[1]
-            assert candidate.kwargs["device"] == 2  # Sound Mapper is never probed.
-            feed_milliseconds(candidate, 200, 0.001)
-            wait_for_audio(lambda: audio.automatic_device_name() == "Array Mic")
-            candidate.feed(np.full(320, 0.25, np.float32))
-        finally:
-            rec.stop()
-    assert default.stops == default.closes == 1
-    assert sum(block.size for block in got if np.all(block == np.float32(0.001))) == 3200
-    assert np.all(got[-1] == np.float32(0.25))
-    assert "Microphone: Array Mic (automatic: default Headset Mic was silent)" in caplog.text
-    assert rec.error is None
-    assert audio._active == 0
-
-
 def test_automatic_keeps_default_when_any_startup_block_has_real_mic_signal(fake_sd):
     rec = MicRecorder(lambda frames: None)
     rec.start()
@@ -947,30 +920,6 @@ def test_explicit_microphone_never_probes_even_when_it_is_digitally_silent(fake_
     assert len(fake_sd.streams) == 1
 
 
-def test_automatic_tries_attached_microphones_before_the_array_and_rechecks_the_first(fake_sd):
-    fake_sd.devices.append(FakeSd.device(5, "USB Mic", 1, 48000.0))
-    rec = MicRecorder(lambda frames: None)
-    rec.start()
-    try:
-        feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        assert fake_sd.streams[1].kwargs["device"] == 5  # the other attached one, not the array
-        feed_milliseconds(fake_sd.streams[1], 200, 0.000015)
-        wait_for_audio(lambda: len(fake_sd.streams) == 3)
-        assert fake_sd.streams[2].kwargs["device"] == 2  # the array, last
-        feed_milliseconds(fake_sd.streams[2], 200, 0.001)
-        wait_for_audio(lambda: audio.automatic_device_name() == "Array Mic")
-    finally:
-        rec.stop()
-    rec.start()
-    try:
-        # the headset is never heard, so it is looked at again at the next start
-        assert fake_sd.streams[3].kwargs["device"] == 1
-    finally:
-        rec.stop()
-    assert audio._active == 0
-
-
 def test_a_headset_that_was_heard_is_kept_when_it_is_quiet_at_the_next_start(fake_sd):
     rec = MicRecorder(lambda frames: None)
     rec.start()
@@ -987,120 +936,6 @@ def test_a_headset_that_was_heard_is_kept_when_it_is_quiet_at_the_next_start(fak
     assert audio._active == 0
 
 
-def test_stopping_during_automatic_probe_closes_streams_and_drops_late_frames(fake_sd):
-    got = []
-    rec = MicRecorder(got.append)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-    finally:
-        rec.stop()
-    delivered = len(got)
-    for stream in fake_sd.streams:
-        stream.feed(np.full(960, 0.25, np.float32))
-        assert stream.stops == stream.closes == 1
-    assert len(got) == delivered
-    assert rec.error is None
-    assert audio._active == 0
-
-
-def test_silent_candidates_fall_back_to_default_without_delivering_their_audio(fake_sd):
-    fake_sd.rates_at_16k = {1: True, 2: True}
-    got = []
-    rec = MicRecorder(got.append)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        feed_milliseconds(fake_sd.streams[1], 200, 0.00001)
-        wait_for_audio(lambda: len(fake_sd.streams) == 3)
-        assert fake_sd.streams[2].kwargs["device"] == 1
-        fake_sd.streams[2].feed(np.full(320, 0.25, np.float32))
-    finally:
-        rec.stop()
-    assert not any(np.all(block == np.float32(0.00001)) for block in got)
-    assert np.all(got[-1] == np.float32(0.25))
-    assert rec.error is None
-    assert audio._active == 0
-
-
-def test_an_unavailable_automatic_candidate_is_skipped_without_poisoning_recording(fake_sd):
-    fake_sd.devices.append(FakeSd.device(5, "USB Mic", 1, 48000.0))
-    original = fake_sd.InputStream
-
-    def open_stream(**kwargs):
-        if kwargs["device"] == 2:
-            raise sounddevice.PortAudioError("device busy")
-        return original(**kwargs)
-
-    fake_sd.InputStream = open_stream
-    rec = MicRecorder(lambda frames: None)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        assert fake_sd.streams[1].kwargs["device"] == 5
-        feed_milliseconds(fake_sd.streams[1], 200, 0.001)
-        wait_for_audio(lambda: audio.automatic_device_name() == "USB Mic")
-    finally:
-        rec.stop()
-    assert rec.error is None
-    assert audio._active == 0
-
-
-def test_an_automatic_candidate_unplugged_during_probe_is_skipped(fake_sd):
-    fake_sd.devices.append(FakeSd.device(5, "USB Mic", 1, 48000.0))
-    rec = MicRecorder(lambda frames: None)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        fake_sd.streams[1].unplug()
-        wait_for_audio(lambda: len(fake_sd.streams) == 3)
-        feed_milliseconds(fake_sd.streams[2], 200, 0.001)
-        wait_for_audio(lambda: audio.automatic_device_name() == "Array Mic")
-    finally:
-        rec.stop()
-    assert rec.error is None
-    assert audio._active == 0
-
-
-def test_automatic_fallback_that_cannot_reopen_reports_error_and_leaks_no_stream(fake_sd):
-    rec = MicRecorder(lambda frames: None)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        fake_sd.open_error = sounddevice.PortAudioError("default disappeared")
-        feed_milliseconds(fake_sd.streams[1], 200, 0.000015)
-        wait_for_audio(lambda: rec.error is not None)
-    finally:
-        rec.stop()
-    assert isinstance(rec.error, NoMicrophoneError)
-    assert audio._active == 0
-    assert all(stream.closes == 1 for stream in fake_sd.streams)
-
-
-def test_stop_while_automatic_candidate_opens_cancels_selection_and_closes_it(fake_sd):
-    opening = threading.Event()
-    release = threading.Event()
-    rec = MicRecorder(lambda frames: None)
-    rec.start()
-    fake_sd.before_start = lambda: (opening.set(), release.wait(2))
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    assert opening.wait(2)
-    stopped = threading.Event()
-    stopper = threading.Thread(target=lambda: (rec.stop(), stopped.set()))
-    stopper.start()
-    release.set()
-    stopper.join(2)
-    assert stopped.is_set()
-    assert audio._active == 0
-    assert all(stream.closes == 1 for stream in fake_sd.streams)
-    assert rec.error is None
-
-
 def test_automatic_with_no_alternative_keeps_original_stream(fake_sd):
     fake_sd.devices = fake_sd.devices[:2]
     rec = MicRecorder(lambda frames: None)
@@ -1111,90 +946,6 @@ def test_automatic_with_no_alternative_keeps_original_stream(fake_sd):
     assert rec.error is None
     assert audio._active == 0
 
-
-def test_stop_during_probe_discards_unselected_resampler_tail(fake_sd):
-    got = []
-    rec = MicRecorder(got.append)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        feed_milliseconds(fake_sd.streams[1], 100, 0.000015)
-        delivered = len(got)
-    finally:
-        rec.stop()
-    assert len(got) == delivered
-    assert audio._active == 0
-
-
-def test_stop_preserves_speech_from_an_alive_probe_before_the_probe_window_ends(fake_sd):
-    fake_sd.rates_at_16k = {1: True, 2: True}
-    got = []
-    rec = MicRecorder(got.append)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        feed_milliseconds(fake_sd.streams[1], 100, 0.1)
-    finally:
-        rec.stop()
-    assert sum(block.size for block in got if np.all(block == np.float32(0.1))) == 1600
-    assert rec.error is None
-    assert audio._active == 0
-
-
-def test_candidate_unplugged_at_promotion_is_not_selected_as_a_live_microphone(fake_sd):
-    fake_sd.rates_at_16k = {1: True, 2: True}
-    rec = MicRecorder(lambda frames: None)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        candidate = fake_sd.streams[1]
-        capture = rec._capture
-        original_lock = capture.delivery_lock
-
-        class UnplugOnPromotion:
-            unplugged = False
-
-            def __enter__(self):
-                if threading.current_thread().name == "raphael-microphone-selection" and not self.unplugged:
-                    self.unplugged = True
-                    candidate.unplug()
-                return original_lock.__enter__()
-
-            def __exit__(self, *args):
-                return original_lock.__exit__(*args)
-
-        capture.delivery_lock = UnplugOnPromotion()
-        feed_milliseconds(candidate, 200, 0.001)
-        wait_for_audio(lambda: len(fake_sd.streams) == 3)
-        assert fake_sd.streams[2].kwargs["device"] == 1
-        assert audio.automatic_device_name() == "Headset Mic"
-    finally:
-        rec.stop()
-    assert rec.error is None
-    assert audio._active == 0
-
-
-def test_a_probe_without_callbacks_keeps_recording_alive_for_the_stall_watchdog(fake_sd):
-    got = []
-    rec = MicRecorder(got.append)
-    rec.start()
-    feed_milliseconds(fake_sd.streams[0], 300, 0.000015)
-    try:
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        # No callback at all from this input; selection must keep the dictation watchdog alive.
-        recorded_samples = sum(block.size for block in got)
-        wait_for_audio(lambda: any(np.all(block == 0) for block in got))
-        assert sum(block.size for block in got) == recorded_samples
-    finally:
-        rec.stop()
-    assert rec.error is None
-    assert audio._active == 0
-
-
-# --- the owner's microphones (R-MIC-AUTO-01) ----------------------------------------------------
 
 OWNER_HEADSET = "麥克風 (3- HyperX Cloud II Core Wi"
 OWNER_MIX = "立體聲混音 (Realtek(R) Audio)"
@@ -1226,20 +977,52 @@ def test_automatic_opens_the_headset_not_the_sound_mapper_and_stays_on_it(fake_s
     assert audio.automatic_device_name() == OWNER_HEADSET
 
 
-def test_a_silent_headset_falls_to_the_array_never_to_stereo_mix(fake_sd):
+def recorded_on(fake, rec, milliseconds, amplitude):
+    """Starts, gives the stream it opened `milliseconds` of sound at `amplitude`, stops: the microphone it opened."""
+    rec.start()
+    try:
+        stream = fake.streams[-1]
+        feed_milliseconds(stream, milliseconds, amplitude)
+        return fake.devices[stream.kwargs["device"]]["name"]
+    finally:
+        rec.stop()
+
+
+def test_automatic_stays_on_a_quiet_headset_at_every_start_and_never_opens_another(fake_sd):
+    # Owner, 2026-11-14: a quiet first moment sent automatic from his HyperX to the laptop's array at every start, and back.
     fake_sd.devices = owner_devices()
     fake_sd.default_input = 0
     rec = MicRecorder(lambda frames: None)
-    rec.start()
-    try:
-        feed_milliseconds(fake_sd.streams[0], 300, 0.0)
-        wait_for_audio(lambda: len(fake_sd.streams) == 2)
-        assert fake_sd.streams[1].kwargs["device"] == 3  # the array: Stereo Mix (2) is skipped
-        feed_milliseconds(fake_sd.streams[1], 200, 0.001)
-        wait_for_audio(lambda: audio.automatic_device_name() == OWNER_ARRAY)
-    finally:
-        rec.stop()
-    assert [s.kwargs["device"] for s in fake_sd.streams] == [1, 3]
+    opened = [recorded_on(fake_sd, rec, 300, 0.0) for _ in range(6)]
+    assert opened == [OWNER_HEADSET] * 6
+    assert len(fake_sd.streams) == 6  # one stream for each start: nothing else is opened to listen
+    assert audio.automatic_device_name() == OWNER_HEADSET
+
+
+def test_a_microphone_silent_for_two_whole_recordings_is_tried_after_the_others_never_stereo_mix(fake_sd, caplog):
+    caplog.set_level("INFO", logger="raphael_core.device.audio")
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    rec = MicRecorder(lambda frames: None)
+    assert recorded_on(fake_sd, rec, 2100, 0.0) == OWNER_HEADSET
+    assert recorded_on(fake_sd, rec, 2100, 0.0) == OWNER_HEADSET
+    assert "gave no sound in two recordings" in caplog.text
+    assert recorded_on(fake_sd, rec, 300, 0.01) == OWNER_ARRAY  # the array: Stereo Mix is never a microphone
+
+
+def test_a_heard_microphone_is_never_passed_over_for_silence(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    rec = MicRecorder(lambda frames: None)
+    assert recorded_on(fake_sd, rec, 500, 0.01) == OWNER_HEADSET
+    assert [recorded_on(fake_sd, rec, 2100, 0.0) for _ in range(4)] == [OWNER_HEADSET] * 4
+
+
+def test_short_silent_recordings_say_nothing_about_the_microphone(fake_sd):
+    fake_sd.devices = owner_devices()
+    fake_sd.default_input = 0
+    rec = MicRecorder(lambda frames: None)
+    assert [recorded_on(fake_sd, rec, 1000, 0.0) for _ in range(5)] == [OWNER_HEADSET] * 5
 
 
 def test_the_menu_label_stays_on_the_headset_while_the_list_is_read_again_and_again(fake_sd):
