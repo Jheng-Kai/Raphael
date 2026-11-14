@@ -71,6 +71,8 @@
 /* What the member does with a message written under the page: the same line as in the thread while it works, then the first
    words of its reply (the arrow brings it in full). */
 .pgv-status { padding: 0 var(--pa-dock-x); }
+/* The page now reaches this row (R-PAGE-09), so the answer stands in a band of its own on a hairline and never reads as the page's last line. */
+.pgv-status:not([hidden]) { border-top: 1px solid var(--line); padding-top: var(--sp-1); }
 .pgv-status > :is(.live-presence, .pgv-reply) { max-width: var(--pa-colw); margin-inline: auto; }
 .pgv-status > .live-presence { margin-top: var(--sp-1); }
 .pgv-reply { margin-top: var(--sp-1); overflow: hidden; color: var(--text-3); font-size: var(--fs-sm); line-height: 28px; text-overflow: ellipsis; white-space: nowrap; }
