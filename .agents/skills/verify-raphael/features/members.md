@@ -255,7 +255,7 @@ selection. Native proof must also relaunch the isolated dev instance and confirm
 persistence, then remove test data.
 
 Routine, skill and command rows put edit/delete in their overflow menus
-(R-UI-11). Routine switches remain on their rows. Existing edit, approval and undo
+(R-UI-11). Routine switches remain on their rows. Existing edit and approval
 behavior remains in the shared editors and controllers.
 
 ## Gotchas
@@ -630,10 +630,13 @@ used for review. `skill_manage` is offered for a request about skills and on the
 workers' fixed tool set, not merely because a skill is enabled.
 
 The existing member Skills pane shows provenance and learning date, opens an editable
-document, deletes and undoes the latest change (including deletion) through existing RPCs.
+document and deletes through existing RPCs. Nothing restores a skill: since 2026-11-14 there is no
+"復原上次變更" button, no `undo` field in `members.skills.list`, no `undo` parameter of
+`members.skills.update` and no `member_skill_undo` tool, so a delete (asked twice) is final
+(owner: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」).
 The owner editor supplies its read revision to prevent overwriting a background update.
-The host journal/mirror records revisions outside bot-writable homes; read/list/index and
-undo discovery never mutate or notify. A learned skill adds one localized conversation
+The host journal/mirror records revisions outside bot-writable homes; read/list/index
+discovery never mutates or notifies. A learned skill adds one localized conversation
 event line without exposing its internal event payload. zh-TW and Japanese memory headings
 join the member name directly to the possessive particle.
 
@@ -643,7 +646,7 @@ npm run look -- details-skills raphael-skills member-text details-commands --the
 npm run native -- skill-growth
 ```
 
-The selected scenes cover learned provenance, silent reading, delete/undo, conversation
+The selected scenes cover learned provenance, silent reading, a final delete, conversation
 notices and the ordinary command editor comparison. The native journey checks the real
 heading, ten persisted tool calls, a background-generated home skill, and a successful
 skill_read on the next similar request, with zero fake-provider spend. This proves host
@@ -885,7 +888,7 @@ SkillHomes maps them to shared/skills. The existing owner RPCs select that scope
 with shared:true and a real member_id, never a negative public ID. Migration 61
 adds individual member_skill_grants; absence means enabled, subject to the
 library's global switch. A member can toggle shared access; shared documents are
-edited/deleted in the library only. Own skill edits/undo never include inherited
+edited/deleted in the library only. Own skill edits never include inherited
 skills. Name collisions share the existing slash namespace.
 
 Raphael gets the same import, command-template, slash discovery and expansion

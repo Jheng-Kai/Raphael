@@ -1572,7 +1572,6 @@ export const ko = {
   "skills.learned": "스스로 학습",
   "skills.imported": "가져옴",
   "skills.owner": "소유자가 제공",
-  "skills.undo": "마지막 변경 취소",
   "skills.instructions": "스킬 지침",
   "skills.save": "스킬 저장",
   "members.more": "{p0} 옵션",
