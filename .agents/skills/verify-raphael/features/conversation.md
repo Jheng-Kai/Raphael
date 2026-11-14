@@ -92,13 +92,20 @@ a dialog first (「復原這些變更？」, what comes back, what is kept) unle
 「沒能復原這些變更，請再試一次。」 beside 重試. Routine and background turns keep the card: the checkpoint is their only undo.
 
 ```powershell
-npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-noise card-task-work-only card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
 ```
 
 `card-task-few` (four files, a text file opened under its row), `card-task-many` (53 files with nothing to count: five rows and 「還有 48 個檔案」, no +0 −0), `card-task-new` (only new
 files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-restored` (「已復原 1 個檔案的變更」, one button) assert no pill or dot, none of the old words, one-line rows with their
 state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
 `npm run verify -- --contract` after a change to the file list the core sends.
+
+What tools leave is never on the card (R-CARD-20, owner 2026-11-14: a card 「新增了 30 個檔案」 of bare hashes, the content store of
+`npm i --cache /home/cua/workspace/.npm-cache`): the core's checkpoints neither walk nor list hidden folders, package and build stores, caches and
+temporary folders, lock files, temporary or partial files and bare-hash names (`checkpoints.py` `noise_folder`, `noise_file`); a review kept before is
+filtered when read, and undo leaves them alone. `card-task-noise` (a turn of leftovers alone: no card) and `card-task-work-only` (the same leftovers
+beside three work files: 「新增了 3 個檔案」 and only those rows) show the list the core's own `CheckpointStore` makes of a synthetic workspace
+(`scripts/look/core_fixtures.py`, through runner.mjs `coreFixtures`), not a mocked copy.
 
 ## A sign-in the CLI refused is mended once for every routine (2026-11-14, R-CLI-SIGNIN-03)
 

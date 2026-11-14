@@ -1289,6 +1289,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.library": {
         // As the core since brief 10: only what the member delivered, newest first, with the day it was handed over.
         if (!variant.memberPanelFiles) return { files: [], has_more: false };
+        // `core`: the Library the core's own snapshot reads from a synthetic database (runner.mjs `coreFixtures`).
+        if (variant.memberPanelFiles === "core") return data.coreLibrary;
         const sample = data.memberPanelSample, now = Date.now(), limit = p.limit ?? 12;
         const dayOf = at => { const d = new Date(at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
         // Three pictures it sent in its replies, stored as attachments (drawn here, read back through attachments.get).
@@ -2086,6 +2088,9 @@ export function installMock(fixture, config = {}, target = window) {
             picture('/home/cua/workspace/預算.xlsx', 'added'), picture('/home/cua/team/封面.png', 'added'),
           ],
         };
+        // `core-noise` and `core-work`: what the core's own CheckpointStore sends for a turn of tools' leftovers alone, and beside the
+        // work's files (runner.mjs `coreFixtures`).
+        if (variant.checkpointShape?.startsWith('core-')) return {checkpoints:data.coreCheckpoints[variant.checkpointShape],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
         const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:variant.roomOwnerCard === 'result' ? 950 : variant.cardTaskResult || variant.cardDeck ? 980 : 7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:shapes[variant.checkpointShape] ?? [{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
         if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:checkpoint.files.map(file => file.path),skipped:[]}; }
         return {checkpoints:variant.checkpoints || variant.cardDeck ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
