@@ -27,6 +27,11 @@ a dot (`routine-view-failed`), and a routine that is running shows the member's 
 bubble for its instructions (`routine-running`, R-ROUTINE-08). Existing consumers: `routine-sentence` (a failed run's line and
 the same view), `details-routine-view` (a routine that works has no status line).
 
+A routine's run reads the team without a card (R-ROUTINE-09; owner, 2026-11-14: a health check raised 16 cards for the
+members it read, two timed out, the runs were cancelled): `member_manage` reading actions (a member's routines, skills,
+commands, settings) are T1 and wait for nobody. Every change a run makes to the team keeps its exact-action card, and a
+destructive one its T3. Core only, no screen: `core/tests/members/test_routine_reads.py`.
+
 ```powershell
 npm run look -- routine-view-failed routine-running routine-sentence details-routine-view --theme both --width 1120,720,1920x1080
 ```
