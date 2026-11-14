@@ -78,7 +78,12 @@ async def test_a_due_routine_runs_once_as_a_task_of_its_member_and_is_moved_on_f
     assert attached[1] == turn.id
     assert ("agent.turn", {"turn_id": turn.id, "member_id": member_id}) in rig.notes
     listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
-    assert listed[member_id]["unread"] and listed[member_id]["preview"] == "晨報"
+    # A run that has only begun has said nothing: the thread is not news until the task completes it (owner, 2026-11-14, R-SIDE-04).
+    assert not listed[member_id]["unread"] and listed[member_id]["preview"] == "晨報"
+    AgentHistory(conn).resolve(turn.id, prefix="", text="今天的進度", status="done")
+    rig.service.turn_arrived(turn.id)
+    listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
+    assert listed[member_id]["unread"] and listed[member_id]["unread_kind"] == "done"
 
 
 async def test_raphael_has_routines_too_run_on_the_answer_model(rig, conn):

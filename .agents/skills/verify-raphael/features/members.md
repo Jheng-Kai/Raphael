@@ -147,6 +147,58 @@ at every width of the list.
 npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row panel-widest sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
 ```
 
+### Reordering the sidebar follows the pointer (owner, 2026-11-14, R-SIDE-03)
+
+「為什麼它只是調順序而已也會卡」: a drop used to send one `members.update` for each member of the folder (or one `groups.update` for each folder), wait for
+each, and draw the panel, the settings page and the conversation again for every change the core announced. Now `dropMember` and `reorderGroup` in
+`members-shell.ts` work out the list the core will answer (`member-order.ts`: `movedMember`, `movedGroup`, the numbering of `store.py _move`), draw it
+at once (`place`: only the column is patched), and save with one request through `reorder`. While a save is out no roster read is drawn (`saving`; a read
+that began before is dropped by `loads`); afterwards one read confirms, and a roster that differs only in places, folders and the roster's order or revision
+(`withoutPlaces`) is followed by the column alone. A save that fails puts the old list back and toasts the error.
+Facts to keep: `position` counts every member but Raphael across all folders; the core numbers them again from 0; dropping on the hidden folder is not a drop;
+a row that would stand where it stands asks nothing.
+
+`sidebar-reorder-members` (a row down its folder), `sidebar-reorder-across` (a row into another folder) and `sidebar-reorder-folder` (a folder above another) run the
+`drag-probe` step (`app/scripts/look/drag-probe.mjs`) with a real pointer on fifteen members in three folders (`sidebarDrag`, a mock core that answers in 16 ms
+and numbers places as the core does) with the slimes moving. It keeps a Chrome trace of the press beside the report
+(`drag-probe-*.trace.json`) and fails on: the row standing later than 150 ms after the drop (`orderMs`), more than one distinct order shown, more than one save or two
+roster reads, a main-thread task over 100 ms, any element made new or removed in the conversation, and any row, folder or face of the list that is another node afterwards
+except the moved row. Measured before and after (mock core at 16 ms per call, light, 1120 x 800, the row standing after the drop / saves / roster reads): row down its folder 369 ms, 5, 3 then 9 ms, 1, 1;
+folder above another 361 ms, 3, 3 then 12 ms, 1, 1; row into another folder 402 ms, 6, 3 then 48 ms, 1, 1 (the longer one is the style recalculation of the moved row's new
+nodes and the focus the list gives back to it; its slime node is the one that was there). At 4 x CPU slowdown (`LOOK_CPU_SLOWDOWN=4`): 649, 861 and 468 ms before, 83, 367 and 65 ms after.
+The same press has a task of about 350 ms at 4 x (24 ms at 1 x) at its first hover and drag start, from restyling the list (983 elements), before and after this change: it is not the drop, and
+`limits` is read at 1 x. The real core takes about 16 ms for each members.update or groups.update (a fresh database with fifteen members: `sync_homes` rewrites every member's home on each change) and 3 ms for members.list.
+Read the report's `assertions` for `dragPhase`, `dropPhase` (script, layout, style and task ms),
+`dragoverMaxMs`, `longTasks`, `orders`, `replaced` and `trace`.
+
+```powershell
+npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row --theme both --width 1120,720,1920x1080
+```
+
+### The sidebar's lights: one dot, one meaning (owner, 2026-11-14, R-SIDE-04)
+
+「他們如果在思考的情況下，不要有提示他們有新的動作，因為我這樣點過去，他們其實是沒有任何內容。只有他們真正傳出訊息的時候，我左邊才會有提示」, and
+「有可能會有不同顏色的，像是白色 maybe 是它傳了一個新的 message，然後綠色可能是他完成任務之類的。可能要有一套邏輯」. Why a thinking member had a dot: `MembersService.turn_arrived`
+marked a thread unread at every `agent.turn` event of a private turn that is written, whatever its status, and a running turn is written when it starts and again at each
+step (a routine's turn the moment the routine starts), so a member that only thought had a dot and an empty thread behind it. Now a turn that is still running marks its thread
+only once it has sent a reply (`_has_reply`; a progress line is not one).
+
+One dot per row (a member, a group chat, a pinned face; on the rail the face's corner), the strongest of: orange `--wait` (a question or an approval waits for the owner: `waiting` or the
+activity `blocked`; it stays until answered), red `--err` (`unread_kind` `failed`, or a run that failed unseen: the activity `error`), green `--ok` (`done`: a task or routine that ended well, a group
+chat whose meeting ended), white `--text` (`message`), none (a member that is thinking or working: its slime shows the work). The core says what the unseen news is (`unread_kind`, `members.list` and `rooms.list`;
+`unread_kind()` in `members/service.py` ranks failed over done over message over the unseen turns); `sidebar-light.ts` `lightOf(row, open)` picks the light and `lightHTML` draws it, for the list, the
+rail, the pinned tiles and group chats alike. The open conversation has read white, green and red (the core clears them with `members.read`) and keeps only orange. The dot keeps its size and place, never
+animates, has no tooltip and names itself (等你處理, 需要你看一下, 已完成, 有新訊息). The header's member picker shows the strongest light of the other members.
+`sidebarLightRules` in `checks.mjs` runs inside `sidebar-shell` in every sidebar scene (at most one dot a row, one of four lights, named, still, and no dot for a member that only thinks). `sidebar-lights` draws
+a thinking member, a message, a task that ended, a failure, a question that waits and three group chats (a message, a meeting that ended, a question) and checks each against what the roster earns, in the
+colour of its token; `sidebar-lights-rail` the same on the rail, `sidebar-lights-pinned` on pinned tiles, `sidebar-lights-thinking` four members that only think (no dot at all), `sidebar-lights-open` opening the
+white, the green and the orange row (white and green go, orange stays). The palette check holds the four colours at 3:1 on every row surface in both themes. Gotchas: a fixture gives `unread_kind` per member
+(`sidebarLights` in `mock-ipc.js`, which also says what each row must earn in `data.expectedLights`), and the real core's `members.read` clears it, not the app alone.
+
+```powershell
+npm run look -- sidebar-lights sidebar-lights-rail sidebar-lights-pinned sidebar-lights-thinking sidebar-lights-open sidebar-unread sidebar-rail --theme both --width 1120,720,1920x1080
+```
+
 Select a member, then click the stacked header title for details.
 At compact width press a member's face in the rail to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
@@ -227,7 +279,7 @@ selection. Native proof must also relaunch the isolated dev instance and confirm
 persistence, then remove test data.
 
 Routine, skill and command rows put edit/delete in their overflow menus
-(R-UI-11). Routine switches remain on their rows. Existing edit, approval and undo
+(R-UI-11). Routine switches remain on their rows. Existing edit and approval
 behavior remains in the shared editors and controllers.
 
 ## Gotchas
@@ -602,10 +654,13 @@ used for review. `skill_manage` is offered for a request about skills and on the
 workers' fixed tool set, not merely because a skill is enabled.
 
 The existing member Skills pane shows provenance and learning date, opens an editable
-document, deletes and undoes the latest change (including deletion) through existing RPCs.
+document and deletes through existing RPCs. Nothing restores a skill: since 2026-11-14 there is no
+"復原上次變更" button, no `undo` field in `members.skills.list`, no `undo` parameter of
+`members.skills.update` and no `member_skill_undo` tool, so a delete (asked twice) is final
+(owner: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」).
 The owner editor supplies its read revision to prevent overwriting a background update.
-The host journal/mirror records revisions outside bot-writable homes; read/list/index and
-undo discovery never mutate or notify. A learned skill adds one localized conversation
+The host journal/mirror records revisions outside bot-writable homes; read/list/index
+discovery never mutates or notifies. A learned skill adds one localized conversation
 event line without exposing its internal event payload. zh-TW and Japanese memory headings
 join the member name directly to the possessive particle.
 
@@ -615,7 +670,7 @@ npm run look -- details-skills raphael-skills member-text details-commands --the
 npm run native -- skill-growth
 ```
 
-The selected scenes cover learned provenance, silent reading, delete/undo, conversation
+The selected scenes cover learned provenance, silent reading, a final delete, conversation
 notices and the ordinary command editor comparison. The native journey checks the real
 heading, ten persisted tool calls, a background-generated home skill, and a successful
 skill_read on the next similar request, with zero fake-provider spend. This proves host
@@ -857,7 +912,7 @@ SkillHomes maps them to shared/skills. The existing owner RPCs select that scope
 with shared:true and a real member_id, never a negative public ID. Migration 61
 adds individual member_skill_grants; absence means enabled, subject to the
 library's global switch. A member can toggle shared access; shared documents are
-edited/deleted in the library only. Own skill edits/undo never include inherited
+edited/deleted in the library only. Own skill edits never include inherited
 skills. Name collisions share the existing slash namespace.
 
 Raphael gets the same import, command-template, slash discovery and expansion

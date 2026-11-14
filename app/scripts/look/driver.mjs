@@ -1,10 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
-import { checkRendered } from "./checks.mjs";
+import { checkFrame, checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
+import { dragProbe } from "./drag-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 /**
@@ -509,18 +510,24 @@ export async function perform(page, step, evidenceDirectory) {
     }
     // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows.
     case "frame-scroll": {
-      const at = await page.evaluate(() => { const box = document.querySelector(".pgv-frame-box")?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 }; });
+      // The middle of what is on screen of the page: the area scrolls as a whole and a page can be far taller than it.
+      const at = await page.evaluate(() => { const box = (document.querySelector(".pgv-page") ?? document.querySelector(".pgv-frame-box"))?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + Math.min(box.height, innerHeight - box.y) / 2 }; });
       if (!at) throw new Error("No page in the conversation's place to scroll");
       await page.mouse.move(at.x, at.y);
       await page.mouse.wheel({ deltaY: step.deltaY });
       await new Promise(resolve => setTimeout(resolve, 500));
       break;
     }
+    // What the frame itself shows, which the app cannot read: a check of checks.mjs `checkFrame` runs inside it (a page's own style, R-PAGE-06).
+    case "frame-check": return (await waitForPageFrame(page)).evaluate(checkFrame, step.name);
     case "frame-expect": {
       const deadline = Date.now() + 8000;
       for (;;) {
         const frames = page.frames().filter(item => item !== page.mainFrame() && item.url().startsWith("data:text/html"));
         const seen = frames.length === 1 ? await frames[0].evaluate(() => ({ text: document.body.innerText, y: Math.round(scrollY), room: Math.max(0, document.documentElement.scrollHeight - innerHeight) })).catch(() => null) : null;
+        // The whole area scrolls, not the page (R-PAGE-08): where it is read is how far the area is scrolled.
+        const area = await page.evaluate(() => { const box = document.querySelector(".pgv-page"); return box ? { y: Math.round(box.scrollTop), room: Math.max(0, box.scrollHeight - box.clientHeight) } : null; });
+        if (seen && area) Object.assign(seen, area);
         // A page that fits its place cannot be read lower down: it is asked to be only as far down as it can be.
         const least = seen && step.scrollAtLeast !== undefined ? Math.min(step.scrollAtLeast, seen.room) : 0;
         const problem = !seen ? `${frames.length} page frames, not one` : step.text && !seen.text.includes(step.text) ? `the page does not show 「${step.text}」` : seen.y < least ? `the page is at ${seen.y}, not at ${least} or lower down` : "";
@@ -690,6 +697,7 @@ export async function perform(page, step, evidenceDirectory) {
     // From now on the roster answers after `ms` (the mock's rosterDelay): the thread is asked for first and the roster comes late.
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
+    case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
       await page.evaluate(ms => { window.__look.now = Date.now() + ms; }, step.ms);
@@ -728,6 +736,14 @@ export async function perform(page, step, evidenceDirectory) {
       if (await page.$('.conversation-trigger[aria-expanded="true"]')) await click('.mb-det [data-det="close"]');
       await click(".conversation-trigger");
       await visible('.mb-det:not([hidden])');
+      break;
+    case "open-computer":
+      // The panel as the owner left it, or opened on the third tab if it was closed (a window too narrow to keep it open).
+      await visible(".conversation-trigger");
+      if (!await page.$('.conversation-trigger[aria-expanded="true"]')) await click(".conversation-trigger");
+      await visible('.mb-det:not([hidden])');
+      // Pressing the tab of the page already shown would show it again, which is not what an owner who stayed does.
+      if (!await page.$('.mb-tabs [data-tab="computer"][aria-selected="true"]')) await click('.mb-tabs [data-tab="computer"]');
       break;
     case "close-details-if-open":
       // The settings page closes a panel that would cover it (a narrow window), so only an open one is closed.

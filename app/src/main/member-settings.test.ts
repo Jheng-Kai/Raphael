@@ -75,7 +75,7 @@ beforeEach(() => {
   current = 3;
   list = LIST;
   for (const fn of Object.values(api)) fn.mockReset();
-  api.membersSkillsList.mockResolvedValue({ skills: SKILLS, undo: null });
+  api.membersSkillsList.mockResolvedValue({ skills: SKILLS });
   api.membersSkillsRead.mockResolvedValue({ skill: { ...SKILLS[0], revision: "h1" }, text: "---\nname: research-summary\n---\n整理來源。" });
   api.membersSkillsUpdate.mockResolvedValue({});
   api.membersSkillsImport.mockResolvedValue({ skill: SKILLS[0] });
@@ -416,12 +416,20 @@ describe("skills and commands", () => {
     expect(api.membersSkillsDelete).toHaveBeenCalledWith(3, 1);
   });
 
+  test("the skills list offers no way to restore a change, even when the core still answers an undo revision", async () => {
+    api.membersSkillsList.mockResolvedValue({ skills: SKILLS, undo: "undo-1" } as never);
+    await open();
+    await cat("skills");
+    expect($("[data-k='ms-skills']").textContent).toContain(SKILLS[0].name);
+    expect(page.el.querySelector('[data-ms="skill-undo"]')).toBeNull();
+    expect(page.el.textContent).not.toContain("復原上次變更");
+  });
+
   test("a skill is added from a link under the plus, and an empty list says so in one line", async () => {
-    api.membersSkillsList.mockResolvedValue({ skills: [], undo: "undo-1" });
+    api.membersSkillsList.mockResolvedValue({ skills: [] });
     await open();
     await cat("skills");
     expect($("[data-k='ms-skills'] .ms-empty").textContent).toBe(t("members.profile.noSkills"));
-    expect($('[data-ms="skill-undo"]')).not.toBeNull();
     await press('[data-ms="skill-add"]');
     const source = $<HTMLInputElement>("#ms-skill-source");
     expect(document.activeElement).toBe(source);
@@ -545,7 +553,7 @@ describe("going back", () => {
     api.membersSkillsList.mockReturnValueOnce(new Promise((done) => { finish = done; }));
     await open();
     current = 4; page.close(); page.open(); await flush();
-    finish({ skills: [{ id: 99, member_id: 3, name: "stale-skill", description: "", enabled: true, source: "owner" }], undo: null });
+    finish({ skills: [{ id: 99, member_id: 3, name: "stale-skill", description: "", enabled: true, source: "owner" }] });
     await flush();
     expect(page.el.textContent).not.toContain("stale-skill");
   });
@@ -555,7 +563,7 @@ describe("words", () => {
   test("in English the page has no Chinese outside the member's own words", async () => {
     setLocale("en");
     list = { groups: [{ id: 20, name: "Study", position: 0, sources: [] }], members: LIST.members.map(m => m.id === 3 ? { ...m, name: "Teacher", role: "Strict", personality: "", instructions: "" } : m) };
-    api.membersSkillsList.mockResolvedValue({ skills: [{ id: 1, member_id: 3, name: "summary", description: "", enabled: true, source: "owner" }], undo: null });
+    api.membersSkillsList.mockResolvedValue({ skills: [{ id: 1, member_id: 3, name: "summary", description: "", enabled: true, source: "owner" }] });
     api.membersCommandsList.mockResolvedValue({ commands: [] });
     await open();
     for (const kind of kinds()) {

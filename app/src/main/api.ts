@@ -575,6 +575,11 @@ export const reportOpen = (id: string): Promise<ReportOpened> => core("pages.ope
  * The shell and the core choose the folder and the name (`report_save`, `pages.export`): no path goes from here.
  */
 export const reportSave = (id: string, html: string): Promise<ReportSaved> => invoke("report_save", { id, html });
+/**
+ * Saves an HTML page as a file (Share, R-PAGE-08). The core builds the file from the page it keeps (`pages.export`) and
+ * ignores any `html`, so the window gives none: the shell takes the same command a report's file does.
+ */
+export const pageSave = (id: string): Promise<ReportSaved> => invoke("report_save", { id, html: "" });
 export const pagesToolCall = (id: string, tool: string, args: object): Promise<{ status: string; ok?: boolean; tool_result?: object | null; error?: string | null }> => core("pages.tool_call", { id, tool, arguments: args });
 
 
@@ -640,7 +645,7 @@ export const keepAwakeGet = (): Promise<boolean> => invoke("schedule_keep_awake_
 export const keepAwakeSet = (enabled: boolean): Promise<boolean> => invoke("schedule_keep_awake_set", { enabled });
 // Member profile resources use the same member boundary as conversations.
 const skillScope = (memberId: number): { member_id: number; shared?: boolean } => memberId === -1 ? { member_id: 0, shared: true } : { member_id: memberId };
-export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[]; undo?: string | null }> => core("members.skills.list", { ...skillScope(memberId) });
+export const membersSkillsList = (memberId: number): Promise<{ skills: import("./types").MemberSkill[] }> => core("members.skills.list", { ...skillScope(memberId) });
 export const membersSkillsImport = (memberId: number, source: string): Promise<{ skill: import("./types").MemberSkill; skills?: import("./types").MemberSkill[] }> => core("members.skills.import", { ...skillScope(memberId), source });
 export const membersSkillsUpdate = (memberId: number, id: number, enabled: boolean): Promise<unknown> => core("members.skills.update", { ...skillScope(memberId), id, enabled });
 /** A skill and its whole Markdown document, for its page (one that is switched off too). */

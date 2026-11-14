@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 from ..clock import wall_clock_ms
 from ..memory.scan import find_secret
 from ..protocol import INTERNAL_ERROR, NOT_FOUND, RpcError, invalid_params
+from .page_style import BASE
 
 HTML_BYTES = 256 * 1024
 MCP_MIME = "text/html;profile=mcp-app"
@@ -135,6 +136,7 @@ THEME = {
 FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei",system-ui,sans-serif'
 
 
+# A page open in the whole area is as tall as its content (up to 20000 px, R-PAGE-08): the area scrolls, the frame does not.
 _HELPER = """<script>
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
@@ -156,7 +158,7 @@ _HELPER = """<script>
     const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);
       const own = box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
       // The root also holds the margins of a first and last child, which collapse through the body.
-      const height = Math.max(80, Math.min(2400, Math.ceil(Math.max(own, document.documentElement.getBoundingClientRect().height))));
+      const height = Math.max(80, Math.min(20000, Math.ceil(Math.max(own, document.documentElement.getBoundingClientRect().height))));
       if (height !== previous) { previous = height; post('height', {height}); } };
     const sizes = new ResizeObserver(report);
     sizes.observe(document.body); sizes.observe(document.documentElement); report();
@@ -180,9 +182,25 @@ def document(page, theme):
         if content == before:
             break
     variables = ";".join(f"--{key}:{value}" for key, value in {**THEME[theme], "font": FONT}.items())
+    # The app's base style (page_style.py) for the pages a member writes, ahead of the page's own, which wins over it; a
+    # plugin's page comes with its own design and is left as it is.
+    base = BASE if page["source"] == "html" else ""
     return ('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             f"<title>{html_lib.escape(page['title'])}</title><style>:root{{{variables};color-scheme:{theme}}}"
-            "body{background:var(--bg);color:var(--fg);font-family:var(--font)}</style>" + _HELPER + content)
+            f"body{{background:var(--bg);color:var(--fg);font-family:var(--font)}}{base}</style>" + _HELPER + content)
+
+
+def page_file(page):
+    """An HTML page as one file the owner can pass on (R-PAGE-08): the stored page as `document()` draws it, without the
+    helper that talks to the window, in its reader's own theme (the dark words stand under `prefers-color-scheme`), and
+    with the page's own policy first in its head: the same sources, no connection, no form, no frame. The sandbox of that
+    policy is a header's alone, and a meta element cannot carry it."""
+    text = document(page, "light").replace(_HELPER, "", 1)
+    policy = "; ".join(part for part in page_csp(page).split("; ") if not part.startswith("sandbox"))
+    dark = ";".join(f"--{key}:{value}" for key, value in {**THEME["dark"], "font": FONT}.items())
+    text = text.replace('<meta charset="utf-8">', '<meta charset="utf-8">'
+                        f'<meta http-equiv="Content-Security-Policy" content="{html_lib.escape(policy, quote=True)}">', 1)
+    return text.replace("</style>", f"</style><style>@media (prefers-color-scheme:dark){{:root{{{dark};color-scheme:dark}}}}</style>", 1)
 
 
 class PageStore:
@@ -424,16 +442,21 @@ class Pages:
         return await self.tool_call(page, params)
 
     async def export(self, params):
-        """Saves a report as a file the owner can pass on (owner, 2026-11-10: 存成檔案): the document the app drew of it
-        (`html`, checked by report_page.checked_file), named after the page, in the owner's output folder, or in
-        `downloads` (the shell's Downloads folder) when none is chosen or it takes nothing. Answers where it went; the
-        shell shows the file selected in its folder."""
-        from .report_page import checked_file, file_name, save_file  # report_page imports this module
+        """Saves a page as a file the owner can pass on (owner, 2026-11-10: 存成檔案; 2026-11-14: Share on every page): a
+        report as the document the app drew of it (`html`, checked by report_page.checked_file), an HTML page as the file
+        this core builds of what is stored (`page_file`: nothing the window says goes into it). Named after the page, in
+        the owner's output folder, or in `downloads` (the shell's Downloads folder) when none is chosen or it takes
+        nothing. Answers where it went; the shell shows the file selected in its folder."""
+        from .report_page import FILE_BYTES, checked_file, file_name, save_file  # report_page imports this module
         page = self.of(params)
-        if not is_report(page):
-            raise RpcError(NOT_FOUND, "Only a report is saved as a file", {"kind": "not_report"})
         try:
-            text = checked_file(params.get("html"))
+            if is_report(page):
+                text = checked_file(params.get("html"))
+            elif page["source"] == "html":
+                text = checked_text(page_file(page), "the page file", FILE_BYTES)
+            else:
+                # A plugin's page works through its host, which a file does not have.
+                raise RpcError(NOT_FOUND, "Only a report or an HTML page is saved as a file", {"kind": "not_shareable"})
         except PageError as error:
             raise invalid_params(str(error)) from None
         folders = [("output", Path(chosen))] if (chosen := self.output_folder()) else []

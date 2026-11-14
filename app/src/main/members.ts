@@ -23,8 +23,8 @@ import { findsName } from "./find-match";
  * whole row, so a reply that streams in or a worker that moves on does not draw them again (owner, 2026-11-11: 「更新…
  * 就會閃現」). Its face carries the rest of it (a long silence, a wait) in its own markup.
  */
-export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "waiting" | "activity" | "activity_label"> {
-  const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
+export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "unread_kind" | "waiting" | "activity" | "activity_label"> {
+  const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, unread_kind: _unreadKind, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
   return rest;
 }
 

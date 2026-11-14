@@ -62,6 +62,8 @@
   /* the owner's own bubble */
   --bubble: #efefef; --on-bubble: #0a0a0a; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #15703f; --warn: #80560f; --err: #b3261e; --warn-soft: #f7f7f7; --warn-edge: #d4d4d4;
+  /* The sidebar dot of a question that waits for the owner: orange, told from the red of a failure (3:1 on every row surface, check-palette.mjs). */
+  --wait: #d05f00;
   --computer-active: #7138bd;
   /* Raphael's blue: his own colour, and the usage bars'. */
   --raphael-color: #1f9fe8;
@@ -120,6 +122,7 @@
   --selected: #282828; --selection: #454545; --on-selection: #ffffff;
   --bubble: #262626; --on-bubble: #f5f5f5; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
+  --wait: #ff9f43;
   --computer-active: #b98aff;
   --raphael-color: #5cc4ff;
   --meter: var(--raphael-color);
