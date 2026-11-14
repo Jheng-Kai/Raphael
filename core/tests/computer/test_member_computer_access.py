@@ -206,3 +206,55 @@ def test_the_unused_grant_table_survives_an_upgrade_untouched(tmp_path):
     conn = db.connect(path)
     assert conn.execute("SELECT COUNT(*) FROM computer_grants").fetchone()[0] == 0
     conn.close()
+
+
+# --- the computer is not a connection (owner, 2026-11-14) ----------------------------------------------------------
+# A member whose owner chose four tools and a connection (members.tools is a list) said it would use its own computer and
+# could not: the list of connections names no computer, and the gate read a computer's key as a connection left out.
+
+CHOSEN = frozenset({"web_search", "web_read", "weather", "local_time", "50a816b0b31c"})
+
+
+async def test_a_member_with_a_list_of_chosen_tools_keeps_its_own_computer(tmp_path, conn):
+    from raphael_core.agent.speaker import Speaker
+    vm = LocalVm(tmp_path, runner=Runtime())
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    await hub.prepare(7)
+    offered = hub.offered_for(7)
+    assert any(tool.name == "vm_exec" for tool in offered)
+    for chosen in (CHOSEN, frozenset(), None):
+        member = Speaker(id=7, name="紫苑", tools=chosen)
+        assert all(member.uses_plugin(tool.key) for tool in offered)
+    # Still a list of connections for connections: one that is not chosen is not offered.
+    assert not Speaker(id=7, tools=CHOSEN).uses_plugin("mcp:connectors_other/send")
+    assert Speaker(id=7, tools=CHOSEN).uses_plugin("mcp:50a816b0b31c/search")
+
+
+async def test_the_tools_a_member_with_a_list_sees_are_the_tools_it_can_call(tmp_path, conn):
+    from raphael_core.agent.speaker import Speaker
+    from raphael_core.background.snapshot import take_snapshot
+    vm = LocalVm(tmp_path, runner=Runtime())
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    await hub.prepare(7)
+    for chosen in (CHOSEN, None):
+        member = Speaker(id=7, name="紫苑", tools=chosen)
+        snapshot = take_snapshot(hub, speaker=member, interactive=True, max_tier=Tier.T3)
+        listed = {item["function"]["name"] for item in snapshot.definitions}
+        assert {"computer__vm_exec", "computer__get_desktop_state"} <= listed
+        assert "computer" not in set(snapshot.refs) | set(snapshot.work)  # not the owner's desktop beside it
+        # Every one of them is callable: the gate the call passes later reads the same list.
+        assert all(snapshot.tool_allowed(tool.key) for tool in hub.offered_for(7))
+
+
+async def test_a_member_without_a_computer_is_offered_none_and_told_not_to_promise_one(tmp_path, conn):
+    from raphael_core.agent.persona import _SHARED_CONTRACT
+    from raphael_core.agent.speaker import Speaker
+    from raphael_core.background.snapshot import take_snapshot
+    vm = LocalVm(tmp_path, runner=Runtime())
+    vm.desktop = Mock(installed=Mock(return_value=False))
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    await hub.prepare(7)
+    snapshot = take_snapshot(hub, speaker=Speaker(id=7, tools=CHOSEN), interactive=True, max_tier=Tier.T3)
+    assert not any(item["function"]["name"].startswith("computer__") for item in snapshot.definitions)
+    # What the model reads says a computer is a tool of the list, so that none in the list is none to promise.
+    assert "With no computer tool listed, say so plainly; promise none." in _SHARED_CONTRACT
