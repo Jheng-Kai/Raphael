@@ -263,6 +263,42 @@ message's bubble not to equal the picture's width, a long one to be wider than t
 `owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
 Enter, the call held), `message-edit-picture` the message open in its editor.
 
+## Several pictures: a scrolling row in the composer, small squares once sent (owner, 2026-11-15, R-ATTACH-01, R-ATTACH-02)
+
+Owner, with two pictures: twelve pictures in the composer ran past its right edge where the mouse could not reach them
+(「理論上要可以用滑鼠，就是可以讓它滾動，向右向左滾動」), and once sent they stood as a two-column grid of tiles about 230 px wide,
+several screens tall (「可以看一下 claude 是怎麼傳的，理論上它應該會是側著的」).
+
+The composer's files (`composerHTML` in `chat-composer.ts`, shared by a member's conversation and a group room) are now the shared
+chip row: `.cmp-files[data-chip-row]` around `.cmp-file[data-chip-scroll]`, so the wheel moves the row sideways, an arrow and a fade
+stand only at an end with more behind it, and a picture reached by Tab comes into view (`chip-scroll.ts`, which now also marks the ends
+again when chips are added or removed without the row changing size). The row is gone with its last file (`.cmp-files:has(> .cmp-file[hidden])`).
+
+Sent: `filesHTML` in `timeline.ts` puts two or more pictures in `.attachment-thumbs`, squares of `--pa-pic` (96 px) side by side,
+wrapping, every row ending at the bubble's right edge; one picture keeps the R-UI-149 size, a video keeps `.attachment-grid`, and
+documents and audio follow, before the bubble. The message on its way, the editor and a group room's message draw the same markup. A
+member's pictures are messages of their own (R-UI-156) and are not changed: each has its own actions and reaction.
+
+Research (2026-11-15, Mobbin screens and the Grok Bot shots in the local research folder, not in the repository): Claude shows a sent
+picture as a square of about 120 px over the bubble at its right edge, Gemini about 110 px; ChatGPT's composer keeps its pictures as small
+squares in one sideways-scrolling row; Grok keeps a picture's shape at a fixed height; Grok Bot shows a member's pictures as a row of
+183 x 120 thumbnails. 96 px rather than 120 lets four stand in the 452 px a bubble has beside its actions at 1120 px, so twelve take three rows.
+
+```powershell
+npm run look -- composer-pictures-strip owner-pictures-four owner-pictures-twelve owner-pictures-mixed owner-pictures-open owner-pictures-pending owner-picture-short owner-picture-pending message-edit-picture room-composer-files room-files-sent attachment-limits --theme both --width 1120,720,1920x1080
+```
+
+`composer-pictures-strip` drops twelve numbered pictures on the composer (`file-drop` with `fill` and `label`), checks one row inside the
+composer, wider than it, at its start with only the right arrow (`composer-pictures-start`), turns a real wheel over it and checks the row
+at its end with only the left arrow, the twelfth picture and its × whole and pressable, and the page and the thread unmoved
+(`composer-pictures-end`). In the 1920 px window the twelve fit the 960 px composer: the checks then require every picture whole, no
+arrow or fade, and a wheel that moves nothing (narrower windows must overflow). `owner-pictures-four`, `-twelve` and `-mixed` (three and a PDF) are the sent message (`ownerPictures`,
+`ownerFile` in the mock); `owner-pictures-pending` pastes three and presses Enter; `room-files-sent` is a group room's. Each runs
+`owner-pictures-row`: 96 px squares, full rows first, as many side by side as the column holds, no taller than its rows, every row at the
+bubble's right edge and the bubble under them; and `owner-picture-bubble` (the bubble keeps its own width). `owner-pictures-open` presses
+the third thumbnail and finds that picture in the viewer. Vitest: `attachment-layout.test.ts` (1, 2, 3, 4 and 12 pictures, mixed),
+`chat-composer.test.ts` (the row and its wheel), `chip-scroll.test.ts` (ends after a change).
+
 ## The delete dialog is Grok Bot's (owner, 2026-11-12)
 
 Owner: 「刪除的 UI，跟我跟你說的那個好像不太一樣，這邊你可能要改一下」. The question before a deletion or a history

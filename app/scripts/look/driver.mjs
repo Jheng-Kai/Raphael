@@ -881,9 +881,17 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "clipboard-paste": case "file-drop": {
       if (step.action === "clipboard-paste") await page.focus(step.selector);
-      await page.$eval(step.selector, (element, { action, name, image, text, hold, mime, size }) => {
-        // One opaque pixel, a real picture for the composer to show and the look to load.
-        const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), c => c.charCodeAt(0));
+      await page.$eval(step.selector, (element, { action, name, image, text, hold, mime, size, fill, label }) => {
+        // One opaque pixel, a real picture for the composer to show and the look to load. `fill` (and `label`) draw a picture of that
+        // colour with its number on it instead, so that pictures in a row can be told apart where it scrolls.
+        let picture = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        if (fill) {
+          const canvas = document.createElement("canvas"); canvas.width = 160; canvas.height = 120;
+          const ctx = canvas.getContext("2d"); ctx.fillStyle = fill; ctx.fillRect(0, 0, 160, 120);
+          if (label) { ctx.fillStyle = "#ffffff"; ctx.font = "bold 56px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, 80, 62); }
+          picture = canvas.toDataURL("image/png").split(",")[1];
+        }
+        const bytes = Uint8Array.from(atob(picture), c => c.charCodeAt(0));
         const transfer = new DataTransfer(), file = image ?? name;
         if (file) {
           const input = new File([bytes], file, { type: mime ?? "image/png" });
