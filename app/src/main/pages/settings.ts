@@ -366,7 +366,7 @@ export function createSettings(app: AppContext): SettingsPage {
     providersRead = providers.view().state === "ready";
   }
   const usageMount = (): UsageAnalyticsMount =>
-    usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
+    usage ??= mountUsageAnalytics(usageHost, { usageAllowances: api.usageAllowances, chatgptStatus: api.chatgptStatus, statusGet: api.statusGet, openExternalUrl: api.openExternalUrl });
   /** The models' catalogue and the speech models opened again within this long of a good reading are not read again. */
   const REFRESH_REUSE_MS = 30_000;
   let backgroundRead: Promise<void> | null = null, backgroundReadAt = -Infinity;

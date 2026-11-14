@@ -786,6 +786,19 @@ export function installMock(fixture, config = {}, target = window) {
     claude.windows = [{ period: "weekly", remaining_percent: 3, resets_at: Math.round(data.now / 1000) + 3 * 86400, updated_at_ms: data.now - 20 * 60000 }, ...claude.windows.filter(window => window.period !== "weekly")];
   }
   if (variant.allowanceTwo) data.allowances.brains = data.allowances.brains.filter(brain => brain.id === "claude" || brain.id === "codex");
+  // The owner's own mix on 2026-11-14 (R-SIDE-02): Codex read live at 65% used with five days to go; Claude's last report named a window whose reset has since passed
+  // (allowed, no percentage); the ChatGPT sign-in, whose plan has no number to read; and an OpenRouter key with its own monthly usage and a limit.
+  if (variant.usageOwner) {
+    const stamp = Math.round(data.now / 1000);
+    data.allowances = { quotas: [], brains: [
+      { id: "codex", name: "Codex", source: "live", windows: [{ period: "weekly", remaining_percent: 35, resets_at: stamp + 5 * 86400 }] },
+      { id: "claude", name: "Claude Code", source: "reported", windows: [{ period: "fiveHour", remaining_percent: null, resets_at: stamp - 3600, status: "allowed", updated_at_ms: data.now - 6 * 3600000 }] },
+    ] };
+    data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
+    data.status.openrouter = { ...data.status.openrouter, state: "ok", usage: { daily: 0.1, weekly: 1, monthly: 3.21, total: 9, limit: 20, limit_remaining: 16.79 } };
+  }
+  // Nothing is connected: no key either.
+  if (variant.usageEmpty) data.status.openrouter = { ...data.status.openrouter, state: "no_key", usage: null };
   if (variant.homeEmpty) {
     data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
