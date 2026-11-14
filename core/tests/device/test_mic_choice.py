@@ -170,3 +170,22 @@ def test_a_microphone_that_was_heard_is_forgotten_when_it_is_unplugged():
 
 def test_no_microphones_gives_nothing():
     assert AutomaticMicrophone().rank([]) == []
+
+
+def test_two_whole_silent_recordings_pass_a_microphone_over_until_it_is_heard_or_plugged_in_again():
+    auto = AutomaticMicrophone()
+    devices = mics(HEADSET, ARRAY)
+    assert first(auto, devices) == HEADSET
+    assert auto.recorded(HEADSET, loud=False, seconds=1.0) is False  # too short to say anything
+    assert auto.recorded(HEADSET, loud=False, seconds=3.0) is False
+    assert first(auto, devices) == HEADSET
+    assert auto.recorded(HEADSET, loud=False, seconds=3.0) is True
+    assert first(auto, devices) == ARRAY
+    first(auto, mics(ARRAY))  # unplugged
+    assert first(auto, devices) == HEADSET  # plugged in again: a new microphone, its silence forgotten
+    auto.recorded(HEADSET, loud=False, seconds=3.0)
+    auto.recorded(HEADSET, loud=False, seconds=3.0)
+    assert first(auto, devices) == ARRAY
+    auto.recorded(HEADSET, loud=True, seconds=0.5)  # chosen by hand and heard
+    assert first(auto, devices) == HEADSET
+    assert auto.recorded(HEADSET, loud=False, seconds=9.0) is False  # heard: never passed over for silence

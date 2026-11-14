@@ -5,8 +5,7 @@ function it is given. `MicRecorder` records from a microphone. `WavRecorder` pla
 same way; the app uses it in place of the microphone when RAPHAEL_FAKE_AUDIO names a file, which is
 how the end-to-end runs speak without anyone speaking.
 
-The frames reach `on_frames` on PortAudio's callback thread (or the automatic-selection worker
-replaying a probe's startup frames), and a thread of its own for a file. `on_frames` must be quick
+The frames reach `on_frames` on PortAudio's callback thread, and a thread of its own for a file. `on_frames` must be quick
 and must not call `stop()` (PortAudio waits for the callback to return before it stops a stream, so
 a callback that stops its own stream waits for itself).
 
@@ -21,7 +20,7 @@ is possible only while none of our streams is open.
 
 Automatic (no name given) does not follow the Windows default: mic_choice.py orders the microphones
 (an attached one before a built-in array, never a loopback such as Stereo Mix) and keeps the choice
-still, so the one a person wears does not change between two recordings.
+still, so the one a person wears does not change between two recordings, nor within one.
 """
 
 import logging
@@ -56,10 +55,8 @@ _SOUND_MAPPER = "Microsoft Sound Mapper"
 # A sleeping wireless headset can keep its default-device slot while returning digital silence.
 # Real microphones have a noticeably higher noise floor, even before anyone begins speaking.
 _SILENT_RMS = 2e-4
-_DEFAULT_CHECK_SECONDS = 0.3
-_PROBE_SECONDS = 0.2
 _automatic_device: str | None = None
-# Which microphone automatic is on, and which have been heard: see mic_choice.py.
+# Which microphone automatic is on, which have been heard and which gave nothing: see mic_choice.py.
 _automatic = AutomaticMicrophone()
 
 # The sound level that rms_level maps to 0 and to 1 (dB relative to full scale).
@@ -246,40 +243,18 @@ def _read_devices_again() -> bool:
     return True
 
 
-class _AutomaticChoice:
-    """The cancellation and worker of one automatic recording, shared by its successive streams."""
-
-    def __init__(self) -> None:
-        self.cancel = threading.Event()
-        self.lock = threading.Lock()
-        self.worker: threading.Thread | None = None
-        self.default_name = ""
-
-
 class _Capture:
-    """One microphone stream and its resampler, including any buffered automatic probe."""
+    """One microphone stream and its resampler, and for automatic how loud the recording got."""
 
-    def __init__(
-        self,
-        resampler: soxr.ResampleStream | None,
-        info: dict,
-        rate: int,
-        choice: _AutomaticChoice | None,
-        probe: bool,
-    ) -> None:
+    def __init__(self, resampler: soxr.ResampleStream | None, info: dict, rate: int, automatic: bool) -> None:
         self.resampler = resampler
         self.stream: sd.InputStream | None = None
         self.stopping = False
         self.info = info
-        self.choice = choice
-        self.window = round(rate * (_PROBE_SECONDS if probe else _DEFAULT_CHECK_SECONDS))
+        self.rate = rate
+        self.automatic = automatic
         self.samples = 0
-        self.peak_rms = 0.0
-        self.checked = threading.Event()
-        self.failed = False
-        self.pending: list[np.ndarray] | None = [] if probe else None
-        # Only the short buffer handoff uses this lock; the callback never takes the recorder lock.
-        self.delivery_lock = threading.Lock()
+        self.loudest = 0.0
 
 
 class MicRecorder:
@@ -289,10 +264,12 @@ class MicRecorder:
     microphone someone chose last month may well be unplugged today.
 
     Automatic opens the first microphone of mic_choice's order (an attached one before a built-in
-    array, a loopback never, the same one while it stays plugged in). A digitally silent one that
-    has never been heard is replaced by the next live one in that order; a background worker
-    probes them, preserving their startup frames when one is selected. Explicit choices never
-    probe. Device refreshes are skipped while another stream is open.
+    array, a loopback never, the same one while it stays plugged in) and stays on it for the whole
+    recording, whatever it hears at the start. What the recording was, sound or digital silence, is
+    told to mic_choice once it ends: a microphone that gave nothing in two whole recordings in a row
+    is tried after the others next time (owner, 2026-11-14: automatic leaving his quiet headset at
+    the start of every recording made it jump between the headset and the laptop's array). Device
+    refreshes are skipped while another stream is open.
     """
 
     def __init__(self, on_frames: OnFrames, device: str | None = None) -> None:
@@ -300,7 +277,6 @@ class MicRecorder:
         self._on_frames = on_frames
         self._device = device
         self._capture: _Capture | None = None
-        self._choice: _AutomaticChoice | None = None
         self._lock = threading.Lock()  # start() and stop(); the audio callback never takes it
 
     def start(self) -> None:
@@ -309,43 +285,32 @@ class MicRecorder:
         Does nothing if it is already recording.
         """
         with self._lock:
-            if self._capture is not None or self._choice is not None:
+            if self._capture is not None:
                 return
             self.error = None
-            self._choice = _AutomaticChoice() if self._device is None else None
             read = False  # whether this start has had the devices read again already
             if self._device is None or not _has_device(self._device):
                 _read_devices_again()
                 read = True
             try:
-                try:
-                    capture = self._open()
-                except NoMicrophoneError:
-                    if read or not _read_devices_again():
-                        raise
-                    capture = self._open()
-            except Exception:
-                if self._choice is not None:
-                    self._choice.cancel.set()
-                    self._choice = None
-                raise
+                capture = self._open()
+            except NoMicrophoneError:
+                if read or not _read_devices_again():
+                    raise
+                capture = self._open()
             self._capture = capture
 
     def stop(self) -> None:
         """Stop recording. The last frames reach `on_frames` before this returns."""
         with self._lock:
             capture, self._capture = self._capture, None
-            choice, self._choice = self._choice, None
-            worker = None
-            if choice is not None:
-                with choice.lock:
-                    choice.cancel.set()
-                    worker = choice.worker
-        if worker is not None and worker is not threading.current_thread():
-            worker.join()
         if capture is None:
             return
         self._close_capture(capture, flush=True)
+        if capture.automatic and self.error is None:
+            name = capture.info["name"]
+            if _automatic.recorded(name, loud=capture.loudest >= _SILENT_RMS, seconds=capture.samples / capture.rate):
+                logger.info("Microphone: %s gave no sound in two recordings; automatic tries the others first", name)
 
     def _close_capture(self, capture: _Capture, *, flush: bool = False) -> None:
         global _active
@@ -364,34 +329,24 @@ class MicRecorder:
         with _active_lock:
             _active -= 1
         # A stream that would not stop may still be in its callback, which uses the resampler.
-        if flush and stopped and self.error is None:
+        if flush and stopped and self.error is None and capture.resampler is not None:
             try:
-                with capture.delivery_lock:
-                    # A short hold-to-record can end before the probe window, after speech arrived.
-                    # Preserve that speech, but discard a silent or failed probe and its tail.
-                    self._accept_probe(capture)
-                    if capture.pending is None and capture.resampler is not None:
-                        tail = resample_block(capture.resampler, np.zeros(0, np.float32), last=True)
-                        if tail.size:
-                            self._on_frames(tail)
+                tail = resample_block(capture.resampler, np.zeros(0, np.float32), last=True)
+                if tail.size:
+                    self._on_frames(tail)
             except Exception as exc:
                 logger.exception("The receiver of the microphone frames failed")
                 self.error = exc
 
-    def _open(self, info: dict | None = None, *, probe: bool = False) -> _Capture:
+    def _open(self) -> _Capture:
         with _devices_lock:
-            return self._open_stream(info, probe=probe)
+            return self._open_stream()
 
-    def _open_stream(self, info: dict | None, *, probe: bool) -> _Capture:
+    def _open_stream(self) -> _Capture:
         global _active, _automatic_device
         stream = None
-        initial = info is None
         try:
-            chosen = False
-            if info is None:
-                info, chosen = _pick_device(self._device)
-            if initial and self._choice is not None:
-                self._choice.default_name = info["name"]
+            info, chosen = _pick_device(self._device)
             index = info["index"]
             rate = SAMPLE_RATE
             try:
@@ -405,7 +360,7 @@ class MicRecorder:
                 if rate == SAMPLE_RATE
                 else soxr.ResampleStream(rate, SAMPLE_RATE, 1, dtype="float32")
             )
-            capture = _Capture(resampler, info, rate, self._choice, probe)
+            capture = _Capture(resampler, info, rate, automatic=self._device is None)
             stream = sd.InputStream(
                 samplerate=rate,
                 channels=1,
@@ -431,96 +386,10 @@ class MicRecorder:
             raise NoMicrophoneError(f"The microphone could not be opened: {exc}") from exc
         with _active_lock:
             _active += 1
-        if initial:
-            logger.info("Microphone: %s (%s)", info["name"], "chosen" if chosen else "automatic")
-            if self._device is None:
-                _automatic_device = info["name"]
+        logger.info("Microphone: %s (%s)", info["name"], "chosen" if chosen else "automatic")
+        if self._device is None:
+            _automatic_device = info["name"]
         return capture
-
-    def _schedule_probe(self, capture: _Capture) -> None:
-        choice = capture.choice
-        assert choice is not None
-        with choice.lock:
-            if choice.cancel.is_set() or choice.worker is not None:
-                return
-            choice.worker = threading.Thread(
-                target=self._find_live_input,
-                args=(capture, choice),
-                name="raphael-microphone-selection",
-                daemon=True,
-            )
-            choice.worker.start()
-
-    def _accept_probe(self, capture: _Capture) -> bool:
-        """Commit a live probe while holding its delivery lock, including its buffered speech."""
-        global _automatic_device
-        if capture.pending is None or capture.failed or capture.peak_rms < _SILENT_RMS:
-            return False
-        pending, capture.pending = capture.pending, None
-        for block in pending:
-            self._on_frames(block)
-        _automatic_device = capture.info["name"]
-        _automatic.heard(capture.info["name"])
-        assert capture.choice is not None
-        logger.info(
-            "Microphone: %s (automatic: default %s was silent)",
-            capture.info["name"], capture.choice.default_name,
-        )
-        return True
-
-    def _find_live_input(self, default: _Capture, choice: _AutomaticChoice) -> None:
-        global _automatic_device
-        try:
-            candidates = [
-                info for info in _automatic_order(*_input_infos())
-                if info["index"] != default.info["index"]
-            ]
-            if not candidates:
-                return
-            for info in candidates:
-                with self._lock:
-                    if choice.cancel.is_set() or self.error is not None:
-                        return
-                    if self._capture is not None:
-                        self._close_capture(self._capture)
-                        self._capture = None
-                    try:
-                        capture = self._open(info, probe=True)
-                    except NoMicrophoneError:
-                        logger.debug("Could not probe microphone %s", info["name"], exc_info=True)
-                        continue
-                    self._capture = capture
-                # A device that never calls back must not hold selection up indefinitely.
-                deadline = time.monotonic() + _PROBE_SECONDS + 0.3
-                heartbeat = time.monotonic() + 0.1
-                while not capture.checked.wait(0.01):
-                    if choice.cancel.is_set() or time.monotonic() >= deadline:
-                        break
-                    if time.monotonic() >= heartbeat:
-                        # Several unavailable inputs must not trip dictation's no-frames watchdog.
-                        # Empty frames update its activity time without inserting fake audio.
-                        self._on_frames(np.zeros(0, np.float32))
-                        heartbeat = time.monotonic() + 0.1
-                with self._lock:
-                    if choice.cancel.is_set() or self.error is not None:
-                        return
-                    with capture.delivery_lock:
-                        if self._accept_probe(capture):
-                            return
-            # No live alternative: keep the default usable, without restarting selection again.
-            with self._lock:
-                if choice.cancel.is_set() or self.error is not None:
-                    return
-                if self._capture is not None:
-                    self._close_capture(self._capture)
-                    self._capture = None
-                self._capture = self._open(default.info)
-                self._capture.checked.set()
-                _automatic_device = default.info["name"]
-        except Exception as exc:
-            logger.exception("Automatic microphone selection failed")
-            if not choice.cancel.is_set() and self.error is None:
-                self.error = exc
 
     def _deliver(self, capture: _Capture, indata: np.ndarray, status) -> None:
         """PortAudio's callback: copy, resample, pass on. It must not wait for anything."""
@@ -530,27 +399,13 @@ class MicRecorder:
             return
         try:
             block = indata[:, 0].copy()  # PortAudio reuses its buffer once this returns
-            if capture.choice is not None and not capture.checked.is_set():
-                capture.peak_rms = max(capture.peak_rms, rms(block))
+            if capture.automatic:
                 capture.samples += block.size
-                if capture.samples >= capture.window:
-                    capture.checked.set()
-                    if capture.pending is None:
-                        name = capture.info["name"]
-                        if capture.peak_rms >= _SILENT_RMS:
-                            _automatic.heard(name)
-                        elif not _automatic.was_heard(name):
-                            # Quiet and never heard: asleep, perhaps. One that was heard before may
-                            # only be gated until someone speaks, so it is kept.
-                            self._schedule_probe(capture)
+                capture.loudest = max(capture.loudest, rms(block))
             if capture.resampler is not None:
                 block = resample_block(capture.resampler, block)
             if block.size:
-                with capture.delivery_lock:
-                    if capture.pending is None:
-                        self._on_frames(block)
-                    else:
-                        capture.pending.append(block)
+                self._on_frames(block)
         except Exception as exc:
             logger.exception("The receiver of the microphone frames failed")
             if self.error is None:
@@ -560,12 +415,7 @@ class MicRecorder:
     def _finished(self, capture: _Capture) -> None:
         """PortAudio's call when the stream ends: unplugged unless stop() ended it."""
         if not capture.stopping and self.error is None:
-            with capture.delivery_lock:
-                if capture.pending is not None:
-                    capture.failed = True
-                    capture.checked.set()
-                else:
-                    self.error = NoMicrophoneError("The microphone stopped: was it unplugged?")
+            self.error = NoMicrophoneError("The microphone stopped: was it unplugged?")
 
 
 class WavRecorder:
