@@ -1,7 +1,8 @@
 // When a conversation's column changes width (the details panel dragged wider or narrower, the window resized) the
 // reading place stays: the message at the top of the view keeps its place while the lines rewrap,
 // and a view at the bottom stays at the bottom. The thread's own scroll anchoring is off (agent.css: the thread
-// manages its scrolling itself), so this corrects width changes only; growth and new turns are left to the thread.
+// manages its scrolling itself), so this corrects width changes only; growth, new turns and a scroller made shorter or taller
+// by what stands under it are followed by the thread's one stick to the bottom (message-rich.ts readingAnchor).
 
 /** Keeps `scroller`'s reading place across width changes of it; `items` are the messages, in order. */
 export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4): () => void {
@@ -39,27 +40,4 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   observer?.observe(scroller);
   take();
   return () => { scroller.removeEventListener("scroll", take); observer?.disconnect(); };
-}
-
-/**
- * A view at the bottom stays at the bottom when its scroller gets shorter or taller because what stands under it changed
- * (the composer with typed or placed text, a question card or a notice in the dock, a quota chip), so the last message or
- * card is whole above the composer; a view scrolled up stays where it is (the design judge's R-UI-21 and R-CARD-11 findings: a
- * page card placed text, the composer grew and covered the last card's foot). `followed` tells the thread's own follow state.
- */
-export function keepBottomOnResize(scroller: HTMLElement, followed: () => void, slack = 6): () => void {
-  let height = scroller.clientHeight;
-  const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
-    const before = height;
-    height = scroller.clientHeight;
-    // A scroller that was or is not drawn (the page hidden, the settings page over it) has no place to keep.
-    if (!before || !height || before === height) return;
-    // A shorter scroller leaves scrollTop where it was, so the old height measures where the view stood; a taller one
-    // clamps scrollTop to the new end itself, which only looks away from the old height by what it grew.
-    if (scroller.scrollHeight - scroller.scrollTop - before > slack) return;
-    followed();
-    scroller.scrollTop = scroller.scrollHeight;
-  }) : null;
-  observer?.observe(scroller);
-  return () => observer?.disconnect();
 }

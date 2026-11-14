@@ -95,3 +95,32 @@ test("lazy loading watches the visible audio pill rather than its hidden media e
   expect(root.querySelector("audio")!.src).toBe("asset:voice");
   expect(attachmentSource).toHaveBeenCalled();
 });
+
+test("a picture drawn again takes the copy already loaded at once and never stands empty", async () => {
+  // The first picture is shown once it is decoded, never as an empty box between its name and itself (R-FOLLOW-01).
+  let decodedNow!: () => void;
+  const decode = vi.fn(() => new Promise<void>(resolve => { decodedNow = resolve; }));
+  vi.stubGlobal("Image", class { src = ""; decode = decode; });
+  let intersect!: IntersectionObserverCallback;
+  vi.stubGlobal("IntersectionObserver", class { constructor(callback: IntersectionObserverCallback) { intersect = callback; } observe() {} disconnect() {} });
+  const id = `${"e".repeat(32)}.png`;
+  const root = document.createElement("div");
+  root.innerHTML = sentFileHTML({ id, name: "office.png", mime: "image/png" });
+  document.body.append(root);
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:office");
+  const read = vi.fn().mockResolvedValue({ mime: "image/png", data: btoa("picture") });
+  const media = createAttachmentMedia(root, read); media.sync();
+  const picture: Element = root.querySelector("img")!;
+  intersect([{ isIntersecting: true, target: picture } as IntersectionObserverEntry], {} as IntersectionObserver);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  expect(decode).toHaveBeenCalledOnce();
+  expect(root.querySelector("img")!.hasAttribute("src")).toBe(false);
+  decodedNow();
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  expect(root.querySelector("img")!.getAttribute("src")).toBe("blob:office");
+  // Its line is drawn again (the words beside it changed): the new picture has its copy in the same task, before any observer.
+  root.innerHTML = sentFileHTML({ id, name: "office.png", mime: "image/png" });
+  media.sync();
+  expect(root.querySelector("img")!.getAttribute("src")).toBe("blob:office");
+  expect(read).toHaveBeenCalledOnce();
+});

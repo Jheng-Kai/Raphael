@@ -1240,6 +1240,8 @@ export function installMock(fixture, config = {}, target = window) {
         // Pictures a member sent (R-UI-156), drawn here at the size the scene gives (a square, a landscape) and read back as stored copies.
         const drawn = variant.drawnPictures?.[p.id];
         if (drawn) {
+          // A busy core reads a stored picture back late (`pictureLate`, ms): the thread is drawn and placed before it comes.
+          if (variant.pictureLate) await new Promise(resolve => setTimeout(resolve, variant.pictureLate));
           const canvas = document.createElement("canvas"); canvas.width = drawn.width; canvas.height = drawn.height;
           const ctx = canvas.getContext("2d"), w = drawn.width, h = drawn.height;
           ctx.fillStyle = drawn.wall; ctx.fillRect(0, 0, w, h);
