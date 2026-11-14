@@ -97,9 +97,9 @@
 .cs-linked > .tg { flex: none; }
 /* A row of this view says it can be pressed, the connected list's and the main view's alike: the pointer, and under it the hover fill of the
    floating surface, 8 px clear of the words (R-UI-53). The left padding is cancelled by the margin, so the tile stays on the content's edge; on the right
-   the fill stops at the gap before the switch or 連結. A connected row opens the app's page from anywhere on it but its switch. */
+   the fill stops at the gap before the switch or 連結, and runs under a connected app's 「✓ 已連結」, which is part of the button. */
 .cs-linked, .cs-card { cursor: pointer; }
-.cs-card .cs-state:hover { color: var(--text-2); }
+.cs-card .btn.cs-main:hover > .cs-state { color: var(--text-2); }
 .cs-card .btn.cs-main, .cs-linked .btn.cs-main { padding-inline: var(--sp-2); margin-inline: calc(var(--sp-2) * -1) 0; }
 .cs-card .btn.cs-main:hover:not(:disabled), .cs-linked .btn.cs-main:hover:not(:disabled) { background: var(--float-hover); }
 .cs-card .btn.cs-main:active:not(:disabled), .cs-linked .btn.cs-main:active:not(:disabled) { background: var(--pressed); }

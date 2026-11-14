@@ -112,6 +112,7 @@ const connectedRowScenes = [
 
 export default [
   scene("connect-apps", "One view: the title and the chip of the connected apps, the search, the chips of the categories, then 為你推薦 and a section for each category of six apps", [...open, check("connect-apps-view"), check("float-surface")]),
+  scene("connect-apps-connected-hover", "A connected app's row under the pointer is one button: its hover fill runs under 「✓ 已連結」 (owner, 2026-11-14)", [...open, hover(".cs-card .cs-main:has(.cs-state)"), check("connect-apps-view")]),
   scene("connect-apps-row-hover", "A row of the main view under the pointer has the pointer and the same hover fill as a connected row, clear of its mark, name and 連結", [...open, hover(".cs-card .cs-main"), check("app-row-hover")]),
   scene("connect-apps-scrolled","The list scrolls under the title, the search and the chips, which stay put", [...open, scroll(".cs-sec:last-of-type .cs-card:last-child"), check("connect-apps-scrolled")]),
   scene("connect-apps-category", "A chip lists all the apps of its category in one list, the chosen chip a light fill with dark words", [...open, click('[data-conn="store-group"][data-id="productivity"]'), wait(".cs-card"), check("connect-apps-category")]),

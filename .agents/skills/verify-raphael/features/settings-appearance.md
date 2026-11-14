@@ -467,3 +467,12 @@ consumers. Never infer a real owner data migration from these isolated tests.
 Rust core_stderr tests cover credential forms, overlong lines, UTF-8/EOF and benign
 diagnostics; run cargo test --locked offline with a worktree-local target directory.
 This changes no Settings markup or navigation and adds no look scope.
+
+## Settings and Connect Apps, small fixes (2026-11-14, R-UI-150 to R-UI-153)
+
+關於我 has no drag handle, is four lines at rest with the rest folded, and grows while written; the about tab's mark and name select nothing;
+Safety has no 電腦操作 section; a connected app's 「✓ 已連結」 is inside the row's one button in Connect Apps.
+
+```powershell
+npm run look -- settings-owner settings-owner-about-typing settings-owner-about-rest settings-about-brand local-command-settings-gone connect-apps connect-apps-connected-hover connect-apps-row-hover connect-apps-connected-rows --theme both --width 1120,720,1920x1080
+```

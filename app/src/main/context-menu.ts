@@ -32,7 +32,6 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-vault="menu"]', row: ".vault-row" },
   { more: '[data-act="word-menu"]', row: ".wrow" },
   { more: '[data-act="history-menu"]', row: ".hrow" },
-  { more: '[data-act="computer-menu"]', row: "div.row" },
   { more: '[data-conn="server-menu"]', row: ".cs-page .cs-head" },
   { more: '[data-conn="account-menu"]', row: ".cs-acct" },
   { more: "[data-cli-menu]", row: ".cli-card" },

@@ -155,7 +155,6 @@ async function start(): Promise<void> {
     device: () => device.get(),
     refreshDevice: () => device.refresh(),
     setDevice: (patch) => device.set(patch),
-    removeComputerApp: (exe) => device.removeComputerApp(exe),
     onEvent(handler) {
       listeners.add(handler);
       return () => void listeners.delete(handler);

@@ -485,21 +485,6 @@ function dictationHTML(v: SettingsView): string {
  * The apps Raphael may always operate, from the device settings. Settings written before the
  * feature have none of them: that is no app.
  */
-export const computerApps = (device: DeviceSettings): readonly { exe: string; name: string }[] => device.computer_apps ?? [];
-
-/**
- * Computer access: one row per always-allowed app, with removal in its overflow menu,
- * or a single muted row when there is none. The apps are put there by the
- * answer 「一律允許」 of the question that asks before Raphael first uses an app.
- */
-function computerRows(v: SettingsView): string[] {
-  const apps = computerApps(v.device);
-  if (apps.length === 0) return [row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
-  return apps.map((app) =>
-    row(esc(app.name), "", iconBtn("more", t("members.more", { p0: app.name }), ` data-act="computer-menu" data-exe="${esc(app.exe)}" aria-haspopup="menu" aria-expanded="false"`)),
-  );
-}
-
 /** Services shared by every member. */
 function toolsHTML(v: SettingsView): string {
   return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain) : "");
@@ -507,7 +492,7 @@ function toolsHTML(v: SettingsView): string {
 
 /** Shared safety rules and local command permissions. */
 function safetyHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "") + section(t("settings.computerUse"), computerRows(v));
+  return headingHTML(v) + coreNote(v) + vaultHTML(v.vault ?? emptyVaultView()) + (v.rules ? rulesHTML(v.rules) : "");
 }
 
 /** 連接: the services Raphael is connected to and the store that adds them; 「新增」 stands on the row of the two views. */
