@@ -1,5 +1,5 @@
-import { scene, member, room, wait, click, hover, check, settings, scroll } from "./steps.mjs";
-import { png, mp4 } from "../media-fixture.mjs";
+import { scene, member, room, wait, click, hover, check, settings, scroll, key, lookCall } from "./steps.mjs";
+import { png, mp4, clip, voice } from "../media-fixture.mjs";
 
 // Two pictures a member drew before its words (owner, 2026-11-14: each is a message the owner can copy and reply to, R-UI-156):
 // a square one and a landscape one, drawn by the mock (`drawnPictures`); the landscape one carries the owner's ❤️.
@@ -38,6 +38,31 @@ const missing = kind => {
     steps:[{kind:"tool",tool:`${kind}_generate`,server:"media",outcome:"error",reason:"not_configured",missing:prerequisite,ms:20,at_ms:1792807155000}]});
 };
 
+// Our own players (owner, 2026-11-15: 「不要用系統 default 的比較好，我們就直接自己增加一些 custom 的東西」, R-MEDIA-01): a video a member
+// sent, a message of its own (R-MEDIA-02), a sound the owner sent, and files that show a mark by their kind.
+const tour = { id: `${"c".repeat(32)}.mp4`, name: "office-tour.mp4", mime: "video/mp4", size: 29086 };
+const memo = { id: `${"d".repeat(32)}.m4a`, name: "會議重點.m4a", mime: "audio/mp4", size: 11688 };
+const storedFiles = { [tour.id]: { mime: tour.mime, data: clip }, [memo.id]: { mime: memo.mime, data: voice } };
+const said = (id, session, question, text, extra) => ({ id, member_id: 1, conversation_id: 11, session_id: session, created_at_ms: 1792807154000,
+  question, route: "answer", source: "app", prefix: "", text, status: "done", cost_usd: 0, steps: [], attachments: [], reactions: {},
+  messages: [{ seq: 2, kind: "reply", text, at_ms: 1792807160100 }], ...extra });
+const videoTurn = said(824, "member-video", "幫我做一段辦公室導覽影片。", "影片做好了，大約六秒。");
+videoTurn.messages.unshift({ seq: 1, kind: "media", text: JSON.stringify({ attachment: tour }), at_ms: 1792807160000 });
+const audioTurn = said(825, "owner-audio", "幫我聽這段錄音，整理重點。", "重點有三個：預算、時程和人力。", { attachments: [memo] });
+const documents = [["報價單.pdf", "application/pdf"], ["素材.zip", "application/zip"], ["首頁草稿.html", "text/html"]]
+  .map(([name, mime], index) => ({ id: `${String(index + 1).repeat(32)}.${name.split(".").pop()}`, name, mime, size: 182000 + index * 9000 }));
+const filesTurn = said(826, "owner-files", "這三個檔案幫我看一下。", "看完了：報價單少一頁簽名，其餘沒問題。", { attachments: documents });
+const tourOf = '.tn[data-id="824"] .chat-message[data-video]';
+const videoOpen = [member(1), wait(`${tourOf} video[src]`), wait(`${tourOf} .mp-length:not(:empty)`)];
+const videos = { turns: [videoTurn], storedFiles };
+const playFor = ms => ({ ...lookCall("letTimePass"), wait: ms });
+const memoOpen = [member(1), wait('.tn[data-id="825"] .attachment-audio .mp-seek:not([disabled])')];
+// The pictures of a conversation, opened, left for another member's and opened again: the second open draws them from what the
+// window has (R-MEDIA-03). Each mark is set while a conversation without pictures is shown, right before the press.
+const mark = label => ({ ...lookCall("mediaMark", label), wait: 0 });
+// The same two pictures with a photograph's grain, as heavy as pictures a camera or a model makes (about 2 MB each).
+const photos = Object.fromEntries(Object.entries(drawnPictures).map(([id, picture]) => [id, { ...picture, grain: 40 }]));
+
 export default [
   scene("media-models-unset", "Media models default unset, paid API is explicit and absent video stays unavailable", [...settings('models'), scroll('[data-row="video-model"]'), check('media-models-unset')], {mediaModels:"unset"}),
   scene("media-models-set", "Explicit drawing and video model rows show their own prices", [...settings('models'), scroll('[data-row="video-model"]'), check('media-models-set')], {mediaModels:"set"}),
@@ -50,6 +75,17 @@ export default [
   scene("picture-message-reply", "Replying to a picture quotes it in the composer as the picture: its thumbnail, the author and the word for a picture", [...picturesOpen, hover(`${pictureOf(1)} .attachment-picture`), click(`${pictureOf(1)} [data-act="reply-message"]`), wait('.cmp-quote:not([hidden]) .quote-thumb[src]'), check('picture-message-reply')], pictures),
   scene("room-picture-message", "A member's picture in a group room has its room message's actions beside it, with Copy copying the picture", [room(1), wait(`${roomPicture} img[data-attachment][src]`), hover(`${roomPicture} .attachment-picture`), check('picture-message-room')], { messages: roomMessages, drawnPictures }),
   scene("generated-video", "A generated video uses the existing stored player", [member(1), wait('.ra-body video[data-attachment][src]'), check('generated-video')], {turns:[turn(video)],generatedFile:video,generatedData:mp4}),
+  scene("video-message", "A video a member sent stands as a message with our own player at rest: its first frame, the play mark and its length, no browser controls", [...videoOpen, check('video-player-rest')], videos),
+  scene("video-message-hover", "Pointing at the video shows our controls: play, the scrubber, the time, sound, speed and full screen", [...videoOpen, hover(`${tourOf} video`), check('video-player-hover')], videos),
+  scene("video-message-playing", "A press on the picture plays it: the scrubber shows what was played and what is loaded, and the button pauses", [...videoOpen, click(`${tourOf} video`), wait(`${tourOf} .mp[data-playing]`), playFor(1800), hover(`${tourOf} video`), check('video-player-playing')], videos),
+  scene("video-message-space", "Space pauses the focused video part-way; its controls stay while it waits", [...videoOpen, click(`${tourOf} video`), wait(`${tourOf} .mp[data-playing]`), playFor(1200), key(" "), wait(`${tourOf} .mp[data-started]:not([data-playing])`), check('video-player-space')], videos),
+  scene("video-full-screen", "The full screen button opens the app's own full screen: the lightbox with the same video and our controls", [...videoOpen, hover(`${tourOf} video`), click(`${tourOf} [data-mp-act="full"]`), wait('.media-lightbox .lb-video video[src]'), check('video-full-screen')], videos),
+  scene("video-lightbox-playing", "F while a video plays carries it into the lightbox where it was, still playing", [...videoOpen, click(`${tourOf} video`), wait(`${tourOf} .mp[data-playing]`), playFor(1200), key("f"), wait('.media-lightbox .lb-video .mp[data-playing]'), playFor(600), hover('.media-lightbox .lb-video video'), check('video-lightbox-playing')], videos),
+  scene("video-message-reply", "Replying to a video quotes it as the video: the play mark, the author and 影片", [...videoOpen, hover(`${tourOf} .attachment-video`), click(`${tourOf} [data-act="reply-message"]`), wait('.cmp-quote:not([hidden]) .quote-mark'), check('video-message-reply')], videos),
+  scene("audio-message", "A sound the owner sent has our compact row: play, its name over the scrubber and its time, sound and speed", [...memoOpen, check('audio-player-rest')], { turns: [audioTurn], storedFiles }),
+  scene("audio-speed-menu", "The speed of a sound is a choice from the app's menu, the current one checked", [...memoOpen, click('.tn[data-id="825"] [data-mp-act="rate"]'), wait('#app-popover .menu-choice[data-value="1.5"]'), check('audio-speed-menu')], { turns: [audioTurn], storedFiles }),
+  scene("file-cards", "Files the owner sent show a mark by their kind: a document, an archive and a page", [member(1), wait('.tn[data-id="826"] .attachment-file'), check('file-card-kinds')], { turns: [filesTurn] }),
+  scene("media-reopen", "A conversation opened again shows its pictures at once: no call to the shell and no new picture request", [mark("first"), ...picturesOpen, playFor(400), member(2), playFor(800), mark("reopen"), member(1), wait(`${pictureOf(1)} img[data-attachment][src]`), wait(`${pictureOf(2)} img[data-attachment][src]`), playFor(600), check('media-reopen')], { turns: [pictureTurn], drawnPictures: photos, browserCache: true }),
   scene("dataset-chart", "A dataset chart is a stored downloadable file beside the answer", [member(1), wait('.ra-body .attachment-file'), check('dataset-chart')], {turns:[turn(chart)]}),
   scene("dataset-table", "A continued query uses the existing rich table reply", [member(1),wait('.ra-body .message-table'),check('dataset-table')], {turns:[turn(null,{attachments:[],text:'| 區域 | 合計 |\n|---|---:|\n| 台北 | 36 |\n| 台中 | 24 |',messages:[{seq:1,kind:'reply',text:'| 區域 | 合計 |\n|---|---:|\n| 台北 | 36 |\n| 台中 | 24 |',at_ms:1792807160000}]})]}),
   ...['image','video'].map(kind => scene(`generated-${kind}-missing`, "An absent configured capability names its existing repair", [member(1),wait('.ra-body [data-missing-repair="models"]'),check('generated-missing')], {turns:[missing(kind)]})),

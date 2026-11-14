@@ -1963,7 +1963,9 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
     launch_link(path)
 }
 
-/// Resolve an opaque stored ID before granting read access to this exact asset file.
+/// Resolve an opaque stored ID and grant the main window that one file under the `raphael-media`
+/// protocol. The core stays the authority over what an ID is; Rust only serves the exact file and
+/// servable type it named, and the window gets the ID back to build a stable, cacheable URL from.
 #[tauri::command]
 pub async fn attachment_source(
     app: AppHandle,
@@ -1982,10 +1984,13 @@ pub async fn attachment_source(
         .get("path")
         .and_then(Value::as_str)
         .ok_or("attachment unavailable")?;
-    app.asset_protocol_scope()
-        .allow_file(path)
-        .map_err(|_| "attachment unavailable")?;
-    Ok(path.to_owned())
+    let grants = app
+        .try_state::<crate::media_protocol::MediaGrants>()
+        .ok_or("attachment unavailable")?;
+    if !grants.allow(&id, path, result.get("mime").and_then(Value::as_str)) {
+        return Err("attachment unavailable".to_owned());
+    }
+    Ok(id)
 }
 
 /// Open a file of the team folder at the owner's press. The core says where it is and whether it reads;
@@ -2494,6 +2499,24 @@ mod tests {
                 "window_hotkey",
             ]
         );
+    }
+
+    #[test]
+    fn an_attachment_is_granted_to_the_media_protocol_not_the_asset_protocol() {
+        // `attachment_source` still checks its caller (it is in the list above), hands back the ID and not the path,
+        // and no longer opens a disk path to the window through Tauri's asset protocol.
+        let source = include_str!("commands.rs").replace("\r\n", "\n");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let body = production
+            .split("pub async fn attachment_source(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap();
+        assert!(body.contains("require_main(&webview)?"));
+        assert!(body.contains("grants.allow("));
+        assert!(body.contains("Ok(id)"));
+        assert!(!body.contains("asset_protocol_scope"));
+        assert!(!body.contains("allow_file"));
     }
 
     #[test]

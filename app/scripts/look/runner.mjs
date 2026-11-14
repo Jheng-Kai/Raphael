@@ -136,8 +136,28 @@ export async function run(options) {
         // Still frames by default; a scene about something that moves turns motion on and holds it with `freeze-motion`.
         await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: scene.motion ? "no-preference" : "reduce" }, { name: "prefers-color-scheme", value: theme }]);
         await page.setRequestInterception(true);
+        // The window's own media protocol (media_protocol.rs): a stored id the shell granted, answered with the bytes the mock holds
+        // and the native headers (a year-long immutable cache lifetime, the id as ETag, byte ranges). Each request is counted.
+        if (scene.fixture?.browserCache) await page.setCacheEnabled(true);
         page.on("request", request => {
           const url = request.url();
+          if (url.startsWith("http://raphael-media.localhost/")) {
+            const id = decodeURIComponent(new URL(url).pathname.slice(1)), range = request.headers().range ?? null;
+            (result.mediaRequests ??= []).push({ id, range, type: request.resourceType() });
+            void (request.frame() ?? page.mainFrame()).evaluate(stored => window.__lookMedia?.(stored) ?? null, id).then(file => {
+              if (!file) return request.respond({ status: 404, headers: { "Cache-Control": "no-store" }, body: "" });
+              const bytes = Buffer.from(file.data, "base64"), length = bytes.length;
+              const headers = { "Content-Type": file.mime, "Cache-Control": "private, max-age=31536000, immutable", ETag: `"${id}"`, "Accept-Ranges": "bytes", "X-Content-Type-Options": "nosniff", "Timing-Allow-Origin": "*" };
+              const match = range && /^bytes=(\d*)-(\d*)/.exec(range);
+              if (!match) return request.respond({ status: 200, headers, body: bytes });
+              let start = match[1] === "" ? Math.max(0, length - Number(match[2])) : Number(match[1]);
+              let end = match[1] === "" || match[2] === "" ? length - 1 : Math.min(Number(match[2]), length - 1);
+              if (start >= length || end < start) return request.respond({ status: 416, headers: { "Content-Range": `bytes */${length}` }, body: "" });
+              end = Math.min(end, start + 2 * 1024 * 1024 - 1);
+              return request.respond({ status: 206, headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${length}` }, body: bytes.subarray(start, end + 1) });
+            }).catch(() => request.abort().catch(() => {}));
+            return;
+          }
           if (url.startsWith("https://images.example.test/")) {
             (result.consentedImages ??= []).push({ url, referrer: request.headers().referer ?? null });
             if (request.headers().referer) error("privacy", "Markdown image sent a referrer");

@@ -158,7 +158,13 @@ class AttachmentStore:
         return await asyncio.to_thread(read)
 
     async def open_path(self, params):
+        """The stored file's path and the type it was stored as: the shell serves a picture, a video or a sound by its id
+        with that type (`media_protocol.rs`) and opens anything else with the owner's own program."""
         path = self.path(params.get("id"))
         if path.suffix.lstrip(".").lower() not in OPENABLE:
             raise invalid_params("unreviewed attachment types cannot be opened")
-        return {"path": str(path)}
+        try:
+            mime = json.loads(path.with_name(path.name + ".json").read_text(encoding="utf-8")).get("mime")
+        except (OSError, ValueError, AttributeError):
+            mime = None
+        return {"path": str(path), **({"mime": mime} if isinstance(mime, str) else {})}

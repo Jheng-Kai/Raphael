@@ -1096,6 +1096,13 @@ describe("rendered look checks", () => {
     expect(result.missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel"]);
     expect(result.nativeControls.map(item => item.tag)).toEqual(["select", "input"]);
   });
+  it("reports the browser's own media player as a native control, and our player as none (R-MEDIA-01)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<video controls src="a.mp4"></video><div class="mp"><video src="b.mp4" controlslist="nodownload"></video></div>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, []);
+    expect(result.nativeControls.map(item => item.tag)).toEqual(["video"]);
+  });
 
   it("fails an element with the hidden attribute that a stylesheet draws anyway (R-UI-140)", () => {
     const window = new Window();

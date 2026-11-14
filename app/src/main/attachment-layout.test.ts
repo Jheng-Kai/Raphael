@@ -24,9 +24,13 @@ test("pictures and video have no visible filename, size, or separate information
   for (const attachment of [image, video]) {
     const root = parse(sentFileHTML(attachment));
     expect(root.querySelector(".attachment-info,.attachment-name,.me-file-t")).toBeNull();
+    // A video's only words are its own player's: the time and the speed (R-MEDIA-01).
+    root.querySelectorAll(".mp-time, .mp-length, .mp-rate").forEach(node => node.remove());
     expect(root.textContent).toBe("");
   }
-  expect(parse(sentFileHTML(video)).querySelector("video[controls]")).not.toBeNull();
+  const player = parse(sentFileHTML(video));
+  expect(player.querySelector("video[controls]")).toBeNull();
+  expect(player.querySelector('.mp[data-mp="video"] [data-mp-act="toggle"]')).not.toBeNull();
 });
 
 test("a quote stays at the top of the text bubble below the owner's media", () => {
@@ -42,9 +46,9 @@ test("a quote stays at the top of the text bubble below the owner's media", () =
 
 test("audio has one pill with controls; documents open from their whole card", () => {
   const sound = parse(sentFileHTML(audio));
-  expect(sound.querySelector(".attachment-audio [data-audio-toggle]")).not.toBeNull();
-  expect(sound.querySelector('input[type="range"]')).not.toBeNull();
-  expect(sound.querySelector("[data-audio-time]")).not.toBeNull();
+  expect(sound.querySelector('.attachment-audio [data-mp-act="toggle"]')).not.toBeNull();
+  expect(sound.querySelector('input[type="range"].mp-seek')).not.toBeNull();
+  expect(sound.querySelector(".mp-time")).not.toBeNull();
   expect(sound.querySelector("audio[controls]")).toBeNull();
   expect(sound.querySelectorAll(".attachment-name")).toHaveLength(1);
   const document = parse(sentFileHTML(file));

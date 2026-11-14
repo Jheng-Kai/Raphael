@@ -63,7 +63,7 @@ import { openUnread, unreadInTail, unreadLine } from "../unread-divider";
 import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
-import { copyPicture, mediaPicture, pictureQuote } from "../picture-message";
+import { copyPicture, mediaPicture, mediaVideo, pictureQuote } from "../picture-message";
 import { ReplyPacing } from "../reply-pacing";
 import { avatarHTML, currentAvatar, onAvatarChange } from "../avatar";
 import "../background-questions.css";
@@ -2045,7 +2045,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) void load(false);
   }
 
-  function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean; picture?: TurnAttachment } | null {
+  function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean; picture?: TurnAttachment; video?: TurnAttachment } | null {
     const id = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id);
     const turn = turns.find(item => item.id === id);
     const key = control.closest<HTMLElement>("[data-message]")?.dataset.message;
@@ -2057,6 +2057,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // A picture the member sent is quoted as a link to its stored file, and copied as the picture itself (R-UI-156).
       const picture = mediaPicture(message.text);
       if (picture) return { turn, key, text: pictureQuote(picture), markdown: false, picture };
+      // A video is quoted the same way; it has no Copy (R-MEDIA-02).
+      const video = mediaVideo(message.text);
+      if (video) return { turn, key, text: pictureQuote(video), markdown: false, video };
       const media = parseMediaPayload(message.text);
       return { turn, key, text: media ? [media.title, media.description, media.url].filter(Boolean).join("\n") : message.text, markdown: false };
     }
@@ -2098,7 +2101,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const message = control.closest<HTMLElement>(".chat-message");
     const items: Parameters<typeof openActions>[1][number][] = [];
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
-    items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
+    if (!source?.video) items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
     // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
@@ -2854,7 +2857,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const member = memberId(), conversation = conversationId();
     const source = (): AgentTurn | undefined => [...turns].sort((a,b) => b.id-a.id).find(turn => turn.id < quotedAt &&
       [messagePlainText(turn.question), ...plainReplies((turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.text)).map(text => messagePlainText(text, true, composioAction(turn))), messagePlainText(turn.text, true, composioAction(turn)),
-        ...(turn.messages ?? []).flatMap(message => { const picture = message.kind === "media" ? mediaPicture(message.text) : null; return picture ? [pictureQuote(picture)] : []; })].some(text => text.includes(quote.text)));
+        ...(turn.messages ?? []).flatMap(message => { const file = message.kind === "media" ? mediaPicture(message.text) ?? mediaVideo(message.text) : null; return file ? [pictureQuote(file)] : []; })].some(text => text.includes(quote.text)));
     let target = source();
     while (!target && canLoadEarlier) {
       const before = oldestId(turns), page = await api.agentHistoryList({member_id:member,conversation_id:conversation,before_id:before,limit:PAGE_SIZE});

@@ -1,108 +1,64 @@
-// Stored media is loaded only near the viewport. Object URLs belong to this mounted thread.
-import { fileKind } from "./attachments";
-import { t } from "./i18n";
-import { ico, toaster } from "./ui";
-import { attachmentSource } from "./api";
+// Stored media of one mounted thread: pictures load near the viewport, videos and sounds get our players (media-player.ts).
+// What a stored id points at never changes, so its URL and the decoded picture belong to the app, not to this thread
+// (media-cache.ts): a conversation opened again draws its pictures at once and asks the shell for nothing it already asked.
+import { bindPlayers } from "./media-player";
+import { isKept, keepDecoded, knownMediaUrl, mediaUrl, STORED_ID, type ReadStored } from "./media-cache";
 
-type Loaded = { url: string; size: number };
-export function createAttachmentMedia(root: HTMLElement, read: (id: string) => Promise<{ mime: string; data: string }>) {
-  const loaded = new Map<string, Loaded>();
-  const pending = new Set<string>();
+export function createAttachmentMedia(root: HTMLElement, read: ReadStored) {
   let epoch = 0;
   const players = new Set<HTMLMediaElement>();
-  const bound = new WeakSet<HTMLAudioElement>();
-  const clock = (seconds: number): string => {
-    const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-    return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
-  };
-  const bindAudio = (audio: HTMLAudioElement): void => {
-    if (bound.has(audio)) return;
-    const pill = audio.closest(".attachment-audio");
-    const toggle = pill?.querySelector<HTMLButtonElement>("[data-audio-toggle]");
-    const progress = pill?.querySelector<HTMLInputElement>("[data-audio-progress]");
-    const time = pill?.querySelector<HTMLElement>("[data-audio-time]");
-    if (!toggle || !progress || !time) return;
-    bound.add(audio);
-    const update = (): void => {
-      const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
-      progress.disabled = duration <= 0;
-      progress.value = String(duration > 0 ? audio.currentTime / duration * 100 : 0);
-      progress.setAttribute("aria-valuetext", `${clock(audio.currentTime)} / ${clock(duration)}`);
-      time.textContent = `${clock(audio.currentTime)} / ${clock(duration)}`;
-      toggle.innerHTML = ico(audio.paused ? "play" : "pause");
-      toggle.setAttribute("aria-pressed", String(!audio.paused));
-    };
-    toggle.addEventListener("click", () => {
-      if (!audio.paused) audio.pause();
-      else void audio.play().catch(() => { update(); toaster.info(t("agent.fileUnavailable")); });
-    });
-    progress.addEventListener("input", () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Number(progress.value) / 100 * audio.duration;
-      update();
-    });
-    for (const event of ["loadedmetadata", "durationchange", "timeupdate", "play", "pause", "ended", "error"]) audio.addEventListener(event, update);
-    update();
-  };
+  const watched = new WeakSet<HTMLImageElement>();
   const apply = (id: string, url: string): void => {
     for (const node of root.querySelectorAll<HTMLImageElement | HTMLMediaElement>(`img[data-attachment="${id}"],video[data-attachment="${id}"],audio[data-attachment="${id}"]`)) {
       if (node.getAttribute("src") !== url) node.src = url;
     }
   };
-  const load = async (node: Element): Promise<void> => {
+  /** A picture that has loaded is kept decoded for the next conversation that shows it. */
+  const watch = (image: HTMLImageElement, id: string): void => {
+    if (watched.has(image)) return;
+    watched.add(image);
+    const keep = (): void => keepDecoded(id, image);
+    if (image.complete && image.naturalWidth) keep();
+    else image.addEventListener("load", keep);
+  };
+  const load = (node: Element): void => {
     const id = (node as HTMLElement).dataset.attachment;
-    if (!id || !/^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(id)) return;
-    const cached = loaded.get(id);
-    if (cached) { apply(id, cached.url); return; }
-    if (pending.has(id)) return;
+    if (!id || !STORED_ID.test(id)) return;
+    const known = knownMediaUrl(id);
+    if (known) { apply(id, known); return; }
     const generation = epoch;
-    pending.add(id);
-    try {
-      // The native asset protocol serves ranges from disk; videos never become a page Blob.
-      if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement || node.hasAttribute("data-stream-file")) {
-        const url = await attachmentSource(id);
-        if (generation === epoch) { loaded.set(id, { url, size: 0 }); apply(id, url); }
-        return;
-      }
-      const file = await read(id);
-      if (generation !== epoch || fileKind(file.mime) === "file" || file.data.length > 70_000_000) return;
-      const binary = atob(file.data);
-      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-      // Bound decoded media to 100 MB; older nodes can load again when scrolled into view.
-      while ([...loaded.values()].reduce((sum, item) => sum + item.size, 0) + bytes.length > 100 * 1024 * 1024 && loaded.size) {
-        const [old, entry] = loaded.entries().next().value!;
-        URL.revokeObjectURL(entry.url);
-        loaded.delete(old);
-        for (const media of root.querySelectorAll(`[data-attachment="${old}"][src]`)) media.removeAttribute("src");
-      }
-      const url = URL.createObjectURL(new Blob([bytes], { type: file.mime }));
-      loaded.set(id, { url, size: bytes.length });
-      apply(id, url);
-    } catch {
+    mediaUrl(id, read).then(url => { if (generation === epoch) apply(id, url); })
       // A missing stored copy leaves its name visible, without exposing backend details.
-    } finally { if (generation === epoch) pending.delete(id); }
+      .catch(() => {});
   };
   const observer = typeof IntersectionObserver === "function" ? new IntersectionObserver(entries => {
-    for (const entry of entries) if (entry.isIntersecting) void load(entry.target.querySelector("audio") ?? entry.target);
+    for (const entry of entries) if (entry.isIntersecting) {
+      observer!.unobserve(entry.target);
+      load(entry.target.querySelector("audio") ?? entry.target);
+    }
   }, { root, rootMargin: "240px" }) : null;
   return {
     sync(): void {
       observer?.disconnect();
       for (const player of players) if (!root.contains(player)) { player.pause(); players.delete(player); }
-      for (const player of root.querySelectorAll<HTMLMediaElement>("audio,video")) {
-        players.add(player);
-        if (player instanceof HTMLAudioElement) bindAudio(player);
-      }
-      const ids = new Set([...root.querySelectorAll<HTMLElement>("[data-attachment]")].map(node => node.dataset.attachment));
-      for (const [id, entry] of loaded) if (!ids.has(id)) { URL.revokeObjectURL(entry.url); loaded.delete(id); }
-      for (const node of root.querySelectorAll("img[data-attachment],video[data-attachment],audio[data-attachment]")) {
-        // Custom audio controls hide the native element; watch their visible pill instead.
+      for (const player of root.querySelectorAll<HTMLMediaElement>("audio,video")) players.add(player);
+      bindPlayers(root);
+      for (const node of root.querySelectorAll<HTMLElement>("img[data-attachment],video[data-attachment],audio[data-attachment]")) {
+        const id = node.dataset.attachment ?? "";
+        if (node instanceof HTMLImageElement) watch(node, id);
+        // A picture this session still holds decoded is set now, in the same frame as the thread: nothing loads again and
+        // nothing jumps. Everything else waits until it is near the viewport (its URL, once known, is not asked again).
+        const known = knownMediaUrl(id);
+        if (known && node.getAttribute("src") === known) continue;
+        if (known && node instanceof HTMLImageElement && isKept(id)) { node.src = known; continue; }
+        // Our audio player hides the element; watch its visible row instead.
         if (observer) observer.observe(node.closest(".attachment-audio") ?? node);
-        else void load(node);
+        else load(node);
       }
     },
     source(button: HTMLElement): string | undefined {
       const id = button.dataset.attachment;
-      if (id) return loaded.get(id)?.url;
+      if (id) return knownMediaUrl(id);
       const src = button.querySelector("img")?.getAttribute("src");
       // A draft's thumbnail was set from its own bytes or its stored copy (agent.ts, chat-composer.ts).
       if (src && button.classList.contains("cmp-pic")) return src;
@@ -113,9 +69,6 @@ export function createAttachmentMedia(root: HTMLElement, read: (id: string) => P
       for (const player of players) player.pause();
       players.clear();
       observer?.disconnect();
-      pending.clear();
-      for (const entry of loaded.values()) URL.revokeObjectURL(entry.url);
-      loaded.clear();
     },
   };
 }
