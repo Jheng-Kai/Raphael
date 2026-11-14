@@ -58,6 +58,14 @@ $env:PYTHONPATH = "<worktree>\core\src"
 npm.cmd run verify -- --computer
 ```
 
+`npm run verify -- --computer` on the final tree (2026-11-15, 26 min, the owner's own shared computer running beside it): 88 ok,
+3 failed, 6 skipped (no images of layers 4 to 8 and 10). "shared seat windows", "shared seat displacement", "shared browser is a
+person's" and "previous layer 11 start/update" (layer 11 made again on 12, workspace kept) passed. The three failures are one
+thing: removing the run's temporary data folder, `vm-homes/<key>/.browser-profiles` is access denied to the host on this PC
+(`previous layer 9 erase`, `previous layer 11 erase`, `cleanup`). The home of a throwaway layer 11 computer made before any of
+this change has the same denied folders, so it is this PC's Docker file sharing, not layer 12; the folders were removed through a
+throwaway root container. Not run: a member's real turn with a model, and a computer of a member's own on a remote host.
+
 Stated limits: two tabs with the same address and title cannot be told apart, so which of them `show` brings forward, or which
 is shown, is not claimed (`shown: null`); the watch does not fight a drag, so a window held still half across for a second is
 put back; a member's typed tools still act on a background tab without bringing it forward (the driver's own design).
