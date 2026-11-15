@@ -3942,7 +3942,8 @@ export function checkRendered(name, context = {}) {
     require(win.getComputedStyle(doc.body).backgroundColor === 'rgb(23, 23, 23)', "viewer gutters share the dark frame surface");
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
     const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
-    require(Math.min(Math.abs(box.width - width), Math.abs(box.height - height)) <= 2, "the canvas fills the frame on its limiting axis");
+    // Owner, 2026-11-15: no dark sliver at the screen's edge. A seat fills its frame both ways, not only on its limiting axis.
+    require(Math.abs(box.width - width) <= 0.75 && Math.abs(box.height - height) <= 0.75, `the seat fills its frame with no gutter: ${[box.width, box.height].map(n => n.toFixed(2))} in ${width}x${height}`);
     require(box.left >= -1 && box.top >= -1 && box.right <= width + 1 && box.bottom <= height + 1, "the whole desktop fits without clipping");
     require(Math.abs(box.width / box.height - canvas.width / canvas.height) < 0.01, "the desktop keeps its framebuffer aspect ratio");
     const controls = [...doc.querySelectorAll('[id^="noVNC_"]')].filter(el => /control|handle|button|panel|status|dlg|logo|hint/i.test(el.id) && el.checkVisibility({ checkVisibilityCSS: true }) && visible(el));

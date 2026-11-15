@@ -53,8 +53,10 @@
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 /* Every state keeps the running screen's proportions, so the wallpaper is never squeezed. The clip,
-   unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height. */
-.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-lg); }
+   unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height.
+   Its line is drawn inside and takes no room (owner, 2026-11-15: 「我不希望它有那個邊框」): a border made the inside
+   2 px off 1280:900, the seat's picture fitted one side and the other showed a dark sliver. The running screen covers it. */
+.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .desktop-recording { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
@@ -127,7 +129,7 @@
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-checkpoints, .desktop-foot) { width: min(100cqw, (100cqh - var(--desktop-foot)) * 1280 / 900); min-width: 0; }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-checkpoints) { grid-area: 1 / 1; height: auto; min-height: 0; aspect-ratio: 1280 / 900; }
 .desktop-panel[data-expanded] .desktop-caption { display: none; }
-.desktop-panel[data-expanded] .desktop-screen { border-color: transparent; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
+.desktop-panel[data-expanded] .desktop-screen { box-shadow: none; border-radius: var(--r-md); background: var(--desktop-frame-bg); }
 /* The skill review and the file changes take the screen's place, in a quiet box of its size that scrolls on its own. */
 .desktop-panel[data-expanded]:is([data-files], :has(.desktop-review:not([hidden]))) .desktop-screen { display: none; }
 .desktop-panel[data-expanded] :is(.desktop-review, .desktop-checkpoints) { box-sizing: border-box; align-content: start; overflow-y: auto; padding: var(--sp-4) var(--sp-5); border-radius: var(--r-md); background: var(--panel); }

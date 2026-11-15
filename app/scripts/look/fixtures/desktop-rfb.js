@@ -7,7 +7,8 @@ export default class RFB extends EventTarget {
     this.target = target;
     target.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;background:rgb(40,40,40)';
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 1024; this.canvas.height = 768;
+    // A seat of the shared computer: 1280 x 900 (core computer/vm.py `screen_grid`).
+    this.canvas.width = 1280; this.canvas.height = 900;
     this.canvas.tabIndex = 0;
     this.canvas.addEventListener('keydown', event => {
       if (this.viewOnly || event.key.length !== 1) return;
