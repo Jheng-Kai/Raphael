@@ -12,6 +12,8 @@ point to, else English. It is small and deterministic, and None when the text ha
 import re
 from collections import Counter
 
+from .ui_languages import LANGUAGES
+
 # What says nothing about the language a person writes in: links, addresses, code, @names.
 _NOISE = re.compile(r"```.*?```|`[^`]*`|https?://\S+|www\.\S+|\S+@\S+\.\S+|@\S+", re.S)
 # What a person quotes is the matter, not the language they ask in (「翻譯 'good morning'」 is a Chinese request).
@@ -65,7 +67,7 @@ def _chinese(text: str) -> str:
     return "zh-CN" if simplified > traditional else "zh-TW"
 
 
-def _latin(text: str) -> str:
+def _latin(text: str, *, firm=False) -> str | None:
     lowered = text.casefold()
     words = Counter(_WORD.findall(lowered))
     scores = {language: sum(words[word] for word in common) for language, common in _LATIN_WORDS.items()}
@@ -73,20 +75,57 @@ def _latin(text: str) -> str:
         scores[language] += 2 * sum(lowered.count(letter) for letter in letters)
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     (best, top), (_, second) = ranked[0], ranked[1]
-    return best if top >= 2 and top > second else "en"
+    if top >= 2 and top > second:
+        return best
+    return None if firm else "en"
 
 
-def detect_language(text: object) -> str | None:
+def detect_language(text: object, *, firm=False) -> str | None:
     """The language `text` is written in, as an interface language code (`ui_languages.LANGUAGES`), or None when it
-    has no letters to read (an emoji, a number, a bare link). The same text always gives the same answer."""
+    has no letters to read (an emoji, a number, a bare link). The same text always gives the same answer.
+
+    `firm` asks for evidence: Latin letters that point to no language ("continue", "ok", a file name) are None, not
+    English, so a caller can look at the owner's earlier words instead of taking one English word for the owner's language."""
     if not isinstance(text, str):
         return None
     text = _NOISE.sub(" ", text)
     unquoted = _QUOTED.sub(" ", text)
-    return _language(unquoted) or _language(text)
+    return _language(unquoted, firm) or _language(text, firm)
 
 
-def _language(text: str) -> str | None:
+# The script family a language is written in. Latin-script languages tell each other apart by common words, which is too
+# little to hide a line from someone for, so they are one family.
+_FAMILY = {"zh-TW": "han", "zh-CN": "han", "ja": "han", "ko": "ko", "th": "th", "ru": "ru"}
+# A Chinese line names a file or a command, and an English one quotes a word of the owner's: only a line that is mostly
+# another script is not in the language.
+_NAMES_PER_CHARACTER = 10
+
+
+def _script_counts(text: str) -> dict[str, int]:
+    text = _NOISE.sub(" ", text)
+    return {"han": len(_HAN.findall(text)) + len(_HIRAGANA.findall(text)) + len(_KATAKANA.findall(text)),
+            "ko": len(_HANGUL.findall(text)), "th": len(_THAI.findall(text)), "ru": len(_CYRILLIC.findall(text)),
+            "latin": len(_LATIN.findall(text))}
+
+
+def in_language(text: object, language: object) -> bool:
+    """Whether `text` may be shown to someone who writes `language` (a code of `ui_languages.LANGUAGES`): it carries no
+    letters (a path, a number), or it is mostly in the script of that language. A language this does not know, or
+    none, passes everything."""
+    if not isinstance(text, str) or not isinstance(language, str) or language not in LANGUAGES:
+        return True
+    counts = _script_counts(text)
+    family = _FAMILY.get(language, "latin")
+    own = counts[family]
+    other = sum(counts.values()) - own
+    if own + other == 0:
+        return True
+    if family == "latin":
+        return other * 3 <= own
+    return own > 0 and own * _NAMES_PER_CHARACTER >= other
+
+
+def _language(text: str, firm=False) -> str | None:
     hiragana, katakana = len(_HIRAGANA.findall(text)), len(_KATAKANA.findall(text))
     han, hangul = len(_HAN.findall(text)), len(_HANGUL.findall(text))
     counts = {
@@ -102,7 +141,7 @@ def _language(text: str) -> str | None:
         japanese = hiragana > 0 and hiragana * 10 >= hiragana + katakana + han or katakana > 0 and han == 0
         return "ja" if japanese else _chinese(text)
     if script == "latin":
-        return _latin(text)
+        return _latin(text, firm=firm)
     return script
 
 

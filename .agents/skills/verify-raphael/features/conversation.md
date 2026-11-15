@@ -2894,6 +2894,8 @@ chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chi
 ui_language; kana, code and English stay unchanged. The configured voice language remains
 independent, including Japanese rendering on a Japanese interface.
 
+R-LANG-05 (2026-11-16, owner: 「工程師又開始說英文了」): the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from his own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that every text it writes is in that language (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
+
 Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
 brain/test_db.py, agent/test_persona.py, agent/test_answers.py,
 members/test_personality_prompts.py, members/test_model_greeting.py and
