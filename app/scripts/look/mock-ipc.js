@@ -566,6 +566,14 @@ export function installMock(fixture, config = {}, target = window) {
     turn.secrets = [{...turn.secrets[0], id: "card-login", name: "https://research.example", secret: "login", login: true}];
     data.turns.push(turn);
   }
+  // A key a member asked for, for a program in its computer (`request_secret` with `key`): the same card, titled by the
+  // variable's name, with what the key is for.
+  if (variant.keyCard) {
+    const turn = structuredClone(data.secretTurns.notion);
+    Object.assign(turn, {id: 133, member_id: 1, conversation_id: 11, question: "幫我用 OpenRouter 跑價格腳本。", text: "請在安全卡片貼上金鑰，儲存後我會接著執行。", steps: [], messages: []});
+    turn.secrets = [{...turn.secrets[0], id: "card-key", name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", key: true, purpose: "價格腳本要呼叫模型"}];
+    data.turns.push(turn);
+  }
   // The panel's 設定 and share answered in the member's conversation: a bot token card, a pairing
   // request to that bot, and the template the member made of itself.
   if (variant.chatCards) {
@@ -1965,7 +1973,7 @@ export function installMock(fixture, config = {}, target = window) {
           if (variant.resumeFails) Object.assign(card, { state: "saved", error: "resume_failed" });
           else {
             Object.assign(card, { state: "resumed", resumed: true });
-            if (!card.login) data.turns.push(structuredClone(data.secretResume));
+            if (!card.login && !card.key) data.turns.push(structuredClone(data.secretResume));
           }
           state.emit({ type: "AgentTurn", turn_id: turn.id, member_id: turn.member_id });
         }, 0);
@@ -2142,7 +2150,7 @@ export function installMock(fixture, config = {}, target = window) {
     // Tauri's own form on Windows: http://<protocol>.localhost/<path>.
     convertFileSrc(path, protocol = "asset") { return protocol === "raphael-media" ? `http://raphael-media.localhost/${encodeURIComponent(path)}` : path; },
     async invoke(command, args = {}) {
-      const recorded = command === "core_call" && args.method === "integrations.card_save" && args.params?.id === "card-login" ? {...args,params:{...args.params,value:"[private login]"}} : args;
+      const recorded = command === "core_call" && args.method === "integrations.card_save" && ["card-login", "card-key"].includes(args.params?.id) ? {...args,params:{...args.params,value:"[private value]"}} : args;
       // `traceCalls` keeps where in the app each call came from, to find who asks for what.
       const entry = { command, ...copy(command === "main_events" ? {} : recorded), ...(variant.traceCalls ? { from: new Error().stack.split("\n").slice(2, 9).map(line => line.trim().replace(/\s*\(?https?:\/\/[^/]+\/src\/main\//, " ").replace(/\?[^:]*/, "")).join(" < ") } : {}) };
       // Not enumerable: the stamps stay out of every comparison and copy of the trace.
@@ -2385,6 +2393,8 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "keyboard_has_altgr") return false;
+      // The owner's clipboard is never read by a look: the live view's paste asks only while he holds a real screen.
+      if (command === "owner_clipboard_text") return null;
       if (command === "mic_access") return { allowed: true, blocked_by: null };
       if (command === "schedule_keep_awake_get") return data.awake ?? false;
       if (command === "schedule_keep_awake_set") return data.awake = args.enabled;

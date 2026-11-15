@@ -102,7 +102,7 @@ export const paneTitle = (id: SettingsPane): string => PANES.find((p) => p.id ==
 export type ModelsTab = "models" | "usage";
 
 /** The shortcuts recorded here, and the row of each. */
-export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotkey", agent_keys: "agent-hotkey" };
+export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotkey", agent_keys: "agent-hotkey", tidy_keys: "tidy-hotkey" };
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
@@ -456,6 +456,7 @@ function dictationHTML(v: SettingsView): string {
       shortcutRow(t("home.020"), d.dictation_keys, { act: "rec", field: "dictation_keys" }),
       ...altgrNote(v, d.dictation_keys),
       ...(d.paste_last_keys.length ? [shortcutRow(t("home.021"), d.paste_last_keys)] : []),
+      shortcutRow(t("settings.tidyKeys"), d.tidy_keys ?? [], { act: "rec-tidy", field: "tidy_keys" }),
       shortcutRow(t("common.cancel"), ["Escape"]),
     ]) +
     section(t("settings.groupStart"), [row(t("settings.055"), "", sel(DICTATION_MODES, d.dictation_mode, t("settings.055"), ' data-k="mode"'))]) +

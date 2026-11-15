@@ -35,6 +35,16 @@
 //!   「一律允許」). Esc while the answer is with the agent stops what it goes on with. An agent
 //!   session never pastes and never touches the clipboard of the focused window.
 //!
+//! A third key tidies text that is already written ([`DictationController::tidy_at`], Right Alt+T):
+//! the text selected in the focused window is copied (`Paster::copy_selection`, which puts the
+//! user's clipboard back), tidied by the core (`dictation.tidy`: the cleanup's model, dictionary,
+//! languages and tone, for typed text) and pasted over the selection with the dictation's own
+//! paster, with the dictation's overlay (thinking, then done). Like Right Alt+V it starts as a
+//! Right Alt press that began a dictation, which it drops quietly. The work is a processing
+//! session of its own, so the window's Stop ends it and the dictation key waits for it. The raw
+//! text is never pasted as if it were tidied: any failure leaves the selection and the clipboard
+//! as they were and says so.
+//!
 //! A recording has no time limit, and silence never ends it: it ends only when the key stops it
 //! or Esc cancels it. When what listens or transcribes in the core has failed for good and the
 //! session can hear nothing more, the core says so (`dictation.silence`, named from when silence
@@ -118,7 +128,7 @@ use tokio::task::JoinHandle;
 use crate::agent::{self, Reply};
 use crate::background::ReportStage;
 use crate::commands::DictationPhase;
-use crate::core_process::{CORE_DOWN, CORE_RESTARTED, dictation_stop_timeout};
+use crate::core_process::{CORE_DOWN, CORE_RESTARTED, dictation_stop_timeout, tidy_timeout};
 use crate::device_settings::DictationMode;
 use crate::holdtap::{Action, HoldTap};
 use crate::hotkey::{CancelSwitch, HotkeyEvent};
@@ -126,7 +136,7 @@ use crate::learn::AfterPaste;
 use crate::media::{MediaHold, MediaPauser};
 use crate::notices::{self, LanguageCell, Notice};
 use crate::overlay::{AskPrompt, Confirmation, Mode, OverlayApi, Progress, Stage, Tier};
-use crate::paste::{CopyReason, PasteDelivery, PasteOutcome, Paster, Target};
+use crate::paste::{CopyReason, PasteDelivery, PasteOutcome, Paster, Selection, Target};
 use crate::rpc::{CORE_EXITED, CoreApi, Notification, RpcError, TIMEOUT, lock};
 
 /// `BUSY` in the core's `protocol.py`: a dictation session is already active.
@@ -140,6 +150,12 @@ const NO_LOCAL_MODEL: i64 = 1006;
 /// A paste-last or agent key press this soon after a dictation started cancels it: Right Alt+V or
 /// Right Alt+Space pressed the dictation key first.
 const CHORD_CANCELS_WITHIN_MS: u64 = 1000;
+/// The most characters the tidy key takes in one selection (`TIDY_MAX_CHARS` in the core's
+/// `brain/service.py`): a whole document selected by mistake is not sent to a model.
+const TIDY_MAX_CHARS: usize = 30_000;
+/// The characters of written text that count as a second of speech for the progress of a tidy:
+/// the cleanup's expected time follows the length of what it is given.
+const TIDY_CHARS_PER_SECOND: f32 = 5.0;
 
 /// The dictation mode that is in force: written by the device settings (at start, and when the
 /// person changes it), read by the controller each time a dictation begins. Clones share the
@@ -944,13 +960,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             }
             HotkeyEvent::Cancel => self.cancel_current(),
             HotkeyEvent::PasteLast => {
-                if lock(&self.state).agent == Some(AgentStage::Asking)
-                    || (self.phase() == Phase::Idle
-                        && self
-                            .typed_contexts()
-                            .iter()
-                            .any(|turn| lock(&turn.state).agent == Some(AgentStage::Asking)))
-                {
+                if self.chord_question_waits(now_ms) {
                     // Like the other keys: while a question waits for its answer, nothing else
                     // may put a report or a paste in its way.
                     log::debug!("paste-last key ignored: Raphael is asking");
@@ -958,7 +968,44 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 }
                 Some(self.paste_last_at(now_ms))
             }
+            HotkeyEvent::Tidy => {
+                if self.chord_question_waits(now_ms) {
+                    log::debug!("tidy key ignored: Raphael is asking");
+                    return None;
+                }
+                self.tidy_at(now_ms)
+            }
         }
+    }
+
+    /// Whether a YES/NO question waits for its answer, in the voice slot or in a typed turn that
+    /// the voice slot is not busy with.
+    fn question_waits(&self) -> bool {
+        lock(&self.state).agent == Some(AgentStage::Asking)
+            || (self.phase() == Phase::Idle
+                && self
+                    .typed_contexts()
+                    .iter()
+                    .any(|turn| lock(&turn.state).agent == Some(AgentStage::Asking)))
+    }
+
+    /// `question_waits` for a Right Alt chord (Right Alt+V, Right Alt+T). The hook reports the
+    /// dictation key first, so the chord arrives over a recording its Right Alt has just started,
+    /// which `question_waits` reads as busy and so lets a typed question waiting go unseen. A
+    /// typed question waiting holds the chord back then as it does at rest.
+    fn chord_question_waits(&self, now_ms: u64) -> bool {
+        let fresh_chord = {
+            let state = lock(&self.state);
+            state.phase == Phase::Recording
+                && state.kind() == Some(Kind::Dictation)
+                && now_ms.saturating_sub(state.started_ms) < CHORD_CANCELS_WITHIN_MS
+        };
+        self.question_waits()
+            || (fresh_chord
+                && self
+                    .typed_contexts()
+                    .iter()
+                    .any(|turn| lock(&turn.state).agent == Some(AgentStage::Asking)))
     }
 
     /// The microphone's loudness, from 0 to 1. Shown only while recording; while a question is
@@ -1524,6 +1571,179 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         if self.is_quiet() {
             self.learn_after_paste(&text, target.as_ref(), delivery);
         }
+    }
+
+    /// The tidy key: the text selected in the focused window is tidied and put in its place.
+    ///
+    /// Right Alt+T reports Right Alt first, and that started a dictation. If it did so a moment
+    /// ago, the T is the second half of the chord and the recording is dropped quietly, as
+    /// Right Alt+V drops it ([`Self::paste_last_at`]): nothing is left recording, the Right Alt's
+    /// release does nothing, and the next press starts a dictation. A dictation that has been
+    /// running longer is a real one, and the key does nothing; neither does it while something is
+    /// being processed. An answer that is only being shown gives way.
+    ///
+    /// The work is a session of its own (processing, with no recording), so the window's Stop
+    /// ends it and the dictation key waits for it; Esc is not taken, as while a dictation is
+    /// processed. It is not a dictation: it tells the guide nothing, saves
+    /// nothing to the history and watches nothing for learning.
+    fn tidy_at(&self, now_ms: u64) -> Option<JoinHandle<()>> {
+        let id = uuid::Uuid::new_v4().to_string();
+        // Nothing is started in the core, so there is nothing to wait for.
+        let (_answered, started) = watch::channel(Started::Yes);
+        let dropped = {
+            let mut state = lock(&self.state);
+            let fresh = state.phase == Phase::Recording
+                && state.kind() == Some(Kind::Dictation)
+                && now_ms.saturating_sub(state.started_ms) < CHORD_CANCELS_WITHIN_MS;
+            if !fresh && state.phase != Phase::Idle && state.agent != Some(AgentStage::Speaking) {
+                log::debug!("tidy key ignored: Raphael is busy");
+                return None;
+            }
+            let dropped = state.go_idle();
+            state.phase = Phase::Processing;
+            state.session = Some(Session {
+                id: id.clone(),
+                kind: Kind::Dictation,
+                member: 0,
+                conversation_id: None,
+                quick: false,
+                started,
+            });
+            state.started_ms = now_ms;
+            // Esc stays the app's: nothing is recorded, as while a dictation is processed.
+            self.set_cancel(false);
+            dropped
+        };
+        log::info!("tidy: the selection is copied");
+        if let Some(hook) = &self.after_paste {
+            // The field's text is about to change under whatever is being watched.
+            hook.paste_started();
+        }
+        self.take_voice_overlay();
+        // The window to paste into is the one that has focus when the key is pressed.
+        let target = self.paster.foreground();
+        self.overlay.show(Mode::Thinking);
+
+        let this = self.clone();
+        Some(tokio::spawn(async move {
+            // The cancel of the dropped recording waits for its start reply; the tidy does not
+            // wait for the cancel.
+            let cancel = async {
+                if let Some(session) = &dropped {
+                    cancel_after_start(this.core.as_ref(), session).await;
+                }
+            };
+            tokio::join!(cancel, this.tidy_selection(id, target));
+        }))
+    }
+
+    /// The work of [`Self::tidy_at`] for the session `id`: copy, tidy, paste. Whenever it ends
+    /// without a paste, the selection and the clipboard are as they were and the overlay says
+    /// why; the text is never replaced by anything that was not tidied.
+    async fn tidy_selection(&self, id: String, target: Option<Target>) {
+        let paster = self.paster.clone();
+        let at_key = target.clone();
+        let copied =
+            tokio::task::spawn_blocking(move || paster.copy_selection(at_key.as_ref())).await;
+        let text = match copied {
+            Ok(Selection::Text(text)) => text,
+            Ok(Selection::Nothing) => {
+                log::info!("tidy: nothing is selected");
+                self.finish(&id, |this| this.show(notices::NOTHING_SELECTED));
+                return;
+            }
+            Ok(Selection::Refused(reason)) => {
+                log::info!("tidy: the window cannot be copied from ({reason:?})");
+                self.finish(&id, |this| this.show(notices::TIDY_FAILED));
+                return;
+            }
+            Ok(Selection::Failed) => {
+                log::warn!("tidy: the selection could not be copied");
+                self.finish(&id, |this| this.show(notices::TIDY_FAILED));
+                return;
+            }
+            Err(err) => {
+                log::error!("tidy: copying failed: {err}");
+                self.finish(&id, |this| this.show(notices::TIDY_FAILED));
+                return;
+            }
+        };
+        let chars = text.chars().count();
+        if chars > TIDY_MAX_CHARS {
+            log::info!("tidy: {chars} characters are more than a selection may hold");
+            self.finish(&id, |this| this.show(notices::TIDY_FAILED));
+            return;
+        }
+        {
+            let _transition = lock(&self.transitions);
+            if !self.is_current(&id) {
+                return;
+            }
+            // The percentage follows the cleanup of a text of this length, as for a dictation.
+            self.overlay.progress(Progress {
+                stage: Stage::Cleaning,
+                done: 0,
+                total: 0,
+                audio_seconds: chars as f32 / TIDY_CHARS_PER_SECOND,
+            });
+        }
+        let target_app = target.as_ref().map(|target| target.process_name.clone());
+        let reply = self
+            .core
+            .call_within(
+                "dictation.tidy",
+                json!({ "text": text, "target_app": target_app }),
+                tidy_timeout(chars),
+            )
+            .await;
+        if !self.is_current(&id) {
+            log::info!("dropping the result of a tidy that was cancelled");
+            return;
+        }
+        let tidied = match &reply {
+            Ok(reply) if reply.get("cleaned").and_then(Value::as_bool) == Some(true) => reply
+                .get("text")
+                .and_then(Value::as_str)
+                .filter(|text| !text.trim().is_empty())
+                .map(str::to_owned),
+            Ok(reply) => {
+                log::info!(
+                    "tidy: not tidied ({})",
+                    reply
+                        .get("fallback_reason")
+                        .and_then(Value::as_str)
+                        .unwrap_or("no reason")
+                );
+                None
+            }
+            Err(err) => {
+                log::warn!("dictation.tidy failed: {err}");
+                None
+            }
+        };
+        let Some(tidied) = tidied else {
+            let notice = match &reply {
+                Err(err) if err.code == CORE_EXITED => {
+                    self.failure_notice(err).unwrap_or(notices::TIDY_FAILED)
+                }
+                _ => notices::TIDY_FAILED,
+            };
+            self.finish(&id, |this| this.show(notice));
+            return;
+        };
+        {
+            let _transition = lock(&self.transitions);
+            if !self.is_current(&id) {
+                return;
+            }
+            self.overlay.progress(Progress::DONE);
+        }
+        let delivery = self.deliver(tidied, target, Some(&id)).await;
+        let language = self.language.get();
+        // Nothing is learned from it: the words are not the dictation's.
+        self.finish(&id, |this| {
+            this.report_in_language(delivery.as_ref(), None, true, &language);
+        });
     }
 
     fn learn_after_paste(
@@ -3273,7 +3493,10 @@ mod app {
                                 log::info!("hotkey {event:?} ignored: the core is not running");
                                 if matches!(
                                     event,
-                                    HotkeyEvent::DictationDown | HotkeyEvent::AgentDown | HotkeyEvent::ConversationDown { .. }
+                                    HotkeyEvent::DictationDown
+                                        | HotkeyEvent::AgentDown
+                                        | HotkeyEvent::Tidy
+                                        | HotkeyEvent::ConversationDown { .. }
                                 ) && !told_no_core
                                 {
                                     told_no_core = true;
@@ -3334,10 +3557,11 @@ mod tests {
     use crate::hotkey::{CancelSwitch, HotkeyEvent};
     use crate::notices::{
         ASK_FAILED, BUDGET, CORE_DOWN, ELEVATED, FOCUS_CHANGED, GREETING, INCOMPLETE,
-        NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_SOUND, NOT_READY, OFFLINE,
+        NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_SOUND, NOT_READY, NOTHING_SELECTED, OFFLINE,
+        TIDY_FAILED,
     };
     use crate::overlay::{Mode, OverlayApi, OverlayEvent, Progress, takes_clicks};
-    use crate::paste::{CopyReason, PasteOutcome, Paster, Target};
+    use crate::paste::{CopyReason, PasteOutcome, Paster, Selection, Target};
     use crate::rpc::{CORE_EXITED, CoreApi, RpcError, TIMEOUT};
     use serde_json::{Value, json};
     use std::collections::HashMap;
@@ -3647,6 +3871,13 @@ mod tests {
         stolen: Mutex<bool>,
         /// The windows the focus was given back to.
         refocused: Mutex<Vec<Target>>,
+        /// What copying the selection finds.
+        selection: Selection,
+        /// How many times the selection was copied.
+        copies: Mutex<u32>,
+        /// The user's clipboard. A copy and a paste both put it back, but a text that is only
+        /// copied (the focus moved) stays on it, as with the real paster.
+        clipboard: Mutex<String>,
     }
 
     impl FakePaster {
@@ -3667,7 +3898,23 @@ mod tests {
                 gate: None,
                 stolen: Mutex::default(),
                 refocused: Mutex::default(),
+                selection: Selection::Nothing,
+                copies: Mutex::default(),
+                clipboard: Mutex::new(USER_CLIPBOARD.to_owned()),
             }
+        }
+
+        /// Copying the selection finds `selection`.
+        fn selecting(self, selection: Selection) -> Self {
+            Self { selection, ..self }
+        }
+
+        fn copies(&self) -> u32 {
+            *self.copies.lock().unwrap()
+        }
+
+        fn clipboard(&self) -> String {
+            self.clipboard.lock().unwrap().clone()
         }
 
         fn gated(mut self) -> (Self, Arc<Notify>, std::sync::mpsc::Sender<()>) {
@@ -3689,7 +3936,21 @@ mod tests {
         }
     }
 
+    /// What the user had copied before a tidy.
+    const USER_CLIPBOARD: &str = "我自己複製的";
+
     impl Paster for FakePaster {
+        fn copy_selection(&self, at_key: Option<&Target>) -> Selection {
+            assert_eq!(
+                at_key,
+                self.foreground.as_ref(),
+                "copied in the window that had focus when the key was pressed"
+            );
+            *self.copies.lock().unwrap() += 1;
+            // The program's copy goes through the clipboard; what was on it comes back.
+            self.selection.clone()
+        }
+
         fn foreground(&self) -> Option<Target> {
             if *self.stolen.lock().unwrap() {
                 return Some(Target {
@@ -3718,6 +3979,9 @@ mod tests {
             if let Some((entered, waiting)) = &self.gate {
                 entered.notify_one();
                 waiting.lock().unwrap().recv().unwrap();
+            }
+            if matches!(self.outcome, PasteOutcome::CopiedOnly(_)) {
+                *self.clipboard.lock().unwrap() = text.to_owned();
             }
             self.outcome
         }
@@ -5078,6 +5342,365 @@ mod tests {
             assert_eq!(c.core().count("dictation.cancel"), 0, "{mode:?}");
             assert_eq!(c.phase(), Phase::Recording, "{mode:?}");
         }
+    }
+
+    // ---------- the tidy key ----------
+
+    fn tidied(text: &str) -> Value {
+        json!({"text": text, "cleaned": true, "fallback_reason": null})
+    }
+
+    /// A tidy key on a window with `selection` selected, answered by the core with `reply`.
+    fn tidy_controller(mode: DictationMode, selection: &str, reply: Value) -> Ctl {
+        controller_in(
+            mode,
+            FakeCore::with("dictation.tidy", reply),
+            FakePaster::pasting("notepad.exe").selecting(Selection::Text(selection.to_owned())),
+        )
+    }
+
+    #[tokio::test]
+    async fn the_tidy_key_replaces_the_selection_with_the_tidied_text() {
+        for mode in BOTH_MODES {
+            let c = tidy_controller(
+                mode,
+                "我今天去公園玩 ，很開心",
+                tidied("我今天去公園玩，很開心。"),
+            );
+            run(&c, HotkeyEvent::Tidy, 5000).await;
+            assert_eq!(c.paster().copies(), 1, "{mode:?}");
+            assert_eq!(
+                c.core().call_params("dictation.tidy"),
+                json!({"text": "我今天去公園玩 ，很開心", "target_app": "notepad.exe"}),
+                "{mode:?}: the selection and the window's program"
+            );
+            assert_eq!(
+                c.paster().delivered(),
+                vec!["我今天去公園玩，很開心。"],
+                "{mode:?}"
+            );
+            assert_eq!(c.paster().clipboard(), USER_CLIPBOARD, "{mode:?}");
+            // the dictation's own working state, then the completion: nothing new on the overlay
+            assert_eq!(
+                c.overlay().events(),
+                vec!["show:thinking", "hide"],
+                "{mode:?}"
+            );
+            assert_eq!(*c.overlay().completions.lock().unwrap(), 1, "{mode:?}");
+            assert_eq!(
+                c.overlay().progress(),
+                vec![
+                    "progress:cleaning:0/0:2.4".to_owned(),
+                    "progress:done:0/0:0".to_owned()
+                ],
+                "{mode:?}: the percentage follows the length of the text"
+            );
+            assert_eq!(c.phase(), Phase::Idle, "{mode:?}");
+            assert_eq!(c.cancel().last(), Some(false), "{mode:?}");
+            // not a dictation: the core hears of nothing else, and nothing is in the history
+            assert_eq!(c.core().count("dictation.start"), 0, "{mode:?}");
+            assert_eq!(c.core().count("dictation.cancel"), 0, "{mode:?}");
+            assert_eq!(c.core().count("dictation.tidy"), 1, "{mode:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_tidy_wait_grows_with_the_selection() {
+        let long = "字".repeat(2500);
+        let c = tidy_controller(DictationMode::Hold, &long, tidied("字"));
+        run(&c, HotkeyEvent::Tidy, 0).await;
+        assert_eq!(c.core().timeout("dictation.tidy"), Some(tidy_timeout(2500)));
+        assert!(tidy_timeout(2500) > tidy_timeout(10));
+    }
+
+    #[tokio::test]
+    async fn right_alt_and_t_drop_the_dictation_that_the_right_alt_started() {
+        // Right Alt+T: the Right Alt went down first (a start in either mode), then T
+        for mode in BOTH_MODES {
+            let c = tidy_controller(mode, "原文", tidied("整理後。"));
+            run(&c, HotkeyEvent::DictationDown, 0).await;
+            assert_eq!(c.phase(), Phase::Recording, "{mode:?}");
+            run(&c, HotkeyEvent::Tidy, 200).await;
+            assert_eq!(c.core().count("dictation.cancel"), 1, "{mode:?}");
+            assert_eq!(c.paster().delivered(), vec!["整理後。"], "{mode:?}");
+            assert_eq!(c.phase(), Phase::Idle, "{mode:?}");
+            assert_eq!(c.cancel().last(), Some(false), "{mode:?}");
+            assert_eq!(
+                c.overlay().events(),
+                vec!["show:listening", "show:thinking", "hide"],
+                "{mode:?}: the recording's emblem goes on thinking"
+            );
+            // the release of the Right Alt does nothing, and no recording is left behind
+            run(&c, HotkeyEvent::DictationUp, 300).await;
+            assert_eq!(c.core().count("dictation.stop"), 0, "{mode:?}");
+            assert_eq!(c.phase(), Phase::Idle, "{mode:?}");
+            // and the next press is a start, in toggle mode too
+            run(&c, HotkeyEvent::DictationDown, 5000).await;
+            assert_eq!(c.core().count("dictation.start"), 2, "{mode:?}");
+            assert_eq!(c.core().count("dictation.stop"), 0, "{mode:?}");
+            assert_eq!(c.phase(), Phase::Recording, "{mode:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn right_alt_let_go_before_the_t_in_toggle_mode_still_drops_the_recording() {
+        let c = tidy_controller(DictationMode::Toggle, "原文", tidied("整理後。"));
+        run(&c, HotkeyEvent::DictationDown, 0).await;
+        run(&c, HotkeyEvent::DictationUp, 90).await;
+        run(&c, HotkeyEvent::Tidy, 400).await;
+        assert_eq!(c.core().count("dictation.cancel"), 1);
+        assert_eq!(c.phase(), Phase::Idle);
+        run(&c, HotkeyEvent::DictationDown, 3000).await;
+        assert_eq!(c.core().count("dictation.start"), 2, "a start, not a stop");
+    }
+
+    #[tokio::test]
+    async fn nothing_selected_pastes_nothing_and_says_so() {
+        let c = controller(
+            FakeCore::default(),
+            FakePaster::pasting("notepad.exe").selecting(Selection::Nothing),
+        );
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(c.paster().copies(), 1);
+        assert_eq!(c.core().count("dictation.tidy"), 0, "nothing to tidy");
+        assert!(c.paster().delivered().is_empty());
+        assert_eq!(c.paster().clipboard(), USER_CLIPBOARD);
+        assert_eq!(
+            c.overlay().events(),
+            vec!["show:thinking".to_owned(), notice(NOTHING_SELECTED.zh)]
+        );
+        assert_eq!(c.phase(), Phase::Idle);
+        assert_eq!(c.cancel().last(), Some(false));
+        // the notice is in the interface language and in that one alone
+        let c = controller(
+            FakeCore::default(),
+            FakePaster::pasting("notepad.exe").selecting(Selection::Nothing),
+        );
+        c.language().set("en");
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(
+            c.overlay().events().last().unwrap(),
+            &notice(NOTHING_SELECTED.en)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_tidy_that_fails_pastes_nothing_and_never_pastes_the_raw_text() {
+        let replies: [(&str, Result<Value, RpcError>); 6] = [
+            ("the call failed", Err(RpcError::new(-32603, "boom"))),
+            ("it timed out", Err(RpcError::new(TIMEOUT, "slow"))),
+            (
+                "no key",
+                Ok(json!({"cleaned": false, "fallback_reason": "no_key"})),
+            ),
+            (
+                "a suspicious reply, even one that carries text",
+                Ok(json!({"cleaned": false, "text": "原文", "fallback_reason": "suspicious"})),
+            ),
+            (
+                "an empty reply",
+                Ok(json!({"cleaned": true, "text": "  ", "fallback_reason": null})),
+            ),
+            ("no answer at all", Ok(json!({}))),
+        ];
+        for (what, reply) in replies {
+            let core = FakeCore::default();
+            core.script("dictation.tidy", reply);
+            let c = controller(
+                core,
+                FakePaster::pasting("notepad.exe").selecting(Selection::Text("原文".to_owned())),
+            );
+            run(&c, HotkeyEvent::Tidy, 5000).await;
+            assert_eq!(c.core().count("dictation.tidy"), 1, "{what}");
+            assert!(c.paster().delivered().is_empty(), "{what}");
+            assert_eq!(c.paster().clipboard(), USER_CLIPBOARD, "{what}");
+            assert_eq!(
+                c.overlay().events(),
+                vec!["show:thinking".to_owned(), notice(TIDY_FAILED.zh)],
+                "{what}"
+            );
+            assert_eq!(*c.overlay().completions.lock().unwrap(), 0, "{what}");
+            assert_eq!(c.phase(), Phase::Idle, "{what}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_window_that_cannot_be_copied_from_or_a_copy_that_failed_is_a_failure() {
+        for selection in [
+            Selection::Failed,
+            Selection::Refused(CopyReason::Elevated),
+            Selection::Refused(CopyReason::FocusChanged),
+        ] {
+            let c = controller(
+                FakeCore::with("dictation.tidy", tidied("不該被貼上")),
+                FakePaster::pasting("notepad.exe").selecting(selection.clone()),
+            );
+            run(&c, HotkeyEvent::Tidy, 5000).await;
+            assert_eq!(c.core().count("dictation.tidy"), 0, "{selection:?}");
+            assert!(c.paster().delivered().is_empty(), "{selection:?}");
+            assert_eq!(
+                c.overlay().events().last().unwrap(),
+                &notice(TIDY_FAILED.zh),
+                "{selection:?}"
+            );
+            assert_eq!(c.phase(), Phase::Idle, "{selection:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_selection_that_is_too_long_is_not_sent_to_a_model() {
+        let c = controller(
+            FakeCore::with("dictation.tidy", tidied("不該被貼上")),
+            FakePaster::pasting("notepad.exe")
+                .selecting(Selection::Text("字".repeat(TIDY_MAX_CHARS + 1))),
+        );
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(c.core().count("dictation.tidy"), 0);
+        assert!(c.paster().delivered().is_empty());
+        assert_eq!(
+            c.overlay().events().last().unwrap(),
+            &notice(TIDY_FAILED.zh)
+        );
+        // one that is exactly as long as allowed is tidied
+        let c = tidy_controller(
+            DictationMode::Hold,
+            &"字".repeat(TIDY_MAX_CHARS),
+            tidied("字"),
+        );
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(c.core().count("dictation.tidy"), 1);
+    }
+
+    #[tokio::test]
+    async fn when_the_focus_moved_meanwhile_the_text_is_not_pasted_and_the_notice_says_so() {
+        let c = controller(
+            FakeCore::with("dictation.tidy", tidied("整理後。")),
+            FakePaster::copying("notepad.exe", CopyReason::FocusChanged)
+                .selecting(Selection::Text("原文".to_owned())),
+        );
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(*c.overlay().completions.lock().unwrap(), 0, "not pasted");
+        assert_eq!(
+            c.overlay().events(),
+            vec!["show:thinking".to_owned(), notice(FOCUS_CHANGED.zh)],
+            "as for a dictation, the text waits on the clipboard"
+        );
+        assert_eq!(c.paster().clipboard(), "整理後。");
+        assert_eq!(c.phase(), Phase::Idle);
+    }
+
+    #[tokio::test]
+    async fn the_tidy_key_is_ignored_while_a_longer_recording_or_a_session_is_busy() {
+        for mode in BOTH_MODES {
+            let c = tidy_controller(mode, "原文", tidied("整理後。"));
+            run(&c, HotkeyEvent::DictationDown, 0).await;
+            run(&c, HotkeyEvent::Tidy, 1500).await;
+            assert_eq!(c.paster().copies(), 0, "{mode:?}");
+            assert_eq!(c.core().count("dictation.cancel"), 0, "{mode:?}");
+            assert_eq!(
+                c.phase(),
+                Phase::Recording,
+                "{mode:?}: a real dictation goes on"
+            );
+            assert_eq!(c.overlay().events(), vec!["show:listening"], "{mode:?}");
+        }
+        // a dictation that is being processed keeps the overlay
+        let (core, gate) =
+            FakeCore::with("dictation.stop", stop_result("好", None)).gated("dictation.stop");
+        let c = controller(
+            core,
+            FakePaster::pasting("notepad.exe").selecting(Selection::Text("原文".to_owned())),
+        );
+        run(&c, HotkeyEvent::DictationDown, 0).await;
+        let stop = c
+            .on_hotkey(HotkeyEvent::DictationUp, 3000)
+            .expect("the stop runs in a task");
+        tokio::task::yield_now().await;
+        assert_eq!(c.phase(), Phase::Processing);
+        run(&c, HotkeyEvent::Tidy, 3500).await;
+        assert_eq!(c.paster().copies(), 0);
+        gate.notify_one();
+        stop.await.unwrap();
+        assert_eq!(c.paster().delivered(), vec!["好"]);
+    }
+
+    #[tokio::test]
+    async fn the_tidy_key_does_nothing_while_raphael_asks_a_question() {
+        let c = tidy_controller(DictationMode::Hold, "原文", tidied("整理後。"));
+        lock(&c.state).agent = Some(AgentStage::Asking);
+        assert!(c.on_hotkey(HotkeyEvent::Tidy, 5000).is_none());
+        assert_eq!(c.paster().copies(), 0);
+        assert!(c.overlay().events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_dictation_key_waits_for_a_tidy_and_stop_ends_it() {
+        let (core, gate) =
+            FakeCore::with("dictation.tidy", tidied("整理後。")).gated("dictation.tidy");
+        let c = controller(
+            core,
+            FakePaster::pasting("notepad.exe").selecting(Selection::Text("原文".to_owned())),
+        );
+        let tidy = c
+            .on_hotkey(HotkeyEvent::Tidy, 5000)
+            .expect("the tidy runs in a task");
+        // let it copy and reach the core
+        while c.core().count("dictation.tidy") == 0 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(c.phase(), Phase::Processing);
+        assert_eq!(
+            c.cancel().last(),
+            Some(false),
+            "Esc stays the app's while it works"
+        );
+        // the dictation key is ignored while it works, as while a dictation is processed
+        run(&c, HotkeyEvent::DictationDown, 5200).await;
+        assert_eq!(c.core().count("dictation.start"), 0);
+        // the window's Stop ends it; the late reply is dropped
+        run(&c, HotkeyEvent::Cancel, 5400).await;
+        assert_eq!(c.phase(), Phase::Idle);
+        assert_eq!(c.cancel().last(), Some(false));
+        gate.notify_one();
+        tidy.await.unwrap();
+        assert!(
+            c.paster().delivered().is_empty(),
+            "a cancelled tidy pastes nothing"
+        );
+        assert_eq!(c.overlay().events().last().unwrap(), "hide");
+        // afterwards the dictation key starts a dictation
+        run(&c, HotkeyEvent::DictationDown, 9000).await;
+        assert_eq!(c.core().count("dictation.start"), 1);
+    }
+
+    #[tokio::test]
+    async fn a_tidy_never_feeds_the_learning_of_corrections() {
+        #[derive(Default)]
+        struct Hook(Mutex<Vec<String>>);
+        impl crate::learn::AfterPaste for Hook {
+            fn pasted(&self, _: &str, _: &Target) {
+                self.0.lock().unwrap().push("pasted".to_owned());
+            }
+            fn pasted_with_receipt(&self, _: &str, _: &Target, _: crate::paste::PasteReceipt) {
+                self.0.lock().unwrap().push("pasted".to_owned());
+            }
+            fn dictation_started(&self) {
+                self.0.lock().unwrap().push("started".to_owned());
+            }
+            fn paste_started(&self) {
+                self.0.lock().unwrap().push("paste_started".to_owned());
+            }
+        }
+        let hook = Arc::new(Hook::default());
+        let c = tidy_controller(DictationMode::Hold, "原文", tidied("整理後。"))
+            .with_after_paste(hook.clone());
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(c.paster().delivered(), vec!["整理後。"]);
+        assert_eq!(
+            *hook.0.lock().unwrap(),
+            ["paste_started"],
+            "the watch of an earlier dictation ends; the tidied text is not watched"
+        );
     }
 
     #[tokio::test]
@@ -7742,6 +8365,32 @@ mod tests {
         );
         assert_eq!(c.overlay().events(), ["show:listening"]);
         run(&c, Cancel, 100).await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_chord_does_nothing_while_a_typed_question_waits() {
+        // Right Alt+T and Right Alt+V report the dictation key first; a typed YES/NO question that
+        // waits still holds them back (R-TIDY-01).
+        for chord in [HotkeyEvent::Tidy, HotkeyEvent::PasteLast] {
+            let (c, _) = questioning(question("waiting", 30_000));
+            let typed = c.ask_typed("Confirm").unwrap();
+            until_stage(&c, AgentStage::Asking).await;
+            run(&c, DictationDown, 0).await;
+            assert!(
+                c.on_hotkey(chord, 100).is_none(),
+                "{chord:?} ran over a typed question"
+            );
+            settle().await;
+            assert!(c.paster().delivered().is_empty());
+            assert_eq!(c.core().count("dictation.tidy"), 0);
+            assert_eq!(c.core().count("history.latest"), 0);
+            run(&c, Cancel, 200).await;
+            tokio::time::advance(FRONT_POLL).await;
+            settle().await;
+            assert_eq!(c.open_question().unwrap().id, "waiting");
+            c.on_confirm("waiting", false);
+            typed.await.unwrap();
+        }
     }
 
     #[tokio::test(start_paused = true)]

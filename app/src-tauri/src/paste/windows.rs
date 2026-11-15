@@ -33,9 +33,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{HRESULT, Owned, PWSTR};
 
-use super::clipboard::ClipboardSession;
+use super::clipboard::{self, ClipboardSession};
 use super::{
-    Decision, PasteDelivery, PasteOutcome, PasteReceipt, Paster, Shortcut, Target, decide,
+    COPY_POLL, COPY_WAIT, CopyShortcut, Decision, PasteDelivery, PasteOutcome, PasteReceipt,
+    Paster, Selection, Shortcut, Target, changed_within, copy_shortcut_for, decide,
 };
 
 /// How long the chord's modifiers stay down after the key click. Most programs read them from
@@ -112,6 +113,26 @@ impl Paster for WindowsPaster {
         }
     }
 
+    fn copy_selection(&self, at_key: Option<&Target>) -> Selection {
+        let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(PoisonError::into_inner);
+        let (target, self_elevated) = (at_key.cloned(), self.self_elevated);
+        // A clipboard session is not `Send`: it lives and ends on a thread of its own.
+        let worker = thread::Builder::new()
+            .name("raphael-copy".to_owned())
+            .spawn(move || copy(target.as_ref(), self_elevated));
+        match worker.map(thread::JoinHandle::join) {
+            Ok(Ok(selection)) => selection,
+            Ok(Err(_)) => {
+                log::error!("copy: the copy thread panicked");
+                Selection::Failed
+            }
+            Err(e) => {
+                log::error!("copy: could not start the copy thread: {e}");
+                Selection::Failed
+            }
+        }
+    }
+
     fn refocus(&self, target: &Target) -> bool {
         // Windows lets the process that has the foreground give it away, which is this one
         // when one of its windows took it.
@@ -166,6 +187,62 @@ fn paste(text: &str, at_stop: Option<&Target>, self_elevated: bool) -> PasteDeli
     }
 }
 
+/// One copy of the selection, on the current thread: snapshot the user's clipboard, send the
+/// program its copy chord, read the text that appears on the clipboard, and put the snapshot
+/// back. Nothing is sent to a window that no longer has focus, or that we may not send keys.
+fn copy(at_key: Option<&Target>, self_elevated: bool) -> Selection {
+    let shortcut = match decide(at_key, foreground_target().as_ref(), self_elevated) {
+        Decision::Paste(shortcut) => copy_shortcut_for(shortcut),
+        Decision::CopyOnly(reason) => {
+            log::info!("copy: not copying ({reason:?})");
+            return Selection::Refused(reason);
+        }
+    };
+    let session = match ClipboardSession::begin() {
+        Ok(session) => session,
+        Err(e) => {
+            log::error!("copy: could not use the clipboard: {e}");
+            return Selection::Failed;
+        }
+    };
+    // After the snapshot, which may ask a program to render what it only promised.
+    let before = clipboard::sequence_number();
+    let program = at_key.map_or("", |target| target.process_name.as_str());
+    log::info!("copy: {shortcut:?} in {program}");
+    release_held_modifiers();
+    if !send_copy_chord(shortcut) {
+        return Selection::Failed;
+    }
+    let copied = changed_within(
+        before,
+        COPY_WAIT,
+        COPY_POLL,
+        clipboard::sequence_number,
+        thread::sleep,
+    );
+    if !copied {
+        // Nothing was selected: the program wrote nothing, so the clipboard is as it was.
+        log::info!("copy: the clipboard did not change; nothing is selected");
+        return Selection::Nothing;
+    }
+    let text = session.read_text();
+    // Whatever the program put there is replaced by what was there before.
+    if let Err(e) = session.restore() {
+        log::warn!("copy: could not put the clipboard back: {e}");
+    }
+    match text {
+        Ok(Some(text)) if !text.trim().is_empty() => Selection::Text(text),
+        Ok(_) => {
+            log::info!("copy: the program copied no text");
+            Selection::Nothing
+        }
+        Err(e) => {
+            log::error!("copy: could not read what was copied: {e}");
+            Selection::Failed
+        }
+    }
+}
+
 fn outcome_of(decision: Decision) -> PasteOutcome {
     match decision {
         Decision::Paste(_) => PasteOutcome::Pasted,
@@ -181,6 +258,22 @@ fn send_chord(shortcut: Shortcut, hold: impl FnOnce()) -> bool {
         Shortcut::CtrlShiftV => (&[Key::Control, Key::Shift], Key::V),
         Shortcut::ShiftInsert => (&[Key::Shift], Key::Insert),
     };
+    send_keys(modifiers, key, &format!("{shortcut:?}"), hold)
+}
+
+/// Sends the copy chord of a program, the same way [`send_chord`] sends the paste chord.
+fn send_copy_chord(shortcut: CopyShortcut) -> bool {
+    let (modifiers, key): (&[Key], Key) = match shortcut {
+        CopyShortcut::CtrlC => (&[Key::Control], Key::C),
+        CopyShortcut::CtrlShiftC => (&[Key::Control, Key::Shift], Key::C),
+        CopyShortcut::CtrlInsert => (&[Key::Control], Key::Insert),
+    };
+    send_keys(modifiers, key, &format!("{shortcut:?}"), || {})
+}
+
+/// Presses `modifiers`, clicks `key`, calls `hold`, releases the modifiers. `what` names the chord
+/// in the log. Returns whether the key click went out.
+fn send_keys(modifiers: &[Key], key: Key, what: &str, hold: impl FnOnce()) -> bool {
     let mut enigo = match Enigo::new(&Settings {
         windows_dw_extra_info: Some(handy_keys::RAPHAEL_INPUT_MARKER),
         ..Settings::default()
@@ -206,7 +299,7 @@ fn send_chord(shortcut: Shortcut, hold: impl FnOnce()) -> bool {
                 clicked = true;
                 hold();
             }
-            Err(e) => log::error!("paste: could not send {shortcut:?}: {e}"),
+            Err(e) => log::error!("paste: could not send {what}: {e}"),
         }
     }
     for &modifier in modifiers[..pressed].iter().rev() {

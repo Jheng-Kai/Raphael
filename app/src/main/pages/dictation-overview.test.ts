@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "../i18n";
 import type { StatsSummary } from "../types";
-import { overviewHTML, usageHTML } from "./dictation-overview";
+import type { DeviceSettings } from "../types";
+import { keysCardHTML, overviewHTML, usageHTML } from "./dictation-overview";
 
 afterEach(() => setLocale("zh-TW"));
 
@@ -21,6 +22,31 @@ const stats: StatsSummary = {
 
 /** The page with the history's cards drawn into the main column, as `paint` does. */
 const page = (s: StatsSummary = stats): string => overviewHTML().replace('<div class="usage"></div>', `<div class="usage">${usageHTML(s)}</div>`);
+
+const device = {
+  dictation_keys: ["AltRight"],
+  paste_last_keys: ["AltRight+V"],
+  agent_keys: ["AltRight+Space"],
+  tidy_keys: ["AltRight+T"],
+} as DeviceSettings;
+const names = (html: string): string[] => [...html.matchAll(/<div class="kc-name">(.*?)<\/div>/g)].map((m) => m[1]!);
+
+describe("the shortcuts card", () => {
+  test("lists the tidy key beside the others, before Esc", () => {
+    const html = keysCardHTML(device);
+    expect(names(html)).toEqual(["聽寫", "問拉斐爾", "貼上上一次", "整理選取文字", "取消"]);
+    const tidy = html.slice(html.indexOf("整理選取文字"));
+    expect(tidy).toContain("<kbd>T</kbd>");
+    setLocale("en");
+    expect(names(keysCardHTML(device))).toContain("Tidy selected text");
+  });
+
+  test("leaves out a tidy key that is empty, or that an older app does not have", () => {
+    expect(names(keysCardHTML({ ...device, tidy_keys: [] }))).not.toContain("整理選取文字");
+    const { tidy_keys: _gone, ...older } = device;
+    expect(names(keysCardHTML(older as DeviceSettings))).toEqual(["聽寫", "問拉斐爾", "貼上上一次", "取消"]);
+  });
+});
 
 describe("the dictation overview", () => {
   test.each(["zh-TW", "en", "ja"] as const)("estimated totals have a quiet localized tooltip in %s", (locale) => {

@@ -126,8 +126,10 @@ RUN set -eux; \
     chromium --version; \
     test -n "$(find /usr/lib -name 'libpixbufloader-svg.so' -print -quit)"
 # What a bot's computer has from its first start (owner, 2026-11-13, of Grok Bot's computer: 「他們會有 chrome 等等之類的
-# 我們一開始就要把環境架設好了 不會只有 cua」). Nothing in a computer is root, so a member cannot add a system package
-# later: what its work is likely to reach for is here. The base already has curl, ffmpeg, node and Python 3.13.
+# 我們一開始就要把環境架設好了 不會只有 cua」). The computer's user may use sudo without a password (the base image
+# allows it, and the container keeps SETUID and SETGID, which the owner chose to leave open), but a system package
+# added by hand is lost when the computer is made again: what its work is likely to reach for is here. The base
+# already has curl, ffmpeg, node and Python 3.13.
 # The CJK and emoji fonts are Debian's: until now only the Japanese cut was there, and Chinese was drawn in its shapes.
 RUN set -eux; \
     apt-get update; \
@@ -283,4 +285,4 @@ RUN set -eux; \
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="12"
+      org.raphael.computer.layer="13"

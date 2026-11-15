@@ -74,6 +74,68 @@ def test_linux_copy_carries_profile_files_and_datasets_with_exclusions_and_sourc
     assert carry_runtime.execute(arguments(), source, destination)['profile'] == 'kept_existing'
 
 
+def identity(path):
+    status = Path(path).lstat()
+    return status.st_dev, status.st_ino
+
+
+def test_everything_a_carry_creates_ends_handed_over_to_the_computers_user(homes, monkeypatch):
+    # The helper is root; a file it leaves root's is one the member cannot change. Every folder and file that was not
+    # there before the carry (the copied files, the profile, the datasets, the folders made on the way) was handed
+    # over: compared by identity, since staged names are renamed to their final ones.
+    source, destination = homes
+    before = {identity(path) for path in destination.rglob('*')}
+    handed = []
+    monkeypatch.setattr(carry_runtime.os, 'chown', lambda path, uid, gid, **kwargs: handed.append((identity(path), uid, gid)))
+    carry_runtime.execute(arguments(), source, destination)
+    created = {identity(path) for path in destination.rglob('*')} - before
+    assert len(created) > 8
+    assert created <= {entry for entry, _, _ in handed}
+    assert {(uid, gid) for _, uid, gid in handed} == {(1000, 1000)}
+
+
+def test_staging_is_handed_over_when_it_is_made_and_the_leftovers_of_a_killed_helper_on_the_next_run(homes, monkeypatch):
+    source, destination = homes
+    dead = destination / '.raphael-carry-dead/files/sub'
+    dead.mkdir(parents=True)
+    (dead / 'x').write_text('written by root before the helper was killed')
+    dead_profile = destination / '.browser-profiles/driver/.carry-profile-dead/main/Default'
+    dead_profile.mkdir(parents=True)
+    (dead_profile / 'y').write_text('y')
+    owners, staged_first = [], []
+    monkeypatch.setattr(carry_runtime.os, 'chown', lambda path, uid, gid, **kwargs: owners.append(Path(path)))
+    copytree = carry_runtime.shutil.copytree
+
+    def watched(src, dst, *args, **kwargs):
+        # The profile's staging folder was handed over before the long copy into it began, not after (copytree calls
+        # itself for each folder: only the first call is the copy's start).
+        if not staged_first:
+            staged_first.append(Path(dst).parent in owners)
+        return copytree(src, dst, *args, **kwargs)
+    monkeypatch.setattr(carry_runtime.shutil, 'copytree', watched)
+    carry_runtime.execute(arguments(), source, destination)
+    assert staged_first == [True]
+    assert {dead.parent.parent, dead.parent, dead, dead / 'x', dead_profile, dead_profile / 'y',
+            destination / '.browser-profiles/driver/.carry-profile-dead'} <= set(owners)
+    # They were only handed over, not removed: the member decides.
+    assert (dead / 'x').exists() and (dead_profile / 'y').exists()
+
+
+def test_a_link_where_a_leftover_could_be_is_never_followed(homes, monkeypatch):
+    source, destination = homes
+    elsewhere = destination / 'members-own'
+    elsewhere.mkdir()
+    (elsewhere / 'secret').write_text("not the carry's")
+    try:
+        (destination / '.raphael-carry-link').symlink_to(elsewhere, target_is_directory=True)
+    except OSError:
+        pytest.skip('symbolic links are not allowed here')
+    owners = []
+    monkeypatch.setattr(carry_runtime.os, 'chown', lambda path, uid, gid, **kwargs: owners.append(Path(path)))
+    carry_runtime.execute(arguments(profile=False), source, destination)
+    assert not [path for path in owners if path == elsewhere or path.is_relative_to(elsewhere)]
+
+
 def test_large_home_keeps_only_its_files_in_place_and_an_unknown_folder_is_never_merged(homes, monkeypatch):
     source, destination = homes
     monkeypatch.setattr(carry_runtime, 'LIMIT', 1)

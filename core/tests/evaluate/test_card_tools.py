@@ -142,3 +142,38 @@ async def test_the_run_on_the_owners_desktop_is_made_for_a_quick_question_alone_
     with pytest.raises(Stop):
         await agent._operate(ask, agent._read_settings(), ask.ledger, request="x")
     assert seen["handback"] is False
+
+
+async def test_a_card_for_a_key_in_the_members_computer_names_a_variable_and_never_shows_a_value(driver):
+    agent = driver.app.agent
+    ask = ask_of(driver)
+    shown = agent._show_secret(ask, {"key": "OPENROUTER_API_KEY", "purpose": "the price script"})
+    assert shown["card"] == "shown" and ask.waiting_secrets == ["OPENROUTER_API_KEY"] and "vm_exec keys" in shown["note"]
+    assert rows(driver, "secret_cards") == 1 and ask.owner_card_ids
+    (card,) = driver.app.secret_cards.cards_of(ask.turn_id)
+    assert (card.kind, card.server_id, card.name) == ("key", "OPENROUTER_API_KEY", "the price script")
+    # Once saved, asking again shows no card and says how to use it.
+    driver.app.login_vault.put_key(0, "OPENROUTER_API_KEY", "the price script", "sk-test-" + "k" * 24)
+    again = agent._show_secret(ask_of(driver), {"key": "OPENROUTER_API_KEY", "purpose": "the price script"})
+    assert again["saved"] is True and "sk-test" not in str(again) and rows(driver, "secret_cards") == 1
+
+
+@pytest.mark.parametrize("arguments", [
+    {"key": "PATH", "purpose": "x"}, {"key": "bad name", "purpose": "x"}, {"key": "OK_KEY"}, {"key": "OK_KEY", "purpose": "a\nb"},
+    {"key": "OK_KEY", "purpose": "x", "connection": SERVER_NAME}, {"key": "OK_KEY", "purpose": "x", "site": "https://example.com"}, {"key": 5},
+])
+async def test_a_key_card_asks_for_exactly_one_thing_by_a_valid_name(driver, arguments):
+    ask = ask_of(driver)
+    with pytest.raises((HarnessToolError, ValueError)):
+        driver.app.agent._show_secret(ask, arguments)
+    assert rows(driver, "secret_cards") == 0 and ask.waiting_secrets == []
+
+
+@pytest.mark.parametrize("fields", [{"scope": "room", "room_id": 1}, {"scope": "exchange", "peer": 1}, {"quick": True}, {"source": "telegram"}])
+async def test_a_key_card_is_never_shown_outside_a_private_typed_chat(driver, fields):
+    ask = ask_of(driver)
+    for name, value in fields.items():
+        setattr(ask, name, value)
+    with pytest.raises(HarnessToolError, match="private_chat_only"):
+        driver.app.agent._show_secret(ask, {"key": "OPENROUTER_API_KEY", "purpose": "the price script"})
+    assert rows(driver, "secret_cards") == 0

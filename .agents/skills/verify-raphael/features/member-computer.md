@@ -1,5 +1,31 @@
 # Member computer (Phases A and B)
 
+## Housekeeping: size, scratch, locale (owner, 2026-11-15)
+
+A member inspected the shared computer and reported measured faults; the owner approved the fixes (R-COMP-SIZE-01,
+R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): the container's shape changed (the UTF-8
+locale), no file of the image did, so only the final `LABEL` step reruns on a PC that built v12. The owner's layer-12
+computer is made again once, when idle; its workspace and sign-ins are kept; hand-installed packages and `/tmp` go.
+`vm.py`: `resources`, `sized`, `machine_size`, `fit_limits`, `run_args` (locale), `scratch_args`; `carry_runtime.py` (staging
+ownership).
+
+Machine-only volumes (the browser's profiles and `~/.cache` in named volumes over their folders) were tried and taken out the
+same day: on Docker Desktop for Windows the engine makes the mountpoint `.browser-profiles` inside the bind-mounted workspace as
+another account with a closed access list, so the host could not erase a computer's folder and an older layer's container
+could not write under it (`mkdir: cannot create directory '/home/cua/workspace/.browser-profiles/driver': Permission denied`).
+The owner will get a different design later: a volume at a path outside the bind mount. Until then the profiles and caches
+stay in the workspace, as every earlier layer kept them. `npm run verify -- --computer` without them (2026-11-15): 95 ok,
+4 failed, 6 skipped; the four ("previous layer 9/11/12 erase" and "cleanup") are the access-denied `.browser-profiles` folders
+that a container of an older layer leaves in the run's temporary data folder on this PC (see the note on the denied folders
+under the layer 12 run below); no check named a volume.
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_housekeeping.py tests/computer/test_carry.py tests/computer/test_vm.py -q
+```
+
+Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
+Docker running is that check.
+
 ## A member's files, as Claude Code works on them (owner, 2026-11-14)
 
 R-TOOL-03, R-FILE-01 to R-FILE-05. The owner: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member read, searched
@@ -1859,3 +1885,29 @@ and live browser behavior require separate native acceptance.
 The private-picture capture race also requires test_navigation_after_capture_cannot_release_the_captured_private_picture:
 a safe observation authorizes the next read, never earlier captured pixels. Recheck
 grant/target before and after the final observation; revoked reads return no tree.
+
+
+## A key for a program in a member's computer, and paste into the computer (2026-11-15, R-KEY-01, R-KEY-02, R-KEY-03, R-PASTE-01)
+
+A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
+variable name) and `purpose`; the existing secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存 NAME」, says
+what it is for and that it goes to a program in the member's computer, and takes the value in its one masked field
+(Credential Manager, a `vault_entries` row of kind `key`, never the conversation, a row or a log). The member then
+runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
+the value in the docker process's own environment, never an argument) and replaces them in everything returned,
+including a background job's log read later. The Keys tab of the safety pane's saved-entries list (`vault.ts`) shows
+and removes them; it offers no way to add one. In the live view (`BOOTSTRAP` in `computer/viewer.py` and
+`desktop-viewer.ts`) the owner's Ctrl+V, while he holds the screen, puts his clipboard into the computer first
+(`owner_clipboard_text`, `paste/clipboard.rs`) and then sends the keys; watching or a member's work never reads it.
+
+Selected matrix, from app/:
+
+```powershell
+npm run look -- computer-key-card computer-key-saved computer-login-card chat-secret-masked desktop-owner --theme both --width 1120,720,1920x1080
+```
+
+Compare the key card with the login card and chat-secret-masked at the same theme/width: the same shell, one masked
+field, Save below, no value in the markup, text or recorded calls. Core: `tests/computer/test_computer_keys.py`,
+`tests/evaluate/test_card_tools.py`, `tests/brain/test_db.py`. App: `secret-card.test.ts`, `vault.test.ts`,
+`desktop-viewer.test.ts`, `desktop-paste-page.test.ts`; Rust: `cargo test paste::clipboard`. Not proved offline: a paste
+into a real container (the image's VNC server taking the client's cut text) and a real Credential Manager write.

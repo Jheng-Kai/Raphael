@@ -3,9 +3,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { canonicalKey } from "./keys";
 
-export type WindowHotkey = "dictation_down" | "dictation_up" | "paste_last" | "cancel" | "cancel_key" | "agent_down" | "agent_up";
-/** `agent_keys` is missing from the settings of an app that does not know Raphael's question key yet. */
-interface Bindings { dictation_keys: string[]; paste_last_keys: string[]; agent_keys?: string[] }
+export type WindowHotkey = "dictation_down" | "dictation_up" | "paste_last" | "tidy" | "cancel" | "cancel_key" | "agent_down" | "agent_up";
+/** `agent_keys` and `tidy_keys` are missing from the settings of an app that does not know those keys yet. */
+interface Bindings { dictation_keys: string[]; paste_last_keys: string[]; agent_keys?: string[]; tidy_keys?: string[] }
 export interface KeyInput {
   code: string;
   type: "keydown" | "keyup";
@@ -70,7 +70,7 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
     // Swallow Alt before the rest of a configured chord arrives, including its release, so
     // an Alt-only tap or repeat cannot activate WebView2's menu handling.
     if ((code === "altright" || code === "altleft") &&
-      [...bindings.dictation_keys, ...bindings.paste_last_keys, ...(bindings.agent_keys ?? [])].some((binding) =>
+      [...bindings.dictation_keys, ...bindings.paste_last_keys, ...(bindings.agent_keys ?? []), ...(bindings.tidy_keys ?? [])].some((binding) =>
         binding.split("+").map(codeName).includes(code))) {
       if (!state.swallowed.includes(code)) state.swallowed.push(code);
       preventDefault = true;
@@ -84,18 +84,21 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
         const dictation = matchBinding(bindings.dictation_keys, state.held, code);
         const paste = matchBinding(bindings.paste_last_keys, state.held, code);
         const agent = matchBinding(bindings.agent_keys ?? [], state.held, code);
+        const tidy = matchBinding(bindings.tidy_keys ?? [], state.held, code);
         if (dictation && state.dictation.length === 0) {
           state.dictation = dictation;
           actions.push("dictation_down");
         }
         if (paste) actions.push("paste_last");
+        // Like paste_last: one press, after the dictation_down of Right Alt, which the app drops.
+        if (tidy) actions.push("tidy");
         // Either key of Right Alt+Space may go down first, here as for the hook: agent_down follows the
         // dictation_down of Right Alt, and the app tells them apart.
         if (agent && state.agent.length === 0) {
           state.agent = agent;
           actions.push("agent_down");
         }
-        if (dictation || paste || agent) {
+        if (dictation || paste || agent || tidy) {
           state.swallowed.push(code);
           preventDefault = true;
         }

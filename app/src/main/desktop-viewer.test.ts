@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn() }));
+const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), ownerClipboardText:vi.fn() }));
 vi.mock("./api", () => api);
 import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
@@ -717,7 +717,7 @@ test('waiting control streams inline without opening the panel, and card takeove
  api.desktopControl.mockResolvedValue({...running,works:[{...work,state:'running'}]});
  host.querySelector<HTMLButtonElement>('[data-card-desktop="return"]')!.click(); await flush();
  expect(api.desktopControl).toHaveBeenLastCalledWith('one',false,'nonce'); expect(api.desktopClose).toHaveBeenCalledWith('one');
- expect(host.querySelector('.computer-card .card-status.is-done')).not.toBeNull();
+ expect(host.querySelector('.computer-card[data-desktop-settled="handed_back"]')).not.toBeNull();expect(host.querySelector('.computer-card .card-status')).toBeNull();
 });
 
 test('card takeover carries the inline frame into the larger view and handback closes the lease',async()=>{
@@ -1028,4 +1028,58 @@ test("a member's picture and state are drawn only for that member, however the p
   expect(panel().dataset.desktopState).toBe('stopped');
   expect(host.querySelectorAll('iframe')).toHaveLength(0);
   expect(panel().querySelector<HTMLImageElement>('.desktop-last')!.hidden).toBe(true);
+});
+
+const askPaste = (id: unknown = 7, over: Partial<MessageEventInit> = {}): void => { window.dispatchEvent(new MessageEvent('message', { source: frame().contentWindow, origin: 'http://127.0.0.1:5000', data: { type: 'raphael-desktop-paste-request', id }, ...over })); };
+// A page in a happy-dom frame has no window to talk to: this one records what is sent to it.
+let peer: { postMessage: ReturnType<typeof vi.fn> };
+const wire = (): void => { peer = { postMessage: vi.fn() }; Object.defineProperty(frame(), 'contentWindow', { value: peer, configurable: true }); };
+const holdControl = async (): Promise<void> => { panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); api.desktopControl.mockResolvedValue({ ...running, control: 'owner' }); await takeOver(); message('interactive', { held: true }); await flush(); };
+const pasteReplies = (sent: { mock: { calls: unknown[][] } }): unknown[][] => sent.mock.calls.filter(([data]) => (data as { type?: string }).type === 'raphael-desktop-paste');
+
+test('the owner pasting into the screen he holds sends his clipboard text to the page, and to that page alone', async () => {
+  await holdControl();
+  api.ownerClipboardText.mockResolvedValue('sk-or-v1-0123456789abcdef');
+  const sent = peer.postMessage;
+  askPaste(7); await flush();
+  expect(api.ownerClipboardText).toHaveBeenCalledTimes(1);
+  expect(pasteReplies(sent)).toEqual([[{ type: 'raphael-desktop-paste', id: 7, text: 'sk-or-v1-0123456789abcdef' }, 'http://127.0.0.1:5000']]);
+});
+
+test('nothing is read from his clipboard while he only watches or while a member works', async () => {
+  panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush();
+  const sent = peer.postMessage;
+  askPaste(7); await flush();
+  expect(api.ownerClipboardText).not.toHaveBeenCalled();
+  expect(pasteReplies(sent)).toEqual([]);
+  // A member at work on the screen, the owner having pressed nothing, is the same.
+  api.desktopStatus.mockResolvedValue({ ...running, works: [work] }); mounted.refresh(); await flush();
+  askPaste(8); await flush();
+  expect(api.ownerClipboardText).not.toHaveBeenCalled();
+  expect(pasteReplies(sent)).toEqual([]);
+});
+
+test('a request from another origin, another window or with no number reads nothing', async () => {
+  await holdControl();
+  askPaste(7, { origin: 'http://127.0.0.1:6000' }); askPaste(7, { source: window }); askPaste('7'); askPaste(null); await flush();
+  expect(api.ownerClipboardText).not.toHaveBeenCalled();
+});
+
+test('control that ends while the clipboard is read is told nothing of it', async () => {
+  await holdControl();
+  let release!: (text: string) => void;
+  api.ownerClipboardText.mockImplementation(() => new Promise<string>(resolve => { release = resolve; }));
+  const sent = peer.postMessage;
+  askPaste(7); await flush();
+  api.desktopControl.mockResolvedValue(running); handback().click(); await flush();
+  release('private-clipboard-text'); await flush();
+  expect(pasteReplies(sent)).toEqual([]);
+});
+
+test('a clipboard that cannot be read answers with no text, and the page pastes as before', async () => {
+  await holdControl();
+  api.ownerClipboardText.mockRejectedValue(new Error('busy'));
+  const sent = peer.postMessage;
+  askPaste(3); await flush();
+  expect(pasteReplies(sent)).toEqual([[{ type: 'raphael-desktop-paste', id: 3, text: null }, 'http://127.0.0.1:5000']]);
 });

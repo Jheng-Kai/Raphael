@@ -6,6 +6,28 @@ import json
 from urllib.parse import urlsplit
 
 
+PLACEHOLDER = "[private]"
+# A long value cut by a limit leaves its head at the end of a text, or its tail at the start of the next one.
+EDGE_VALUE, EDGE_PART = 12, 6
+
+
+def redact_values(values, text):
+    """`text` with every one of `values` replaced by a placeholder, whole or cut at either end of the text."""
+    for value in sorted(values, key=len, reverse=True):
+        for representation in {value, json.dumps(value)[1:-1], json.dumps(value, ensure_ascii=False)[1:-1]}:
+            text = text.replace(representation, PLACEHOLDER)
+        if len(value) >= EDGE_VALUE:
+            for size in range(len(value) - 1, EDGE_PART - 1, -1):
+                if text.endswith(value[:size]):
+                    text = text[:-size] + PLACEHOLDER
+                    break
+            for size in range(len(value) - 1, EDGE_PART - 1, -1):
+                if text.startswith(value[-size:]):
+                    text = PLACEHOLDER + text[size:]
+                    break
+    return text
+
+
 def origin(site):
     try:
         url = urlsplit(site)
@@ -64,7 +86,4 @@ class LoginVault:
         return data
 
     def redact(self, member, text):
-        for value in sorted(self.values.get(member, ()), key=len, reverse=True):
-            for representation in {value, json.dumps(value)[1:-1], json.dumps(value, ensure_ascii=False)[1:-1]}:
-                text = text.replace(representation, "[private]")
-        return text
+        return redact_values(self.values.get(member, ()), text)

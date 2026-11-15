@@ -11,6 +11,11 @@
 //! once the reads have stopped, unless the user copied something new meanwhile;
 //! [`ClipboardSession::keep`] leaves the text on the clipboard instead.
 //!
+//! The same session also serves the other direction, copying what is selected in a program:
+//! [`sequence_number`] is read after `begin`, the program is sent its copy chord,
+//! [`ClipboardSession::read_text`] reads what it put on the clipboard once the number has moved,
+//! and [`ClipboardSession::restore`] puts the snapshot back.
+//!
 //! A session belongs to the thread that began it (it is not `Send`): Windows' requests to its
 //! window are answered only while that thread is inside a session method that waits. After
 //! `publish_text` the first such wait is the paste chord's hold, so every read the session sees
@@ -33,7 +38,8 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Gdi::{CopyEnhMetaFileW, HBITMAP, HENHMETAFILE};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData, GetClipboardOwner,
-    GetClipboardSequenceNumber, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard,
+    RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{
@@ -80,6 +86,12 @@ const MARKERS: [(PCWSTR, u32); 3] = [
     (w!("CanIncludeInClipboardHistory"), 0),
     (w!("CanUploadToCloudClipboard"), 0),
 ];
+
+/// The clipboard's sequence number now: it goes up with every change of the contents.
+pub fn sequence_number() -> u32 {
+    // SAFETY: a plain query.
+    unsafe { GetClipboardSequenceNumber() }
+}
 
 /// One paste on the clipboard: snapshot the user's clipboard, offer the text, then restore the
 /// snapshot or keep the text.
@@ -164,6 +176,35 @@ impl ClipboardSession {
         self.shared.pending.set(true);
         self.shared.lost.set(false);
         Ok(())
+    }
+
+    /// The Unicode text on the clipboard now, with its line breaks as `\n`; `None` when the
+    /// clipboard holds no text (an image, say, or nothing). Asking makes a program that only
+    /// promised the text render it.
+    pub fn read_text(&self) -> Result<Option<String>, String> {
+        let _opened = self.open()?;
+        // SAFETY: the clipboard is open, by our window.
+        if unsafe { IsClipboardFormatAvailable(UNICODETEXT) }.is_err() {
+            return Ok(None);
+        }
+        let handle = unsafe { GetClipboardData(UNICODETEXT) }
+            .map_err(|e| format!("could not read the clipboard's text: {e}"))?;
+        let Some(bytes) = (unsafe { copy_global(HGLOBAL(handle.0)) }) else {
+            return Ok(None);
+        };
+        let units: Vec<u16> = bytes
+            .as_chunks()
+            .0
+            .iter()
+            .map(|&pair| u16::from_le_bytes(pair))
+            .take_while(|&unit| unit != 0)
+            .collect();
+        Ok(Some(String::from_utf16_lossy(&units).replace("\r\n", "\n")))
+    }
+
+    /// Puts the clipboard back as it was when the session began, whatever is on it now.
+    pub fn restore(mut self) -> Result<(), String> {
+        self.put_back(false).map(|_| ())
     }
 
     /// Waits until the reads of the text have stopped for [`QUIET_PERIOD`] (or until
@@ -337,6 +378,52 @@ fn restore_due(
         NO_CHORD_TIMEOUT
     };
     quiet || now.saturating_duration_since(published_at) >= limit
+}
+
+/// The text on the owner's clipboard (`CF_UNICODETEXT`), read once and kept nowhere (the desktop viewer's paste into a
+/// member's computer, while the owner holds its control). `None` when the clipboard holds no text, or more than
+/// `max_chars` characters: a cut-off key pasted into a program is worse than none.
+pub fn read_text(max_chars: usize) -> Result<Option<String>, String> {
+    let mut error = String::new();
+    for attempt in 0..OPEN_ATTEMPTS {
+        if attempt > 0 {
+            std::thread::sleep(OPEN_RETRY);
+        }
+        // SAFETY: the clipboard is closed again when `_opened` ends, on this thread.
+        match unsafe { OpenClipboard(None) } {
+            Ok(()) => {
+                let _opened = Opened(PhantomData);
+                return Ok(unsafe { unicode_text(max_chars) });
+            }
+            Err(e) => error = e.to_string(),
+        }
+    }
+    Err(format!("could not open the clipboard: {error}"))
+}
+
+/// The clipboard's `CF_UNICODETEXT`, which must be open: nothing when absent, or bigger than `max_chars` could be.
+unsafe fn unicode_text(max_chars: usize) -> Option<String> {
+    let handle = unsafe { GetClipboardData(UNICODETEXT) }.ok()?;
+    let block = HGLOBAL(handle.0);
+    // UTF-16 takes at most two units for one character: a block past that is too big before any byte of it is copied.
+    if unsafe { GlobalSize(block) } > max_chars.saturating_mul(4).saturating_add(2) {
+        return None;
+    }
+    text_from_utf16(&unsafe { copy_global(block) }?, max_chars)
+}
+
+/// The text of a `CF_UNICODETEXT` block: its UTF-16 up to the first NUL, or `None` when it is empty, not valid, or longer
+/// than `max_chars` characters.
+fn text_from_utf16(bytes: &[u8], max_chars: usize) -> Option<String> {
+    let units: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .take_while(|unit| *unit != 0)
+        .collect();
+    let text = String::from_utf16(&units).ok()?;
+    (!text.is_empty() && text.chars().count() <= max_chars).then_some(text)
 }
 
 /// The clipboard is open, by this thread, while this lives.
@@ -677,6 +764,32 @@ mod tests {
 
     fn ms(n: u64) -> Duration {
         Duration::from_millis(n)
+    }
+
+    #[test]
+    fn the_text_of_a_clipboard_block_stops_at_its_nul_and_is_bounded() {
+        let block = |text: &str| -> Vec<u8> {
+            text.encode_utf16()
+                .chain([0u16, 0xdead])
+                .flat_map(u16::to_le_bytes)
+                .collect()
+        };
+        assert_eq!(
+            text_from_utf16(&block("sk-or-v1-清單"), 100).as_deref(),
+            Some("sk-or-v1-清單")
+        );
+        assert_eq!(
+            text_from_utf16(&block("12345"), 5).as_deref(),
+            Some("12345")
+        );
+        assert_eq!(text_from_utf16(&block("123456"), 5), None);
+        assert_eq!(text_from_utf16(&block(""), 5), None);
+        assert_eq!(
+            text_from_utf16(&[0xff, 0xdc, 0, 0], 5),
+            None,
+            "a lone surrogate is not text"
+        );
+        assert_eq!(text_from_utf16(&[], 5), None);
     }
 
     #[test]

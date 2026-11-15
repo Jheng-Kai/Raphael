@@ -51,7 +51,8 @@ NO_FIREFOX = ('for found in /usr/bin/firefox /usr/bin/firefox.real /usr/bin/fire
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
               "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
               "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9",
-              "10": "raphael/cua-local-vm:driver-0.37.0-v10", "11": "raphael/cua-local-vm:driver-0.37.0-v11"}
+              "10": "raphael/cua-local-vm:driver-0.37.0-v10", "11": "raphael/cua-local-vm:driver-0.37.0-v11",
+              "12": "raphael/cua-local-vm:driver-0.37.0-v12"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
 # A panel leads with its three launchers, 48 px each (146 px with its border, measured), and its window list follows
 # them (image layer 12): it is as wide as that and its windows' buttons, and its terminal launcher is 121 px from its left.
@@ -190,12 +191,16 @@ def strip_change(before, after, area):
 def previous_args(target, owner, password, layer="4"):
     # The run arguments a release of that layer made. Layer 4 (release 1.2.0) had no screen variables yet;
     # layer 5 differs from today's only by its label and image.
-    args = vm.run_args(target, owner, password)
+    # Layers before 13 had no locale variables, and the shared computer was always 6 GiB / 4 CPUs.
+    args = vm.run_args(target, owner, password, size=vm.SHARED_SIZE)
     current = f"{vm.LABEL}.layer=" + vm.IMAGE_LABELS[f"{vm.LABEL}.layer"]
     result, index = [], 0
     while index < len(args):
         value = args[index]
         if layer == "4" and value == "-e" and args[index + 1].startswith(("RAPHAEL_SCREENS=", "VNC_RESOLUTION=")):
+            index += 2
+            continue
+        if value == "-e" and args[index + 1].startswith(("LANG=", "LC_ALL=")):
             index += 2
             continue
         if value == current:
@@ -418,10 +423,16 @@ class IsolatedDocker:
                     'Expected this run\'s carry helper')
         elif args[:2] == ['volume', 'inspect']:
             require(len(args) == 3 and args[2] in self.carry_homes, 'Expected this run\'s registered workspace volume')
+        elif command == 'update':
+            require(len(args) == 8 and args[1] == '--memory' and args[3] == '--memory-swap' and args[2] == args[4]
+                    and re.fullmatch(r'(?:[4-9]|1[0-2])g', args[2]) and args[5] == '--cpus' and re.fullmatch(r'[2-8]', args[6]),
+                    "Expected the shared computer's size within the rule")
+            await self.owned(args[7])
         elif command == "build":
             require(args == ["build", "--tag", self.tag, str(IMAGE_FOLDER)], "Expected isolated plain Docker build")
         elif command == "info":
-            require(args == ["info", "--format", "{{.OSType}}"], "Expected Linux engine probe")
+            require(args in (["info", "--format", "{{.OSType}}"], ["info", "--format", "{{.MemTotal}} {{.NCPU}}"]),
+                    "Expected Linux engine probe or size reading")
         else:
             raise AssertionError(f"Refused Docker command outside acceptance scope: {command}")
 
@@ -1141,7 +1152,7 @@ class Acceptance:
                     await self.machine.stop(target)
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
-        if layer in ("7", "8", "9"):
+        if layer in ("7", "8", "9", "12"):
             await self.previous_shared(layer)
 
     async def previous_shared(self, layer):
@@ -1648,11 +1659,16 @@ class Acceptance:
                 require(self.docker.created.count(first.name) - before == 1, "Expected one container creation for two concurrent starts")
                 raw = await machine.inspect(first)
                 host = raw["HostConfig"]
-                require(host["Memory"] == host["MemorySwap"] == 6 * 1024**3 and host["NanoCpus"] == 4_000_000_000
-                        and "RAPHAEL_SCREENS=6" in raw["Config"]["Env"], "Expected 6 GiB, 4 CPUs and six screens")
+                # The size the engine gives it (`machine_size`: a rule over the engine's memory and CPUs, 6 GiB / 4 CPUs when
+                # the engine cannot say), not a fixed one.
+                memory, cpus = await self.machine.machine_size(first)
+                require(host["Memory"] == host["MemorySwap"] == memory * 1024**3 and host["NanoCpus"] == cpus * 1_000_000_000
+                        and "RAPHAEL_SCREENS=6" in raw["Config"]["Env"], f"Expected {memory} GiB, {cpus} CPUs and six screens")
+                for name, value in (("LANG", vm.LOCALE), ("LC_ALL", vm.LOCALE)):
+                    require(f"{name}={value}" in raw["Config"]["Env"], f"Expected {name}={value}")
                 for member in members:
                     await hub._discover(targets[member])
-                return "Two product VmTools catalogs and sessions, seats 1/2, one six-screen 6 GiB/4 CPU container started once"
+                return f"Two product VmTools catalogs and sessions, seats 1/2, one six-screen {memory} GiB/{cpus} CPU container started once, UTF-8 locale"
 
             if not await self.check("shared prepares", prepare):
                 self.record("shared dependent checks", "skipped", "shared prepares failed")

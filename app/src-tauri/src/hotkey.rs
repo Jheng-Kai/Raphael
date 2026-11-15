@@ -1,5 +1,5 @@
-//! Global hotkeys: Right Alt dictates, Esc cancels, Right Alt+V pastes the last dictation and
-//! Right Alt+Space asks Raphael.
+//! Global hotkeys: Right Alt dictates, Esc cancels, Right Alt+V pastes the last dictation,
+//! Right Alt+T tidies the selected text and Right Alt+Space asks Raphael.
 //!
 //! [`HotkeyService`] runs a `handy-keys` hotkey manager on its own thread and turns what it
 //! reports into [`HotkeyEvent`]s on a channel. The manager works in blocking mode, so a
@@ -68,6 +68,10 @@ pub enum HotkeyEvent {
     /// A paste-last key went down. Right Alt+V reports `DictationDown` first, because Right Alt
     /// went down first.
     PasteLast,
+    /// A tidy key went down: tidy the text that is selected in the focused window. Right Alt+T
+    /// reports `DictationDown` first, because Right Alt went down first, exactly as Right Alt+V
+    /// does; the controller drops that fresh recording the same way.
+    Tidy,
 }
 
 /// The main webview's fallback input, mapped to exactly the same controller events as the hook.
@@ -79,6 +83,7 @@ pub enum WindowHotkey {
     AgentDown,
     AgentUp,
     PasteLast,
+    Tidy,
     Cancel,
     /// Esc pressed in the window: the same request as the hook's physical Esc.
     CancelKey,
@@ -92,6 +97,7 @@ impl From<WindowHotkey> for HotkeyEvent {
             WindowHotkey::AgentDown => Self::AgentDown,
             WindowHotkey::AgentUp => Self::AgentUp,
             WindowHotkey::PasteLast => Self::PasteLast,
+            WindowHotkey::Tidy => Self::Tidy,
             WindowHotkey::Cancel => Self::Cancel,
             WindowHotkey::CancelKey => Self::CancelKey,
         }
@@ -131,6 +137,8 @@ pub struct Bindings {
     pub paste_last: Vec<String>,
     /// The keys that ask Raphael something.
     pub agent: Vec<String>,
+    /// The keys that tidy the selected text. May be empty: then there is no such key.
+    pub tidy: Vec<String>,
 }
 
 impl Default for Bindings {
@@ -139,6 +147,7 @@ impl Default for Bindings {
             dictation: vec!["AltRight".to_string()],
             paste_last: vec!["AltRight+V".to_string()],
             agent: vec!["AltRight+Space".to_string()],
+            tidy: vec!["AltRight+T".to_string()],
         }
     }
 }
@@ -393,15 +402,17 @@ enum Role {
     Dictation,
     PasteLast,
     Agent,
+    Tidy,
     Cancel,
 }
 
-/// The parsed dictation, paste-last and agent keys.
+/// The parsed dictation, paste-last, agent and tidy keys.
 #[derive(Debug, Clone, PartialEq)]
 struct Wanted {
     dictation: Vec<Hotkey>,
     paste_last: Vec<Hotkey>,
     agent: Vec<Hotkey>,
+    tidy: Vec<Hotkey>,
 }
 
 impl Wanted {
@@ -410,6 +421,7 @@ impl Wanted {
         let dictation = parse_all(&bindings.dictation)?;
         let paste_last = parse_all(&bindings.paste_last)?;
         let agent = parse_all(&bindings.agent)?;
+        let tidy = parse_all(&bindings.tidy)?;
         let cancel = cancel_hotkeys(dictation.iter().chain(&agent));
 
         let entries = bindings
@@ -417,7 +429,8 @@ impl Wanted {
             .iter()
             .zip(&dictation)
             .chain(bindings.paste_last.iter().zip(&paste_last))
-            .chain(bindings.agent.iter().zip(&agent));
+            .chain(bindings.agent.iter().zip(&agent))
+            .chain(bindings.tidy.iter().zip(&tidy));
         let mut seen: Vec<(&str, Hotkey)> = Vec::new();
         for (text, hotkey) in entries {
             if cancel.contains(hotkey) {
@@ -432,6 +445,7 @@ impl Wanted {
             dictation,
             paste_last,
             agent,
+            tidy,
         })
     }
 }
@@ -534,7 +548,7 @@ struct Worker<B: Backend> {
     events: UnboundedSender<HotkeyEvent>,
     wanted: Wanted,
     cancel_enabled: bool,
-    /// The dictation, paste-last and agent keys are paused: the settings page records a key.
+    /// The dictation, paste-last, agent and tidy keys are paused: the settings page records a key.
     paused: bool,
     registered: Vec<Registration<B::Id>>,
     duplicates: DuplicateGate,
@@ -671,6 +685,7 @@ impl<B: Backend> Worker<B> {
             active.extend(self.wanted.dictation.iter().map(|k| (*k, Role::Dictation)));
             active.extend(self.wanted.paste_last.iter().map(|k| (*k, Role::PasteLast)));
             active.extend(self.wanted.agent.iter().map(|k| (*k, Role::Agent)));
+            active.extend(self.wanted.tidy.iter().map(|k| (*k, Role::Tidy)));
         }
         if self.cancel_enabled {
             active.extend(
@@ -719,7 +734,7 @@ impl<B: Backend> Worker<B> {
 }
 
 /// The event to report for a key of the given role changing state, if any. Only dictation and
-/// agent keys report their release.
+/// agent keys report their release; paste-last and tidy are one press.
 fn translate(role: Role, state: HotkeyState) -> Option<HotkeyEvent> {
     match (role, state) {
         (Role::Dictation, HotkeyState::Pressed) => Some(HotkeyEvent::DictationDown),
@@ -727,8 +742,9 @@ fn translate(role: Role, state: HotkeyState) -> Option<HotkeyEvent> {
         (Role::Agent, HotkeyState::Pressed) => Some(HotkeyEvent::AgentDown),
         (Role::Agent, HotkeyState::Released) => Some(HotkeyEvent::AgentUp),
         (Role::PasteLast, HotkeyState::Pressed) => Some(HotkeyEvent::PasteLast),
+        (Role::Tidy, HotkeyState::Pressed) => Some(HotkeyEvent::Tidy),
         (Role::Cancel, HotkeyState::Pressed) => Some(HotkeyEvent::Cancel),
-        (Role::PasteLast | Role::Cancel, HotkeyState::Released) => None,
+        (Role::PasteLast | Role::Tidy | Role::Cancel, HotkeyState::Released) => None,
     }
 }
 
@@ -776,6 +792,7 @@ mod tests {
             dictation: dictation.iter().map(|s| s.to_string()).collect(),
             paste_last: paste_last.iter().map(|s| s.to_string()).collect(),
             agent: agent.iter().map(|s| s.to_string()).collect(),
+            tidy: Vec::new(),
         }
     }
 
@@ -1117,6 +1134,25 @@ mod tests {
     }
 
     #[test]
+    fn tidy_reports_only_the_press() {
+        assert_eq!(
+            translate(Role::Tidy, HotkeyState::Pressed),
+            Some(HotkeyEvent::Tidy)
+        );
+        assert_eq!(translate(Role::Tidy, HotkeyState::Released), None);
+    }
+
+    #[test]
+    fn default_tidy_binding_is_right_alt_and_t() {
+        let defaults = Bindings::default();
+        assert_eq!(defaults.tidy, vec!["AltRight+T"]);
+        assert_eq!(
+            parse_binding(&defaults.tidy[0]).unwrap(),
+            Hotkey::new(Modifiers::OPT_RIGHT, Key::T).unwrap()
+        );
+    }
+
+    #[test]
     fn paste_last_and_cancel_report_only_the_press() {
         assert_eq!(
             translate(Role::PasteLast, HotkeyState::Pressed),
@@ -1265,6 +1301,7 @@ mod tests {
             ("agent_down", HotkeyEvent::AgentDown),
             ("agent_up", HotkeyEvent::AgentUp),
             ("paste_last", HotkeyEvent::PasteLast),
+            ("tidy", HotkeyEvent::Tidy),
             ("cancel", HotkeyEvent::Cancel),
             ("cancel_key", HotkeyEvent::CancelKey),
         ] {
@@ -1294,6 +1331,7 @@ mod tests {
             WindowHotkey::AgentDown,
             WindowHotkey::AgentUp,
             WindowHotkey::PasteLast,
+            WindowHotkey::Tidy,
             WindowHotkey::Cancel,
         ] {
             w.handle(Command::WindowHotkey(kind));
@@ -1370,6 +1408,7 @@ mod tests {
         for (binding, kind) in [
             ("AltRight", WindowHotkey::DictationDown),
             ("AltRight+V", WindowHotkey::PasteLast),
+            ("AltRight+T", WindowHotkey::Tidy),
             ("AltRight+Space", WindowHotkey::AgentDown),
         ] {
             fake.press(binding);
@@ -1393,6 +1432,7 @@ mod tests {
             HotkeyEvent::AgentDown,
             HotkeyEvent::AgentUp,
             HotkeyEvent::PasteLast,
+            HotkeyEvent::Tidy,
             HotkeyEvent::Cancel,
         ] {
             for (first, second) in [
@@ -1436,7 +1476,7 @@ mod tests {
         w.sync().unwrap();
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
     }
 
@@ -1452,6 +1492,7 @@ mod tests {
             hks(&[
                 "AltRight",
                 "AltRight+V",
+                "AltRight+T",
                 "AltRight+Space",
                 "Escape",
                 "AltRight+Escape"
@@ -1461,7 +1502,7 @@ mod tests {
         w.handle(Command::SetCancel(false));
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
     }
 
@@ -1503,6 +1544,7 @@ mod tests {
             hks(&[
                 "AltRight",
                 "AltRight+V",
+                "AltRight+T",
                 "AltRight+Space",
                 "Escape",
                 "AltRight+Escape"
@@ -1526,13 +1568,13 @@ mod tests {
         pause(&mut w, false);
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
         // Resuming when nothing is paused changes nothing.
         pause(&mut w, false);
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
     }
 
@@ -1608,7 +1650,7 @@ mod tests {
         assert!(err.contains("F9"), "{err}");
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
         assert_eq!(
             w.wanted,
@@ -1643,6 +1685,113 @@ mod tests {
                 HotkeyEvent::CancelKey,
             ]
         );
+    }
+
+    #[test]
+    fn the_hook_reports_tidy_for_right_alt_and_t_and_leaves_no_dictation_started() {
+        let fake = FakeBackend::default();
+        let (mut w, mut rx) = worker(&fake, &Bindings::default());
+        w.sync().unwrap();
+        w.handle(Command::SetCancel(true));
+
+        // Right Alt+T: Right Alt goes down first, so the dictation key reports before the tidy
+        // key, as it does for Right Alt+V. The controller drops the recording that began (see
+        // `right_alt_and_t_drop_the_dictation_that_the_right_alt_started`), and the release of
+        // the Right Alt that follows ends nothing: the tidy key has no release of its own.
+        fake.press("AltRight");
+        fake.press("AltRight+T");
+        fake.release("AltRight+T");
+        fake.release("AltRight");
+        w.pump();
+        assert_eq!(
+            drain(&mut rx),
+            vec![
+                HotkeyEvent::DictationDown,
+                HotkeyEvent::Tidy,
+                HotkeyEvent::DictationUp,
+            ]
+        );
+
+        // The key is the chord: neither T nor Right Alt+Space (a different key) reports it.
+        assert!(!fake.registered().contains(&hk("T")));
+        fake.press("AltRight");
+        fake.press("AltRight+Space");
+        fake.release("AltRight+Space");
+        fake.release("AltRight");
+        w.pump();
+        assert!(!drain(&mut rx).contains(&HotkeyEvent::Tidy));
+    }
+
+    #[test]
+    fn the_tidy_key_follows_the_bindings_and_has_none_when_it_is_empty() {
+        let fake = FakeBackend::default();
+        let (mut w, mut rx) = worker(&fake, &Bindings::default());
+        w.sync().unwrap();
+        assert!(fake.registered().contains(&hk("AltRight+T")));
+
+        // another key
+        let mut custom = Bindings {
+            tidy: vec!["F8".to_owned()],
+            ..Bindings::default()
+        };
+        w.handle(Command::Update {
+            wanted: Wanted::from_bindings(&custom).unwrap(),
+            reply: std::sync::mpsc::channel().0,
+        });
+        assert!(!fake.registered().contains(&hk("AltRight+T")));
+        fake.press("F8");
+        w.pump();
+        assert_eq!(drain(&mut rx), vec![HotkeyEvent::Tidy]);
+
+        // no key at all: nothing is registered for it, and Right Alt+T is nothing
+        custom.tidy = Vec::new();
+        w.handle(Command::Update {
+            wanted: Wanted::from_bindings(&custom).unwrap(),
+            reply: std::sync::mpsc::channel().0,
+        });
+        assert_eq!(
+            fake.registered(),
+            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+        );
+
+        // the recorder pauses it with the others
+        w.handle(Command::Update {
+            wanted: Wanted::from_bindings(&Bindings::default()).unwrap(),
+            reply: std::sync::mpsc::channel().0,
+        });
+        assert!(fake.registered().contains(&hk("AltRight+T")));
+        pause(&mut w, true);
+        assert!(!fake.registered().contains(&hk("AltRight+T")));
+        pause(&mut w, false);
+        assert!(fake.registered().contains(&hk("AltRight+T")));
+    }
+
+    #[test]
+    fn a_tidy_key_that_another_action_has_is_refused() {
+        for (dictation, paste, agent) in [
+            (
+                vec!["AltRight+T"],
+                vec!["AltRight+V"],
+                vec!["AltRight+Space"],
+            ),
+            (
+                vec!["AltRight"],
+                vec!["AltRight+KeyT"],
+                vec!["AltRight+Space"],
+            ),
+            (vec!["AltRight"], vec!["AltRight+V"], vec!["altright+t"]),
+        ] {
+            let mut b = bindings_with_agent(&dictation, &paste, &agent);
+            b.tidy = vec!["AltRight+T".to_owned()];
+            let err = Wanted::from_bindings(&b).unwrap_err();
+            assert!(err.contains("already used"), "{err}");
+        }
+        // and Esc is for cancelling, never for tidying
+        let b = Bindings {
+            tidy: vec!["Escape".to_owned()],
+            ..Bindings::default()
+        };
+        assert!(Wanted::from_bindings(&b).is_err());
     }
 
     #[test]
@@ -1795,7 +1944,7 @@ mod tests {
         let (svc, mut rx) = service(&fake, &Bindings::default());
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
 
         fake.press("AltRight");
@@ -1840,6 +1989,7 @@ mod tests {
             hks(&[
                 "AltRight",
                 "AltRight+V",
+                "AltRight+T",
                 "AltRight+Space",
                 "Escape",
                 "AltRight+Escape"
@@ -1855,7 +2005,7 @@ mod tests {
         settle(&svc, &b);
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
     }
 
@@ -1897,7 +2047,7 @@ mod tests {
         settle(&svc, &b);
         assert_eq!(
             fake.registered(),
-            hks(&["AltRight", "AltRight+V", "AltRight+Space"])
+            hks(&["AltRight", "AltRight+V", "AltRight+Space", "AltRight+T"])
         );
     }
 

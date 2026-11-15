@@ -36,7 +36,7 @@ tabs_helper = load("layer12_browser_tabs", LAYER / "raphael-browser-tabs")
 def test_layer_twelve_is_the_last_step_and_writes_over_what_earlier_steps_installed():
     dockerfile = (IMAGE / "Dockerfile").read_text(encoding="utf-8")
     eleven, twelve = dockerfile.index("COPY layer11/"), dockerfile.index("COPY layer12/")
-    assert eleven < twelve < dockerfile.index('org.raphael.computer.layer="12"')
+    assert eleven < twelve < dockerfile.index('org.raphael.computer.layer="13"')
     step = dockerfile[twelve:dockerfile.index("LABEL org.raphael.computer=")]
     for line in ("install -m 0755 /opt/raphael-layer12/raphael-seat-browser /usr/local/bin/raphael-seat-browser",
                  "install -m 0755 /opt/raphael-layer12/raphael-browser /usr/local/bin/raphael-browser",
@@ -47,7 +47,7 @@ def test_layer_twelve_is_the_last_step_and_writes_over_what_earlier_steps_instal
         assert line in step
     # Nothing before it changes, so a PC that built layer 11 runs this one step again.
     assert "COPY layer12/" not in dockerfile[:eleven] and dockerfile.count("COPY desktop/") == 1
-    assert module.IMAGE.endswith("-v12") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "12"
+    assert module.IMAGE.endswith("-v13") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "13"
     for path in LAYER.iterdir():
         assert b"\r\n" not in path.read_bytes(), f"{path.name} must keep LF line ends inside Linux"
 

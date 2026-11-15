@@ -73,6 +73,7 @@ from .providers.registry import ProviderRegistry, ProviderRouter
 from .secrets import KeyStore
 from .settings import SettingsStore, checked
 from .spend import SpendTracker
+from .tidy import CHARS_PER_SECOND, MAX_TIDY_CHARS, TIDY_ADDENDUM
 from .stats import StatsStore
 from .usage import UsageAnalytics
 from .textnorm import (
@@ -318,6 +319,7 @@ class Brain:
             "brain.finalize_dictation": self._finalize_dictation,
             "brain.normalize_transcript": self._normalize_transcript,
             "brain.cancel_dictation": self._cancel_dictation,
+            "dictation.tidy": self._dictation_tidy,
             "stt.transcribe": self._stt.transcribe,
             "history.list": self._history_list,
             "history.latest": self._history_latest,
@@ -570,6 +572,82 @@ class Brain:
             next((result.model for result in results if result.model), None),
             sum(result.cost_usd for result in results), sum(result.llm_ms for result in results), tuple(parts),
         ), chunks
+
+    async def _dictation_tidy(self, params: dict) -> dict:
+        """`{text, target_app?}` -> `{cleaned, text, fallback_reason, llm_ms, model}`: the tidy key's
+        text, tidied by the dictation cleanup (same model, dictionary, languages, tone, chunking,
+        guards and spend) with the addition that it was typed, not spoken (`tidy.TIDY_ADDENDUM`).
+
+        The text the app selected is not speech, so it is not run through the shortcuts of a
+        dictation: the model is always asked, nothing is removed as a filler or a stutter, and a
+        final full stop stays. The spaces and line breaks around the text stay as they were. Nothing
+        is saved to the history (it would become what "paste last" pastes) or counted.
+
+        The answer carries `text` only when `cleaned` is true. A failure (no key or model, no
+        connection, a reply that is no tidying: blank, longer than the text can have become, or
+        about something else) is `cleaned` false with its `fallback_reason` and no text: the text
+        is never handed back as if it were tidied. More than `MAX_TIDY_CHARS` characters is
+        INVALID_PARAMS.
+        """
+        text = _str(params, "text")
+        target_app = _opt_str(params, "target_app")
+        if len(text) > MAX_TIDY_CHARS:
+            raise invalid_params(f"text is longer than {MAX_TIDY_CHARS} characters")
+        body = text.strip()
+        if not body:
+            return {"cleaned": False, "fallback_reason": "empty", "llm_ms": 0, "model": None}
+        lead, trail = text[: len(text) - len(text.lstrip())], text[len(text.rstrip()) :]
+
+        rules = self._dictionary.replacements()
+        words = self._dictionary.hint_words()
+        chinese = chinese_variant(self._settings.get("languages"))
+        normalized = normalize_transcript(body, rules, chinese=chinese)
+        pieces = split_for_cleanup(body)
+        chunks = (
+            [
+                (normalize_transcript(piece, rules, chinese=chinese), apply_replacements(piece, rules))
+                for piece in pieces
+            ]
+            if len(pieces) > 1
+            else None
+        )
+        result = await self._cleanup.clean(
+            normalized,
+            audio_seconds=len(body) / CHARS_PER_SECOND,
+            heard=apply_replacements(body, rules),
+            target_app=target_app,
+            chunks=chunks,
+            system_suffix=TIDY_ADDENDUM,
+        )
+        if result.model is not None and not result.model.startswith("@") and self._openrouter.state == "ok":
+            self._openrouter.latency_ms = result.llm_ms
+        failure = {"cleaned": False, "llm_ms": result.llm_ms, "model": result.model}
+        if not result.cleaned:
+            return {**failure, "fallback_reason": result.fallback_reason or "error:unexpected"}
+
+        def finish(source: str, reply: str) -> str:
+            guarded = guard_cleanup_text(source, reply, dictionary_words=words)
+            return finish_cleaned_text(guarded, rules, chinese=chinese) if guarded.strip() else ""
+
+        if result.parts:
+            parts = [
+                replace(part, text=finish(chunks[index][0] if chunks else normalized, part.text))
+                for index, part in enumerate(result.parts)
+            ]
+            tidied = "" if any(not part.text.strip() for part in parts) else join_parts(parts)
+        else:
+            tidied = finish(normalized, result.text)
+        if not tidied.strip():
+            # The guards found something that is no tidying of this text.
+            return {**failure, "fallback_reason": "suspicious"}
+        tidied = respell_dictionary_words(tidied, words, self._dictionary.hint_forms())
+        return {
+            "cleaned": True,
+            "text": lead + tidied + trail,
+            "fallback_reason": None,
+            "llm_ms": result.llm_ms,
+            "model": result.model,
+        }
 
     async def _normalize_transcript(self, params: dict) -> dict:
         """`{raw_text}` -> `{text}`: what speech-to-text heard, with the dictionary's replacements

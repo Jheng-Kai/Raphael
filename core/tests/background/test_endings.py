@@ -281,3 +281,120 @@ async def test_failed_task_retains_specific_failure_kind(make_rig, kind):
     rig.service._conclude_run(rig.task(task_id), run, {"status": "stopped", "kind": "failed", "detail": kind})
     assert rig.task(task_id).reason == kind
     assert rig.task(task_id).report_text != "An error occurred during processing. Please try again."
+
+
+def _team_rig(rig, tmp_path):
+    """A member's own folder and its team's shared folder, as the computer binds them from this PC."""
+    workspace, team = tmp_path / "workspace", tmp_path / "team"
+    workspace.mkdir()
+    team.mkdir()
+    rig.service.use_workspaces(lambda member: [workspace, team])
+    return workspace, team
+
+
+def _fresh(rig, path, ahead=0):
+    """Make `path` as new as this task, `ahead` seconds newer."""
+    moment = rig.wall() / 1000 + ahead
+    os.utime(path, (moment, moment))
+
+
+async def _finish(rig, target, source, **options):
+    receipt = rig.service.handoff(RAPHAEL, args(target, requires_artifact=True, **options),
+                                  source_turn_id=source.id, language="en")
+    task_id = receipt.data["task_id"]
+    await until(lambda: rig.task(task_id).state in ("done", "failed"))
+    return rig.task(task_id)
+
+
+async def test_work_file_named_by_its_computer_path_counts_when_the_browser_profile_is_newer(make_rig, tmp_path, monkeypatch):
+    """Owner 2026-11-15, task 797: the member wrote typeless-benchmark.md in the team folder and said so; the newest files of
+    its own folder were browser caches this PC cannot read, which took every place of the verified ones, so the work failed."""
+    from raphael_core.background import tasks
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    digest = tasks._artifact_digest
+    def readable(path):
+        if "cache" in path.parts:
+            raise PermissionError(path)
+        return digest(path)
+    monkeypatch.setattr(tasks, "_artifact_digest", readable)
+    def saved(**kwargs):
+        (workspace / "cache").mkdir()
+        for number in range(30):
+            noise = workspace / "cache" / f"data_{number}"
+            noise.write_text("cache", encoding="utf8")
+            _fresh(rig, noise, ahead=5)
+        folder = team / "projects" / "research"
+        folder.mkdir(parents=True)
+        (folder / "typeless-benchmark.md").write_text("# Benchmark", encoding="utf8")
+        _fresh(rig, folder / "typeless-benchmark.md")
+        return report("Report is in /home/cua/team/projects/research/typeless-benchmark.md")
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when="typeless-benchmark.md exists with sources")
+    assert (task.state, task.reason) == ("done", None)
+    assert [item["uri"] for item in rig.service._store.evidence(task.id) if item["kind"] == "artifact"] == [
+        "projects/research/typeless-benchmark.md"]
+
+
+async def test_work_file_named_in_the_condition_fails_when_only_other_files_are_new(make_rig, tmp_path):
+    """A file the condition names (here a .md) is the one that must exist; any other new file is not it."""
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    def saved(**kwargs):
+        (team / "notes.txt").write_text("other", encoding="utf8")
+        _fresh(rig, team / "notes.txt")
+        return report("Done.")
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when="plan.md exists")
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_the_team_folder_is_searched_even_when_the_member_folder_is_large(make_rig, tmp_path, monkeypatch):
+    """The scan budget is each folder's own: a member folder that uses it up never hides the team folder."""
+    from raphael_core.background import service
+    monkeypatch.setattr(service, "ARTIFACT_SCAN", 5)
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    def saved(**kwargs):
+        for folder in range(4):
+            (workspace / f"part{folder}").mkdir()
+            for number in range(3):
+                (workspace / f"part{folder}" / f"file{number}.txt").write_text("x", encoding="utf8")
+        (team / "projects").mkdir()
+        (team / "projects" / "plan.txt").write_text("Plan", encoding="utf8")
+        _fresh(rig, team / "projects" / "plan.txt")
+        return report("Done.")
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when="plan.txt exists")
+    assert (task.state, task.reason) == ("done", None)
+
+
+async def test_the_browser_profile_is_never_taken_for_the_work(make_rig, tmp_path):
+    """Chrome's caches change all the time; a task that left no file does not pass on them."""
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    def saved(**kwargs):
+        (workspace / ".browser-profiles" / "driver").mkdir(parents=True)
+        (workspace / ".browser-profiles" / "driver" / "Cookies").write_text("x", encoding="utf8")
+        _fresh(rig, workspace / ".browser-profiles" / "driver" / "Cookies")
+        return report("Done.")
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when="the summary is saved")
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+@pytest.mark.parametrize("text, names", [
+    ("Report is in /home/cua/team/projects/x/a.md", ["projects/x/a.md"]),
+    ("完整報告在 /home/cua/team/projects/x/a.md。另外有 5 件事", ["projects/x/a.md"]),
+    ("saved to '/home/cua/workspace/out/b.pdf'), then", ["out/b.pdf"]),
+    ("/home/cua/team/../etc/passwd and /home/cua/team/", []),
+    ("/home/cua/other/c.md", []),
+])
+def test_files_named_by_their_path_in_the_computer(text, names):
+    from raphael_core.background.outcomes import computer_files
+    found = [item.as_posix() for item in computer_files(text)]
+    assert set(names) <= set(found) and not any(".." in item for item in found)

@@ -30,6 +30,18 @@ export function desktopWorkText(work: DesktopWork): string {
   return work.tool in actions ? t(actions[work.tool as keyof typeof actions]) : t("desktop.working");
 }
 
+/** What the owner did with a handoff, once it is settled (owner, 2026-11-15: the card said 「完成」 in green and, folded open, the
+ *  work's live state 「正在使用電腦」 while the member still worked). A settled result carries no status pill (R-CARD-15): the
+ *  one line says what the owner did, and the fold says it again in full. Neither tells how the member's work goes, which the
+ *  conversation's own presence line says. The member's work stopped after the owner was asked only when the owner skipped it. */
+export function settledCardHTML(work: DesktopWork): string {
+  const skipped = work.state === "stopped" || work.state === "expired";
+  return cardHTML({ title: t("card.pcTitle"), status: "done", hideStatus: true, body: t(skipped ? "desktop.skipped" : "desktop.handedBack"),
+    content: cardDisclosureHTML(`computer-${work.id}`, `<p class="card-body">${esc(t(skipped ? "desktop.ended" : "desktop.handedBackDetail"))}</p>`),
+    cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}" data-desktop-settled="${skipped ? "skipped" : "handed_back"}"`,
+  });
+}
+
 export function mountDesktopTimeline(host: HTMLElement): { update(state: DesktopState): void; sync(): void; clear(): void } {
   let state: DesktopState | undefined;
   const rendered = new WeakMap<Element, string>();
@@ -43,10 +55,7 @@ export function mountDesktopTimeline(host: HTMLElement): { update(state: Desktop
         content: `<div class="card-computer-screen" data-card-desktop-screen><button type="button" class="btn" data-card-desktop="take" aria-label="${esc(t("cards.takeover"))}">${ico("monitor")}</button></div>`,
         actions: btn(esc(t("cards.takeover")), "sm pri", ' data-card-desktop="take"') + btn(esc(t("desktop.done")), "sm", ' data-card-desktop="return"') + btn(esc(t("cards.skip")), "sm card-quiet", ' data-card-desktop="skip"'),
         cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
-      }) : (asked.has(work.id) || !!work.request_id) ? cardHTML({ title: t("card.pcTitle"), status: "done", statusText: t("cards.done"),
-        content: cardDisclosureHTML(`computer-${work.id}`, `<p class="card-body">${esc(desktopWorkText(work))}</p>`),
-        cls: "computer-card", attrs: ` data-desktop-work="${esc(work.id)}" data-work-state="${work.state}"`,
-      }) : "";
+      }) : (asked.has(work.id) || !!work.request_id) ? settledCardHTML(work) : "";
       if (rendered.get(slot) === html) continue;
       patchHTML(slot, html); rendered.set(slot, html);
     }

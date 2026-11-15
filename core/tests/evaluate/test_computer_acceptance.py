@@ -560,6 +560,17 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     monkeypatch.setattr(vm, "IMAGE", "raphael-acceptance/cua-local-vm:test")
     args = acceptance.previous_args(target, machine.owner, "private")
     current = vm.run_args(target, machine.owner, "private")
+    # The shape the layers before 13 were made in: no locale variables.
+    assert not any(value.startswith(("LANG=", "LC_ALL=")) for value in args)
+    earlier = []
+    index = 0
+    while index < len(current):
+        if current[index] == "-e" and current[index + 1].startswith(("LANG=", "LC_ALL=")):
+            index += 2
+            continue
+        earlier.append(current[index])
+        index += 1
+    current = earlier
     assert args[-1] == acceptance.OLD_IMAGES["4"] == "raphael/cua-local-vm:driver-0.37.0-v4"
     assert f"{vm.LABEL}.layer=4" in args
     assert f"{vm.LABEL}.owner={machine.owner}" in args
@@ -584,7 +595,9 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert [a for a, b in zip(tenth, current) if a != b] == [f"{vm.LABEL}.layer=10", acceptance.OLD_IMAGES["10"]]
     eleventh = acceptance.previous_args(target, machine.owner, "private", "11")
     assert [a for a, b in zip(eleventh, current) if a != b] == [f"{vm.LABEL}.layer=11", acceptance.OLD_IMAGES["11"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11"]
+    twelfth = acceptance.previous_args(target, machine.owner, "private", "12")
+    assert [a for a, b in zip(twelfth, current) if a != b] == [f"{vm.LABEL}.layer=12", acceptance.OLD_IMAGES["12"]]
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11", "12"]
 
 
 class FakeDocker:
@@ -725,7 +738,7 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v12"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v13"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],

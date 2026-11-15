@@ -185,6 +185,28 @@ def test_bridge_pictures_are_requested_and_stopped_explicitly():
     assert "pagehide', () => {snapshot(); clearInterval(framesTimer)" in script
 
 
+def test_the_page_holds_back_the_owners_paste_only_while_he_holds_control_and_never_reads_a_clipboard():
+    # R-PASTE-01. What the page does is run against a stand-in for noVNC in app/src/main/desktop-paste-page.test.ts.
+    from raphael_core.computer.viewer import BOOTSTRAP
+    script = BOOTSTRAP.decode()
+    assert "if (!rfb || rfb.viewOnly || event.code !== 'KeyV'" in script
+    assert "raphael-desktop-paste-request" in script and "rfb.clipboardPasteFrom(text)" in script
+    assert "if (!rfb || rfb.viewOnly) return;" in script
+    assert "navigator.clipboard" not in script and "readText" not in script
+    # The paste is a client cut text, a message of the owner's input: the relay carries one of the largest size the page sends
+    # while he holds control, and drops it when he does not.
+    import struct
+    from raphael_core.computer.rfb_input import frame
+    from .test_rfb_input import payload, ready
+    text = b"k" * 1_000_000
+    message = b"\x06\0\0\0" + struct.pack("!I", len(text)) + text
+    held = [True]
+    gate = ready(lambda: held[0])
+    assert payload(gate.feed(frame(message))) == message
+    held[0] = False
+    assert payload(gate.feed(frame(message))) == b""
+
+
 @pytest.mark.parametrize("preview", [False, True], ids=["watch-only", "preview"])
 async def test_relay_drops_unauthorized_input_without_stalling_frames(viewer, wire_upstream, preview):
     from raphael_core.computer.rfb_input import frame

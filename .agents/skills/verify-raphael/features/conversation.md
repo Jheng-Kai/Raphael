@@ -2968,3 +2968,19 @@ ends the scenes in `TOP_ROW_SCENES` (scenes/top-row.mjs), and the narrow case is
 ```powershell
 npm run look -- top-row-find top-row-details top-row-room top-row-room-find top-row-scrolled top-row-wheel chat conversation-share details raphael-details room calm-thread page-inplace page-inplace-back page-inplace-room page-report page-report-share room-thread-open --theme both --width 1120,720,1920x1080
 ```
+
+## Message text colour and the settled handoff card (2026-11-15)
+
+A message's text is `--text` whatever its kind (reply, timed progress) or its turn's state (done, running, failed, denied, expired,
+stopped): the rules that made `.ans.progress` and the replies of a failed turn a step paler are gone, and
+`src/main/message-colour.test.ts` fails on any rule that colours or fades `.ans`, `.message-text` or `.chat-message` (R-MSG-COLOUR-01).
+The look check `message-text-colour` measures the real messages on screen and a message of each kind under a turn of each state drawn into
+the same thread, in both themes.
+
+A computer handoff the owner has settled folds to its title and one word of what he did, 「已交回」 (or 「已略過」 when he skipped it
+and the work stopped), with no status pill, and its fold says 「電腦已交回給成員。」 (or that the computer work stopped); never 「完成」
+and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeover-done` checks it after `card-computer-handback`.
+
+```powershell
+npm run look -- message-text-colour chat card-computer-handback card-sheet --theme both --width 1120,720,1920x1080
+```

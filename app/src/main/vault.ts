@@ -5,7 +5,7 @@ import { btn, esc, fieldHTML, iconBtn, openConfirmMenu, openMenu, sel, tabs } fr
 import { openActions } from "./member-column";
 import "./vault.css";
 
-export type EntryKind = "login" | "contact" | "card";
+export type EntryKind = "login" | "contact" | "card" | "key";
 export interface VaultEntry { id: string; kind: EntryKind; label: string; hint: string; origin: string; members: "all" | number[] }
 interface Preview { token: string; entries: { id: number; label: string; origin: string }[]; rejected: number }
 export interface VaultView {
@@ -14,10 +14,11 @@ export interface VaultView {
   members: { id: number; name: string }[]; preview: Preview | null;
 }
 export const emptyVaultView = (): VaultView => ({ entries: [], members: [], filter: "all", loaded: false, error: "", busy: false, editing: null, kind: null, access: "all", preview: null });
-const kinds: EntryKind[] = ["login", "contact", "card"];
+/** The kinds the owner adds here by hand: a key is saved only from the card a member shows (`request_secret`), and listed, edited and removed here. */
+const kinds = ["login", "contact", "card"] as const;
 const privateFields = { login: ["username", "password"], contact: ["name", "address", "phone", "email"], card: ["name", "number", "expiry", "cvc"] } as const;
 const words = {
-  title: "vault.title", about: "vault.about", all: "vault.all", login: "vault.login", contact: "vault.contact", card: "vault.card",
+  title: "vault.title", about: "vault.about", all: "vault.all", login: "vault.login", contact: "vault.contact", card: "vault.card", key: "vault.key",
   new: "vault.new", empty: "vault.empty", label: "vault.label", hint: "vault.hint", site: "vault.site",
   everyone: "vault.everyone", chosen: "vault.chosen", access: "vault.access", username: "vault.username", password: "vault.password",
   name: "vault.name", address: "vault.address", phone: "vault.phone", email: "vault.email", number: "vault.number", expiry: "vault.expiry", cvc: "vault.cvc",
@@ -33,10 +34,12 @@ export function vaultHTML(v: VaultView): string {
   const editor = v.kind ? `<div class="vault-editor" data-trap><h3>${esc(word(v.editing ? "edit" : v.kind))}</h3>` +
     fieldHTML(word("label"), v.editing?.label ?? "", { id: "vault-label" }) +
     fieldHTML(word("hint"), v.editing?.hint ?? "", { id: "vault-hint" }) +
-    (!v.editing ? (v.kind === "login" ? fieldHTML(word("site"), "", { id: "vault-origin" }) : "") +
+    (!v.editing && v.kind !== "key" ? (v.kind === "login" ? fieldHTML(word("site"), "", { id: "vault-origin" }) : "") +
       privateFields[v.kind].map(field => fieldHTML(word(field), "", { id: `vault-value-${field}`, type: "password" })).join("") : "") +
     access(v.editing?.members) + (v.kind === "card" ? `<p class="dim">${esc(word("cardNotice"))}</p>` : "") +
     `<div class="vault-actions">${action("cancel")}${action("save", "save", "pri")}</div></div>` : "";
+  // A key appears only once a member has asked for one.
+  const filters: ("all" | EntryKind)[] = ["all", ...kinds, ...(v.entries.some(e => e.kind === "key") ? ["key" as const] : [])];
   const preview = v.preview ? `<div class="vault-editor" data-trap><h3>${esc(word("preview"))}</h3><p class="dim">${esc(word("previewAbout"))}</p>` +
     `<p>${esc(t("vault.rejected", { count: v.preview.rejected }))}</p><div class="vault-preview">` + v.preview.entries.map(row =>
       `<label><input type="checkbox" data-vault-import="${row.id}" checked><span><strong>${esc(row.label)}</strong><small>${esc(row.origin)}</small></span></label>`).join("") +
@@ -44,7 +47,7 @@ export function vaultHTML(v: VaultView): string {
   return `<section class="vault" aria-label="${esc(word("title"))}"><div class="vault-heading"><h2>${esc(word("title"))}</h2><div class="vault-actions">${action("import")}${action("new")}</div></div>` +
     `<p class="dim">${esc(word("about"))}</p><input type="file" id="vault-file" accept=".csv,text/csv" hidden>` +
     (v.error ? `<p role="alert" class="notice">${esc(v.error)}</p>` : "") + (v.busy ? `<p role="status">${esc(word("busy"))}</p>` : "") + editor + preview +
-    tabs((["all", ...kinds] as const).map(id => ({ id, label: word(id), count: v.entries.filter(e => id === "all" || e.kind === id).length, attrs: ` data-vault="filter" data-kind="${id}"` })), v.filter, { kind: "nav", label: word("title"), plain: true }) +
+    tabs(filters.map(id => ({ id, label: word(id), count: v.entries.filter(e => id === "all" || e.kind === id).length, attrs: ` data-vault="filter" data-kind="${id}"` })), v.filter, { kind: "nav", label: word("title"), plain: true }) +
     `<div class="vault-list">${v.entries.filter(e => v.filter === "all" || e.kind === v.filter).map(e => `<div class="vault-row" data-vault-row="${esc(e.id)}"><div class="vault-copy"><strong>${esc(e.label)}</strong>` +
       (e.origin ? `<small>${esc(e.origin)}</small>` : "") + `<small>${esc(e.members === "all" ? word("everyone") : e.members.map(id => v.members.find(m => m.id === id)?.name ?? String(id)).join("、"))}</small>` +
       (e.hint ? `<p>${esc(e.hint)}</p>` : "") + `</div>${iconBtn("more", t("members.more", { p0: e.label }), ` data-vault="menu" data-id="${esc(e.id)}"`)}</div>`).join("") || `<p class="dim">${esc(v.loaded ? word("empty") : word("busy"))}</p>`}</div></section>`;
@@ -106,7 +109,7 @@ export function createVault(root: HTMLElement, redraw: () => void) {
     else if (name === "save" && state.kind) {
       const value = (id: string): string => root.querySelector<HTMLInputElement>(`#vault-${id}`)?.value ?? "";
       const params = { kind: state.kind, label: value("label"), hint: value("hint"), origin: value("origin"), members: selectedMembers(),
-        ...(state.editing ? { id: state.editing.id } : { values: Object.fromEntries(privateFields[state.kind].map(field => [field, value(`value-${field}`)])) }) };
+        ...(state.editing ? { id: state.editing.id } : state.kind === "key" ? {} : { values: Object.fromEntries(privateFields[state.kind].map(field => [field, value(`value-${field}`)])) }) };
       root.querySelectorAll<HTMLInputElement>("[id^='vault-value-']").forEach(input => { input.value = ""; });
       void run(async () => { await core(state.editing ? "vault.update" : "vault.add", params); cancel(); await load(); });
     } else if (name === "confirm" && state.preview) {

@@ -11,7 +11,7 @@ import type { AppContext } from "./types";
 import { keys, toaster } from "./ui";
 
 /** The shortcuts that can be recorded. */
-export type HotkeyField = "dictation_keys" | "agent_keys";
+export type HotkeyField = "dictation_keys" | "agent_keys" | "tidy_keys";
 
 /** The name of the other shortcut that already has `binding`, if one has: no two actions share their keys. */
 export function shortcutTakenBy(app: Pick<AppContext, "device">, field: HotkeyField, binding: string): string | null {
@@ -19,6 +19,7 @@ export function shortcutTakenBy(app: Pick<AppContext, "device">, field: HotkeyFi
   const others: Array<readonly [string, readonly string[]]> = [];
   if (field !== "dictation_keys") others.push([t("home.020"), d.dictation_keys]);
   if (field !== "agent_keys") others.push([t("settings.agentKeys"), d.agent_keys ?? []]);
+  if (field !== "tidy_keys") others.push([t("settings.tidyKeys"), d.tidy_keys ?? []]);
   others.push([t("home.021"), d.paste_last_keys]);
   return bindingClash(binding, others);
 }

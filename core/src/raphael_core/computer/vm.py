@@ -28,17 +28,24 @@ logger = logging.getLogger(__name__)
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v12"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v13"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
+# The shared computer is sized from the engine it runs on (`sized`, `LocalVm.machine_size`). SHARED_SIZE is what it
+# keeps when the engine cannot be asked (what every layer before 13 was made with); the bounds are what any size stays in.
+SHARED_SIZE = (6, 4)
+SHARED_MEMORY_GB = (4, 12)
+SHARED_CPUS = (2, 8)
+SIZE_TTL_S = 300
+LOCALE = "C.UTF-8"
 LOCAL_LIMIT = 2
 PREFLIGHT_S = 45.0
 DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
-IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "12"}
+IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "13"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
 # waits for him and a recording are held until he says so): a lease nobody uses blocks every member (2026-11-14).
@@ -85,6 +92,11 @@ def engine_start_allowed():
         _MAY_START_ENGINE.reset(token)
 
 
+def _withheld(values, text):
+    from .logins import redact_values
+    return redact_values(values, text)
+
+
 class VmError(Exception):
     """Public failure kind; never contains command output or workspace contents."""
 
@@ -107,13 +119,17 @@ class Docker:
             raise ValueError("Computer host must be a simple SSH config alias")
         return [docker_cli(), *(["--host", f"ssh://{self.alias}"] if self.alias else []), *args]
 
-    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None, input=None):
+    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None, input=None, env=None, redact=None):
         """`input`, when given, is written to the command's stdin and closed (`docker exec -i`): a file's text travels
-        there, never on the command line, which Windows holds to 32,767 characters."""
+        there, never on the command line, which Windows holds to 32,767 characters. `env` (name -> value) is set in
+        the environment of this one docker process, for `docker exec -e NAME` to hand on: a value is never an argument,
+        which any program on this PC can read. `redact` is applied to everything read, whole, before it is cut to `limit`
+        or handed to `progress`."""
         from .desktop_host import NO_WINDOW
         process = await asyncio.create_subprocess_exec(
             *self.argv(args), stdin=asyncio.subprocess.DEVNULL if input is None else asyncio.subprocess.PIPE,
             creationflags=NO_WINDOW, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            **({"env": {**os.environ, **env}} if env else {}),
         )
 
         async def feed():
@@ -127,6 +143,8 @@ class Docker:
             finally:
                 process.stdin.close()
 
+        show = redact or (lambda text: text)
+
         async def drain(stream):
             kept, size = bytearray(), 0
             pending = b""
@@ -138,10 +156,10 @@ class Docker:
                     pending = lines.pop()[-2048:]
                     for line in lines:
                         if line.strip():
-                            progress(line.decode("utf-8", errors="replace"))
+                            progress(show(line.decode("utf-8", errors="replace")))
             if progress and pending.strip():
-                progress(pending.decode("utf-8", errors="replace"))
-            text = kept.decode("utf-8", errors="replace")
+                progress(show(pending.decode("utf-8", errors="replace")))
+            text = show(kept.decode("utf-8", errors="replace"))
             return text[:limit], size > len(kept) or len(text) > limit
 
         try:
@@ -184,9 +202,44 @@ class Target:
             raise ValueError("Screens must be integers with 1 <= screen <= screens <= 6")
 
 
-def resources(target):
-    """Memory GiB and CPUs for the captured computer kind."""
-    return (6, 4) if target.container == "shared" else (MEMORY_GB, 2)
+def resources(target, size=None):
+    """Memory GiB and CPUs for the captured computer kind. The shared computer takes `size` (`sized`); a computer that
+    is one member's own keeps its fixed size (the rule's smallest memory, 4 GiB, is more than it was ever given)."""
+    return (size or SHARED_SIZE) if target.container == "shared" else (MEMORY_GB, 2)
+
+
+def bound_folder(path):
+    """Make a folder of this PC that a computer binds. On Windows, Python 3.12.4 and later give a folder made with mode 0o700
+    a DACL closed to all but its owner, and the files the engine makes in it inherit that: it makes them as another account,
+    so the owner could not read what a member made there (owner, 2026-11-15, task 797). There the folder takes the access of
+    the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is his to do."""
+    path = Path(path)
+    if os.name == "nt":
+        path.mkdir(parents=True, exist_ok=True)
+    else:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+
+def sized(memory_bytes, cpus):
+    """The shared computer's size on an engine with this much memory and this many CPUs: half the CPUs (2 to 8) and
+    four fifths of the memory in whole GiB (4 to 12). Measured on the owner's PC the fixed 6 GiB / 4 CPUs left the
+    computer throttled 48% of the time while the engine had 20 CPUs."""
+    return (min(SHARED_MEMORY_GB[1], max(SHARED_MEMORY_GB[0], int(memory_bytes * 4 // 5 // 1024**3))),
+            min(SHARED_CPUS[1], max(SHARED_CPUS[0], cpus // 2)))
+
+
+def limits_match(host, target):
+    """A computer of its own has exactly its size. The shared computer's limits are only held inside the rule's bounds:
+    its size follows the engine (`LocalVm.fit_limits` brings it to the current one with `docker update`), so a size that
+    was right when it was made is not a reason to make it again."""
+    memory, cpus = resources(target)
+    if target.container != "shared":
+        return (host.get("Memory") == memory * 1024**3 and host.get("MemorySwap") == memory * 1024**3
+                and host.get("NanoCpus") == cpus * 1_000_000_000)
+    held, swap, nano = host.get("Memory"), host.get("MemorySwap"), host.get("NanoCpus")
+    return (held == swap and type(held) is int and held % 1024**3 == 0 and type(nano) is int and nano % 1_000_000_000 == 0
+            and SHARED_MEMORY_GB[0] <= held // 1024**3 <= SHARED_MEMORY_GB[1]
+            and SHARED_CPUS[0] <= nano // 1_000_000_000 <= SHARED_CPUS[1])
 
 
 def mount_arg(path, destination=GUEST, *, remote=False):
@@ -211,9 +264,9 @@ def screen_grid(count, width=1280, height=900):
             (columns * width, rows * height))
 
 
-def run_args(target, owner, password, *, tz=None):
+def run_args(target, owner, password, *, tz=None, size=None):
     zone = timezone_name(tz)
-    memory, cpus = resources(target)
+    memory, cpus = resources(target, size)
     _, canvas = screen_grid(target.screens)
     args = ["run", "-d", "--name", target.name, "--hostname", target.name]
     for key, value in {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.unit}.items():
@@ -226,16 +279,30 @@ def run_args(target, owner, password, *, tz=None):
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
         "-e", f"VNC_PW={password}",
         "-e", f"TZ={zone}",
+        # Tools handle Chinese and Japanese file names only under a UTF-8 locale; the image's default is POSIX.
+        "-e", f"LANG={LOCALE}", "-e", f"LC_ALL={LOCALE}",
         "-e", f"RAPHAEL_SCREENS={target.screens}",
         "-e", f"VNC_RESOLUTION={canvas[0]}x{canvas[1]}",
         "-p", "127.0.0.1::6901", IMAGE,
     ]
 
 
-def exec_args(target, command, *, interactive=False, detached=False):
+def scratch_args(target):
+    """The shell command that clears a computer's old scratch: plain files in /tmp not touched for three days (nothing
+    whose name starts with a dot: the display's lock and sockets are there), and the logs and exit files of background
+    jobs (`LocalVm._detached`) older than seven days. A job lasts BACKGROUND_S (six hours) at most, so one that old is
+    over; nothing else is named."""
+    script = ('find /tmp -xdev -mindepth 1 -type f ! -path "/tmp/.*" -mmin +4320 -amin +4320 -delete 2>/dev/null; '
+              'find "$1" -maxdepth 1 -type f \\( -name "*.log" -o -name "*.exit" \\) -mmin +10080 -delete 2>/dev/null; true')
+    return exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs"])
+
+
+def exec_args(target, command, *, interactive=False, detached=False, env=()):
+    """`env` is the names of variables the command gets from the environment of the docker process itself
+    (`-e NAME` without a value): a secret is never on this line."""
     return ["exec", *(["-i"] if interactive else []), *(["-d"] if detached else []), "-u", "cua", "-e", "HOME=/home/cua",
             "-e", "DISPLAY=:1", "-e", "CUA_DRIVER_INSTALL_CHANNEL=python_package",
-            "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", target.name, *command]
+            "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", *(part for name in env for part in ("-e", name)), target.name, *command]
 
 
 def move_window_args(target, window_id):
@@ -260,7 +327,6 @@ def compatible(raw, target, owner, image_id):
     try:
         config, host = raw["Config"], raw["HostConfig"]
         labels = config.get("Labels") or {}
-        memory, cpus = resources(target)
         expected = {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.unit}
         mounts = raw["Mounts"]
         configured_mounts = host.get("Mounts", mounts)
@@ -276,8 +342,7 @@ def compatible(raw, target, owner, image_id):
             and host.get("NetworkMode") not in ("host", "none")
             and not any("unconfined" in x or "disable" in x for x in host.get("SecurityOpt") or [])
             and host.get("RestartPolicy", {}).get("Name", "no") in ("", "no")
-            and host.get("Memory") == memory * 1024**3 and host.get("MemorySwap") == memory * 1024**3
-            and host.get("NanoCpus") == cpus * 1_000_000_000 and host.get("PidsLimit") == 4096
+            and limits_match(host, target) and host.get("PidsLimit") == 4096
             and host.get("ShmSize") == 512 * 1024**2
             and mounts_match(mounts, configured_mounts, target)
             and (
@@ -317,13 +382,14 @@ def known_previous(raw, target, owner):
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
         # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
-        # owner's own computer the day layer 8 came; layers 8 to 11 kept that shape. A layer that is not named here is
-        # refused as incompatible, and its computer does not start: each new layer adds the one before it.
-        six = shared_upgrade and layer in ("5", "7", "8", "9", "10", "11") and screens == ["RAPHAEL_SCREENS=6"]
-        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3, "10": 3, "11": 3}.get(layer)
+        # owner's own computer the day layer 8 came; layers 8 to 12 kept that shape. A layer that is not named here is
+        # refused as incompatible, and its computer does not start: each new layer adds the one before it. Layer 13 is
+        # the first with the UTF-8 locale in its environment: every layer before it is made again once.
+        six = shared_upgrade and layer in ("5", "7", "8", "9", "10", "11", "12") and screens == ["RAPHAEL_SCREENS=6"]
+        memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3, "10": 3, "11": 3, "12": 3}.get(layer)
         # Layer 5 was the first to say its screen count; the two before it had no such entry.
         if ((target.screens != 1 and not shared_upgrade) or memory is None
-                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9", "10", "11") else [])
+                or screens != ([f"RAPHAEL_SCREENS={6 if six else 1}"] if layer in ("5", "6", "7", "8", "9", "10", "11", "12") else [])
                 or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
@@ -358,6 +424,9 @@ class LocalVm:
         self.tunnels = {}
         self.preparation, self.preparing = {}, {}
         self.wallpaper_attempted = {}  # (host, computer) -> the picture its watcher was started with
+        self.sizes = {}  # host -> (when, (memory GiB, CPUs)) the shared computer takes there (`machine_size`)
+        self.fitted = {}  # (host, computer) -> the size its limits were last seen or made at
+        self.scratch_cleaned = {}  # (host, computer) -> when its old scratch was last cleared
         # Raised whenever this core starts or stops a computer, so a remembered state is never trusted across it.
         self.changes = 0
         self.status_engines = {}
@@ -1016,15 +1085,18 @@ class LocalVm:
         if state["state"] != "running":
             self.carry_attempted.discard(target.physical)
             self.wallpaper_attempted.pop((target.remote, target.name), None)
+            self.scratch_cleaned.pop((target.remote, target.name), None)  # a computer that wakes is cleared again
+        if state["state"] in ("running", "stopped"):
+            await self.fit_limits(target)
         if state["state"] == "missing":
             if not state.get("image"):
                 raise VmError("image_missing")
             if not target.remote:
-                target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
-                target.shared.mkdir(parents=True, exist_ok=True, mode=0o700)
+                bound_folder(target.workspace)
+                bound_folder(target.shared)
             self.validate_storage(target)
             self.data.made(target)  # before the engine makes it: a computer unrecorded could never be removed
-            result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
+            result = await self.create(target, zone)
         elif state["state"] == "stopped":
             result = await self.run_for(target, ["start", target.name], timeout=60)
             if not result.code and self.unit_active(target) and target.state_key not in self.maintenance:
@@ -1046,8 +1118,9 @@ class LocalVm:
                         raise VmError("team_layout_failed")
                 else:
                     for name in ("context", "meetings", "projects"):
-                        (target.shared / name).mkdir(parents=True, exist_ok=True, mode=0o700)
+                        bound_folder(target.shared / name)
                 await self._wallpaper(target)
+                await self.clear_scratch(target)
                 return state
             if not repaired and state["state"] == "running" and not self.unit_held(target) and self.unit_active(target) <= 1 and not self.unit_active(target, excluding=target.key) and not self.unit_busy(target, excluding=target.key):
                 missing_socket = False
@@ -1089,6 +1162,77 @@ class LocalVm:
             raise VmError("remove_failed")
         self.invalidate(target)
         return {"state": "missing", "image": True}
+
+    async def machine_size(self, target):
+        """The size the shared computer takes on the engine it runs on: asked from Docker itself (memory and CPUs its
+        engine has: on Windows the WSL2 machine's, not the PC's) and kept for a few minutes. When the engine cannot be
+        asked, or answers nonsense, it is what the computer always had (`SHARED_SIZE`), and that is not kept."""
+        kept = self.sizes.get(target.remote)
+        now = self.clock()
+        if kept and 0 <= now - kept[0] < SIZE_TTL_S:
+            return kept[1]
+        try:
+            result = await self.run_for(target, ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], timeout=10, limit=4000)
+            fields = result.stdout.split()
+            if not result.code and len(fields) == 2 and all(field.isdecimal() for field in fields) and all(int(field) > 0 for field in fields):
+                size = sized(int(fields[0]), int(fields[1]))
+                self.sizes[target.remote] = now, size
+                return size
+        except (OSError, TimeoutError, VmError):
+            pass
+        logger.warning("The engine could not say its size; the shared computer keeps %s GiB and %s CPUs", *SHARED_SIZE)
+        return SHARED_SIZE
+
+    async def create(self, target, zone, *, only_create=False):
+        """Make the computer's container; a shared computer takes the size its engine gives it."""
+        size = await self.machine_size(target) if target.container == "shared" else None
+        args = run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone, size=size)
+        if only_create:
+            args[:2] = ["create"]
+        self.fitted[(target.remote, target.name)] = resources(target, size)
+        return await self.run_for(target, args, timeout=60)
+
+    async def fit_limits(self, target):
+        """A shared computer that was made at another size is brought to the engine's present one in place, with
+        `docker update` (nothing is rebuilt, nothing in it ends). It is asked at most once for each size; a refusal
+        (a smaller memory than the computer holds now) is logged and the computer goes on as it is."""
+        if target.container != "shared":
+            return
+        key = (target.remote, target.name)
+        size = await self.machine_size(target)
+        if self.fitted.get(key) == size:
+            return
+        try:
+            raw = await self.inspect(target)
+            host = (raw or {}).get("HostConfig", {})
+            memory, cpus = size
+            if raw is None:
+                return
+            if (host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3
+                    or host.get("NanoCpus") != cpus * 1_000_000_000):
+                result = await self.run_for(target, ["update", "--memory", f"{memory}g", "--memory-swap", f"{memory}g",
+                                                     "--cpus", str(cpus), target.name], timeout=30)
+                if result.code:
+                    logger.warning("The shared computer could not be resized in place")
+                    return
+            self.fitted[key] = size
+        except (OSError, TimeoutError, VmError):
+            logger.warning("The shared computer's size could not be checked")
+
+    async def clear_scratch(self, target):
+        """Clear a running computer's old scratch (`scratch_args`) when it is prepared, and at most once a day after
+        that. A failure is logged and never stops the computer."""
+        key = (target.remote, target.name)
+        now = self.clock()
+        last = self.scratch_cleaned.get(key)
+        if last is not None and 0 <= now - last < 86_400:
+            return
+        self.scratch_cleaned[key] = now
+        try:
+            if (await self.run_for(target, scratch_args(target), timeout=60)).code:
+                logger.warning("A computer's old scratch could not be cleared")
+        except (OSError, TimeoutError, VmError):
+            logger.warning("A computer's old scratch could not be cleared")
 
     async def _wallpaper(self, target):
         """Put the desktop's picture up: once for each run of a computer, and again when the owner's picture changed.
@@ -1160,9 +1304,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                 if (await self.run_for(target, ["rm", target.name])).code:
                     raise VmError("remove_failed")
                 if keep_stopped and state["state"] == "stopped":
-                    args = run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone)
-                    args[:2] = ["create"]
-                    if (await self.run_for(target, args, timeout=60)).code:
+                    if (await self.create(target, zone, only_create=True)).code:
                         raise VmError("start_failed")
                     return state
                 state = {"state": "missing", "image": True}
@@ -1318,24 +1460,31 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         except ValueError:
             raise VmError("checkpoint_unavailable") from None
 
-    async def execute(self, target, command, timeout=60, *, background=False):
+    async def execute(self, target, command, timeout=60, *, background=False, keys=None):
         """Run `command` in the workspace. In the foreground it is waited for, at most `FOREGROUND_S`, and ended then;
         in the background it is started detached and this returns at once with a job whose log and exit code the
-        caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`."""
+        caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`.
+        `keys` (variable name -> value) are given to this one command's environment, never to its command line, and
+        what it prints has them replaced by a placeholder before anything is returned."""
         if not isinstance(command, str) or not command.strip() or len(command) > 16_000:
             raise VmError("bad_arguments")
+        if keys is not None and (not isinstance(keys, dict) or not keys or not all(
+                isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) and isinstance(value, str) and value
+                and "\0" not in value for name, value in keys.items())):
+            raise VmError("bad_arguments")
+        carried = {"env": keys, "redact": lambda text, values=tuple(keys.values()): _withheld(values, text)} if keys else {}
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= (BACKGROUND_S if background else FOREGROUND_S):
             raise VmError("bad_arguments")
         if background:
-            return await self._detached(target, command, timeout)
+            return await self._detached(target, command, timeout, keys)
         # The guest timeout also ends the process when the host docker client is cancelled.
         token = secrets.token_hex(16)
         script = 'echo $$ > "$1"; shift; exec timeout --signal=TERM --kill-after=2 "$@"'
         pidfile = f"/tmp/raphael-exec-{token}.pid"
         shell = ["env", "-u", "DISPLAY", "sh", "-lc"] if target.container else ["sh", "-lc"]
-        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, f"cd {GUEST} && {command}"])
+        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, f"cd {GUEST} && {command}"], env=tuple(keys or ()))
         try:
-            result = await self.run_for(target, args, timeout=timeout + 5)
+            result = await self.run_for(target, args, timeout=timeout + 5, **carried)
             output = (result.stdout + result.stderr)[:MAX_OUTPUT]
             return {"exit_code": result.code, "output": output, "truncated": result.truncated or len(result.stdout + result.stderr) > MAX_OUTPUT}
         except (asyncio.CancelledError, TimeoutError):
@@ -1344,14 +1493,14 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         finally:
             await asyncio.shield(self.run_for(target, exec_args(target, ["rm", "-f", pidfile])))
 
-    async def _detached(self, target, command, timeout):
+    async def _detached(self, target, command, timeout, keys=None):
         job = secrets.token_hex(6)
         base = f"{GUEST}/.raphael-jobs/{job}"
         shell = "env -u DISPLAY sh" if target.container else "sh"
         script = ('mkdir -p "$1" && { timeout --signal=TERM --kill-after=2 "$2" ' + shell + ' -lc "$3"; echo $? > "$5"; } > "$4" 2>&1')
         args = exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs", str(timeout),
-                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True)
-        result = await self.run_for(target, args, timeout=30)
+                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True, env=tuple(keys or ()))
+        result = await self.run_for(target, args, timeout=30, **({"env": keys} if keys else {}))
         if result.code:
             raise VmError("start_failed")
         return {"job": job, "log": f"{base}.log", "exit_file": f"{base}.exit"}

@@ -23,6 +23,8 @@
 //!   `device_computer_app_remove` takes one app off the always-allowed list of 電腦操作, from the
 //!   list as it is under the settings' lock.
 //! - `keyboard_has_altgr` and `hotkeys_pause` are small helpers of the settings page.
+//! - `owner_clipboard_text` reads the owner's clipboard text, once, for the desktop viewer's paste into a member's
+//!   computer; the page asks only while the owner holds that screen's control.
 //! - `hotkeys_practice` lets the first-run guide's lessons hear the keys without a dictation
 //!   starting; `mic_access` says whether the privacy settings let desktop apps use the microphone.
 //! - `main_events` is the channel on which the main window hears the core and the app (the
@@ -118,6 +120,7 @@ pub enum HotkeyKind {
     AgentDown,
     AgentUp,
     PasteLast,
+    Tidy,
     Cancel,
     CancelKey,
     CancelReset,
@@ -131,6 +134,7 @@ impl From<HotkeyEvent> for HotkeyKind {
             HotkeyEvent::AgentDown | HotkeyEvent::ConversationDown { .. } => Self::AgentDown,
             HotkeyEvent::AgentUp => Self::AgentUp,
             HotkeyEvent::PasteLast => Self::PasteLast,
+            HotkeyEvent::Tidy => Self::Tidy,
             HotkeyEvent::Cancel => Self::Cancel,
             HotkeyEvent::CancelKey => Self::CancelKey,
             HotkeyEvent::CancelReset => Self::CancelReset,
@@ -1488,6 +1492,7 @@ fn bindings_of(settings: &DeviceSettings) -> Bindings {
         dictation: settings.dictation_keys.clone(),
         paste_last: settings.paste_last_keys.clone(),
         agent: settings.agent_keys.clone(),
+        tidy: settings.tidy_keys.clone(),
     }
 }
 
@@ -1501,7 +1506,8 @@ pub async fn apply_changes<E: Effects>(
 ) -> Result<(), String> {
     let bindings_changed = old.dictation_keys != new.dictation_keys
         || old.paste_last_keys != new.paste_last_keys
-        || old.agent_keys != new.agent_keys;
+        || old.agent_keys != new.agent_keys
+        || old.tidy_keys != new.tidy_keys;
     let microphone_changed = old.microphone != new.microphone;
 
     if bindings_changed {
@@ -2159,6 +2165,25 @@ pub fn keyboard_has_altgr(webview: Webview) -> Result<bool, String> {
     }
 }
 
+/// The most characters of the owner's clipboard the desktop viewer pastes into a member's computer.
+const PASTE_MAX_CHARS: usize = 1_000_000;
+
+/// The text on the owner's clipboard, for the viewer's paste into a member's computer. The page asks only while the owner
+/// holds the screen's control; the text goes back to that page and is neither logged nor kept. `None` when it holds no
+/// text, too much of it, or on another system.
+#[tauri::command]
+pub fn owner_clipboard_text(webview: Webview) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    #[cfg(windows)]
+    {
+        crate::paste::read_clipboard_text(PASTE_MAX_CHARS)
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(None)
+    }
+}
+
 /// The keyboard layout of the window that has focus: the one the user is typing with.
 #[cfg(windows)]
 fn foreground_layout() -> windows::Win32::UI::Input::KeyboardAndMouse::HKL {
@@ -2261,10 +2286,12 @@ fn apply_saved(app: &AppHandle, settings: &DeviceSettings) {
         &settings.dictation_keys,
         &settings.paste_last_keys,
         &settings.agent_keys,
+        &settings.tidy_keys,
     ) != (
         &fresh.dictation_keys,
         &fresh.paste_last_keys,
         &fresh.agent_keys,
+        &fresh.tidy_keys,
     )
         // Startup is not an async context and nothing else is waiting yet, so this blocks.
         && let Err(err) = effects
@@ -2501,6 +2528,7 @@ mod tests {
                 "open_library_file",
                 "open_link",
                 "open_team_file",
+                "owner_clipboard_text",
                 "pick_output_folder",
                 "report_save",
                 "schedule_keep_awake_get",
@@ -3336,6 +3364,8 @@ mod tests {
             "dictation.start",
             "dictation.stop",
             "dictation.cancel",
+            // the tidy key's own call: only the controller makes it, with what it copied itself
+            "dictation.tidy",
             "agent.ask",
             "agent.confirm",
             "agent.cancel",
@@ -3918,6 +3948,7 @@ mod tests {
             (HotkeyEvent::AgentDown, HotkeyKind::AgentDown),
             (HotkeyEvent::AgentUp, HotkeyKind::AgentUp),
             (HotkeyEvent::PasteLast, HotkeyKind::PasteLast),
+            (HotkeyEvent::Tidy, HotkeyKind::Tidy),
             (HotkeyEvent::Cancel, HotkeyKind::Cancel),
         ] {
             assert_eq!(HotkeyKind::from(event), kind);
@@ -3932,6 +3963,7 @@ mod tests {
             HotkeyEvent::AgentDown,
             HotkeyEvent::AgentUp,
             HotkeyEvent::PasteLast,
+            HotkeyEvent::Tidy,
         ] {
             assert!(acts_on(event, false), "{event:?} acts when not practising");
             assert!(
@@ -4321,7 +4353,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_bindings_are_made_of_all_three_actions() {
+    async fn the_bindings_are_made_of_all_four_actions() {
         let fake = Fake::default();
         let (old, new) = changed(json!({"agent_keys": ["F8"]}));
         apply_changes(&fake, &old, &new).await.unwrap();
@@ -4332,6 +4364,7 @@ mod tests {
                 dictation: vec!["AltRight".to_owned()],
                 paste_last: vec!["AltRight+V".to_owned()],
                 agent: vec!["F8".to_owned()],
+                tidy: vec!["AltRight+T".to_owned()],
             }
         );
         assert_eq!(bindings_of(&DeviceSettings::default()), Bindings::default());
@@ -4341,6 +4374,20 @@ mod tests {
         let (old, new) = changed(json!({"agent_keys": ["F8"], "emblem_size": 194}));
         assert!(apply_changes(&fake, &old, &new).await.is_err());
         assert_eq!(fake.done(), ["bindings AltRight"]);
+    }
+
+    #[tokio::test]
+    async fn a_changed_tidy_key_is_handed_to_the_hotkeys_with_the_others() {
+        let fake = Fake::default();
+        let (old, new) = changed(json!({"tidy_keys": ["F8"]}));
+        apply_changes(&fake, &old, &new).await.unwrap();
+        assert_eq!(fake.done(), ["bindings AltRight"]);
+        assert_eq!(fake.bound.lock().unwrap().clone().unwrap().tidy, ["F8"]);
+        // no key is handed over as no key
+        let fake = Fake::default();
+        let (old, new) = changed(json!({"tidy_keys": []}));
+        apply_changes(&fake, &old, &new).await.unwrap();
+        assert!(fake.bound.lock().unwrap().clone().unwrap().tidy.is_empty());
     }
 
     #[tokio::test]

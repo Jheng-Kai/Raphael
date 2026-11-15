@@ -107,6 +107,13 @@ pub fn dictation_stop_timeout(recorded: Duration) -> Duration {
     timeout_for("dictation.stop") + recorded / 3
 }
 
+/// How long `dictation.tidy` of a selection of `chars` characters may take: the cleanup of that
+/// text is given 10 s and a second for every 15 characters at the most (`cleanup.timeout_for` for
+/// the speech such a text stands for, `chars / 5` seconds), and the wait here has to hold it.
+pub fn tidy_timeout(chars: usize) -> Duration {
+    Duration::from_secs(30 + (chars / 10) as u64)
+}
+
 /// What to run to start the core.
 #[derive(Debug, Clone)]
 pub struct CoreCommand {
@@ -1026,6 +1033,10 @@ mod tests {
     #[test]
     fn the_stop_of_a_long_recording_is_given_time_for_its_cleanup() {
         let stop = |seconds| dictation_stop_timeout(Duration::from_secs(seconds));
+        // the tidy of a selection: half a minute and more for a longer text, never the 15 s of a call
+        assert_eq!(tidy_timeout(0), Duration::from_secs(30));
+        assert_eq!(tidy_timeout(2_500), Duration::from_secs(280));
+        assert!(tidy_timeout(30_000) > Duration::from_secs(3_000));
         // A short dictation: the method's usual time.
         assert_eq!(stop(0), Duration::from_secs(150));
         assert_eq!(stop(30), Duration::from_secs(160));

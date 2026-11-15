@@ -78,6 +78,10 @@ class SecretCard:
 
     def view(self) -> dict:
         """The card as the window draws it: the connection and the secret it declares, never a value."""
+        if self.kind == "key":  # the variable's name is the title; what the key is for is the line beside it
+            return {"id": self.id, "name": self.server_id, "secret": self.server_id, "state": self.state,
+                    "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
+                    "key": True, "purpose": self.name}
         return {"id": self.id, "name": self.name, "secret": self.secret, "state": self.state,
                 "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
                 **({"login": True} if self.kind == "login" else {}),
@@ -266,6 +270,21 @@ class SecretCards:
         return reference, [self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
             server_id=reference, kind="login", secret="login", name=site, language=language, done=done)]
 
+    def show_key(self, *, turn_id, member_id, conversation_id, name, purpose, language, done=()):
+        """The card of a key a program in the member's computer needs, as the environment variable `name`; its
+        `purpose` is the short line the owner reads. None when this member's key of that name is already saved."""
+        from ..computer.vault_entries import key_name_ok
+        if self.logins is None or not hasattr(self.logins, "put_key"):
+            raise LookupError("key")
+        if not key_name_ok(name):
+            raise ValueError("bad key name")
+        if not isinstance(purpose, str) or not purpose.strip() or len(purpose) > 120 or _CONTROL.search(purpose):
+            raise ValueError("bad key purpose")
+        if self.logins.key_values(member_id, [name])[0]:
+            return None
+        return self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id, server_id=name, kind="key",
+                               secret="key", name=purpose.strip(), language=language, done=done)
+
     def show(self, *, turn_id: int, member_id: int, conversation_id: int | None, connection: str, secret: str | None,
              language: str, done: Iterable[tuple[str, str]] = ()) -> list[SecretCard]:
         """The cards of the secrets `connection` (its id or its name) declares and the vault holds no
@@ -340,6 +359,10 @@ class SecretCards:
                 elif card.kind == "login" and self.logins is not None:
                     self.logins.save(card.server_id, value, member=card.member_id, site=card.name)
                     self.logins.load(card.member_id, card.name, card.server_id)
+                elif card.kind == "key":
+                    if self.logins is None or not hasattr(self.logins, "put_key"):
+                        raise ValueError("keys unavailable")
+                    self.logins.put_key(card.member_id, card.server_id, card.name, value)
                 else:
                     self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
             except SecretTooLong:

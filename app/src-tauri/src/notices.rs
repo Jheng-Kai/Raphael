@@ -105,6 +105,23 @@ pub const NO_KEY: Notice = Notice {
     ja: "《告。OpenRouter のキーが未設定です。整形前のテキストを貼り付けます。》",
 };
 
+/// The tidy key was pressed and the copy brought nothing new: no text is selected. Nothing was
+/// pasted and the clipboard is as it was.
+pub const NOTHING_SELECTED: Notice = Notice {
+    zh: "《告。未選取任何文字。》",
+    en: "《Notice. No text is selected.》",
+    ja: "《告。選択されたテキストがありません。》",
+};
+
+/// The tidy key could not tidy the selected text (no model, no connection, a reply that is no
+/// tidying, or a window that cannot be copied from or pasted into). The selection stays as it
+/// was: the text is never replaced by anything that was not tidied.
+pub const TIDY_FAILED: Notice = Notice {
+    zh: "《否。這次沒有整理成功，原文未更動。》",
+    en: "《Negative. Tidying did not finish this time. The text is unchanged.》",
+    ja: "《否。今回は整えられませんでした。テキストはそのままです。》",
+};
+
 /// The core found no microphone to record from.
 pub const NO_MIC: Notice = Notice {
     zh: "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫 › 麥克風」選擇。》",
@@ -244,7 +261,9 @@ pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
 mod tests {
     use super::*;
 
-    const ALL: [Notice; 15] = [
+    const ALL: [Notice; 17] = [
+        NOTHING_SELECTED,
+        TIDY_FAILED,
         NOT_CLEANED,
         CORE_RECOVERED,
         ELEVATED,

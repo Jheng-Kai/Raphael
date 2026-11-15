@@ -132,6 +132,9 @@ pub struct DeviceSettings {
     /// Key combinations that ask Raphael something. They follow `dictation_mode` like the
     /// dictation keys and never share a combination with them or with `paste_last_keys`.
     pub agent_keys: Vec<String>,
+    /// Key combinations that tidy the text selected in the focused window. May be empty: then
+    /// there is no such key. They never share a combination with the three actions above.
+    pub tidy_keys: Vec<String>,
     /// The name of the microphone; `None` is the system's default one.
     pub microphone: Option<String>,
     /// The emblem's diameter, one of [`EMBLEM_SIZES`].
@@ -160,6 +163,7 @@ impl Default for DeviceSettings {
             dictation_mode: DictationMode::default(),
             paste_last_keys: keys.paste_last,
             agent_keys: keys.agent,
+            tidy_keys: keys.tidy,
             microphone: None,
             emblem_size: 150,
             subtitles: Subtitles::default(),
@@ -225,6 +229,7 @@ impl DeviceSettings {
                 "dictation_mode" => next.dictation_mode = parse_value(name, value)?,
                 "paste_last_keys" => next.paste_last_keys = parse_value(name, value)?,
                 "agent_keys" => next.agent_keys = parse_value(name, value)?,
+                "tidy_keys" => next.tidy_keys = parse_value(name, value)?,
                 "microphone" => next.microphone = parse_value(name, value)?,
                 "emblem_size" => next.emblem_size = parse_value(name, value)?,
                 "subtitles" => next.subtitles = parse_value(name, value)?,
@@ -292,6 +297,13 @@ impl DeviceSettings {
             &self.dictation_keys,
             &self.paste_last_keys,
             &self.agent_keys,
+        )?;
+        check_optional_keys("整理選取文字的快捷鍵", &self.tidy_keys)?;
+        check_tidy_apart(
+            &self.tidy_keys,
+            &self.dictation_keys,
+            &self.paste_last_keys,
+            &self.agent_keys,
         )
     }
 
@@ -351,6 +363,21 @@ impl DeviceSettings {
             self.dictation_keys = default.dictation_keys;
             self.paste_last_keys = default.paste_last_keys;
             self.agent_keys = default.agent_keys;
+        }
+        if let Err(err) = check_optional_keys("tidy_keys", &self.tidy_keys) {
+            log::warn!("device settings: {err}");
+            self.tidy_keys = default.tidy_keys;
+        }
+        // A combination that an older file gave to another action (Right Alt+T was free before
+        // the tidy key) keeps that action; the tidy key is what gives way, and is simply off.
+        if let Err(err) = check_tidy_apart(
+            &self.tidy_keys,
+            &self.dictation_keys,
+            &self.paste_last_keys,
+            &self.agent_keys,
+        ) {
+            log::warn!("device settings: {err}");
+            self.tidy_keys = Vec::new();
         }
     }
 }
@@ -431,6 +458,15 @@ fn check_keys(what: &str, keys: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// Like [`check_keys`], but no key at all is fine: the action is then simply without a key.
+fn check_optional_keys(what: &str, keys: &[String]) -> Result<(), String> {
+    if keys.is_empty() {
+        Ok(())
+    } else {
+        check_keys(what, keys)
+    }
+}
+
 /// Whether no key combination is used for two actions. (`AltRight+V` and `AltRight+KeyV` are the
 /// same one.)
 fn check_keys_apart(
@@ -454,6 +490,30 @@ fn check_keys_apart(
         for text in first {
             let hotkey = parse_binding(text)?;
             for other in second {
+                if parse_binding(other)? == hotkey {
+                    return Err(refusal.to_owned());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether no tidy key is also a key of another action. An empty `tidy` shares nothing.
+fn check_tidy_apart(
+    tidy: &[String],
+    dictation: &[String],
+    paste_last: &[String],
+    agent: &[String],
+) -> Result<(), String> {
+    for (others, refusal) in [
+        (dictation, "整理選取文字和聽寫不能用同一組按鍵"),
+        (paste_last, "整理選取文字和貼上上一次聽寫不能用同一組按鍵"),
+        (agent, "整理選取文字和問拉斐爾不能用同一組按鍵"),
+    ] {
+        for text in tidy {
+            let hotkey = parse_binding(text)?;
+            for other in others {
                 if parse_binding(other)? == hotkey {
                     return Err(refusal.to_owned());
                 }
@@ -739,6 +799,7 @@ mod tests {
                 "dictation_mode": "toggle",
                 "paste_last_keys": ["AltRight+V"],
                 "agent_keys": ["AltRight+Space"],
+                "tidy_keys": ["AltRight+T"],
                 "microphone": "耳機麥克風",
                 "emblem_size": 150,
                 "subtitles": "off",
@@ -1117,6 +1178,7 @@ mod tests {
             ("dictation_keys", json!("AltRight")),
             ("paste_last_keys", json!([1, 2])),
             ("agent_keys", json!({"key": "Space"})),
+            ("tidy_keys", json!("F8")),
         ] {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join(FILE_NAME);
@@ -1125,6 +1187,7 @@ mod tests {
                 "dictation_mode": "hold",
                 "paste_last_keys": ["F10"],
                 "agent_keys": ["F11"],
+                "tidy_keys": ["F12"],
                 "microphone": "USB mic",
                 "emblem_size": 194,
                 "subtitles": "off",
@@ -1369,6 +1432,106 @@ mod tests {
             assert_eq!(s.paste_last_keys, defaults.paste_last_keys, "{stored}");
             assert_eq!(s.agent_keys, defaults.agent_keys, "{stored}");
             assert!(path.exists(), "{stored}: the file is not set aside");
+        }
+    }
+
+    #[test]
+    fn the_tidy_keys_are_off_when_empty_and_never_share_a_combination() {
+        let mut s = DeviceSettings::default();
+        assert_eq!(s.tidy_keys, ["AltRight+T"]);
+        // no key is a valid setting
+        s.apply_patch(&json!({"tidy_keys": []})).unwrap();
+        assert!(s.tidy_keys.is_empty());
+        s.apply_patch(&json!({"tidy_keys": ["F8"]})).unwrap();
+        assert_eq!(s.tidy_keys, ["F8"]);
+        // another action's combination, in any spelling, and keys that cannot be offered
+        for (field, value) in [
+            ("dictation_keys", json!(["F8"])),
+            ("paste_last_keys", json!(["f8"])),
+            ("agent_keys", json!(["F8"])),
+        ] {
+            let refused = s.apply_patch(&json!({ field: value })).unwrap_err();
+            assert!(refused.contains("整理選取文字"), "{field}: {refused}");
+        }
+        assert!(
+            s.apply_patch(&json!({"tidy_keys": ["AltRight", "AltRight"]}))
+                .is_err()
+        );
+        assert!(s.apply_patch(&json!({"tidy_keys": ["V"]})).is_err());
+        assert!(
+            s.apply_patch(&json!({"tidy_keys": ["AltRight+Space"]}))
+                .is_err()
+        );
+        assert!(s.apply_patch(&json!({"tidy_keys": "F8"})).is_err());
+        assert_eq!(s.tidy_keys, ["F8"], "nothing changed");
+        // giving a combination up in the same patch is fine
+        s.apply_patch(&json!({"tidy_keys": ["F9"], "dictation_keys": ["F8"]}))
+            .unwrap();
+        assert_eq!(
+            (s.tidy_keys.clone(), s.dictation_keys.clone()),
+            (vec!["F9".to_owned()], vec!["F8".to_owned()])
+        );
+    }
+
+    #[test]
+    fn a_file_from_before_the_tidy_key_gets_it_without_touching_the_other_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE_NAME);
+        std::fs::write(
+            &path,
+            r#"{"dictation_keys": ["F9"], "paste_last_keys": ["F10"], "agent_keys": ["F8"]}"#,
+        )
+        .unwrap();
+        let s = DeviceSettings::load(&path);
+        assert_eq!(s.tidy_keys, ["AltRight+T"]);
+        assert_eq!(
+            (s.dictation_keys, s.paste_last_keys, s.agent_keys),
+            (
+                vec!["F9".to_owned()],
+                vec!["F10".to_owned()],
+                vec!["F8".to_owned()]
+            )
+        );
+    }
+
+    #[test]
+    fn a_stored_tidy_key_that_clashes_is_dropped_and_the_other_keys_stay() {
+        // Right Alt+T was free before the tidy key: a file that gave it to dictation keeps it there.
+        for (stored, kept) in [
+            (r#"{"dictation_keys": ["AltRight+T"]}"#, "dictation_keys"),
+            (
+                r#"{"paste_last_keys": ["AltRight+KeyT"]}"#,
+                "paste_last_keys",
+            ),
+            (r#"{"agent_keys": ["altright+t"]}"#, "agent_keys"),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join(FILE_NAME);
+            std::fs::write(&path, stored).unwrap();
+            let s = DeviceSettings::load(&path);
+            assert!(s.tidy_keys.is_empty(), "{stored}: the tidy key gives way");
+            let defaults = DeviceSettings::default();
+            let (mine, theirs) = match kept {
+                "dictation_keys" => (&s.dictation_keys, &defaults.dictation_keys),
+                "paste_last_keys" => (&s.paste_last_keys, &defaults.paste_last_keys),
+                _ => (&s.agent_keys, &defaults.agent_keys),
+            };
+            assert_ne!(mine, theirs, "{stored}: the owner's choice stays");
+        }
+        // an empty list is the owner's choice of no key and stays; one that cannot be used is the default
+        for (stored, want) in [
+            (r#"{"tidy_keys": []}"#, Vec::<String>::new()),
+            (r#"{"tidy_keys": ["V"]}"#, vec!["AltRight+T".to_owned()]),
+            (
+                r#"{"tidy_keys": ["F8", "F8"]}"#,
+                vec!["AltRight+T".to_owned()],
+            ),
+            (r#"{"tidy_keys": [1]}"#, vec!["AltRight+T".to_owned()]),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join(FILE_NAME);
+            std::fs::write(&path, stored).unwrap();
+            assert_eq!(DeviceSettings::load(&path).tidy_keys, want, "{stored}");
         }
     }
 

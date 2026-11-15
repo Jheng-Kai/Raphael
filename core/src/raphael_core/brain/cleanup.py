@@ -646,6 +646,7 @@ class CleanupService:
         target_app: str | None = None,
         chunks: Sequence[tuple[str, str]] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
+        system_suffix: str = "",
     ) -> CleanupResult:
         """Cleaned text, or unsuccessful recovery text with its failure reason.
 
@@ -676,6 +677,9 @@ class CleanupService:
         remaining time. `is_cancelled` prevents a new retry after the owner's cancellation RPC,
         while allowing the already-paid request to finish. Task cancellation passes through.
         An answer is recorded in the spend whatever it holds.
+
+        `system_suffix` is put after the system prompt of every call. The tidy key uses it to say
+        that the text was typed, not spoken (`tidy.TIDY_ADDENDUM`); a dictation gives none.
         """
         if not raw.strip():
             return _fallback(raw, "empty")
@@ -683,7 +687,7 @@ class CleanupService:
             source = raw if heard is None else heard
             pieces = _bodies(chunks or [(piece, piece) for piece in split_for_cleanup(source)])
             return await self._clean(
-                raw, source, audio_seconds, target_app, pieces, is_cancelled
+                raw, source, audio_seconds, target_app, pieces, is_cancelled, system_suffix
             )
         except Exception as exc:
             # Preserve recovery text, but never claim an unexpected failure was cleaned.
@@ -697,6 +701,7 @@ class CleanupService:
         target_app: str | None,
         pieces: Sequence[tuple[str, str, str]],
         is_cancelled: Callable[[], bool] | None,
+        system_suffix: str = "",
     ) -> CleanupResult:
         if not self._has_key():
             return _fallback(raw, "no_key")
@@ -707,7 +712,7 @@ class CleanupService:
             target_app,
             languages=self._settings.get("languages"),
             heard=heard,
-        )
+        ) + system_suffix
         if len(pieces) <= 1:
             return await self._clean_one(raw, heard, system, self._timeout_fn(audio_seconds), is_cancelled)
         return await self._clean_pieces(raw, pieces, system, audio_seconds, is_cancelled)

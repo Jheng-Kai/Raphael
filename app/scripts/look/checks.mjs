@@ -1868,6 +1868,24 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.desktop-checkpoints') && !window.__look.calls.some(call => call.method === 'computer.checkpoints'), 'no file-changes view or request exists');
     return {check:name};
   }
+  if (["key-private", "key-saved"].includes(name)) {
+    // R-KEY-01: a key for a program in a member's computer is pasted on the same secure card, and the page keeps no copy of it.
+    const card = document.querySelector('[data-secret-card=card-key]');
+    require(visible(card) && card.hasAttribute('data-key-card'), 'the key uses the existing secret card, in its key form');
+    for (const secret of ['sk-or-v1-private-look-key']) require(!document.body.innerText.includes(secret) && !document.documentElement.outerHTML.includes(secret) && !JSON.stringify(window.__look.calls).includes(secret), 'the key value stays out of the markup, the text and the calls recorded');
+    const title = card.querySelector('.card-title')?.textContent.trim();
+    require(title === (name === 'key-private' ? '儲存 OPENROUTER_API_KEY' : 'OPENROUTER_API_KEY'), `the card is titled by the variable's name: ${title}`);
+    if (name === 'key-private') {
+      const field = card.querySelector('[data-secret-input]');
+      require(field.type === 'password' && !card.querySelector('[data-act=card-save]').disabled, 'the key is masked and Save works once it is typed');
+      require(card.innerText.includes('價格腳本要呼叫模型') && card.innerText.includes('不會出現在對話裡'), 'what the key is for and where it goes are said');
+      const box = card.getBoundingClientRect(), input = field.getBoundingClientRect();
+      require(input.left >= box.left && input.right <= box.right + 1 && field.getBoundingClientRect().width > 120, 'the field sits inside the card at a usable width');
+    } else {
+      require(!card.querySelector('input') && window.__look.calls.filter(call => call.method === 'integrations.card_save').length === 1, 'save empties the field and crosses one call');
+    }
+    return {check:name};
+  }
   if (["login-private", "login-saved"].includes(name)) {
     const card = document.querySelector('[data-secret-card=card-login]');
     require(visible(card), 'login uses the existing secret card');
@@ -2490,6 +2508,9 @@ export function checkRendered(name, context = {}) {
       } else if (card.matches('[data-owner-question][data-card-state="answered"]') && card.querySelector('.question-answer-line')) {
         // An answered question is its title and one row: the check at the row's right says what a pill said.
         require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
+      } else if (card.matches('[data-desktop-settled]')) {
+        // A settled handoff is its title and one word of what the owner did (R-COMP-HANDOFF-01); a settled result carries no status pill (R-CARD-15).
+        require(!pill && card.querySelector('.card-body')?.textContent.trim(), 'a settled handoff has no pill and says what the owner did');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
@@ -3763,7 +3784,16 @@ export function checkRendered(name, context = {}) {
       require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
       require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
     }
-    if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
+    if(name==='computer-takeover-done'){
+      require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
+      // R-COMP-HANDOFF-01 (owner, 2026-11-15): the settled card says what the owner did, in one word of its own and no status pill, and its
+      // fold tells of the handoff, never of the work's live state (the conversation's presence line says that).
+      const settled=events[0];
+      require(settled.dataset.desktopSettled==='handed_back'&&!settled.querySelector('.card-status'),'the settled handoff card carries no status pill');
+      require(settled.querySelector('.card-body').textContent.trim()==='已交回','the settled handoff card says it was handed back');
+      const fold=settled.querySelector('.card-detail');
+      require(fold&&fold.textContent.trim()==='電腦已交回給成員。'&&!/完成|正在使用電腦/.test(settled.textContent),'the fold tells of the handoff, not of the live state of the work or of a finish');
+    }
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
       // Only the pill under the screen says who holds it; the screen carries no badge of its own (owner, 2026-11-13:
@@ -8155,6 +8185,27 @@ export function checkRendered(name, context = {}) {
     require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'pressing a day leaves the grid as it was: no history opened');
     return { check: name };
   }
+  if (name === "settings-tidy-key") {
+    const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
+    const rows = [...scrim.querySelectorAll('.row-shortcut')], at = id => scrim.querySelector(`[data-row="${id}"]`);
+    const tidy = at("tidy-hotkey"), agent = at("agent-hotkey"), dictation = at("hotkey");
+    require(visible(tidy) && visible(agent) && visible(dictation), "the tidy, question and dictation shortcuts are all on the page");
+    // After the shortcuts that start something, before Esc, which is not changeable.
+    require(rows.indexOf(tidy) > rows.indexOf(dictation) && rows.indexOf(tidy) === rows.length - 2, "the tidy shortcut stands after the dictation ones and before Esc");
+    const caps = [...tidy.querySelectorAll('.caps kbd')].map(cap => cap.textContent.trim());
+    require(caps.length === 2 && caps[1] === "T", `its keys are Right Alt and T (${caps.join(" + ")})`);
+    const pencil = tidy.querySelector('[data-act="rec-tidy"]');
+    require(visible(pencil) && pencil.getAttribute("aria-label"), "a pencil changes the key, and says so");
+    const label = tidy.querySelector('.lbl .t');
+    require(label.scrollWidth <= label.clientWidth + 1 && label.textContent.trim().length > 0, "its name is whole");
+    const box = tidy.getBoundingClientRect(), other = agent.getBoundingClientRect();
+    require(Math.abs(box.height - other.height) < 1 && Math.abs(box.left - other.left) < 1 && Math.abs(box.right - other.right) < 1, "it is a row like the question key's: same height and width");
+    require(Math.abs(pencil.getBoundingClientRect().right - agent.querySelector('[data-act="rec-agent"]').getBoundingClientRect().right) < 1, "its pencil is where the question key's is");
+    const list = tidy.closest('.list') ?? tidy.parentElement;
+    require(list.scrollWidth <= list.clientWidth + 1, "the shortcuts fit their list");
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    return { check: name, keys: caps.join(" + ") };
+  }
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
@@ -8172,6 +8223,8 @@ export function checkRendered(name, context = {}) {
   if (name === "dictation-overview") {
     const cards = [...document.querySelectorAll('.page-overview .icard')];
     require(cards.length === 4, "four independent totals are visible");
+    // Dictation, question, paste last, tidy and cancel: the tidy key is among the shortcuts (R-TIDY-01).
+    require(document.querySelectorAll('.page-overview .keys-card .kc-row').length === 5, "the shortcuts card lists the tidy key beside the others");
     const boxes = cards.map(card => card.getBoundingClientRect());
     const desktop = document.querySelector('.dictation-content').clientWidth >= 700;
     require(boxes[0].top === boxes[1].top && boxes[2].top > boxes[0].bottom && boxes[2].top === boxes[3].top, "totals keep two by two rows at every width");
@@ -8207,6 +8260,37 @@ export function checkRendered(name, context = {}) {
       }
     }
     return { check: name, sidebarVisible: visible(column), fontSize: getComputedStyle(bubble).fontSize };
+  }
+  if (name === "message-text-colour") {
+    // R-MSG-COLOUR-01 (owner, 2026-11-15): a message's text is the normal text colour whatever its kind or its turn's state; the timed
+    // progress messages and the replies of a failed turn were a step paler. The real messages on screen, and a message of each kind
+    // under a turn of each state drawn into the same thread, so every rule of the real stylesheet is measured.
+    const probe = document.createElement("span");
+    probe.style.color = "var(--text)";
+    document.body.append(probe);
+    const normal = getComputedStyle(probe).color;
+    probe.remove();
+    const shown = [...document.querySelectorAll(".tn .ans")].filter(visible);
+    require(shown.length > 0, "a message is on screen");
+    for (const message of shown) {
+      const colours = [message, ...message.querySelectorAll(".message-text, .message-text p")].map(node => getComputedStyle(node).color);
+      require(colours.every(colour => colour === normal), `${message.className} draws its text in the normal colour ${normal}, not ${colours.find(colour => colour !== normal)}`);
+      require(getComputedStyle(message).opacity === "1", "a message is not faded");
+    }
+    const turn = shown[0].closest(".tn"), measured = [];
+    for (const status of ["done", "running", "error", "denied", "expired", "cancelled"]) for (const kind of ["", " progress"]) {
+      const copy = document.createElement("li");
+      copy.className = "tn";
+      copy.dataset.status = status;
+      copy.innerHTML = `<div class="ra"><div class="ra-body"><div class="chat-message"><div class="ans${kind}"><div class="message-text">Sample</div></div></div></div></div>`;
+      turn.parentElement.append(copy);
+      const text = copy.querySelector(".message-text");
+      measured.push({ status, kind: kind.trim() || "reply", bubble: getComputedStyle(copy.querySelector(".ans")).color, text: getComputedStyle(text).color });
+      copy.remove();
+    }
+    const pale = measured.filter(item => item.bubble !== normal || item.text !== normal);
+    require(!pale.length, `a message is paler than normal (${normal}): ${JSON.stringify(pale)}`);
+    return { check: name, normal, kinds: measured.length };
   }
   if (name === "member-column") return checkRendered("sidebar-shell");
   // Primary is a display position; the room's coordinator remains identity 0.

@@ -29,13 +29,21 @@ class Runtime:
         self.calls, self.raw, self.image_id = [], None, "sha256:test-image"
         self.up, self.built = True, True
         self.screens_ready = True
+        # What `docker info` says the engine has: a machine whose rule gives the shared computer 6 GiB and 4 CPUs.
+        self.engine = (int(7.5 * 1024**3), 8)
 
     async def __call__(self, args, **kwargs):
         if args[:1] == ["--host"]:
             args = args[2:]
         self.calls.append((args, kwargs))
+        if args[0] == "info" and "{{.MemTotal}}" in args[-1]:
+            return Result(0, "%d %d" % self.engine) if self.engine else Result(1)
         if args[0] == "info":
             return Result(0, "linux") if self.up else Result(1)
+        if args[0] == "update" and self.raw:
+            memory, cpus = args[2], args[6]
+            self.raw["HostConfig"].update(Memory=int(memory[:-1]) * 1024**3, MemorySwap=int(memory[:-1]) * 1024**3,
+                                          NanoCpus=int(cpus) * 1_000_000_000)
         if args[:2] == ["image", "inspect"]:
             return Result(0, json.dumps([{"Id": self.image_id, "Config": {"Labels": IMAGE_LABELS}}])) if self.built else Result(1)
         if args[:2] == ["container", "inspect"]:
@@ -65,7 +73,7 @@ class Runtime:
 
 def container(vm, target, runtime):
     raw = {"Name": "/" + target.name, "Image": runtime.image_id,
-        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
+        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}, "Env": ["VNC_PW=private", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", f"RAPHAEL_SCREENS={target.screens}"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
             "Memory": (6 if target.container else 3) * 1024**3, "MemorySwap": (6 if target.container else 3) * 1024**3,
@@ -320,7 +328,8 @@ async def test_a_stalled_wallpaper_copy_cannot_hold_the_ready_computer(desktop, 
 def test_run_args_use_known_iana_zone_or_utc(tmp_path, zone, expected):
     vm = LocalVm(tmp_path)
     args = run_args(vm.target(), vm.owner, "secret", tz=zone)
-    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == ["VNC_PW=secret", f"TZ={expected}", "RAPHAEL_SCREENS=1", "VNC_RESOLUTION=1280x900"]
+    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == [
+        "VNC_PW=secret", f"TZ={expected}", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", "RAPHAEL_SCREENS=1", "VNC_RESOLUTION=1280x900"]
     assert args[-1] == IMAGE
 
 
@@ -537,7 +546,7 @@ async def test_status_checks_real_health_and_hides_remote_binding(desktop):
 
 def test_reuse_checks_original_host_mount_without_engine_path_translation(desktop):
     vm, target, runtime = desktop
-    runtime.raw["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": m["Source"], "Target": m["Destination"]} for m in runtime.raw["Mounts"]]
+    runtime.raw["HostConfig"]["Mounts"] = [{"Type": m["Type"], "Source": m.get("Name", m["Source"]), "Target": m["Destination"]} for m in runtime.raw["Mounts"]]
     runtime.raw["Mounts"][0]["Source"] = "/engine/internal/path"
     assert compatible(runtime.raw, target, vm.owner, runtime.image_id)
     runtime.raw["HostConfig"]["Mounts"][0]["Source"] = str(target.workspace.parent)
