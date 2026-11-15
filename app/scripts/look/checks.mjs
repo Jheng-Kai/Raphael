@@ -3674,6 +3674,32 @@ export function checkRendered(name, context = {}) {
     require(open ? Object.keys(seen).sort().join() === 'failed,waiting' : Object.keys(seen).sort().join() === 'done,failed,message,waiting', `the lights drawn are the ones earned: ${Object.keys(seen)}`);
     return { check: name, lights: Object.keys(seen) };
   }
+  if (name === "sidebar-light-steady") {
+    // R-SIDE-04 (owner, 2026-11-15: 「這個狀態不要因為 hover 在上面移動」): a row draws no 「more」 (its right click is the menu), so
+    // under the pointer nothing makes room for one: the row's light and words stand where every other row's do.
+    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) return { check: name, rail: true };
+    const item = [...document.querySelectorAll('#nav .mb-item, #nav .au-room-row')].find(el => el.matches(':hover'));
+    require(item, 'a row is under the pointer');
+    const row = item.querySelector(':scope > .nav.mb-row'), dot = row?.querySelector(':scope > .mb-dot');
+    require(dot && visible(dot), 'the row under the pointer has its light');
+    require(![...item.querySelectorAll('[data-overflow]')].some(visible), 'the row draws no 「more」 under the pointer');
+    const from = (el, box) => { const rect = el.getBoundingClientRect(); return [Math.round((box.right - rect.right) * 2) / 2, Math.round((rect.top - box.top) * 2) / 2]; };
+    const same = (a, b) => Math.abs(a[0] - b[0]) < 0.6 && Math.abs(a[1] - b[1]) < 0.6;
+    if (row.matches('.mb-tile')) {
+      const others = [...document.querySelectorAll('#nav .mb-tile > .mb-dot')].filter(other => other !== dot).map(other => from(other, other.parentElement.getBoundingClientRect()));
+      require(others.length >= 1, 'another face wears a light to compare with');
+      const here = from(dot, row.getBoundingClientRect());
+      require(others.every(other => same(other, here)), `the face's light stands where the others' do: ${here} vs ${others.join(' ')}`);
+    } else {
+      // Rows with a light, measured from their own right edge: the light, and the end of the words beside it.
+      const rows = [...document.querySelectorAll('#nav .nav.mb-row:not(.mb-tile)')].filter(other => other.querySelector(':scope > .mb-dot'));
+      require(rows.length >= 3, 'other rows wear lights to compare with');
+      const shape = other => { const box = other.getBoundingClientRect(); return [...from(other.querySelector(':scope > .mb-dot'), box), from(other.querySelector('.mb-row-main'), box)[0]]; };
+      const here = shape(row), rest = rows.filter(other => other !== row).map(shape);
+      require(rest.every(other => Math.abs(other[0] - here[0]) < 0.6 && Math.abs(other[2] - here[2]) < 0.6), `the light and the words stand where every row's do: ${here} vs ${rest.join(' ')}`);
+    }
+    return { check: name };
+  }
   if (name === "sidebar-unread") {
     // The sidebar's rows show no time (R-UI-77): new messages keep their unread dot.
     require(document.querySelector('.mb-col .mb-dot.is-unread') && ![...document.querySelectorAll('.mb-col time')].some(visible), "new messages keep their unread dot, with no time on screen");
@@ -9296,7 +9322,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "peer-chat") {
     // The conversation between members: in place of the thread and composer, the pill 「A ⇄ B」,
-    // every exchange between those two under faces and coloured names, day dividers, and 「關閉對話」 (R-UI-72).
+    // the exchanges between those two at the same time under faces and coloured names, a day divider, and 「關閉對話」 (R-UI-72).
     const chat = document.querySelector('.mb-chat:not([hidden]) > .peer-chat'), column = chat?.parentElement;
     require(visible(chat), "the line opened the conversation");
     const box = chat.getBoundingClientRect(), whole = column.getBoundingClientRect(), head = column.querySelector('.mb-head').getBoundingClientRect(), composer = column.querySelector('.composer').getBoundingClientRect();
@@ -9308,8 +9334,9 @@ export function checkRendered(name, context = {}) {
     require(pill.querySelectorAll('.av').length === 2, "the pill carries both faces");
     require(Math.abs(pillBox.left + pillBox.width / 2 - box.left - box.width / 2) < 2 && pillBox.top - box.top < 24, "the pill is centred at the top");
     const lines = [...chat.querySelectorAll('.peer-line')];
-    require(lines.map(line => line.dataset.peerFrom).join() === "0,1,0,1", `both days of their exchanges, oldest first: ${lines.map(line => line.dataset.peerFrom)}`);
-    require(chat.querySelectorAll('.peer-thread > .day').length === 2, "a divider for each day");
+    require(lines.map(line => line.dataset.peerFrom).join() === "0,1,0,1", `both of this morning's exchanges, oldest first: ${lines.map(line => line.dataset.peerFrom)}`);
+    require(chat.querySelectorAll('.peer-thread > .day').length === 1, "one divider for the day they talked");
+    require(!chat.textContent.includes(window.__look.data.peerChatSample.yesterdayRequest), "yesterday's exchange is another conversation, not in this one");
     require(!chat.textContent.includes("小森") && !chat.textContent.includes(window.__look.data.peerChatSample.otherRequest), "an exchange with another member is not theirs");
     require(lines.every(line => visible(line.querySelector('.ra-face .av')) && visible(line.querySelector('.peer-who'))), "every message has its speaker's face and name");
     const colour = getComputedStyle(lines[1].querySelector('.peer-who')).color.match(/[\d.]+/g).slice(0, 3).map(Number);

@@ -40,7 +40,6 @@
   --pa-row-role: var(--fs-2xs);
   --pa-row-pv: var(--fs-xs);
   --pa-row-r: var(--r-sm);
-  --pa-more: calc(28px + 8 * var(--pa-u));
   --pa-dot: calc(7px + 2 * var(--pa-u));
   /* the chat: the top row, the thread, the composer */
   --pa-chat-pad: calc(24px + 8 * var(--pa-u));

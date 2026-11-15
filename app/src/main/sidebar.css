@@ -40,7 +40,6 @@
 .side .mb-pinned:not([data-count="1"]) .nav.mb-tile b { font-size: var(--fs-sm); }
 .side .nav.mb-tile[aria-current="true"] b { color: var(--accent-text); }
 .side .nav.mb-tile > .mb-dot { position: absolute; top: 10px; right: 12px; }
-:is(.page-agent, .side) .mb-item:has(> .mb-tile) .btn.mb-more { top: 8px; margin-top: 0; }
 /* The rail of faces, Grok Bot's: 88 px wide, each face (36 px) on a 54 px rounded square that is lit for the open conversation,
    no names or lines of text, the unread dot on the face's corner, a faint line under Raphael's row and between folders; at its
    foot, in a column, the plus alone (no search on the rail, owner 2026-11-12 23:25), then the icon button of 連結應用程式 and the account's face. It is what the list becomes on a
