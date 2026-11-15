@@ -195,7 +195,7 @@ async def test_the_second_attempt_is_told_what_was_done_without_any_argument(mak
     await until(lambda: rig.task(old).state == "cancelled")
     rig.client.replies = [report("Redone.")]
     await rig.rpc.call("worker.rerun", {"task_id": old})
-    await rig.wait_for_reports(2)
+    await rig.wait_for_reports(1)  # the stop said nothing (R-STOP-01); only the redone task reports
     user = rig.client.chat_calls[-1]["messages"][1]["content"]
     assert "<previous_attempt>" in user and "</previous_attempt>" in user
     block = user.split("<previous_attempt>")[1].split("</previous_attempt>")[0]

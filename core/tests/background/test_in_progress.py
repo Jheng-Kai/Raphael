@@ -19,7 +19,7 @@ async def test_a_plugin_call_is_a_step_from_the_moment_it_is_sent(make_rig, call
     _, shown = rig.service.tasks_for_turns([99])[99]
     assert [s["outcome"] for s in shown if s["kind"] == "tool"] == []
     await rig.rpc.call("worker.cancel", {})
-    await rig.wait_for_reports()
+    await until(lambda: rig.task(task_id).state == "cancelled")  # a stop says nothing: no report to wait for (R-STOP-01)
     tools = [s for s in rig.steps(task_id) if s.kind == "tool"]
     assert [s.outcome for s in tools] == ["cancelled"]  # one step, not two
 

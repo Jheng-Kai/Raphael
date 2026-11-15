@@ -4574,7 +4574,7 @@ class AgentService:
         team = self._team
         if team is None or name not in TEAM_TOOLS:
             return ToolResult(name, False, None, "blocked", instruction="This team tool is unavailable here. Answer with the information already available or tell the owner what is missing.")
-        if name not in (*SKILL_TOOLS, "handoff", "work_status", *ROOM_TOOLS) and not speaker.may_ask:
+        if name not in (*SKILL_TOOLS, "handoff", "work_status", "stop_work", *ROOM_TOOLS) and not speaker.may_ask:
             return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
         if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
@@ -4585,6 +4585,10 @@ class AgentService:
             self._gate.check_for(action or Action(name, dict(arguments)), name, arguments, approval)
         except (UnknownTool, NotApproved):
             return handoff_refused("blocked") if name == "handoff" else ToolResult(name, False, None, "blocked")
+        if name == "stop_work":
+            if self._background is None:
+                return ToolResult(name, False, None, "unavailable")
+            return await self._background.stop_own_work(speaker, dict(arguments), source_turn_id=source_turn_id)
         if name == "handoff":
             if self._background is None:
                 return handoff_refused("worker_disabled")

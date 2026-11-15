@@ -140,6 +140,8 @@ const BOTTOM_SLACK_PX = 80;
 /** Within this many px of the top, the earlier turns are loaded. */
 /** Events that come together (a task's step and its turn) bring the turns once. */
 const REFRESH_DELAY_MS = 150;
+/** While the composer offers Stop, the page reads its live turns this often, whatever events came (R-PUMP-03). */
+const STOP_RECHECK_MS = 15_000;
 /** The most a typed question may hold (the app's own limit is the same). */
 export const TYPED_MAX_CHARS = 100_000;
 /** A question said aloud whose turn never comes (the core went away) stops waiting after this long. */
@@ -608,6 +610,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let hearing: { since: number; after: number | null; member: number; conversation?: number } | null = null;
   /** Ends `hearing` at `HEARING_MAX_MS` when neither its turn nor any other word of the core comes. */
   let hearingTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The read made now and then while Stop shows (`watchStop`). */
+  let stopRecheck: ReturnType<typeof setTimeout> | undefined;
   const stoppingComposerTasks = new Set<string>();
   /** The native voice key names quick for Raphael and the main conversation for a member. */
   const voiceConversationId = (member: number): number | undefined =>
@@ -2300,6 +2304,25 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
     if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
+    watchStop();
+  }
+
+  /**
+   * Stop is the page's claim that something is in progress, and the page only knows what its last read said. A turn the core
+   * ended while no event reached the page (a core that restarted and swept its rows, a window that was hidden, a dropped
+   * message) would keep Stop on for ever, since nothing reads again (owner, 2026-11-15: 「明明就已經結束任務了，輸入框右下角
+   * 是暫停鍵」). So while Stop shows, the live turns are read now and then; once it does not, nothing is (R-PUMP-03).
+   */
+  function watchStop(): void {
+    const task = composerTask();
+    if (!task || task.state === "recording" || !visible) { clearTimeout(stopRecheck); stopRecheck = undefined; return; }
+    if (stopRecheck !== undefined) return;
+    stopRecheck = setTimeout(() => {
+      stopRecheck = undefined;
+      if (!visible) return;
+      if (!roomPane.active) scheduleRefresh(0);
+      watchStop();
+    }, STOP_RECHECK_MS);
   }
 
   async function stopComposerTask(): Promise<void> {
@@ -2848,6 +2871,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
     if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
+    // A restarted core ended what the last run left (turns expired, tasks interrupted) and told the page only that it is ready:
+    // the live turns are read again (R-PUMP-03).
+    if (event.type === "CoreReady") scheduleRefresh();
     if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); staleHistory.set(event.member_id, (staleHistory.get(event.member_id) ?? 0) + 1); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); if (voiceDraft?.member === (event.member_id ?? RAPHAEL_ID)) voiceDraft = null; }
     if (event.type === "QuotaChanged") void readQuotas();
@@ -3112,6 +3138,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       voice.drop();
       if (refreshTimer !== null) clearTimeout(refreshTimer);
       refreshTimer = null;
+      clearTimeout(stopRecheck);
+      stopRecheck = undefined;
     },
   };
 }
