@@ -1,7 +1,6 @@
 import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
-import { mountTaskResults } from "../task-result";
 import { patchThread, threadLineIdentity } from "../thread-diff";
 import { sameWire, ThreadRenderCache } from "../thread-render";
 import { mountTranscriptWindow, TranscriptWindow } from "../transcript-window";
@@ -809,9 +808,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawQuote();
   }
 
+  /** Send is offered only for a message that can go as it is: every file in (none still being read, R-ATTACH-04), none missing, and words or files. */
+  const sendable = (): boolean => !files.some(file => file.pending) && missingFiles.length === 0 && typedQuestion(input.value, files.length > 0) !== null;
+
   /** Keep draft cards mounted while their filenames and remove labels stay current. */
   function drawFile(): void {
-    sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
+    sendButton.disabled = !sendable();
     // Most restored drafts have no files; an unchanged empty tray needs no layout read.
     if (!files.length && !missingFiles.length && fileChip.hidden && !fileChip.childElementCount) return;
     const label = esc(t("agent.unattach"));
@@ -1060,7 +1062,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) previews.sync();
     else previews.pause();
     desktop.sync();
-    taskResults.sync();
     pagesHost.sync();
     measureMessages();
     updateLiveTimes(thread);
@@ -1466,11 +1467,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * leaves the composer as it is.
    */
   async function send(edit?: { text: string; draft: ComposerDraft }): Promise<void> {
-    if (!edit && attaching) {
-      const epoch = attachmentEpoch;
-      await attachQueue;
-      if (epoch !== attachmentEpoch) return;
-    }
+    // A file still being read is not sent: Enter does nothing until it is in, as the button is not offered (R-ATTACH-04).
+    if (!edit && (attaching || files.some(file => file.pending))) return;
     const words = edit ? edit.text : input.value, carried = edit ? edit.draft.files : files;
     if ((edit ? edit.draft.missing : missingFiles).length > 0) { toaster.info(t("chat.reattach")); return; }
     const text = typedQuestion(wholeLinks(words), carried.length > 0);
@@ -1565,7 +1563,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** Send takes words or files; the field sizes itself to its text (`.cmp-input` in agent.css). */
   function fit(): void {
-    sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
+    sendButton.disabled = !sendable();
   }
 
   /**
@@ -1599,7 +1597,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   async function attachAll(list: readonly File[]): Promise<void> {
     const epoch = attachmentEpoch;
     // Every chip stands at once, as Claude's do (owner, 2026-11-15: 「才剛點下去他就在畫面裡了」); the bytes are read and
-    // stored after, one file after the other, and a send waits for them (R-ATTACH-03).
+    // stored after, one file after the other, and send is offered only once they are in (R-ATTACH-03, R-ATTACH-04).
     const placed: { file: File; id: number; mime: string; name: string }[] = [];
     for (const file of list) {
       const place = placeFile(file, attachmentType(file));
@@ -2479,7 +2477,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     } else await answer(choice !== "deny", choice === "always");
   }
 
-  const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
   mountMessageMetadata(thread, control => {
     const source = messageSource(control);
@@ -2991,10 +2988,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId, files, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean; draft?: string }>).detail;
+    const { memberId, turnId, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; draft?: string }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
-      if (files) { desktop.files(); }
       // Words handed with the member (the calendar's ask for a routine) wait in its composer once it is the open one.
       if (typeof draft === "string" && jump === memberJump && memberId === members.current()) { putDraft(draft.slice(0, TYPED_MAX_CHARS)); focusComposer(); }
       if (!turnId) return;

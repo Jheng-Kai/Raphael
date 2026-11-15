@@ -1858,26 +1858,14 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (["file-changes", "file-partial", "file-confirm", "file-restored", "file-bypass"].includes(name)) {
-    require(visible(document.querySelector('.desktop-checkpoints')), 'review stays in the existing computer panel');
-    if (name === 'file-changes') require(visible(document.querySelector('.checkpoint details[open] pre')) && document.querySelector('.checkpoint pre').textContent.includes('新版研究摘要'), 'the owner can read the file diff');
-    if (name === 'file-changes' || name === 'file-partial') {
-      const diff = document.querySelector('.checkpoint pre').textContent;
-      require(!/--- before|\+\+\+ after|@@/.test(diff) && diff.includes('− 舊版') && diff.includes('+ 新版'), 'line signs explain the changes without developer headers');
-      require(document.querySelector('.checkpoint summary').textContent === '團隊資料夾 / report.md', 'paths use relative owner words');
-    }
-    if (name === 'file-partial') require(document.querySelector('.checkpoint').textContent.includes('未備份') && document.querySelector('.checkpoint-uncovered').textContent.includes('video.mp4') && !document.querySelector('.checkpoint-uncovered').textContent.includes('/home/cua/'), 'partial coverage names files and folders in owner words');
-    const restores = window.__look.calls.filter(call => call.method === 'computer.checkpoints' && call.params.action === 'restore');
-    for (const call of restores) require(call.params.review_token === 'a'.repeat(64), 'restore binds to the after-state the owner actually reviewed');
-    if (name === 'file-confirm') require(visible(document.querySelector('.mb-confirm')) && restores.length === 0 && document.querySelector('.mb-confirm').textContent.includes('你後來修改'), 'restore waits for the shared confirmation and explains preservation');
-    if (name === 'file-restored') require(restores.length === 1 && restores[0].params.confirmed === true && !document.querySelector('[data-checkpoint-restore]') && !document.querySelector('.mb-confirm'), 'the approved restore runs once and leaves no question open');
-    if (name === 'file-bypass') require(restores.length === 1 && restores[0].params.confirmed === false && !document.querySelector('[data-checkpoint-restore]') && !document.querySelector('.mb-confirm'), 'full permission restores once without inventing owner confirmation');
-    if (name === 'file-restored' || name === 'file-bypass') {
-      const status = document.querySelector('.checkpoint-heading > span:last-child');
-      const text = document.createRange();
-      text.selectNodeContents(status);
-      require(text.getClientRects().length === 1, 'the restored status stays on one readable line');
-    }
+  if (name === 'computer-menu-teach-only') {
+    // Owner, 2026-11-15: the file-changes view left the member computer panel; undoing a change is asked in chat (`file_history`).
+    const menu = document.querySelector('#app-popover');
+    require(menu && visible(menu), 'the ⋯ menu is open');
+    const items = [...menu.querySelectorAll('[role="menuitem"]')].map(item => item.textContent.trim());
+    require(items.length === 1 && items[0] === '教他做一次', `the menu lists exactly 教他做一次: ${items}`);
+    require(!menu.querySelector('[data-pick="files"]') && !/檔案變更/.test(document.body.innerText), 'no file-changes entry is offered');
+    require(!document.querySelector('.desktop-checkpoints') && !window.__look.calls.some(call => call.method === 'computer.checkpoints'), 'no file-changes view or request exists');
     return {check:name};
   }
   if (["login-private", "login-saved"].includes(name)) {
@@ -2259,13 +2247,13 @@ export function checkRendered(name, context = {}) {
     // computer sits in one foot directly under the screen (or the box that takes its place), inside its span.
     const panel = document.querySelector('.desktop-panel[data-expanded]');
     require(panel, 'the larger view is open');
-    const stage = [...panel.querySelectorAll('.desktop-screen, .desktop-review, .desktop-checkpoints')].find(visible);
+    const stage = [...panel.querySelectorAll('.desktop-screen, .desktop-review')].find(visible);
     require(stage, 'the screen or the box in its place is shown');
     const s = stage.getBoundingClientRect(), round = box => [box.left, box.top, box.right, box.bottom].map(Math.round).join(',');
     require(Math.abs(stage.getBoundingClientRect().width / s.height - 1280 / 900) < 0.02, `${stage.className} keeps the screen's proportions (${round(s)})`);
     require(Math.abs((s.left + s.right) / 2 - innerWidth / 2) <= 2, `${stage.className} is centred in the window (${round(s)})`);
     const items = [...panel.querySelectorAll('.desktop-notes > *, .desktop-dock > *, .desktop-actions')].filter(visible);
-    require(items.some(item => item.matches('.desktop-mode')) || panel.hasAttribute('data-files-only'), 'the pill is under the screen');
+    require(items.some(item => item.matches('.desktop-mode')), 'the pill is under the screen');
     for (const item of items) {
       const box = item.getBoundingClientRect(), label = `${item.className || item.dataset.desktop} (${round(box)} under ${round(s)})`;
       require(box.left >= s.left - 1 && box.right <= s.right + 1, `${label} stays inside the screen's width`);
@@ -2418,7 +2406,7 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, kind };
   }
-  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-result','card-task-few','card-task-many','card-task-new','card-task-noise','card-task-work-only','card-task-confirm','card-task-room','card-task-files','card-task-restored','card-task-prose','card-sheet','card-permission-settled'].includes(name)) {
+  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-no-file-card','card-sheet','card-permission-settled'].includes(name)) {
     const calls = window.__look.calls;
     if (name === 'card-question-typing') require(!calls.some(call=>call.method==='owner_questions.answer'), 'typing A never answers the question');
     if (name === 'card-question-key') {
@@ -2447,74 +2435,15 @@ export function checkRendered(name, context = {}) {
       if(name.endsWith('failed')) require(card.dataset.mailState==='failed' && card.querySelector('[data-mail-field=body]') && !card.querySelector('[data-act=mail-send]').disabled && window.__look.sent.length===0, 'failed mail is still editable with a usable retry');
       else require(card.dataset.mailState==='sent' && sends.length===2 && sends[1].params.retry_version===1 && window.__look.sent.length===1, 'an explicit version-bound retry sends once');
     }
-    if (name === 'card-task-result') require(document.querySelector('[data-task-result="980"]').textContent.includes('+1 −1'), 'counts come from the actual checkpoint diff');
-    if (['card-task-result','card-task-few','card-task-many','card-task-new','card-task-work-only','card-task-confirm'].includes(name)) {
-      // The work-result card (owner, 2026-11-14: 「工作結果」, 「53 個檔案變更 +0 −0」 and a green 「完成」 told nothing).
-      const card = document.querySelector('[data-task-result="980"]'), text = value => value.textContent.replace(/\s+/g, ' ').trim();
-      require(card && visible(card), 'the result card is on screen');
-      require(!card.querySelector('.card-status, .card-head i'), 'a finished result has no pill and no dot');
-      require(!/完成|工作結果|還原檔案|顯示內容|\+0|−0/.test(text(card)), `no word that says nothing and no +0 −0: ${text(card)}`);
-      const title = text(card.querySelector('.card-title'));
-      const shown = [...card.querySelectorAll(':scope > .tr-files .tr-file')];
-      require(shown.length >= 1 && shown.length <= 5, `at most five rows show before the fold: ${shown.length}`);
-      for (const row of shown.filter(visible)) {
-        const name = row.querySelector('.tr-name'), state = row.querySelector('.tr-state'), box = row.getBoundingClientRect(), line = (row.querySelector(':scope > summary') ?? row).getBoundingClientRect();
-        // The line of a row that is open is its summary: the diff under it is the row's own opened text.
-        require(line.height <= 48 && name.getBoundingClientRect().height <= 24, `a row is one line: ${text(name)} is ${Math.round(line.height)} px`);
-        require(state.getBoundingClientRect().right >= box.right - 14 && state.getBoundingClientRect().right <= box.right - 8, `the state stands at the row's right: ${text(state)}`);
-        require(name.scrollWidth <= name.clientWidth + 1 || getComputedStyle(name).textOverflow === 'ellipsis', 'a long name is cut with an ellipsis, never into the state');
-      }
-      const buttons = [...card.querySelectorAll('.card-actions button')].map(text);
-      require(buttons.join('|') === '開啟檔案變更|復原這些變更', `the buttons say what they do: ${buttons}`);
-      if (name === 'card-task-result') require(title === '改了 1 個檔案', `the title says what happened: ${title}`);
-      if (name === 'card-task-few') {
-        require(title === '改了 4 個檔案' && shown.length === 4, `a few files: ${title}`);
-        require(shown.map(row => text(row.querySelector('.tr-state'))).join('|') === '+12 −3|新增|新增|刪除', `each row says what happened to it: ${shown.map(row => text(row.querySelector('.tr-state')))}`);
-        require(card.querySelector('details.tr-file[open] pre') && visible(card.querySelector('details.tr-file[open] pre')), 'a text file opens under its row');
-        require(!card.querySelector('[data-card-disclosure]'), 'four files need no fold');
-      }
-      if (name === 'card-task-many') {
-        require(title === '改了 53 個檔案' && shown.length === 5, `fifty-three files: ${title}, ${shown.length} rows`);
-        const fold = card.querySelector('[data-card-disclosure]');
-        require(fold && text(fold) === '還有 48 個檔案' && card.querySelector('.card-detail[hidden]') && card.querySelectorAll('.card-detail .tr-file').length === 48, 'the other forty-eight fold under one line');
-        require(!card.querySelector('.tr-file .tr-state:empty') && [...card.querySelectorAll('.tr-state')].every(state => ['新增', '已修改', '+4 −1'].includes(text(state))), 'a file with nothing to count says 新增 or 已修改');
-      }
-      if (name === 'card-task-new') {
-        require(title === '新增了 3 個檔案', `only new files: ${title}`);
-        require(shown.every(row => text(row.querySelector('.tr-state')) === '新增'), 'every row says 新增');
-      }
-      if (name === 'card-task-work-only') {
-        // The core's own list (runner.mjs `coreFixtures`): beside npm's store of bare hashes, node_modules, a cache, a lock file, a partial
-        // render and a temporary folder, the work's three files and nothing else.
-        const names = shown.map(row => text(row.querySelector('.tr-name')));
-        require(title === '新增了 3 個檔案' && names.slice().sort().join() === ['Promo.tsx', 'package.json', '宣傳影片.mp4'].sort().join(), `only the work's files: ${title}, ${names}`);
-        require(!card.querySelector('[data-card-disclosure]') && !names.some(item => /^[0-9a-f]{32,}|lock|\.part$|node_modules|cache/i.test(item)), 'nothing a tool left is listed or folded away');
-      }
-      if (name === 'card-task-confirm') {
-        const dialog = document.querySelector('.mb-confirm');
-        require(dialog && visible(dialog) && text(dialog.querySelector('h2')) === '復原這些變更？', 'the dialog asks first');
-        require(text(dialog).includes('新增的檔案會刪除，刪掉的會補回，改過的會改回原樣') && text(dialog).includes('你之後自己改過的檔案會保留'), 'the dialog says what comes back and what is kept');
-        require([...dialog.querySelectorAll('.mb-dlg-act button')].map(text).join('|').includes('復原這些變更'), 'its primary says the effect');
-        require(!window.__look.calls.some(call => call.method === 'computer.checkpoints' && call.params.action === 'restore'), 'nothing is undone before the owner agrees');
-      }
+    if (name === 'card-task-no-file-card') {
+      // Owner, 2026-11-15: a finished turn that changed files shows its reply and nothing else; the member undoes a change when asked in chat (`file_history`).
+      const reply = document.querySelector('.tn[data-id="980"] [data-message="reply"] .message-text');
+      require(reply && visible(reply) && reply.textContent.includes('專案摘要已備妥'), 'the reply is on screen as prose');
+      require(!document.querySelector('.task-result') && !document.querySelector('[data-task-result-slot]') && !document.querySelector('[data-task-result]'), 'no file card or its slot under the turn');
+      require(!/開啟檔案變更|復原這些變更/.test(document.body.innerText), 'no file-changes or undo button is on the page');
+      require(!window.__look.calls.some(call => call.method === 'computer.checkpoints'), 'the thread never asks the core for checkpoints');
     }
-    if (name === 'card-task-room') require(document.querySelector('[data-task-result="950"]')?.textContent.includes('+1 \u22121'), 'room counts use the same actual checkpoint');
-    if (name === 'card-task-files') require(visible(document.querySelector('.desktop-checkpoints')) && calls.some(call => call.method === 'computer.checkpoints'), 'the existing file view opens independently of a running computer');
-    if (name === 'card-task-restored') {
-      const restores = calls.filter(call => call.method === 'computer.checkpoints' && call.params.action === 'restore');
-      require(restores.length === 1 && restores[0].params.review_token === 'a'.repeat(64) && !document.querySelector('[data-task-restore]'), 'one confirmed restore uses the exact reviewed checkpoint token');
-      const settled = document.querySelector('[data-task-result="980"]');
-      require(settled?.querySelector('.card-title').textContent === '已復原 1 個檔案的變更' && [...settled.querySelectorAll('.card-actions button')].map(button => button.textContent.trim()).join('|') === '開啟檔案變更' && !settled.querySelector('.card-status'), 'an undone result says so, has no pill and offers no second undo');
-    }
-    if (name === 'card-task-noise') {
-      // Owner, 2026-11-14: 「這個可以不要顯示嗎」 of a card of thirty bare hashes. The core's own list for a turn of tools' leftovers alone is empty.
-      require(Array.isArray(window.__look.data.coreCheckpoints['core-noise']) && window.__look.data.coreCheckpoints['core-noise'].length === 0, 'the core sends no checkpoint for a turn of tools\' leftovers alone');
-      require(calls.some(call => call.method === 'computer.checkpoints'), 'the thread asked the core for its checkpoints');
-      require(!document.querySelector('.task-result') && document.querySelector('.tn[data-id="980"] [data-task-result-slot]')?.innerHTML === '', 'no card under the turn');
-      require(visible(document.querySelector('.tn[data-id="980"] [data-message="reply"] .message-text')), 'the reply is on screen as prose');
-    }
-    if (name === 'card-task-prose') require(!document.querySelector('.task-result') && !document.querySelector('.tn[data-id="980"] .task-actions'), 'no files means no result card, and the reply already says it is finished');
-    if (name === 'card-sheet') require(document.querySelectorAll('.conversation-card').length >= 9 && document.querySelector('[data-card-desktop-screen] iframe'), 'the sheet uses real production consumers, team rows and one live screen in one column');
+    if (name === 'card-sheet') require(document.querySelectorAll('.conversation-card').length >= 8 && document.querySelector('[data-card-desktop-screen] iframe'), 'the sheet uses real production consumers, team rows and one live screen in one column');
     if (name === 'card-permission-settled') require(calls.filter(call=>call.command==='agent_question_answer').length===1 && !document.querySelector('[data-act=perm-once]'), 'one answer settles the card and removes controls');
     return {check:name};
   }
@@ -2563,9 +2492,6 @@ export function checkRendered(name, context = {}) {
         require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
-      } else if (card.matches('.task-result') && !card.querySelector(':scope > .card-failure')) {
-        // A finished work result is a named thing with nothing after it, as Grok Bot's files are (owner, 2026-11-14): no pill, no dot.
-        require(!pill && !card.querySelector(':scope > .card-head i'), 'a finished work result has no pill and no dot');
       } else {
         require(pill && pill.textContent.trim(), 'status always has a word');
         // A failed card's × closes the head at the right; otherwise the status does. A × in the head
@@ -2586,7 +2512,7 @@ export function checkRendered(name, context = {}) {
         require(!turn?.hasAttribute('data-live'), 'the member is paused while waiting for computer handoff');
       }
       const taskLine = card.closest('.ra-body')?.querySelector(':scope > .task-actions');
-      if (card.matches('.task-result,[data-owner-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
+      if (card.matches('[data-owner-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
       for (const hint of [...card.querySelectorAll('.cn-hint')].filter(visible)) require(getComputedStyle(hint).whiteSpace === 'nowrap' && hint.getBoundingClientRect().height <= parseFloat(getComputedStyle(hint).lineHeight) + 1, 'field hints stay on one line');
         for (const well of [...card.querySelectorAll('.card-well')].filter(visible)) {
           const shade = value => value.match(/[\d.]+/g).slice(0, 3).reduce((sum, part) => sum + Number(part), 0);

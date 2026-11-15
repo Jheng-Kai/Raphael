@@ -11,7 +11,9 @@ Claude Code's options and output modes; a search that finds nothing is an answer
 """
 
 import base64
+from datetime import datetime, timezone
 import hashlib
+import json
 import posixpath
 import re
 from contextvars import ContextVar
@@ -82,6 +84,14 @@ EDIT_FILE = {
         "new_string": {"type": "string"},
         "replace_all": {"type": "boolean"}},
         "required": ["path", "old_string", "new_string"], "additionalProperties": False}}
+FILE_HISTORY = {
+    "description": "Use when the owner asks to undo, revert, put back or remove a turn's files. List, show prior text/diff, or restore all or selected files in workspace/team folder only.",
+    "parameters": {"type": "object", "properties": {
+        "action": {"type": "string", "enum": ["list", "show", "restore"]},
+        "checkpoint": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "paths": {"type": "array", "maxItems": 10000, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}},
+        "required": ["action"], "additionalProperties": False}}
 
 GLOB = {
     "description": "Find files in your computer by name, as Claude Code's Glob: pattern is a glob such as **/*.py or "
@@ -114,9 +124,10 @@ GREP = {
         "head_limit": {"type": "integer", "minimum": 0}, "offset": {"type": "integer", "minimum": 0}},
         "required": ["pattern"], "additionalProperties": False}}
 
-DEFINITIONS = {"read_file": READ_FILE, "write_file": WRITE_FILE, "edit_file": EDIT_FILE, "glob": GLOB, "grep": GREP}
+DEFINITIONS = {"read_file": READ_FILE, "write_file": WRITE_FILE, "edit_file": EDIT_FILE,
+               "file_history": FILE_HISTORY, "glob": GLOB, "grep": GREP}
 FILE_READS = frozenset({"read_file", "glob", "grep"})
-FILE_WRITES = frozenset({"write_file", "edit_file"})
+FILE_WRITES = frozenset({"write_file", "edit_file", "file_history"})
 FILE_TOOLS = FILE_READS | FILE_WRITES
 
 # Claude Code's own words where it has them.
@@ -249,8 +260,8 @@ def _guest_failure(answer):
 class Files:
     """The file tools of one computer call: `vm.file_request` to the guest, the run's read state and its checkpoint."""
 
-    def __init__(self, vm, target, reads, run, checkpoint):
-        self.vm, self.target, self.reads, self.run, self.checkpoint = vm, target, reads, run, checkpoint
+    def __init__(self, vm, target, reads, run, checkpoint, history=None):
+        self.vm, self.target, self.reads, self.run, self.checkpoint, self.history = vm, target, reads, run, checkpoint, history
 
     async def look(self, path, limit=0, line=1):
         return await self.vm.file_request(self.target, {"action": "read", "path": path, "limit": limit, "line": line},
@@ -441,6 +452,34 @@ class Files:
         return PluginResult(True, text=f"The file {path} has been updated. {what}; `cat -n` of the lines around the first "
                                        f"edit:\n{numbered(changed, first - 4, last + 4)}")
 
+    async def file_history(self, arguments):
+        action = arguments["action"]
+        metadata = {"member": self.run[1]}
+        if action != "list":
+            metadata["id"] = arguments["checkpoint"]
+        if action == "show":
+            metadata["path"] = guest_path(arguments["path"])
+        if action == "restore":
+            if "paths" in arguments:
+                metadata["paths"] = [guest_path(path) for path in arguments["paths"]]
+            try:
+                await self.checkpoint()
+            except VmError as error:
+                return PluginResult(False, str(error))
+        try:
+            result = (await self.history(action, metadata) if self.history else
+                      await self.vm.checkpoint(self.target, action, **metadata))
+        except (VmError, OSError, TimeoutError):
+            return PluginResult(False, "checkpoint_unavailable", "File history is unavailable right now.")
+        if action == "list":
+            result = [{"id": item["id"], "turn": item["turn"],
+                       "when": datetime.fromtimestamp(item["created"] / 1000, timezone.utc).isoformat(),
+                       "restored": item["state"] == "restored",
+                       "files": [{key: file[key] for key in ("path", "change", "added", "removed")}
+                                 for file in item["files"]]}
+                      for item in result]
+        return PluginResult(True, text=json.dumps(result, ensure_ascii=False))
+
 
 # --- glob and grep, on ripgrep --------------------------------------------------------------------------------------
 
@@ -583,12 +622,14 @@ async def grep_files(vm, target, arguments):
     return PluginResult(True, text="\n".join([*page, *([note] if note else [])]))
 
 
-async def call(vm, target, name, arguments, reads, run, checkpoint):
+async def call(vm, target, name, arguments, reads, run, checkpoint, history=None):
     if name == "glob":
         return await glob_files(vm, target, arguments)
     if name == "grep":
         return await grep_files(vm, target, arguments)
-    files = Files(vm, target, reads, run, checkpoint)
+    files = Files(vm, target, reads, run, checkpoint, history)
+    if name == "file_history":
+        return await files.file_history(arguments)
     if name == "read_file":
         return await files.read_file(arguments)
     if name == "write_file":

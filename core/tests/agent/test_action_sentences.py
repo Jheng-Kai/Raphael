@@ -20,6 +20,12 @@ def test_sentences(tool, args, present, past):
     assert sentence(tool, args, "zh-TW") == (present, past)
 
 
+@pytest.mark.parametrize("action,present,past", [("list", "Reading a file", "Read a file"),
+                                                   ("restore", "Editing a file", "Edited a file")])
+def test_file_history_action_notifications_match_the_operation(action, present, past):
+    assert sentence("computer__file_history", {"action": action}, "en", server="computer") == (present, past)
+
+
 @pytest.mark.parametrize("key", ["password", "access_token", "secret", "api_key", "authorization"])
 def test_private_fields_are_never_used(key):
     words = sentence("web_search", {key: "sample-private-value"}, "en")

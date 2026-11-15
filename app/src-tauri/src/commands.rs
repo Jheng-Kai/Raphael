@@ -520,7 +520,6 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.discord.reject",
     "messaging.discord.remove_user",
     "messaging.discord.disconnect",
-    "computer.checkpoints",
     "vault.list",
     "vault.add",
     "vault.update",
@@ -3051,8 +3050,7 @@ mod tests {
                 assert!(!is_allowed_method(&format!("messaging.{kind}.{action}")));
             }
         }
-        assert!(is_allowed_method("computer.checkpoints"));
-        assert!(!is_allowed_method("computer.checkpoints.restore"));
+        assert!(!is_allowed_method("computer.checkpoints"));
         assert!(!is_allowed_method("computer.fill_login"));
     }
 

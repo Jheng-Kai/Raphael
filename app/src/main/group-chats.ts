@@ -38,7 +38,6 @@ import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions, questionWaits } from "./owner-questions";
 import { mountPendingQuestions } from "./pending-questions";
 import { composioAction, composioText } from "./composio-result";
-import { mountTaskResults } from "./task-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
@@ -326,7 +325,6 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     });
     meetingPanel.focus();
   });
-  const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
   const pagesHost = mountPages(thread, { place: (id, text) => composer.placePageText(id, text),
     people: () => ({ nameOf: id => memberOf(list, id)?.name ?? "", colorOf: id => memberColor(memberOf(list, id) ?? { id }) }) });
@@ -509,17 +507,6 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     if (changed) {
     updateLiveTimes(thread);
     pagesHost.sync();
-    for (const slot of thread.querySelectorAll<HTMLElement>("[data-task-result-slot]")) {
-      const host = slot.parentElement!, owner = Number(slot.dataset.taskMember);
-      let results = resultCards.get(host);
-      if (!results) {
-        results = mountTaskResults(host, () => owner, () => {
-          window.dispatchEvent(new CustomEvent("raphael:open-member", { detail: { memberId: owner, files: true } }));
-        });
-        resultCards.set(host, results);
-      }
-      results.sync();
-    }
     measureMessagePreviews(thread);
     attachmentMedia.sync();
     }

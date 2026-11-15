@@ -250,6 +250,96 @@ async def test_the_file_tools_are_listed_whole_without_the_outward_sentence(comp
         assert tool.description == file_tools.DEFINITIONS[name]["description"]
         assert "Claude Code" in tool.description and "read_file" in tool.description
     assert hub.kind_of("computer", "write_file") == hub.kind_of("computer", "edit_file") == "write"
+    history = tools["file_history"]
+    assert history.tier.name == "T0" and history.whole and history.pinned and not history.deferred
+    assert history.description == file_tools.DEFINITIONS["file_history"]["description"]
+    assert all(word in history.description.lower() for word in ("undo", "revert", "put back", "remove", "workspace", "team folder"))
+    schema = history.schema
+    assert schema["properties"]["action"]["enum"] == ["list", "show", "restore"]
+    assert set(schema["properties"]) == {"action", "checkpoint", "path", "paths"}
+    assert hub.kind_of("computer", "file_history") == "write"
+
+
+async def test_file_history_is_offered_to_the_cli_computer_server(computer):
+    hub, _ = computer
+    definitions = [{"function": {"name": f"computer__{tool.name}", "parameters": tool.schema}}
+                   for tool in hub.offered()]
+    async with RaphaelMcp(lambda: definitions, lambda *_: ToolOutcome(True)) as server, httpx.AsyncClient() as client:
+        answer = (await client.post(server.computer_url, headers={"Authorization": "Bearer " + server.token},
+                                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})).json()
+    assert "computer__file_history" in {tool["name"] for tool in answer["result"]["tools"]}
+
+
+async def test_file_history_lists_shows_and_restores_with_an_undo_checkpoint(computer, tmp_path):
+    from raphael_core.computer.checkpoints import CheckpointStore
+    hub, runtime = computer
+    file = workspace(runtime, "note.txt")
+    file.write_text("before\n")
+    store = CheckpointStore(tmp_path / "checkpoints", list(runtime.folders.values()))
+    calls = []
+
+    def host_path(path):
+        for guest, root in runtime.folders.items():
+            if path.startswith(guest + "/"):
+                return str(root / path[len(guest) + 1:])
+        return path
+
+    def guest_path_for(path):
+        for guest, root in runtime.folders.items():
+            try:
+                return guest + "/" + os.path.relpath(path, root).replace("\\", "/")
+            except ValueError:
+                pass
+        return path
+
+    async def checkpoint(target, action, **metadata):
+        calls.append(action)
+        if action == "begin":
+            return store.begin(member=metadata["member"], turn=metadata["turn"])
+        if action == "list":
+            result = store.list(member=metadata["member"])
+            for item in result:
+                for changed in item["files"]:
+                    changed["path"] = guest_path_for(changed["path"])
+            return result
+        if action == "show":
+            return store.show(metadata["id"], member=metadata["member"], path=host_path(metadata["path"]))
+        if action == "restore":
+            paths = metadata.get("paths")
+            result = store.restore(metadata["id"], member=metadata["member"],
+                                   paths=[host_path(path) for path in paths] if paths is not None else None)
+            result["restored"] = [guest_path_for(path) for path in result["restored"]]
+            result["skipped"] = [guest_path_for(path) for path in result["skipped"]]
+            result["reasons"] = {guest_path_for(path): reason for path, reason in result["reasons"].items()}
+            return result
+        raise AssertionError(action)
+
+    hub.vm.checkpoint = checkpoint
+    original = store.begin(member=0, turn=1)
+    file.write_text("changed\n")
+    store.list(member=0)
+    list_result = await use(hub, "file_history", turn=7, action="list")
+    assert list_result.ok, (list_result.kind, list_result.text)
+    listed = json.loads(list_result.text)
+    assert listed[0]["id"] == original and listed[0]["restored"] is False
+    assert listed[0]["when"].endswith("+00:00") and listed[0]["files"][0]["path"] == GUEST + "/note.txt"
+    shown = json.loads((await use(hub, "file_history", turn=7, action="show", checkpoint=original,
+                                  path="note.txt")).text)
+    assert shown["is_text"] is True and shown["text"].replace("\r\n", "\n") == "before\n"
+    restored = json.loads((await use(hub, "file_history", turn=7, action="restore", checkpoint=original)).text)
+    assert restored["restored"] == [GUEST + "/note.txt"] and file.read_text().replace("\r\n", "\n") == "before\n"
+    undo = store.list(member=0)[0]["id"]
+    assert undo != original and "begin" in calls
+    assert (await use(hub, "file_history", turn=8, action="restore", checkpoint=undo)).ok
+    assert file.read_text().replace("\r\n", "\n") == "changed\n"
+
+
+async def test_file_history_refuses_while_the_owner_holds_control(computer):
+    hub, _ = computer
+    target = hub.vm.target(0)
+    hub.vm.held.add(target.key)
+    result = await use(hub, "file_history", action="list")
+    assert result.kind == "owner_holds_control"
 
 
 # --- a whole file is not cut at a command's length ------------------------------------------------------------------

@@ -160,15 +160,6 @@ def test_guest_source_compiles_as_the_exact_exec_string_without_a_bom():
     compile(Path(module.__file__).read_text(encoding="utf-8"), "<guest-checkpoint>", "exec")
 
 
-async def test_unavailable_archive_is_an_owner_notice_not_a_failed_command(desktop):
-    from raphael_core.computer.checkpoint_service import Checkpoints
-    vm, _, _ = desktop
-    async def unavailable(*_args, **_kwargs): raise TimeoutError()
-    vm.checkpoint = unavailable
-    response = await Checkpoints(vm, lambda _: True).call({"member_id": 0})
-    assert response["coverage_warning"] and response["checkpoints"] == []
-
-
 def test_refreshing_policy_cannot_replace_the_after_state_the_owner_reviewed(tmp_path):
     root = tmp_path / "work"; root.mkdir()
     file = root / "a"; file.write_text("before")
