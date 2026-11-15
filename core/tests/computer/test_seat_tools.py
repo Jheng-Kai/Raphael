@@ -461,8 +461,10 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), 9 is the
     # desktop saying which browser that is, 10 is the computer without Firefox ESR, 11 the loaded PC's waits, and 12 a
     # screen a person can use (a window list, a dock's Browser icon, no marker page, tabs, windows inside their screen).
-    assert module.IMAGE.endswith("-v12") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "12"
-    assert 'org.raphael.computer.layer="12"' in dockerfile and "librsvg2-common" in dockerfile
+    # 13 changed no file of the image: it is the container's shape (the volumes, the locale), so what it made again is
+    # the layers' own steps above, unchanged.
+    assert module.IMAGE.endswith("-v13") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "13"
+    assert 'org.raphael.computer.layer="13"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and "settle_deadline" in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and 'shows=${5:-chrome://newtab/}' in launcher
@@ -784,7 +786,7 @@ wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} h
     assert '[ "$attempt" -ge 15 ] && filling' in launcher
 
 
-@pytest.mark.parametrize("layer", ["7", "8", "9", "10", "11"])
+@pytest.mark.parametrize("layer", ["7", "8", "9", "10", "11", "12"])
 async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm, layer):
     # The owner's own computer on the day layer 8 came: six screens, 6 GiB, four cores, labelled layer 7. The
     # acceptance run found that layer 7 was not yet named as a released one, and such a computer did not start.
@@ -792,6 +794,8 @@ async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_laye
     vm, runtime = shared_vm
     target = await vm.seat(1)
     raw = container(vm, target, runtime)
+    raw["Mounts"] = [mount for mount in raw["Mounts"] if mount["Destination"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
+    raw["HostConfig"]["Mounts"] = [mount for mount in raw["HostConfig"]["Mounts"] if mount["Target"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
     raw["Config"]["Labels"][f"{module.LABEL}.layer"] = layer
     raw["Image"] = "sha256:the-layer-before"
     assert "RAPHAEL_SCREENS=6" in raw["Config"]["Env"] and raw["HostConfig"]["Memory"] == 6 * 1024**3
@@ -812,6 +816,8 @@ async def test_layer_five_shapes_upgrade_with_mounts_kept(shared_vm, shared, scr
     target = await vm.seat(1) if shared else vm.target_for("", vm.key_for("", 1))
     previous = replace(target, screens=screens, screen=1, container="" if screens == 1 else target.container)
     raw = container(vm, previous, runtime)
+    raw["Mounts"] = [mount for mount in raw["Mounts"] if mount["Destination"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
+    raw["HostConfig"]["Mounts"] = [mount for mount in raw["HostConfig"]["Mounts"] if mount["Target"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
     raw["Config"]["Labels"][f"{module.LABEL}.target"] = target.unit
     raw["Config"]["Labels"][f"{module.LABEL}.layer"] = "5"
     assert module.known_previous(raw, target, vm.owner)
