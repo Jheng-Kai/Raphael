@@ -29,6 +29,10 @@
       "scenario_ids": ["S08.completion"],
       "expected_assertions": ["status_only"]
     },
+    "raphael/core/stop_work": {
+      "scenario_ids": ["S08.completion"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/approve": {
       "scenario_ids": [
         "S21.settings-quick.approve"

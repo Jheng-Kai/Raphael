@@ -1048,6 +1048,44 @@ class BackgroundService:
             'dispatch_policy':'immediate','member_id':member,
             **({'artifact_note': self._artifact_note(task)} if self._artifact_note(task) else {})})
 
+    async def stop_own_work(self, speaker, arguments, *, source_turn_id=None) -> ToolResult:
+        """A member's own way to end its unfinished background work (`stop_work`; the owner's Stop does the same from the
+        composer): without `task_id` it lists the tasks that are the member's, with one it ends that task and what waits on it,
+        silently (R-STOP-02). Only tasks the member does (`member_id`) or handed on (`from_member_id`) are its own, never
+        another member's or the owner's, and never the task this very call runs in or one that waits above it."""
+        name = "stop_work"
+        member = speaker.id
+        rows = self._metrics_conn.execute(
+            "SELECT id FROM worker_tasks WHERE state IN ('queued','running','waiting') AND scope != 'room'"
+            " AND (member_id=? OR from_member_id=?) ORDER BY id", (member, member)).fetchall()
+        held: set[int] = set()
+        pending = [row[0] for row in self._metrics_conn.execute(
+            "SELECT id FROM worker_tasks WHERE turn_id=?", (source_turn_id,))] if source_turn_id else []
+        while pending:
+            identifier = pending.pop()
+            if identifier in held:
+                continue
+            held.add(identifier)
+            above = self._metrics_conn.execute("SELECT parent_task_id FROM worker_tasks WHERE id=?", (identifier,)).fetchone()
+            if above and above[0]:
+                pending.append(above[0])
+        own = [self._store.get(row[0]) for row in rows if row[0] not in held]
+        own = [task for task in own if task is not None]
+        wanted = arguments.get("task_id")
+        if wanted is None:
+            return ToolResult(name, True, {"tasks": [{"task_id": task.id, "title": title(task.text), "state": task.state,
+                                                      "member_id": task.member_id} for task in own]})
+        if type(wanted) is not int:
+            return ToolResult(name, False, None, "bad_arguments", instruction="task_id must be a whole number from the list.")
+        if wanted in held:
+            return ToolResult(name, False, None, "blocked", instruction="That is the work this reply runs in, or waits above it; end your reply instead.")
+        if wanted not in {task.id for task in own}:
+            return ToolResult(name, False, None, "not_found",
+                              instruction="Only your own unfinished tasks can be stopped. Call stop_work without task_id to list them.")
+        stopped = bool((await self._cancel({"task_id": wanted}))["cancelled"])
+        now = self._store.get(wanted)
+        return ToolResult(name, True, {"task_id": wanted, "stopped": stopped, "state": now.state if now else "gone"})
+
     def settle_asker(self, turn_id: int, *, answered: bool) -> None:
         """A conversation turn that consulted colleagues has ended. When it was `answered`, its task
         (`TaskStore.asker`) is tied to it, waits for their answers and goes on once, when every
@@ -1285,6 +1323,10 @@ class BackgroundService:
             logger.warning("Could not close the background tasks: %s", type(exc).__name__)
             return 0
         for task in tasks:
+            if task.reason == "stale_queue":
+                # Nobody was working on it and nobody is told: its turn just ends, empty (R-STOP-01).
+                self._resolve_interrupted(task.turn_id, "", "", status="cancelled")
+                continue
             self._resolve_interrupted(task.turn_id, task.report_prefix, task.report_text)
         # Older interrupted receipts can outlive an unfinished linked turn after an abrupt exit.
         for row in self._metrics_conn.execute(
@@ -1298,12 +1340,12 @@ class BackgroundService:
         return len(tasks)
 
     def _resolve_interrupted(
-        self, turn_id: int | None, prefix: str | None, text: str | None
+        self, turn_id: int | None, prefix: str | None, text: str | None, *, status: str = "error"
     ) -> None:
         if not turn_id:
             return
         try:
-            self._history.resolve(turn_id, prefix=prefix or "", text=text or "", status="error")
+            self._history.resolve(turn_id, prefix=prefix or "", text=text or "", status=status)
         except sqlite3.Error as exc:
             logger.warning("Could not complete the turn of a task: %s", type(exc).__name__)
 
@@ -2914,7 +2956,12 @@ class BackgroundService:
         report to the app. `prefix` is a prefix of the task's language (《告》, 《否》 ...); a
         member's task has none (a member speaks plainly). A task the user cleared meanwhile is
         deleted instead, and nothing is said or saved about it. A quiet task (a member's, or a
-        routine's run: `Task.quiet`) is not said on the overlay: its report is in its thread."""
+        routine's run: `Task.quiet`) is not said on the overlay: its report is in its thread. A stop somebody asked for (the
+        owner's Stop, a member ending its own work, a parent's end taking its children) says nothing at all: no report, no
+        line in the conversation, no count of the calls it made (R-STOP-01); the task simply ends."""
+        silent = state == "cancelled" and reason == "cancelled"
+        if silent:
+            prefix, text, detail, replies = "", "", None, ()
         if task.member_id != 0:
             prefix = ""
         if task.id in self._discarded:
@@ -2952,7 +2999,7 @@ class BackgroundService:
                                         if previous and previous.route != 'delegate' else '')
             prior_cost = previous.cost_usd if previous and run is None else 0.0
             if said and said != text:
-                turn_text = said + '\n\n' + text
+                turn_text = said if silent else said + '\n\n' + text
                 turn_detail = None
                 if not saved:
                     terminal_replies = [turn_text]
@@ -3010,7 +3057,7 @@ class BackgroundService:
             line for line in terminal_replies if line and line.strip()]
         while len(self._final_words) > 64:
             self._final_words.pop(next(iter(self._final_words)))
-        if not task.quiet:
+        if not task.quiet and not silent:
             self._notify(
                 "worker.report",
                 {"task_id": task.id, "state": state, "prefix": prefix, "text": fit_text(text, task.language)[0]},
@@ -3190,12 +3237,13 @@ class BackgroundService:
         return {"cancelled": self._withdraw(task_id)}
 
     def _withdraw(self, task_id: int, prefix: str | None = None) -> bool:
-        """End a task that has not begun: it waits for its place, or was given one a moment ago. Its carrier,
+        """End a task that has not begun: it waits for its place, was given one a moment ago, or is queued and nothing carries it
+        (not in the queue, no carrier: it can never start, and Stop must still be able to end it, R-PUMP-02). Its carrier, if any,
         finding it ended, does nothing. Whether there was such a task."""
         task = self._store.get(task_id)
         if task_id in self._queue:
             self._queue.remove(task_id)
-        elif not (task_id in self._active and task is not None and task.state == QUEUED):
+        elif task is None or task.state != QUEUED:
             return False
         if task is not None:
             self._conclude(

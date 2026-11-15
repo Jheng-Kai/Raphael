@@ -687,8 +687,9 @@ class TaskStore:
         recoverable; uncertain running effects are never replayed. Their questions are cancelled. With `report` (the task's language and
         the tool calls it made, to a prefix and a line) each gets that report, to be said once
         (`announced` 0). A hand-off that never began and has waited since before `stale_before_ms` is not put back either: it
-        ends as `stale_queue`, with its report, so that work the owner has long since done another way is not started unseen
-        hours later and a parent that waits for it hears how it went (R-PUMP-01). Returns the tasks as they are now."""
+        ends as `stale_queue`, without a report (nothing was done, nothing is said: R-STOP-01), so that work the owner has long
+        since done another way is not started unseen hours later and a parent that waits for it is woken (R-PUMP-01). Returns
+        the tasks as they are now."""
         with self._conn:
             rows = self._conn.execute(
                 "SELECT id, language, (state='queued' AND mode IS NOT NULL AND started_at_ms IS NULL"
@@ -723,11 +724,12 @@ class TaskStore:
                         (self._now_ms(), ended, row["id"]),
                     )
                     continue
-                prefix, text = report(row["language"], self.tool_steps(row["id"]))
+                # A hand-off nobody began says nothing when it ends: no report, and nothing to announce (R-STOP-01).
+                prefix, text = ("", "") if row["stale"] else report(row["language"], self.tool_steps(row["id"]))
                 self._conn.execute(
                     "UPDATE worker_tasks SET state = 'interrupted', finished_at_ms = ?,"
-                    " reason = ?, report_prefix = ?, report_text = ?, announced = 0 WHERE id = ?",
-                    (self._now_ms(), ended, prefix, text, row["id"]),
+                    " reason = ?, report_prefix = ?, report_text = ?, announced = ? WHERE id = ?",
+                    (self._now_ms(), ended, prefix, text, 1 if row["stale"] else 0, row["id"]),
                 )
                 self._conn.execute("INSERT OR IGNORE INTO task_outbox "
                     "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "

@@ -1069,6 +1069,17 @@ accessible label. The same target chooses the glyph and cancellation: an outgoin
 then the newest active turn/task, then pre-turn voice. A repeated Stop is disabled until its call
 settles; it never sends a voice key. Request/worker cancellation preserves history.
 
+Stop is only ever as true as the last read (R-PUMP-03, owner 2026-11-15: Stop stayed after the work ended). The page reads
+its live turns again on `CoreReady` (a restarted core expires the turns and interrupts the tasks and sends no other word)
+and, while the composer offers Stop for work (not a recording), every `STOP_RECHECK_MS` (15 s) whatever events came; an idle
+composer reads nothing by itself. `pages/agent-stop.test.ts` replays a restart and a dropped event; the core side is
+R-PUMP-01 and R-PUMP-02 (`work-truth.md`). A group room's composer follows its exchange and hand-offs and reads again on
+`CoreReady` already.
+
+A stop leaves nothing in the thread (R-STOP-01): no 「任務已中止。已執行 N 次工具呼叫。」 line (the core writes none), and a
+cancelled task with no steps and no words draws no line at all (`conversation.ts` `visibleTurn`, `stoppedQuietly`); the
+composer and the member's presence go idle. `conversation.test.ts` covers the drawing, `core/tests/background` the endings.
+
 Composer voice processing belongs to the conversation selected when recording began.
 Desktop hotkey voice belongs to Raphael's quick conversation, including navigation into it after Alt+Space. Older voice history cannot settle a new
 question whose own history boundary was not on screen. Running turns read on a fresh page do not

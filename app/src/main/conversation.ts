@@ -60,8 +60,14 @@ export function visibleTurn(turn: AgentTurn): boolean {
     turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
     // A pairing code that came later is a turn with its card and no words; a template card too.
     turn.pairings?.length || turn.templates?.length ||
-    turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
+    turn.status === "running" || turn.status === "confirm" || (turn.task && !stoppedQuietly(turn)) || turn.steps?.length);
 }
+
+/**
+ * A task somebody stopped before it did anything: the stop says nothing (R-STOP-01), so what is left of its turn (no words, no
+ * steps) is not a line of the thread; a stop after some work keeps the steps it made.
+ */
+const stoppedQuietly = (turn: AgentTurn): boolean => turn.task?.state === "cancelled" && !turn.steps?.length;
 
 /**
  * The owner messages that joined each turn's work while it ran (the core's `owner_input` rows: words the work read at its

@@ -113,7 +113,7 @@ def test_work_queued_before_the_loop_runs_one_after_the_other_for_one_member(con
 @pytest.mark.parametrize("waited_ms,kept", [(10 * 60 * 1000, True), (3 * HOUR_MS, False)])
 def test_a_hand_off_that_waited_for_hours_ends_with_its_reason_and_wakes_its_parent(conn, plugins, monkeypatch, waited_ms, kept):
     """What the owner's own stuck rows come to at the next start: a child that never began and is hours old is not started
-    unseen. It ends `stale_queue` with a report, and its waiting parent hears it and answers; a young one is put back."""
+    unseen. It ends `stale_queue` without a word, and its waiting parent hears it and answers; a young one is put back."""
     target, [(parent, child)] = left_by_the_last_run(conn, plugins, monkeypatch, queued_at_ms=NOW_MS - waited_ms)
     second, nowhere = restart(conn, plugins, target)
     try:
@@ -131,8 +131,10 @@ def test_a_hand_off_that_waited_for_hours_ends_with_its_reason_and_wakes_its_par
             assert ended.state == "done"
         else:
             assert ended.state == "interrupted" and ended.reason == "stale_queue"
-            assert ended.report_text and ended.finished_at_ms is not None
-            assert second.conn.execute("SELECT status FROM agent_turns WHERE id=?", (ended.turn_id,)).fetchone()[0] == "error"
+            # Nobody began it and nobody is told (R-STOP-01): no report, nothing to announce, its turn ends empty.
+            assert ended.finished_at_ms is not None and ended.report_text == "" and ended.announced == 1
+            turn = second.conn.execute("SELECT status, text FROM agent_turns WHERE id=?", (ended.turn_id,)).fetchone()
+            assert (turn[0], turn[1]) == ("cancelled", "")
             assert second.conn.execute("SELECT state FROM task_stage_owners WHERE owner_task_id=?", (child,)).fetchone()[0] == "blocked"
             assert len(second.client.chat_calls) == 1  # only the parent's answer, no work of the child
         await until(lambda: not second.service._active)
@@ -198,3 +200,23 @@ async def test_a_pump_asked_before_any_loop_runs_does_not_start_anything(make_ri
     rig.client.replies.extend([report(JOB), report(JOB)])
     rig.service.start()
     await until(lambda: rig.task(parent).state == "done")
+
+
+async def test_stop_ends_a_queued_task_that_nothing_carries_and_its_parent_hears(make_rig, monkeypatch):
+    """The composer's Stop must always be able to clear what it shows (R-PUMP-02). A task that is queued but is neither in the
+    queue nor carried by anyone can never start, and `worker.cancel` used to answer `cancelled: false` for it and leave it: the
+    member stayed "working" and the owner could not end it. It ends cancelled, and the parent that waits for it goes on."""
+    rig = make_rig()
+    first, _ = setup(rig, room=False)
+    with monkeypatch.context() as held:
+        held.setattr(rig.service, "_ensure_pump", lambda: None)
+        parent, child = own_work(rig, first)
+    rig.service._queue.remove(child)
+    assert child not in rig.service._active and child not in rig.service._queue
+    rig.client.replies.extend([report(JOB)])
+    assert (await rig.service._cancel({"task_id": child}))["cancelled"] is True
+    assert rig.task(child).state == "cancelled"
+    await until(lambda: rig.task(parent).state == "done")
+    assert rig.conn.execute("SELECT status FROM agent_turns WHERE id=?", (rig.task(child).turn_id,)).fetchone()[0] == "cancelled"
+    await until(lambda: not rig.service._active)
+    await rig.close()

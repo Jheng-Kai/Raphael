@@ -174,7 +174,7 @@ async def test_retracting_a_running_turn_cannot_write_its_late_report_into_a_reu
     new = history.add(session_id="new", question="New", route="chat", prefix="",
                       text="New answer", status="done")
     assert new == old
-    await rig.wait_for_reports()
+    await until(lambda: rig.task(task_id).state == "cancelled")
     assert history.get(new).text == "New answer"
     assert history.messages([new]) == {}
 
@@ -499,10 +499,9 @@ async def test_a_task_the_user_stops_ends_at_once_with_what_was_done(make_rig, c
     task_id = rig.submit()
     await until(lambda: "slow" in calls)
     assert await rig.rpc.call("worker.cancel", {}) == {"cancelled": True}
-    [done] = await rig.wait_for_reports()
-    # The call that was under way may have been made: the report says it is not known.
-    assert done["state"] == "cancelled"
-    assert done["text"] == phrase("en", "worker_cancelled_unsure", steps="2")
+    await until(lambda: rig.task(task_id).state == "cancelled")
+    # A stop that was asked for says nothing (R-STOP-01): no report, no count of calls, nothing said on the overlay.
+    assert rig.task(task_id).report_text == "" and rig.reports() == []
     assert rig.task(task_id).state == "cancelled" and len(rig.client.chat_calls) == 2
     assert [s.outcome for s in rig.steps(task_id) if s.kind == "tool"] == ["ok", "cancelled"]  # the cut-off call is a step
 
@@ -519,8 +518,8 @@ async def test_a_task_stopped_in_the_middle_of_a_model_call_has_nothing_cut_off(
     task_id = rig.submit()
     await asyncio.wait_for(started.wait(), 5)
     await rig.rpc.call("worker.cancel", {"task_id": task_id})
-    [done] = await rig.wait_for_reports()
-    assert done["text"] == phrase("en", "worker_cancelled", steps="0")
+    await until(lambda: rig.task(task_id).state == "cancelled")
+    assert rig.task(task_id).report_text == "" and rig.reports() == []
 
 
 async def test_the_worker_comes_back_for_the_next_task_after_one_was_stopped(make_rig):
@@ -536,9 +535,10 @@ async def test_the_worker_comes_back_for_the_next_task_after_one_was_stopped(mak
     second = rig.submit()
     await asyncio.wait_for(started.wait(), 5)
     await rig.rpc.call("worker.cancel", {})
-    reports = await rig.wait_for_reports(2)
-    assert [r["state"] for r in reports] == ["cancelled", "done"]
-    assert reports[1]["text"] == "Second task." and (first, second) == (reports[0]["task_id"], reports[1]["task_id"])
+    # The stop is silent (R-STOP-01): only the task that went on says anything.
+    [report_done] = await rig.wait_for_reports()
+    assert rig.task(first).state == "cancelled" and report_done["state"] == "done"
+    assert report_done["text"] == "Second task." and report_done["task_id"] == second
 
 
 async def test_the_queue_goes_on_after_a_task_whose_failure_handling_raises(make_rig):
@@ -568,15 +568,14 @@ async def test_a_task_that_waits_can_be_taken_out_of_the_queue(make_rig):
         await asyncio.sleep(30)
 
     rig.client.replies = [slow]
-    rig.submit()
+    running = rig.submit()
     waiting = rig.submit()
     await asyncio.wait_for(started.wait(), 5)
     assert await rig.rpc.call("worker.cancel", {"task_id": waiting}) == {"cancelled": True}
-    [gone] = await rig.wait_for_reports()
-    assert (gone["task_id"], gone["state"]) == (waiting, "cancelled")
+    assert rig.task(waiting).state == "cancelled" and rig.reports() == []  # said nothing
     assert rig.task(waiting).started_at_ms is None  # it never started
     await rig.rpc.call("worker.cancel", {})
-    await rig.wait_for_reports(2)
+    await until(lambda: rig.task(running).state == "cancelled")
     assert len(rig.client.chat_calls) == 1  # only the first task ever asked the model
 
 
@@ -774,7 +773,7 @@ async def test_taking_a_waiting_task_out_of_the_queue_does_not_tell_the_tray_non
     gone = [c for c in rig.changes() if c["task_id"] == waiting][-1]
     assert (gone["state"], gone["running"]) == ("cancelled", True)
     release.set()
-    await rig.wait_for_reports(2)
+    await rig.wait_for_reports(1)
 
 
 async def test_clearing_the_history_cancels_the_tasks_that_wait_and_the_one_that_runs(make_rig, conn):
@@ -904,12 +903,11 @@ async def test_stopping_a_session_stops_only_its_own_tasks(make_rig):
     queued = rig.submit(session="telegram:42")
     await asyncio.wait_for(started.wait(), 5)
     assert await rig.service.cancel_session("telegram:42") is True  # the queued one only
-    [gone] = await rig.wait_for_reports()
-    assert (gone["task_id"], gone["state"]) == (queued, "cancelled")
+    assert rig.task(queued).state == "cancelled" and rig.reports() == []
     assert rig.service.running and rig.task(mine).state == "running"
     assert await rig.service.cancel_session("telegram:42") is False
     assert await rig.service.cancel_session("other") is True
-    await rig.wait_for_reports(2)
+    await until(lambda: rig.task(mine).state == "cancelled")
 
 
 async def test_stopping_a_session_stops_the_task_that_runs_when_it_is_the_sessions(make_rig):
@@ -924,8 +922,8 @@ async def test_stopping_a_session_stops_the_task_that_runs_when_it_is_the_sessio
     task_id = rig.submit(session="telegram:42")
     await asyncio.wait_for(started.wait(), 5)
     assert await rig.service.cancel_session("telegram:42") is True
-    [done] = await rig.wait_for_reports()
-    assert (done["task_id"], done["state"]) == (task_id, "cancelled")
+    await until(lambda: rig.task(task_id).state == "cancelled")
+    assert rig.reports() == []
 
 
 @pytest.mark.parametrize("resource,kind", [("chatgpt", "auth_expired"), ("anthropic", "auth_expired"), ("chatgpt", "chatgpt_scope")])
