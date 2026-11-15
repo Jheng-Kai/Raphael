@@ -655,7 +655,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const retracting = new Set<string>();
   const sendingNow = new Set<number>();
   /** What the composer was given when a message was taken back to be edited, to tell an untouched edit from a changed one (Esc). */
-  let editOrigin: { turnId: number; draft: ComposerDraft } | null = null;
+  let editOrigin: { turnId: number; draft: ComposerDraft; before?: ComposerDraft } | null = null;
   const retracted = new Set<string>();
   let attachmentEpoch = 0;
   let attaching = 0;
@@ -1504,6 +1504,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // back after a failure then holds no evidence, so a retry never counts the same correction twice.
     void learnComposerCorrections(corrections);
     const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
+    const resume = draft.replacing !== undefined && editOrigin?.turnId === draft.replacing ? editOrigin.before : undefined;
     rememberDraft(requestId, draft);
     clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
@@ -1550,6 +1551,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     else members.changed();
     outgoing = outgoing.filter((item) => item !== mine);
     render();
+    // The edit has taken its message's place: what the composer held before 編輯 comes back, unless something newer is in it.
+    if (resume && memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length && replacing === undefined) resumeDraft(resume);
   }
 
   /** Send takes words or files; the field sizes itself to its text (`.cmp-input` in agent.css). */
@@ -2243,13 +2246,26 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     if (!source || source.key !== "question") return;
     if (replacing === source.turn.id) { focusComposer(); return; }
-    const member = memberId(), epoch = attachmentEpoch, key = draftKey();
+    const member = memberId(), epoch = attachmentEpoch, key = draftKey(), typed = input.value, held = files.length;
     const draft = await draftFor(source.turn);
-    if (memberId() !== member || attachmentEpoch !== epoch || draftKey() !== key) return;
+    // Words typed or a file added while the message's files were read are newer than the click: the composer keeps them.
+    if (memberId() !== member || attachmentEpoch !== epoch || draftKey() !== key || input.value !== typed || files.length !== held) return;
+    // What the composer held before the edit comes back once the edit is sent or given up; it is never lost under it.
+    const before = replacing !== undefined ? editOrigin?.before
+      : input.value || files.length || missingFiles.length || composerQuote
+        ? { text: input.value, files: files.filter(file => !file.pending), missing: missingFiles.map(file => ({ ...file })), quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId }
+        : undefined;
     const taken: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: source.turn.id };
-    editOrigin = { turnId: source.turn.id, draft: taken };
+    editOrigin = { turnId: source.turn.id, draft: taken, before };
     restoreDraft(taken);
     render();
+  }
+
+  /** Puts back what the composer held before an edit, and keeps it as the conversation's draft again. */
+  function resumeDraft(before: ComposerDraft | undefined): void {
+    if (!before) return;
+    restoreDraft(before);
+    saveComposerDraft();
   }
 
   /** Whether the composer still holds exactly what 編輯 gave it: the words, the files and the quote of the message. */
@@ -2259,9 +2275,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       && missingFiles.length === origin.missing.length && JSON.stringify(composerQuote ?? null) === JSON.stringify(origin.quote ?? null);
   }
 
-  /** Gives the edit up: the composer is emptied and the message is drawn again, unchanged. Nothing was sent, so nothing else moves. */
+  /** Gives the edit up: the message is drawn again, unchanged, and the composer holds what it held before 編輯. Nothing was sent. */
   function abandonEdit(): void {
     if (replacing === undefined) return;
+    const before = editOrigin?.turnId === replacing ? editOrigin.before : undefined;
     clearTimeout(draftTimer); discardComposerDraft(composerKey);
     correctionLearning.clear();
     attachmentEpoch++;
@@ -2270,6 +2287,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawQuote(); drawFile(); fit();
     render();
     focusComposer();
+    resumeDraft(before);
   }
 
   /** The displayed slot and its action always refer to the same reply in this conversation. */

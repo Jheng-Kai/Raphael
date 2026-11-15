@@ -68,7 +68,11 @@ test("the actions of a message with pictures stand against its bubble, never aga
   const message = root.querySelector(".owner-message")!;
   expect([...message.querySelectorAll(".me-files + .bubble")]).toHaveLength(1);
   expect(css).toContain(".owner-message:has(.me-files + .bubble) { anchor-scope: --owner-bubble; column-gap: 0; }");
-  expect(css).toContain(".owner-message:has(.me-files + .bubble) .bubble { anchor-name: --owner-bubble; }");
+  // Out of the grid, the actions leave their column empty: the bubble keeps that room itself, react's 28 px and reply's and ⋯'s small
+  // control size with their gaps, so a long message wraps where it wraps without a picture (R-UI-149, look check owner-picture-bubble).
+  expect(css).toContain(".owner-message:has(.me-files + .bubble) .bubble { anchor-name: --owner-bubble; max-width: calc(100% - 28px - 2 * var(--h-ctl-sm) - 3 * var(--sp-1)); }");
+  expect(css).toContain(".message-actions .btn.icon { width: 28px;");
+  expect(readFileSync("src/main/styles.css", "utf8")).toContain(".btn.icon.row { width: var(--h-ctl-sm);");
   expect(css).toContain(".owner-message:has(.me-files + .bubble) > .message-actions { position: absolute; position-anchor: --owner-bubble; right: calc(anchor(left) + var(--sp-1)); top: anchor(center); translate: 0 -50%; }");
   expect(css).not.toContain("display: contents");
   expect(css).not.toContain("grid-template-columns: subgrid");

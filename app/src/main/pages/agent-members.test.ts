@@ -794,6 +794,39 @@ describe("a sent message is taken back into the composer to be edited (owner, 20
     agent.hide();
   });
 
+  test("words being written before 編輯 come back once the edit is given up, and once it is sent", async () => {
+    const agent = mount(); await flush(); await pick(3);
+    typeInto(box(), "half a new question");
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    expect(box().value).toBe("問題 31");
+    press(box(), "Escape"); await flush();
+    expect(box().value).toBe("half a new question");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    typeInto(box(), "corrected");
+    press(box(), "Enter"); await flush();
+    expect(api.agentAskText).toHaveBeenLastCalledWith("corrected", [], 3, expect.objectContaining({ replaceTurnId: 31 }));
+    expect(box().value).toBe("half a new question");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    agent.hide();
+  });
+
+  test("words typed while the message's files are read stay: 編輯 does not write over them", async () => {
+    withPicture();
+    let give!: () => void;
+    const read = api.core.getMockImplementation()!;
+    api.core.mockImplementation((method: string, ...rest: unknown[]) => method === "attachments.get"
+      ? new Promise(resolve => { give = () => resolve({ mime: "image/png", data: btoa("pixels") }); }) : read(method, ...rest));
+    const agent = mount(); await flush(); await pick(3);
+    pickMessage('[data-id="8"]', 'edit'); await flush();
+    typeInto(box(), "something newer");
+    give(); await flush();
+    expect(box().value).toBe("something newer");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    expect($('[data-id="8"] .owner-message .bubble').textContent).toContain("問題 8");
+    agent.hide();
+  });
+
   test("leaving the conversation gives the edit up: the bubble is there as it was, and nothing of the edit comes back as a draft", async () => {
     const agent = mount(); await flush(); await pick(3);
     pickMessage('[data-id="31"]', 'edit'); await flush();
