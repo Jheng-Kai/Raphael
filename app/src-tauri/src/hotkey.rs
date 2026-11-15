@@ -1730,8 +1730,10 @@ mod tests {
         assert!(fake.registered().contains(&hk("AltRight+T")));
 
         // another key
-        let mut custom = Bindings::default();
-        custom.tidy = vec!["F8".to_owned()];
+        let mut custom = Bindings {
+            tidy: vec!["F8".to_owned()],
+            ..Bindings::default()
+        };
         w.handle(Command::Update {
             wanted: Wanted::from_bindings(&custom).unwrap(),
             reply: std::sync::mpsc::channel().0,
@@ -1785,8 +1787,10 @@ mod tests {
             assert!(err.contains("already used"), "{err}");
         }
         // and Esc is for cancelling, never for tidying
-        let mut b = Bindings::default();
-        b.tidy = vec!["Escape".to_owned()];
+        let b = Bindings {
+            tidy: vec!["Escape".to_owned()],
+            ..Bindings::default()
+        };
         assert!(Wanted::from_bindings(&b).is_err());
     }
 

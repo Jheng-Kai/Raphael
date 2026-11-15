@@ -8376,7 +8376,10 @@ mod tests {
             let typed = c.ask_typed("Confirm").unwrap();
             until_stage(&c, AgentStage::Asking).await;
             run(&c, DictationDown, 0).await;
-            assert!(c.on_hotkey(chord, 100).is_none(), "{chord:?} ran over a typed question");
+            assert!(
+                c.on_hotkey(chord, 100).is_none(),
+                "{chord:?} ran over a typed question"
+            );
             settle().await;
             assert!(c.paster().delivered().is_empty());
             assert_eq!(c.core().count("dictation.tidy"), 0);
