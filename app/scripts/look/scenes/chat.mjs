@@ -241,6 +241,7 @@ export default [
   scene("primary-contact-set", "換成其他成員, then 小晴, exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu(), click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, ...gear, wait(".ms-pane .ms-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),
+  scene("message-text-colour", "A message's text is the normal text colour whatever its kind (reply, timed progress) or its turn's state (done, running, failed, denied, expired, stopped)", [wait(".ra .chat-message[data-reply]"), check("message-text-colour")]),
   scene("conversation-share", "Share sits at the header's right, opposite search, in a member's conversation", [
     member(1), wait('.mb-head [data-act="share-member"]:not([hidden])'), check("conversation-share"),
     click('.mb-head [data-act="share-member"]'), wait('#app-popover .menu-action'), check("conversation-share-menu"),

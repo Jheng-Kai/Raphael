@@ -45,7 +45,7 @@ from ..worker.stall_guards import stalled
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
 # File names narrow the scan only after the caller explicitly requires an artifact.
-FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)')
+FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json|md|docx|pptx|png|jpe?g|gif|svg|mp4|mov|webm|mp3|wav|zip))(?!\w)')
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200

@@ -111,3 +111,18 @@ Offline: `core/tests/agent/test_persistence.py`, `core/tests/worker/test_persist
 `npm run verify -- --contract` (scenario drivers and the prompt budget). Not covered offline, left to a live brain run on the
 owner's own models: whether a given model, told all this, now opens its browser or tries another source instead of
 stopping; a live read of a real consent page; a real reading service's fallback.
+
+## Work that was to leave a file is judged on a file that exists (R-WORK-FILE-01, R-WORK-FILE-02, 2026-11-15)
+
+- `background/service.py::_record_artifacts` records as evidence the files found in the member's folders (its own, then its team's):
+  the paths the condition or the report names inside the computer (`outcomes.computer_files`: `/home/cua/workspace/...`,
+  `/home/cua/team/...`), the files the condition names (`tasks.FILE_NAMES`, documents, pictures, audio, video and archives
+  included), else the newest. Each folder has its own scan budget (`ARTIFACT_SCAN`); `ARTIFACT_SKIP` holds a browser's profile;
+  a file this PC cannot read takes none of the `ARTIFACT_KEEP` places.
+- `computer/vm.py::bound_folder`: on Windows a folder made with mode `0o700` takes a closed access list (SYSTEM, Administrators, owner)
+  that the container's files inherit, as another account's: the app then cannot read what a member made. The folders a computer binds
+  take the access of the folder they are in; one made closed earlier is left as it is (the owner's to reset). Files and folders the
+  engine already made under a closed folder stay closed to the app until their access is reset; the app cannot verify them.
+- Offline: `core/tests/background/test_endings.py` (the four tests named in R-WORK-FILE-01 and `test_files_named_by_their_path_in_the_computer`)
+  and `core/tests/computer/test_bound_folders.py` (Windows only).
+

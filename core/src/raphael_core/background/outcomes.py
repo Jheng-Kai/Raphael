@@ -2,7 +2,7 @@
 
 import re
 import traceback
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def named_files(text):
@@ -19,6 +19,25 @@ def named_files(text):
             if path.is_absolute() and str(path) not in seen:
                 seen.add(str(path))
                 yield path
+
+
+# A member names the files it made by the path they have inside its own computer: its folder or its team's shared folder.
+COMPUTER_PATH = re.compile(r"""/home/cua/(?:workspace|team)/[^\s"'`<>|?*]+""")
+
+
+def computer_files(text):
+    """Yield, for each file `text` names by its path inside a member's computer, the path below its folder (the folder
+    of the member or of its team: the caller knows where this PC keeps each). Prose may follow the name, so each place
+    a file name could end is offered, the longest first."""
+    seen = set()
+    for match in COMPUTER_PATH.finditer(text):
+        named = match.group().rstrip("' ).,;。")
+        ends = [found.end() for found in re.finditer(r"\.[A-Za-z0-9]{1,12}(?![A-Za-z0-9_])", named)]
+        for candidate in [named, *(named[:end] for end in reversed(ends))]:
+            below = PurePosixPath(candidate).parts[4:]
+            if below and ".." not in below and below not in seen:
+                seen.add(below)
+                yield PurePosixPath(*below)
 
 
 def worker_trace(error):

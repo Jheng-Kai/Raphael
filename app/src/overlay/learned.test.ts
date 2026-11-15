@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, expect, test, vi, type Mock } from "vitest";
 import { learnedPill, type LearnedActions } from "./learned";
 
@@ -51,4 +53,12 @@ test("a late Undo result cannot close the next learned batch", async () => {
   finish(); await Promise.resolve(); vi.advanceTimersByTime(200);
   expect(root.hidden).toBe(false);
   expect(root.textContent).toContain("HiKari");
+});
+
+test("the learned page names no phrase of any language as its title", () => {
+  // R-LEARN-WIN-02 (owner, 2026-11-15): the native window's title is empty, and nothing the page names itself shows a phrase of one
+  // language under an interface in another.
+  const title = /<title>([^<]*)<\/title>/.exec(readFileSync("learned.html", "utf8"))?.[1] ?? "";
+  expect(title).toBe("Raphael");
+  expect(readFileSync("src-tauri/src/learned.rs", "utf8").split("#[cfg(test)]")[0]).not.toMatch(/Raphael learned word/i);
 });

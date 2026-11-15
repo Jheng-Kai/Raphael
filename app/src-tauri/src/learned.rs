@@ -3,12 +3,15 @@ use crate::core_process::{CoreApi, CoreProcess};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 use tauri::{
     AppHandle, Manager, PhysicalPosition, PhysicalSize, Webview, WebviewUrl, WebviewWindowBuilder,
     ipc::Channel,
 };
 
 const LABEL: &str = "learned";
+/// The page fades its pill out in this long (`learned.css`, a little over it); the window goes after that, never before.
+const FADE: Duration = Duration::from_millis(220);
 #[derive(Clone, Serialize)]
 pub struct Notice {
     words: Vec<String>,
@@ -25,8 +28,12 @@ struct State {
 
 pub fn start(app: &AppHandle) -> tauri::Result<()> {
     app.manage(State::default());
+    // The window is there only while a notice is: it is made hidden and shown by the layout of a notice, and it goes
+    // when the notice does (R-LEARN-WIN-02). Its title is empty: whatever a system painted of it would be a word the
+    // owner never chose, in English under a Chinese interface.
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("learned.html".into()))
-        .title("Raphael learned word")
+        .title("")
+        .visible(false)
         .transparent(true)
         .decorations(false)
         .shadow(false)
@@ -219,7 +226,53 @@ pub fn learned_layout(
         .map_err(|e| e.to_string())?;
     crate::overlay::apply_passive_style(&window);
     round_region(&window, w, h);
+    reveal(&window);
     Ok(())
+}
+
+/// Show the window without activating it: the owner is typing somewhere else.
+fn reveal(window: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{SW_SHOWNOACTIVATE, ShowWindow};
+        let Ok(hwnd) = window.hwnd() else {
+            return;
+        };
+        let hwnd = hwnd.0 as isize;
+        let _ = window.run_on_main_thread(move || unsafe {
+            // SAFETY: this runs on the owning window thread; the handle is that of a live window.
+            let _ = ShowWindow(
+                windows::Win32::Foundation::HWND(hwnd as *mut _),
+                SW_SHOWNOACTIVATE,
+            );
+        });
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window.show();
+    }
+}
+
+/// Take the window away once the page has faded its pill, unless a new notice came meanwhile. A window with nothing
+/// to say is not on the screen at all: no bar, no title, nothing to click through (owner, 2026-11-15: after Undo, a
+/// pale bar with the English title stayed).
+fn leave(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(FADE).await;
+        let idle = app
+            .state::<State>()
+            .current
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_none();
+        if !idle {
+            return;
+        }
+        if let Some(window) = app.get_webview_window(LABEL) {
+            let _ = window.hide();
+        }
+    });
 }
 
 #[tauri::command]
@@ -250,6 +303,8 @@ pub async fn learned_finish(
         if let Some(mouse) = app.state::<crate::overlay::mouse::Windows>().get(LABEL) {
             mouse.clear();
         }
+        drop(current);
+        leave(&app);
     }
     Ok(())
 }
@@ -346,6 +401,43 @@ mod tests {
             PhysicalPosition::new(-1110, 1088)
         );
     }
+    #[test]
+    fn the_window_is_there_only_while_a_notice_is_and_has_no_title() {
+        // R-LEARN-WIN-02 (owner, 2026-11-15): after Undo a pale bar with the English title stayed on the screen. The
+        // window is made hidden and without a title, shown once a notice is placed, and taken away after its fade.
+        let source = include_str!("learned.rs").replace("
+", "
+");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let start = production.split("pub fn start(").nth(1).unwrap();
+        let start = start.split("
+pub fn ").next().unwrap();
+        assert!(start.contains(".title(\"\")"), "no word of any language is its title");
+        assert!(start.contains(".visible(false)"), "it is hidden until a notice is placed");
+        assert!(!production.contains("Raphael learned word"));
+        let layout = production.split("pub fn learned_layout(").nth(1).unwrap();
+        let layout = layout.split("
+}
+").next().unwrap();
+        assert!(
+            layout.find("round_region(").unwrap() < layout.find("reveal(&window)").unwrap(),
+            "it is shown only after it is sized, placed and shaped"
+        );
+        let finish = production.split("pub async fn learned_finish(").nth(1).unwrap();
+        let finish = finish.split("
+}
+").next().unwrap();
+        assert!(
+            finish.find("*current = None").unwrap() < finish.find("leave(&app)").unwrap(),
+            "Undo, a timeout and a click all end the notice and then take its window away"
+        );
+        let leave = production.split("fn leave(").nth(1).unwrap();
+        let leave = leave.split("
+}
+").next().unwrap();
+        assert!(leave.contains("FADE") && leave.contains("is_none()") && leave.contains(".hide()"));
+    }
+
     #[test]
     fn composer_uses_the_same_pure_term_rule_as_external_dictation() {
         let before = "Please ask Allice to review the next release notes carefully.";
