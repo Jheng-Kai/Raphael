@@ -5,24 +5,6 @@ from raphael_core.computer.checkpoints import CheckpointStore
 from .test_vm import desktop, Bridge, EmptyHub
 
 
-async def test_restore_asks_for_confirmation_unless_the_owner_allows_everything(desktop, conn):
-    from raphael_core.brain.settings import SettingsStore
-    from raphael_core.computer.checkpoint_service import Checkpoints
-    from raphael_core.protocol import RpcError
-    import pytest
-    vm, _, _ = desktop
-    vm.settings = SettingsStore(conn)
-    vm.settings.set("action_mode", "direct")
-    service = Checkpoints(vm, lambda member: member == 2)
-    assert (await service.call({"member_id": 2}))["confirmation_required"] is True
-    with pytest.raises(RpcError):
-        await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})
-    vm.settings.set("action_mode", "bypass")
-    service = Checkpoints(vm, lambda member: member == 2)
-    assert (await service.call({"member_id": 2}))["confirmation_required"] is False
-    await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})
-
-
 async def test_workspace_commands_take_the_guest_checkpoint_path(desktop, tmp_path):
     from raphael_core.computer.vm_tools import VmTools, vm_scope
     from raphael_core.services.attachment_store import AttachmentStore
@@ -125,23 +107,97 @@ def test_restore_preserves_later_owner_changes_and_refuses_another_member(tmp_pa
         store.restore(checkpoint, member=3)
 
 
-async def test_restore_is_an_owner_action_and_refuses_active_work():
-    from types import SimpleNamespace
+def test_member_history_lists_checkpoint_metadata_and_show_returns_text_without_binary_bytes(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    (root / "note.txt").write_text("before\n")
+    utf16 = root / "notes.txt"
+    utf16.write_bytes(b"\xff\xfe" + "older\n".encode("utf-16-le"))
+    store = CheckpointStore(tmp_path / "archive", [root])
+    ticket = store.begin(member=2, turn=7)
+    (root / "note.txt").write_text("after\n")
+    utf16.write_bytes(b"\xff\xfe" + "newer\n".encode("utf-16-le"))
+    (root / "image.bin").write_bytes(b"\0\xffsecret")
+    history = store.list(member=2)
+    assert len(history) == 1
+    item = history[0]
+    assert item["id"] == ticket and item["turn"] == 7 and item["state"] == "ready"
+    assert isinstance(item["created"], int)
+    assert {file["path"] for file in item["files"]} == {str(root / "note.txt"), str(utf16), str(root / "image.bin")}
+    compact = store.list(member=2, compact=True)[0]
+    assert all("diff" not in file for file in compact["files"])
+    text = store.show(ticket, member=2, path=str(root / "note.txt"))
+    assert text["text"].replace("\r\n", "\n") == "before\n"
+    assert text["is_text"] is True and "-before" in text["diff"] and "+after" in text["diff"]
+    binary = store.show(ticket, member=2, path=str(root / "image.bin"))
+    assert binary["is_text"] is False and binary["text"] is None and binary["diff"] == ""
+    assert binary["message"] == "This file is not text; its bytes are not shown."
+    older = store.show(ticket, member=2, path=str(utf16))
+    assert older["is_text"] is True and older["text"] == "older\n" and "-older" in older["diff"]
+
+
+def test_restore_can_select_paths_and_leave_the_rest_for_a_later_restore(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    first, second = root / "first.txt", root / "second.txt"
+    first.write_text("first before")
+    second.write_text("second before")
+    store = CheckpointStore(tmp_path / "archive", [root])
+    ticket = store.begin(member=2, turn=7)
+    first.write_text("first after")
+    second.write_text("second after")
+    store.list(member=2)
+    result = store.restore(ticket, member=2, paths=[str(first)])
+    assert result["restored"] == [str(first)] and first.read_text() == "first before"
+    assert second.read_text() == "second after"
+    remaining = store.list(member=2)[0]
+    assert remaining["state"] == "ready" and {file["path"] for file in remaining["files"]} == {str(first), str(second)}
+    result = store.restore(ticket, member=2)
+    assert result["restored"] == [str(second)] and second.read_text() == "second before"
+    assert store.list(member=2)[0]["state"] == "restored"
+
+
+def test_a_later_file_change_is_reported_and_kept_during_partial_restore(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    file = root / "document.txt"; file.write_text("before")
+    store = CheckpointStore(tmp_path / "archive", [root])
+    ticket = store.begin(member=2, turn=7)
+    file.write_text("turn change")
+    store.list(member=2)
+    file.write_text("later change")
+    result = store.restore(ticket, member=2)
+    assert result["skipped"] == [str(file)]
+    assert result["reasons"] == {str(file): "changed_since_checkpoint"}
+    assert file.read_text() == "later change"
+    assert store.list(member=2)[0]["state"] == "ready"
+
+
+def test_shared_archive_lists_each_members_own_checkpoints_only(tmp_path):
+    root = tmp_path / "shared-workspace"; root.mkdir()
+    store = CheckpointStore(tmp_path / "archive", [root])
+    first = store.begin(member=1, turn=10)
+    (root / "one.txt").write_text("one")
+    second = store.begin(member=2, turn=20)
+    (root / "two.txt").write_text("two")
+    first_files = store.list(member=1)
+    second_files = store.list(member=2)
+    assert [item["id"] for item in first_files] == [first]
+    assert [item["id"] for item in second_files] == [second]
     import pytest
-    from raphael_core.computer.checkpoint_service import Checkpoints
-    from raphael_core.protocol import RpcError
-    calls = []
-    async def checkpoint(*args, **kwargs): calls.append((args, kwargs)); return []
-    vm = SimpleNamespace(target=lambda _: SimpleNamespace(key="one"), full_permission=lambda: False,
-                         active={"one": 1}, busy=lambda _: False, checkpoint=checkpoint)
-    service = Checkpoints(vm, lambda member: member == 2)
-    with pytest.raises(RpcError): await service.call({"member_id": 2, "action": "restore", "id": "1" * 32})
-    with pytest.raises(RpcError): await service.call({"member_id": 2, "action": "restore", "id": "1" * 32, "confirmed": True})
-    assert not calls
-    assert (await service.call({"member_id": 2}))["busy"] is True
-    vm.active.clear()
-    await service.call({"member_id": 2, "action": "restore", "id": "1" * 32, "confirmed": True})
-    assert calls[-1][1] == {"id": "1" * 32, "member": 2}
+    with pytest.raises(ValueError, match="unknown_checkpoint"):
+        store.restore(first, member=2)
+
+
+def test_open_checkpoint_history_tracks_new_changes_until_a_restore_begins(tmp_path):
+    root = tmp_path / "workspace"; root.mkdir()
+    store = CheckpointStore(tmp_path / "archive", [root])
+    ticket = store.begin(member=2, turn=7)
+    (root / "first.txt").write_text("first")
+    assert {file["path"] for file in store.list(member=2)[0]["files"]} == {str(root / "first.txt")}
+    (root / "second.txt").write_text("second")
+    assert {file["path"] for file in store.list(member=2)[0]["files"]} == {str(root / "first.txt"), str(root / "second.txt")}
+    store.restore(ticket, member=2, paths=[])
+    (root / "third.txt").write_text("third")
+    assert {file["path"] for file in store.list(member=2)[0]["files"]} == {
+        str(root / "first.txt"), str(root / "second.txt")}
 
 
 def test_a_forged_restore_path_cannot_change_anything_outside_the_workspace(tmp_path):

@@ -139,3 +139,22 @@ test("full screen is the lightbox with the same video where it was, and leaving 
   expect(document.querySelector(".media-lightbox")).toBeNull();
   expect(media.currentTime).toBe(20);
 });
+
+test("the sound set in full screen is the thread player's sound after it, as the thread's is the full screen's", () => {
+  // Owner, 2026-11-15: 「放大螢幕然後更換音量的話，外面的音量是不會做調整的」 (R-MEDIA-04).
+  const { player, media } = mount(videoPlayerHTML(' src="http://raphael-media.localhost/clip.mp4"', "tour.mp4"));
+  const slider = (root: ParentNode): HTMLInputElement => root.querySelector<HTMLInputElement>(".mp-volume")!;
+  slider(player).value = "0.6"; slider(player).dispatchEvent(new Event("input"));
+  player.querySelector<HTMLElement>('[data-mp-act="full"]')!.click();
+  const box = document.querySelector<HTMLElement>(".media-lightbox")!, large = box.querySelector<HTMLVideoElement>(".lb-video .mp video")!;
+  expect(large.volume).toBeCloseTo(0.6);
+  slider(box).value = "0.25"; slider(box).dispatchEvent(new Event("input"));
+  box.querySelector<HTMLElement>('[data-lb="close"]')!.click();
+  expect(media.volume).toBeCloseTo(0.25);
+  expect(media.muted).toBe(false);
+  // Another clip bound before the change plays at the same sound.
+  const other = mount(audioPlayerHTML(' src="http://raphael-media.localhost/note.mp3"', "note.mp3"));
+  other.media.volume = 1;
+  void other.media.play();
+  expect(other.media.volume).toBeCloseTo(0.25);
+});

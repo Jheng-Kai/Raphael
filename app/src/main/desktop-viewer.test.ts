@@ -396,11 +396,11 @@ test('a slow draft can be discarded once and its late answer cannot open an edit
   expect(host.querySelector('#mp-skill-text')).toBeNull();expect(trySent).not.toHaveBeenCalled();
 });
 
-test("the larger view keeps the review, the file changes and one foot inside the screen's shell, and the draft is said once",async()=>{
+test("the larger view keeps the review and one foot inside the screen's shell, and the draft is said once",async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   const shell = panel().querySelector('.desktop-shell')!, foot = shell.querySelector(':scope > .desktop-foot')!;
   // R-PANEL-08: the screen, the boxes that take its place and the foot are one column; nothing of the computer sits outside it.
-  expect([...shell.children].map(child => child.className)).toEqual(['desktop-screen', 'desktop-caption', 'desktop-review', 'desktop-checkpoints', 'desktop-foot']);
+  expect([...shell.children].map(child => child.className)).toEqual(['desktop-screen', 'desktop-caption', 'desktop-review', 'desktop-foot']);
   expect([...foot.querySelectorAll(':scope > .desktop-notes > *')].map(child => child.className)).toEqual(['desktop-request', 'desktop-error', 'desktop-recording', 'desktop-teach-missing', 'desktop-try']);
   expect(foot.querySelector(':scope > .desktop-bar > .desktop-dock [data-desktop="menu"]')).not.toBeNull();
   expect(foot.querySelector(':scope > .desktop-bar > .desktop-actions [data-desktop="teach"]')).not.toBeNull();
@@ -833,18 +833,6 @@ test("a running computer's panel streams again after a handback that leaves it o
   message('connected'); await flush();
   expect(frame().hidden).toBe(false); expect(panel().dataset.desktopState).toBe('member');
  } finally { Object.defineProperty(window,'innerWidth',{value:width,configurable:true}); }
-});
-
-test('file changes opened from a card offer only Back, which returns to the conversation',async()=>{
- panelOpen=false; mounted.show(); await flush();
- mounted.files(); await flush();
- expect(panel().hasAttribute('data-expanded')).toBe(true);
- expect(handback().hidden).toBe(true);
- expect(host.querySelector<HTMLElement>('[data-desktop="menu"]')!.hidden).toBe(true);
- host.querySelector<HTMLButtonElement>('[data-desktop="back"]')!.click(); await flush();
- expect(panel().hasAttribute('data-expanded')).toBe(false);
- expect(panelOpen).toBe(false);
- expect(api.desktopControl).not.toHaveBeenCalled();
 });
 
 test('Back hides an unsaved teaching draft and the menu resumes the same editor',async()=>{

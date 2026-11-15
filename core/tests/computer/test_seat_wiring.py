@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from raphael_core.brain.settings import SettingsStore
-from raphael_core.computer.checkpoint_service import Checkpoints
 from raphael_core.computer.lifecycle import maintain
 from raphael_core.computer.vm import LABEL, LocalVm, VmError, compatible, known_previous, run_args
 from raphael_core.computer.viewer import DesktopViewer, Session
@@ -62,7 +61,7 @@ async def test_two_seats_start_the_unit_once_and_keep_their_own_view_url(shared_
 
 
 @pytest.mark.parametrize("guard", ["active", "held", "busy"])
-@pytest.mark.parametrize("action", ["stop", "restart", "update", "repair", "reset", "restore", "timezone"])
+@pytest.mark.parametrize("action", ["stop", "restart", "update", "repair", "reset", "timezone"])
 async def test_physical_actions_refuse_another_seats_work(shared_vm, guard, action):
     vm, runtime = shared_vm
     first, second = await vm.seat(1), await vm.seat(2)
@@ -73,10 +72,7 @@ async def test_physical_actions_refuse_another_seats_work(shared_vm, guard, acti
         vm.hold(second, True)
     else:
         vm.busy = lambda key: key == second.key
-    if action == "restore":
-        with pytest.raises(RpcError, match="computer_busy"):
-            await Checkpoints(vm, lambda member: True).call({"member_id": 1, "action": "restore", "confirmed": True})
-    elif action == "timezone":
+    if action == "timezone":
         vm.timezone = lambda: "Asia/Taipei"
         await vm.refresh_timezone()
         assert vm.timezone_pending

@@ -83,8 +83,10 @@ export function bindPlayer(player: HTMLElement): void {
   let scrubbing = false;
   media.volume = sound.volume;
   media.muted = sound.muted;
+  // The session's sound is set in whichever player was used last (the full screen, another clip): a player plays at it.
+  media.addEventListener("play", () => { media.volume = sound.volume; media.muted = sound.muted; });
 
-  const duration = (): number => (Number.isFinite(media.duration) ? media.duration : 0);
+  const duration =(): number => (Number.isFinite(media.duration) ? media.duration : 0);
   const update = (): void => {
     const total = duration(), now = media.currentTime;
     let loaded = 0;
@@ -250,6 +252,8 @@ function openFull(player: HTMLElement): void {
         const playOn = !large.paused;
         video.currentTime = large.currentTime;
         video.playbackRate = large.playbackRate;
+        video.volume = large.volume;
+        video.muted = large.muted;
         large.pause();
         large.removeAttribute("src");
         large.load();

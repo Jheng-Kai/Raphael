@@ -359,20 +359,21 @@ picture. Offline look evidence does not prove the picture in a real computer.
 
 R-PANEL-08. The owner's picture after a failed demonstration: the red line began at the window's edge
 over the screen and was cut, 丟棄示範 and 審閱示範 floated in the far corner, and the file changes ran
-along the top-left. In the larger view (`desktop-viewer.ts`, `.desktop-shell`) the screen, the skill
-review (`.desktop-review`), the file changes (`.desktop-checkpoints`) and one foot (`.desktop-foot`)
+along the top-left (that view was removed 2026-11-15, R-COMP-UNDO-01). In the larger view (`desktop-viewer.ts`, `.desktop-shell`) the screen, the skill
+review (`.desktop-review`) and one foot (`.desktop-foot`)
 share one width: `min(100cqw, (100cqh - --desktop-foot) * 1280 / 900)` of the shell, a size container.
 The foot holds `.desktop-notes` (request, failure, privacy line, missing-computer note, the trial input),
 centred and wrapping, then `.desktop-bar`: three columns with the pill (`.desktop-dock`) in the middle on
 the screen's centre line and the demonstration's pill (`.desktop-actions`: Discard quiet, review or Stop
-recording filled) right beside it. The review and the file changes take the screen's place in a box of its
-size that scrolls on its own; file changes opened from a result card (`data-files-only`) show no pill.
+recording filled) right beside it. The review takes the screen's place in a box of its
+size that scrolls on its own.
 While the draft is written the teach button is hidden and the line alone says so. The small preview keeps
 only a notice under its screen (the foot is `display: contents` there).
 
 How to get to it: open a member's computer tab, enlarge the screen, take control, then ⋯ → 教他做一次
-(press it again to stop; `teachFails` in the mock makes the draft fail) or ⋯ → 檔案變更. A result card's
-檔案變更 opens the files-only view.
+(press it again to stop; `teachFails` in the mock makes the draft fail). The ⋯ menu lists that one entry only:
+the 檔案變更 entry and its view are gone (owner, 2026-11-15, R-COMP-UNDO-01); a member undoes its file changes when asked in chat
+with its tool `file_history`. `computer-menu-teach-only` opens the menu in the larger view and asserts exactly one entry, 教他做一次, and no 檔案變更.
 
 `computer-foot-layout` (checks.mjs) asserts on every listed scene: the screen or its box keeps the
 proportions and is centred; every line, the pill and the actions lie inside its horizontal span, below it,
@@ -380,7 +381,7 @@ inside the window and uncut; none overlap; the foot starts within 24 px of the s
 screen's centre line; lines are centred.
 
 ```powershell
-npm run look -- desktop-teach-failed desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-shared desktop-teach-discard desktop-teach-try computer-file-changes card-task-files takeover-bar takeover-menu desktop-watch desktop-viewer desktop-owner desktop-panel desktop-unavailable --theme both --width 1120,720,1920x1080
+npm run look -- desktop-teach-failed desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-shared desktop-teach-discard desktop-teach-try computer-menu-teach-only takeover-bar takeover-menu desktop-watch desktop-viewer desktop-owner desktop-panel desktop-unavailable --theme both --width 1120,720,1920x1080
 ```
 
 Gotchas: `--desktop-foot` is a fixed reserve (88 px: one line and the pill; a second line borrows the
@@ -962,10 +963,10 @@ an already admitted repair also keeps its normal bounded readiness wait.
 Synthetic zh-TW matrix, both themes and 1120/720/1920x1080:
 
 ```powershell
-npm run look -- computer-maintenance-menu computer-maintenance-restart computer-maintenance-update computer-maintenance-repair computer-maintenance-reset computer-maintenance-reset-done computer-sleep-menu computer-state-sleeping computer-state-waking computer-state-updating computer-state-repairing computer-low-disk desktop-panel takeover-menu computer-file-confirm --theme both --width 1120,720,1920x1080
+npm run look -- computer-maintenance-menu computer-maintenance-restart computer-maintenance-update computer-maintenance-repair computer-maintenance-reset computer-maintenance-reset-done computer-sleep-menu computer-state-sleeping computer-state-waking computer-state-updating computer-state-repairing computer-low-disk desktop-panel takeover-menu --theme both --width 1120,720,1920x1080
 ```
 
-Compare maintenance/idle menus to takeover-menu, reset to computer-file-confirm,
+Compare maintenance/idle menus to takeover-menu and computer-menu-teach-only, reset to quick-clear-confirm,
 and sleeping/working faces and header icon controls to desktop-panel at matching
 theme/size. Maintenance descriptions use the shared mdesc rows, so their content
 requires a wider/taller menu; reset adds a scope paragraph to the shared dialog.
@@ -1286,8 +1287,6 @@ The monitor is always an icon entry and turns purple only for a running computer
 Details opens on the screen/caption, direct routine rows and conversations. The
 gear leads to existing identity, fields and resources; Back returns through that
 hierarchy. Skills and slash-command templates retain their distinct editors.
-File changes opened from a result card offer only Back, which returns to the conversation;
-nothing was taken over, so handback and the menu are absent there.
 Routine pausing is saved inside the ordinary editor, never on the landing row.
 An unprovisioned computer is omitted; unavailable/install/preparation
 states retain their existing localized words and repair/start actions.
@@ -1669,8 +1668,8 @@ with no computer is offered none, and its prompt says that with no computer tool
 What stays exactly as it was: sandbox gestures pass the screening and need the lease; `fill_login`, `fill_contact`,
 `fill_card` and `dataset` still obey the safety rules and the mode (`fill_card` is T3); the worker still cannot
 drive the owner's own desktop (`ToolGate.check(worker=True)`); payment holds, takeover, the owner's hold and a
-changed target still refuse a call; checkpoint restore still asks for the owner's confirmation unless the mode is
-全部允許 (`LocalVm.full_permission()`). In 先詢問 and 計畫 sandbox gestures were never asked after the first yes and
+changed target still refuse a call; a checkpoint restore is the member's own `file_history` tool, which asks for no
+confirmation (R-COMP-UNDO-01). In 先詢問 and 計畫 sandbox gestures were never asked after the first yes and
 are not now (the one question that is gone was the grant itself).
 
 An explicit non-preview `computer.viewer_open` (the owner's press on the screen) launches a stopped computer;
@@ -1797,11 +1796,11 @@ snapshot. Commands retain their original bytes and executor; gestures take none.
 The pure Python guest archive stores SHA256 objects and manifests; unchanged size
 and mtime avoid rereading a file, and identical manifests add no checkpoint.
 Failures/timeouts never fail the command. Files above 20 MiB and partial walks are
-named as uncovered in the panel. The archive retains 20 checkpoints per member
+named as uncovered when the member lists a turn's changes. The archive retains 20 checkpoints per member
 within approximately 500 MiB of objects per computer, pruning unreferenced objects.
-Changes are compared on request against the next manifest or live folder. Restore
-checks the reviewed after-state digest/mode and names later edits it leaves alone.
-There is no pending/finish state. Full permission skips the additional confirmation;
+Changes are compared on request against the next manifest or live folder. Restore is
+the member's tool `file_history` (R-COMP-UNDO-01): it takes the run's own checkpoint first, names later
+edits it leaves alone and asks the owner for nothing. There is no pending/finish state;
 grants/revocation still apply. Caches, repositories and browser profiles are excluded.
 The existing panel uses relative folder words, compact time and signed added/removed
 lines without diff headers; incomplete coverage never promises a complete restore.
@@ -1820,10 +1819,10 @@ the light theme and the text colour in the dark theme. Never use a letter substi
 Selected matrix, from app/:
 
 ```powershell
-npm run look -- work-messaging-setup work-messaging-pairing computer-file-changes computer-file-partial computer-file-confirm computer-file-restored computer-file-bypass computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
+npm run look -- work-messaging-setup work-messaging-pairing computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
 ```
 
-Compare login with chat-secret-masked, restore confirmation with delete, and panel
+Compare login with chat-secret-masked and panel
 controls with desktop-owner at the same theme/width. Inspect every contact sheet
 and full-size changed controls. Extend scripts/look rather than adding a harness.
 Focused tests: messaging/test_work_channels.py, computer/test_checkpoints.py,
