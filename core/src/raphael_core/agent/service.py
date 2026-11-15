@@ -167,6 +167,7 @@ from .attachment_inputs import earlier_files, text_context
 from ..worker.guards import neutralize, wrap_untrusted
 from ..services.attachments import MAX_ATTACHMENTS, Attachment, AttachmentError, from_wire
 from ..services.file_reader import read_window
+from ..services.video import is_video, place_videos, video_notes
 from ..services.urls import urls_in
 from ..services.urls import SeenUrls
 from ..messaging.words import compose
@@ -813,6 +814,7 @@ class AgentService:
         self._tool_observer = tool_observer
         self._model_observer = model_observer
         self._attachment_store = attachment_store
+        self._computer_folder = None
         # The connector cards a turn shows for an app its task needs (`connectors.cards`); their
         # connection resumes that task here (`resume_turn`).
         self._cards = cards
@@ -1253,6 +1255,26 @@ class AgentService:
         try:
             return {"path": str(self._attachment_store.path(key))}
         except RpcError:
+            return {}
+
+    def use_computer_folder(self, folder) -> None:
+        """`folder(member_id)`: the shared folder of the member's own computer on this PC and the path it has inside that
+        computer, as (a folder, "/home/cua/team"), or None when it has none here (a computer on another host)."""
+        self._computer_folder = folder
+
+    async def _place_videos(self, ask: "_Ask") -> dict[str, str]:
+        """The original of each video of the message, put in the member's own computer (R-ATTACH-VIDEO-02): stored ID ->
+        its path there. A member works in its own computer, where the owner's copy on the owner's PC cannot be opened:
+        a path there is the one it can use. Nothing when the member has no computer on this PC or the copy fails; the
+        turn never stops for it."""
+        videos = [a for a in ask.attachments if a.stored_id and is_video(a)]
+        if not videos or self._computer is None or self._computer_folder is None or self._attachment_store is None:
+            return {}
+        try:
+            return await asyncio.to_thread(
+                place_videos, videos, self._attachment_store.path, self._computer_folder(ask.speaker.id))
+        except (OSError, RpcError, ValueError) as exc:
+            logger.warning("A video could not be put in the member's computer: %s", type(exc).__name__)
             return {}
 
     def _earlier_files(self, turns, current) -> list[dict[str, str]]:
@@ -2361,10 +2383,13 @@ class AgentService:
                 user += ("\nA file's path is its whole stored copy on this computer: read it with your own file tools"
                          " when read_attachment or an excerpt cuts it short.")
             if ask.attachments:
+                placed = await self._place_videos(ask)
                 user += "\nFiles: " + json.dumps([
-                    {"index": n, "name": neutralize(a.name), "mime": a.mime, **self._stored_path(a.stored_id)}
+                    {"index": n, "name": neutralize(a.name), "mime": a.mime, **self._stored_path(a.stored_id),
+                     **({"computer_path": placed[a.stored_id]} if a.stored_id in placed else {})}
                     for n, a in enumerate(ask.attachments, 1)
                 ], ensure_ascii=False)
+                user += video_notes(ask.attachments, placed, brain_ref(settings.model))
                 user += text_context(ask.attachments, {a.stored_id: found["path"] for a in ask.attachments
                                                        if a.stored_id and (found := self._stored_path(a.stored_id))})
                 user += "\nUse read_attachment by index for PDFs, images not included natively, and other files."
@@ -2379,6 +2404,13 @@ class AgentService:
                         user += "\n" + wrap_untrusted("read_attachment", json.dumps(
                             result.data if result.ok else {"error": result.error}, ensure_ascii=False,
                         ), ok=result.ok)
+                    for n, a in enumerate(ask.attachments, 1):
+                        if is_video(a):
+                            # Antigravity takes no pictures with its message: the frames and the transcript are read for it.
+                            result = await self._tool(ask, self._tools.read_attachment(a, ask.text, ledger, number=n), "read_attachment")
+                            user += "\n" + wrap_untrusted("read_attachment", json.dumps(
+                                result.data if result.ok else {"error": result.error}, ensure_ascii=False,
+                            ), ok=result.ok)
             # The same tools every turn of the conversation, whatever it asks (owner, 2026-11-09, decision 2).
             snapshot = take_snapshot(
                 self._plugins, memory=self._memory is not None, speaker=ask.speaker,

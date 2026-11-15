@@ -37,8 +37,10 @@ RPC methods (the choice itself is `settings.set`, like any other setting):
 Nothing here logs a key, a query, an address, a file's name or a result.
 """
 
+import asyncio
 import logging
 import sqlite3
+import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -46,7 +48,7 @@ from typing import Any
 import httpx
 
 from ..agent.ledger import Ledger
-from ..brain.catalog import IMAGE_INPUT, LLM, CatalogEntry, find
+from ..brain.catalog import IMAGE_INPUT, LLM, VIDEO_INPUT, CatalogEntry, find
 from ..brain.providers.base import ModelProvider
 from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_providers
 from ..protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError, invalid_params
@@ -59,6 +61,7 @@ from .common import ServiceError
 from .fetch import PageFetcher, Resolver, system_resolver
 from .links import LinkPreviews, THUMBNAIL_BYTES
 from .keys import KEYED_SERVICES, KeyRefused, ServiceKeys
+from .video import VideoError, clock, extract_frames, is_video, native_url
 from .vision import Vision
 
 logger = logging.getLogger(__name__)
@@ -215,14 +218,23 @@ class ServiceHub:
         """Whether `model` reads images, as OpenRouter's list says; None when the list does not know it."""
         return self._sees(model)
 
+    def reads_video(self, model: str) -> bool:
+        """Whether OpenRouter's list says `model` takes a video as it is (its `input_modalities` hold "video"). A model
+        of another provider, or one the list does not know, is False: a video is sent as it is only where its shape is
+        documented (`services.video.native_url`)."""
+        return not model.startswith("@") and self._reads(model, VIDEO_INPUT) is True
+
     def _sees(self, model: str) -> bool | None:
+        return self._reads(model, IMAGE_INPUT)
+
+    def _reads(self, model: str, capability: str) -> bool | None:
         try:
             entries = None if self._models is None else self._models()
         except Exception as exc:  # what the catalog knows must not stop a request
             logger.warning("Could not read the catalog of models: %s", type(exc).__name__)
             entries = None
         entry = None if not entries else find(entries, LLM, model)
-        return None if entry is None else IMAGE_INPUT in entry.capabilities
+        return None if entry is None else capability in entry.capabilities
 
     # --- the tools ------------------------------------------------------------------------------
 
@@ -273,10 +285,14 @@ class ServiceHub:
         )
 
     async def read_attachment(
-        self, attachment: Attachment, question: str, ledger: Ledger
+        self, attachment: Attachment, question: str, ledger: Ledger, *,
+        start: float | None = None, end: float | None = None,
     ) -> tuple[str, dict]:
         """The reader kind and bounded data for a supplied file. Images/PDFs retain their
-        configured services; other files use local extraction or the existing STT callback."""
+        configured services; other files use local extraction or the existing STT callback.
+        A video is watched (`_read_video`); `start` and `end` (seconds) look at part of it."""
+        if is_video(attachment):
+            return await self._read_video(attachment, question, ledger, start, end)
         if attachment.is_pdf:
             service = self.pdf_service()
             # The scanned pages of a PDF are read as images, so with the images off they stay
@@ -294,6 +310,53 @@ class ServiceHub:
             return "image", await self.vision.look([attachment], question, ledger)
         callback = self.transcribe if self._optional_text("stt_service") else self._transcribe
         return await read_file(attachment, callback)
+
+    async def _read_video(
+        self, video: Attachment, question: str, ledger: Ledger, start: float | None, end: float | None
+    ) -> tuple[str, dict]:
+        """What a video holds, as Claude's own agents watch one: what it shows, and what it says.
+
+        Shows: a model whose list takes video is given the video as it is, when it is not longer than
+        `NATIVE_VIDEO_BYTES` and the whole of it is asked for; any other is given frames taken evenly across the video
+        (or across `start` to `end` of it), each with its time. Says: the audio's transcript, of the same range. Either
+        half may be missing (the reader of images off, ffmpeg gone, no speech recognition): the other still comes, and
+        what is missing says why (`visual_limitation`, `limitation`)."""
+        callback = self.transcribe if self._optional_text("stt_service") else self._transcribe
+        heard = asyncio.create_task(read_file(video, callback, start=start, end=end))
+        try:
+            found = await self._watch_video(video, question, ledger, start, end)
+            _, said = await heard
+        finally:
+            heard.cancel()
+        return "video", {**said, **found}
+
+    async def _watch_video(
+        self, video: Attachment, question: str, ledger: Ledger, start: float | None, end: float | None
+    ) -> dict:
+        if not self.enabled("vision"):
+            return {"visual_limitation": "Reading images is turned off, so the video's pictures were not read."}
+        model, _ = self.vision.model()
+        shown: dict = {}
+        try:
+            if start is None and end is None and self.reads_video(model) and (url := native_url(video)) is not None:
+                seen = await self.vision.watch_raw(url, question, ledger)
+                return {"visual": seen["text"], "visual_source": "video"}
+            sampled = await asyncio.to_thread(extract_frames, video, start=start, end=end)
+            shown = {"duration": round(sampled.duration, 1), "range": {"start": sampled.start, "end": sampled.end},
+                     "frame_times": [clock(frame.at) for frame in sampled.frames]}
+            seen = await self.vision.watch(sampled.frames, [frame.label for frame in sampled.frames], question, ledger)
+        except FileNotFoundError:
+            return {"visual_limitation": "The ffmpeg decoding component is missing, so frames could not be taken from the video."}
+        except VideoError as error:
+            return {"visual_limitation": "That part of the video does not exist." if error.kind == "range"
+                    else "The video could not be decoded into frames."}
+        except (OSError, subprocess.SubprocessError):
+            return {"visual_limitation": "The video could not be decoded into frames."}
+        except ServiceError as error:
+            why = ("The model that reads images cannot see; choose another in Settings." if error.kind == "vision_unsupported"
+                   else f"The model that reads images failed ({error.kind}).")
+            return {**shown, "visual_limitation": why}
+        return {**shown, "visual": seen["text"], "visual_source": "frames"}
 
     async def transcribe(self, audio: bytes, language: str = "auto") -> str:
         from .speech_backends import transcribe

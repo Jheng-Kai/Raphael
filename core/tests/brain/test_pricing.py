@@ -223,7 +223,8 @@ def test_the_builtin_table_names_each_model_as_the_recorded_list_does():
         )
         # The models Raphael calls were tried live: every role of their kind can use them, and
         # the language models take tools.
-        assert entry.capabilities == recorded[entry.id].capabilities, entry.id
+        # The table says nothing of which of them take a video as it is: only the live list does (a Gemini model's).
+        assert entry.capabilities == recorded[entry.id].capabilities - {"video_input"}, entry.id
         assert ("tool_calling" in entry.capabilities) == (entry.kind == "llm")
 
 

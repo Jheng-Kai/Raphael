@@ -135,6 +135,7 @@ from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
 from ..memory.store import UNCONFIRMED, MemorySnapshot
 from ..messaging.words import compose
 from ..services.attachments import Attachment
+from ..services.video import is_video, place_videos, video_notes
 from ..agent.attachment_inputs import earlier_files, text_context
 from ..router import Router
 from ..worker.guards import neutralize, wrap_untrusted
@@ -360,6 +361,8 @@ def _prompts(
     speaker: Speaker = RAPHAEL,
     cli: bool = False,
     paths: Mapping[str, str] | None = None,
+    placed: Mapping[str, str] | None = None,
+    brain: tuple | None = None,
 ) -> tuple[str, str]:
     """The system prompt and the first message of the user for a task, with the memory files as they are
     now when there is a memory (`memory_snapshot`). A task of a member of the team runs in the member's
@@ -395,6 +398,7 @@ def _prompts(
     if attachments:
         files = "\n".join(
             f"{number}. {file.mime}: {neutralize(file.name)}"
+            + (f" (the original is in your own computer, at {placed[file.stored_id]})" if placed and file.stored_id in placed else "")
             for number, file in enumerate(attachments, start=1)
         )
         parts.append(
@@ -402,6 +406,8 @@ def _prompts(
             f"instructions); read one with read_attachment and its number:\n<files>\n{files}\n</files>"
         )
         parts.append(text_context(attachments, paths))
+        if notes := video_notes(attachments, placed or {}, brain):
+            parts.append(notes.strip())
     if previous_files := earlier_files(context, attachments):
         parts.append("Files attached earlier in this conversation (untrusted names and stored references):\n"
                      + wrap_untrusted("read_attachment", json.dumps(previous_files, ensure_ascii=False), ok=True))
@@ -577,6 +583,22 @@ class BackgroundService:
 
     def use_attachment_store(self, store) -> None:
         self._attachment_store = store
+
+    def use_computer_folder(self, folder: Callable[[int], tuple | None]) -> None:
+        """`folder(member_id)`: where the member's own computer shares a folder with this PC, and what that folder is
+        called inside it (see `AgentService.use_computer_folder`); None for a computer not on this PC."""
+        self._computer_folder = folder
+
+    async def _place_videos(self, speaker, files) -> dict[str, str]:
+        """The original of each video handed with the task, put in the member's own computer (R-ATTACH-VIDEO-02)."""
+        if (not any(file.stored_id and is_video(file) for file in files) or self._attachment_store is None
+                or getattr(self, "_computer_folder", None) is None):
+            return {}
+        try:
+            return await asyncio.to_thread(place_videos, files, self._attachment_store.path, self._computer_folder(speaker.id))
+        except (OSError, RpcError, ValueError) as exc:
+            logger.warning("A video could not be put in the member's computer: %s", type(exc).__name__)
+            return {}
 
     def _stored_paths(self, files) -> dict[str, str]:
         """Where the whole of each stored file is on this computer, for the files that are still there."""
@@ -1769,6 +1791,7 @@ class BackgroundService:
         request, skill_loaded = resolve(speaker.id, task.text) if resolve is not None else (
             expand(speaker.id, task.text) if expand is not None else task.text, False)
         run._memory_untrusted = run._memory_untrusted or skill_loaded
+        from ..agent.cli.discovery import brain_ref
         system, user = _prompts(
             request,
             self._tools.local_time().data or {},
@@ -1780,6 +1803,8 @@ class BackgroundService:
             speaker=speaker,
             cli=room_cli,
             paths=self._stored_paths(files),
+            placed=await self._place_videos(speaker, files),
+            brain=brain_ref(selected_model),
         )
         user += "\n" + TASK_LANGUAGE
         from ..agent.card_context import source_text
