@@ -45,9 +45,10 @@ pill beside it is 連結應用程式.
 ## Driving it with look
 
 ```powershell
-npm run look -- start-conversation start-startup-order foot-rest foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
+foot-starter-apps shows the Connections pill with no app connected: Gmail's, Notion's and Google Calendar's marks beside its words (owner, 2026-11-15).
 start-conversation and foot-rest measure the foot at rest in both shapes (the list's one row: face 32px, pill 36px and round on
 `--surface-2`, 8px between, the pill to the foot's right edge, one row of two, words whole; the rail's column with the 36px icon button
 and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (four rows with distinct Lucide

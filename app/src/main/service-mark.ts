@@ -15,10 +15,14 @@ export function iconHTML(_name: string, icon: ServiceIconId | null, size: "md" |
 /** A service the app knows is drawn with its own mark in its brand colour; a catalogue's picture is only for the rest
  */
 export function entryIcon(entry: { name: string; icon?: string | null; logo?: string }, size: "md" | "xl"): string {
+  return entryMark(entry, size) ?? iconHTML(entry.name, null, size);
+}
+
+/** The app's own mark (ours, else the catalogue's picture, the one source every place draws it from), or null where only
+ *  the generic plug would stand: a row of marks leaves such an app out rather than show a plug. */
+export function entryMark(entry: { name: string; icon?: string | null; logo?: string }, size: "md" | "xl"): string | null {
   const known = isIcon(entry.icon) ? entry.icon : serviceIconOf({ name: entry.name });
   if (known) return iconHTML(entry.name, known, size);
   const logo = pluginLogoURL(entry.logo);
-  return logo
-    ? `<span class="mono ${size} logo-art"><img class="logo" src="${esc(logo)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>`
-    : iconHTML(entry.name, null, size);
+  return logo ? `<span class="mono ${size} logo-art"><img class="logo" src="${esc(logo)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>` : null;
 }

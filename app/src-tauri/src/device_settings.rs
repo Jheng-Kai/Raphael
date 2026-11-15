@@ -580,6 +580,14 @@ impl DeviceStore {
         self.current.lock().await.clone()
     }
 
+    /// The settings now, without waiting: `None` while a change holds them.
+    pub fn try_get(&self) -> Option<DeviceSettings> {
+        self.current
+            .try_lock()
+            .ok()
+            .map(|settings| settings.clone())
+    }
+
     /// Locks the settings for a change: nobody else changes them until the guard is dropped.
     pub async fn lock(&self) -> tokio::sync::MutexGuard<'_, DeviceSettings> {
         self.current.lock().await
@@ -590,6 +598,17 @@ impl DeviceStore {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_store_reads_now_without_waiting_and_says_none_while_a_change_holds_it() {
+        // `commands::start` puts in force what the window may already have changed (2026-11-15).
+        let store = DeviceStore::new(PathBuf::from("device.json"), DeviceSettings::default());
+        let mut held = store.current.try_lock().unwrap();
+        held.emblem_size = 120;
+        assert!(store.try_get().is_none());
+        drop(held);
+        assert_eq!(store.try_get().unwrap().emblem_size, 120);
+    }
 
     #[test]
     fn automatic_updates_are_on_by_default_and_receipts_cannot_be_forged_by_a_page() {

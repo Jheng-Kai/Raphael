@@ -285,6 +285,11 @@ pub fn run() {
                 spawn_models_copy(job);
             }
 
+            // ---- Device settings, read ----
+            // `device.json` is in the app state before the main window exists, so that the page's
+            // first read finds it (a first run that read nothing skipped the guide).
+            let device = commands::load_device_settings(app.handle());
+
             // ---- Main window ----
             // Created here rather than from the config so that it gets the webview data folder
             // like the overlay does, after the migration has put the old data there.
@@ -385,11 +390,11 @@ pub fn run() {
                 computer::spawn(app.handle());
             }
 
-            // ---- Device settings ----
-            // `device.json`: loads it, puts it in force (hotkeys, overlay size and subtitles,
-            // theme, autostart) and keeps the core told which microphone to use. It takes the
-            // overlay, the core and the hotkeys from the app state, so it comes after them.
-            commands::start(app.handle());
+            // ---- Device settings, in force ----
+            // Puts them in force (hotkeys, overlay size and subtitles, theme, autostart) and keeps
+            // the core told which microphone to use. It takes the overlay, the core and the
+            // hotkeys from the app state, so it comes after them.
+            commands::start(app.handle(), device);
             updates::start(app.handle());
 
             // A member's desktop notices follow the core even while the main window is hidden.

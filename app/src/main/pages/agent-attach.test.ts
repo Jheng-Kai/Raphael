@@ -126,6 +126,33 @@ describe("files dropped onto the thread", () => {
     expect(document.querySelector(".media-lightbox")).toBeNull();
     finishSend(); await flush(); agent.hide();
   });
+  test("a chip stands the moment a file is added, busy until its bytes are read, and a file taken away meanwhile is not sent", async () => {
+    // Owner, 2026-11-15: 「理論上應該都要可以一點下去就直接放上去了 因為 claude 就是這樣 才剛點下去他就在畫面裡了」.
+    const reads: ((buffer: ArrayBuffer) => void)[] = [];
+    const { agent, picker, chips } = mount(); await flush();
+    const slow = (file: File): File => { Object.defineProperty(file, "arrayBuffer", { value: () => new Promise<ArrayBuffer>(resolve => { reads.push(resolve); }) }); return file; };
+    Object.defineProperty(picker(), "files", { value: [slow(png("a.png")), slow(pdf())], configurable: true });
+    picker().dispatchEvent(new Event("change"));
+    // Both chips, in the same task as the change, before any byte was read.
+    expect(chips()).toEqual(["a.png", "report.pdf"]);
+    const [picture, document_] = [...agent.el.querySelectorAll<HTMLElement>(".cmp-file .cmp-chip")];
+    expect(picture.getAttribute("aria-busy")).toBe("true");
+    expect(document_.getAttribute("aria-busy")).toBe("true");
+    expect(picture.querySelector<HTMLImageElement>("img.cmp-thumb")!.src).toMatch(/^blob:/);
+    await flush();
+    expect(reads).toHaveLength(1);
+    reads.shift()!(PNG.buffer); await flush();
+    expect(picture.hasAttribute("aria-busy")).toBe(false);
+    expect(document_.getAttribute("aria-busy")).toBe("true");
+    // The PDF is taken away while it is read: its bytes arrive and nothing comes back.
+    document_.querySelector<HTMLButtonElement>("button.chip-x")!.click();
+    reads.shift()!(new Uint8Array([37, 80, 68, 70, 45]).buffer); await flush();
+    expect(chips()).toEqual(["a.png"]);
+    agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
+    expect(api.agentAskText.mock.lastCall![1]).toEqual([{ name: "a.png", mime: "image/png", data: base64Of(PNG) }]);
+    agent.hide();
+  });
+
   test("the overlay survives child crossings, leaves cleanly, and drops into removable cards", async () => {
     const { agent, chips } = mount(); await flush();
     const stage = agent.el.querySelector<HTMLElement>(".ra-stage")!;
@@ -268,7 +295,8 @@ describe("the composer with images and PDFs", () => {
     await pick(png(), pdf());
     expect(chips()).toEqual(["photo.png", "report.pdf"]);
     const [image, file] = [...agent.el.querySelectorAll<HTMLElement>(".cmp-file .cmp-chip")];
-    expect(image.querySelector<HTMLImageElement>("img.cmp-thumb")!.src).toBe(`data:image/png;base64,${base64Of(PNG)}`);
+    // The small picture is the picture's own file, shown before its bytes were read (R-ATTACH-03).
+    expect(image.querySelector<HTMLImageElement>("img.cmp-thumb")!.src).toMatch(/^blob:/);
     expect(file.querySelector("img")).toBeNull();
     for (const chip of [image, file]) {
       const x = chip.querySelector<HTMLButtonElement>("button.chip-x")!;
@@ -284,9 +312,10 @@ describe("the composer with images and PDFs", () => {
     const { agent, pick } = mount();
     await flush();
     await pick(png());
+    const thumb = agent.el.querySelector<HTMLImageElement>(".cmp-chip img.cmp-thumb")!.src;
     agent.el.querySelector<HTMLButtonElement>(".cmp-chip .cmp-pic")!.click();
     const card = document.querySelector<HTMLElement>(".media-lightbox .lb-card")!;
-    expect(card.querySelector<HTMLImageElement>(".lb-img")!.src).toBe(`data:image/png;base64,${base64Of(PNG)}`);
+    expect(card.querySelector<HTMLImageElement>(".lb-img")!.src).toBe(thumb);
     expect(card.querySelector(".lb-head, .lb-title")).toBeNull();
     card.querySelector<HTMLButtonElement>('.lb-close[data-lb="close"]')!.click();
     expect(document.querySelector(".media-lightbox")).toBeNull();

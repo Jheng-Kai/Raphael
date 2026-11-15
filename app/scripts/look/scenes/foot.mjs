@@ -16,6 +16,9 @@ export default [
     [wait(".page-agent:not([hidden]) .conversation-trigger"), { action: "startup-order", firstView: ["members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),
   scene("foot-rest", "The foot is one row as Grok Bot's: the owner's round face and the Connections pill (36px, fully round, on its own surface), with no tooltip; on the rail the icon and the face in a column",
     [check("foot-rest"), check("sidebar-shell")], marks),
+  // Owner, 2026-11-15: 「如果剛進來甚麼都還沒 connect 這邊還是要顯示 default 顯示的 我覺得就顯示 gmail Notion 跟 calendar」.
+  scene("foot-starter-apps", "With no app connected yet the pill still shows Gmail, Notion and Google Calendar beside its words",
+    [check("foot-starter-apps"), check("sidebar-shell")], { appsInventory: { state: "complete", count: 0, apps: [] } }),
   scene("foot-account-menu", "Pressing the face opens the account menu above it (to its right on the rail): 用量 with a chevron and no number, 聽寫, 行事曆, a hairline, 設定",
     [...menuWithNumber, check("foot-account-menu")], tight),
   scene("foot-usage-submenu", "用量 opens a submenu at its right edge: a block for each of the three subscriptions and OpenRouter (its window, its number, when it resets), a hairline and 管理用量",

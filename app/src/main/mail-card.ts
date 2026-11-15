@@ -10,6 +10,7 @@
 import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
 import { noticeHTML } from "./missing";
 import { NAME, eventLineHTML } from "./event-line";
+import { appLogo } from "./app-logos";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { connectionMarkHTML } from "./secret-card";
@@ -55,7 +56,7 @@ export function mailErrorText(draft: MailDraftCard): string {
 
 /** The mark of the app that sends it: its own, bare, when it is a known one, else an envelope. */
 export function senderMarkHTML(name: string): string {
-  return name && serviceIconOf({ name }) ? connectionMarkHTML(name) : `<span class="mono md" aria-hidden="true">${ico("mail")}</span>`;
+  return name && (serviceIconOf({ name }) || appLogo(name)) ? connectionMarkHTML(name) : `<span class="mono md" aria-hidden="true">${ico("mail")}</span>`;
 }
 
 /** The recipients as one short line: the first, and how many more. */

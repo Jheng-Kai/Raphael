@@ -91,53 +91,18 @@ describe("the flyer in front of a page", () => {
     expect(css("agent.css")).toMatch(/\.ra-flyer \{[^}]*z-index: 5/);
   });
 
-  test("with a page open the flyer stays after the recording and leaves when the words are in", () => {
-    const { stage, button, voice } = setup(true);
-    try {
-      voice.up();
-      expect(stage.querySelector(".ra-flyer")).not.toBeNull();
-      expect(voice.hold()).toBe(true);
-      expect(voice.isUp).toBe(true);
-      expect(voice.isHeld).toBe(true);
-      expect(stage.querySelector(".ra-flyer")).not.toBeNull();
-      // the recording is over: the button is the slot's again
-      expect(button.classList.contains("vm-away")).toBe(false);
-      voice.down();
-      expect(voice.isUp).toBe(false);
-      expect(voice.isHeld).toBe(false);
-      expect(stage.querySelector(".ra-flyer")).toBeNull();
-    } finally { voice.drop(); stage.remove(); vi.unstubAllGlobals(); }
-  });
-
-  test("without a page it is not held: the flyer goes back as it always did", () => {
-    const { stage, voice } = setup(false);
-    try {
-      voice.up();
-      expect(voice.hold()).toBe(false);
-      expect(voice.isHeld).toBe(false);
-      voice.down();
-      expect(stage.querySelector(".ra-flyer")).toBeNull();
-    } finally { voice.drop(); stage.remove(); vi.unstubAllGlobals(); }
-  });
-
-  test("a held flyer goes back when the page is put away, and a new press listens with the same one", async () => {
-    const first = setup(true);
-    try {
-      first.voice.up(); first.voice.hold();
-      first.stage.classList.remove("is-page");
-      await new Promise(resolve => setTimeout(resolve, 0));
-      expect(first.voice.isUp).toBe(false);
-      expect(first.stage.querySelector(".ra-flyer")).toBeNull();
-    } finally { first.voice.drop(); first.stage.remove(); vi.unstubAllGlobals(); }
-    const again = setup(true);
-    try {
-      again.voice.up(); again.voice.hold();
-      const flyer = again.stage.querySelector(".ra-flyer");
-      again.voice.up();
-      expect(again.voice.isHeld).toBe(false);
-      expect(again.stage.querySelectorAll(".ra-flyer")).toHaveLength(1);
-      expect(again.stage.querySelector(".ra-flyer")).toBe(flyer);
-      expect(again.button.classList.contains("vm-away")).toBe(true);
-    } finally { again.voice.drop(); again.stage.remove(); vi.unstubAllGlobals(); }
+  test("with a page open the flyer stands in front of it while the owner speaks and goes back when the recording ends", () => {
+    // Owner, 2026-11-15: after the send it stayed over the page until he left it. It goes back as it does without a page.
+    for (const page of [true, false]) {
+      const { stage, button, voice } = setup(page);
+      try {
+        voice.up();
+        expect(stage.querySelector(".ra-flyer")).not.toBeNull();
+        expect(button.classList.contains("vm-away")).toBe(true);
+        voice.down();
+        expect(voice.isUp).toBe(false);
+        expect(stage.querySelector(".ra-flyer")).toBeNull();
+      } finally { voice.drop(); stage.remove(); vi.unstubAllGlobals(); }
+    }
   });
 });

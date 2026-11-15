@@ -30,11 +30,12 @@ nothing (「那個拉菲爾大師會被 HTML 擋在後面，所以我們看不�
 mode's flyer (`voice-mode.ts`, `.ra-flyer`), a child of the conversation's stage; `page-view.css` set every stage child but
 the thread, the page and the composer to `display: none` while a page stands (`.ra-stage.is-page`), so it was never drawn,
 and the thread's own "hearing" line is hidden with the thread. R-VC-04: the flyer is the child that stays, in front of the
-page and above the composer, takes no pointer over a page, is held there after the recording while the words are heard
-(`VoiceMode.hold`, the emblem turning as the corner's does) and leaves with them.
+page and above the composer, takes no pointer over a page while the owner speaks, and flies back into the composer when the
+recording ends, over a page as anywhere (owner, 2026-11-15: held over the page until the words came back, it stayed after the
+send). `voice-over-page-answered` speaks over a page, sends, and has the words come back as a voice turn.
 
 ```powershell
-npm run look -- voice-over-page-listening voice-over-page-hearing voice-over-page-gone voice-flyer-emblem page-inplace --theme both --width 1120,720,1920x1080
+npm run look -- voice-over-page-listening voice-over-page-hearing voice-over-page-gone voice-over-page-answered voice-flyer-emblem page-inplace --theme both --width 1120,720,1920x1080
 ```
 
 The three `voice-over-page-*` scenes open the news page in a member's conversation (`ownerVoice: "pending"`: the mock core

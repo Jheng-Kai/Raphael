@@ -2089,6 +2089,18 @@ export function checkRendered(name, context = {}) {
     require(menu.top >= row.bottom || menu.bottom <= row.top, `the menu clears the row (${Math.round(menu.top)} under ${Math.round(row.bottom)})`);
     return { check: name };
   }
+  if (name === 'video-full-screen-speed') {
+    // Owner, 2026-11-15: in the app's full screen the speeds fell below the window. The player is the window there, so the
+    // menu opens from the chip, above the controls, every speed on screen.
+    const popover = document.querySelector('#app-popover'), choices = [...popover.querySelectorAll('.menu-choice')];
+    require(choices.map(choice => choice.dataset.value).join() === '0.5,0.75,1,1.25,1.5,2', 'six speeds in the app menu');
+    const menu = popover.getBoundingClientRect(), bar = document.querySelector('.media-lightbox .lb-video .mp-bar').getBoundingClientRect();
+    require(menu.height > 0 && menu.top >= 0 && menu.bottom <= innerHeight, `the menu is inside the window: ${[menu.top, menu.bottom, innerHeight].map(Math.round)}`);
+    require(popover.scrollHeight <= popover.clientHeight + 1, 'every speed shows without scrolling');
+    require(choices.every(visible), 'each speed is visible');
+    require(menu.bottom <= bar.top + 1, `the menu stands above the controls: ${Math.round(menu.bottom)} over ${Math.round(bar.top)}`);
+    return { check: name };
+  }
   if (name === 'file-card-kinds') {
     const marks = [...document.querySelectorAll('.tn[data-id="826"] .attachment-file .attachment-icon')].map(icon => icon.dataset.mark).join();
     require(marks === 'fileText,fileArchive,report', `a document, an archive and a page each have their mark: ${marks}`);
@@ -2970,6 +2982,15 @@ export function checkRendered(name, context = {}) {
   const footBox = el => el.getBoundingClientRect();
   const footNear = (a, b, message) => require(Math.abs(a - b) <= 1, `${message}: ${Math.round(a * 10) / 10} not ${Math.round(b * 10) / 10}`);
   const footRail = () => document.documentElement.hasAttribute('data-sidebar-collapsed');
+  if (name === 'foot-starter-apps') {
+    // With nothing connected the pill shows what it is for: Gmail, Notion and Google Calendar (sidebar.ts STARTER_APPS).
+    const pill = document.querySelector('#nav .sidebar-apps[data-connect-apps]');
+    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) { require(![...pill.querySelectorAll('.sidebar-app-marks .mono')].some(visible), 'on the rail the door has no marks'); return { check: name, rail: true }; }
+    const marks = [...pill.querySelectorAll('.sidebar-app-marks .mono')].filter(visible);
+    require(marks.length === 3, `the three starter marks show beside the words: ${marks.length}`);
+    require(visible(pill.querySelector('.nav-t')), 'the words stay whole');
+    return { check: name };
+  }
   if(name==='foot-rest'){
     // The foot at rest, both shapes: the list's one row (measured by sidebar-air) or the rail's column; the app opens on a conversation, so no Home
     // and no page button of the foot's remain.
@@ -3674,6 +3695,17 @@ export function checkRendered(name, context = {}) {
     require(open ? Object.keys(seen).sort().join() === 'failed,waiting' : Object.keys(seen).sort().join() === 'done,failed,message,waiting', `the lights drawn are the ones earned: ${Object.keys(seen)}`);
     return { check: name, lights: Object.keys(seen) };
   }
+  if (name === "page-window-height" || name === "page-window-stable") {
+    // R-PAGE-12: a page sized by its window says its height once, near the area's, and the frame stays there.
+    const box = document.querySelector(".pgv-frame-box"), area = document.querySelector(".pgv-page");
+    const height = parseFloat(box?.style.getPropertyValue("--pgv-h") ?? "");
+    require(height > 0, "the page said its height");
+    require(height < area.clientHeight * 1.5, `the page stops near its own height: ${height} px for an area of ${area.clientHeight}`);
+    if (name === "page-window-height") { window.__pageWindowHeight = height; return { check: name, height }; }
+    require(height === window.__pageWindowHeight, `it never grows on: ${window.__pageWindowHeight} px, then ${height} px`);
+    require(area.scrollHeight < area.clientHeight * 2, `the area has an end: ${area.scrollHeight} px to scroll in ${area.clientHeight}`);
+    return { check: name, height };
+  }
   if (name === "sidebar-light-steady") {
     // R-SIDE-04 (owner, 2026-11-15: 「這個狀態不要因為 hover 在上面移動」): a row draws no 「more」 (its right click is the menu), so
     // under the pointer nothing makes room for one: the row's light and words stand where every other row's do.
@@ -3919,7 +3951,8 @@ export function checkRendered(name, context = {}) {
     require(win.getComputedStyle(doc.body).backgroundColor === 'rgb(23, 23, 23)', "viewer gutters share the dark frame surface");
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
     const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
-    require(Math.min(Math.abs(box.width - width), Math.abs(box.height - height)) <= 2, "the canvas fills the frame on its limiting axis");
+    // Owner, 2026-11-15: no dark sliver at the screen's edge. A seat fills its frame both ways, not only on its limiting axis.
+    require(Math.abs(box.width - width) <= 0.75 && Math.abs(box.height - height) <= 0.75, `the seat fills its frame with no gutter: ${[box.width, box.height].map(n => n.toFixed(2))} in ${width}x${height}`);
     require(box.left >= -1 && box.top >= -1 && box.right <= width + 1 && box.bottom <= height + 1, "the whole desktop fits without clipping");
     require(Math.abs(box.width / box.height - canvas.width / canvas.height) < 0.01, "the desktop keeps its framebuffer aspect ratio");
     const controls = [...doc.querySelectorAll('[id^="noVNC_"]')].filter(el => /control|handle|button|panel|status|dlg|logo|hint/i.test(el.id) && el.checkVisibility({ checkVisibilityCSS: true }) && visible(el));
@@ -6639,6 +6672,13 @@ export function checkRendered(name, context = {}) {
     if (name === "voice-over-page-gone") {
       require(!flyer && !stage.classList.contains("is-voice") && !composer.querySelector(".vm-away"), "when it ends the flyer is gone and the button is its own again");
       require(composer.dataset.taskState === "idle", `the composer is at rest: ${composer.dataset.taskState}`);
+      return { check: name };
+    }
+    if (name === "voice-over-page-hearing") {
+      // Owner, 2026-11-15: after the send Raphael stayed over the page until he left it. The recording is over: the flyer is back
+      // in the composer at once, over a page as anywhere, and the slot's Stop belongs to the words on their way.
+      require(!flyer && !stage.classList.contains("is-voice") && !composer.querySelector(".vm-away"), "once the recording ends the flyer is back in the composer");
+      require(composer.dataset.taskState === "ack", `the words are on their way: ${composer.dataset.taskState}`);
       return { check: name };
     }
     require(visible(flyer), "the flyer is drawn in front of the page");

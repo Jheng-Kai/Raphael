@@ -155,12 +155,17 @@ _HELPER = """<script>
     if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
   });
   addEventListener('DOMContentLoaded', () => {
-    let previous = 0;
+    let previous = 0, framed = innerHeight;
     const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);
       const own = box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
       // The root also holds the margins of a first and last child, which collapse through the body.
       const height = Math.max(80, Math.min(20000, Math.ceil(Math.max(own, document.documentElement.getBoundingClientRect().height))));
-      if (height !== previous) { previous = height; post('height', {height}); } };
+      // A page sized by its window (a column `height: 100vh` with padding beside it) grows by just as much as its frame did: that
+      // is the frame's own growth coming back, not more page, and passing it on would grow the frame without end (R-PAGE-12).
+      const grown = innerHeight - framed;
+      framed = innerHeight;
+      if (height === previous || (previous && grown > 0 && Math.abs(height - previous - grown) <= 1)) return;
+      previous = height; post('height', {height}); };
     const sizes = new ResizeObserver(report);
     sizes.observe(document.body); sizes.observe(document.documentElement); report();
   }, {once:true});

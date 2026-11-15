@@ -192,13 +192,15 @@ export function bindPlayer(player: HTMLElement): void {
       }
       case "rate": {
         // The speeds open below the whole player (above it when there is no room), at the chip's side, so they never lie over
-        // the player's own words: its time, its name.
-        const below = (): DOMRect => {
-          const chip = act.getBoundingClientRect(), box = player.getBoundingClientRect();
+        // the player's own words: its time, its name. In the app's full screen the player is the window and has no room on
+        // either side, so they open from the controls' bar instead, above its scrubber (owner, 2026-11-15: they fell off the screen).
+        const beside = (): DOMRect => {
+          const chip = act.getBoundingClientRect();
+          const box = (player.closest(".media-lightbox") ? player.querySelector(".mp-bar") ?? player : player).getBoundingClientRect();
           return new DOMRect(chip.left, box.top, chip.width, box.height);
         };
         openMenu(act, RATES.map(rate => ({ value: String(rate), label: rateLabel(rate) })), String(media.playbackRate), value => { media.playbackRate = Number(value); wake(); },
-          undefined, [], { anchorRect: below });
+          undefined, [], { anchorRect: beside });
         break;
       }
       case "full": openFull(player); break;

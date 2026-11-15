@@ -84,10 +84,6 @@ export class VoiceMode {
   private hidden: HTMLElement[] = [];
   /** The voice button whose picture is hidden while the flyer is up. */
   private button: HTMLElement | null = null;
-  /** The recording ended and the flyer stays over a page while the words are heard (see `hold`). */
-  private holding = false;
-  /** Brings a held flyer down when the page that made it stay is put away. */
-  private watcher: MutationObserver | null = null;
 
   constructor(private readonly parts: VoiceModeParts) {}
 
@@ -96,23 +92,10 @@ export class VoiceMode {
     return this.flyer !== null;
   }
 
-  /** Whether the flyer is held over a page after the recording (the words are being heard). */
-  get isHeld(): boolean {
-    return this.holding;
-  }
-
   /** The picture flies out of the composer. Nothing happens while it is up already or there is no composer. */
   up(): void {
     const button = this.parts.button();
     const composer = this.parts.composer();
-    // A new recording while the last one's words are still heard: the same flyer listens again.
-    if (this.flyer && this.holding) {
-      this.release();
-      this.emblem?.set("listening");
-      button?.classList.add(AWAY);
-      this.button = button;
-      return;
-    }
     if (this.flyer || !button || !composer || button.getClientRects().length === 0) return;
     const target = this.parts.target();
     const { from, to } = flightPath(this.parts.stage.getBoundingClientRect(), button.getBoundingClientRect(), composer.getBoundingClientRect(), target?.getBoundingClientRect());
@@ -141,38 +124,9 @@ export class VoiceMode {
     if (!reduced()) flyer.animate([{ transform: spotTransform(from) }, { transform: spotTransform(to) }], { ...OUT, fill: "backwards" });
   }
 
-  /**
-   * The recording ended while a page stands in the thread's place: the flyer is not taken back but stays in front of the page,
-   * turning as the corner's emblem does while the words are heard and made into a message, with no voice in it and no hand to
-   * press (the composer's button is the slot's again). Answers whether it stays; false leaves the flyer to `down`. It goes back
-   * on its own when the page is put away, and by `down` or `drop` when the words are in.
-   */
-  hold(): boolean {
-    const stage = this.parts.stage;
-    if (!this.flyer || !stage.classList.contains("is-page")) return false;
-    this.emblem?.set("thinking");
-    this.level(0);
-    this.button?.classList.remove(AWAY);
-    this.button = null;
-    this.holding = true;
-    if (typeof MutationObserver === "function") {
-      this.watcher?.disconnect();
-      this.watcher = new MutationObserver(() => { if (!stage.classList.contains("is-page")) this.down(); });
-      this.watcher.observe(stage, { attributes: true, attributeFilter: ["class"] });
-    }
-    return true;
-  }
-
-  private release(): void {
-    this.holding = false;
-    this.watcher?.disconnect();
-    this.watcher = null;
-  }
-
   /** The picture flies back into the composer and is gone. */
   down(): void {
     const flyer = this.flyer;
-    this.release();
     if (!flyer) return;
     this.flyer = null;
     const hidden = this.hidden;
@@ -210,7 +164,6 @@ export class VoiceMode {
   /** The picture is gone at once (the page is left). */
   drop(): void {
     const flyer = this.flyer;
-    this.release();
     this.flyer = null;
     this.emblem?.dispose();
     this.emblem = null;

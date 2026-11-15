@@ -79,6 +79,19 @@ test("attachment-only delivery uses the shared composer and keeps the file on fa
  view.el.requestSubmit();await flush();expect(send).toHaveBeenLastCalledWith("",[{name:"notes.txt",mime:"text/plain",data:btoa("notes")}]);expect(view.el.querySelector<HTMLElement>(".cmp-file")!.hidden).toBe(true);
 });
 
+test("a room's chip stands the moment a file is added, busy and unsendable until its bytes are read",async()=>{
+ // Owner, 2026-11-15: 「才剛點下去他就在畫面裡了」 (R-ATTACH-03).
+ const {view,send}=mount();const picker=view.el.querySelector<HTMLInputElement>(".cmp-picker")!;let read!:(buffer:ArrayBuffer)=>void;
+ Object.defineProperty(picker,"files",{value:[{name:"notes.txt",type:"text/plain",size:5,arrayBuffer:()=>new Promise<ArrayBuffer>(resolve=>{read=resolve;})}]});picker.dispatchEvent(new Event("change"));
+ const chip=view.el.querySelector<HTMLElement>(".cmp-file .cmp-chip")!;
+ expect(chip.textContent).toContain("notes.txt");expect(chip.getAttribute("aria-busy")).toBe("true");
+ expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);
+ expect(view.snapshot().files).toEqual([]);
+ await flush();read(new TextEncoder().encode("notes").buffer);await flush();
+ expect(view.el.querySelector(".cmp-file .cmp-chip")!.hasAttribute("aria-busy")).toBe(false);
+ view.el.requestSubmit();await flush();expect(send).toHaveBeenLastCalledWith("",[{name:"notes.txt",mime:"text/plain",data:btoa("notes")}]);
+});
+
 test("plus only attaches, and the permission mode is its own named control on the model menu's card, with what each mode does", async () => {
  const {view}=mount();
  const picker=view.el.querySelector<HTMLInputElement>(".cmp-picker")!,pick=vi.spyOn(picker,"click");

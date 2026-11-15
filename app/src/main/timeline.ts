@@ -40,6 +40,8 @@ import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
+import { appLogo } from "./app-logos";
+import { pluginLogoURL } from "./plugins-data";
 import type { AgentStep, AgentTask, AgentTurn, CliBrainId, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
 
@@ -363,8 +365,11 @@ function stepIcon(step: AgentStep): string {
   }
   const mark = serviceIconOf({ name: step.server });
   if (mark && hasLogo(mark)) return `<span class="step-ic logo-art" ${named}>${serviceLogoHTML(mark)}</span>`;
-  return mark
-    ? `<span class="step-ic logo-mono"${brandStyle(mark)} ${named}>${serviceIconSVG(mark)}</span>`
+  if (mark) return `<span class="step-ic logo-mono"${brandStyle(mark)} ${named}>${serviceIconSVG(mark)}</span>`;
+  // An app we draw no mark for: the catalogue's picture of it, as the lists draw it (app-logos.ts).
+  const picture = pluginLogoURL(step.server ? appLogo(step.server) : undefined);
+  return picture
+    ? `<span class="step-ic logo-art" ${named}><img class="logo" src="${esc(picture)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>`
     : `<span class="step-ic" ${named}>${ico("plug")}</span>`;
 }
 

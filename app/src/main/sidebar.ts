@@ -3,8 +3,8 @@ import { onLocaleChange, t } from "./i18n";
 import { messageTooltip } from "./message-tooltip";
 import * as api from "./api";
 import { entryLabel, type InventoryView } from "./apps-inventory";
-import { iconHTML } from "./service-mark";
-import { serviceIconOf } from "./service-icons";
+import { entryMark } from "./service-mark";
+import { rememberAppLogos } from "./app-logos";
 import type { AppContext } from "./types";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
 import { ico } from "./ui";
@@ -22,6 +22,8 @@ const CONVERSATION_MIN = 604;
  *  list between its two shapes. */
 const RAIL_WIDTH = 88, TO_RAIL = 150, FROM_RAIL = 170;
 const WIDTH_KEY = "raphael.sidebar.width";
+/** The Connections pill's marks before any app is connected: what most people connect first. */
+const STARTER_APPS = ["Gmail", "Notion", "Google Calendar"] as const;
 const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent" | "go">): void {
@@ -39,9 +41,14 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (apps.getAttribute("aria-label") !== label) apps.setAttribute("aria-label", label);
     // Nothing shows under the pointer over this button, in the list or on the rail (owner, 2026-11-12): its name is for a screen reader.
     if (apps.querySelector(".nav-t")!.textContent !== name) apps.querySelector(".nav-t")!.textContent = name;
-    const marks = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
-      .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0))
-      .flatMap(item => { const icon = serviceIconOf({ name: item.name }); return icon ? [iconHTML(item.name, icon, "md")] : []; }).slice(0, 3)
+    if (typeof inventory === "object") rememberAppLogos(inventory.apps);
+    const connected: { name: string; logo?: string }[] = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
+      .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0)) : [];
+    // With nothing connected yet the pill still shows what it is for (owner, 2026-11-15: 「不然一開始很空」); a reading that failed shows none.
+    // Each mark is the app's own, from the one source every place draws it from (ours, else the catalogue's picture).
+    const shown = typeof inventory === "object" && !connected.length ? STARTER_APPS.map(name => ({ name })) : connected;
+    const marks = typeof inventory === "object" ? shown
+      .flatMap(app => { const mark = entryMark(app, "md"); return mark ? [mark] : []; }).slice(0, 3)
       // Each mark knows where it stands against the middle one, for the pill's hover (sidebar.css `--spread`).
       .map((mark, at, all) => `<span class="sidebar-app-mark" style="--spread:${at - (all.length - 1) / 2}">${mark}</span>`).join("") : "";
     const host = apps.querySelector(".sidebar-app-marks")!;

@@ -13,6 +13,8 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { syncQuestionCard } from "./owner-question-sync";
 import { SERVICE_ICONS, type MonoIconId, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
+import { appLogo } from "./app-logos";
+import { entryMark } from "./service-mark";
 import type { AgentTurn, SecretCard } from "./types";
 import { btn, esc, ico } from "./ui";
 
@@ -33,6 +35,9 @@ export function connectionMarkHTML(name: string, inline = false): string {
     const mono = id as MonoIconId;
     return `<span class="mono md logo-mono"${brandStyle(mono)}>${serviceIconSVG(mono)}</span>`;
   }
+  // An app we draw no mark for: the catalogue's picture of it, the one the lists draw (app-logos.ts).
+  const picture = entryMark({ name, logo: appLogo(name) }, "md");
+  if (picture) return picture;
   return inline ? ico("plug") : `<span class="mono md" aria-hidden="true">${ico("plug")}</span>`;
 }
 

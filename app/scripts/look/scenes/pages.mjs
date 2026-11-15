@@ -27,6 +27,9 @@ const baseOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { acti
 const baseFixture = { baseTurn: true, pageBase: true };
 
 export default [
+  // Owner, 2026-11-15: 「他現在看起來是會變得無限長 看不到底部 可以一直滑動」: a side column `height: 100vh` with padding said a taller
+  // page each time its frame grew, up to 20000 px. It opens at its own height and stops there.
+  scene("page-window-sized", "A page whose side column is one window tall plus its padding opens at its own height and never grows on", [member(1), wait('.pg-body[data-state="ready"] iframe'), click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { ...lookCall("letTimePass"), wait: 800 }, check("page-window-height"), { ...lookCall("letTimePass"), wait: 2500 }, check("page-window-stable"), { action: "wheel", selector: ".pgv-page", deltaY: 6000 }, { ...lookCall("letTimePass"), wait: 600 }], { baseTurn: true, pageWindow: true }),
   scene("page-product", "A member shows a product page as a card: its title row and the top of the page, clipped, nothing in it to press", [...shown, check("page-card")], { pageTurn: true }),
   scene("page-buy", "Page text appends to the focused draft without sending", [...shown, type('.page-agent .cmp-input', "我原本的草稿"), ...larger, { action: "frame-click", selector: "#buy" }, wait(".page-agent .cmp-page-note"), check("page-appended")], { pageTurn: true }),
   scene("page-composer-grows", "Lines typed under a thread whose last item is a card grow the composer, and the thread stays at its bottom", [...shown, check("composer-grows-before"), type('.page-agent .cmp-input', "這是一段很長的草稿，一直寫到換好幾行為止。".repeat(14)), { action: "wait-scroll-end", selector: ".mb-chat .ra-scroll" }, check("composer-grows-keeps-bottom")], { pageTurn: true }),
@@ -55,12 +58,17 @@ export default [
   scene("page-room-end", "A room's page runs under the room's floating composer the same way, and only the composer takes the pointer", [...roomShown, ...larger, frameScroll(4000), waitScrollEnd(".pgv-page"), check("page-under-composer")], { pageTurn: true, roomOwnerCard: "page" }),
   // The owner speaks with a page open (voice-mode.ts, page-view.css): the thread is hidden under the page, so Raphael's flyer stays in front of it, while he speaks and while his words are heard, and leaves with them.
   ...[["listening", "While the owner speaks over an open page, Raphael stands in front of the page, above the composer, and the page stays operable under him"],
-    ["hearing", "The recording is over and the words are being heard: Raphael stays in front of the page, turning, until they are in"],
+    ["hearing", "The recording is over and the words are on their way: Raphael is back in the composer at once, over a page as anywhere"],
     ["gone", "When the words are in or the dictation ends, Raphael is gone from in front of the page and the composer is at rest"]].map(([phase, words], at) => scene(`voice-over-page-${phase}`, words, [
     ...news, ...larger, { action: "press-voice" }, wait(".ra-stage.is-page > .ra-flyer canvas.ra-flyer-emblem"), { action: "emit", events: [{ type: "VoiceLevel", value: 0.6 }], wait: 900 },
     ...(at === 0 ? [check("voice-over-page-listening")] : [click(".page-agent .composer .cmp-voice"), wait('.page-agent .composer[data-task-state="ack"]'), { action: "emit", events: [], wait: 700 }, check("voice-over-page-hearing")]),
     ...(at === 2 ? [{ action: "emit", events: [{ type: "Dictation", phase: "cancelled", agent: true, member_id: 1 }], wait: 900 }, check("voice-over-page-gone")] : [])],
     { ...newsFixture, ownerVoice: "pending", emblem: true })),
+  // Owner, 2026-11-15: after speaking over an open page and sending, Raphael stayed in front of the page and the slot stayed Stop
+  // until he left the page. The words come back as a member's voice turn: Raphael leaves and the composer is at rest.
+  scene("voice-over-page-answered", "Words spoken over an open page are answered: Raphael leaves the page and the composer is at rest", [
+    ...news, ...larger, { action: "press-voice" }, wait(".ra-stage.is-page > .ra-flyer canvas.ra-flyer-emblem"), { action: "emit", events: [{ type: "VoiceLevel", value: 0.6 }], wait: 600 },
+    click(".page-agent .composer .cmp-voice"), { action: "emit", events: [], wait: 2500 }, check("voice-over-page-gone")], { ...newsFixture, ownerVoice: "answer", emblem: true }),
   scene("page-inplace-room", "A room's page opens in the room's place the same way: its arrow at the header's top left, the room's composer below", [...roomShown, ...larger, check("page-inplace")], { pageTurn: true, roomOwnerCard: "page" }),
   scene("page-inplace-room-update", "A page changed while open in a room updates in place and the room keeps one card", [...roomShown, ...larger, check("page-watch"), lookCall("updatePage", "page-product"), frameExpect("NT$ 990", 0), check("page-inplace-updated")], { pageTurn: true, roomOwnerCard: "page" }),
   // A report (report-page.ts) opens in the same place, and goes back by the same arrow: a link card in the reply, the composer below.

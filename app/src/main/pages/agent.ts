@@ -199,6 +199,10 @@ export const attachLimit = attachmentLimit;
 export interface ComposerFile extends WireAttachment {
   id: number;
   size?: number;
+  /** Its chip stands while the bytes are still read or stored (R-ATTACH-03); a send waits for them. */
+  pending?: boolean;
+  /** A picture's own file as an object URL, its thumbnail while it is pending. */
+  preview?: string;
 }
 
 /** The files as `agent.ask` takes them: name, type and bytes, nothing of the page's own. */
@@ -625,7 +629,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function saveComposerDraft(): void {
     clearTimeout(draftTimer);
     if (composerKey === "deleted") return;
-    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
+    // A pending file is not kept: leaving the conversation ends its reading (`attachmentEpoch`).
+    const draft: ComposerDraft = { text: input.value, files: files.filter(file => !file.pending), missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
     if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
     else restored.delete(composerKey);
     writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId });
@@ -814,6 +819,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const follows = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= BOTTOM_SLACK_PX;
     for (const [id, chip] of fileChips) {
       if (files.some((file) => file.id === id)) continue;
+      if (chip.dataset.preview) URL.revokeObjectURL(chip.dataset.preview);
       chip.remove();
       fileChips.delete(id);
     }
@@ -823,6 +829,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         chip = fileChipElement(file);
         fileChips.set(file.id, chip);
       }
+      if (file.pending) chip.setAttribute("aria-busy", "true");
+      else chip.removeAttribute("aria-busy");
       fileChip.append(chip); // preserve attachment order
       const x = chip.querySelector<HTMLElement>(".chip-x")!;
       x.setAttribute("aria-label", t("agent.unattach"));
@@ -851,9 +859,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     chip.dataset.file = String(file.id);
     chip.innerHTML = draftFileHTML(file, `data-act="unattach-file" data-file="${file.id}"`);
     const thumb = chip.querySelector<HTMLImageElement>(".cmp-thumb");
-    // A raster thumbnail from the draft's own bytes.
+    // A raster thumbnail: the picture's own file while its bytes are read (kept until the chip goes), else the draft's bytes.
     if (thumb) {
-      if (file.stored_id) void api.attachmentSource(file.stored_id).then(url => { if (thumb.isConnected) thumb.src = url; }).catch(() => {});
+      if (file.preview) { thumb.src = file.preview; chip.dataset.preview = file.preview; }
+      else if (file.stored_id) void api.attachmentSource(file.stored_id).then(url => { if (thumb.isConnected) thumb.src = url; }).catch(() => {});
       else thumb.src = `data:${file.mime};base64,${file.data}`;
     }
     return chip;
@@ -1427,13 +1436,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       hearingTimer = undefined;
       if (!hearing) return;
       hearing = null;
-      if (voice.isHeld) voice.down();
       if (visible) render();
     }, HEARING_MAX_MS);
   }
   function stopHearing(): void {
     hearing = null;
-    if (voice.isHeld) voice.down();
     clearTimeout(hearingTimer);
     hearingTimer = undefined;
   }
@@ -1591,12 +1598,23 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   async function attachAll(list: readonly File[]): Promise<void> {
     const epoch = attachmentEpoch;
+    // Every chip stands at once, as Claude's do (owner, 2026-11-15: 「才剛點下去他就在畫面裡了」); the bytes are read and
+    // stored after, one file after the other, and a send waits for them (R-ATTACH-03).
+    const placed: { file: File; id: number; mime: string; name: string }[] = [];
+    for (const file of list) {
+      const place = placeFile(file, attachmentType(file));
+      if (place === "stop") break;
+      if (place) placed.push(place);
+    }
+    if (!placed.length) return;
+    drawFile();
+    input.focus();
     attaching++;
     composer.setAttribute("aria-busy", "true");
     attachQueue = attachQueue.then(async () => {
-      for (const file of list) {
+      for (const place of placed) {
         if (epoch !== attachmentEpoch) break;
-        if (!(await attachFile(file, attachmentType(file), epoch))) break;
+        await readPlaced(place, epoch);
       }
     }).finally(() => {
       attaching--;
@@ -1605,41 +1623,50 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     await attachQueue;
   }
 
-  async function attachFile(file: File, mime: string, epoch: number): Promise<boolean> {
+  /** The file's chip, pending, or why it cannot be taken: "stop" for too many, which ends the list. */
+  function placeFile(file: File, mime: string): { file: File; id: number; mime: string; name: string } | "stop" | null {
     const name = file.name.trim() || `image.${mime.slice(mime.indexOf("/") + 1)}`;
     const refusal = attachRefusal(files.length, mime, file.size, files.reduce((sum, item) => sum + (item.size ?? 0), 0));
     if (refusal === "count") {
       toaster.info(t("agent.attachTooMany", { p0: ATTACH_MAX }));
-      return false;
+      return "stop";
     }
     if (refusal === "size") {
       toaster.info(t("agent.attachTooBig", { p0: name, p1: attachmentLimit(mime) / 1024 / 1024 }));
-      return true;
+      return null;
     }
     if (refusal === "total") {
       toaster.info(t("agent.attachTotal", { p0: TOTAL_MAX_BYTES / 1024 / 1024 }));
-      return true;
+      return null;
     }
+    if (refusal === "empty") {
+      toaster.info(t("agent.attachUnreadable", { p0: name }));
+      return null;
+    }
+    const id = ++fileIds;
+    const preview = fileKind(mime) === "image" ? URL.createObjectURL(file) : undefined;
+    files = [...files, { id, name, mime, size: file.size, data: "", pending: true, ...(preview ? { preview } : {}) }];
+    const missing = missingFiles.findIndex(item => item.name === name && item.mime === mime);
+    if (missing >= 0) missingFiles.splice(missing, 1);
+    return { file, id, mime, name };
+  }
+
+  /** Reads a pending file's bytes (a large one is stored in chunks) into its chip; one taken away meanwhile is dropped. */
+  async function readPlaced(place: { file: File; id: number; mime: string; name: string }, epoch: number): Promise<void> {
+    const kept = (): boolean => epoch === attachmentEpoch && files.some(file => file.id === place.id);
     let attached: WireAttachment;
     try {
-      if (refusal === "empty") throw new Error("empty");
-      attached = await readComposerFile(file, mime, () => epoch === attachmentEpoch);
+      attached = await readComposerFile(place.file, place.mime, kept);
     } catch {
-      toaster.info(t("agent.attachUnreadable", { p0: name }));
-      return true;
+      if (!kept()) return;
+      files = files.filter(file => file.id !== place.id);
+      drawFile();
+      toaster.info(t("agent.attachUnreadable", { p0: place.name }));
+      return;
     }
-    if (epoch !== attachmentEpoch) return false;
-    // Others may have been attached while this one was read.
-    if (files.length >= ATTACH_MAX) {
-      toaster.info(t("agent.attachTooMany", { p0: ATTACH_MAX }));
-      return false;
-    }
-    files = [...files, { ...attached, id: ++fileIds, name, mime, size: file.size }];
-    const missing = missingFiles.findIndex(file => file.name === name && file.mime === mime);
-    if (missing >= 0) missingFiles.splice(missing, 1);
+    if (!kept()) return;
+    files = files.map(file => file.id === place.id ? { ...attached, id: place.id, name: place.name, mime: place.mime, size: place.file.size } : file);
     drawFile();
-    input.focus();
-    return true;
   }
 
   // ---------- the voice ----------
@@ -1733,8 +1760,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       listening = false;
       clearTimeout(listenTimer);
       listenTimer = setTimeout(() => {
-        // Not while the words are being heard: the flyer held over a page is the one sign of it.
-        if (!listening && !voice.isHeld) voice.down();
+        if (!listening) voice.down();
       }, LISTEN_WAIT_MS);
     }
     // In toggle mode the press made while recording is the one that ends it (in hold mode, the release is: `voiceUp`).
@@ -2291,7 +2317,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       note = document.createElement("div"); note.dataset.conversationMissing = ""; composer.append(note);
     }
     if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
-    if (task) { if ((!listening || voiceMember !== memberId()) && !(voice.isHeld && voiceMember === memberId())) voice.drop(); voiceButton.classList.remove("vm-away"); }
+    if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
   }
 
@@ -2919,8 +2945,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
         listening = false;
         voiceRequested = false;
-        // A page in the thread's place hides the thread's own hearing line: the flyer stays in front of it while the words are heard.
-        if (!(event.phase === "processing" && visible && (event.member_id ?? RAPHAEL_ID) === memberId() && voice.hold())) voice.down();
+        // The recording is over: the flyer goes back into the composer, over a page as anywhere (owner, 2026-11-15: held over a
+        // page until the words came back, it stayed after the send). The page's own line says the member is at work (R-VC-04).
+        voice.down();
         if (event.phase === "cancelled" || event.phase === "failed") takeBackVoiceDraft();
         drawComposerTask();
         if (event.phase === "processing") {

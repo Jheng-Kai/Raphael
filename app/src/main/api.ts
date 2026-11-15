@@ -327,7 +327,7 @@ export const membersRead = (id: number): Promise<unknown> => core("members.read"
 /** The thread on screen now (null for none): what arrives there is no news. */
 export const membersViewing = (id: number | null): Promise<unknown> => core("members.viewing", { id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
 /** Raphael's own tools a member may be given, by id, and the connections. */
-export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }> =>
+export const membersToolChoices = (): Promise<{ tools: string[]; connections: { id: string; name: string; enabled: boolean; logo?: string }[] }> =>
   core("members.tool_choices");
 
 export const groupsCreate = (name: string): Promise<{ group: MemberGroup }> => core("groups.create", { name });

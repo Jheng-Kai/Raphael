@@ -2222,10 +2222,11 @@ fn layout_has_altgr(hkl: windows::Win32::UI::Input::KeyboardAndMouse::HKL) -> bo
 
 // ---------- start ----------
 
-/// Loads the device settings, puts them in force and keeps the core told about the microphone.
-/// Called once from `setup`, after the overlay, the core and the hotkeys have been started. It
-/// cannot fail: whatever does not work is logged, and the settings page still opens.
-pub fn start(app: &AppHandle) {
+/// Reads `device.json` and puts its store in the app state. Called from `setup` before the main
+/// window is made: the window's first read of the device settings must find them. A release
+/// build's page once asked before the store existed, read nothing, and a first run opened on the
+/// pages instead of the guide (2026-11-15). Returns the settings as read.
+pub fn load_device_settings(app: &AppHandle) -> DeviceSettings {
     let path = device_settings::settings_path().unwrap_or_else(|err| {
         log::error!("{err}");
         app.path()
@@ -2235,6 +2236,16 @@ pub fn start(app: &AppHandle) {
     });
     let settings = DeviceSettings::load(&path);
     app.manage(DeviceStore::new(path, settings.clone()));
+    settings
+}
+
+/// Puts the device settings in force and keeps the core told about the microphone. Called once
+/// from `setup`, after the overlay, the core and the hotkeys have been started. The window may
+/// already have changed some (its fixed settings): the store's settings now are what is applied,
+/// `read` only while a change holds them. It cannot fail: whatever does not work is logged, and
+/// the settings page still opens.
+pub fn start(app: &AppHandle, read: DeviceSettings) {
+    let settings = app.state::<DeviceStore>().try_get().unwrap_or(read);
     apply_saved(app, &settings);
     // The tray's menu was drawn before the settings were known: it names the microphone and
     // speaks the language they chose.

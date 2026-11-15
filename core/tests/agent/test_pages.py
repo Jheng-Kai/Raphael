@@ -934,3 +934,12 @@ async def test_a_changed_page_is_shared_as_it_is_now_and_a_secret_in_it_still_st
 ], ids=["plain", "reserved-characters", "chinese", "dots", "device", "device-extension", "nothing-left", "long"])
 def test_a_report_file_is_named_after_its_page_as_windows_takes_a_name(title, name):
     assert file_name(title) == name
+
+
+def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
+    # R-PAGE-12: a page sized by its window grows by just as much as its frame did; that echo is not sent, or the frame
+    # would grow without end (look page-window-sized proves it in a browser).
+    from raphael_core.agent.pages import _HELPER
+    assert "const grown = innerHeight - framed;" in _HELPER
+    assert "Math.abs(height - previous - grown) <= 1" in _HELPER
+    assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")

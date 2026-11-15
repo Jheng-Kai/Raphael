@@ -1236,7 +1236,8 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // What the core serves of an HTML page that writes no style of its own: the page with the app's base style in front of it,
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
-        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageBaseDocs[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
+        // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
+        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
         if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };
@@ -2205,7 +2206,8 @@ export function installMock(fixture, config = {}, target = window) {
         if (!data.conversations.some(c => c.id === args.conversationId && c.member_id === member)) throw new Error("Composer voice must name its own conversation");
         notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true, member_id: member });
         if (args.kind === "agent_up" && variant.ownerVoice === "answer") {
-          const turn = { ...copy(data.ownerRound.voiceReply), member_id: member, conversation_id: args.conversationId };
+          // As the core writes it: the newest turn of the thread, made now.
+          const turn = { ...copy(data.ownerRound.voiceReply), id: Math.max(0, ...data.turns.map(item => item.id)) + 1, created_at_ms: Date.now(), member_id: member, conversation_id: args.conversationId };
           data.turns.push(turn); notify("AgentTurn", { turn_id: turn.id, member_id: member });
         }
         return;
