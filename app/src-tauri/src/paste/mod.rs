@@ -17,6 +17,8 @@ mod clipboard;
 mod windows;
 
 #[cfg(windows)]
+pub use self::clipboard::read_text as read_clipboard_text;
+#[cfg(windows)]
 pub use self::windows::WindowsPaster;
 #[cfg(windows)]
 pub(crate) use self::windows::describe_process;

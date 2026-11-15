@@ -66,12 +66,25 @@ addEventListener('message', event => {
   }
   if (event.data?.type === 'raphael-desktop-disable') {
     clearInterval(framesTimer); framesTimer = null;
+    pasting = null;
     if (rfb) { rfb.viewOnly = true; rfb.disconnect(); rfb = null; }
+    return;
+  }
+  if (event.data?.type === 'raphael-desktop-paste') {
+    const ask = pasting;
+    if (!ask || ask.id !== event.data.id) return;
+    pasting = null;
+    // Control ended while the app read the clipboard: nothing is pasted.
+    if (!rfb || rfb.viewOnly) return;
+    const text = event.data.text;
+    if (typeof text === 'string' && text && text.length <= PASTE_MAX) rfb.clipboardPasteFrom(text);
+    setTimeout(() => chord(ask.shift), 60);
     return;
   }
   if (event.data?.type !== 'raphael-desktop-control' || !rfb) return;
   const current = ++revision;
   rfb.viewOnly = true;
+  pasting = null;
   if (!event.data.held) return;
   void fetch('./control', {cache:'no-store'}).then(response => response.ok ? response.json() : null).then(config => {
     if (current !== revision || !rfb || !config?.held) return;
@@ -92,6 +105,36 @@ addEventListener('message', event => {
     }
   }).catch(() => {});
 });
+// Paste from the owner's PC. While he holds control (rfb.viewOnly is false) Ctrl+V and Ctrl+Shift+V are held back here, because
+// the computer would paste its own clipboard. The app, which alone reads his clipboard, is asked for its text; it goes to the
+// computer's clipboard and only then are the keys of the paste sent. Watching, or a member at work, never asks.
+const PASTE_WAIT_MS = 1500, PASTE_MAX = 1000000, mods = {ctrl:false, shift:false};
+let pasteAsks = 0, pasting = null;
+function track(event) {
+  if (event.key === 'Control') mods.ctrl = event.type === 'keydown';
+  else if (event.key === 'Shift') mods.shift = event.type === 'keydown';
+}
+function chord(shift) {
+  if (!rfb || rfb.viewOnly) return;
+  if (!mods.ctrl) rfb.sendKey(0xFFE3, 'ControlLeft', true);
+  if (shift && !mods.shift) rfb.sendKey(0xFFE1, 'ShiftLeft', true);
+  rfb.sendKey(shift ? 0x56 : 0x76, 'KeyV');
+  if (shift && !mods.shift) rfb.sendKey(0xFFE1, 'ShiftLeft', false);
+  if (!mods.ctrl) rfb.sendKey(0xFFE3, 'ControlLeft', false);
+}
+screen.addEventListener('keyup', track, true);
+screen.addEventListener('keydown', event => {
+  track(event);
+  if (!rfb || rfb.viewOnly || event.code !== 'KeyV' || !event.ctrlKey || event.altKey || event.metaKey) return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  if (event.repeat || pasting) return;
+  const id = ++pasteAsks, shift = event.shiftKey;
+  pasting = {id, shift};
+  parent.postMessage({type:'raphael-desktop-paste-request', id}, '*');
+  // An app that does not answer leaves the paste as it was: the computer's own clipboard.
+  setTimeout(() => { if (pasting?.id === id) { pasting = null; chord(shift); } }, PASTE_WAIT_MS);
+}, true);
+addEventListener('blur', () => { mods.ctrl = mods.shift = false; });
 screen.addEventListener('mousedown', () => {
   if (rfb && !rfb.viewOnly && controlAt) {
     parent.postMessage({type:'raphael-desktop', state:'input', latencyMs:performance.now()-controlAt}, '*');

@@ -1859,3 +1859,29 @@ and live browser behavior require separate native acceptance.
 The private-picture capture race also requires test_navigation_after_capture_cannot_release_the_captured_private_picture:
 a safe observation authorizes the next read, never earlier captured pixels. Recheck
 grant/target before and after the final observation; revoked reads return no tree.
+
+
+## A key for a program in a member's computer, and paste into the computer (2026-11-15, R-KEY-01, R-KEY-02, R-KEY-03, R-PASTE-01)
+
+A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
+variable name) and `purpose`; the existing secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存 NAME」, says
+what it is for and that it goes to a program in the member's computer, and takes the value in its one masked field
+(Credential Manager, a `vault_entries` row of kind `key`, never the conversation, a row or a log). The member then
+runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one process's environment (`docker exec -e NAME`,
+the value in the docker process's own environment, never an argument) and replaces them in everything returned,
+including a background job's log read later. The Keys tab of the safety pane's saved-entries list (`vault.ts`) shows
+and removes them; it offers no way to add one. In the live view (`BOOTSTRAP` in `computer/viewer.py` and
+`desktop-viewer.ts`) the owner's Ctrl+V, while he holds the screen, puts his clipboard into the computer first
+(`owner_clipboard_text`, `paste/clipboard.rs`) and then sends the keys; watching or a member's work never reads it.
+
+Selected matrix, from app/:
+
+```powershell
+npm run look -- computer-key-card computer-key-saved computer-login-card chat-secret-masked desktop-owner --theme both --width 1120,720,1920x1080
+```
+
+Compare the key card with the login card and chat-secret-masked at the same theme/width: the same shell, one masked
+field, Save below, no value in the markup, text or recorded calls. Core: `tests/computer/test_computer_keys.py`,
+`tests/evaluate/test_card_tools.py`, `tests/brain/test_db.py`. App: `secret-card.test.ts`, `vault.test.ts`,
+`desktop-viewer.test.ts`, `desktop-paste-page.test.ts`; Rust: `cargo test paste::clipboard`. Not proved offline: a paste
+into a real container (the image's VNC server taking the client's cut text) and a real Credential Manager write.

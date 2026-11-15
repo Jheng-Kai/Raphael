@@ -23,6 +23,8 @@
 //!   `device_computer_app_remove` takes one app off the always-allowed list of 電腦操作, from the
 //!   list as it is under the settings' lock.
 //! - `keyboard_has_altgr` and `hotkeys_pause` are small helpers of the settings page.
+//! - `owner_clipboard_text` reads the owner's clipboard text, once, for the desktop viewer's paste into a member's
+//!   computer; the page asks only while the owner holds that screen's control.
 //! - `hotkeys_practice` lets the first-run guide's lessons hear the keys without a dictation
 //!   starting; `mic_access` says whether the privacy settings let desktop apps use the microphone.
 //! - `main_events` is the channel on which the main window hears the core and the app (the
@@ -2163,6 +2165,25 @@ pub fn keyboard_has_altgr(webview: Webview) -> Result<bool, String> {
     }
 }
 
+/// The most characters of the owner's clipboard the desktop viewer pastes into a member's computer.
+const PASTE_MAX_CHARS: usize = 1_000_000;
+
+/// The text on the owner's clipboard, for the viewer's paste into a member's computer. The page asks only while the owner
+/// holds the screen's control; the text goes back to that page and is neither logged nor kept. `None` when it holds no
+/// text, too much of it, or on another system.
+#[tauri::command]
+pub fn owner_clipboard_text(webview: Webview) -> Result<Option<String>, String> {
+    require_main(&webview)?;
+    #[cfg(windows)]
+    {
+        crate::paste::read_clipboard_text(PASTE_MAX_CHARS)
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(None)
+    }
+}
+
 /// The keyboard layout of the window that has focus: the one the user is typing with.
 #[cfg(windows)]
 fn foreground_layout() -> windows::Win32::UI::Input::KeyboardAndMouse::HKL {
@@ -2507,6 +2528,7 @@ mod tests {
                 "open_library_file",
                 "open_link",
                 "open_team_file",
+                "owner_clipboard_text",
                 "pick_output_folder",
                 "report_save",
                 "schedule_keep_awake_get",

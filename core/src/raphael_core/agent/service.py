@@ -588,6 +588,7 @@ class Resumption:
     apps: tuple[str, ...]
     done: frozenset[tuple[str, str]]
     secrets: tuple[str, ...] = ()
+    computer_keys: tuple[str, ...] = ()
     messaging: tuple[str, ...] = ()
     report: "ComputerReport | None" = None
     made: list[tuple[str, str]] = field(default_factory=list, compare=False)
@@ -625,6 +626,10 @@ class Resumption:
                          " in <question>, which was asked earlier and resumes now, once. It is in the secure vault and the"
                          " connection uses it by itself: you never see it. Do it now with the connection's tools, and do not"
                          " ask for the key again.")
+        if self.computer_keys:
+            parts.append(f"Key saved for your computer: {', '.join(self.computer_keys)}. The owner pasted it on the card you showed for the"
+                         " request in <question>, which resumes now, once. Give it to one command with vm_exec keys (use $NAME in the"
+                         " command); you never see it and its output is withheld. Do not ask for it again.")
         if self.messaging:
             parts.append("Messaging credential saved. Use the current messaging state for pairing and availability. Never ask for its token again.\n"
                          + wrap_untrusted("messaging_connected", ", ".join(self.messaging), ok=True))
@@ -4016,8 +4021,10 @@ class AgentService:
         if it must, the secret by the name the connection declares it with, never a place in the vault,
         and learns only that a card is shown; the key itself goes from the window to the vault."""
         connection, secret = args.get("connection"), args.get("secret")
-        site = args.get("site")
-        if site is None and (not isinstance(connection, str) or not connection.strip() or not (secret is None or isinstance(secret, str))):
+        site, key = args.get("site"), args.get("key")
+        if key is not None and (not isinstance(key, str) or any(item is not None for item in (connection, secret, site))):
+            raise ValueError("choose connection, site or key")
+        if key is None and site is None and (not isinstance(connection, str) or not connection.strip() or not (secret is None or isinstance(secret, str))):
             raise ValueError("unknown connection")
         if site is not None and (not isinstance(site, str) or connection is not None or secret is not None):
             raise ValueError("choose connection or site")
@@ -4026,7 +4033,13 @@ class AgentService:
         if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
         try:
-            if site is not None:
+            if key is not None:
+                card = self._secret_cards.show_key(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
+                    name=key, purpose=args.get("purpose"), language=ask.language, done=ask.made)
+                if card is None:
+                    return {"key": key, "saved": True, "note": f"{key} is already saved. Pass keys: [\"{key}\"] to vm_exec; you never see the value."}
+                cards = [card]
+            elif site is not None:
                 reference, cards = self._secret_cards.show_login(turn_id=ask.turn_id, member_id=ask.speaker.id,
                     conversation_id=ask.conversation_id, site=site, language=ask.language, done=ask.made)
                 if not cards:
@@ -4041,9 +4054,14 @@ class AgentService:
             raise HarnessToolError("unavailable") from None
         if not cards:
             return {"connection": connection, "missing": 0, "note": "Nothing is missing: use the connection's tools."}
-        ask.waiting_secrets.extend(card.name for card in cards)
+        ask.waiting_secrets.extend(card.server_id if card.kind == "key" else card.name for card in cards)
         ask.owner_card_ids = [card.id for card in cards]
         self._turn_changed(ask.turn_id, ask.speaker.id)
+        if key is not None:
+            return {"key": key, "card": "shown", "note": (
+                f"A card to paste {key} is shown to the owner in this chat. End this turn now with one short sentence. The key goes "
+                "straight to the secure vault and you never see it; this request resumes by itself, once, after the owner saves it. "
+                f"Then run the program with vm_exec keys: [\"{key}\"], and use ${key} in the command.")}
         names = ", ".join(sorted({card.secret for card in cards}))
         return {"connection": cards[0].name, "card": "shown", "secrets": names, **({"reference": reference} if site is not None else {}), "note": (
             f"A card to save {names} for {cards[0].name} is shown to the owner in this chat. End this turn now with one short "
@@ -4239,7 +4257,8 @@ class AgentService:
                                 frozenset({*(done for card in [*apps, *keys] for done in card.done),
                                            *(tuple(done) for row in proposed for done in json.loads(row["done"])),
                                            *(report.done if report is not None else ())}),
-                                secrets=tuple(dict.fromkeys(card.name for card in keys if card.kind != "messaging" and card.state in ("saved", "resuming", "resumed"))),
+                                secrets=tuple(dict.fromkeys(card.name for card in keys if card.kind not in ("messaging", "key") and card.state in ("saved", "resuming", "resumed"))),
+                                computer_keys=tuple(dict.fromkeys(card.server_id for card in keys if card.kind == "key" and card.state in ("saved", "resuming", "resumed"))),
                                 messaging=self._secret_cards.messaging_notes(keys) if self._secret_cards is not None else (),
                                 report=report, failure=failure)
         language = report.language if report is not None else (apps or keys)[0].language if apps or keys else proposed[0]["language"]

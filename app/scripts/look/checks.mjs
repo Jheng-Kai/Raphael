@@ -1868,6 +1868,24 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.desktop-checkpoints') && !window.__look.calls.some(call => call.method === 'computer.checkpoints'), 'no file-changes view or request exists');
     return {check:name};
   }
+  if (["key-private", "key-saved"].includes(name)) {
+    // R-KEY-01: a key for a program in a member's computer is pasted on the same secure card, and the page keeps no copy of it.
+    const card = document.querySelector('[data-secret-card=card-key]');
+    require(visible(card) && card.hasAttribute('data-key-card'), 'the key uses the existing secret card, in its key form');
+    for (const secret of ['sk-or-v1-private-look-key']) require(!document.body.innerText.includes(secret) && !document.documentElement.outerHTML.includes(secret) && !JSON.stringify(window.__look.calls).includes(secret), 'the key value stays out of the markup, the text and the calls recorded');
+    const title = card.querySelector('.card-title')?.textContent.trim();
+    require(title === (name === 'key-private' ? '儲存 OPENROUTER_API_KEY' : 'OPENROUTER_API_KEY'), `the card is titled by the variable's name: ${title}`);
+    if (name === 'key-private') {
+      const field = card.querySelector('[data-secret-input]');
+      require(field.type === 'password' && !card.querySelector('[data-act=card-save]').disabled, 'the key is masked and Save works once it is typed');
+      require(card.innerText.includes('價格腳本要呼叫模型') && card.innerText.includes('不會出現在對話裡'), 'what the key is for and where it goes are said');
+      const box = card.getBoundingClientRect(), input = field.getBoundingClientRect();
+      require(input.left >= box.left && input.right <= box.right + 1 && field.getBoundingClientRect().width > 120, 'the field sits inside the card at a usable width');
+    } else {
+      require(!card.querySelector('input') && window.__look.calls.filter(call => call.method === 'integrations.card_save').length === 1, 'save empties the field and crosses one call');
+    }
+    return {check:name};
+  }
   if (["login-private", "login-saved"].includes(name)) {
     const card = document.querySelector('[data-secret-card=card-login]');
     require(visible(card), 'login uses the existing secret card');

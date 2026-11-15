@@ -310,8 +310,21 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     clearTimeout(lingering);
     lingering = setTimeout(closeStream, LINGER_MS);
   }
+  /** The owner's own Ctrl+V in the live screen: his clipboard text goes to the screen's page, which pastes it into the computer.
+   *  Only while he holds this screen; a member at work, or the owner only watching, reads nothing of his clipboard. */
+  async function answerPaste(id: unknown): Promise<void> {
+    if (typeof id !== 'number' || !session || !interactive || state?.control !== 'owner') return;
+    const target = frame.contentWindow, origin = new URL(session.url).origin, held = session;
+    let text: string | null = null;
+    try { text = await api.ownerClipboardText(); } catch { text = null; }
+    // Control may have ended, or the screen changed, while the clipboard was read: then it is told nothing.
+    if (session !== held || !interactive || state?.control !== 'owner') return;
+    target?.postMessage({ type: 'raphael-desktop-paste', id, text }, origin);
+  }
   function message(event: MessageEvent): void {
-    if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin || event.data?.type !== 'raphael-desktop') return;
+    if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin) return;
+    if (event.data?.type === 'raphael-desktop-paste-request') { void answerPaste(event.data.id); return; }
+    if (event.data?.type !== 'raphael-desktop') return;
     if (event.data.state === 'frame') {
       if (state?.control === 'owner' || pending()) return;
       if (typeof event.data.image === 'string' && event.data.image.startsWith('data:image/jpeg;base64,') && streamMember !== undefined && lastFrames.get(streamMember) !== event.data.image) { lastFrames.set(streamMember, event.data.image); draw(); }

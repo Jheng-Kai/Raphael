@@ -5,15 +5,34 @@ import asyncio
 import csv
 import io
 import json
+import re
 import time
 import uuid
 
 from .logins import LoginVault, origin
+from ..integrations.vault import SecretTooLong
 from ..protocol import invalid_params
 
 
 FIELDS = {"login": ("username", "password"), "contact": ("name", "address", "phone", "email"),
           "card": ("name", "number", "expiry", "cvc")}
+
+# A key the owner pasted on a card for a program in a member's computer: the entry's label is the environment
+# variable's name, its hint what the key is for, and the value is its one private field. It is made only by
+# `put_key` (the card), never by the generic `put`, and is read only by `key_values` (a command's environment).
+KEY_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
+# Names a command's program or the shell itself reads for something else; a key is never given under one of them.
+KEY_REFUSED = frozenset(("PATH", "HOME", "USER", "LOGNAME", "SHELL", "SH", "PWD", "OLDPWD", "TZ", "LANG", "TERM", "IFS", "ENV",
+                         "PS1", "PS4", "DISPLAY", "XAUTHORITY", "TMPDIR"))
+KEY_REFUSED_PREFIXES = ("LD_", "DYLD_", "BASH", "VNC_", "RAPHAEL_", "CUA_")
+KEY_MIN, KEY_MAX = 6, 800
+
+
+def key_name_ok(name):
+    if not isinstance(name, str) or KEY_NAME.fullmatch(name) is None:
+        return False
+    upper = name.upper()
+    return upper not in KEY_REFUSED and not upper.startswith(KEY_REFUSED_PREFIXES)
 
 
 def payment_question(arguments, language):
@@ -36,6 +55,61 @@ class VaultEntries(LoginVault):
             if member is None or members == "all" or member in members:
                 rows.append({key: row[key] for key in ("id", "kind", "label", "hint", "origin")} | {"members": members})
         return rows
+
+    def key_entry(self, member, name):
+        """The saved key `name` this member may use (the one of its own before one for everyone), or None."""
+        rows = [row for row in self.conn.execute("SELECT * FROM vault_entries WHERE kind='key' AND label=?", (name,))
+                if (members := json.loads(row["members"])) == "all" or member in members]
+        return min(rows, key=lambda row: json.loads(row["members"]) == "all", default=None)
+
+    def put_key(self, member, name, purpose, value):
+        """Keep the key `name` of this member (a new value replaces the old one) in the OS vault; `purpose` is the
+        short line the owner reads beside it. The value goes nowhere else, and is withheld from every output at once."""
+        if not key_name_ok(name) or not isinstance(purpose, str) or len(purpose) > 240 or "\n" in purpose or "\r" in purpose:
+            raise ValueError("invalid_key")
+        if not isinstance(value, str) or len(value) < KEY_MIN or value != value.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+            raise ValueError("invalid_key")
+        if len(value) > KEY_MAX:
+            raise SecretTooLong("The key is longer than the Credential Manager can hold")
+        values = {"value": value}
+        identifier = uuid.uuid4().hex
+        credential = "computer-entry:" + identifier
+        encoded = json.dumps(values, ensure_ascii=False)
+        if len(encoded.encode("utf-16-le")) > 2000:
+            raise SecretTooLong("The key is longer than the Credential Manager can hold")
+        self.vault.set(credential, encoded)
+        old = [row["id"] for row in self.conn.execute("SELECT id, members FROM vault_entries WHERE kind='key' AND label=?", (name,))
+               if json.loads(row["members"]) == [member]]
+        try:
+            with self.conn:
+                self.conn.execute("INSERT INTO vault_entries VALUES (?,?,?,?,?,?,?)",
+                                  (identifier, "key", name, purpose.strip(), "", json.dumps([member]), credential))
+        except Exception:
+            self.vault.delete(credential)
+            raise
+        for stale in old:
+            self.remove(stale)
+        # Everything a command prints or a file shows from now on is checked for it, for any member of a shared computer.
+        for holder in {member, *self.values}:
+            self.remember(holder, values)
+        return identifier
+
+    def key_values(self, member, names):
+        """(the values of the saved keys `names`, the names that are not saved or cannot be read). Nothing of a value is
+        said but to the caller, which hands it to one process's environment."""
+        found, missing = {}, []
+        for name in dict.fromkeys(names):
+            row = self.key_entry(member, name) if key_name_ok(name) else None
+            try:
+                values = json.loads(self.vault.get(row["credential"]) or "null") if row else None
+            except (TypeError, ValueError):
+                values = None
+            if not isinstance(values, dict) or not isinstance(values.get("value"), str) or not values["value"]:
+                missing.append(name)
+                continue
+            self.remember(member, values)
+            found[name] = values["value"]
+        return found, missing
 
     def choices(self, member):
         return [{key: row[key] for key in ("id", "kind", "label", "hint")} for row in self.entries(member)]
@@ -177,6 +251,8 @@ class VaultEntries(LoginVault):
         async def update(p):
             row = next((r for r in self.entries() if r["id"] == p.get("id")), None)
             label, hint, members = p.get("label"), p.get("hint", ""), p.get("members")
+            if row and row["kind"] == "key" and not key_name_ok(label):
+                raise invalid_params("vault_metadata")
             if (not row or not isinstance(label, str) or not label.strip() or len(label) > 200
                     or not isinstance(hint, str) or len(hint) > 240 or "\n" in hint or "\r" in hint
                     or not (members == "all" or isinstance(members, list) and members

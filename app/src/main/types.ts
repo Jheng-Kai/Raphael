@@ -562,6 +562,10 @@ export interface ConnectorCard {
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */
 export interface SecretCard {
   login?: boolean;
+  /** A key for a program in a member's computer (`request_secret` with `key`): `name` and `secret` are its variable's name. */
+  key?: boolean;
+  /** What that key is for, in a few words the member wrote. */
+  purpose?: string;
   id: string;
   /** The connection's name. */
   name: string;

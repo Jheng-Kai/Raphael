@@ -596,6 +596,8 @@ export const deviceComputerAppRemove = (exe: string): Promise<DeviceSettings> =>
   invoke("device_computer_app_remove", { exe });
 /** Whether the keyboard layout has an AltGr key (Right Alt types characters). */
 export const keyboardHasAltgr = (): Promise<boolean> => invoke("keyboard_has_altgr");
+/** The text on the owner's clipboard, read once for the desktop viewer's paste while the owner holds the screen; null when there is none. */
+export const ownerClipboardText = (): Promise<string | null> => invoke("owner_clipboard_text");
 /** Pauses the global hotkeys while the page records a new one. */
 export const hotkeysPause = (paused: boolean): Promise<void> =>
   withWindowHotkeyPause(paused, () => invoke("hotkeys_pause", { paused }));

@@ -178,10 +178,11 @@ RUN_STEPS = {"description": "Perform 1–10 short driver actions, then return on
             "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
         "required": ["steps", "observation"], "additionalProperties": False}}
 
-EXEC = {"description": "Run Linux shell commands (sh, not PowerShell) in the computer workspace, never on the host. Your files are in /home/cua/workspace; team files go in /home/cua/team. The shell has no screen: use it for programs, never to fetch a page. For files use read_file, grep, glob, edit_file and write_file, not cat, find, sed or heredocs. Commands wait timeout_seconds (60 default, 1800 max) then end. Run long builds or servers in background and read their logs and .exit files with vm_exec. Other members' commands and the screen are not held up. " + VM_CONTRACT,
+EXEC = {"description": "Run Linux shell commands (sh, not PowerShell) in the computer workspace, never on the host. Your files are in /home/cua/workspace; team files go in /home/cua/team. The shell has no screen: use it for programs, never to fetch a page. For files use read_file, grep, glob, edit_file and write_file, not cat, find, sed or heredocs. Commands wait timeout_seconds (60 default, 1800 max) then end. Run long builds or servers in background and read their logs and .exit files with vm_exec. Other members' commands and the screen are not held up. keys: names of saved keys (request_secret key) given to this command as environment variables; their values are withheld from every output. " + VM_CONTRACT,
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
-        "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
+        "background": {"type": "boolean"},
+        "keys": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"}, "maxItems": 8}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
 BROWSER_OPEN = {"description": "Open an http/https URL in your browser and return its page references, no screenshot. " + NEW_TAB + "Use the typed browser tools for follow-ups. " + VM_CONTRACT,
@@ -868,6 +869,14 @@ class VmTools:
             if tool.name == "vault_entries":
                 choices = self.logins.choices(member) if self.logins and hasattr(self.logins, "choices") else []
                 return PluginResult(True, text=json.dumps({"entries": choices}, ensure_ascii=False))
+            keys = {}
+            if tool.name == "vm_exec" and arguments.get("keys"):
+                # The core reads the values here; the model learns only whether each name is saved.
+                keys, missing = self.logins.key_values(member, arguments["keys"]) if self.logins and hasattr(self.logins, "key_values") else ({}, arguments["keys"])
+                if missing:
+                    result = PluginResult(False, "key_not_saved", f"No saved key named {', '.join(missing)}. Call request_secret with key and purpose, "
+                                          "end the turn, and run the command again with keys once the owner has saved it.")
+                    return result
             if target.key in self.payment_holds and tool.name not in READS | FILE_READS | {"request_takeover"}:
                 return PluginResult(False, "owner_payment_required", "The owner must finish payment through request_takeover. No further member action is allowed on this computer.")
             owner = _SCOPE.get() or ("async", asyncio.current_task())
@@ -946,10 +955,11 @@ class VmTools:
                         return PluginResult(False, "computer_changed")
                     if target.key in self.vm.held:
                         raise VmError("owner_holds_control")
+                    carried = {"keys": keys} if keys else {}
                     if background:
-                        data = await self.vm.execute(target, arguments["command"], wait, background=True)
+                        data = await self.vm.execute(target, arguments["command"], wait, background=True, **carried)
                     else:
-                        data = await self.vm.execute(target, arguments["command"], wait)
+                        data = await self.vm.execute(target, arguments["command"], wait, **carried)
                     # A command that ran and exited non-zero (tests that fail) is what the model asked to find out, not a broken tool.
                     result = PluginResult(True, None, json.dumps(data), data.get("truncated", False))
                 elif tool.name in FILE_TOOLS:
