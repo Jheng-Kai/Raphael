@@ -36,7 +36,6 @@ import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from ".
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
-import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
@@ -314,8 +313,11 @@ export interface TimelineState {
   ended: Set<number>;
   nowMs: number;
   expandedMessages: Set<string>;
-  /** The owner's message open as an editor in its place, if any (message-edit.ts). */
-  editing: OwnerEditing | null;
+  /**
+   * The turn whose owner message the composer holds while it is edited (owner, 2026-11-15): that bubble is not drawn, and
+   * comes back when the edit is given up. What the turn answered stays as it was.
+   */
+  editingTurnId: number | null;
   /** The files of the open conversation by stored id (`knownFiles`): what an `attachment:<id>` link in a reply may open. Left out, none. */
   files?: KnownFiles;
 }
@@ -332,7 +334,7 @@ export const emptyTimelineState = (): TimelineState => ({
   ended: new Set(),
   nowMs: Date.now(),
   expandedMessages: new Set(),
-  editing: null,
+  editingTurnId: null,
 });
 
 /** Whether a turn's steps are open: as the reader left them, else open while its task runs and closed once it is done. */
@@ -707,15 +709,6 @@ function action(icon: Parameters<typeof iconBtn>[0], label: string, act: string)
  */
 export function pictureActionsHTML(actions: string): string {
   return actions.replace(action("copy", t("chat.copy"), "copy-message"), action("copy", t("chat.copyImage"), "copy-picture"));
-}
-
-/**
- * The actions beside a bubble take their share of the message's width, so a bubble is as wide as that share allows. While the message is
- * edited they are not there to press, but their room is held (hidden, inert), so opening the editor changes neither the bubble's width nor
- * the size of a picture above it.
- */
-function heldActionsHTML(time: number): string {
-  return messageActionsHTML(time).replace('class="message-actions"', 'class="message-actions is-held" inert aria-hidden="true"');
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false, origin = true, last = true, latestFailure = false): string {
@@ -1224,8 +1217,9 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     // A brief another member handed over says who from, in place of the owner's bubble.
     (delegatedTurn(turn) && turn.question.trim() ? receivedLineHTML(turn, look) : "") +
-    (asked && state.editing?.turnId === turn.id
-      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question" data-msg-editor>${ownerEditorHTML(state.editing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote, true) : "")}${heldActionsHTML(turn.created_at_ms)}</div></div>`
+    // The message the composer holds for editing is not drawn: it is taken back into the composer, and returns if the edit is given up.
+    (asked && state.editingTurnId === turn.id
+      ? ""
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +

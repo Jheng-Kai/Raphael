@@ -73,7 +73,6 @@ import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
-import { carryEditor } from "../message-edit";
 import { chatCardAction } from "../chat-cards";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
@@ -630,9 +629,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (composerKey === "deleted") return;
     // A pending file is not kept: leaving the conversation ends its reading (`attachmentEpoch`).
     const draft: ComposerDraft = { text: input.value, files: files.filter(file => !file.pending), missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
-    if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
+    // A message taken back to be edited is not a draft: leaving its conversation gives the edit up, and its message is as it was
+    // (owner, 2026-11-15). Nothing of it is kept, so it never comes back as a second copy of the words.
+    if (draft.replacing === undefined && (draft.text || draft.files.length || draft.missing.length || draft.quote)) restored.set(composerKey, draft);
     else restored.delete(composerKey);
-    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId });
+    writeDraftWords(`member:${composerKey}`, draft.replacing === undefined ? { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId } : undefined);
   }
   function loadComposerDraft(): void {
     composerKey = draftKey();
@@ -649,8 +650,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
   const sendingNow = new Set<number>();
-  /** The owner's message open as an editor (`state.editing` draws it): the thread it belongs to and what it carries, as the composer would. */
-  let editDraft: { key: string; draft: ComposerDraft } | null = null;
+  /** What the composer was given when a message was taken back to be edited, to tell an untouched edit from a changed one (Esc). */
+  let editOrigin: { turnId: number; draft: ComposerDraft } | null = null;
   const retracted = new Set<string>();
   let attachmentEpoch = 0;
   let attaching = 0;
@@ -1005,7 +1006,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
-            state.editing?.turnId === turn.id ? `editing:${state.editing.missing.length}:${state.editing.text}` : "",
+            state.editingTurnId === turn.id ? "editing" : "",
             item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together, part: item.part }));
         })(), turnId: item.turn.id },
@@ -1051,8 +1052,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const changed = patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
-        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made), restoreEditor = carryEditor(node, made);
-        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); restoreEditor(); };
+        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
+        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
       },
     });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
@@ -1097,8 +1098,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
-    // An editor stands only where it was opened, while its message is still in the history.
-    if (state.editing && (editDraft?.key !== draftKey() || !turns.some(turn => turn.id === state.editing!.turnId))) { state.editing = null; editDraft = null; }
+    // The message the composer holds for editing is not drawn while it is there; it is drawn again as soon as the composer lets it go.
+    state.editingTurnId = replacing !== undefined && turns.some(turn => turn.id === replacing) ? replacing : null;
+    composer.toggleAttribute("data-replacing", state.editingTurnId !== null);
     drawComposer();
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
@@ -1463,35 +1465,33 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /**
    * Sends what the composer holds as a typed question: it shows at once, and Raphael's answer when it lands. A message
-   * edited in its own place (`edit`) goes the same way, with its words and files in place of the composer's, and
-   * leaves the composer as it is.
+   * taken back to be edited (`replacing`) goes the same way and replaces its message.
    */
-  async function send(edit?: { text: string; draft: ComposerDraft }): Promise<void> {
+  async function send(): Promise<void> {
     // A file still being read is not sent: Enter does nothing until it is in, as the button is not offered (R-ATTACH-04).
-    if (!edit && (attaching || files.some(file => file.pending))) return;
-    const words = edit ? edit.text : input.value, carried = edit ? edit.draft.files : files;
-    if ((edit ? edit.draft.missing : missingFiles).length > 0) { toaster.info(t("chat.reattach")); return; }
-    const text = typedQuestion(wholeLinks(words), carried.length > 0);
+    if (attaching || files.some(file => file.pending)) return;
+    if (missingFiles.length > 0) { toaster.info(t("chat.reattach")); return; }
+    const text = typedQuestion(wholeLinks(input.value), files.length > 0);
     if (text === null) {
-      if (words.trim() !== "") toaster.info(t("agent.tooLong"));
+      if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
-    if (!edit && pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
+    if (pageDraft.pageId && !files.length && !composerQuote && replacing === undefined && answerOwnerPage(thread, pageDraft.pageId, text, () => { void load(false); })) {
       clearTimeout(draftTimer); discardComposerDraft(composerKey);
       input.value = "";
       input.dispatchEvent(new Event("composer-draft-restored"));
       fit();
       return;
     }
-    if (!edit) composer.querySelector(".composer-failure")?.remove();
+    composer.querySelector(".composer-failure")?.remove();
     // A page open in the thread's place stays: the member that answers is told which page it is (before the message goes),
     // and what it says shows under the page while it works.
     const pageTold = pagesHost.sent();
     // Something was said about the page opened from the Library: the exchange is in its conversation, which stays when the page is put away.
     if (libraryReturn && pagesHost.shown()) libraryReturn.spoke = true;
-    const sending = carried;
-    const dictation = edit ? undefined : correctionLearning.snapshot();
-    const corrections = edit ? [] : correctionLearning.take(input.value);
+    const sending = files;
+    const dictation = correctionLearning.snapshot();
+    const corrections = correctionLearning.take(input.value);
     const member = memberId();
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
@@ -1499,30 +1499,24 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // member minutes, and the learned pill came long after the owner had moved on (native run, 2026-11-14). A draft given
     // back after a failure then holds no evidence, so a retry never counts the same correction twice.
     void learnComposerCorrections(corrections);
-    const draft: ComposerDraft = edit ? { ...edit.draft, text: words, missing: [] } : { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
+    const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
     rememberDraft(requestId, draft);
-    if (!edit) { clearTimeout(draftTimer); discardComposerDraft(composerKey); }
-    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
-    // The message an edit replaces stays where it stands until the edit has taken its place (lines).
-    if (edit && draft.replacing !== undefined) mine.replaces = turns.find(turn => turn.id === draft.replacing);
+    clearTimeout(draftTimer); discardComposerDraft(composerKey);
+    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
+    // The message an edit replaces comes back to its place as the edit's own bubble, and stays there until the edit has taken its place (lines).
+    if (draft.replacing !== undefined) mine.replaces = turns.find(turn => turn.id === draft.replacing);
     outgoing.push(mine);
-    if (edit) {
-      closeEditor(false);
-    } else {
-      files = [];
-      replacing = undefined;
-      composerQuote = undefined;
-    }
+    files = [];
+    replacing = undefined;
+    composerQuote = undefined;
     // Drawn while the layout is still clean, so reading the thread's scroll position costs nothing. An edit stands where its
     // message stood, so the reader stays where they are; a message at the end brings the reader to it.
     render(!mine.replaces);
-    if (!edit) {
-      input.value = "";
-      input.dispatchEvent(new Event("composer-draft-restored"));
-      drawQuote();
-      drawFile();
-      fit();
-    }
+    input.value = "";
+    input.dispatchEvent(new Event("composer-draft-restored"));
+    drawQuote();
+    drawFile();
+    fit();
     drawDock();
     askingMember = member;
     try {
@@ -1532,13 +1526,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (retracted.has(requestId)) return;
       if (askingMember === member) askingMember = null;
       outgoing = outgoing.filter((item) => item !== mine);
-      if (edit) {
-        // Its place is back, open again with the words as they were typed.
-        if (memberId() === member && conversationId() === sentConversation && draft.replacing !== undefined && turns.some(turn => turn.id === draft.replacing)) openEditor(draft.replacing, draft);
-        toaster.info(describeError(err));
-        render();
-        return;
-      }
       if (memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length) restoreDraft(draft);
       else restored.set(draftKey(member, sentConversation), draft);
       if (memberId() === member && conversationId() === sentConversation) {
@@ -2243,46 +2230,42 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawFile(); fit(); if (focus) focusComposer();
   }
 
-  /** Whether the editor's Send has something to send: the composer's rule, with every file of the original there. */
-  const editSendable = (text: string, draft: ComposerDraft): boolean => draft.missing.length === 0 && typedQuestion(text, draft.files.length > 0) !== null;
-
-  /** The owner's message turns into an editor where it stands (owner, 2026-11-14); the composer is not touched. */
-  function openEditor(turnId: number, draft: ComposerDraft): void {
-    const carried: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: turnId };
-    editDraft = { key: draftKey(), draft: carried };
-    state.editing = { turnId, text: carried.text, missing: carried.missing, sendable: editSendable(carried.text, carried) };
-    render();
-    focusEditor();
-  }
-
-  function closeEditor(redraw = true): void {
-    if (!state.editing && !editDraft) return;
-    state.editing = null; editDraft = null;
-    if (redraw) render();
-  }
-
-  /** The focus in the editor, the caret at the end of its words, and the editor in view. */
-  function focusEditor(): void {
-    const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
-    if (!field) return;
-    field.focus({ preventScroll: true });
-    field.setSelectionRange(field.value.length, field.value.length);
-    field.closest("[data-msg-editor]")?.scrollIntoView({ block: "nearest" });
-  }
-
-  /** Sends the edited words as the composer would send them (`send`), the message it replaces named as before. */
-  function sendEdit(): void {
-    if (!state.editing || !editDraft) return;
-    void send({ text: state.editing.text, draft: editDraft.draft });
-  }
-
+  /**
+   * 編輯 takes the owner's message back into the composer (owner, 2026-11-15): its words, its files (by their stored copies, as chips) and its
+   * quote, the composer marked as replacing that turn. The message's bubble is not drawn while the composer holds it (`render`), and sending
+   * replaces the turn (`send`). Giving the edit up (`abandonEdit`) draws the message again, as it was.
+   */
   async function editMessage(control: HTMLElement): Promise<void> {
     const source = messageSource(control);
     if (!source || source.key !== "question") return;
-    if (state.editing?.turnId === source.turn.id) { focusEditor(); return; }
+    if (replacing === source.turn.id) { focusComposer(); return; }
     const member = memberId(), epoch = attachmentEpoch, key = draftKey();
     const draft = await draftFor(source.turn);
-    if (memberId() === member && attachmentEpoch === epoch && draftKey() === key) openEditor(source.turn.id, draft);
+    if (memberId() !== member || attachmentEpoch !== epoch || draftKey() !== key) return;
+    const taken: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: source.turn.id };
+    editOrigin = { turnId: source.turn.id, draft: taken };
+    restoreDraft(taken);
+    render();
+  }
+
+  /** Whether the composer still holds exactly what 編輯 gave it: the words, the files and the quote of the message. */
+  function editUntouched(): boolean {
+    const origin = editOrigin && editOrigin.turnId === replacing ? editOrigin.draft : null;
+    return origin !== null && input.value === origin.text && files.length === origin.files.length && files.every(file => origin.files.includes(file))
+      && missingFiles.length === origin.missing.length && JSON.stringify(composerQuote ?? null) === JSON.stringify(origin.quote ?? null);
+  }
+
+  /** Gives the edit up: the composer is emptied and the message is drawn again, unchanged. Nothing was sent, so nothing else moves. */
+  function abandonEdit(): void {
+    if (replacing === undefined) return;
+    clearTimeout(draftTimer); discardComposerDraft(composerKey);
+    correctionLearning.clear();
+    attachmentEpoch++;
+    input.value = ""; files = []; missingFiles = []; replacing = undefined; composerQuote = undefined; editOrigin = null;
+    input.dispatchEvent(new Event("composer-draft-restored"));
+    drawQuote(); drawFile(); fit();
+    render();
+    focusComposer();
   }
 
   /** The displayed slot and its action always refer to the same reply in this conversation. */
@@ -2494,21 +2477,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const inputs = field?.closest(".secret-card")?.querySelectorAll<HTMLInputElement>("input");
     if (inputs && save) save.disabled = [...inputs].some(input => !input.value.trim());
   });
-  // The words of an editor in the thread are kept where a redraw can find them; Send follows the composer's rule.
-  thread.addEventListener("input", (e) => {
-    const field = (e.target as Element).closest<HTMLTextAreaElement>("[data-edit-input]");
-    if (!field || !state.editing || !editDraft) return;
-    state.editing.text = field.value;
-    state.editing.sendable = editSendable(field.value, editDraft.draft);
-    const button = field.closest("[data-msg-editor]")?.querySelector<HTMLButtonElement>('[data-act="edit-send"]');
-    if (button) button.disabled = !state.editing.sendable;
-  });
-  thread.addEventListener("keydown", (e) => {
-    const editor = (e.target as Element).closest<HTMLTextAreaElement>("[data-edit-input]");
-    if (!editor || !sendsOnEnter(e)) return;
-    e.preventDefault();
-    sendEdit();
-  });
   thread.addEventListener("keydown", (e) => {
     const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");
     if (!field || e.key !== "Enter" || e.isComposing) return;
@@ -2589,20 +2557,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "edit-message":
         void editMessage(act);
-        break;
-      case "edit-send":
-        sendEdit();
-        break;
-      case "edit-cancel":
-        closeEditor();
-        break;
-      case "drop-edit-missing":
-        if (state.editing && editDraft) {
-          editDraft.draft.missing.splice(Number(act.dataset.index), 1);
-          state.editing.missing = [...editDraft.draft.missing];
-          state.editing.sendable = editSendable(state.editing.text, editDraft.draft);
-          render(); focusEditor();
-        }
         break;
       case "cancel-message":
         void cancelMessage(act);
@@ -2751,14 +2705,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
     } : null;
   });
-  // Escape in the editor leaves it: at once while its words are the original's, and as the app's other cancels (a task's Stop)
-  // once they changed: the first press arms Cancel, the second within 1.5 s leaves. It comes before the composer's Stop while the focus is here.
+  // Escape in the composer that holds a message taken back for editing gives the edit up: at once while the composer still holds what 編輯
+  // gave it, and as the app's other cancels (a task's Stop) once it changed: the first press arms the slot's cancel, the second within 1.5 s
+  // gives it up. A task that works (or a recording) keeps its own Escape; this one is for the composer when nothing else is.
   cancelGesture().register(() => {
-    const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
-    const cancel = field?.closest("[data-msg-editor]")?.querySelector<HTMLElement>('[data-act="edit-cancel"]');
-    return visible && state.editing && editDraft && field && cancel && document.activeElement === field ? {
-      key: `edit:${state.editing.turnId}`, immediate: field.value === editDraft.draft.text, button: cancel, hint: t("common.cancelAgain"),
-      cancel: () => closeEditor(),
+    return visible && !roomPane.active && replacing !== undefined && document.activeElement === input && composerTask() === null ? {
+      key: `edit:${replacing}`, immediate: editUntouched(), button: voiceButton, hint: t("common.cancelAgain"),
+      cancel: abandonEdit,
     } : null;
   });
   input.addEventListener("input", () => { fit(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (el.isConnected) saveComposerDraft(); }, 300); });
