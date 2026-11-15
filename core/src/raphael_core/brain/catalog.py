@@ -77,8 +77,10 @@ TOOL_CALLING = "tool_calling"
 # for Raphael (the `vision_model` setting, raphael_core.services.vision) must have the first.
 IMAGE_INPUT = "image_input"
 FILE_INPUT = "file_input"
+# A model whose list says it reads video is sent a video as it is (`video_url`, services.vision) instead of frames.
+VIDEO_INPUT = "video_input"
 # What the list calls each of those inputs.
-_INPUT_CAPABILITIES = {"image": IMAGE_INPUT, "file": FILE_INPUT}
+_INPUT_CAPABILITIES = {"image": IMAGE_INPUT, "file": FILE_INPUT, "video": VIDEO_INPUT}
 
 # What a minute of speech-to-text can plausibly cost at most, in US dollars. The dearest model
 # (Google Chirp 3) is 1.6 cents.
@@ -142,6 +144,7 @@ CAPABILITIES = {
         TOOL_CALLING,
         IMAGE_INPUT,
         FILE_INPUT,
+        VIDEO_INPUT,
     ),
     STT: ("dictionary_hints",),
 }

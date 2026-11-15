@@ -894,7 +894,7 @@ class App(Router):
         # changes something, with their judge (Jev).
         self.safety_rules = SafetyRules(self._conn)
         self.safety_rules.register(self)
-        from .computer.vm import LocalVm
+        from .computer.vm import LocalVm, SHARED as VM_SHARED
         from .computer.vm_tools import VmTools
 
         import os
@@ -1055,6 +1055,13 @@ class App(Router):
             ("workspace", self.vm.target(member).workspace), ("team", self.vm.target(member).shared)]
         self.background.use_workspaces(
             lambda member: [path for path in (self.vm.target(member).workspace, self.vm.target(member).shared) if path])
+        # The original of a video the owner attaches is put in the member's own computer, in its team folder, where the member can open it
+        # (a computer on another host shares no folder with this PC).
+        def in_computer(member):
+            shared = None if self.vm.remote else self.vm.target(member).shared
+            return (shared, VM_SHARED) if shared else None
+        self.agent.use_computer_folder(in_computer)
+        self.background.use_computer_folder(in_computer)
         self.vm_tools.names = self.members.name_of
         self.members.computer_data = self.vm.data
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.

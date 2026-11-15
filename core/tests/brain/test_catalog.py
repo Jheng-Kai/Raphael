@@ -449,6 +449,7 @@ def test_an_entry_has_what_the_picker_shows():
             "tool_calling": True,
             "image_input": True,
             "file_input": True,
+            "video_input": False,
         },
         "input_modalities": ["text", "image", "file"],
         "roles": {

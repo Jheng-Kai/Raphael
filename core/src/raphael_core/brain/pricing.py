@@ -88,6 +88,8 @@ def builtin_catalog() -> list[CatalogEntry]:
         capabilities = set(CAPABILITIES[kind])
         if model_id not in STT_MODELS_WITH_HINTS:
             capabilities.discard("dictionary_hints")
+        # The builtin table does not say what a model reads; a video is never assumed to be one of them.
+        capabilities.discard("video_input")
         provider, name = BUILTIN_LISTING[model_id]
         entries.append(
             CatalogEntry(
