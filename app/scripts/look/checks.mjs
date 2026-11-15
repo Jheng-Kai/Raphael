@@ -956,6 +956,32 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(call => call.method === 'members.delete'), 'asking performs no deletion');
     return {check:name, title};
   }
+  // R-COMP-SWITCH-01: every member's screen is its own, in the Computer tab and after a switch of members.
+  if (name === 'computer-member-switch-before' || name === 'computer-member-switch') {
+    const seat = name === 'computer-member-switch' ? '2' : '1', other = seat === '1' ? '2' : '1';
+    const frames = [...document.querySelectorAll('iframe[data-desktop-stream]')], calls = window.__look.calls.filter(call => call.command === 'core_call');
+    const frame = frames[0], doc = frame?.contentDocument, win = doc?.defaultView, canvas = doc?.querySelector('#noVNC_container canvas');
+    require(frames.length === 1 && visible(frame) && new URL(frame.src).searchParams.get('seat') === seat, `the one stream is seat ${seat}'s (${frames.map(item => item.src)})`);
+    require(win.__desktopSeat === seat && win.__desktopConnections === 1 && visible(canvas), `the stream's own page is seat ${seat}'s and connected`);
+    const ctx = canvas.getContext('2d'), pixel = ctx.getImageData(Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.8), 1, 1).data;
+    const mark = seat === '1' ? [192, 57, 43] : [30, 132, 73];
+    require([0, 1, 2].every(index => Math.abs(pixel[index] - mark[index]) <= 3), `the screen's picture is seat ${seat}'s colour (${[...pixel].slice(0, 3)})`);
+    require(![...document.querySelectorAll('iframe')].some(item => new URL(item.src, location.href).searchParams.get('seat') === other), `no frame of seat ${other} is left in the window`);
+    const panel = document.querySelector('.desktop-panel'), picture = panel.querySelector('.desktop-last');
+    require(!visible(picture), 'no still picture is drawn over a live screen');
+    if (seat === '2') {
+      const log = window.__look.sessionLog, first = log.find(item => item.member === 1), second = log.find(item => item.member === 2);
+      require(first && second && log.filter(item => item.member === 2).length === 1, 'member 2 opened its own session, once');
+      const at = (method, session) => calls.findIndex(call => call.method === method && call.params?.session === session);
+      const opened = calls.findIndex(call => call.method === 'computer.viewer_open' && call.params.member_id === 2);
+      require(calls.some(call => call.method === 'computer.viewer_status' && call.params.member_id === 2), "member 2's own state was read");
+      require(at('computer.viewer_close', first.session) >= 0, "member 1's session was closed");
+      // Nothing of member 1's session is asked for after member 2 is shown: it is neither renewed nor left to answer for member 2.
+      require(!calls.some((call, index) => index > opened && call.method === 'computer.viewer_renew' && call.params.session === first.session), "member 1's session is never renewed for member 2");
+      require(calls.every((call, index) => !(index > opened && call.method === 'computer.viewer_open' && call.params.member_id === 1)), 'member 1 is not reopened');
+    }
+    return {check:name};
+  }
   if (name === 'desktop-stream') {
     const frame = document.querySelector('iframe[data-desktop-stream]');
     require(visible(frame) && frame.contentDocument?.defaultView.__desktopConnections === 1, 'the existing viewer is connected before enlargement');

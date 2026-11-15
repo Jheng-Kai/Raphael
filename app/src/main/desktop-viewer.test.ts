@@ -999,3 +999,33 @@ test("a seat's frame draws its line inside and takes no room, so the 1280:900 pi
   expect(css("card.css")).toMatch(/\.card-computer-screen \{[^}]*box-shadow: inset 0 0 0 1px var\(--edge\)/);
   expect(css("card.css")).not.toMatch(/\.card-computer-screen \{[^}]*border: 1px/);
 });
+
+test("another member opened while the page was away never shows the previous member's screen", async () => {
+  // owner, 2026-11-15: 「我明明打開不同的角色，結果它顯示前一個角色的畫面」. The sidebar switches the member before the page is
+  // shown (refresh() runs only for a page on screen), and the first member's stream was still lingering.
+  panelOpen = true; mounted.show(); await flush(); message('connected');
+  expect(frame().getAttribute('src')).toContain('/one/');
+  mounted.hide(); await flush();
+  member = 2;
+  api.desktopOpen.mockResolvedValue({ session:'two', url:'http://127.0.0.1:5000/two/vnc.html' });
+  api.desktopStatus.mockResolvedValue({ ...running, works:[{ id:'b', request_id:'r', turn_id:7, state:'running', reason:'', tool:'' }] });
+  mounted.show(); await flush();
+  // Member 1's session is neither renewed for member 2's panel nor left open, and its screen is gone from the panel.
+  expect(api.desktopRenew).not.toHaveBeenCalledWith('one');
+  expect(api.desktopClose).toHaveBeenCalledWith('one');
+  expect(api.desktopStatus).toHaveBeenCalledWith(2, 11);
+  expect(api.desktopOpen).toHaveBeenLastCalledWith(2, { conversation_id: 11 });
+  expect(frame().getAttribute('src')).toContain('/two/');
+  expect(host.querySelectorAll('iframe[src*="/one/"]')).toHaveLength(0);
+});
+
+test("a member's picture and state are drawn only for that member, however the page came back", async () => {
+  panelOpen = true; mounted.show(); await flush(); message('connected');
+  message('frame', { image:'data:image/jpeg;base64,AAAA' }); await flush();
+  mounted.hide(); await flush();
+  member = 2; api.desktopStatus.mockResolvedValue({ state:'stopped', ready:false, control:'member' });
+  mounted.show(); await flush();
+  expect(panel().dataset.desktopState).toBe('stopped');
+  expect(host.querySelectorAll('iframe')).toHaveLength(0);
+  expect(panel().querySelector<HTMLImageElement>('.desktop-last')!.hidden).toBe(true);
+});
