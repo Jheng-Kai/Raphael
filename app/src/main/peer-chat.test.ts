@@ -27,12 +27,31 @@ test("an exchange is two messages: what one member sent, then the other's answer
   expect(files[1]!.files).toEqual(["report.html"]);
 });
 
-test("the view takes every exchange between the same members, oldest first, and none with others", () => {
-  const all = [task(3), task(1, { created_at_ms: NOW - 2 * DAY, finished_at_ms: NOW - 2 * DAY }), task(5, { member_id: 7, member_name: "Other" })];
+test("the view takes the exchanges between the same members at the same time, oldest first, and none with others", () => {
+  const MIN = 60_000;
+  const all = [task(3), task(2, { created_at_ms: NOW - 20 * MIN, finished_at_ms: NOW - 15 * MIN }), task(1, { created_at_ms: NOW - 2 * DAY, finished_at_ms: NOW - 2 * DAY }), task(5, { member_id: 7, member_name: "Other" })];
   const found = peerTasks("3", all)!;
   expect(found.host).toBe(1);
-  expect(peerLines(found.tasks).map(line => line.text)).toEqual(["Question 1", "Answer 1", "Question 3", "Answer 3"]);
+  expect(peerLines(found.tasks).map(line => line.text)).toEqual(["Question 2", "Answer 2", "Question 3", "Answer 3"]);
   expect(peerTasks("9", all)).toBeNull();
+});
+
+test("an exchange long after the last is a conversation of its own: each line opens only its own time", () => {
+  const MIN = 60_000;
+  // A daily routine's exchange: yesterday's and today's are two conversations, not one.
+  const yesterday = task(1, { created_at_ms: NOW - DAY, finished_at_ms: NOW - DAY + MIN });
+  const today = task(2, { created_at_ms: NOW - 2 * MIN, finished_at_ms: NOW - MIN });
+  expect(peerTasks("1", [yesterday, today])!.tasks.map(view => view.task_id)).toEqual([1]);
+  expect(peerTasks("2", [yesterday, today])!.tasks.map(view => view.task_id)).toEqual([2]);
+  // A line that counts both opens both; an exchange that is still going on keeps the next one in its conversation.
+  expect(peerTasks("1 2", [yesterday, today])!.tasks.map(view => view.task_id)).toEqual([1, 2]);
+  const running = task(4, { created_at_ms: NOW - 3 * 60 * MIN, finished_at_ms: null, state: "running", result: "" });
+  const later = task(5, { created_at_ms: NOW - MIN, finished_at_ms: null, state: "running", result: "" });
+  expect(peerTasks("5", [running, later])!.tasks.map(view => view.task_id)).toEqual([4, 5]);
+  // An answer arriving 31 minutes after the last one moved starts the next conversation; at 30 it is the same one.
+  const first = task(6, { created_at_ms: NOW - 60 * MIN, finished_at_ms: NOW - 50 * MIN });
+  expect(peerTasks("7", [first, task(7, { created_at_ms: NOW - 20 * MIN, finished_at_ms: NOW - 19 * MIN })])!.tasks.map(view => view.task_id)).toEqual([6, 7]);
+  expect(peerTasks("8", [first, task(8, { created_at_ms: NOW - 19 * MIN, finished_at_ms: NOW - 18 * MIN })])!.tasks.map(view => view.task_id)).toEqual([8]);
 });
 
 test("work a member handed itself is never a conversation between members", () => {
@@ -46,7 +65,9 @@ test("work a member handed itself is never a conversation between members", () =
 });
 
 test("a line opens the conversation in place: the pill, faces and coloured names, day dividers and Close chat", () => {
-  const all = [task(3), task(1, { created_at_ms: NOW - 2 * DAY, finished_at_ms: NOW - 2 * DAY })];
+  // One conversation across midnight: 23:50 to 00:11, a divider for each day.
+  const MIDNIGHT = NOW - DAY / 2, MIN = 60_000;
+  const all = [task(3, { created_at_ms: MIDNIGHT + 10 * MIN, finished_at_ms: MIDNIGHT + 11 * MIN }), task(1, { created_at_ms: MIDNIGHT - 10 * MIN, finished_at_ms: MIDNIGHT - 5 * MIN })];
   const { column, line } = mount(() => all);
   line.focus();
   const view = openPeerChat(column, line, () => all, people)!;

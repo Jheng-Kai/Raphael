@@ -195,11 +195,13 @@ animates, has no tooltip and names itself (等你處理, 需要你看一下, 已
 `sidebarLightRules` in `checks.mjs` runs inside `sidebar-shell` in every sidebar scene (at most one dot a row, one of four lights, named, still, and no dot for a member that only thinks). `sidebar-lights` draws
 a thinking member, a message, a task that ended, a failure, a question that waits and three group chats (a message, a meeting that ended, a question) and checks each against what the roster earns, in the
 colour of its token; `sidebar-lights-rail` the same on the rail, `sidebar-lights-pinned` on pinned tiles, `sidebar-lights-thinking` four members that only think (no dot at all), `sidebar-lights-open` opening the
-white, the green and the orange row (white and green go, orange stays). The palette check holds the four colours at 3:1 on every row surface in both themes. Gotchas: a fixture gives `unread_kind` per member
+white, the green and the orange row (white and green go, orange stays). `sidebar-lights-hover`, `-hover-room` and `-hover-pinned` put the pointer on a
+member's row, a group chat's row and a pinned face: `sidebar-light-steady` holds the light and the end of the words as far from the row's edge as every other
+row's (a face's light where the other faces' stand) and no 「more」 drawn: rows have none, so nothing makes room (owner, 2026-11-15). The palette check holds the four colours at 3:1 on every row surface in both themes. Gotchas: a fixture gives `unread_kind` per member
 (`sidebarLights` in `mock-ipc.js`, which also says what each row must earn in `data.expectedLights`), and the real core's `members.read` clears it, not the app alone.
 
 ```powershell
-npm run look -- sidebar-lights sidebar-lights-rail sidebar-lights-pinned sidebar-lights-thinking sidebar-lights-open sidebar-unread sidebar-rail --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-lights sidebar-lights-rail sidebar-lights-pinned sidebar-lights-thinking sidebar-lights-open sidebar-lights-hover sidebar-lights-hover-room sidebar-lights-hover-pinned sidebar-unread sidebar-rail --theme both --width 1120,720,1920x1080
 ```
 
 Select a member, then click the stacked header title for details.

@@ -88,8 +88,19 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
 }
 
 /**
- * The exchanges a line counts (`keys`, its `data-peer-keys`) with every other one between the same members in `all`,
- * and who sent the first: the member whose side the view takes. Null once `all` no longer has them.
+ * How long the two members may be quiet before their next exchange is another conversation (owner, 2026-11-15: every
+ * exchange stuck together hid what each one was about; a daily routine's exchange is that day's alone).
+ */
+export const PEER_SESSION_GAP_MS = 30 * 60_000;
+
+/** When an exchange last moved: an unfinished one is still going on. */
+const lastMoved = (task: HandoffView): number =>
+  task.finished_at_ms ?? (["queued", "running", "waiting"].includes(task.state) ? Number.POSITIVE_INFINITY : task.started_at_ms ?? task.created_at_ms);
+
+/**
+ * The exchanges a line counts (`keys`, its `data-peer-keys`) with the others between the same members at the same time in
+ * `all` (none more than `PEER_SESSION_GAP_MS` after the one before), and who sent the first: the member whose side the
+ * view takes. Null once `all` no longer has them.
  */
 export function peerTasks(keys: string, all: readonly HandoffView[]): { tasks: HandoffView[]; host: number } | null {
   const wanted = new Set(keys.split(" ").filter(Boolean));
@@ -97,7 +108,17 @@ export function peerTasks(keys: string, all: readonly HandoffView[]): { tasks: H
   const picked = exchanges.filter(task => wanted.has(peerKey(task)));
   if (!picked.length) return null;
   const pairs = new Set(picked.map(task => `${task.from_member_id}:${task.member_id}`));
-  return { tasks: exchanges.filter(task => pairs.has(`${task.from_member_id}:${task.member_id}`)), host: picked[0]!.from_member_id };
+  const between = exchanges.filter(task => pairs.has(`${task.from_member_id}:${task.member_id}`))
+    .sort((a, b) => a.created_at_ms - b.created_at_ms || (a.task_id ?? 0) - (b.task_id ?? 0));
+  const sessions: HandoffView[][] = [];
+  let moved = Number.NEGATIVE_INFINITY;
+  for (const task of between) {
+    if (!sessions.length || task.created_at_ms - moved > PEER_SESSION_GAP_MS) sessions.push([]);
+    sessions[sessions.length - 1]!.push(task);
+    moved = Math.max(moved, lastMoved(task));
+  }
+  const tasks = sessions.filter(session => session.some(task => wanted.has(peerKey(task)))).flat();
+  return { tasks, host: picked[0]!.from_member_id };
 }
 
 export interface PeerChatView { readonly el: HTMLElement; update(): void; close(): void }

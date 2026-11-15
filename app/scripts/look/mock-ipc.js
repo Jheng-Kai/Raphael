@@ -499,14 +499,17 @@ export function installMock(fixture, config = {}, target = window) {
   // Raphael as his emblem, with no picture of the owner's in its place.
   if (variant.emblem) data.avatar = null;
   if (variant.peerChat) {
-    // Raphael asked 小晴 yesterday and today, and 小森 once yesterday: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
-    const turn = data.turns.find(turn => turn.id === 1), sample = data.peerChatSample, DAY = 86_400_000;
+    // Raphael asked 小晴 twenty minutes ago and now, and 小森 once in between: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
+    // Yesterday's exchange with 小晴 is another conversation with its own line, so it is not in this one (owner, 2026-11-15).
+    const turn = data.turns.find(turn => turn.id === 1), sample = data.peerChatSample, DAY = 86_400_000, EARLIER = 20 * 60_000;
     const exchange = (id, member, name, created, request, result) => ({ ...structuredClone(data.roomHandoff), task_id: id, work_turn_id: id + 100,
       member_id: member, member_name: name, mode: "consult", state: "done", created_at_ms: created, started_at_ms: created, finished_at_ms: created + 40_000,
       request, result, evidence: [] });
-    data.turns.unshift({ ...structuredClone(turn), id: 3, created_at_ms: turn.created_at_ms - DAY, question: sample.earlierQuestion, text: sample.earlierAnswer,
-      messages: [], steps: [], handoffs: [exchange(60, 1, "小晴", turn.created_at_ms - DAY + 5_000, sample.earlierRequest, sample.earlierResult),
-        exchange(62, 2, "小森", turn.created_at_ms - DAY + 6_000, sample.otherRequest, sample.otherResult)] });
+    data.turns.unshift({ ...structuredClone(turn), id: 4, created_at_ms: turn.created_at_ms - DAY, question: sample.earlierQuestion, text: sample.earlierAnswer,
+      messages: [], steps: [], handoffs: [exchange(63, 1, "小晴", turn.created_at_ms - DAY + 5_000, sample.yesterdayRequest, sample.yesterdayResult)] },
+    { ...structuredClone(turn), id: 3, created_at_ms: turn.created_at_ms - EARLIER, question: sample.earlierQuestion, text: sample.earlierAnswer,
+      messages: [], steps: [], handoffs: [exchange(60, 1, "小晴", turn.created_at_ms - EARLIER + 5_000, sample.earlierRequest, sample.earlierResult),
+        exchange(62, 2, "小森", turn.created_at_ms - EARLIER + 6_000, sample.otherRequest, sample.otherResult)] });
     turn.handoffs = [exchange(61, 1, "小晴", turn.created_at_ms + 5_000, sample.request, sample.result)];
   }
   if (variant.handoffGroup) {
