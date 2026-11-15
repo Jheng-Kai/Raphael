@@ -107,7 +107,8 @@ function drag(target: Element, type: string, files: File[] = [], relatedTarget: 
 }
 
 describe("files dropped onto the thread", () => {
-  test("sending waits for a file read and the pending image opens in the lightbox", async () => {
+  test("send is not offered while a file is read, Enter sends nothing, and the pending image opens in the lightbox", async () => {
+    // Owner, 2026-11-15: 「還沒有正常載入完的話，不能顯示傳送的按鈕，不然傳送出去我不知道會變什麼樣子」 (R-ATTACH-04).
     let finishRead!: (buffer: ArrayBuffer) => void;
     let finishSend!: () => void;
     api.agentAskText.mockImplementation(() => new Promise<void>(resolve => { finishSend = resolve; }));
@@ -116,9 +117,15 @@ describe("files dropped onto the thread", () => {
     Object.defineProperty(file, "arrayBuffer", { value: () => new Promise<ArrayBuffer>(resolve => { finishRead = resolve; }) });
     Object.defineProperty(picker(), "files", { value: [file], configurable: true });
     picker().dispatchEvent(new Event("change")); await Promise.resolve(); await Promise.resolve();
+    const send = agent.el.querySelector<HTMLButtonElement>(".cmp-send")!, input = agent.el.querySelector<HTMLTextAreaElement>(".cmp-input")!;
+    expect(send.disabled).toBe(true);
     agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit();
-    expect(api.agentAskText).not.toHaveBeenCalled();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
     finishRead(PNG.buffer); await flush();
+    // Nothing went while the file was read, and nothing goes by itself once it is in.
+    expect(api.agentAskText).not.toHaveBeenCalled();
+    expect(send.disabled).toBe(false);
+    agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
     expect(api.agentAskText).toHaveBeenCalledTimes(1);
     agent.el.querySelector<HTMLButtonElement>('[data-act="attachment-image"]')!.click();
     expect(document.querySelector<HTMLImageElement>(".media-lightbox .lb-img")!.src).toBe(`data:image/png;base64,${base64Of(PNG)}`);
