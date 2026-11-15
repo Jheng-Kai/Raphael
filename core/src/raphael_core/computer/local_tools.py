@@ -185,7 +185,7 @@ class LocalTools:
                 result = PluginResult(True, text=json.dumps(data))
                 return result
             if self.settings.get("local_commands_mode") == "never":
-                return PluginResult(False, "disabled", "Local commands are off. Enable them in Settings > Raphael > Local commands.")
+                return PluginResult(False, "disabled", "Local commands are off. The owner can ask Raphael to turn them back on.")
             if access is None and (_SECRET.search(arguments["command"]) or _SECRET.search(arguments.get("cwd", ""))):
                 return PluginResult(False, "secret_store", "Reading secret stores is refused.")
             if not self.enabled:

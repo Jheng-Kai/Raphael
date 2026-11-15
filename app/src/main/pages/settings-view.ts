@@ -28,7 +28,7 @@ import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, splitEffort } from "../model-picker";
+import { type ModelPickerLook, modelDisplayName, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -267,6 +267,9 @@ export function modelPickerLook(v: SettingsView, role: ModelRole | "image" | "vi
     ...(role === "stt" ? { local: localView(v) } : {}),
     showPrice: false,
     disabled: v.brain === null,
+    // What the app ships as the choice is no choice while OpenRouter (or the provider it runs through) has no key: said once
+    // the providers are read, so that a page still loading shows no flash of 「未設定」.
+    ...((role === "cleanup" || role === "answer" || role === "stt") && v.providers?.state === "ready" ? { shipped: DEFAULT_MODELS[role] } : {}),
   };
 }
 
@@ -314,7 +317,8 @@ function keyStatus(v: SettingsView): string {
   const more = (text: string): string => `<span class="status-more">${esc(text)}</span>`;
   switch (openrouter.state) {
     case "ok":
-      return st("ok", t("settings.040")) + (openrouter.latency_ms !== null ? more(t("settings.041", { p0: openrouter.latency_ms })) : "");
+      // Connected is all it says: how many milliseconds the check took tells nobody anything.
+      return st("ok", t("settings.040"));
     case "error":
       return (
         st("err", openrouter.error === "auth" ? t("settings.036") : t("settings.042")) +
@@ -330,13 +334,13 @@ function keyRow(v: SettingsView): string {
   const attrs = ' data-row="openrouter-key"';
   if (v.hasKey && !v.replacingKey) {
     return row(
-      t("common.apiKey"),
+      t("common.apiKeyField"),
       keyStatus(v),
       actionRow({
         secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
           // Changing it is the pencil, as everywhere.
           iconBtn("pencil", t("home.018"), ' data-act="key-replace" data-k="key"'),
-      }) + iconButton("more", t("members.more", { p0: t("common.apiKey") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
+      }) + iconButton("more", t("members.more", { p0: t("common.apiKeyField") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
       { attrs, cls: "row-key" },
     );
   }
@@ -488,7 +492,7 @@ function dictationHTML(v: SettingsView): string {
  */
 /** Services shared by every member. */
 function toolsHTML(v: SettingsView): string {
-  return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain) : "");
+  return headingHTML(v) + coreNote(v) + (v.services ? servicesHTML(v.services, modelPickerHTML(visionPickerLook(v)), v.brain, (id) => modelDisplayName(catalogOf(v), id)) : "");
 }
 
 /** Shared safety rules and local command permissions. */
@@ -519,7 +523,7 @@ function modelsHTML(v: SettingsView): string {
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
-    spendCardHTML(v) + `<div data-usage-host></div>` + section(t("common.apiKey"), [
+    spendCardHTML(v) + `<div data-usage-host></div>` + section(t("settings.keySection"), [
       keyRow(v),
       ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
     ]);

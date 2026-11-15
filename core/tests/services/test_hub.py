@@ -62,7 +62,7 @@ async def test_the_status_says_what_is_chosen_and_what_each_service_needs(rig):
     assert status == {
         "search": {
             "enabled": True,
-            "service": "openrouter",
+            "service": "none",
             "options": [
                 {"id": "openrouter", "needs_key": False, "has_key": False, "key_optional": False},
                 {"id": "brave", "needs_key": True, "has_key": False, "key_optional": False},
@@ -97,6 +97,46 @@ async def test_the_status_says_what_is_chosen_and_what_each_service_needs(rig):
             "supports_images": True,
         },
     }  # fmt: skip
+
+
+async def test_with_no_choice_the_search_is_the_first_service_that_is_set_up(conn):
+    # R-DEFAULT-02: a new person starts on no service that needs a key they have not got, never on OpenRouter's.
+    ready = []
+    rig = Rig(conn, models=lambda: parse_catalog(RECORDED))
+    rig.hub._openrouter_ready = lambda: bool(ready)
+    status = await rig.call("services.status")
+    assert rig.settings.get("web_search_service") == "auto"
+    assert status["search"]["service"] == "none"
+    ready.append(True)
+    assert (await rig.call("services.status"))["search"]["service"] == "openrouter"
+    rig.settings.set("searxng_url", "http://192.168.1.20:8080")
+    assert (await rig.call("services.status"))["search"]["service"] == "searxng"
+    rig.keys.set("exa", KEY)
+    assert (await rig.call("services.status"))["search"]["service"] == "exa"
+    rig.keys.set("brave", KEY)
+    assert (await rig.call("services.status"))["search"]["service"] == "brave"
+    # What was chosen is what is used, set up or not.
+    rig.settings.set("web_search_service", "openrouter")
+    ready.clear()
+    assert (await rig.call("services.status"))["search"]["service"] == "openrouter"
+
+
+async def test_a_search_with_no_service_set_up_says_so_and_calls_no_one(conn):
+    from raphael_core.services.common import ServiceError
+
+    rig = Rig(conn, models=lambda: parse_catalog(RECORDED))
+    with pytest.raises(ServiceError) as raised:
+        await rig.hub.search("anything")
+    assert raised.value.kind == "not_configured"
+
+
+async def test_the_answer_is_told_where_to_set_a_search_up_when_there_is_none(conn):
+    from raphael_core.agent.tools import Tools
+
+    rig = Rig(conn, models=lambda: parse_catalog(RECORDED))
+    result = await Tools(object(), services=rig.hub).web_search("anything", "fake", None)
+    assert not result.ok and result.error == "not_configured"
+    assert "Settings > Tools > Services > Web search" in result.instruction
 
 
 async def test_the_status_follows_the_settings(rig, conn):
@@ -216,7 +256,7 @@ async def test_a_key_with_a_space_in_it_is_refused_by_a_kind_and_never_echoed(ri
 @pytest.mark.parametrize(
     ("key", "good", "bad"),
     [
-        ("web_search_service", ["openrouter", "brave", "tavily", "exa", "searxng"], ["google", ""]),
+        ("web_search_service", ["auto", "openrouter", "brave", "tavily", "exa", "searxng"], ["google", ""]),
         ("web_read_service", ["builtin", "jina", "firecrawl", "tavily"], ["brave", "Builtin"]),
         ("pdf_service", ["builtin", "openrouter"], ["pypdf"]),
     ],

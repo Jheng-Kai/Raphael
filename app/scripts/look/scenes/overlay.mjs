@@ -35,7 +35,7 @@ export default [{
     { type: "complete" },
     { type: "say", prefix: "答", text: "台北現在二十四度。" },
   ] }), entry: "overlay.html", ready: ".subs.on .sub-line",
-}, ...[["gold", "《告。一切正常。本月額度已使用 6%。》"], ["angry", "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫 › 麥克風」選擇。》"]].map(([mood, line]) => ({
+}, ...[["gold", "《告。一切正常。本月額度已使用 6%。》"], ["angry", "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫與快捷鍵 › 麥克風」選擇。》"]].map(([mood, line]) => ({
   // The vector rune ring: crisp at the largest corner size, gold for a report, red for a refusal.
   ...scene(`overlay-emblem-${mood}`, `Raphael's emblem drawn as vectors, ${mood === "gold" ? "in his gold for a report" : "red while he refuses"}`, [
     { action: "advance-time", ms: 1500 }, check(`overlay-emblem-${mood}`),

@@ -459,6 +459,8 @@ export interface ModelPickerOptions {
   inheritFrom?: string;
   /** The effort a newly chosen model starts at when it has it, instead of the model's own default (快速提問: low, to stay quick). */
   defaultEffort?: string;
+  /** The model the app ships as the choice when none was made: shown as chosen only while its connection is there. */
+  shipped?: string;
 }
 
 /** What a picker's button is drawn from: all but what choosing does. */
@@ -503,6 +505,21 @@ const shortName = (id: string): string => {
 };
 
 export function pickerModelsFor(o: ModelPickerLook): CatalogModel[] { return pickerModels(o); }
+
+/**
+ * The name people read for the model `ref` ("GPT-6 Sol"): the catalogue's own, or, for a model it does not list, its id made
+ * into words ("gpt-6-sol" is "GPT-6 Sol"). Never the bare id of a model the catalogue knows.
+ */
+export function modelDisplayName(catalog: ModelCatalog | null | undefined, ref: string): string {
+  if (!ref) return "";
+  const base = baseRef(ref);
+  const listed = catalog ? (["answer", "stt", "image", "video"] as const).flatMap((role) => modelsFor(catalog, role)) : [];
+  const model = listed.find((m) => refsOf(m).includes(base) || m.id === base);
+  if (model) return model.name;
+  const words = shortName(ref).split(/[-_]/).filter(Boolean).map((part) => (/^(gpt|llm|ai|pdf|tts|stt)$/i.test(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1)));
+  // "gpt-6-sol" is GPT-6 Sol: the number of a generation sticks to its family.
+  return (/^GPT$/.test(words[0] ?? "") && /^\d/.test(words[1] ?? "") ? [`${words[0]}-${words[1]}`, ...words.slice(2)] : words).join(" ");
+}
 
 /** The core names a subscription's own model in English ("Codex (subscription)", agent/cli/images.py); the window says it in its language. */
 const SUBSCRIPTION_NAME = /^(.+?) \(subscription\)$/i;
@@ -564,8 +581,39 @@ function concreteCurrent(o: ModelPickerLook, models = pickerModels(o)): string {
     models.find((m) => Object.values(m.effort_models ?? {}).includes(ref))?.id ?? models.find((m) => refsOf(m).includes(ref))?.id ?? ref;
 }
 
+/** The connection a saved model ref runs through: a provider (`@id:model`), a subscription CLI (`cli:id:model`), else OpenRouter. */
+const connectionOfRef = (ref: string): string =>
+  ref.startsWith("@") ? ref.slice(1).split(":", 1)[0] : ref.startsWith("cli:") ? ref.split(":").slice(0, 2).join(":") : "openrouter";
+
+/**
+ * Whether the connection a model runs through can answer now, as far as the picker was told: a provider has its key (or is
+ * a local one that answers), ChatGPT is signed in, a subscription CLI is installed and signed in. What the picker was not
+ * told is connected: a choice is hidden only on a sign that its connection is not there.
+ */
+function connectedTo(o: ModelPickerLook, id: string): boolean {
+  if (id === "chatgpt") return !o.chatgpt || o.chatgpt.signed_in;
+  if (id.startsWith("cli:")) {
+    const cli = o.clis?.find((c) => c.id === id.slice(4));
+    return !cli || (cli.installed && !cli.disconnected && cli.available);
+  }
+  const provider = o.providers?.find((p) => p.id === id);
+  // The core lists OpenRouter only once it has a key (or a card of its own): a list that is read and does not hold it says there is none.
+  if (!provider) return !(id === "openrouter" && o.providers !== undefined);
+  return (provider.enabled && (provider.has_key || provider.status === "ok" || isLocal(provider.kind)));
+}
+
+/**
+ * The model that only ships as the choice (`shipped`), while the connection it runs through is not there: nobody made that choice, so
+ * it is not shown as made (R-DEFAULT-04). A model someone chose stays shown, whatever happened to its sign-in since.
+ */
+const unconnectedChoice = (o: ModelPickerLook): boolean => {
+  const ref = baseRef(o.current);
+  return o.shipped !== undefined && ref !== "" && ref === o.shipped && !o.local?.active && !connectedTo(o, connectionOfRef(ref));
+};
+
 /** The same model name and connection source for picker buttons and read-only cards. */
 export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
+  if (unconnectedChoice(o)) return { name: t("media.unset"), source: "", provider: "" };
   // Public cached names remain useful after logout; only pickerModels can supply runnable rows.
   const models = [...pickerModels(o).filter((m) => !m.id.startsWith("cli:")), ...cliModels(o.clis ?? [], false)];
   const inherited = baseRef(o.current) === o.lead?.id && o.inheritFrom;
@@ -749,7 +797,7 @@ class MountedPicker implements ModelPicker {
   open(query = ""): void {
     if (this.o.disabled || this.dialog) return;
     const models = pickerModels(this.o);
-    this.draft = concreteCurrent(this.o, models); this.effort = effortOf(this.o.current, models);
+    this.draft = unconnectedChoice(this.o) ? "" : concreteCurrent(this.o, models); this.effort = effortOf(this.o.current, models);
     this.localDraft = this.o.local?.active ?? null;
     // the list opens where the chosen model is; under an inheritance lead, where the model it stands for is
     const shown = this.inherits() ? this.effortModel()?.id ?? this.draft : this.draft;

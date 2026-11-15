@@ -24,6 +24,8 @@ import { liveAction, pastStep, workActions } from "./work-actions";
 // the core goes through `esc`.
 
 import { getLocale, t } from "./i18n";
+import { knownCatalog } from "./brain-lists";
+import { modelDisplayName } from "./model-picker";
 import { composioAction, composioText, isComposioTool } from "./composio-result";
 import type { MessageKey } from "./i18n/zh-TW";
 
@@ -605,7 +607,8 @@ export function sourceName(source: string): string {
 export function answerMeta(turn: AgentTurn): string {
   const parts: string[] = [];
   if (turn.status === "confirm") parts.push(t("agent.waiting"));
-  if (turn.model) parts.push(shortModel(turn.model));
+  // The name people read ("GPT-6 Luna"), not the id a model has in a list.
+  if (turn.model) parts.push(modelDisplayName(knownCatalog(), turn.model));
   if (turn.cost_usd && turn.cost_usd > 0) parts.push(formatUsd(turn.cost_usd));
   return parts.join(" · ");
 }

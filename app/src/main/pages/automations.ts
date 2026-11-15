@@ -176,7 +176,9 @@ export function createAutomationsPage(app: AppContext): Page {
       members.map(m => sourceRow(memberSource(m.id), m.name, faceHTML(m, 20), `${chipColor(m)} draggable="true" data-drag-member="${m.id}" title="${esc(t("auto.drag"))}"`)).join("") +
       (google === "connected" ? sourceRow(GOOGLE_SOURCE, t("cal.google"), googleMark()) : "") + `</div>` +
       notice +
-      `<label class="au-awake" title="${esc(t("auto.keepAwake"))}"><span>${esc(t("auto.awake"))}</span>${tg(awake, t("auto.keepAwake"), ' data-au="awake"')}</label></aside>`;
+      // One line says what 保持喚醒 does, on the page: a switch with only its name leaves a new person guessing (R-COPY-05).
+      `<div class="au-awake-box"><label class="au-awake"><span>${esc(t("auto.awake"))}</span>${tg(awake, t("auto.keepAwake"), ' data-au="awake"')}</label>` +
+      `<p class="au-awake-note">${esc(t("auto.keepAwake"))}</p></div></aside>`;
   }
   const entryAttrs = (entry: CalendarEntry, label: string): string =>
     ` data-au="entry" data-entry="${esc(entry.id)}" data-calendar-item="${esc(entry.id)}" title="${esc(label)}" aria-label="${esc(label)}"${entry.run ? ` data-status="${entry.run.status}"` : ""}${focusedHomeItem === entry.id ? ' aria-current="true"' : ""}`;

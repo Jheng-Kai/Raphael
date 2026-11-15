@@ -124,9 +124,9 @@ pub const TIDY_FAILED: Notice = Notice {
 
 /// The core found no microphone to record from.
 pub const NO_MIC: Notice = Notice {
-    zh: "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫 › 麥克風」選擇。》",
-    en: "《Negative. No microphone is available. Connect one and select it in Settings > Dictation > Microphone.》",
-    ja: "《否。マイクを検出できません。接続し、「設定 › ディクテーション › マイク」で選んでください。》",
+    zh: "《否。未偵測到麥克風。請接上裝置，再到「設定 › 聽寫與快捷鍵 › 麥克風」選擇。》",
+    en: "《Negative. No microphone is available. Connect one and select it in Settings > Dictation & shortcuts > Microphone.》",
+    ja: "《否。マイクを検出できません。接続し、「設定 › 音声入力とショートカット › マイク」で選んでください。》",
 };
 
 /// The microphone is there but delivered no sound (muted, or a wireless headset asleep), and
@@ -139,31 +139,31 @@ pub const NO_SOUND: Notice = Notice {
 
 /// The cloud speech model's credentials are missing.
 pub const CLOUD_STT_MISSING: Notice = Notice {
-    zh: "《否。雲端語音辨識尚未連接。請到「設定 › 模型與用量 › 用量」設定 OpenRouter 金鑰，或到「設定 › 聽寫」下載本機模型。》",
-    en: "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation.》",
-    ja: "《否。クラウド認識は未接続です。「設定 › モデルと使用量 › 使用量」で OpenRouter キーを設定するか、「設定 › ディクテーション」でモデルをダウンロードしてください。》",
+    zh: "《否。雲端語音辨識尚未連接。請到「設定 › 模型與用量 › 用量」設定 OpenRouter 金鑰，或到「設定 › 聽寫與快捷鍵」下載本機模型。》",
+    en: "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation & shortcuts.》",
+    ja: "《否。クラウド認識は未接続です。「設定 › モデルと使用量 › 使用量」で OpenRouter キーを設定するか、「設定 › 音声入力とショートカット」でモデルをダウンロードしてください。》",
 };
 
 /// The selected local speech model has not been downloaded.
 pub const LOCAL_MODEL_MISSING: Notice = Notice {
-    zh: "《否。尚未下載本機語音模型。請到「設定 › 聽寫」下載後再錄音。》",
-    en: "《Negative. The local speech model is not downloaded. Download it in Settings > Dictation before recording.》",
-    ja: "《否。ローカル音声モデルがありません。「設定 › ディクテーション」でダウンロードしてから録音してください。》",
+    zh: "《否。尚未下載本機語音模型。請到「設定 › 聽寫與快捷鍵」下載後再錄音。》",
+    en: "《Negative. The local speech model is not downloaded. Download it in Settings > Dictation & shortcuts before recording.》",
+    ja: "《否。ローカル音声モデルがありません。「設定 › 音声入力とショートカット」でダウンロードしてから録音してください。》",
 };
 
 /// The core cannot dictate yet: the speech model is not ready (`NOT_CONFIGURED`).
 pub const NOT_READY: Notice = Notice {
-    zh: "《否。語音辨識尚未就緒。請到「設定 › 聽寫」下載本機模型；使用雲端辨識時，請在「設定 › 模型與用量」確認連線。》",
-    en: "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation; for cloud recognition check the connection in Settings > Models & usage.》",
-    ja: "《否。音声認識の準備ができていません。「設定 › ディクテーション」でモデルをダウンロードし、クラウド認識の場合は「設定 › モデルと使用量」で接続を確認してください。》",
+    zh: "《否。語音辨識尚未就緒。請到「設定 › 聽寫與快捷鍵」下載本機模型；使用雲端辨識時，請在「設定 › 模型與用量」確認連線。》",
+    en: "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation & shortcuts; for cloud recognition check the connection in Settings > Models & usage.》",
+    ja: "《否。音声認識の準備ができていません。「設定 › 音声入力とショートカット」でモデルをダウンロードし、クラウド認識の場合は「設定 › モデルと使用量」で接続を確認してください。》",
 };
 
 /// The cloud could not transcribe the speech and no local model is left to take over
 /// (`NO_LOCAL_MODEL`).
 pub const NO_LOCAL_MODEL: Notice = Notice {
-    zh: "《否。雲端辨識失敗，且沒有本機模型。請到「設定 › 聽寫」下載後再試。》",
-    en: "《Negative. Cloud transcription failed and there is no local model. Download one in Settings > Dictation, then try again.》",
-    ja: "《否。クラウド認識に失敗し、ローカルモデルもありません。「設定 › ディクテーション」でダウンロードして再試行してください。》",
+    zh: "《否。雲端辨識失敗，且沒有本機模型。請到「設定 › 聽寫與快捷鍵」下載後再試。》",
+    en: "《Negative. Cloud transcription failed and there is no local model. Download one in Settings > Dictation & shortcuts, then try again.》",
+    ja: "《否。クラウド認識に失敗し、ローカルモデルもありません。「設定 › 音声入力とショートカット」でダウンロードして再試行してください。》",
 };
 
 /// Some segments still failed after the final retry; the pasted text marks each gap.

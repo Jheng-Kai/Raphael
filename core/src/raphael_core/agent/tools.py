@@ -7,10 +7,11 @@ answer then says plainly that the data is missing.
 
 - The weather comes from Open-Meteo, which needs no key: the city (the `agent_city` setting) is
   looked up for its coordinates (`cities` knows how), then the forecast for them. It costs nothing.
-- A web search is the `web_search_service` setting's (`raphael_core.services`). "openrouter", the
-  default, is a chat call to OpenRouter with the `web` plugin on, which puts a few search results
-  in front of the model; the call is paid and written to the spend by the ledger. Another service
-  (Brave, Tavily, Exa, SearXNG) returns the results themselves, which the answer model words.
+- A web search is the `web_search_service` setting's (`raphael_core.services`); by default ("auto") the first
+  service that is set up. "openrouter" is a chat call to OpenRouter with the `web` plugin on, which puts a few
+  search results in front of the model; the call is paid and written to the spend by the ledger. Another service
+  (Brave, Tavily, Exa, SearXNG) returns the results themselves, which the answer model words. With none set up
+  the search says so (`not_configured`) and the answer tells where to set one up.
 - A page is read by the `web_read_service` setting's reader (`web_read`), and a file the owner
   handed over (an image, a PDF) by the vision model or the PDF service (`read_attachment`, `look`).
 - The time is the computer's.
@@ -253,7 +254,11 @@ class Tools:
     # --- the weather ----------------------------------------------------------------------------
 
     async def weather(self, city: str, language: str) -> ToolResult:
-        """The weather in `city` now, today and tomorrow, with the place named in `language`."""
+        """The weather in `city` now, today and tomorrow, with the place named in `language`. No city is no guess: the
+        answer is told to ask which one."""
+        if not city.strip():
+            return ToolResult("weather", False, None, "needs_city",
+                              instruction="No city is known yet. Ask the user which city they mean, then look it up; do not guess one.")
         try:
             data = await asyncio.wait_for(self._weather(city, language), WEATHER_TIMEOUT_S)
         except TimeoutError:
@@ -355,6 +360,8 @@ class Tools:
             return self._failed("web_search", DISABLED)
         service = "openrouter" if self.services is None else self.services.search_service()
         if service != "openrouter":
+            if service == "none":
+                return self._failed("web_search", "not_configured")
             return await self._search_with(service, question)
         try:
             found = await asyncio.wait_for(

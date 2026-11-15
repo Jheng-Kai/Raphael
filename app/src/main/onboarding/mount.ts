@@ -17,6 +17,7 @@ import { describeError, keyReasonText } from "../format";
 import { wireKeyField } from "../keyfield";
 import { UI_LANGUAGES } from "../pages/settings-view";
 import { languageButtonHTML, openLanguagePicker } from "../language-picker";
+import { dictationLanguagesFor } from "../languages";
 import { storePlugin } from "../plugins-data";
 import { composioKeyProblem, ownServerApps, ownServerForm } from "../connections";
 import { openConnectionSetup } from "../connection-setup";
@@ -569,7 +570,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
     const language = target.closest<HTMLElement>('[data-ob="lang"]');
     if (language) {
-      openLanguagePicker(language, UI_LANGUAGES, device().ui_language, (value) => void app.setDevice({ ui_language: value as "zh-TW" | "en" | "ja" }).catch((err) => toaster.info(describeError(err))));
+      openLanguagePicker(language, UI_LANGUAGES, device().ui_language, (value) => {
+        void app.setDevice({ ui_language: value as "zh-TW" | "en" | "ja" })
+          // What is spoken follows the window's language until the person says otherwise; a core that cannot take it leaves the default.
+          .then(() => api.settingsSet("languages", dictationLanguagesFor(value)).catch(() => undefined))
+          .catch((err) => toaster.info(describeError(err)));
+      });
       return;
     }
     if (target.closest(".sel")) return;

@@ -111,6 +111,15 @@ async def test_the_weather_is_looked_up_by_city_then_by_place(tools, meteo):
     assert isinstance(result, ToolResult) and result.name == "weather" and result.ok
 
 
+async def test_the_weather_asks_which_city_when_none_is_known_and_looks_nothing_up(tools, meteo):
+    # R-DEFAULT-01: nobody's city is a default. No city is no request to Open-Meteo, and the answer is told to ask.
+    for blank in ("", "  \n"):
+        result = await tools.weather(blank, "zh-TW")
+        assert not result.ok and result.error == "needs_city"
+        assert "Ask the user which city" in result.instruction
+    assert meteo.requests == []
+
+
 async def test_the_weather_is_the_place_now_today_and_tomorrow(tools):
     result = await tools.weather("Taipei", "zh-TW")
     assert result.data == {

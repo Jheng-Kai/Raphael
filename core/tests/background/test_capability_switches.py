@@ -1,4 +1,4 @@
-"""The owner's switches of the capabilities (Settings › 拉斐爾 › 服務) in a background task: what is off
+"""The owner's switches of the capabilities (Settings › 工具 › 服務) in a background task: what is off
 is not offered to the task and is refused if the task asks for it anyway, with nothing sent to any
 service. Fakes for every service: no test reaches the network."""
 

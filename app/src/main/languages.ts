@@ -20,6 +20,17 @@ export interface LanguageGroup {
 
 /** The same as the core's default. */
 export const DEFAULT_LANGUAGES = ["zh-TW"];
+
+/**
+ * The dictation language that goes with each interface language (R-DEFAULT-03): the language someone chose in the first-run
+ * guide is the one they speak until they say otherwise, not a fixed 繁體中文. The speech list has no variant of Russian or
+ * Turkish; speech is still understood in them (it is detected, the list only chooses how it is written), so they take English.
+ */
+const DICTATION_FOR_INTERFACE: Record<string, string> = {
+  "zh-TW": "zh-TW", "zh-CN": "zh-CN", en: "en-US", ja: "ja-JP", ko: "ko-KR", es: "es-ES", fr: "fr-FR", de: "de-DE", it: "it-IT",
+  "pt-BR": "pt-BR", vi: "vi-VN", th: "th-TH", id: "id-ID",
+};
+export const dictationLanguagesFor = (interfaceLanguage: string): string[] => [DICTATION_FOR_INTERFACE[interfaceLanguage] ?? "en-US"];
 export const MAX_LANGUAGES = 5;
 export const AUTO_DETECT_HINT = () => t("languages.001");
 

@@ -864,6 +864,7 @@ class App(Router):
             models=self.brain.known_models,
             transcribe=self._transcribe_from_messaging,
             transport=offline_transport() if fake_llm else None,
+            openrouter_ready=lambda: self.brain._has_key_or_none() is True,
         )
         self.services.register(self)
         if agent_actions is None:

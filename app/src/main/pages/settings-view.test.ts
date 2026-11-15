@@ -305,7 +305,7 @@ describe("the rules for every tab, in every language", () => {
     expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
     expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
-    expect(described(tab("usage"))).toEqual(["金鑰"]);
+    expect(described(tab("usage"))).toEqual(["OpenRouter API 金鑰"]);
   });
 });
 
@@ -481,6 +481,15 @@ describe("拉斐爾", () => {
 });
 
 describe("Models", () => {
+  test("the model the app ships is no choice while OpenRouter has no key, said only once the providers are read (R-DEFAULT-04)", () => {
+    const ready = { ...emptyProvidersView(), state: "ready" as const };
+    for (const role of ["cleanup", "answer", "stt"] as const) {
+      expect(modelPickerLook(view({ providers: emptyProvidersView() }), role).shipped, role).toBeUndefined();
+      expect(modelPickerLook(view({ providers: ready }), role).shipped, role).toBe({ cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" }[role]);
+    }
+    expect(modelPickerLook(view({ providers: ready }), "image").shipped).toBeUndefined();
+  });
+
   test("puts providers and model choices on Models, existing usage controls and analytics slot on Usage", () => {
     const html = tab("models");
     expect(groups(html)).toEqual(["使用的模型", "訂閱帳號", "供應商"]);
@@ -494,7 +503,7 @@ describe("Models", () => {
     const usage = tab("usage");
     // This month's spending of the app is the spending card above the allowances; an OpenRouter account's own usage is
     // read on OpenRouter.
-    expect(names(usage)).toEqual(["金鑰"]);
+    expect(names(usage)).toEqual(["OpenRouter API 金鑰"]);
     expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
     expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
     expect(usage).not.toContain("OpenRouter 帳號本月用量");
@@ -517,34 +526,37 @@ describe("Models", () => {
   });
 
   test("shows how OpenRouter took the key, with a button to check again and a pencil to change it", () => {
-    const key = rowOf(tab("usage"), "金鑰");
+    const key = rowOf(tab("usage"), "OpenRouter API 金鑰");
     expect(key).toContain("已連線");
-    expect(key).toContain("延遲 120 ms");
+    // No latency: how many milliseconds the check took tells a first-time user nothing (R-COPY-02).
+    expect(key).not.toMatch(/ms|延遲/);
+    expect(tab("usage")).toContain("<h2>OpenRouter</h2>");
+    expect(tab("usage")).not.toContain("<h2>金鑰</h2>");
     expect(buttons(key).slice(0, 2)).toEqual(['<button type="button" class="btn" data-act="or-check">', '<button type="button" class="btn icon row" aria-label="變更" title="變更" data-act="key-replace" data-k="key">']);
     expect(key).toContain(`data-k="key">${ico("pencil")}</button>`);
-    const bad = rowOf(tab("usage", { openrouter: { ...openrouter, state: "error", error: "auth" } }), "金鑰");
+    const bad = rowOf(tab("usage", { openrouter: { ...openrouter, state: "error", error: "auth" } }), "OpenRouter API 金鑰");
     expect(bad).toContain("金鑰無效，請更換");
   });
 
   test("removing the key waits in its row's ⋯, only while a key is set (R-UI-56)", () => {
-    const key = rowOf(tab("usage"), "金鑰");
+    const key = rowOf(tab("usage"), "OpenRouter API 金鑰");
     expect(key).toContain('data-act="key-menu"');
     expect(key).not.toContain("移除金鑰");
     expect(key).not.toContain("danger");
     for (const over of [{ hasKey: false }, { replacingKey: true }]) {
-      expect(rowOf(tab("usage", over), "金鑰")).not.toContain("key-menu");
+      expect(rowOf(tab("usage", over), "OpenRouter API 金鑰")).not.toContain("key-menu");
     }
   });
 
   test("asks for a key when there is none, or while it is being changed", () => {
     for (const over of [{ hasKey: false }, { replacingKey: true }]) {
-      const key = rowOf(tab("usage", over), "金鑰");
+      const key = rowOf(tab("usage", over), "OpenRouter API 金鑰");
       expect(key).toContain('id="key-input" type="password"');
       expect(key).toContain('class="btn pri" data-act="key-paste"');
       expect(key).not.toContain('data-act="key-replace"');
     }
-    expect(rowOf(tab("usage", { replacingKey: true }), "金鑰")).toContain('data-act="key-cancel"');
-    const replacing = rowOf(tab("usage", { replacingKey: true }), "金鑰");
+    expect(rowOf(tab("usage", { replacingKey: true }), "OpenRouter API 金鑰")).toContain('data-act="key-cancel"');
+    const replacing = rowOf(tab("usage", { replacingKey: true }), "OpenRouter API 金鑰");
     expect(replacing.indexOf('data-act="key-cancel"')).toBeLessThan(replacing.indexOf('data-act="key-paste"'));
   });
 
@@ -552,8 +564,8 @@ describe("Models", () => {
     const html = tab("models");
     for (const [name, k, role, price, chosen] of [
       ["語音轉文字", "stt-model", "stt", "每分鐘 $0.0067", "Scribe v2"],
-      ["整理文字", "model", "cleanup", "輸入 $0.10 / 輸出 $0.40 每百萬 token", "GPT-6 Luna"],
-      ["拉斐爾的快速提問", "quick-model", "answer", "輸入 $0.10 / 輸出 $0.40 每百萬 token", "GPT-6 Luna"],
+      ["整理文字", "model", "cleanup", "輸入 $0.10 / 輸出 $0.40 約每百萬字", "GPT-6 Luna"],
+      ["拉斐爾的快速提問", "quick-model", "answer", "輸入 $0.10 / 輸出 $0.40 約每百萬字", "GPT-6 Luna"],
     ]) {
       const row = rowOf(html, name);
       expect(row).toContain(`data-row="${k}"`);
