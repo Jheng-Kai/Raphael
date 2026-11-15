@@ -1032,8 +1032,8 @@ class LocalVm:
             if not state.get("image"):
                 raise VmError("image_missing")
             if not target.remote:
-                await asyncio.to_thread(bound_folder, target.workspace)
-                await asyncio.to_thread(bound_folder, target.shared)
+                bound_folder(target.workspace)
+                bound_folder(target.shared)
             self.validate_storage(target)
             self.data.made(target)  # before the engine makes it: a computer unrecorded could never be removed
             result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
@@ -1058,7 +1058,7 @@ class LocalVm:
                         raise VmError("team_layout_failed")
                 else:
                     for name in ("context", "meetings", "projects"):
-                        await asyncio.to_thread(bound_folder, target.shared / name)
+                        bound_folder(target.shared / name)
                 await self._wallpaper(target)
                 return state
             if not repaired and state["state"] == "running" and not self.unit_held(target) and self.unit_active(target) <= 1 and not self.unit_active(target, excluding=target.key) and not self.unit_busy(target, excluding=target.key):
