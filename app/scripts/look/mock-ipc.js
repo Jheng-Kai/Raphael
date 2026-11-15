@@ -2206,7 +2206,8 @@ export function installMock(fixture, config = {}, target = window) {
         if (!data.conversations.some(c => c.id === args.conversationId && c.member_id === member)) throw new Error("Composer voice must name its own conversation");
         notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true, member_id: member });
         if (args.kind === "agent_up" && variant.ownerVoice === "answer") {
-          const turn = { ...copy(data.ownerRound.voiceReply), member_id: member, conversation_id: args.conversationId };
+          // As the core writes it: the newest turn of the thread, made now.
+          const turn = { ...copy(data.ownerRound.voiceReply), id: Math.max(0, ...data.turns.map(item => item.id)) + 1, created_at_ms: Date.now(), member_id: member, conversation_id: args.conversationId };
           data.turns.push(turn); notify("AgentTurn", { turn_id: turn.id, member_id: member });
         }
         return;

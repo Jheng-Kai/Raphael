@@ -6665,6 +6665,13 @@ export function checkRendered(name, context = {}) {
       require(composer.dataset.taskState === "idle", `the composer is at rest: ${composer.dataset.taskState}`);
       return { check: name };
     }
+    if (name === "voice-over-page-hearing") {
+      // Owner, 2026-11-15: after the send Raphael stayed over the page until he left it. The recording is over: the flyer is back
+      // in the composer at once, over a page as anywhere, and the slot's Stop belongs to the words on their way.
+      require(!flyer && !stage.classList.contains("is-voice") && !composer.querySelector(".vm-away"), "once the recording ends the flyer is back in the composer");
+      require(composer.dataset.taskState === "ack", `the words are on their way: ${composer.dataset.taskState}`);
+      return { check: name };
+    }
     require(visible(flyer), "the flyer is drawn in front of the page");
     const canvas = flyer.querySelector("canvas.ra-flyer-emblem");
     require(canvas && visible(canvas) && !flyer.querySelector("img"), "it is the live emblem, the one the voice mode always draws");

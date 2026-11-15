@@ -149,7 +149,7 @@ describe("files dropped onto the thread", () => {
     reads.shift()!(new Uint8Array([37, 80, 68, 70, 45]).buffer); await flush();
     expect(chips()).toEqual(["a.png"]);
     agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit(); await flush();
-    expect(api.agentAskText.mock.calls.at(-1)![1]).toEqual([{ name: "a.png", mime: "image/png", data: base64Of(PNG) }]);
+    expect(api.agentAskText.mock.lastCall![1]).toEqual([{ name: "a.png", mime: "image/png", data: base64Of(PNG) }]);
     agent.hide();
   });
 
