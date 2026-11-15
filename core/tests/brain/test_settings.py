@@ -73,13 +73,13 @@ def test_the_defaults_are_the_documented_ones():
         "pdf_fallbacks": [],
         "stt_fallbacks": [],
         "memory_fallbacks": [],
-        "agent_city": "台北",
+        "agent_city": "",
         "worker_cost_cap_usd": 0.2,
         "stt_local_model": "qwen3-asr",
         "model_favorites": {"cleanup": [], "answer": [], "stt": []},
         "disconnected_clis": [],
         "chatgpt.registrations.v1": {},
-        "web_search_service": "openrouter",
+        "web_search_service": "auto",
         "web_read_service": "builtin",
         "vision_model": "",
         "pdf_service": "builtin",
@@ -288,10 +288,11 @@ def test_learning_corrections_is_no_longer_a_setting_and_a_saved_off_is_ignored(
 # --- the voice assistant -----------------------------------------------------------------------
 
 
-def test_the_assistant_answers_with_luna_in_taipei_by_default(conn):
+def test_the_assistant_answers_with_luna_and_knows_no_city_by_default(conn):
+    # Nobody's city is a default (R-DEFAULT-01): the weather asks, and a city said is looked up.
     s = SettingsStore(conn)
     assert s.get("agent_model") == "openai/gpt-6-luna"
-    assert s.get("agent_city") == "台北"
+    assert s.get("agent_city") == ""
 
 
 def test_the_router_is_no_longer_a_setting_and_a_saved_choice_is_ignored(conn):

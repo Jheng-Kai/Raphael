@@ -126,6 +126,15 @@ test("window occurrences restart at the first time each local day", () => {
 
 
 
+test("the keep-awake switch says what it does in a line on the page, not in a tooltip that repeats it (R-COPY-05)",async()=>{
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+  const note=page.el.querySelector('.au-awake-box > .au-awake-note')!;
+  expect(note.textContent).toBe("Keep this computer awake for scheduled routines");
+  expect(page.el.querySelector('.au-awake-box > .au-awake > span')!.textContent).toBe("Stay awake");
+  expect(page.el.querySelector('.au-awake-box')!.querySelector('[title]')).toBeNull();
+  page.hide();
+});
+
 test("the calendar opens directly, without a list, and the keep-awake switch persists",async()=>{
   const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
   expect(page.el.querySelector('[data-view]')).toBeNull();

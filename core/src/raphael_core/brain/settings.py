@@ -92,8 +92,9 @@ DEFAULTS: dict[str, Any] = {
     "pdf_fallbacks": [],
     "stt_fallbacks": [],
     "memory_fallbacks": [],
-    # Where the weather is looked up when the user does not say.
-    "agent_city": "台北",
+    # Where the weather is looked up when the user does not say. Nobody's city is a default: with none set the
+    # weather tool asks which city (agent/tools.py), and a city the user names is looked up and not kept.
+    "agent_city": "",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
     # One computer for every member, a screen each, signed in once (owner, 2026-11-07 and 2026-11-12). "per-bot"
@@ -111,9 +112,11 @@ DEFAULTS: dict[str, Any] = {
     "model_favorites": {"cleanup": [], "answer": [], "stt": []},
     "disconnected_clis": [],
     # The services Raphael's tools stand on (raphael_core.services), each chosen by the owner. The
-    # web search: "openrouter" is the answer model with OpenRouter's `web` plugin, as it always was;
-    # the others are search engines that return results for the answer model to word.
-    "web_search_service": "openrouter",
+    # web search: "auto" is the first one that is set up (services/hub.py `auto_search`: an engine with its key, the
+    # user's SearXNG, then OpenRouter when its key is stored), so nobody starts on a service that needs a key they
+    # have not got; "openrouter" is the answer model with OpenRouter's `web` plugin; the others are search engines
+    # that return results for the answer model to word.
+    "web_search_service": "auto",
     # Reading a page: "builtin" fetches it from this computer and turns its HTML into text here, at
     # no cost; the others are services that read it for Raphael.
     "web_read_service": "builtin",
@@ -125,7 +128,7 @@ DEFAULTS: dict[str, Any] = {
     "pdf_service": "builtin",
     # The address of the owner's own SearXNG, for `web_search_service` "searxng"; "" when none.
     "searxng_url": "",
-    # Whether each capability is used at all (the switch of its row in Settings › 拉斐爾 › 服務). The
+    # Whether each capability is used at all (the switch of its row in Settings › 工具 › 服務). The
     # search, the reading of pages, the reading of images and the reading of PDFs are on by default.
     "web_search_enabled": True,
     "web_read_enabled": True,
@@ -141,7 +144,7 @@ MAX_FAVORITES = 50
 DISCONNECTABLE_CLIS = ("claude", "codex", "gemini")
 STT_ENGINES = ("cloud", "local")
 # The services each tool may stand on (raphael_core.services.catalog says what each needs).
-WEB_SEARCH_SERVICES = ("openrouter", "brave", "tavily", "exa", "searxng")
+WEB_SEARCH_SERVICES = ("auto", "openrouter", "brave", "tavily", "exa", "searxng")
 WEB_READ_SERVICES = ("builtin", "jina", "firecrawl", "tavily")
 PDF_SERVICES = ("builtin", "openrouter")
 # The switches of the capabilities (the keys of DEFAULTS that are on or off).

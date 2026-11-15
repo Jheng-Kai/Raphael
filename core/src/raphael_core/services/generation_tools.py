@@ -105,7 +105,8 @@ class GenerationTools:
                 result.billing["billing_source"] = "subscription"
         except ServiceError as error:
             label = "drawing" if kind == "image" else "video"
-            result = PluginResult(False, error.kind, f"No available {label} model is chosen. Choose one in Settings > Models & usage > {label} model. The selected source uses paid API billing or subscription usage; no model is chosen automatically." if error.kind == "not_configured" else f"Media generation{(' with ' + error.service) if error.service else ''} did not finish ({error.kind}); no file was delivered.",
+            place = "Settings > Models & usage > Draw images" if kind == "image" else "Settings > Models & usage > Make videos"
+            result = PluginResult(False, error.kind, f"No available {label} model is chosen. Choose one in {place}. The selected source uses paid API billing or subscription usage; no model is chosen automatically." if error.kind == "not_configured" else f"Media generation{(' with ' + error.service) if error.service else ''} did not finish ({error.kind}); no file was delivered.",
                                   billing={"model": selected, "cost_usd": ledger.total if ledger.calls[-1]["outcome"] != "cost_unknown" else None} if ledger and ledger.calls else None)
             if ledger and ledger.calls and ledger.calls[-1].get("billing_source") == "subscription":
                 result.billing.update(cost_usd=None, billing_source="subscription")

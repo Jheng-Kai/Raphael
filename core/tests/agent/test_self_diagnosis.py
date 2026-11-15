@@ -50,7 +50,7 @@ def test_native_fake_reply_reads_the_wire_but_does_not_use_failure_copy(monkeypa
     from raphael_core.native_journeys import native_diagnosis
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     monkeypatch.setattr(Failure, "sentence", lambda *args: pytest.fail("The fake brain must write its own reply"))
-    reason = "No app can be added yet: Composio's API key is missing or was refused. The owner adds it in Settings > Connections."
+    reason = "No app can be added yet: Composio's API key is missing or was refused. The owner adds it in Connect apps (sidebar)."
     task = '[native-diagnosis] card_failure {"kind": "auth_expired", "reason": "%s"}' % reason
     messages = [{"role": "user", "content": task}]
     assert native_diagnosis(messages, {"self_check"}, 0) == ("self_check", {})

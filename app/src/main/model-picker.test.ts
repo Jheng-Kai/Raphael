@@ -12,6 +12,8 @@ import {
   modelPickerHTML,
   usableFor,
   formatContext,
+  modelDisplayName,
+  modelPickerSelection,
   modelsFor,
   moveIndex,
   pickerRows,
@@ -33,7 +35,7 @@ test("media chooser shows fixed and image-token prices without requiring text to
     const model = llm("test/media", { input_per_mtok: null, output_per_mtok: null });
     expect(chooserPrice({ ...model, per_image: .04 }, [], role)).toBe("每張 $0.04");
     expect(chooserPrice({ ...model, per_request: .12 }, [], role)).toBe("每次請求 $0.12");
-    expect(chooserPrice({ ...model, image_output_per_mtok: 30 }, [], role)).toBe("圖片輸出 $30 每百萬 token");
+    expect(chooserPrice({ ...model, image_output_per_mtok: 30 }, [], role)).toBe("圖片輸出 $30 每百萬單位");
   }
 });
 
@@ -120,7 +122,7 @@ describe("prices", () => {
     expect(priceText(LUNA, "cleanup")).toBe("$0.10 / $0.50");
     expect(priceText(DEAR, "answer")).toBe("$20 / $80");
     expect(priceText(llm("a/b", { input_per_mtok: null }), "cleanup")).toBe("? / $2.00");
-    expect(priceDescription(LUNA, "cleanup")).toBe("輸入 $0.10 / 輸出 $0.50 每百萬 token");
+    expect(priceDescription(LUNA, "cleanup")).toBe("輸入 $0.10 / 輸出 $0.50 約每百萬字");
   });
 
   test("a free model is free, a router's price varies, and a model without one says so", () => {
@@ -140,8 +142,8 @@ describe("prices", () => {
     expect(priceText(SCRIBE, "stt")).toBe("每分鐘 $0.0037");
     expect(priceText(WHISPER, "stt")).toBe("每分鐘 $0.00020");
     expect(priceText(MAI, "stt")).toBe("每分鐘 $0.0017");
-    expect(priceText(GEMINI, "stt")).toBe("$2.00 / $12 每百萬 token");
-    expect(priceDescription(GEMINI, "stt")).toBe("$2.00 / $12 每百萬 token");
+    expect(priceText(GEMINI, "stt")).toBe("$2.00 / $12 約每百萬字");
+    expect(priceDescription(GEMINI, "stt")).toBe("$2.00 / $12 約每百萬字");
   });
 
   test("the prices speak the language of the window", () => {
@@ -149,7 +151,7 @@ describe("prices", () => {
     expect(priceText(SCRIBE, "stt")).toBe("$0.0037 per minute");
     expect(priceText(FREE, "cleanup")).toBe("Free");
     expect(priceText(ROUTER, "cleanup")).toBe("Price varies");
-    expect(priceDescription(LUNA, "cleanup")).toBe("Input $0.10 / output $0.50 per million tokens");
+    expect(priceDescription(LUNA, "cleanup")).toBe("Input $0.10 / output $0.50 per million words (approx.)");
   });
 
   test("context lengths are short", () => {
@@ -453,5 +455,46 @@ describe("the picker of 看圖片 (the role vision)", () => {
     expect(modelPickerHTML({ ...look, current: "" })).toContain('<strong class="mp-tname">與回答相同</strong>');
     expect(modelPickerHTML({ ...look, current: "" })).toContain('aria-label="看圖片: 與回答相同 · 與回答相同"');
     expect(modelPickerHTML({ ...look, current: "google/gemini-4-flash" })).toContain('<strong class="mp-tname">gemini-4-flash</strong>');
+  });
+});
+
+// R-DEFAULT-04: a model whose connection is not there is never shown as the one chosen.
+describe("a choice whose connection is not connected", () => {
+  const look = (over: Record<string, unknown>) => ({ role: "answer" as const, label: "回答", catalog: CATALOG, current: "openai/gpt-6-luna", shipped: "openai/gpt-6-luna", showPrice: false, ...over });
+  const provider = (over: Record<string, unknown>) => ({ id: "openrouter", kind: "openrouter", name: "OpenRouter", base_url: "", has_key: false, enabled: true, status: "unknown" as const, models: 0, ...over });
+
+  test("OpenRouter's default model is not chosen while OpenRouter has no key, and is when it has one", () => {
+    expect(modelPickerSelection(look({ providers: [provider({})] })).name).toBe("未設定");
+    // a fresh install: the core lists no OpenRouter at all until it has a key
+    expect(modelPickerSelection(look({ providers: [] })).name).toBe("未設定");
+    expect(modelPickerHTML(look({ providers: [provider({})] }))).toContain('<strong class="mp-tname">未設定</strong>');
+    expect(modelPickerSelection(look({ providers: [provider({ has_key: true })] })).name).toBe("GPT-6 Luna");
+    expect(modelPickerSelection(look({ providers: [provider({ has_key: true })] })).source).toBe("OpenRouter");
+  });
+
+  test("a model of a provider, of ChatGPT or of a subscription CLI follows the same rule", () => {
+    expect(modelPickerSelection(look({ current: "@chatgpt:gpt-6", shipped: "@chatgpt:gpt-6", chatgpt: { signed_in: false } })).name).toBe("未設定");
+    expect(modelPickerSelection(look({ current: "@chatgpt:gpt-6", shipped: "@chatgpt:gpt-6", chatgpt: { signed_in: true } })).name).not.toBe("未設定");
+    const cli = (over: Record<string, unknown>) => ({ id: "codex" as const, name: "Codex", installed: true, logged_in: true, disconnected: false, available: true, login_command: "codex login", models: [], ...over });
+    expect(modelPickerSelection(look({ current: "cli:codex", shipped: "cli:codex", clis: [cli({ available: false, logged_in: false })] })).name).toBe("未設定");
+    expect(modelPickerSelection(look({ current: "cli:codex", shipped: "cli:codex", clis: [cli({})] })).name).not.toBe("未設定");
+  });
+
+  test("a model someone chose stays shown after its sign-in is gone, and only the shipped one is not a choice", () => {
+    expect(modelPickerSelection(look({ shipped: undefined, providers: [provider({})] })).name).toBe("GPT-6 Luna");
+    expect(modelPickerSelection(look({ shipped: "openai/gpt-6-luna", current: "anthropic/claude-haiku-5.5", providers: [provider({})] })).name).toBe("Claude Haiku 5.5");
+  });
+
+  test("what the picker was not told about is not hidden, and nothing hides the lead", () => {
+    expect(modelPickerSelection(look({})).name).toBe("GPT-6 Luna");
+    expect(modelPickerSelection(look({ providers: [provider({ enabled: true, has_key: false, status: "ok" })] })).name).toBe("GPT-6 Luna");
+    expect(modelPickerSelection(look({ current: "", lead: { id: "", name: "與回答相同" }, providers: [provider({})] })).name).toBe("與回答相同");
+  });
+
+  test("a model is named as people read it, never by its id", () => {
+    expect(modelDisplayName(CATALOG, "openai/gpt-6-luna")).toBe("GPT-6 Luna");
+    expect(modelDisplayName(CATALOG, "elevenlabs/scribe-v2")).toBe("Scribe v2");
+    expect(modelDisplayName(null, "openai/gpt-6-sol")).toBe("GPT-6 Sol");
+    expect(modelDisplayName(CATALOG, "")).toBe("");
   });
 });

@@ -1,5 +1,22 @@
 # Raphael feature map
 
+## Designed for everyone, pass 1 (owner, 2026-11-16)
+
+R-COPY-01 to R-COPY-05 and R-DEFAULT-01 to R-DEFAULT-04 (RULES.md, "Designed for everyone"). Words and defaults that only
+made sense for the owner, changed where no control he chose moves: every 「設定 › …」 path names a place Settings has
+(`settings-paths.test.ts`, which also reads the core and the shell's notices), the OpenRouter key row says whose key it
+is and no longer shows milliseconds, prices are counted in words, a failed connection and a stopped program are told
+without MCP or CLI, a model is named by its catalogue name, 保持喚醒 has its line, and a new person starts with no city,
+no search service that needs a key they have not got, the dictation language of the language they picked in the guide and
+no shipped model shown as chosen while its connection is missing. Selected scenes: usage, usage-empty, usage-allowances-chatgpt,
+usage-owner, usage-key-menu, usage-key-removed, quick-model-menu, model-sync, model-choices-local, settings-chatgpt-row,
+missing-search, missing-search-repair, missing-vision, missing-pdf, missing-card, missing-card-repair, missing-provider,
+missing-model-list, automations-calendar, automations-tools-awake, calendar-week-fit, onboarding-tools, onboarding-abilities,
+connect-apps-categories and plugins-store (the store rows check now knows a connected app's 已連結 lives inside its one
+button, owner 2026-11-14), both themes at 1120,720,1920x1080. Not changed, and waiting for the owner: the monthly limit
+(it has no field, and `chat-usage-limit` still points at the usage page), the key beside the usage page, the guide's
+first screens, the computer tab's wallpaper and the Composio, Connect Apps and dictation-shortcut entries.
+
 ## Delete dialog and the member's colour on switches (2026-11-12)
 
 See [Conversation](conversation.md#the-delete-dialog-is-grok-bots-owner-2026-11-12) for R-UI-146: the one delete

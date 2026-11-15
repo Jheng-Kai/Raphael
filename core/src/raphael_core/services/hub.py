@@ -135,8 +135,11 @@ class ServiceHub:
         transport: httpx.AsyncBaseTransport | None = None,
         resolver: Resolver = system_resolver,
         transcribe: Transcribe | None = None,
+        openrouter_ready: Callable[[], bool] | None = None,
     ) -> None:
         self._transcribe = transcribe
+        # Whether an OpenRouter key is stored: the one service whose key the brain holds, not `keys`.
+        self._openrouter_ready = openrouter_ready or (lambda: False)
         self._provider = client
         self._settings = SettingsStore(conn)
         self._keys = keys
@@ -175,7 +178,26 @@ class ServiceHub:
     # --- what is chosen -------------------------------------------------------------------------
 
     def search_service(self) -> str:
-        return _setting(self._settings, "web_search_service", SEARCH_OPTIONS)
+        """The search service in use: the one chosen, or while none is (the default "auto") the first that is set up, or
+        "none" when nothing is."""
+        chosen = _setting(self._settings, "web_search_service", SEARCH_OPTIONS)
+        return self.auto_search() if chosen == "auto" else chosen
+
+    def auto_search(self) -> str:
+        """The first search service that can be used now: an engine whose key is stored, the owner's SearXNG (its address
+        is set), then OpenRouter's (its key is stored). "none" when no one has set one up: a search then says what to do
+        and never reaches for a service the person has no key for."""
+        for service in ("brave", "tavily", "exa"):
+            if self._keys.has(service):
+                return service
+        if self._text("searxng_url"):
+            return "searxng"
+        try:
+            ready = self._openrouter_ready()
+        except Exception as exc:  # a key store that fails is no key
+            logger.warning("Could not tell whether an OpenRouter key is stored: %s", type(exc).__name__)
+            ready = False
+        return "openrouter" if ready else "none"
 
     def read_service(self) -> str:
         return _setting(self._settings, "web_read_service", READ_OPTIONS)
@@ -242,6 +264,8 @@ class ServiceHub:
         """(the service, what it found for `query`) with the search service chosen. Not for
         "openrouter", which the answer model's own call is. ServiceError of a kind."""
         service = self.search_service()
+        if service == "none":
+            raise ServiceError("not_configured", service="search")
         key = self._keys.get(service) if service in KEYED_SERVICES else None
         found = await web.search(
             service, query, http=self._client(), key=key, searxng_url=self._text("searxng_url"),

@@ -2364,7 +2364,7 @@ export function checkRendered(name, context = {}) {
       require(document.activeElement === document.querySelector('#pv-dialog [data-pv="replace"]'), 'provider repair focuses its credential action');
     } else if (name === 'missing-card-repair') {
       require(visible(document.querySelector('#conn-key')), 'the shared card opens the existing Composio key field');
-      require(document.querySelector('.cs-key-form .note')?.textContent.includes('專案設定 › API 金鑰'), 'the form says where to obtain the project key before typing it');
+      require(document.querySelector('.cs-key-form .note')?.textContent.includes('Project Settings › API Keys'), 'the form says where to obtain the project key before typing it');
     } else if (name.endsWith('-repair')) {
       const field = document.querySelector('#svc-url');
       require(visible(field), 'repair reaches the existing exact field');
@@ -2380,13 +2380,13 @@ export function checkRendered(name, context = {}) {
       require(reply.getBoundingClientRect().bottom <= note.getBoundingClientRect().top + 1, 'the repair comes after the reply');
       if (name === 'missing-card') {
         const card = note.closest('.conversation-card');
-        require(card && (card.textContent.match(/設定 › 連接 › 商店/g) ?? []).length === 1, 'the card names its existing repair form once, with one action');
+        require(card && (card.textContent.match(/側欄的「連結應用程式」/g) ?? []).length === 1, 'the card names its existing repair form once, with one action');
       }
     } else {
       require(visible(note) && note.textContent.length > 20, 'the reason is visible text');
       require(!note.querySelector('[title]'), 'no reason depends on a hover title');
       if (name === 'missing-search') require(note.textContent.includes('尚未設定 SearXNG 網址') && note.querySelectorAll('button').length === 1, 'the step says address, not key, with one action');
-      if (name === 'missing-card') require(note.textContent.includes('設定 › 連接 › 商店') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
+      if (name === 'missing-card') require(note.textContent.includes('側欄的「連結應用程式」') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
       if (name === 'missing-vision') require(document.querySelector('[data-svc="use"]').disabled && note.textContent.includes('回答模型無法讀取圖片'), 'same-as-answer says why it cannot be used');
     }
     return {check:name};
@@ -8467,17 +8467,19 @@ export function checkRendered(name, context = {}) {
     require(add.length > 0 && add.every(button => button.className === add[0].className && button.className === 'btn cs-connect'), "every 連結 button has the same class list");
     for (const row of rows) {
       const [main, action] = row.children;
-      require(row.className === 'cs-card' && row.children.length === 2, "every app row has the same two slots");
+      // A connected app's 已連結 is part of its one button (owner, 2026-11-14: the button and 已連結 are one); any other row has that button and one action beside it.
+      const connected = !!main.querySelector(':scope > .cs-state');
+      require(row.className === 'cs-card' && row.children.length === (connected ? 1 : 2), "every app row is its page button, with one action beside it unless the app is connected");
       require(main.tagName === 'BUTTON' && main.className === 'btn cs-main' && main.dataset.conn === 'open-store', "every source uses the same page button");
-      require(main.children.length === 2 && main.children[0].className === 'cs-tile' && main.children[1].className === 'tx', "every row has the same tile and text structure");
+      require(main.children.length === (connected ? 3 : 2) && main.children[0].className === 'cs-tile' && main.children[1].className === 'tx' && (!connected || main.children[2].className === 'cs-state'), "every row has the same tile and text structure");
       const [title, summary] = main.children[1].children;
       // A row is the tile and the name; the line under it only says that a sign-in waits.
       require(title.tagName === 'SPAN' && title.className === 'nm' && (!summary || summary.classList.contains('wait')), "a row's line is only its waiting sign-in");
-      require(action.matches('button.btn.cs-connect[data-conn="join"], button.btn.cs-connect[data-conn="cancel-login"], span.cs-state'), "every state stays in the one action slot");
+      require(connected ? action === undefined : action.matches('button.btn.cs-connect[data-conn="join"], button.btn.cs-connect[data-conn="cancel-login"]'), "every state stays in the one action slot, or in the button of a connected app");
       const style = window.getComputedStyle(row);
       require(style.display === 'flex' && !row.querySelector('.need'), "every row is one line with nothing it would have to explain");
       const frame = row.getBoundingClientRect();
-      require([main, action, title].filter(visible).every(node => {
+      require([main, action, title].filter(node => node && visible(node)).every(node => {
         const box = node.getBoundingClientRect();
         return box.top >= frame.top - 1 && box.bottom <= frame.bottom + 1;
       }), "names and actions fit inside their row");
@@ -8665,7 +8667,7 @@ export function checkRendered(name, context = {}) {
       ja: "これは Composio のコンシューマーキー（ck_ で始まるキー）です。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。",
     } : {
       "zh-TW": "這是 OpenRouter 的金鑰，請到「設定 → 模型與用量」輸入。",
-      en: "This is an OpenRouter key. Enter it in Settings → Models and usage.",
+      en: "This is an OpenRouter key. Enter it in Settings → Models & usage.",
       ja: "これは OpenRouter のキーです。「設定 → モデルと使用量」で入力してください。",
     };
     require(visible(alert) && Object.values(expected).includes(alert.textContent), "the key form explains how to correct the key type");
@@ -9490,7 +9492,7 @@ export function checkRendered(name, context = {}) {
       require(card.dataset.cardState === "failed" && state === "這把金鑰沒有被接受，請再填一次", `the card says the key was not accepted (${state})`);
       require(visible(card.querySelector("[data-inline-submit]")) && card.querySelector("input[type=password]").value === "", "the inline form returns with its secret cleared");
       const reply = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible).at(-1);
-      require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("設定 › 連接 › 商店"), "the member names what to do and where");
+      require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("側欄的「連結應用程式」"), "the member names what to do and where");
     }
     return { check: name, state };
   }

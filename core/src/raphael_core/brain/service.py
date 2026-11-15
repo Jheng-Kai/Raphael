@@ -625,7 +625,7 @@ class Brain:
             return {"deleted": self._history.delete(item_id)}
 
     async def _history_clear(self, params: dict) -> dict:
-        """Delete the whole dictation history: Settings › 資料, once its 10 seconds of 復原 ran out."""
+        """Delete the whole dictation history: the dictation history, once its 10 seconds of 復原 ran out."""
         with _store_call():
             return {"deleted": self._history.clear()}
 

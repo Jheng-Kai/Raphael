@@ -20,7 +20,7 @@ export function keyEntryRow(o: {
   row?: RowOptions;
 }): string {
   return row(
-    t("common.apiKey"),
+    t("common.apiKeyField"),
     o.desc,
     fieldHTML("sk-or-v1-…", "", { w: o.fieldWidth, get label() { return t("common.apiKeyField"); }, id: o.inputId, type: "password", invalid: o.invalid }) +
       actionRow({

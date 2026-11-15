@@ -307,7 +307,7 @@ async def test_a_card_pressed_without_what_the_app_needs_says_what_and_where(tmp
     assert (card.state, card.error) == ("failed", "needs_key")
     said = rig.failures[-1]
     assert isinstance(said, Failure) and said.kind == "auth_expired"
-    for part in ("Acme", "API Key", "Settings > Connections > Store", "https://docs.acme.example/keys"):
+    for part in ("Acme", "API Key", "Connect apps (sidebar)", "https://docs.acme.example/keys"):
         assert part in said.reason
     assert not rig.store.auth_configs
     bigco = await rig.card("bigco", rig.new_turn())  # a failure is told once for a turn
@@ -331,7 +331,7 @@ async def test_with_no_composio_key_the_card_says_to_add_it_and_not_that_it_is_n
     card = rig.cards.show(turn_id=rig.turn, member_id=0, conversation_id=None, app=app, language="zh-TW")
     _, card = await rig.press(card)
     assert (card.state, card.error) == ("failed", "needs_composio_key")
-    assert "Composio's API key is missing" in rig.failures[-1].reason and "Settings > Connections" in rig.failures[-1].reason
+    assert "Composio's API key is missing" in rig.failures[-1].reason and "Connect apps (sidebar)" in rig.failures[-1].reason
 
 
 async def test_the_member_is_told_what_each_app_needs_before_the_card(tmp_path, conn):
