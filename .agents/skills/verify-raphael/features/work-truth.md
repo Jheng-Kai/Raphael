@@ -18,6 +18,12 @@ RPC, schema migration or alternative brain loop.
   tasks. Durable queued handoffs and waiting continuations remain recoverable; running
   uncertain effects are never replayed. A worker that disappears closes as interrupted
   with worker_lost; a parent already requeued after child completion is preserved.
+- The queue is worked only from the running loop (R-PUMP-01): start-up builds the service before the loop runs, so
+  `use_team` puts queued work back without carrying anything out (`_ensure_pump` returns while no loop runs), and
+  `core.hello` calls `BackgroundService.start` to take it up. A hand-off that never began and waited more than
+  `STALE_QUEUE_MS` (2 h) ends at the next start as `stale_queue` (report, turn closed, waiting parent woken); a
+  younger one is put back. Check: after a restart a member's queued own work starts, and a stuck "working" member
+  never outlives the run that left it (`core/tests/background/test_queue_pump.py`).
 - room_list returns the caller's real room IDs, names and membership, including the
   chief only where actually a member. room_post publishes a completed room turn as
   the caller, checks current membership, and deduplicates a retry of the same source

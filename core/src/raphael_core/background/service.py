@@ -158,6 +158,9 @@ logger = logging.getLogger(__name__)
 MAX_PARALLEL = 3
 # Short meeting speech has its own small pool, including CLI brains.
 ROOM_PARALLEL = 2
+# A hand-off that was queued, never began and was still waiting when the app ended is put back at the next start only when it
+# is this young (ms); an older one ends as `stale_queue`, told to whoever waits for it, and is not started unseen hours later.
+STALE_QUEUE_MS = 2 * 60 * 60 * 1000
 # How many routine runs work at once, of the MAX_PARALLEL places: the rest of what is due waits its turn, in the order it came, and
 # one place is always left for what the owner asked for. Five routines due at 07:00 used to start together on a PC that was
 # starting up (a weather check timed out); a routine's run is nobody's emergency (owner, 2026-11-14).
@@ -791,6 +794,11 @@ class BackgroundService:
         if self._queue:
             self._ensure_pump()
 
+    def start(self) -> None:
+        """The loop runs: take up what was queued before it did (what the last run left, put back by `use_team`)."""
+        if self._queue:
+            self._ensure_pump()
+
     def capabilities_for(self, speaker: Speaker) -> dict:
         """Describe the same tool catalog a worker receives, without preparing or calling providers."""
         from ..agent.cli.discovery import brain_ref
@@ -1272,7 +1280,7 @@ class BackgroundService:
         """Interrupt the tasks that are queued or running, each with its report, and complete the
         turn that handed it over. Returns how many there were."""
         try:
-            tasks = self._store.interrupt_unfinished(_interrupted_report, reason)
+            tasks = self._store.interrupt_unfinished(_interrupted_report, reason, self._now_ms() - STALE_QUEUE_MS)
         except sqlite3.Error as exc:
             logger.warning("Could not close the background tasks: %s", type(exc).__name__)
             return 0
@@ -1504,6 +1512,14 @@ class BackgroundService:
         `ROUTINE_PARALLEL` of the places, and wait their turn behind the owner's own work, so five routines due at one time do
         not start together and never hold a place the owner's task needs (R-ROUTINE-11)."""
         if self._closing:
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # Start-up builds the service before the loop runs (`use_team` re-queues what the last run left). A task carried
+            # out here would be parked on a loop that never runs: it never started, never ended, and held its member's place
+            # and one of the MAX_PARALLEL for ever, so every later task of that member queued for ever (R-PUMP-01).
+            # What is queued stays queued; `start` takes it up once the loop is there.
             return
         active = [self._store.get(identifier) for identifier in self._active]
         speech = sum(task is not None and task.scope == 'room' for task in active)
