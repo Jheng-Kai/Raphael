@@ -4,6 +4,10 @@ export default class RFB extends EventTarget {
   constructor(target) {
     super();
     window.__desktopConnections = (window.__desktopConnections ?? 0) + 1;
+    // The seat this page was opened for (the look mock puts it in the URL); a scene that marks seats paints its colour.
+    const query = new URLSearchParams(location.search);
+    window.__desktopSeat = query.get('seat');
+    this.mark = query.get('mark') === '1' ? ({ 1: '#c0392b', 2: '#1e8449' }[window.__desktopSeat] ?? '#2980b9') : null;
     this.target = target;
     target.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;background:rgb(40,40,40)';
     this.canvas = document.createElement('canvas');
@@ -44,6 +48,10 @@ export default class RFB extends EventTarget {
     ctx.fillStyle = '#182332'; ctx.font = '14px system-ui'; ctx.fillText('工作區 — 測試桌面', 12, 19);
     ctx.fillStyle = '#eef3fa'; ctx.font = '16px monospace';
     ['$ cat raphael-smoke.txt', 'Raphael VM smoke', '', '$ pwd', '/home/cua/workspace'].forEach((line, i) => ctx.fillText(line, 24, 72 + i * 26));
+    if (this.mark) {
+      ctx.fillStyle = this.mark; ctx.fillRect(0, this.canvas.height * 0.6, this.canvas.width, this.canvas.height * 0.4);
+      ctx.fillStyle = '#ffffff'; ctx.font = '28px system-ui'; ctx.fillText(`seat ${window.__desktopSeat}`, 24, this.canvas.height * 0.6 + 44);
+    }
     if (window.__desktopAcceptedKeys) {
       ctx.fillStyle = '#eef3fa'; ctx.fillRect(180, 310, 650, 200);
       ctx.fillStyle = '#182332'; ctx.font = '22px system-ui';

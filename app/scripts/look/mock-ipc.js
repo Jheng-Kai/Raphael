@@ -1258,7 +1258,10 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
         const session = `look-desktop-${++desktopSequence}`;
         desktopSessions.set(session, { preview: p.preview, held: false, member:p.member_id, conversation:p.conversation_id });
-        return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html` };
+        // Which seat a session is for, so a scene can tell one member's screen from another's (R-COMP-SWITCH-01): the
+        // fixture's RFB page reads `seat`, and paints that seat's colour band when the scene asks (`seatMarks`).
+        (state.sessionLog ??= []).push({ session, member: p.member_id });
+        return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html?seat=${p.member_id ?? 0}${variant.seatMarks ? "&mark=1" : ""}` };
       }
       case "computer.viewer_renew": return { ...data.desktop, ...(teaching ? {teaching} : {}), control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
       case "computer.teach": {
