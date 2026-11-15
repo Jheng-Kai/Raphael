@@ -39,6 +39,7 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..services.attachments import Attachment
 from ..services.file_reader import read_lines
+from ..services.video import is_video
 from ..services.common import ServiceError
 from .cities import city_key, geocoding_queries
 from .ledger import Ledger
@@ -104,6 +105,8 @@ READ_NEEDS_BROWSER = (
 )
 # Reading a file the owner handed over: the vision model, or the PDF service.
 ATTACHMENT_TIMEOUT_S = 70.0
+# A video: its transcript and up to 32 frames are made, then a model reads them (services.video).
+VIDEO_TIMEOUT_S = 240.0
 _SEARCH_SYSTEM = (
     "Answer the user's question with facts from the web results. Reply in plain text of at most "
     "three short sentences, with no markdown, no list and no link. Name the site a fact comes "
@@ -439,22 +442,26 @@ class Tools:
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger, *, number: int = 1,
-        offset: int | None = None, limit: int | None = None,
+        offset: int | None = None, limit: int | None = None, start: float | None = None, end: float | None = None,
     ) -> ToolResult:
         """Read a supplied file through its configured reader. `number` identifies it among the
         request's files. Paid vision calls use `ledger`; every result remains untrusted data.
         A text file comes as numbered lines, from line `offset` (from 1), `limit` lines at most, like Claude Code's
-        Read, with where to go on when there is more."""
-        kind = "pdf" if attachment.is_pdf else "image" if attachment.is_image else "file"
+        Read, with where to go on when there is more. A video comes as what its frames show and what its audio says;
+        `start` and `end` (seconds) look closer at part of it."""
+        video = is_video(attachment)
+        kind = "pdf" if attachment.is_pdf else "image" if attachment.is_image else "video" if video else "file"
         if (found := read_lines(attachment, number=number, offset=offset, limit=limit)) is not None:
             return ToolResult("read_attachment", True, {"file": number, "kind": "text", **found}, untrusted=True, detail="text")
         if self.services is None:
             return self._failed("read_attachment", "unavailable", kind)
         if (attachment.is_pdf or attachment.is_image) and not self.services.enabled("pdf" if attachment.is_pdf else "vision"):
             return self._failed("read_attachment", DISABLED, kind)
+        asked = {key: value for key, value in (("start", start), ("end", end)) if value is not None}
         try:
             kind, found = await asyncio.wait_for(
-                self.services.read_attachment(attachment, question, ledger), ATTACHMENT_TIMEOUT_S
+                self.services.read_attachment(attachment, question, ledger, **asked),
+                VIDEO_TIMEOUT_S if video else ATTACHMENT_TIMEOUT_S,
             )
         except TimeoutError:
             return self._failed("read_attachment", "timeout", kind)

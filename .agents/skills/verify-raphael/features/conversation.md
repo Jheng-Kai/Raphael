@@ -161,6 +161,25 @@ every text type), `core/tests/agent/test_attachment_read_on.py` (a 100 KB embedd
 call), the room and worker prompts in `core/tests/background/test_attachment_text.py`.
 Not covered: a real model's use of the source, a native attach in the running app.
 
+## A video the owner attaches is watched, not only heard (owner, 2026-11-15, R-ATTACH-VIDEO-01..04)
+
+Owner: 「你可以看 claude 原生傳送影片是怎麼做的 我希望都盡量做的自由一點 就是直接 raw data 直接傳出去」. A member given a 138 MB screen
+recording answered that it could not see the video: `read_file` made a video into its audio's transcript only, and a CLI brain
+was given the original's path on the owner's PC, which the member's own computer cannot open. Now (`services/video.py`): a
+model whose OpenRouter list takes video is given the video as it is (`video_url`, a `data:` URL, up to 15 MiB, mp4 mpeg mov
+webm; `ServiceHub._watch_video`, `Vision.watch_raw`); every other brain's reading is frames evenly spaced over the video (one
+every ~5 s, 8 to 32, each labelled `Frame at 0:35`, at most 768 px, JPEG; `extract_frames`) read by the vision model
+(`Vision.watch`) beside the transcript. A Claude or Codex member is handed those frames natively with its message
+(`CliLoop._native_images`, `drivers.py`: a text line with the time before each image) and the original is copied into its team
+folder, `/home/cua/team/attachments/<stored id>`, named as `computer_path` in the `Files:` line (`place_videos`; the app wires
+the folder with `use_computer_folder`, a computer on another host has none). `read_attachment` takes `start` and `end`
+(seconds) to look closer at part of a video. Offline evidence: `core/tests/services/test_video.py` (real ffmpeg on a generated
+clip: the frames, the sizes, the range, the OpenRouter parts, the copy), `core/tests/agent/test_video_attachments.py` (a fake
+Claude and Codex given a 20 s clip: the frames, the labels, the `computer_path`; the task and room prompt).
+Not covered: a real model watching a real video (a live check: attach a screen recording of a few minutes to a Claude CLI member,
+a Codex member and an OpenRouter member, and ask what is on the screen at 1:30), the frames in the running Docker computer, a
+native attach in the running app (no app file was changed).
+
 ```powershell
 node scripts\verify.mjs --contract
 ```

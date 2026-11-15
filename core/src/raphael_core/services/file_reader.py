@@ -137,14 +137,23 @@ def _shown(line: str) -> tuple[str, int, bool]:
 
 
 def read_window(arguments: dict) -> dict | None:
-    """Where in a text file a `read_attachment` call asks to read: its `offset` (a line, from 1) and `limit` (lines).
-    Empty when it asks for neither; None when one is not a whole number of at least 1."""
+    """Where in a file a `read_attachment` call asks to read: in a text file its `offset` (a line, from 1) and `limit`
+    (lines); in a video its `start` and `end` (seconds, `end` after `start`). Empty when it asks for none; None when
+    one is not valid."""
     window: dict = {}
     for key in ("offset", "limit"):
         if arguments.get(key) is not None:
             if type(arguments[key]) is not int or arguments[key] < 1:
                 return None
             window[key] = arguments[key]
+    for key in ("start", "end"):
+        if arguments.get(key) is not None:
+            value = arguments[key]
+            if type(value) not in (int, float) or value != value or value < 0 or value > 24 * 3600:
+                return None
+            window[key] = float(value)
+    if "start" in window and "end" in window and window["end"] <= window["start"]:
+        return None
     return window
 
 
@@ -279,8 +288,9 @@ def office_text(data: bytes | Path, extension: str) -> str:
     return "\n".join(parts)
 
 
-def convert_media(attachment: Attachment) -> tuple[bytes, float | None, bool]:
-    """Convert at most five minutes to mono WAV; no shell, network protocols or stderr text."""
+def convert_media(attachment: Attachment, start: float | None = None, end: float | None = None) -> tuple[bytes, float | None, bool]:
+    """Convert at most five minutes to mono WAV, from second `start` to second `end` of the media when they are given;
+    no shell, network protocols or stderr text."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise FileNotFoundError
@@ -293,23 +303,29 @@ def convert_media(attachment: Attachment) -> tuple[bytes, float | None, bool]:
         if attachment.source_path is None:
             source.write_bytes(attachment.data)
         flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+        span = MAX_MEDIA_SECONDS if end is None else min(max(end - (start or 0.0), 0.1), MAX_MEDIA_SECONDS)
         subprocess.run(
-            [ffmpeg, "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,mp3,wav,ogg,flac,aac", "-i", str(source),
-             "-t", str(MAX_MEDIA_SECONDS), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)],
+            [ffmpeg, "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mov,matroska,webm,mp3,wav,ogg,flac,aac,avi,mpeg,mpegts",
+             *(["-ss", f"{start:.3f}"] if start else []), "-i", str(source),
+             "-t", f"{span:g}", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)],
             check=True, timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags,
         )
         import wave
         with wave.open(str(target), "rb") as wav:
             duration = wav.getnframes() / wav.getframerate()
-        return target.read_bytes(), duration, duration >= MAX_MEDIA_SECONDS - 0.1
+        return target.read_bytes(), duration, duration >= span - 0.1 and (end is None or span >= MAX_MEDIA_SECONDS)
 
 
-async def read_file(attachment: Attachment, transcribe: Transcribe | None = None) -> tuple[str, dict]:
+async def read_file(attachment: Attachment, transcribe: Transcribe | None = None, *,
+                    start: float | None = None, end: float | None = None) -> tuple[str, dict]:
+    """What a file says: text as it was written, a document's words, a media file's transcript (from second `start` to
+    second `end` of it when they are given). A video's frames are not here: see `services.video`."""
     if (text := read_text(attachment)) is not None:
         return "text", text
     extension = Path(attachment.name).suffix.lower()
     facts = {"name": attachment.name, "mime": attachment.mime, "size": len(attachment.data)}
-    video = attachment.mime.startswith("video/") or extension in (".mp4", ".mov", ".mkv")
+    from .video import is_video
+    video = is_video(attachment)
     audio = attachment.mime.startswith("audio/") or extension in (".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm")
     if video or audio:
         kind = "video" if video else "audio"
@@ -327,7 +343,7 @@ async def read_file(attachment: Attachment, transcribe: Transcribe | None = None
             if direct:
                 data, truncated = attachment.data, False
             else:
-                data, duration, truncated = await asyncio.to_thread(convert_media, attachment)
+                data, duration, truncated = await asyncio.to_thread(convert_media, attachment, start, end)
             text = await transcribe(data, "auto")
             text, cut = fit(text)
             return kind, {**facts, "text": text, "duration": duration, "truncated": cut or truncated}

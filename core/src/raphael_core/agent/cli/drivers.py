@@ -22,6 +22,7 @@ from .native_diagnostics import capture as native_capture, directory as native_d
 from ..quota import parse_quota
 from ...brain.meter import codex as codex_usage, delta as usage_delta
 from ...failures import classify, redact, sign_in_cause
+from ...services.video import Frame
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
@@ -291,8 +292,10 @@ class Driver:
             await self.child.start()
             if self.name == "claude":
                 content = ([{"type": "text", "text": user}] + [
-                    {"type": "image", "source": {"type": "base64", "media_type": image.mime,
-                     "data": base64.b64encode(image.data).decode("ascii")}} for image in images
+                    block for image in images for block in (
+                        ([{"type": "text", "text": image.label + ":"}] if isinstance(image, Frame) else []) +
+                        [{"type": "image", "source": {"type": "base64", "media_type": image.mime,
+                          "data": base64.b64encode(image.data).decode("ascii")}}])
                 ]) if images else user
                 await self.child.send({"type": "user", "message": {"role": "user", "content": content}})
                 self.child.process.stdin.close()
@@ -310,14 +313,15 @@ class Driver:
                         event = self._event("error", event.data)
                     yield event
             else:
-                image_paths = []
+                image_paths, image_labels = [], []
                 for number, image in enumerate(images):
                     # Copy only this turn's validated bytes; owner-supplied names are never paths.
                     suffix = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif"}[image.mime]
                     path = files.path / f"image-{number}{suffix}"
                     path.write_bytes(image.data)
                     image_paths.append(str(path.resolve()))
-                async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths, fresh_context=fresh_context):
+                    image_labels.append(image.label + ":" if isinstance(image, Frame) else None)
+                async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths, fresh_context=fresh_context, image_labels=image_labels):
                     if event.kind == "error":
                         await self.interrupt()
                         event = self._event("error", event.data)
@@ -486,7 +490,7 @@ class Driver:
                     yield self._event("final", result.get("response") or "")
                 return
 
-    async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=(), *, fresh_context=None):
+    async def _rpc(self, user, system, endpoint, token, session, permission, image_paths=(), *, fresh_context=None, image_labels=()):
         """Codex app-server: JSON-RPC over stdio."""
         pending = {}
         sequence = 0
@@ -545,7 +549,10 @@ class Driver:
                     if not self.session:
                         raise ValueError("missing_session")
                     yield Event("session", self.session)
-                    inputs = [{"type": "text", "text": user}] + [{"type": "localImage", "path": path} for path in image_paths]
+                    labels = list(image_labels) + [None] * (len(image_paths) - len(image_labels))
+                    inputs = [{"type": "text", "text": user}] + [
+                        item for path, label in zip(image_paths, labels)
+                        for item in ([{"type": "text", "text": label}] if label else []) + [{"type": "localImage", "path": path}]]
                     inputs += getattr(self, "native_skills", [])
                     await request("turn/start", {"threadId": self.session, "input": inputs,
                                   **({"effort": self.effort} if self.effort else {})}, "turn")

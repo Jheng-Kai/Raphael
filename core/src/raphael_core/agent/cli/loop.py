@@ -15,6 +15,7 @@ from dataclasses import replace
 from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING, FINAL_REPORT, NOT_MADE, OWNER_DENIED, called, failure_text
 from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
+from ...services.video import is_video, sample_all
 from ...worker.tool_guardrails import ToolGuardrails
 from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
@@ -270,6 +271,8 @@ class CliLoop:
         self._turn_user = user
         self.tools = [item for item in tools if item["function"]["name"] in self._only] if no_tools else list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
+        # Frames of the videos among them, taken when the first CLI starts (`_native_images`), once for the turn.
+        self._frames = None
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
         self.seen, self.batch_calls = [], []
         self.tool_messages = []
@@ -1068,6 +1071,18 @@ class CliLoop:
             self.ledger.add(model=model, cost_usd=0, usage=row, ms=ms if index == len(rows) - 1 else 0)
         self._metered = self._metered or bool(rows)
 
+    async def _native_images(self, name):
+        """The pictures a CLI brain that takes them is handed with the turn: the owner's images, then frames taken evenly
+        across each video, each labelled with its time (services.video; a CLI brain cannot watch a video as bytes, as
+        no model of Claude can, and a video it only has as a path it must pull frames from itself). A video that cannot
+        be read gives none, and the turn goes on."""
+        if name not in ("codex", "claude"):
+            return ()
+        if self._frames is None:
+            videos = [attachment for attachment in self.attachments if is_video(attachment)]
+            self._frames = await asyncio.to_thread(sample_all, videos) if videos else []
+        return [*self.images, *self._frames]
+
     async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
@@ -1086,7 +1101,7 @@ class CliLoop:
                 **({"no_tools": True} if self.no_tools else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
-                cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream, \
+                cwd=str(workspace), images=await self._native_images(name))) as stream, \
                 aclosing(self._events(stream) if self.stall_s else stream) as events:
             async for event in events:
                 self.alive()
