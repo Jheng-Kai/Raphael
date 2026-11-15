@@ -576,6 +576,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .btn.cmp-pic { display: block; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; }
 .cmp-pic .cmp-thumb { width: 100%; height: 100%; }
 .cmp-chip > .cmp-pic + .chip-x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; flex: none; background: var(--photo-dim); color: var(--photo-mark); }
+/* A file whose bytes are still read or stored (R-ATTACH-03) stands at once, the app's spinner over its picture or its tile. */
+.cmp-chip[aria-busy="true"] > .cmp-tile { position: relative; }
+.cmp-chip[aria-busy="true"]:has(> .cmp-pic)::after, .cmp-chip[aria-busy="true"] > .cmp-tile::after { content: ""; position: absolute; inset: 0; width: 16px; height: 16px; margin: auto; border-radius: var(--r-pill); border: 2px solid var(--track); border-top-color: var(--accent-text); pointer-events: none; animation: ra-spin 0.8s linear infinite; }
+.cmp-chip[aria-busy="true"]:has(> .cmp-pic)::after { border-color: var(--photo-dim); border-top-color: var(--photo-mark); }
 
 /* The drop target ends above whichever composer or approval card is visible. */
 .attachment-drop { position: absolute; inset: 12px; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); border: 2px dashed var(--accent-text); border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent-soft) 94%, transparent); color: var(--accent-text); font-size: var(--fs-md); font-weight: var(--weight-semibold); pointer-events: none; }
@@ -734,7 +738,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
   .ask-card::before { animation: ra-glow 2.4s ease-in-out infinite; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tn.is-new, .step.is-new, .task-check.is-pop, .spin, .shimmer-mask::after, .think i, .ask-card::before { animation: none !important; }
+  .tn.is-new, .step.is-new, .task-check.is-pop, .spin, .shimmer-mask::after, .think i, .ask-card::before, .cmp-chip[aria-busy="true"]:has(> .cmp-pic)::after, .cmp-chip[aria-busy="true"] > .cmp-tile::after { animation: none !important; }
   .steps-body, .steps-chev .i, .tn-more .i, .composer, .btn.cmp-voice { transition: none !important; }
 }
 
