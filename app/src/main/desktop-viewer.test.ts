@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn() }));
 vi.mock("./api", () => api);
 import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
@@ -997,4 +999,15 @@ test('the pill reads watching with Take control, then you are in control with St
   expect(t('desktop.release')).toBe('停止'); expect(t('desktop.operating')).toBe('你正在控制');
   api.desktopControl.mockResolvedValue(running); handback().click(); await flush();
   expect(api.desktopControl).toHaveBeenLastCalledWith('one', false);
+});
+
+test("a seat's frame draws its line inside and takes no room, so the 1280:900 picture fills it", () => {
+  // R-COMP-FRAME-01 (owner, 2026-11-15): a 1 px border put the inside 2 px off the ratio and a dark sliver showed.
+  const css = (name: string): string => readFileSync(resolve(__dirname, name), "utf8");
+  const screen = /\.desktop-screen \{([^}]*)\}/.exec(css("desktop-viewer.css"))![1]!;
+  expect(screen).toContain("aspect-ratio: 1280 / 900");
+  expect(screen).not.toMatch(/(^|;)\s*border:/);
+  expect(screen).toContain("box-shadow: inset 0 0 0 1px var(--line)");
+  expect(css("card.css")).toMatch(/\.card-computer-screen \{[^}]*box-shadow: inset 0 0 0 1px var\(--edge\)/);
+  expect(css("card.css")).not.toMatch(/\.card-computer-screen \{[^}]*border: 1px/);
 });
