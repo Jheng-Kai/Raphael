@@ -1,7 +1,6 @@
 """Carry contracts use only temporary synthetic homes and injected container operations."""
 
 import asyncio
-import csv
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -252,23 +251,14 @@ def test_safe_names_disambiguate_names_and_preexisting_directories():
 def test_helper_exact_linux_form_uses_readonly_source_and_same_image(tmp_path, remote):
     machine = vm.LocalVm(tmp_path, runner=Runtime())
     source, target = machine.target_for(remote, 'a' * 16), machine.shared_target(remote, 1, 1)
-    args = carry.helper_args(source, target, arguments(), machine.owner)
+    args = carry.helper_args(source, target, arguments())
     assert args[:6] == ['run', '--rm', '--network', 'none', '--user', '0']
     # Named, and not with the computers' prefix: a helper that is given up is killed by this name.
     assert args[6:8] == ['--name', f'raphael-carry-{machine.owner}-' + 'a' * 16] and carry.helper_name(source) == args[7]
     assert not args[7].startswith('raphael-computer-')
     assert args[8:10] == ['-v', str(source.workspace) + ':/from:ro']
-    assert args[10:13] == ['-v', str(target.workspace) + ':/to', '--mount']
-    profile_mount = next(args[i + 1] for i, value in enumerate(args[:-1]) if value == '--mount')
-    assert next(csv.reader([profile_mount])) == ['type=volume', f'source=raphael-computer-{machine.owner}-shared-profiles', 'target=/to/.browser-profiles']
-    assert args[14:18] == ['--entrypoint', 'sh', vm.IMAGE, '-c']
-    assert 'Singleton*' in args[-1] and '1000' in args[-1] and len(args) == 19
-    # An old home whose browser profile was moved into its own volume shows it, read-only, over its folder.
-    shown = carry.helper_args(source, target, arguments(), machine.owner, source_profiles=True)
-    assert len(shown) == 21 and shown[10:13] == args[10:13] and shown[-4:] == args[-4:]
-    assert shown[14] == '--mount' and shown[16] == '--entrypoint'
-    assert next(csv.reader([shown[15]])) == ['type=volume', f'source=raphael-computer-{machine.owner}-{source.unit}-profiles',
-                                             'target=/from/.browser-profiles', 'readonly']
+    assert args[10:16] == ['-v', str(target.workspace) + ':/to', '--entrypoint', 'sh', vm.IMAGE, '-c']
+    assert 'Singleton*' in args[-1] and '1000' in args[-1] and len(args) == 17
 
 
 @pytest.mark.parametrize('remote', ['', 'test-host'])
@@ -293,7 +283,7 @@ async def test_core_stops_idle_skips_busy_selects_newest_and_retries_failures_on
     async def run_for(target, args, **kwargs):
         commands.append(args)
         return vm.Result(0, '[]')
-    async def helper(vm, source, target, args, source_profiles=False):
+    async def helper(vm, source, target, args):
         if args['operation'] == 'scan':
             scans.append(source.key)
             return {'profile': True, 'cookies': sources.index(source), 'destination_profile': False,
@@ -339,7 +329,7 @@ async def carry_rig(tmp_path, monkeypatch, copy):
             return deepcopy(state)
         state.clear()
         state.update(deepcopy(record))
-    async def helper(vm, source, target, args, source_profiles=False):
+    async def helper(vm, source, target, args):
         if args['operation'] == 'scan':
             return {'profile': True, 'cookies': 1, 'destination_profile': False, 'folders': [], 'bytes': 1}
         copies.append(args)
@@ -349,38 +339,6 @@ async def carry_rig(tmp_path, monkeypatch, copy):
     monkeypatch.setattr(carry, 'helper', helper)
     monkeypatch.setattr(machine, 'inspect', AsyncMock(return_value=None))
     return machine, target, source, state, copies
-
-
-@pytest.mark.parametrize('answer,shown', [(vm.Result(0, '[]'), True), (vm.Result(1, '', 'Error: No such volume: x'), False)])
-async def test_an_old_home_whose_profile_moved_to_its_volume_is_read_through_it(tmp_path, monkeypatch, answer, shown):
-    async def copy():
-        return {'profile': 'carried', 'files': 'carried', 'datasets': []}
-    machine, target, source, state, copies = await carry_rig(tmp_path, monkeypatch, copy)
-    seen, asked = [], []
-    async def helper(vm, home, destination, args, source_profiles=False):
-        seen.append((args['operation'], source_profiles))
-        if args['operation'] == 'scan':
-            return {'profile': True, 'cookies': 1, 'destination_profile': False, 'folders': [], 'bytes': 1}
-        return {'profile': 'carried', 'files': 'carried', 'datasets': []}
-    async def run_for(destination, args, **kwargs):
-        asked.append(args)
-        return answer
-    monkeypatch.setattr(carry, 'helper', helper)
-    monkeypatch.setattr(machine, 'run_for', run_for)
-    await carry.before_browser(machine, target)
-    assert asked == [['volume', 'inspect', f'raphael-computer-{machine.owner}-{source.unit}-profiles']]
-    assert seen == [('scan', shown), ('copy', shown)] and state[source.key]['status'] == 'done'
-
-
-async def test_a_failed_question_about_the_old_volume_is_not_taken_for_no_volume(tmp_path, monkeypatch):
-    async def copy():
-        raise AssertionError('Nothing is copied when the old home cannot be read')
-    machine, target, source, state, copies = await carry_rig(tmp_path, monkeypatch, copy)
-    async def run_for(destination, args, **kwargs):
-        return vm.Result(1, '', 'Cannot connect to the Docker daemon')
-    monkeypatch.setattr(machine, 'run_for', run_for)
-    await carry.before_browser(machine, target)
-    assert state[source.key]['status'] == 'failed' and not copies
 
 
 async def test_a_copy_that_keeps_failing_is_paid_for_three_times_and_then_left_in_place(tmp_path, monkeypatch):
@@ -554,8 +512,6 @@ async def test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to
     commands = []
     async def run_for(target, args, **kwargs):
         commands.append(args[0] if args[0] != 'container' else 'inspect')
-        if args[0] == 'volume':
-            return vm.Result(1, '', 'Error: No such volume: ' + args[2])
         if args[0] == 'run':
             raise TimeoutError
         answer = kill if args[0] == 'kill' else seen
@@ -565,7 +521,7 @@ async def test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to
     monkeypatch.setattr(machine, 'run_for', run_for)
     # As in the product, the carry is a task of its own: the guard it leaves names that task, not its caller.
     await asyncio.create_task(carry.carry(machine, target))
-    assert commands == (['volume', 'run', 'kill'] if seen is None else ['volume', 'run', 'kill', 'inspect'])
+    assert commands == (['run', 'kill'] if seen is None else ['run', 'kill', 'inspect'])
     assert not machine.locks[source.state_key].locked()
     assert (source.state_key in machine.maintenance) is lost and (source.state_key in machine.carry_lost) is lost
     if lost:

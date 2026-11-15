@@ -17,7 +17,7 @@ from raphael_core.agent.mcp_server import RaphaelMcp
 from raphael_core.agent.policy import Tier
 from raphael_core.background.snapshot import take_snapshot
 from raphael_core.brain.settings import SettingsStore, checked
-from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, machine_volume, run_args
+from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
@@ -40,8 +40,6 @@ class Runtime:
             return Result(0, "%d %d" % self.engine) if self.engine else Result(1)
         if args[0] == "info":
             return Result(0, "linux") if self.up else Result(1)
-        if args[:2] == ["volume", "rm"]:
-            self.removed = [*getattr(self, "removed", []), args[-1]]
         if args[0] == "update" and self.raw:
             memory, cpus = args[2], args[6]
             self.raw["HostConfig"].update(Memory=int(memory[:-1]) * 1024**3, MemorySwap=int(memory[:-1]) * 1024**3,
@@ -85,16 +83,11 @@ def container(vm, target, runtime):
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
-    for kind, destination in (("profiles", f"{GUEST}/.browser-profiles"), ("cache", "/home/cua/.cache")):
-        name = machine_volume(vm.owner, target, kind)
-        raw["Mounts"].append({"Type": "volume", "Name": name, "Source": "/engine/volumes/" + name,
-                              "Destination": destination, "RW": True})
     if target.remote:
-        for mount in raw["Mounts"]:
-            if mount["Destination"] in (GUEST, "/home/cua/team"):
-                mount.update(Type="volume", Name=str(mount["Source"]), Source="/engine/volumes/" + str(mount["Source"]))
+        for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
+            mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
+        raw["HostConfig"]["Mounts"] = [{"Type": "volume", "Source": m["Name"], "Target": m["Destination"]} for m in raw["Mounts"]]
         raw["NetworkSettings"]["Networks"] = {"bridge": {"IPAddress": "172.18.0.2"}}
-    raw["HostConfig"]["Mounts"] = [{"Type": m["Type"], "Source": m.get("Name", m.get("Source")), "Target": m["Destination"]} for m in raw["Mounts"]]
     return raw
 
 
@@ -346,7 +339,7 @@ async def test_start_reads_latest_owner_timezone_when_creating_container(desktop
     original = runtime.__call__
 
     async def run(args, **kwargs):
-        if args[:2] == ["run", "-d"]:
+        if args[0] == "run":
             runtime.raw = container(vm, target, runtime)
         return await original(args, **kwargs)
 
@@ -354,7 +347,7 @@ async def test_start_reads_latest_owner_timezone_when_creating_container(desktop
     vm.run, vm.timezone = run, lambda: owner.zone
     owner.zone = "Asia/Taipei"
     assert (await vm.start(target))["ready"]
-    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[:2] == ["run", "-d"])
+    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
 
 
 async def test_start_launches_installed_docker_and_builds_missing_image_once(desktop):
@@ -415,7 +408,7 @@ async def test_start_recreates_owned_container_when_owner_zone_arrives(desktop, 
     original = runtime.__call__
 
     async def run(args, **kwargs):
-        if args[:2] == ["run", "-d"]:
+        if args[0] == "run":
             runtime.raw = container(vm, target, runtime)
             runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
         return await original(args, **kwargs)
@@ -423,7 +416,7 @@ async def test_start_recreates_owned_container_when_owner_zone_arrives(desktop, 
     vm.run, vm.timezone = run, lambda: "Asia/Taipei"
     assert (await vm.start(target))["ready"]
     assert any(args == ["rm", target.name] for args, _ in runtime.calls)
-    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[:2] == ["run", "-d"])
+    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
     assert (target.workspace / "keep.txt").read_text() == "keep"
     runtime.calls.clear()
     await vm.start(target)
@@ -436,7 +429,7 @@ async def test_home_timezone_refresh_recovers_old_vm_and_defers_busy_desktops(de
     original = runtime.__call__
 
     async def run(args, **kwargs):
-        if args[:2] == ["run", "-d"]:
+        if args[0] == "run":
             runtime.raw = container(vm, target, runtime)
             runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
         return await original(args, **kwargs)
@@ -449,7 +442,7 @@ async def test_home_timezone_refresh_recovers_old_vm_and_defers_busy_desktops(de
     await vm.refresh_timezone()
     assert target.key in vm.targets
     assert vm.timezone_pending == bool(blocked)
-    assert any(args[:2] == ["run", "-d"] for args, _ in runtime.calls) == (blocked is None)
+    assert any(args[0] == "run" for args, _ in runtime.calls) == (blocked is None)
     vm.active.clear(); vm.held.clear(); vm.busy = lambda key: False
     await vm.refresh_timezone()
     assert "TZ=Asia/Taipei" in runtime.raw["Config"]["Env"]
@@ -479,8 +472,7 @@ async def test_timezone_refresh_recreates_stopped_desktop_without_waking_it(desk
     await vm.refresh_timezone()
     assert not runtime.raw["State"]["Running"]
     assert "TZ=Asia/Taipei" in runtime.raw["Config"]["Env"]
-    # Created, not run: the volumes are made ready by a helper that runs and ends, and the computer is never started.
-    assert not any(args[0] in ("start", "stop") or args[:2] == ["run", "-d"] for args, _ in runtime.calls)
+    assert not any(args[0] in ("run", "start", "stop") for args, _ in runtime.calls)
 
 
 async def test_timezone_recreation_rechecks_ownership_and_keeps_owner_hold(desktop):

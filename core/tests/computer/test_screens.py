@@ -669,8 +669,6 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
 async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(per_bot_desktop, layer, env, recognised):
     # A member's own computer: on this branch the plain `desktop` is the six-screen shared one.
     vm, target, runtime = per_bot_desktop
-    from .test_housekeeping import earlier_layer
-    earlier_layer(runtime.raw, layer)  # every layer before 13 mounted the workspace only: no machine-only volumes
     runtime.raw['Image'] = 'sha256:old-image'
     runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = layer
     runtime.raw['Config']['Env'] = env

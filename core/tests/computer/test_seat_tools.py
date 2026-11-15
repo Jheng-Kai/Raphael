@@ -461,7 +461,7 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), 9 is the
     # desktop saying which browser that is, 10 is the computer without Firefox ESR, 11 the loaded PC's waits, and 12 a
     # screen a person can use (a window list, a dock's Browser icon, no marker page, tabs, windows inside their screen).
-    # 13 changed no file of the image: it is the container's shape (the volumes, the locale), so what it made again is
+    # 13 changed no file of the image: it is the container's shape (the locale), so what it made again is
     # the layers' own steps above, unchanged.
     assert module.IMAGE.endswith("-v13") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "13"
     assert 'org.raphael.computer.layer="13"' in dockerfile and "librsvg2-common" in dockerfile
@@ -794,8 +794,6 @@ async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_laye
     vm, runtime = shared_vm
     target = await vm.seat(1)
     raw = container(vm, target, runtime)
-    raw["Mounts"] = [mount for mount in raw["Mounts"] if mount["Destination"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
-    raw["HostConfig"]["Mounts"] = [mount for mount in raw["HostConfig"]["Mounts"] if mount["Target"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
     raw["Config"]["Labels"][f"{module.LABEL}.layer"] = layer
     raw["Image"] = "sha256:the-layer-before"
     assert "RAPHAEL_SCREENS=6" in raw["Config"]["Env"] and raw["HostConfig"]["Memory"] == 6 * 1024**3
@@ -816,8 +814,6 @@ async def test_layer_five_shapes_upgrade_with_mounts_kept(shared_vm, shared, scr
     target = await vm.seat(1) if shared else vm.target_for("", vm.key_for("", 1))
     previous = replace(target, screens=screens, screen=1, container="" if screens == 1 else target.container)
     raw = container(vm, previous, runtime)
-    raw["Mounts"] = [mount for mount in raw["Mounts"] if mount["Destination"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
-    raw["HostConfig"]["Mounts"] = [mount for mount in raw["HostConfig"]["Mounts"] if mount["Target"] not in (f"{module.GUEST}/.browser-profiles", "/home/cua/.cache")]
     raw["Config"]["Labels"][f"{module.LABEL}.target"] = target.unit
     raw["Config"]["Labels"][f"{module.LABEL}.layer"] = "5"
     assert module.known_previous(raw, target, vm.owner)

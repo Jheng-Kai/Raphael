@@ -48,14 +48,14 @@ async def test_two_seats_start_the_unit_once_and_keep_their_own_view_url(shared_
     original = vm.run
 
     async def run(args, **kwargs):
-        if args[:2] == ["run", "-d"]:
+        if args[0] == "run":
             runtime.raw = container(vm, first, runtime)
         await asyncio.sleep(0)
         return await original(args, **kwargs)
 
     vm.run = run
     states = await asyncio.gather(vm.start(first), vm.start(second))
-    assert sum(args[:2] == ["run", "-d"] for args, _ in runtime.calls) == 1
+    assert sum(args[0] == "run" for args, _ in runtime.calls) == 1
     assert "screen-1" in states[0]["viewer_url"] and "screen-2" in states[1]["viewer_url"]
     assert (await vm.status(vm.target(3)))["viewer_url"] == ""
 
@@ -174,8 +174,6 @@ async def test_old_shared_shape_rebuilds_to_six_screens_and_keeps_mounts(shared_
     target = await vm.seat(1)
     previous = vm.target_for("", "shared")
     runtime.raw = container(vm, previous, runtime)
-    runtime.raw["Mounts"] = [mount for mount in runtime.raw["Mounts"] if mount["Destination"] not in ("/home/cua/workspace/.browser-profiles", "/home/cua/.cache")]
-    runtime.raw["HostConfig"]["Mounts"] = [mount for mount in runtime.raw["HostConfig"]["Mounts"] if mount["Target"] not in ("/home/cua/workspace/.browser-profiles", "/home/cua/.cache")]
     runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = str(layer)
     if layer < 5:
         runtime.raw["Config"]["Env"] = ["VNC_PW=private"]
@@ -190,16 +188,13 @@ async def test_old_shared_shape_rebuilds_to_six_screens_and_keeps_mounts(shared_
     original = vm.run
 
     async def run(args, **kwargs):
-        if args[:2] == ["run", "-d"]:
+        if args[0] == "run":
             runtime.raw = container(vm, target, runtime)
         return await original(args, **kwargs)
 
     vm.run = run
     assert (await vm.start(target))["ready"]
-    # The workspace and team mounts are the ones the old computer had; the layer adds the two machine-only volumes.
-    volumes = ("/home/cua/workspace/.browser-profiles", "/home/cua/.cache")
-    assert [m for m in runtime.raw["Mounts"] if m["Destination"] not in volumes] == mounts and marker.exists()
-    assert sorted(m["Destination"] for m in runtime.raw["Mounts"] if m["Type"] == "volume") == sorted(volumes)
+    assert runtime.raw["Mounts"] == mounts and marker.exists()
     assert sum(args[0] == "rm" for args, _ in runtime.calls) == 1
 
 

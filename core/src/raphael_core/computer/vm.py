@@ -39,10 +39,6 @@ SHARED_MEMORY_GB = (4, 12)
 SHARED_CPUS = (2, 8)
 SIZE_TTL_S = 300
 LOCALE = "C.UTF-8"
-# Machine-only data (a browser's profiles, the tools' caches) lives in named volumes, one pair for each computer, mounted
-# over these paths: a Windows bind mount answers file metadata 55 to 200 times slower than the engine's own disk, and
-# nobody reads these folders. Documents and results stay on the workspace's mount where the owner sees them.
-MACHINE_VOLUMES = {"profiles": f"{GUEST}/.browser-profiles", "cache": "/home/cua/.cache"}
 LOCAL_LIMIT = 2
 PREFLIGHT_S = 45.0
 DRIVER = "/usr/local/libexec/raphael/cua-driver"
@@ -246,15 +242,9 @@ def limits_match(host, target):
             and SHARED_CPUS[0] <= nano // 1_000_000_000 <= SHARED_CPUS[1])
 
 
-def machine_volume(owner, target, kind):
-    """The named volume that holds one kind of a computer's machine-only data (`MACHINE_VOLUMES`)."""
-    return f"raphael-computer-{owner}-{target.unit}-{kind}"
-
-
-def mount_arg(path, destination=GUEST, *, remote=False, readonly=False):
+def mount_arg(path, destination=GUEST, *, remote=False):
     stream = io.StringIO(newline="")
-    csv.writer(stream, lineterminator="").writerow(["type=volume" if remote else "type=bind", f"source={path}", f"target={destination}",
-                                                    *(["readonly"] if readonly else [])])
+    csv.writer(stream, lineterminator="").writerow(["type=volume" if remote else "type=bind", f"source={path}", f"target={destination}"])
     return stream.getvalue()
 
 
@@ -287,8 +277,6 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace, remote=bool(target.remote)),
         *(["--mount", mount_arg(target.shared, SHARED, remote=bool(target.remote))] if target.shared else []),
-        *[arg for kind, destination in MACHINE_VOLUMES.items()
-          for arg in ("--mount", mount_arg(machine_volume(owner, target, kind), destination, remote=True))],
         "-e", f"VNC_PW={password}",
         "-e", f"TZ={zone}",
         # Tools handle Chinese and Japanese file names only under a UTF-8 locale; the image's default is POSIX.
@@ -297,26 +285,6 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "-e", f"VNC_RESOLUTION={canvas[0]}x{canvas[1]}",
         "-p", "127.0.0.1::6901", IMAGE,
     ]
-
-
-def volume_prepare_args(target, owner):
-    """Make the computer's machine-only volumes ready before its container is made (a volume starts root-owned and the
-    computer's user could not write to it), and move a profile that is still in the workspace into the volume once, so
-    nobody is signed out: the container mounts the volume over the folder, and a profile left under it would be hidden.
-    A profile moves only into an empty volume, and the old one goes only after its copy has ended whole: a copy that
-    fails empties the volume again and ends the program, so the computer is never made over a volume that hides the
-    profile (and a retry finds the volume empty and copies again); run again it does nothing but hand the volumes over."""
-    script = ('set -e; old=/workspace/.browser-profiles; '
-              'if [ -d "$old" ] && [ ! -L "$old" ] && [ -n "$(find "$old" -mindepth 1 -maxdepth 1 -print -quit)" ] '
-              '&& [ -z "$(find /profiles -mindepth 1 -maxdepth 1 -print -quit)" ]; then '
-              'if ! cp -a "$old"/. /profiles/; then find /profiles -mindepth 1 -delete; exit 1; fi; '
-              'find "$old" -mindepth 1 -delete; fi; '
-              'chown -R 1000:1000 /profiles; chown 1000:1000 /cache')
-    return ["run", "--rm", "--network", "none", "--user", "0",
-            "--mount", mount_arg(target.workspace, "/workspace", remote=bool(target.remote)),
-            "--mount", mount_arg(machine_volume(owner, target, "profiles"), "/profiles", remote=True),
-            "--mount", mount_arg(machine_volume(owner, target, "cache"), "/cache", remote=True),
-            "--entrypoint", "sh", IMAGE, "-c", script]
 
 
 def scratch_args(target):
@@ -376,7 +344,7 @@ def compatible(raw, target, owner, image_id):
             and host.get("RestartPolicy", {}).get("Name", "no") in ("", "no")
             and limits_match(host, target) and host.get("PidsLimit") == 4096
             and host.get("ShmSize") == 512 * 1024**2
-            and mounts_match(mounts, configured_mounts, target, owner)
+            and mounts_match(mounts, configured_mounts, target)
             and (
                 set(ports) == {"6901/tcp"} and len(ports["6901/tcp"]) == 1
                 and ports["6901/tcp"][0]["HostIp"] == "127.0.0.1")
@@ -385,10 +353,9 @@ def compatible(raw, target, owner, image_id):
         return False
 
 
-def mounts_match(mounts, configured, target, owner):
+def mounts_match(mounts, configured, target):
     expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {})}
-    volume_mounts = {destination: machine_volume(owner, target, kind) for kind, destination in MACHINE_VOLUMES.items()}
-    if len(mounts) != len(expected) + len(volume_mounts) or len(configured) != len(expected) + len(volume_mounts):
+    if len(mounts) != len(expected) or len(configured) != len(expected):
         return False
     for destination, source in expected.items():
         actual = next((m for m in mounts if m.get("Destination") == destination), {})
@@ -400,13 +367,6 @@ def mounts_match(mounts, configured, target, owner):
             if actual.get("Name") != str(source) or request.get("Source", actual.get("Name")) != str(source):
                 return False
         elif Path(request.get("Source", "")).resolve() != source.resolve():
-            return False
-    for destination, source in volume_mounts.items():
-        actual = next((m for m in mounts if m.get("Destination") == destination), {})
-        request = next((m for m in configured if m.get("Target", m.get("Destination")) == destination), {})
-        if actual.get("Type") != "volume" or actual.get("RW") is not True or request.get("Type") != "volume" or request.get("ReadOnly"):
-            return False
-        if actual.get("Name") != source or request.get("Source", actual.get("Name")) != source:
             return False
     return True
 
@@ -424,7 +384,7 @@ def known_previous(raw, target, owner):
         # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
         # owner's own computer the day layer 8 came; layers 8 to 12 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it. Layer 13 is
-        # the first with the machine-only volumes and the UTF-8 locale: every layer before it is made again once.
+        # the first with the UTF-8 locale in its environment: every layer before it is made again once.
         six = shared_upgrade and layer in ("5", "7", "8", "9", "10", "11", "12") and screens == ["RAPHAEL_SCREENS=6"]
         memory = 6 if six else {"3": 2, "4": 3, "5": 3, "6": 3, "7": 3, "8": 3, "9": 3, "10": 3, "11": 3, "12": 3}.get(layer)
         # Layer 5 was the first to say its screen count; the two before it had no such entry.
@@ -433,29 +393,6 @@ def known_previous(raw, target, owner):
                 or host.get("NanoCpus") != (4 if six else 2) * 1_000_000_000
                 or host.get("Memory") != memory * 1024**3 or host.get("MemorySwap") != memory * 1024**3):
             return False
-        # Only the workspace (and the team folder) were mounted before layer 13: exactly those, as they were checked
-        # then. The machine-only volumes are what the layer being made adds, so they are added here and the rest of
-        # `compatible` judges the shape as the layer 13 container it will become.
-        mounts = previous.get("Mounts", [])
-        configured = list(host.get("Mounts", mounts))
-        old_expected = {GUEST: target.workspace, **({SHARED: target.shared} if target.shared else {})}
-        if len(mounts) != len(old_expected) or len(configured) != len(old_expected):
-            return False
-        for destination, source in old_expected.items():
-            actual = next((item for item in mounts if item.get("Destination") == destination), {})
-            request = next((item for item in configured if item.get("Target", item.get("Destination")) == destination), {})
-            kind = "volume" if target.remote else "bind"
-            if actual.get("Type") != kind or actual.get("RW") is not True or request.get("Type") != kind or request.get("ReadOnly"):
-                return False
-            if target.remote and actual.get("Name") != str(source):
-                return False
-            if not target.remote and Path(request.get("Source", "")).resolve() != Path(source).resolve():
-                return False
-        for kind, destination in MACHINE_VOLUMES.items():
-            volume = machine_volume(owner, target, kind)
-            mounts.append({"Type": "volume", "Name": volume, "Destination": destination, "RW": True})
-            configured.append({"Type": "volume", "Source": volume, "Target": destination})
-        host["Mounts"] = configured
         labels[f"{LABEL}.layer"] = IMAGE_LABELS[f"{LABEL}.layer"]
         memory, cpus = resources(target)
         host.update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3, NanoCpus=cpus * 1_000_000_000)
@@ -1247,11 +1184,8 @@ class LocalVm:
         return SHARED_SIZE
 
     async def create(self, target, zone, *, only_create=False):
-        """Make the computer's container. Its machine-only volumes are made ready first (`volume_prepare_args`), and a
-        shared computer takes the size its engine gives it."""
+        """Make the computer's container; a shared computer takes the size its engine gives it."""
         size = await self.machine_size(target) if target.container == "shared" else None
-        if (await self.run_for(target, volume_prepare_args(target, self.owner), timeout=180)).code:
-            raise VmError("volume_prepare_failed")
         args = run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone, size=size)
         if only_create:
             args[:2] = ["create"]
@@ -1299,12 +1233,6 @@ class LocalVm:
                 logger.warning("A computer's old scratch could not be cleared")
         except (OSError, TimeoutError, VmError):
             logger.warning("A computer's old scratch could not be cleared")
-
-    async def remove_machine_volumes(self, target):
-        """Remove the computer's machine-only volumes (its container is gone). Already gone is success (`-f`)."""
-        for kind in MACHINE_VOLUMES:
-            if (await self.run_for(target, ["volume", "rm", "-f", machine_volume(self.owner, target, kind)], timeout=30)).code:
-                raise VmError("machine_volume_remove_failed")
 
     async def _wallpaper(self, target):
         """Put the desktop's picture up: once for each run of a computer, and again when the owner's picture changed.
@@ -1479,8 +1407,6 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
                     if result.code and await self.inspect(target) is not None:
                         raise VmError("remove_failed")
             await self.close_viewer(target)
-            if engine:
-                await self.remove_machine_volumes(target)
             if target.remote:
                 if (await self.run_for(target, ["volume", "rm", str(target.workspace)])).code:
                     volume = await self.run_for(target, ["volume", "inspect", str(target.workspace)])

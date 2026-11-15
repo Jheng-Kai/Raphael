@@ -1,63 +1,31 @@
-"""The computer's housekeeping (owner, 2026-11-15): machine-only data off the slow mount, a size from the engine, old
-scratch cleared, a UTF-8 locale. No Docker: the existing fakes, and the shell scripts run for real where one is there."""
+"""The computer's housekeeping (owner, 2026-11-15): a size from the engine, old scratch cleared, a UTF-8 locale. No Docker: the existing fakes, and the shell scripts run for real where one is there."""
 
-import csv
 import logging
 import os
 import shutil
 import subprocess
 import time
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from raphael_core.computer import vm as module
-from raphael_core.computer.vm import (GUEST, LABEL, MACHINE_VOLUMES, Result, compatible, exec_args, known_previous,
-                                      limits_match, machine_volume, run_args, scratch_args, sized, volume_prepare_args)
+from raphael_core.computer.vm import (GUEST, LABEL, Result, compatible, exec_args, known_previous, limits_match, run_args,
+                                      scratch_args, sized)
 from .test_vm import container, desktop, per_bot_desktop  # noqa: F401
 
 GIB = 1024**3
 SHELL = shutil.which("sh")
 
 
-def mounts_of(args):
-    return [dict(part.split("=", 1) for part in next(csv.reader([args[i + 1]])) if "=" in part)
-            for i, value in enumerate(args[:-1]) if value == "--mount"]
-
-
 def earlier_layer(raw, layer="12"):
-    """A computer as a layer before 13 made it: no machine-only volumes, no locale."""
-    raw["Mounts"] = [m for m in raw["Mounts"] if m["Destination"] not in MACHINE_VOLUMES.values()]
-    raw["HostConfig"]["Mounts"] = [m for m in raw["HostConfig"]["Mounts"] if m["Target"] not in MACHINE_VOLUMES.values()]
+    """A computer as a layer before 13 made it: its own label and image (and no locale in its environment)."""
     raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
     raw["Image"] = "sha256:the-layer-before"
     return raw
 
 
-# --- 1. machine-only data in a volume for each computer -------------------------------------------------------------
-
-
-@pytest.mark.parametrize("remote", ["", "host"])
-async def test_profiles_and_caches_are_volumes_of_their_own_computer_and_documents_stay_on_the_workspace(per_bot_desktop, remote):
-    vm, target, _ = per_bot_desktop
-    shared = vm.shared_target(remote, 1, 1)
-    for each in (replace(target, remote=remote) if remote else target, shared):
-        mounts = mounts_of(run_args(each, vm.owner, "private"))
-        by_target = {m["target"]: m for m in mounts}
-        assert set(by_target) == {GUEST, *MACHINE_VOLUMES.values(), *(["/home/cua/team"] if each.shared else [])}
-        for kind, destination in MACHINE_VOLUMES.items():
-            # Always a named volume, even where the workspace is a Windows folder: that is the point.
-            assert by_target[destination] == {"type": "volume", "source": f"raphael-computer-{vm.owner}-{each.unit}-{kind}",
-                                              "target": destination}
-        assert by_target[GUEST]["type"] == ("volume" if each.remote else "bind")
-    assert machine_volume(vm.owner, shared, "profiles") != machine_volume(vm.owner, target, "profiles")
-
-
-def test_the_two_volumes_never_look_like_a_home_to_the_carry_over_or_the_browser_acceptance(tmp_path):
-    vm = module.LocalVm(tmp_path)
-    for kind in MACHINE_VOLUMES:
-        assert not machine_volume(vm.owner, vm.target(1), kind).endswith("-workspace")
+# --- 1. a UTF-8 locale ------------------------------------------------------------------------------------------------
 
 
 def test_the_computer_runs_with_a_utf8_locale(tmp_path):
@@ -354,12 +322,8 @@ async def test_a_computer_of_the_layer_before_is_made_again_once_and_not_at_ever
     runtime.calls.clear()
     assert (await vm.start(target))["ready"]
     order = [(args[0], args[1] if len(args) > 1 else "") for args, _ in runtime.calls if args[0] in ("stop", "rm", "run")]
-    # Stopped, removed, the volumes made ready (moving a profile still in the workspace), then made: one of each.
-    assert order == [("stop", "--time"), ("rm", target.name), ("run", "--rm"), ("run", "-d")]
-    prepare = next(args for args, _ in runtime.calls if args[:2] == ["run", "--rm"])
-    assert prepare == volume_prepare_args(target, vm.owner)
-    assert [m["target"] for m in mounts_of(prepare)] == ["/workspace", "/profiles", "/cache"]
-    assert mounts_of(prepare)[0]["source"] == str(target.workspace) and mounts_of(prepare)[0]["type"] == "bind"
+    # Stopped, removed, made: one of each, and its workspace is never removed.
+    assert order == [("stop", "--time"), ("rm", target.name), ("run", "-d")]
     assert not any(args[:2] == ["volume", "rm"] for args, _ in runtime.calls)
     # The next starts find a computer of the layer, whole: nothing is made again.
     for _ in range(2):
@@ -402,130 +366,7 @@ async def test_every_shared_layer_before_13_is_recognised_with_its_screens_and_o
     assert not known_previous(raw, target, vm.owner)
 
 
-async def test_a_computer_with_only_one_of_the_two_volumes_is_not_this_layer(desktop):
-    vm, target, runtime = desktop
-    runtime.raw["Mounts"] = [m for m in runtime.raw["Mounts"] if m["Destination"] != "/home/cua/.cache"]
-    runtime.raw["HostConfig"]["Mounts"] = [m for m in runtime.raw["HostConfig"]["Mounts"] if m["Target"] != "/home/cua/.cache"]
-    assert not compatible(runtime.raw, target, vm.owner, runtime.image_id)
-    # ...and another computer's volume in its place is refused too.
-    runtime.raw["Mounts"].append({"Type": "volume", "Name": "someone-elses", "Destination": "/home/cua/.cache", "RW": True})
-    runtime.raw["HostConfig"]["Mounts"].append({"Type": "volume", "Source": "someone-elses", "Target": "/home/cua/.cache"})
-    assert not compatible(runtime.raw, target, vm.owner, runtime.image_id)
-
-
-@pytest.fixture
-def prepared(tmp_path):
-    """`volume_prepare_args`' own program, run for real with the three folders it is given standing in a temporary one
-    (ownership cannot be changed by a test, so `chown` only records)."""
-    if SHELL is None:
-        pytest.skip("A POSIX shell is required")
-    version = subprocess.run([SHELL, "-c", "find --version"], capture_output=True, text=True)
-    if "GNU findutils" not in version.stdout:
-        pytest.skip("GNU find is required")
-    workspace, profiles, cache = tmp_path / "workspace", tmp_path / "profiles", tmp_path / "cache"
-    for folder in (workspace, profiles, cache):
-        folder.mkdir()
-    machine = module.LocalVm(tmp_path)
-    script = volume_prepare_args(machine.target(1), machine.owner)[-1]
-    for name, folder in (("/workspace", workspace), ("/profiles", profiles), ("/cache", cache)):
-        script = script.replace(name, folder.as_posix())
-
-    def run(before=""):
-        result = subprocess.run([SHELL, "-c", 'chown() { echo "$@" >> "$0.chown"; }; ' + before + script, (tmp_path / "log").as_posix()],
-                                capture_output=True, text=True, timeout=30)
-        return result
-    return workspace, profiles, cache, run, tmp_path
-
-
-def test_the_profile_in_the_workspace_moves_into_its_volume_once_whole(prepared):
-    workspace, profiles, cache, run, tmp_path = prepared
-    old = workspace / ".browser-profiles"
-    (old / "driver/main/Default").mkdir(parents=True)
-    (old / "driver/main/Default/Cookies").write_bytes(b"signed in")
-    (old / "google-chrome").mkdir()
-    (old / "google-chrome/Local State").write_text("state")
-    assert run().returncode == 0
-    assert (profiles / "driver/main/Default/Cookies").read_bytes() == b"signed in"
-    assert (profiles / "google-chrome/Local State").read_text() == "state"
-    # The workspace keeps the (now empty) folder the volume is mounted over, and nothing of the profile is left behind it.
-    assert old.is_dir() and not any(old.iterdir())
-    # Run again (the computer is made again): nothing is copied, nothing lost.
-    assert run().returncode == 0
-    assert (profiles / "driver/main/Default/Cookies").read_bytes() == b"signed in"
-
-
-def test_a_profile_already_in_the_volume_is_never_overwritten_and_the_old_one_is_left(prepared):
-    workspace, profiles, cache, run, tmp_path = prepared
-    (workspace / ".browser-profiles/driver").mkdir(parents=True)
-    (workspace / ".browser-profiles/driver/old.txt").write_text("old")
-    (profiles / "driver").mkdir()
-    (profiles / "driver/new.txt").write_text("new")
-    assert run().returncode == 0
-    assert (profiles / "driver/new.txt").read_text() == "new" and not (profiles / "driver/old.txt").exists()
-    assert (workspace / ".browser-profiles/driver/old.txt").read_text() == "old"
-
-
-def test_a_workspace_without_a_profile_only_hands_the_volumes_over(prepared):
-    workspace, profiles, cache, run, tmp_path = prepared
-    assert run().returncode == 0
-    assert not any(profiles.iterdir()) and not any(workspace.iterdir())
-    recorded = (tmp_path / "log.chown").read_text().splitlines()
-    assert any(line.startswith("-R 1000:1000") and line.endswith(profiles.as_posix()) for line in recorded)
-    assert any(line.startswith("1000:1000") and line.endswith(cache.as_posix()) for line in recorded)
-
-
-def test_a_failed_copy_leaves_the_old_profile_where_it_was(prepared):
-    workspace, profiles, cache, run, tmp_path = prepared
-    (workspace / ".browser-profiles/driver/main").mkdir(parents=True)
-    (workspace / ".browser-profiles/driver/main/Cookies").write_text("signed in")
-    result = run("cp() { return 1; }; ")  # a disk that fills up, a volume that cannot be written
-    # The program ends with the failure (the computer is not made over an empty volume that would hide the profile),
-    # and the old profile is still where it was.
-    assert result.returncode != 0
-    assert (workspace / ".browser-profiles/driver/main/Cookies").read_text() == "signed in"
-    assert not (tmp_path / "log.chown").exists()
-
-
-def test_a_copy_that_stops_half_way_leaves_the_volume_empty_so_a_retry_copies_again(prepared):
-    workspace, profiles, cache, run, tmp_path = prepared
-    (workspace / ".browser-profiles/driver/main").mkdir(parents=True)
-    (workspace / ".browser-profiles/driver/main/Cookies").write_text("signed in")
-    # Half a profile is written, then the copy fails: were it kept, the next start would find the volume "not empty",
-    # skip the copy, and the computer would be made over half a profile that hides the whole one.
-    assert run('cp() { mkdir -p "' + profiles.as_posix() + '/driver"; echo half > "' + profiles.as_posix() + '/driver/half"; return 1; }; ').returncode != 0
-    assert not any(profiles.iterdir())
-    assert (workspace / ".browser-profiles/driver/main/Cookies").read_text() == "signed in"
-    assert run().returncode == 0
-    assert (profiles / "driver/main/Cookies").read_text() == "signed in"
-
-
-# --- 5. reset and erase remove the volumes with the computer -----------------------------------------------------------
-
-
-async def test_erasing_a_members_computer_removes_both_its_volumes(per_bot_desktop):
-    vm, target, runtime = per_bot_desktop
-    target.workspace.mkdir(parents=True, exist_ok=True)
-    runtime.raw = None
-    await vm.erase(target)
-    removed = [args for args, _ in runtime.calls if args[:2] == ["volume", "rm"]]
-    assert removed == [["volume", "rm", "-f", machine_volume(vm.owner, target, kind)] for kind in MACHINE_VOLUMES]
-
-
-async def test_a_volume_that_cannot_be_removed_is_not_forgotten(per_bot_desktop):
-    vm, target, runtime = per_bot_desktop
-    original = vm.run
-
-    async def refusing(args, **kwargs):
-        if args[:2] == ["volume", "rm"]:
-            return Result(1, "", "volume is in use")
-        return await original(args, **kwargs)
-
-    vm.run = refusing
-    with pytest.raises(module.VmError, match="machine_volume_remove_failed"):
-        await vm.remove_machine_volumes(target)
-
-
-# --- 6. the image -------------------------------------------------------------------------------------------------------
+# --- 5. the image -------------------------------------------------------------------------------------------------------
 
 
 def test_the_dockerfile_comment_about_root_is_true_and_the_layer_is_the_one_the_core_names():

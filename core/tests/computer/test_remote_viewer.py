@@ -305,16 +305,14 @@ async def test_start_automatically_upgrades_legacy_remote_container(remote):
     runtime.raw["NetworkSettings"]["Ports"] = {}
     async def run(args, **kwargs):
         command = args[2:] if args[:1] == ["--host"] else args
-        if command[:2] == ["run", "-d"]:
+        if command[0] == "run":
             runtime.raw = container(vm, target, runtime)
         return await runtime(args, **kwargs)
     vm.run = run
     assert (await vm.start(target))["ready"]
     commands = [args for args, _ in runtime.calls]
-    # The machine-only volumes are made ready by a helper that runs and ends before the computer is made.
-    assert [args[:2] if args[0] == "run" else args[:1] for args in commands if args[0] in ("stop", "rm", "run")] == [
-        ["stop"], ["rm"], ["run", "--rm"], ["run", "-d"]]
-    created = next(args for args in commands if args[:2] == ["run", "-d"])
+    assert [args[0] for args in commands if args[0] in ("stop", "rm", "run")] == ["stop", "rm", "run"]
+    created = next(args for args in commands if args[0] == "run")
     assert created[created.index("-p") + 1] == "127.0.0.1::6901"
     assert any(f"source={target.workspace}," in arg for arg in created)
     assert any(f"source={target.shared}," in arg for arg in created)
@@ -325,8 +323,6 @@ async def test_start_automatically_upgrades_legacy_remote_container(remote):
 async def test_old_remote_computer_of_a_previous_layer_still_upgrades(remote, layer, memory):
     vm, target, runtime = remote
     from raphael_core.computer.vm import LABEL
-    from .test_housekeeping import earlier_layer
-    earlier_layer(runtime.raw, layer)  # every layer before 13 mounted the workspace only
     runtime.raw["HostConfig"]["PortBindings"] = {}
     runtime.raw["NetworkSettings"]["Ports"] = {}
     runtime.raw["Image"] = "sha256:old-image"

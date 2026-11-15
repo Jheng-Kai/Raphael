@@ -560,19 +560,17 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     monkeypatch.setattr(vm, "IMAGE", "raphael-acceptance/cua-local-vm:test")
     args = acceptance.previous_args(target, machine.owner, "private")
     current = vm.run_args(target, machine.owner, "private")
-    # The shape the layers before 13 were made in: no machine-only volumes, no locale variables.
+    # The shape the layers before 13 were made in: no locale variables.
     assert not any(value.startswith(("LANG=", "LC_ALL=")) for value in args)
-    assert not any(value.startswith("type=volume") for value in args) and len([v for v in current if v.startswith("type=volume")]) == 2
     earlier = []
     index = 0
     while index < len(current):
-        if current[index] == "-e" and current[index + 1].startswith(("LANG=", "LC_ALL=")) or (
-                current[index] == "--mount" and current[index + 1].startswith("type=volume")):
+        if current[index] == "-e" and current[index + 1].startswith(("LANG=", "LC_ALL=")):
             index += 2
             continue
         earlier.append(current[index])
         index += 1
-    current_with_machine_data, current = current, earlier
+    current = earlier
     assert args[-1] == acceptance.OLD_IMAGES["4"] == "raphael/cua-local-vm:driver-0.37.0-v4"
     assert f"{vm.LABEL}.layer=4" in args
     assert f"{vm.LABEL}.owner={machine.owner}" in args
@@ -606,17 +604,11 @@ class FakeDocker:
     def __init__(self, *, engine="linux", build_failure=False):
         self.engine, self.build_failure = engine, build_failure
         self.calls, self.containers, self.images = [], {}, {}
-        self.volumes = []  # the machine-only volumes this run's computers left (cleanup removes them)
 
     async def __call__(self, args, **kwargs):
         self.calls.append(list(args))
         if args[0] == "info":
             return vm.Result(0, self.engine)
-        if args[:2] == ["volume", "ls"]:
-            return vm.Result(0, "\n".join(self.volumes))
-        if args[:3] == ["volume", "rm", "-f"]:
-            self.volumes = [name for name in self.volumes if name != args[3]]
-            return vm.Result(0)
         if args[0] == "build":
             if self.build_failure:
                 return vm.Result(1, stderr="synthetic build failure")
@@ -1335,18 +1327,15 @@ async def test_carry_guard_accepts_only_exact_offline_helper_on_registered_homes
     source, target = machine.target(1), machine.shared_target('', 1, 1)
     guard.carry_homes = {str(home.workspace): home for home in (source, target)}
     data = {'operation': 'copy', 'key': source.key, 'folder': 'Ada', 'profile': True, 'excluded': carry.EXCLUDE}
-    args = carry.helper_args(source, target, data, machine.owner)
+    args = carry.helper_args(source, target, data)
     await guard.authorize(args)
-    # An old home whose profile lives in its volume is shown it, read-only: also exactly as the product makes it.
-    await guard.authorize(carry.helper_args(source, target, data, machine.owner, source_profiles=True))
     long_base = carry.folder_name('\u754c' * 100, source.key, set())
     for folder in (long_base, carry.folder_name(long_base, source.key, {long_base})):
-        await guard.authorize(carry.helper_args(source, target, {**data, 'folder': folder}, machine.owner))
+        await guard.authorize(carry.helper_args(source, target, {**data, 'folder': folder}))
     assert args[6:8] == ['--name', f'raphael-carry-{machine.owner}-{source.key}']
     for index, value in ((3, 'host'), (5, 'cua'), (7, f'raphael-carry-{machine.owner}-' + 'b' * 16), (7, source.name),
                          (9, str(source.workspace) + ':/from'), (11, str(tmp_path / 'foreign') + ':/to'),
-                         (13, 'type=volume,source=raphael-computer-foreign-shared-profiles,target=/to/.browser-profiles'),
-                         (16, vm.BASE), (18, 'echo unsafe')):
+                         (14, vm.BASE), (16, 'echo unsafe')):
         invalid = list(args)
         invalid[index] = value
         with pytest.raises((AssertionError, ValueError)):
@@ -1362,7 +1351,7 @@ async def test_carry_guard_accepts_only_exact_offline_helper_on_registered_homes
     for change in ({'key': 'b' * 16}, {'folder': '../other'}, {'folder': None},
                    {'folder': 'Ada-' + source.key + '-' + '2' * 256}, {'excluded': []}, {'extra': True}):
         with pytest.raises(AssertionError):
-            await guard.authorize(carry.helper_args(source, target, {**data, **change}, machine.owner))
+            await guard.authorize(carry.helper_args(source, target, {**data, **change}))
     guard.carry_homes.pop(str(source.workspace))
     with pytest.raises(AssertionError, match='registered'):
         await guard.authorize(args)

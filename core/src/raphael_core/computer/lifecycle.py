@@ -2,9 +2,9 @@
 
 import asyncio
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-from .vm import GUEST, MACHINE_VOLUMES, SOCKET, VmError, compatible, exec_args, known_previous
+from .vm import GUEST, SOCKET, VmError, compatible, exec_args, known_previous
 
 
 async def repair_connection(vm, target):
@@ -92,8 +92,6 @@ async def maintain(vm, target, action, *, confirmed=False):
                 if root.is_symlink() or root.resolve() != root or workspace.is_symlink() or workspace.resolve() != root / target.unit:
                     raise VmError("outside_workspace")
                 await asyncio.to_thread(shutil.rmtree, workspace)
-            # A reset makes the computer new: the browser's sign-ins and the tools' caches go with its workspace.
-            await vm.remove_machine_volumes(target)
             vm.disk_warned.discard(target.physical)
         vm.invalidate(target)
         return await vm.start(target)
@@ -159,12 +157,11 @@ async def disk_pressure(vm, target):
         return None
     if target.physical in vm.disk_warned:
         return None
-    sizes = await vm.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "4", "du", "-x", "-k", "--max-depth=1", GUEST, *MACHINE_VOLUMES.values()]), timeout=5, limit=8000)
+    sizes = await vm.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "4", "du", "-x", "-k", "--max-depth=1", GUEST, "/home/cua/.cache"]), timeout=5, limit=8000)
     folders, workspace = [], None
     for line in sizes.stdout.splitlines() if not sizes.truncated else []:
         size, separator, path = line.partition("\t")
-        # The folders of the workspace itself, and each machine-only volume as one (its own subfolders are not listed).
-        if separator and size.isdecimal() and (PurePosixPath(path).parent == PurePosixPath(GUEST) or path in MACHINE_VOLUMES.values()):
+        if separator and size.isdecimal() and (path.startswith(GUEST + "/") or path == "/home/cua/.cache"):
             folders.append((int(size), path))
         elif separator and size.isdecimal() and path == GUEST:
             workspace = int(size)

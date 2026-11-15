@@ -12,7 +12,7 @@ import unicodedata
 
 from . import carry_runtime
 from .checkpoints import EXCLUDED
-from .vm import VmError, exec_args, machine_volume, mount_arg
+from .vm import VmError, exec_args
 
 logger = logging.getLogger(__name__)
 RECORD = '.raphael-carried.json'
@@ -29,20 +29,12 @@ HELPER_SECONDS = 1800
 ATTEMPTS = 3
 
 
-def helper_args(source, target, arguments, owner, *, source_profiles=False):
-    """The helper's one command. The browser's profiles are not in a computer's workspace folder but in its own volume
-    (`vm.MACHINE_VOLUMES`): the shared computer's is mounted over `/to/.browser-profiles` so a carried profile lands where
-    the browser reads it, and an old home whose profile has been moved to its volume (`source_profiles`) shows it read-only
-    over `/from/.browser-profiles`, so the scan and the copy see the same tree as before."""
+def helper_args(source, target, arguments):
     from .vm import IMAGE
     program = inspect.getsource(carry_runtime)
     script = 'python3 -c ' + shlex.quote(program) + ' ' + shlex.quote(json.dumps(arguments))
-    profiles = '/.browser-profiles'
     return ['run', '--rm', '--network', 'none', '--user', '0', '--name', helper_name(source),
             '-v', str(source.workspace) + ':/from:ro', '-v', str(target.workspace) + ':/to',
-            '--mount', mount_arg(machine_volume(owner, target, 'profiles'), '/to' + profiles, remote=True),
-            *(['--mount', mount_arg(machine_volume(owner, source, 'profiles'), '/from' + profiles, remote=True, readonly=True)]
-              if source_profiles else []),
             '--entrypoint', 'sh', IMAGE, '-c', script]
 
 
@@ -70,12 +62,11 @@ def folder_name(name, key, occupied):
     return name
 
 
-async def helper(vm, source, target, arguments, source_profiles=False):
+async def helper(vm, source, target, arguments):
     name = helper_name(source)
     for again in (False, True):
         try:
-            result = await vm.run_for(target, helper_args(source, target, arguments, vm.owner, source_profiles=source_profiles),
-                                      timeout=HELPER_SECONDS, limit=200000)
+            result = await vm.run_for(target, helper_args(source, target, arguments), timeout=HELPER_SECONDS, limit=200000)
         except TimeoutError:
             await stopped(vm, source, target)
             raise
@@ -183,7 +174,7 @@ async def candidates(vm, target):
 
 async def carry(vm, target):
     record = await journal(vm, target)
-    sources, held, profile_volumes = [], [], set()
+    sources, held = [], []
     try:
         for source, name in await candidates(vm, target):
             prior = record.get(source.key, {})
@@ -222,16 +213,7 @@ async def carry(vm, target):
                             raise VmError('stop_failed')
                         vm.invalidate(source)
                         await vm.close_viewer(source)
-                # A home whose computer was made again at layer 13 keeps its browser profile in a volume, not in its folder.
-                # Only the engine's own "no such volume" says there is none: a failed question is not an answer (a profile
-                # taken for absent would be reported as carried-nothing and never looked for again).
-                volume = await vm.run_for(source, ['volume', 'inspect', machine_volume(vm.owner, source, 'profiles')], limit=4000)
-                if volume.code == 0:
-                    profile_volumes.add(source.key)
-                elif 'no such volume' not in (volume.stdout + volume.stderr).lower():
-                    raise VmError('carry_source_unreadable')
-                info = await helper(vm, source, target, {'operation': 'scan', 'excluded': EXCLUDE},
-                                    source.key in profile_volumes)
+                info = await helper(vm, source, target, {'operation': 'scan', 'excluded': EXCLUDE})
                 sources.append((source, name, info))
             except Exception as error:
                 record[source.key] = {**record.get(source.key, {}), 'status': 'failed', 'reason': type(error).__name__}
@@ -253,7 +235,7 @@ async def carry(vm, target):
             record[source.key] = {'status': 'failed', 'folder': folder, 'attempts': prior.get('attempts', 0) + 1}
             await journal(vm, target, record)
             try:
-                result = await helper(vm, source, target, arguments, source.key in profile_volumes)
+                result = await helper(vm, source, target, arguments)
                 record[source.key] = {'status': 'done', **result}
                 profile_exists |= result['profile'] in ('carried', 'kept_existing')
                 occupied.add(folder)
