@@ -717,7 +717,7 @@ test('waiting control streams inline without opening the panel, and card takeove
  api.desktopControl.mockResolvedValue({...running,works:[{...work,state:'running'}]});
  host.querySelector<HTMLButtonElement>('[data-card-desktop="return"]')!.click(); await flush();
  expect(api.desktopControl).toHaveBeenLastCalledWith('one',false,'nonce'); expect(api.desktopClose).toHaveBeenCalledWith('one');
- expect(host.querySelector('.computer-card .card-status.is-done')).not.toBeNull();
+ expect(host.querySelector('.computer-card[data-desktop-settled="handed_back"]')).not.toBeNull();expect(host.querySelector('.computer-card .card-status')).toBeNull();
 });
 
 test('card takeover carries the inline frame into the larger view and handback closes the lease',async()=>{

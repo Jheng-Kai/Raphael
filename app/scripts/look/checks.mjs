@@ -2508,6 +2508,9 @@ export function checkRendered(name, context = {}) {
       } else if (card.matches('[data-owner-question][data-card-state="answered"]') && card.querySelector('.question-answer-line')) {
         // An answered question is its title and one row: the check at the row's right says what a pill said.
         require(!pill && !card.querySelector(':scope > .card-head > .card-close'), 'an answered question has no pill and no ×');
+      } else if (card.matches('[data-desktop-settled]')) {
+        // A settled handoff is its title and one word of what the owner did (R-COMP-HANDOFF-01); a settled result carries no status pill (R-CARD-15).
+        require(!pill && card.querySelector('.card-body')?.textContent.trim(), 'a settled handoff has no pill and says what the owner did');
       } else if (card.matches('[data-member-template],[data-template-connection][data-connected="false"]')) {
         require(!pill, 'a template and its unconnected requests have no invented status');
       } else {
@@ -3781,7 +3784,16 @@ export function checkRendered(name, context = {}) {
       require(frame.contentDocument.defaultView.__desktopAcceptedKeys > 0, 'synthetic keyboard input reaches the RFB surface');
       require(!calls.some(call => JSON.stringify(call.params ?? {}).includes('synthetic-owner-input')), 'owner input never enters an RPC');
     }
-    if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
+    if(name==='computer-takeover-done'){
+      require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
+      // R-COMP-HANDOFF-01 (owner, 2026-11-15): the settled card says what the owner did, in one word of its own and no status pill, and its
+      // fold tells of the handoff, never of the work's live state (the conversation's presence line says that).
+      const settled=events[0];
+      require(settled.dataset.desktopSettled==='handed_back'&&!settled.querySelector('.card-status'),'the settled handoff card carries no status pill');
+      require(settled.querySelector('.card-body').textContent.trim()==='已交回','the settled handoff card says it was handed back');
+      const fold=settled.querySelector('.card-detail');
+      require(fold&&fold.textContent.trim()==='電腦已交回給成員。'&&!/完成|正在使用電腦/.test(settled.textContent),'the fold tells of the handoff, not of the live state of the work or of a finish');
+    }
     if(name==='computer-takeover-owner'||name==='desktop-owner'){
       require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
       // Only the pill under the screen says who holds it; the screen carries no badge of its own (owner, 2026-11-13:
@@ -8248,6 +8260,37 @@ export function checkRendered(name, context = {}) {
       }
     }
     return { check: name, sidebarVisible: visible(column), fontSize: getComputedStyle(bubble).fontSize };
+  }
+  if (name === "message-text-colour") {
+    // R-MSG-COLOUR-01 (owner, 2026-11-15): a message's text is the normal text colour whatever its kind or its turn's state; the timed
+    // progress messages and the replies of a failed turn were a step paler. The real messages on screen, and a message of each kind
+    // under a turn of each state drawn into the same thread, so every rule of the real stylesheet is measured.
+    const probe = document.createElement("span");
+    probe.style.color = "var(--text)";
+    document.body.append(probe);
+    const normal = getComputedStyle(probe).color;
+    probe.remove();
+    const shown = [...document.querySelectorAll(".tn .ans")].filter(visible);
+    require(shown.length > 0, "a message is on screen");
+    for (const message of shown) {
+      const colours = [message, ...message.querySelectorAll(".message-text, .message-text p")].map(node => getComputedStyle(node).color);
+      require(colours.every(colour => colour === normal), `${message.className} draws its text in the normal colour ${normal}, not ${colours.find(colour => colour !== normal)}`);
+      require(getComputedStyle(message).opacity === "1", "a message is not faded");
+    }
+    const turn = shown[0].closest(".tn"), measured = [];
+    for (const status of ["done", "running", "error", "denied", "expired", "cancelled"]) for (const kind of ["", " progress"]) {
+      const copy = document.createElement("li");
+      copy.className = "tn";
+      copy.dataset.status = status;
+      copy.innerHTML = `<div class="ra"><div class="ra-body"><div class="chat-message"><div class="ans${kind}"><div class="message-text">Sample</div></div></div></div></div>`;
+      turn.parentElement.append(copy);
+      const text = copy.querySelector(".message-text");
+      measured.push({ status, kind: kind.trim() || "reply", bubble: getComputedStyle(copy.querySelector(".ans")).color, text: getComputedStyle(text).color });
+      copy.remove();
+    }
+    const pale = measured.filter(item => item.bubble !== normal || item.text !== normal);
+    require(!pale.length, `a message is paler than normal (${normal}): ${JSON.stringify(pale)}`);
+    return { check: name, normal, kinds: measured.length };
   }
   if (name === "member-column") return checkRendered("sidebar-shell");
   // Primary is a display position; the room's coordinator remains identity 0.

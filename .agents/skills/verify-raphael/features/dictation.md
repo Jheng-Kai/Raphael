@@ -258,7 +258,10 @@ single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
 monitor's horizontal center, 16 px above its taskbar. It expires after five seconds
 without hover. Its window never has a title bar, not even in its style, whatever tao rewrites
-(R-LEARN-WIN-01, `overlay/frame.rs`). The ordinary overlay remains click-through. Fixture pill evidence
+(R-LEARN-WIN-01, `overlay/frame.rs`). The window is there only while a notice is: it is made hidden and with an empty
+title, shown without activation once the notice is sized, placed and shaped, and hidden again 220 ms after the notice ends
+(Undo, expiry or a click) unless a new one came; no pale bar and no English title stays on a Chinese interface
+(R-LEARN-WIN-02, `learned.rs`). The ordinary overlay remains click-through. Fixture pill evidence
 does not establish native hit-testing, positioning, paste or persistence.
 
 `stable-click` records the clicked view control and persistent content above it,

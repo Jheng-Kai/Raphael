@@ -145,7 +145,7 @@ from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from .routine_outcome import failure as routine_failure
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
-from .outcomes import named_files, worker_trace
+from .outcomes import computer_files, named_files, worker_trace
 from .handback import title
 from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
 
@@ -249,7 +249,7 @@ MAX_HANDOFFS = 24
 RESULTS_CHARS = 1_000_000
 # Where work that was to leave a file is looked for, and how much of it: folders that are not the member's own
 # work, the most files looked at, and the most kept as evidence.
-ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs"))
+ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs", ".browser-profiles"))
 ARTIFACT_SCAN = 20_000
 ARTIFACT_KEEP = 20
 ARTIFACT_MAX_BYTES = 64 * 1024 * 1024
@@ -2822,29 +2822,36 @@ class BackgroundService:
         """Before work that was to leave a file is judged: write down, as its evidence, the files found in the
         member's computer that are newer than the task (the ones its `done_when` names, else the newest
         ones), with the digest of the bytes found there. The member's word that it made one is no evidence.
-        Explicit absolute owner-PC paths also count; a missing workspace never waives the requirement."""
+        Explicit absolute owner-PC paths also count, and so do the paths the member names inside its computer
+        (`/home/cua/team/...`); a missing workspace never waives the requirement."""
         if not task.requires_artifact:
             return True
         # Shared mounts can round modification times down to whole seconds.
         fresh_since_ms = since_ms - 1000
         baselines = {str(Path(item['uri'])): item for item in self._store.evidence(task.id) if item['kind'] == 'file_before'}
-        for path in named_files(task.done_when + '\n' + report + '\n' + '\n'.join(baselines)):
-            if self._gate.data_floor.access('read_file', {'path': str(path)}) is not None:
-                continue
+
+        def keep(path: Path, root: Path) -> bool:
+            """Record `path` (a file of `root`) when it is new, or changed since the hand-off, and can be read."""
             try:
                 info = path.stat()
                 before = baselines.get(str(path.resolve(strict=True)))
                 if info.st_size > ARTIFACT_MAX_BYTES:
-                    continue
+                    return False
                 if before is not None:
                     if not self._store.file_changed(before):
-                        continue
+                        return False
                 elif info.st_mtime * 1000 < fresh_since_ms:
-                    continue
-                self._store.verify_artifact(task.id, "artifact", path, workspace=path.parent,
+                    return False
+                self._store.verify_artifact(task.id, "artifact", path, workspace=root,
                     mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+                return True
             except (OSError, ValueError):
+                return False
+
+        for path in named_files(task.done_when + '\n' + report + '\n' + '\n'.join(baselines)):
+            if self._gate.data_floor.access('read_file', {'path': str(path)}) is not None:
                 continue
+            keep(path, path.parent)
         try:
             places = self._workspace_of(task.member_id)
         except Exception:  # whatever says where the files are, it is not the work's failure
@@ -2853,9 +2860,16 @@ class BackgroundService:
         roots = [root for root in (places if isinstance(places, (list, tuple)) else [places]) if root is not None and root.is_dir()]
         if not roots:
             return True
+        # What the member names by its path inside its computer is that file, whichever of the two folders holds it here.
+        for below in computer_files(task.done_when + '\n' + report):
+            for root in roots:
+                path = root.joinpath(*below.parts)
+                if path.is_file() and self._gate.data_floor.access('read_file', {'path': str(path)}) is None:
+                    keep(path, root)
         wanted = {name.lower() for name in FILE_NAMES.findall(task.done_when)}
-        found, seen = [], 0
+        found = []
         for root in roots:
+            seen = 0  # each folder has its own budget: a large one never hides the other
             for base, folders, names in os.walk(root):
                 folders[:] = [folder for folder in folders if folder not in ARTIFACT_SKIP]
                 for name in names:
@@ -2869,16 +2883,13 @@ class BackgroundService:
                         found.append((info.st_mtime, str(path), root))
                 if seen > ARTIFACT_SCAN:
                     break
-        for _, path, root in sorted(found, reverse=True)[:ARTIFACT_KEEP]:
-            path = Path(path)
-            try:
-                before = baselines.get(str(path.resolve(strict=True)))
-                if before is not None and not self._store.file_changed(before):
-                    continue
-                self._store.verify_artifact(task.id, "artifact", path, workspace=root,
-                                            mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
-            except (OSError, ValueError):
-                continue
+        # The newest that can be read and are kept: a file this PC cannot read takes none of the places.
+        kept = tried = 0
+        for _, path, root in sorted(found, reverse=True):
+            if kept >= ARTIFACT_KEEP or tried >= ARTIFACT_KEEP * 10:
+                break
+            tried += 1
+            kept += keep(Path(path), root)
         return True
 
     def _conclude(

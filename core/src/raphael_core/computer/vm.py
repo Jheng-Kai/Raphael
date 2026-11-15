@@ -200,6 +200,18 @@ def resources(target):
     return (6, 4) if target.container == "shared" else (MEMORY_GB, 2)
 
 
+def bound_folder(path):
+    """Make a folder of this PC that a computer binds. On Windows, Python 3.12.4 and later give a folder made with mode 0o700
+    a DACL closed to all but its owner, and the files the engine makes in it inherit that: it makes them as another account,
+    so the owner could not read what a member made there (owner, 2026-11-15, task 797). There the folder takes the access of
+    the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is his to do."""
+    path = Path(path)
+    if os.name == "nt":
+        path.mkdir(parents=True, exist_ok=True)
+    else:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+
 def mount_arg(path, destination=GUEST, *, remote=False):
     stream = io.StringIO(newline="")
     csv.writer(stream, lineterminator="").writerow(["type=volume" if remote else "type=bind", f"source={path}", f"target={destination}"])
@@ -1033,8 +1045,8 @@ class LocalVm:
             if not state.get("image"):
                 raise VmError("image_missing")
             if not target.remote:
-                target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
-                target.shared.mkdir(parents=True, exist_ok=True, mode=0o700)
+                await asyncio.to_thread(bound_folder, target.workspace)
+                await asyncio.to_thread(bound_folder, target.shared)
             self.validate_storage(target)
             self.data.made(target)  # before the engine makes it: a computer unrecorded could never be removed
             result = await self.run_for(target, run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
@@ -1059,7 +1071,7 @@ class LocalVm:
                         raise VmError("team_layout_failed")
                 else:
                     for name in ("context", "meetings", "projects"):
-                        (target.shared / name).mkdir(parents=True, exist_ok=True, mode=0o700)
+                        await asyncio.to_thread(bound_folder, target.shared / name)
                 await self._wallpaper(target)
                 return state
             if not repaired and state["state"] == "running" and not self.unit_held(target) and self.unit_active(target) <= 1 and not self.unit_active(target, excluding=target.key) and not self.unit_busy(target, excluding=target.key):
