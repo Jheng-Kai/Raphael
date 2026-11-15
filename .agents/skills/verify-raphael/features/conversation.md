@@ -286,7 +286,7 @@ the files and the quote, `replaceTurnId`; `Outgoing.replaces` keeps the message'
 replacing, with the failure card. Giving the edit up (`abandonEdit`) empties the composer and draws the bubble again: Escape in the composer, at once while it holds what
 編輯 gave it (`editUntouched`), and through the app's cancel gesture once it changed (the voice slot shows Esc and 「再按一次取消」); a running task or a recording keeps its own
 Escape. `saveComposerDraft` never keeps a draft that replaces a message, so leaving the conversation gives the edit up and nothing of it comes back as a second copy.
-Not covered: an unsent draft the composer held is replaced by the message (as it was before R-UI-148); small files (4 MB or less) are read back and sent as bytes again, not by stored id.
+An unsent draft the composer held is kept aside (`editOrigin.before`) and comes back once the edit is sent or given up (`resumeDraft`), unless something newer is in the composer; words typed or a file added while the message's files are read stop 編輯 from writing over them. Not covered: small files (4 MB or less) are read back and sent as bytes again, not by stored id.
 
 **The edit stands where its message stood.** Found by reading, then by running the real core with a member, its own conversation id and routine turns
 newer than the owner's message: the core removed the message and wrote the edit at the end of the thread, and when the message was the newest the new row
