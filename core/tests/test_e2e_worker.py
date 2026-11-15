@@ -93,6 +93,13 @@ def tool_call_under_way(core):
     )
 
 
+def stopped(core):
+    """Whether a task ended as stopped. A stop somebody asked for says nothing (R-STOP-01): no report is said on the
+    overlay, so the end is read from the task's own move."""
+    return any(n["params"]["state"] == "cancelled" and not n["params"]["running"]
+               for n in core.notifications if n["method"] == "worker.changed")
+
+
 def worker_pids(core):
     return [int(pid) for pid in PID.findall(bytes(core.stderr))]
 
@@ -189,11 +196,12 @@ def test_a_message_while_a_task_runs_joins_it_at_once(spawn):
     assert answer["steered"] is True
     assert time.monotonic() - started < 10
     result(core, "worker.cancel", {})
-    wait_for(core, lambda: reports(core))
+    wait_for(core, lambda: stopped(core))
+    assert not reports(core)
     assert core.close(timeout=30) == 0
 
 
-def test_a_task_the_user_stops_is_reported_as_stopped_and_the_worker_stays_for_the_next(spawn):
+def test_a_task_the_user_stops_ends_quietly_and_the_worker_stays_for_the_next(spawn):
     core = spawn()
     connect_the_fake_server(core, look="T0", slow="T0")
     ask(core, "[delegate] this one is slow")
@@ -202,16 +210,13 @@ def test_a_task_the_user_stops_is_reported_as_stopped_and_the_worker_stays_for_t
     # lands in either, and either way the next task must not wait behind the stopped one's server.
     wait_for(core, lambda: tool_call_under_way(core))
     assert result(core, "worker.cancel", {}) == {"cancelled": True}
-    wait_for(core, lambda: reports(core))
-    [stopped] = reports(core)
-    assert stopped["state"] == "cancelled"
-    assert stopped["text"] == (  # the search, then the slow tool
-        "Task stopped after 2 tool calls. One was cut off; whether it ran is unknown."
-    )
+    # The stop ends the task and says nothing: no report, no count of the calls it made (R-STOP-01).
+    wait_for(core, lambda: stopped(core))
+    assert not reports(core)
     # The next task is carried out as usual.
     ask(core, "[delegate] now look something up")
-    wait_for(core, lambda: len(reports(core)) == 2)
-    assert reports(core)[1]["state"] == "done"
+    wait_for(core, lambda: len(reports(core)) == 1)
+    assert reports(core)[0]["state"] == "done"
     assert core.close(timeout=30) == 0
 
 
