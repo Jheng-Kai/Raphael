@@ -3686,6 +3686,17 @@ export function checkRendered(name, context = {}) {
     require(open ? Object.keys(seen).sort().join() === 'failed,waiting' : Object.keys(seen).sort().join() === 'done,failed,message,waiting', `the lights drawn are the ones earned: ${Object.keys(seen)}`);
     return { check: name, lights: Object.keys(seen) };
   }
+  if (name === "page-window-height" || name === "page-window-stable") {
+    // R-PAGE-12: a page sized by its window says its height once, near the area's, and the frame stays there.
+    const box = document.querySelector(".pgv-frame-box"), area = document.querySelector(".pgv-page");
+    const height = parseFloat(box?.style.getPropertyValue("--pgv-h") ?? "");
+    require(height > 0, "the page said its height");
+    require(height < area.clientHeight * 1.5, `the page stops near its own height: ${height} px for an area of ${area.clientHeight}`);
+    if (name === "page-window-height") { window.__pageWindowHeight = height; return { check: name, height }; }
+    require(height === window.__pageWindowHeight, `it never grows on: ${window.__pageWindowHeight} px, then ${height} px`);
+    require(area.scrollHeight < area.clientHeight * 2, `the area has an end: ${area.scrollHeight} px to scroll in ${area.clientHeight}`);
+    return { check: name, height };
+  }
   if (name === "sidebar-light-steady") {
     // R-SIDE-04 (owner, 2026-11-15: 「這個狀態不要因為 hover 在上面移動」): a row draws no 「more」 (its right click is the menu), so
     // under the pointer nothing makes room for one: the row's light and words stand where every other row's do.

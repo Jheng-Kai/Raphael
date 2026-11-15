@@ -112,6 +112,7 @@ export async function run(options) {
       };
     }
     if (options.selected.some(scene => scene.fixture?.pageBase)) fixture.pageBaseDocs = await pageBaseDocuments(fixture.pageBaseHtml);
+    if (options.selected.some(scene => scene.fixture?.pageWindow)) fixture.pageWindowDocs = await pageBaseDocuments(fixture.pageWindowHtml);
     if (options.selected.some(scene => scene.fixture?.coreFixtures)) Object.assign(fixture, await coreFixtures());
     // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
     if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;

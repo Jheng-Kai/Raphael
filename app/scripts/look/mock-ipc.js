@@ -1236,7 +1236,8 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // What the core serves of an HTML page that writes no style of its own: the page with the app's base style in front of it,
         // made by the core itself for each theme before the run (runner.mjs `pageBaseDocuments`).
-        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageBaseDocs[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
+        // `pageWindow`: a page laid out as a screen, a side column one window tall plus its padding (R-PAGE-12).
+        if (p.id === "page-base") return { url: `data:text/html;charset=utf-8,${encodeURIComponent((variant.pageWindow ? data.pageWindowDocs : data.pageBaseDocs)[p.theme === "dark" ? "dark" : "light"])}`, title: "東京行程候選清單", rev: 1, height: 900, source: "html", server: null };
         // Not a file of the dev server, which would write its own client into the page.
         // A page its member changed (`state.updatePage`) is another page: the news page's last heading, the product's price.
         if (p.id === "page-news") return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageNewsHtml.replace("__THEME__", p.theme === "dark" ? "dark" : "").replace("練習問題", (state.pageRevs[p.id] ?? 1) > 1 ? "練習問題（已更新）" : "練習問題"))}`, title: "每日新聞日文學習 2026-11-11", rev: state.pageRevs[p.id] ?? 1, height: 900, source: "html", server: null };

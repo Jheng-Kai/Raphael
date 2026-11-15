@@ -27,6 +27,9 @@ const baseOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { acti
 const baseFixture = { baseTurn: true, pageBase: true };
 
 export default [
+  // Owner, 2026-11-15: 「他現在看起來是會變得無限長 看不到底部 可以一直滑動」: a side column `height: 100vh` with padding said a taller
+  // page each time its frame grew, up to 20000 px. It opens at its own height and stops there.
+  scene("page-window-sized", "A page whose side column is one window tall plus its padding opens at its own height and never grows on", [member(1), wait('.pg-body[data-state="ready"] iframe'), click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { ...lookCall("letTimePass"), wait: 800 }, check("page-window-height"), { ...lookCall("letTimePass"), wait: 2500 }, check("page-window-stable"), { action: "wheel", selector: ".pgv-page", deltaY: 6000 }, { ...lookCall("letTimePass"), wait: 600 }], { baseTurn: true, pageWindow: true }),
   scene("page-product", "A member shows a product page as a card: its title row and the top of the page, clipped, nothing in it to press", [...shown, check("page-card")], { pageTurn: true }),
   scene("page-buy", "Page text appends to the focused draft without sending", [...shown, type('.page-agent .cmp-input', "我原本的草稿"), ...larger, { action: "frame-click", selector: "#buy" }, wait(".page-agent .cmp-page-note"), check("page-appended")], { pageTurn: true }),
   scene("page-composer-grows", "Lines typed under a thread whose last item is a card grow the composer, and the thread stays at its bottom", [...shown, check("composer-grows-before"), type('.page-agent .cmp-input', "這是一段很長的草稿，一直寫到換好幾行為止。".repeat(14)), { action: "wait-scroll-end", selector: ".mb-chat .ra-scroll" }, check("composer-grows-keeps-bottom")], { pageTurn: true }),
