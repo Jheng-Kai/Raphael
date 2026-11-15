@@ -1,6 +1,6 @@
 """A member's own background work is never queued for ever (R-PUMP-01).
 
-The owner's 蜜莉姆 and 工程師 stayed "working" for hours: each conversation turn that handed work to its own member waited for
+Two of the owner's members stayed "working" for hours: each conversation turn that handed work to its own member waited for
 a child that never began. The cause was start-up. The service is built before the event loop runs, and `use_team` puts back
 what the last run left queued: a task carried out then was parked on a loop that never runs, so it never started or ended,
 and held its member's place (and one of the three places) for ever.

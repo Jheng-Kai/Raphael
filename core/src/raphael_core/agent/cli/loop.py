@@ -17,7 +17,7 @@ from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...services.video import is_video, sample_all
 from ...worker.tool_guardrails import ToolGuardrails
-from ..answers import MESSAGE_RULES, MESSAGE_BREAK, message_parts, parse_reply, public_reply, pending_replies
+from ..answers import MESSAGE_RULES, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..failure import AgentFailure
 from ..mcp_server import RaphaelMcp
@@ -244,12 +244,12 @@ class CliLoop:
         self.ledger, self.language, self.plain = ledger, language, plain
         mcp_names = "Raphael and computer" if any(item["function"]["name"].startswith("computer__") for item in tools) else "Raphael"
         self.system = system + "\n" + CLI_PROGRESS_RULES + language_rule(owner_language) + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
-        self.system += (
-            "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
-            "several (an answer, then a separate exercise or question): then put a line with only "
-            f"{MESSAGE_BREAK} between them. Preserve the complete answer. Never split one thought or pad to fill. "
-            "Never output a JSON reply envelope."
-        )
+        # The model catalogue gives Codex its own sub-agent tools whatever its feature flags say (0.167: spawn_agent, followup_task);
+        # asked to hand work to a colleague, a member reached for them, they refused the colleague's name and nothing was handed on.
+        self.system += "A colleague gets work only through handoff, never spawn_agent, followup_task or another sub-agent tool. "
+        # When a second message is due and how it is marked is MESSAGE_RULES' (in CLI_PROGRESS_RULES above), said once.
+        self.system += ("Reply in plain text (Markdown is fine). Preserve the complete answer. Never split one thought or pad to fill. "
+                        "Never output a JSON reply envelope.")
         # Only Claude Code asks through `approve` (its --permission-prompt-tool); Codex and Antigravity ask natively. Live,
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
         if structured is not None:

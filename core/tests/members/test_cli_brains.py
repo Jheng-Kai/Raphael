@@ -142,7 +142,9 @@ json.loads(sys.stdin.readline())
 print(json.dumps({"type":"assistant", "message":{"content":[{"type":"text", "text":"Still checking."}]}}),flush=True)
 print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=True)
 '''.replace("ANSWER", repr(answer)))
-    result = await typed(rig, "Inspect this", teacher.id, language="en")
+    # Words that say English firmly: what a member says while it works is shown in the owner's language (R-LANG-05), and two words
+    # say none, so the member's own Chinese profile would decide and the English narration would be held back.
+    result = await typed(rig, "Please inspect this file and tell me what you find", teacher.id, language="en")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     replies = [message["text"] for message in turn["messages"] if message["kind"] == "reply"]
     if answer:

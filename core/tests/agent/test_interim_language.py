@@ -51,7 +51,7 @@ def test_one_english_word_says_nothing_about_the_owners_language_but_a_chinese_m
     ("ko", "테스트를 실행합니다", True),
     ("en", ENGLISH, True),
     ("en", CHINESE, False),
-    ("en", "I will read the notes first, 蜜莉姆.", True),  # an English line that names the owner's word
+    ("en", "I will read the notes first, 小晴.", True),  # an English line that names the owner's word
     ("fr", ENGLISH, True),  # the Latin-script languages are one family: their words say too little to hide a line for
     (None, ENGLISH, True),  # no language known, nothing held back
     ("xx", ENGLISH, True),
@@ -68,6 +68,15 @@ def test_a_cli_is_told_plainly_that_every_text_it_writes_is_in_the_owners_langua
                        ledger=None, language="en", plain=True, system="", user="x", tools=[], progress=print,
                        thinking=lambda text: None, event=lambda text: None, execute=None, owner_language="zh-TW")
     assert named in loop.system
+
+
+def test_a_cli_hands_work_to_a_colleague_only_with_raphaels_handoff():
+    # Codex 0.167 has sub-agent tools of its own whatever its feature flags say; asked to hand work on, a member called
+    # followup_task with the colleague's name, Codex refused it, and nothing was handed on (live S03, 0 of 6 before this line).
+    loop = cli.CliLoop(brains=SimpleNamespace(environ={}, home=None), sessions=None, member_id=5, model="cli:codex:fake",
+                       ledger=None, language="en", plain=True, system="", user="x", tools=[], progress=print,
+                       thinking=lambda text: None, event=lambda text: None, execute=None)
+    assert "A colleague gets work only through handoff, never spawn_agent, followup_task" in loop.system
 
 
 # --- the loop --------------------------------------------------------------------------------------------------------
