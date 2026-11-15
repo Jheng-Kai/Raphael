@@ -27,6 +27,42 @@ def safe(root, relative):
     return path
 
 
+def own_tree(tree):
+    """Hand a tree to the computer's user. Only ever a tree this run staged inside its own temporary folder: a walk that
+    starts at a path the members prepared (a link named .browser-profiles) would hand out whatever it points to. A member
+    that swaps the staging folder's own name while this runs can still turn the walk, but only inside this throwaway
+    container: its one writable mount is the workspace every member owns, /from is read-only."""
+    for parent, dirs, names in os.walk(tree, followlinks=False):
+        os.chown(parent, 1000, 1000, follow_symlinks=False)
+        for name in dirs + names:
+            os.chown(Path(parent) / name, 1000, 1000, follow_symlinks=False)
+
+
+def stage(prefix, parent):
+    """A staging folder, handed over at once: this helper is root, and a copy that is cut short (its container killed)
+    leaves the folder behind; a member could not remove what stayed root's."""
+    folder = tempfile.TemporaryDirectory(prefix=prefix, dir=parent)
+    os.chown(folder.name, 1000, 1000, follow_symlinks=False)
+    return folder
+
+
+def hand_over_leftovers(destination):
+    """The staging folders of a helper that was killed mid-copy, and everything it had written in them, become the
+    computer's user's own, so the member can remove them. Looked for only where staging folders are made, never through
+    a link."""
+    for relative, prefix in (('.', '.raphael-carry-'), ('.browser-profiles/driver', '.carry-profile-')):
+        try:
+            base = safe(destination, relative)
+            if base.is_symlink() or not base.is_dir():
+                continue
+            for entry in os.listdir(base):
+                path = base / entry
+                if entry.startswith(prefix) and path.is_dir() and not path.is_symlink():
+                    own_tree(path)
+        except (ValueError, OSError):
+            continue
+
+
 def inventory(source, excluded):
     files, size, skipped = [], 0, 0
     for parent, dirs, names in os.walk(source, followlinks=False):
@@ -64,15 +100,7 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
               'excluded': sorted(excluded), 'skipped_links_or_special': skipped,
               'folder': args['folder'], 'datasets': [], 'profile': 'skipped'}
 
-    def own(tree):
-        # Only ever a tree this run staged inside its own temporary folder: a walk that starts at a path the
-        # members prepared (a link named .browser-profiles) would hand out whatever it points to. A member that
-        # swaps the staging folder's own name while this runs can still turn the walk, but only inside this
-        # throwaway container: its one writable mount is the workspace every member owns, /from is read-only.
-        for parent, dirs, names in os.walk(tree, followlinks=False):
-            os.chown(parent, 1000, 1000, follow_symlinks=False)
-            for name in dirs + names:
-                os.chown(Path(parent) / name, 1000, 1000, follow_symlinks=False)
+    own = own_tree
 
     def own_folders(*relatives):
         # Folders this run may have made on the way, one by one and checked again; never their contents.
@@ -80,6 +108,7 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
             if os.path.lexists(destination / relative):
                 os.chown(safe(destination, relative), 1000, 1000, follow_symlinks=False)
 
+    hand_over_leftovers(destination)
     # Sign-ins first: they are what can no longer be carried once the browser has started on an empty profile.
     if args['profile']:
         target = safe(destination, PROFILE)
@@ -89,7 +118,7 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
             target.parent.mkdir(parents=True, exist_ok=True)
             # Before the long copy: the browser that could not wait must be able to make its own profile here.
             own_folders('.browser-profiles', '.browser-profiles/driver')
-            with tempfile.TemporaryDirectory(prefix='.carry-profile-', dir=target.parent) as temporary:
+            with stage('.carry-profile-', target.parent) as temporary:
                 staged = Path(temporary) / 'main'
                 shutil.copytree(safe(source, PROFILE), staged, symlinks=True,
                                 ignore=shutil.ignore_patterns(*PROFILE_LEFT))
@@ -106,7 +135,7 @@ def execute(args, source=Path('/from'), destination=Path('/to')):
     # Above the limit only the files stay where they are: the home's sign-ins and datasets are still carried.
     if size <= LIMIT and not existing:
         # Publish a complete folder once, so failure before rename cannot expose a partial file set.
-        with tempfile.TemporaryDirectory(prefix='.raphael-carry-', dir=destination) as temporary:
+        with stage('.raphael-carry-', destination) as temporary:
             staged = Path(temporary) / 'files'
             staged.mkdir()
             for relative in files:

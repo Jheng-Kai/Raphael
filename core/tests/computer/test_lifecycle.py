@@ -1,13 +1,14 @@
 """Lifecycle contracts use the fake Docker runner and synthetic disk output only."""
 
 import asyncio
+import csv
 import json
 
 import pytest
 
 from raphael_core.brain.settings import checked
 from raphael_core.computer.lifecycle import disk_pressure, maintain, repair_connection
-from raphael_core.computer.vm import GUEST, LABEL, Result, VmError
+from raphael_core.computer.vm import GUEST, LABEL, Result, VmError, machine_volume
 from raphael_core.computer.viewer import DesktopViewer
 from .test_vm import container, desktop  # noqa: F401
 from .test_vm import CatalogBridge, EmptyHub
@@ -23,16 +24,18 @@ def previous_computer(desktop, request):
     vm.settings.set('computer_ssh_alias', 'review-host' if remote else '')
     target = vm.target(1)
     runtime.raw = container(vm, target, runtime)
+    runtime.raw["Mounts"] = [mount for mount in runtime.raw["Mounts"] if mount["Destination"] not in (f"{GUEST}/.browser-profiles", "/home/cua/.cache")]
+    runtime.raw["HostConfig"]["Mounts"] = [mount for mount in runtime.raw["HostConfig"]["Mounts"] if mount["Target"] not in (f"{GUEST}/.browser-profiles", "/home/cua/.cache")]
     runtime.raw['Image'] = 'sha256:previous-image'
     runtime.raw['Config']['Labels'][f'{LABEL}.layer'] = str(layer)
     # Layer 5 was the first to say its screen count; the two before it had no such entry.
-    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC'] + (['RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'] if layer in (5, 6) else [])
+    runtime.raw['Config']['Env'] = ['VNC_PW=private', 'TZ=UTC'] + (['RAPHAEL_SCREENS=1', 'VNC_RESOLUTION=1280x900'] if layer >= 5 else [])
     memory = (2 if layer == 3 else 3) * 1024**3
     runtime.raw['HostConfig'].update(Memory=memory, MemorySwap=memory)
     return vm, target, runtime
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5, 6)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5, 6, 12)], indirect=True)
 @pytest.mark.parametrize('action', ['restart', 'update', 'repair', 'reset'])
 async def test_previous_computer_maintenance_rebuilds_without_starting_old_image(previous_computer, action):
     vm, target, runtime = previous_computer
@@ -40,20 +43,25 @@ async def test_previous_computer_maintenance_rebuilds_without_starting_old_image
 
     async def runner(args, **kwargs):
         actual = args[2:] if args[:1] == ['--host'] else args
-        if actual[0] == 'run':
+        if actual[0] == 'run' and '--entrypoint' not in actual:
             runtime.raw = container(vm, target, runtime)
         return await original(args, **kwargs)
 
     vm.run = runner
     assert (await maintain(vm, target, action, confirmed=action == 'reset'))['ready']
     assert sum(args[0] == 'rm' for args, _ in runtime.calls) == 1
-    assert sum(args[0] == 'run' for args, _ in runtime.calls) == 1
+    assert sum(args[0] == 'run' and '--entrypoint' not in args for args, _ in runtime.calls) == 1
+    # The volumes are made ready (and a profile still in the workspace moved into its volume) before the container is.
+    assert sum(args[0] == 'run' and '--entrypoint' in args for args, _ in runtime.calls) == 1
     assert not any(args[0] == 'start' for args, _ in runtime.calls)
-    assert [args for args, _ in runtime.calls if args[0] == 'volume'] == (
-        [['volume', 'rm', str(target.workspace)]] if action == 'reset' and target.remote else [])
+    removed_volumes = [args[-1] for args, _ in runtime.calls if args[:2] == ['volume', 'rm']]
+    expected_volumes = ([str(target.workspace)] if action == 'reset' and target.remote else [])
+    if action == 'reset':
+        expected_volumes += [machine_volume(vm.owner, target, kind) for kind in ('profiles', 'cache')]
+    assert removed_volumes == expected_volumes
 
 
-@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5, 6)], indirect=True)
+@pytest.mark.parametrize('previous_computer', [(remote, layer) for remote in (False, True) for layer in (3, 4, 5, 6, 12)], indirect=True)
 async def test_previous_member_data_deletion_needs_no_new_image_or_start(previous_computer):
     vm, target, runtime = previous_computer
     runtime.built = False
@@ -122,16 +130,26 @@ async def test_maintenance_is_targeted_and_only_confirmed_reset_removes_workspac
     original = vm.run
     async def runner(args, **kwargs):
         result = await original(args, **kwargs)
-        if args[0] == "run":
+        if args[:2] == ["run", "-d"]:
             runtime.raw = container(vm, target, runtime)
         return result
     vm.run = runner
     await maintain(vm, target, action, confirmed=action == "reset")
     assert marker.exists() == (action != "reset")
     assert shared.read_text() == "team data"
-    mutations = [args for args, _ in runtime.calls if args[0] in ("stop", "rm", "start", "run")]
+    mutations = [args for args, _ in runtime.calls if args[0] in ("stop", "rm", "start", "run") and args[:2] != ["run", "--rm"]]
     assert mutations and all(target.name in args for args in mutations)
-    assert not any(args[:2] == ["volume", "rm"] for args, _ in runtime.calls)
+    # The one helper container (the volumes made ready) is given this computer's own folder and volumes, nothing else.
+    # (A restart makes nothing again, so it needs none.)
+    helpers = [args for args, _ in runtime.calls if args[:2] == ["run", "--rm"]]
+    assert len(helpers) == (0 if action == "restart" else 1)
+    for helper in helpers:
+        sources = {next(csv.reader([helper[i + 1]]))[1] for i, value in enumerate(helper[:-1]) if value == "--mount"}
+        assert sources == {f"source={target.workspace}", f"source={machine_volume(vm.owner, target, 'profiles')}",
+                           f"source={machine_volume(vm.owner, target, 'cache')}"}
+    # Only a confirmed reset removes anything of the computer's: its own two machine-only volumes, with the workspace.
+    assert [args[-1] for args, _ in runtime.calls if args[:2] == ["volume", "rm"]] == (
+        [machine_volume(vm.owner, target, kind) for kind in ("profiles", "cache")] if action == "reset" else [])
     assert not vm.maintenance and not vm.lifecycle
 
 
@@ -384,7 +402,7 @@ async def test_remote_reset_removes_only_the_confirmed_workspace_volume(desktop)
     async def runner(args, **kwargs):
         result = await original(args, **kwargs)
         command = args[2:] if args[:1] == ['--host'] else args
-        if command[0] == 'run':
+        if command[:2] == ['run', '-d']:
             runtime.raw = container(vm, target, runtime)
         return result
     vm.run = runner
@@ -392,7 +410,8 @@ async def test_remote_reset_removes_only_the_confirmed_workspace_volume(desktop)
         await maintain(vm, target, 'reset')
     assert not runtime.calls
     await maintain(vm, target, 'reset', confirmed=True)
-    assert [args for args, _ in runtime.calls if args[:2] == ['volume','rm']] == [['volume','rm',str(target.workspace)]]
+    removed = [args for args, _ in runtime.calls if args[:2] == ['volume','rm']]
+    assert removed == [['volume','rm',str(target.workspace)], *(['volume','rm','-f',machine_volume(vm.owner, target, kind)] for kind in ('profiles', 'cache'))]
     assert not any(str(target.shared) in args for args, _ in runtime.calls if args[:2] == ['volume','rm'])
 
 
@@ -475,7 +494,7 @@ async def test_update_rebuilds_on_the_current_image_without_pulling_or_losing_wo
     original = vm.run
     async def runner(args, **kwargs):
         result = await original(args, **kwargs)
-        if args[0] == 'run':
+        if args[:2] == ['run', '-d']:
             runtime.raw = container(vm, target, runtime)
         return result
     vm.run = runner

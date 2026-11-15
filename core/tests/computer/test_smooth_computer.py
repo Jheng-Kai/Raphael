@@ -145,7 +145,7 @@ def test_opening_a_page_is_its_own_read_and_a_click_after_it_still_needs_one():
     assert not check.required
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v12"
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v13"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):
@@ -295,8 +295,10 @@ async def test_idle_and_close_preserve_container_and_browser_workspace(desktop):
 async def test_image_upgrade_announces_before_removal_and_preserves_workspace(desktop, layer, memory):
     vm, target, runtime = desktop
     old_workspace = target.workspace
-    runtime.raw["Image"] = "sha256:old-image"
     from raphael_core.computer.vm import LABEL
+    from .test_housekeeping import earlier_layer
+    earlier_layer(runtime.raw, layer)  # every layer before 13 mounted the workspace only
+    runtime.raw["Image"] = "sha256:old-image"
     runtime.raw["Config"]["Labels"][f"{LABEL}.layer"] = layer
     runtime.raw["Config"]["Env"] = ['VNC_PW=private'] + (['RAPHAEL_SCREENS=1'] if layer in ('5', '6') else [])
     runtime.raw["HostConfig"].update(Memory=memory * 1024**3, MemorySwap=memory * 1024**3, NanoCpus=2 * 10**9)

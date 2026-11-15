@@ -51,8 +51,11 @@ NO_FIREFOX = ('for found in /usr/bin/firefox /usr/bin/firefox.real /usr/bin/fire
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
               "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
               "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9",
-              "10": "raphael/cua-local-vm:driver-0.37.0-v10", "11": "raphael/cua-local-vm:driver-0.37.0-v11"}
+              "10": "raphael/cua-local-vm:driver-0.37.0-v10", "11": "raphael/cua-local-vm:driver-0.37.0-v11",
+              "12": "raphael/cua-local-vm:driver-0.37.0-v12"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
+# A browser profile as an earlier layer kept it: in the workspace folder, where the next layer must find it again.
+PROFILE_FIXTURE = "mkdir -p /home/cua/workspace/.browser-profiles/driver/main && printf signed-in > /home/cua/workspace/.browser-profiles/driver/main/signin.txt"
 # A panel leads with its three launchers, 48 px each (146 px with its border, measured), and its window list follows
 # them (image layer 12): it is as wide as that and its windows' buttons, and its terminal launcher is 121 px from its left.
 LAUNCHERS_PX, TERMINAL_LAUNCHER_X, PANEL_HIGH = 146, 121, 49
@@ -190,12 +193,19 @@ def strip_change(before, after, area):
 def previous_args(target, owner, password, layer="4"):
     # The run arguments a release of that layer made. Layer 4 (release 1.2.0) had no screen variables yet;
     # layer 5 differs from today's only by its label and image.
-    args = vm.run_args(target, owner, password)
+    # Layers before 13 had no machine-only volumes and no locale variables, and the shared computer was always 6 GiB / 4 CPUs.
+    args = vm.run_args(target, owner, password, size=vm.SHARED_SIZE)
     current = f"{vm.LABEL}.layer=" + vm.IMAGE_LABELS[f"{vm.LABEL}.layer"]
     result, index = [], 0
     while index < len(args):
         value = args[index]
         if layer == "4" and value == "-e" and args[index + 1].startswith(("RAPHAEL_SCREENS=", "VNC_RESOLUTION=")):
+            index += 2
+            continue
+        if value == "-e" and args[index + 1].startswith(("LANG=", "LC_ALL=")):
+            index += 2
+            continue
+        if value == "--mount" and any(f"target={destination}" in args[index + 1].split(",") for destination in vm.MACHINE_VOLUMES.values()):
             index += 2
             continue
         if value == current:
@@ -336,13 +346,39 @@ class IsolatedDocker:
                 f"Refused container {name}: expected owner {self.owner}")
         return data
 
+    def machine_volume(self, name):
+        """One of this run's own machine-only volumes (`vm.MACHINE_VOLUMES`), by its exact form."""
+        return bool(re.fullmatch(re.escape(self.prefix) + r"(?:[0-9a-f]{16}|shared)-(?:" + "|".join(vm.MACHINE_VOLUMES) + ")", name))
+
     async def authorize(self, args):
         require(bool(args), "Expected a Docker command")
         command = args[0]
         if command == "run":
+            if args[1:7] == ['--rm', '--network', 'none', '--user', '0', '--mount']:
+                # The volumes' preparation before a container is made: this run's workspace and volumes, this run's image.
+                require(args[-5:-1] == ['--entrypoint', 'sh', self.tag, '-c'], "Expected this run's image and shell")
+                mounts = [dict(part.split('=', 1) for part in next(csv.reader([args[i + 1]])) if '=' in part)
+                          for i in range(6, len(args) - 1) if args[i] == '--mount']
+                require(len(mounts) == 3 and [m['target'] for m in mounts] == ['/workspace', '/profiles', '/cache']
+                        and all(m['type'] == 'volume' and m['source'].startswith(self.prefix) for m in mounts[1:])
+                        and mounts[1]['source'].endswith('-profiles') and mounts[2]['source'].endswith('-cache'),
+                        "Expected this run's own volumes")
+                if mounts[0]['type'] == 'volume':
+                    require(mounts[0]['source'].startswith(self.prefix) and mounts[0]['source'].endswith('-workspace'),
+                            "Expected this run's own workspace volume")
+                else:
+                    import hashlib
+                    home = Path(mounts[0]['source'])
+                    root = home.parent.parent.resolve()
+                    expected_owner = hashlib.sha256(os.path.normcase(str(root)).encode()).hexdigest()[:16]
+                    require(home.parent.name == 'vm-homes' and home.resolve() == root / 'vm-homes' / home.name
+                            and expected_owner == self.owner, "Expected workspace in this run's data root")
+                require(args[-1] == vm.volume_prepare_args(vm.Target('x', 'x', Path('x')), self.owner)[-1],
+                        'Expected the exact volume preparation program')
+                return
             if args[1:6] == ['--rm', '--network', 'none', '--user', '0']:
                 from ..computer.carry import helper_args, EXCLUDE, folder_name
-                require(len(args) == 17 and args[6] == '--name' and args[8] == args[10] == '-v',
+                require(args[6] == '--name' and args[8] == args[10] == '-v',
                         'Expected exact carry run shape')
                 source = self.carry_homes.get(args[9].removesuffix(':/from:ro'))
                 target = self.carry_homes.get(args[11].removesuffix(':/to'))
@@ -363,8 +399,9 @@ class IsolatedDocker:
                             and safe_folder, 'Expected own member destination')
                 else:
                     require(set(data) == {'operation', 'excluded'}, 'Expected exact scan arguments')
-                require(args == helper_args(source, target, data) and args[14] == self.tag
-                        and args[7] == f'raphael-carry-{self.owner}-{source.key}',
+                # An old home whose browser profile lives in its volume has that volume shown read-only (`helper_args`).
+                require((args == helper_args(source, target, data, self.owner) or args == helper_args(source, target, data, self.owner, source_profiles=True))
+                        and args[-3] == self.tag and args[7] == f'raphael-carry-{self.owner}-{source.key}',
                         'Expected exact isolated image, helper name and Linux carry program')
                 return
             labels = [args[i + 1] for i, value in enumerate(args[:-1]) if value == "--label"]
@@ -417,11 +454,23 @@ class IsolatedDocker:
             require(len(args) == 2 and re.fullmatch(re.escape(f'raphael-carry-{self.owner}-') + '[0-9a-f]{16}', args[1]),
                     'Expected this run\'s carry helper')
         elif args[:2] == ['volume', 'inspect']:
-            require(len(args) == 3 and args[2] in self.carry_homes, 'Expected this run\'s registered workspace volume')
+            require(len(args) == 3 and (args[2] in self.carry_homes or self.machine_volume(args[2])),
+                    "Expected this run's registered workspace or machine-only volume")
+        elif args[:3] == ['volume', 'rm', '-f']:
+            require(len(args) == 4 and self.machine_volume(args[3]), "Expected one of this run's machine-only volumes")
+        elif args[:2] == ['volume', 'ls']:
+            require(args == ['volume', 'ls', '--filter', 'name=^' + self.prefix, '--format', '{{.Name}}'],
+                    "Expected this run's volume listing")
+        elif command == 'update':
+            require(len(args) == 8 and args[1] == '--memory' and args[3] == '--memory-swap' and args[2] == args[4]
+                    and re.fullmatch(r'(?:[4-9]|1[0-2])g', args[2]) and args[5] == '--cpus' and re.fullmatch(r'[2-8]', args[6]),
+                    "Expected the shared computer's size within the rule")
+            await self.owned(args[7])
         elif command == "build":
             require(args == ["build", "--tag", self.tag, str(IMAGE_FOLDER)], "Expected isolated plain Docker build")
         elif command == "info":
-            require(args == ["info", "--format", "{{.OSType}}"], "Expected Linux engine probe")
+            require(args in (["info", "--format", "{{.OSType}}"], ["info", "--format", "{{.MemTotal}} {{.NCPU}}"]),
+                    "Expected Linux engine probe or size reading")
         else:
             raise AssertionError(f"Refused Docker command outside acceptance scope: {command}")
 
@@ -1113,9 +1162,9 @@ class Acceptance:
                 target.workspace.mkdir(parents=True, exist_ok=True)
                 target.shared.mkdir(parents=True, exist_ok=True)
                 await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24), layer), timeout=90)
-                await self.text(target, ["sh", "-c", "printf acceptance > /home/cua/workspace/acceptance.txt"])
+                await self.text(target, ["sh", "-c", "printf acceptance > /home/cua/workspace/acceptance.txt; " + PROFILE_FIXTURE])
                 await self.command(["stop", target.name], timeout=90)
-                return f"Created a layer {layer} container with workspace file, then stopped it"
+                return f"Created a layer {layer} container with workspace file and a browser profile, then stopped it"
             if await self.check(f"{name} fixture {operation}", fixture):
                 fixtures.append((target, operation))
             else:
@@ -1138,11 +1187,23 @@ class Acceptance:
                     require(raw["Image"] == await self.machine.image(target), "Expected rebuilt computer on isolated new image")
                     content = await self.text(target, ["cat", vm.GUEST + "/acceptance.txt"])
                     require(content == "acceptance", f"Expected preserved workspace file, observed {content!r}")
+                    await self.profile_moved(target, raw)
                     await self.machine.stop(target)
                 return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
             await self.check(f"{name} {operation}", exercise)
-        if layer in ("7", "8", "9"):
+        if layer in ("7", "8", "9", "12"):
             await self.previous_shared(layer)
+
+    async def profile_moved(self, target, raw):
+        """A browser profile that was in the workspace folder is now in the computer's own volume, whole, and readable by
+        its user: nobody is signed out by the move."""
+        volume = vm.machine_volume(self.machine.owner, target, "profiles")
+        require({m["Destination"]: m.get("Name") for m in raw["Mounts"] if m.get("Type") == "volume"}.get(vm.MACHINE_VOLUMES["profiles"]) == volume,
+                f"Expected the profile folder to be the volume {volume}")
+        content = await self.text(target, ["cat", vm.MACHINE_VOLUMES["profiles"] + "/driver/main/signin.txt"])
+        require(content == "signed-in", f"Expected the old profile moved into its volume, observed {content!r}")
+        owner = await self.text(target, ["stat", "-c", "%U", vm.MACHINE_VOLUMES["profiles"]])
+        require(owner.strip() == "cua", f"Expected the profile folder owned by cua, observed {owner!r}")
 
     async def previous_shared(self, layer):
         """The computer every member shares, as the release before this layer left it on an owner's PC (six screens,
@@ -1155,7 +1216,7 @@ class Acceptance:
             target.workspace.mkdir(parents=True, exist_ok=True)
             target.shared.mkdir(parents=True, exist_ok=True)
             await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24), layer), timeout=90)
-            await self.text(target, ["sh", "-c", "printf shared-acceptance > /home/cua/workspace/acceptance-shared.txt"])
+            await self.text(target, ["sh", "-c", "printf shared-acceptance > /home/cua/workspace/acceptance-shared.txt; " + PROFILE_FIXTURE])
             await self.command(["stop", target.name], timeout=90)
             return f"Created a six-screen layer {layer} shared computer with a workspace file, then stopped it"
         if not await self.check(f"{name} fixture", fixture):
@@ -1171,6 +1232,7 @@ class Acceptance:
             require(f"RAPHAEL_SCREENS={target.screens}" in raw["Config"]["Env"], "Expected six screens kept")
             content = await self.text(target, ["cat", vm.GUEST + "/acceptance-shared.txt"])
             require(content == "shared-acceptance", f"Expected the shared workspace file kept, observed {content!r}")
+            await self.profile_moved(target, raw)
             await self.machine.stop(target)
             return f"layer {layer} shared computer: incompatible -> ready on the new image with six screens, workspace file kept"
         await self.check(f"{name} start", exercise)
@@ -1648,11 +1710,19 @@ class Acceptance:
                 require(self.docker.created.count(first.name) - before == 1, "Expected one container creation for two concurrent starts")
                 raw = await machine.inspect(first)
                 host = raw["HostConfig"]
-                require(host["Memory"] == host["MemorySwap"] == 6 * 1024**3 and host["NanoCpus"] == 4_000_000_000
-                        and "RAPHAEL_SCREENS=6" in raw["Config"]["Env"], "Expected 6 GiB, 4 CPUs and six screens")
+                # The size the engine gives it (`machine_size`: a rule over the engine's memory and CPUs, 6 GiB / 4 CPUs when
+                # the engine cannot say), not a fixed one.
+                memory, cpus = await self.machine.machine_size(first)
+                require(host["Memory"] == host["MemorySwap"] == memory * 1024**3 and host["NanoCpus"] == cpus * 1_000_000_000
+                        and "RAPHAEL_SCREENS=6" in raw["Config"]["Env"], f"Expected {memory} GiB, {cpus} CPUs and six screens")
+                for name, value in (("LANG", vm.LOCALE), ("LC_ALL", vm.LOCALE)):
+                    require(f"{name}={value}" in raw["Config"]["Env"], f"Expected {name}={value}")
+                require({m["Destination"]: m.get("Name") for m in raw["Mounts"] if m.get("Type") == "volume"} ==
+                        {destination: vm.machine_volume(self.machine.owner, first, kind) for kind, destination in vm.MACHINE_VOLUMES.items()},
+                        "Expected the browser profiles and the tools' cache in this computer's own volumes")
                 for member in members:
                     await hub._discover(targets[member])
-                return "Two product VmTools catalogs and sessions, seats 1/2, one six-screen 6 GiB/4 CPU container started once"
+                return f"Two product VmTools catalogs and sessions, seats 1/2, one six-screen {memory} GiB/{cpus} CPU container started once, UTF-8 locale, profiles and cache in volumes"
 
             if not await self.check("shared prepares", prepare):
                 self.record("shared dependent checks", "skipped", "shared prepares failed")
@@ -2287,6 +2357,12 @@ class Acceptance:
                     except Exception as error:
                         safe_to_remove_data = False
                         self.record("cleanup container", "failed", str(error))
+                # This run's machine-only volumes: named for its owner only, so no other computer's can match.
+                volumes = await self.command(["volume", "ls", "--filter", "name=^" + self.docker.prefix, "--format", "{{.Name}}"], timeout=60)
+                for volume in volumes.split():
+                    if self.docker.machine_volume(volume):
+                        await self.command(["volume", "rm", "-f", volume], timeout=60)
+                        print(f"Removed volume {volume}", flush=True)
             except Exception as error:
                 safe_to_remove_data = False
                 self.record("cleanup listing", "failed", str(error))

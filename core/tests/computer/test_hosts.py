@@ -164,7 +164,9 @@ def test_default_member_computers_share_only_team_files(tmp_path, conn):
     assert one.name != two.name and one.workspace != two.workspace
     assert one.shared == two.shared
     mounts = [next(csv.reader([args])) for args in run_args(one, vm.owner, "private") if args.startswith("type=")]
-    assert len(mounts) == 2
+    assert len(mounts) == 4
+    assert {entry[2] for entry in mounts if entry[0] == "type=volume"} == {
+        "target=/home/cua/workspace/.browser-profiles", "target=/home/cua/.cache"}
     args = run_args(one, vm.owner, "private")
     assert args[args.index("--memory") + 1] == "3g"
     assert args[args.index("--memory-swap") + 1] == "3g"
@@ -178,7 +180,7 @@ def test_remote_uses_engine_volumes_and_publishes_only_loopback(tmp_path, conn):
     target = vm.target(1)
     args = run_args(target, vm.owner, "private")
     assert args[args.index("-p") + 1] == "127.0.0.1::6901"
-    assert len([arg for arg in args if arg.startswith("type=volume,")]) == 2
+    assert len([arg for arg in args if arg.startswith("type=volume,")]) == 4
     assert str(tmp_path) not in " ".join(args)
 
 

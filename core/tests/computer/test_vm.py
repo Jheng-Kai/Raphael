@@ -17,7 +17,7 @@ from raphael_core.agent.mcp_server import RaphaelMcp
 from raphael_core.agent.policy import Tier
 from raphael_core.background.snapshot import take_snapshot
 from raphael_core.brain.settings import SettingsStore, checked
-from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, run_args
+from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, machine_volume, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
@@ -29,13 +29,23 @@ class Runtime:
         self.calls, self.raw, self.image_id = [], None, "sha256:test-image"
         self.up, self.built = True, True
         self.screens_ready = True
+        # What `docker info` says the engine has: a machine whose rule gives the shared computer 6 GiB and 4 CPUs.
+        self.engine = (int(7.5 * 1024**3), 8)
 
     async def __call__(self, args, **kwargs):
         if args[:1] == ["--host"]:
             args = args[2:]
         self.calls.append((args, kwargs))
+        if args[0] == "info" and "{{.MemTotal}}" in args[-1]:
+            return Result(0, "%d %d" % self.engine) if self.engine else Result(1)
         if args[0] == "info":
             return Result(0, "linux") if self.up else Result(1)
+        if args[:2] == ["volume", "rm"]:
+            self.removed = [*getattr(self, "removed", []), args[-1]]
+        if args[0] == "update" and self.raw:
+            memory, cpus = args[2], args[6]
+            self.raw["HostConfig"].update(Memory=int(memory[:-1]) * 1024**3, MemorySwap=int(memory[:-1]) * 1024**3,
+                                          NanoCpus=int(cpus) * 1_000_000_000)
         if args[:2] == ["image", "inspect"]:
             return Result(0, json.dumps([{"Id": self.image_id, "Config": {"Labels": IMAGE_LABELS}}])) if self.built else Result(1)
         if args[:2] == ["container", "inspect"]:
@@ -65,7 +75,7 @@ class Runtime:
 
 def container(vm, target, runtime):
     raw = {"Name": "/" + target.name, "Image": runtime.image_id,
-        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}, "Env": ["VNC_PW=private", f"RAPHAEL_SCREENS={target.screens}"]},
+        "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.unit}, "Env": ["VNC_PW=private", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", f"RAPHAEL_SCREENS={target.screens}"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
             "Memory": (6 if target.container else 3) * 1024**3, "MemorySwap": (6 if target.container else 3) * 1024**3,
@@ -75,11 +85,16 @@ def container(vm, target, runtime):
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
     if target.shared:
         raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
+    for kind, destination in (("profiles", f"{GUEST}/.browser-profiles"), ("cache", "/home/cua/.cache")):
+        name = machine_volume(vm.owner, target, kind)
+        raw["Mounts"].append({"Type": "volume", "Name": name, "Source": "/engine/volumes/" + name,
+                              "Destination": destination, "RW": True})
     if target.remote:
-        for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
-            mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
-        raw["HostConfig"]["Mounts"] = [{"Type": "volume", "Source": m["Name"], "Target": m["Destination"]} for m in raw["Mounts"]]
+        for mount in raw["Mounts"]:
+            if mount["Destination"] in (GUEST, "/home/cua/team"):
+                mount.update(Type="volume", Name=str(mount["Source"]), Source="/engine/volumes/" + str(mount["Source"]))
         raw["NetworkSettings"]["Networks"] = {"bridge": {"IPAddress": "172.18.0.2"}}
+    raw["HostConfig"]["Mounts"] = [{"Type": m["Type"], "Source": m.get("Name", m.get("Source")), "Target": m["Destination"]} for m in raw["Mounts"]]
     return raw
 
 
@@ -320,7 +335,8 @@ async def test_a_stalled_wallpaper_copy_cannot_hold_the_ready_computer(desktop, 
 def test_run_args_use_known_iana_zone_or_utc(tmp_path, zone, expected):
     vm = LocalVm(tmp_path)
     args = run_args(vm.target(), vm.owner, "secret", tz=zone)
-    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == ["VNC_PW=secret", f"TZ={expected}", "RAPHAEL_SCREENS=1", "VNC_RESOLUTION=1280x900"]
+    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == [
+        "VNC_PW=secret", f"TZ={expected}", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", "RAPHAEL_SCREENS=1", "VNC_RESOLUTION=1280x900"]
     assert args[-1] == IMAGE
 
 
@@ -330,7 +346,7 @@ async def test_start_reads_latest_owner_timezone_when_creating_container(desktop
     original = runtime.__call__
 
     async def run(args, **kwargs):
-        if args[0] == "run":
+        if args[:2] == ["run", "-d"]:
             runtime.raw = container(vm, target, runtime)
         return await original(args, **kwargs)
 
@@ -338,7 +354,7 @@ async def test_start_reads_latest_owner_timezone_when_creating_container(desktop
     vm.run, vm.timezone = run, lambda: owner.zone
     owner.zone = "Asia/Taipei"
     assert (await vm.start(target))["ready"]
-    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
+    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[:2] == ["run", "-d"])
 
 
 async def test_start_launches_installed_docker_and_builds_missing_image_once(desktop):
@@ -399,7 +415,7 @@ async def test_start_recreates_owned_container_when_owner_zone_arrives(desktop, 
     original = runtime.__call__
 
     async def run(args, **kwargs):
-        if args[0] == "run":
+        if args[:2] == ["run", "-d"]:
             runtime.raw = container(vm, target, runtime)
             runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
         return await original(args, **kwargs)
@@ -407,7 +423,7 @@ async def test_start_recreates_owned_container_when_owner_zone_arrives(desktop, 
     vm.run, vm.timezone = run, lambda: "Asia/Taipei"
     assert (await vm.start(target))["ready"]
     assert any(args == ["rm", target.name] for args, _ in runtime.calls)
-    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
+    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[:2] == ["run", "-d"])
     assert (target.workspace / "keep.txt").read_text() == "keep"
     runtime.calls.clear()
     await vm.start(target)
@@ -420,7 +436,7 @@ async def test_home_timezone_refresh_recovers_old_vm_and_defers_busy_desktops(de
     original = runtime.__call__
 
     async def run(args, **kwargs):
-        if args[0] == "run":
+        if args[:2] == ["run", "-d"]:
             runtime.raw = container(vm, target, runtime)
             runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
         return await original(args, **kwargs)
@@ -433,7 +449,7 @@ async def test_home_timezone_refresh_recovers_old_vm_and_defers_busy_desktops(de
     await vm.refresh_timezone()
     assert target.key in vm.targets
     assert vm.timezone_pending == bool(blocked)
-    assert any(args[0] == "run" for args, _ in runtime.calls) == (blocked is None)
+    assert any(args[:2] == ["run", "-d"] for args, _ in runtime.calls) == (blocked is None)
     vm.active.clear(); vm.held.clear(); vm.busy = lambda key: False
     await vm.refresh_timezone()
     assert "TZ=Asia/Taipei" in runtime.raw["Config"]["Env"]
@@ -463,7 +479,8 @@ async def test_timezone_refresh_recreates_stopped_desktop_without_waking_it(desk
     await vm.refresh_timezone()
     assert not runtime.raw["State"]["Running"]
     assert "TZ=Asia/Taipei" in runtime.raw["Config"]["Env"]
-    assert not any(args[0] in ("run", "start", "stop") for args, _ in runtime.calls)
+    # Created, not run: the volumes are made ready by a helper that runs and ends, and the computer is never started.
+    assert not any(args[0] in ("start", "stop") or args[:2] == ["run", "-d"] for args, _ in runtime.calls)
 
 
 async def test_timezone_recreation_rechecks_ownership_and_keeps_owner_hold(desktop):
@@ -537,7 +554,7 @@ async def test_status_checks_real_health_and_hides_remote_binding(desktop):
 
 def test_reuse_checks_original_host_mount_without_engine_path_translation(desktop):
     vm, target, runtime = desktop
-    runtime.raw["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": m["Source"], "Target": m["Destination"]} for m in runtime.raw["Mounts"]]
+    runtime.raw["HostConfig"]["Mounts"] = [{"Type": m["Type"], "Source": m.get("Name", m["Source"]), "Target": m["Destination"]} for m in runtime.raw["Mounts"]]
     runtime.raw["Mounts"][0]["Source"] = "/engine/internal/path"
     assert compatible(runtime.raw, target, vm.owner, runtime.image_id)
     runtime.raw["HostConfig"]["Mounts"][0]["Source"] = str(target.workspace.parent)

@@ -1,5 +1,20 @@
 # Member computer (Phases A and B)
 
+## Housekeeping: volumes, size, scratch, locale (owner, 2026-11-15)
+
+A member inspected the shared computer and reported measured faults; the owner approved five fixes (R-COMP-VOL-01,
+R-COMP-SIZE-01, R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): only the final `LABEL`
+step reruns on a PC that built v12. The owner's layer-12 computer is made again once, when idle; the browser profile moves into
+its volume, so sign-ins and the workspace are kept; hand-installed packages and `/tmp` go. `vm.py`: `resources`,
+`engine_size`, `run_args` (volumes, locale), `volume_prepare_args`, `scratch_args`; `carry.py` (volumes, staging ownership).
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_housekeeping.py tests/computer/test_carry.py tests/computer/test_vm.py -q
+```
+
+Not proved here: a named volume under a bind-mounted folder on Docker Desktop, `docker update` on a live computer, the move on a
+real Windows mount and the v13 build; `npm run verify -- --computer` with Docker running is that check.
+
 ## A member's files, as Claude Code works on them (owner, 2026-11-14)
 
 R-TOOL-03, R-FILE-01 to R-FILE-05. The owner: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member read, searched
