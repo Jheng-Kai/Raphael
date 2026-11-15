@@ -131,6 +131,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
   let returnedRequests: string[] = [];
   let state: DesktopState | undefined, session: DesktopSession | undefined;
+  /** The member `state` was read for: a panel that comes back after the sidebar switched members must not wear the old member's. */
+  let stateMember: number | undefined;
   let maintenance: { member: number; phase: NonNullable<DesktopState['lifecycle']> } | undefined;
   const lifecycle = mountComputerLifecycle(host, panel, member, () => state, async (action, captured) => {
     const id = member();
@@ -382,6 +384,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     // A status read taken before the wake press landed must not put the screen back to sleep.
     if (waking && next.state !== 'stopped' && next.state !== 'missing') waking = false;
     state = maintenance?.member === member() ? { ...next, lifecycle: maintenance.phase } : waking ? { ...next, lifecycle: 'waking' } : next;
+    stateMember = member();
     if (pending()) lastFrames.delete(member());
     // A lease the core no longer gives this view (handed back, idle, replaced) is not input: the screen goes view-only.
     if (interactive && state.control !== 'owner') { interactive = false; send(false); }
@@ -394,10 +397,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (maintenance?.member !== member() && active() && next.state === 'running') void openStream();
     draw();
   }
+  /** R-COMP-SWITCH-01: the stream or the state on this panel belongs to another member than the one now open. A page that is
+   *  not on screen when the sidebar switches members is not refreshed (agent.ts switchThread), so the panel catches up as
+   *  it is shown or synced: the old stream is closed, never renewed or painted for the new member. */
+  const foreign = (): boolean => !!session && streamMember !== member() || stateMember !== undefined && stateMember !== member();
   let pollDelay = 2000;
   const pollGate = visibilityGate(() => { clearTimeout(timer); void poll(); }, () => host.isConnected && (visible || !!session));
   async function poll(): Promise<void> {
     if ((!visible && !session) || loading || !windowVisible()) return;
+    // A lingering stream of the member open before a switch is never renewed as the new member's.
+    if (foreign()) { refreshPanel(); return; }
     loading = true;
     const current = generation, id = member();
     try {
@@ -621,15 +630,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     draw();
   });
   onLocaleChange(draw);
+  function refreshPanel(): void {
+    // Back to the conversation whose stream is still open: nothing to reconnect.
+    if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
+    closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; stateMember = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+  }
   return {
-    show() { if (options.panelVisible()) void location.refresh().then(draw); visible = true; suspended = false; pollDelay = 2000; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },
+    show() { if (foreign()) refreshPanel(); if (options.panelVisible()) void location.refresh().then(draw); visible = true; suspended = false; pollDelay = 2000; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },
     hide(close = false) { location.hide(); visible = false; if (close || panel.hasAttribute('data-expanded')) closeStream(); else leave(); timeline.clear(); draw(); },
-    refresh() {
-      // Back to the conversation whose stream is still open: nothing to reconnect.
-      if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
-    },
-    sync() { if (!options.panelVisible()) location.hide(); timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
+    refresh: refreshPanel,
+    sync() { if (foreign()) refreshPanel(); if (!options.panelVisible()) location.hide(); timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     carry(before) { if (before.contains(frame)) parkFrame(); },
     takeover() { visible = true; acquire(); void poll(); },
     /** The panel's computer row was pressed: a sleeping or stopped computer is started, a running one opens in the larger view. */

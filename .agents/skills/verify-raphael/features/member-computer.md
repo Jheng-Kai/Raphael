@@ -262,6 +262,26 @@ offered and enabled, the frame is visible and connected (one `viewer_open`, no `
 live stream or the last picture (the check fails on a black frame with only 開啟). `takeover-handback` and `desktop-handback`
 now end by folding back, not by the stop. Native, not run: the owner's own real take, stop and fold on his seat.
 
+## Every member's screen is its own, after a switch of members (owner, 2026-11-15)
+
+R-COMP-SWITCH-01. His words: 「我明明打開不同的角色，結果它顯示前一個角色的畫面…一定要每個角色都分開才對。應該是 cache 的問題」.
+Cause, in `desktop-viewer.ts` and not in the core: the sidebar's `onSelect` runs `switchThread()` before `app.go("agent")`,
+and `switchThread()` calls `desktop.refresh()` only for a page that is on screen. Coming back from another page, the viewer
+still held member 1's lingering stream (`session`), so `show()` polled `desktopRenew(member 1's session)`: its answer passed
+the `id === member()` guard (read at poll time, after the switch) and member 1's state and frame were drawn for member 2.
+Fix: `stateMember` (whom `state` was read for) and `streamMember` (whom the stream was opened for) are compared with
+`member()` in `show()` and `sync()`, and a mismatch runs the same reset as `refresh()` first.
+Reproduced before the fix: the two vitest cases named in the rule, red on `desktopRenew('one')` for member 2.
+
+```powershell
+npm run look -- computer-member-switch desktop-panel desktop-return-stopped panel-screen-routines desktop-takeover --theme both --width 1120,720,1920x1080
+```
+
+`computer-member-switch`: member 1's computer streams (the look mock now gives each session `?seat=<member>` and, with
+`seatMarks`, the fixture paints that seat's colour band), the owner goes to the calendar, opens member 2 in the sidebar, and
+the Computer tab streams seat 2: one iframe, seat 2's page and colour, no frame of seat 1 anywhere, member 1's session
+closed and never renewed after member 2 opened, member 2's own status read. Native, not run: two real running seats.
+
 ## The disk notice names the disk that is full (owner, 2026-11-14)
 
 R-COMP-DISK-01. A member told the owner 電腦磁碟快滿了 and named `.browser-profiles` (326 MiB), `.raphael-checkpoints` (12 MiB)
