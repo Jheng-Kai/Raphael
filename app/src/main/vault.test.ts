@@ -68,3 +68,26 @@ it("confirms only checked preview entries and cancels transient previews on clos
   controller.reset();
   expect(api.core).toHaveBeenCalledWith("vault.cancel", { token: "close-preview" });
 });
+
+it("lists a key a member asked for, filters it like the other entries, and offers no way to type one in here", async () => {
+  api.membersList.mockResolvedValue({ members: [{ id: 1, name: "Member" }] });
+  const withKey: VaultEntry[] = [...entries, { id: "key", kind: "key", label: "OPENROUTER_API_KEY", hint: "Price script", origin: "", members: [1] }];
+  api.core.mockImplementation(async method => method === "vault.list" ? { entries: withKey } : {});
+  const root = document.createElement("div"); document.body.append(root);
+  const controller = createVault(root, () => { root.innerHTML = vaultHTML(controller.view()); });
+  await controller.load();
+  expect(root.querySelectorAll(".vault-row")).toHaveLength(4);
+  click(root, '[data-vault="filter"][data-kind="key"]');
+  const row = root.querySelector(".vault-row")!;
+  expect(root.querySelectorAll(".vault-row")).toHaveLength(1);
+  expect(row.textContent).toContain("OPENROUTER_API_KEY"); expect(row.textContent).toContain("Price script");
+  // New offers the three kinds the owner types by hand, never a key.
+  click(root, '[data-vault="new"]');
+  expect([...document.querySelectorAll<HTMLElement>(".menu [data-value]")].map(item => item.dataset.value)).toEqual(["login", "contact", "card"]);
+  closeMenu();
+});
+
+it("shows no Keys tab until a member has asked for a key", async () => {
+  const { root } = await setup();
+  expect(root.querySelector('[data-vault="filter"][data-kind="key"]')).toBeNull();
+});

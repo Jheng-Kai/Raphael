@@ -85,6 +85,11 @@ def engine_start_allowed():
         _MAY_START_ENGINE.reset(token)
 
 
+def _withheld(values, text):
+    from .logins import redact_values
+    return redact_values(values, text)
+
+
 class VmError(Exception):
     """Public failure kind; never contains command output or workspace contents."""
 
@@ -107,13 +112,17 @@ class Docker:
             raise ValueError("Computer host must be a simple SSH config alias")
         return [docker_cli(), *(["--host", f"ssh://{self.alias}"] if self.alias else []), *args]
 
-    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None, input=None):
+    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None, input=None, env=None, redact=None):
         """`input`, when given, is written to the command's stdin and closed (`docker exec -i`): a file's text travels
-        there, never on the command line, which Windows holds to 32,767 characters."""
+        there, never on the command line, which Windows holds to 32,767 characters. `env` (name -> value) is set in
+        the environment of this one docker process, for `docker exec -e NAME` to hand on: a value is never an argument,
+        which any program on this PC can read. `redact` is applied to everything read, whole, before it is cut to `limit`
+        or handed to `progress`."""
         from .desktop_host import NO_WINDOW
         process = await asyncio.create_subprocess_exec(
             *self.argv(args), stdin=asyncio.subprocess.DEVNULL if input is None else asyncio.subprocess.PIPE,
             creationflags=NO_WINDOW, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            **({"env": {**os.environ, **env}} if env else {}),
         )
 
         async def feed():
@@ -127,6 +136,8 @@ class Docker:
             finally:
                 process.stdin.close()
 
+        show = redact or (lambda text: text)
+
         async def drain(stream):
             kept, size = bytearray(), 0
             pending = b""
@@ -138,10 +149,10 @@ class Docker:
                     pending = lines.pop()[-2048:]
                     for line in lines:
                         if line.strip():
-                            progress(line.decode("utf-8", errors="replace"))
+                            progress(show(line.decode("utf-8", errors="replace")))
             if progress and pending.strip():
-                progress(pending.decode("utf-8", errors="replace"))
-            text = kept.decode("utf-8", errors="replace")
+                progress(show(pending.decode("utf-8", errors="replace")))
+            text = show(kept.decode("utf-8", errors="replace"))
             return text[:limit], size > len(kept) or len(text) > limit
 
         try:
@@ -232,10 +243,12 @@ def run_args(target, owner, password, *, tz=None):
     ]
 
 
-def exec_args(target, command, *, interactive=False, detached=False):
+def exec_args(target, command, *, interactive=False, detached=False, env=()):
+    """`env` is the names of variables the command gets from the environment of the docker process itself
+    (`-e NAME` without a value): a secret is never on this line."""
     return ["exec", *(["-i"] if interactive else []), *(["-d"] if detached else []), "-u", "cua", "-e", "HOME=/home/cua",
             "-e", "DISPLAY=:1", "-e", "CUA_DRIVER_INSTALL_CHANNEL=python_package",
-            "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", target.name, *command]
+            "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", *(part for name in env for part in ("-e", name)), target.name, *command]
 
 
 def move_window_args(target, window_id):
@@ -1318,24 +1331,31 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         except ValueError:
             raise VmError("checkpoint_unavailable") from None
 
-    async def execute(self, target, command, timeout=60, *, background=False):
+    async def execute(self, target, command, timeout=60, *, background=False, keys=None):
         """Run `command` in the workspace. In the foreground it is waited for, at most `FOREGROUND_S`, and ended then;
         in the background it is started detached and this returns at once with a job whose log and exit code the
-        caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`."""
+        caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`.
+        `keys` (variable name -> value) are given to this one command's environment, never to its command line, and
+        what it prints has them replaced by a placeholder before anything is returned."""
         if not isinstance(command, str) or not command.strip() or len(command) > 16_000:
             raise VmError("bad_arguments")
+        if keys is not None and (not isinstance(keys, dict) or not keys or not all(
+                isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) and isinstance(value, str) and value
+                and "\0" not in value for name, value in keys.items())):
+            raise VmError("bad_arguments")
+        carried = {"env": keys, "redact": lambda text, values=tuple(keys.values()): _withheld(values, text)} if keys else {}
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= (BACKGROUND_S if background else FOREGROUND_S):
             raise VmError("bad_arguments")
         if background:
-            return await self._detached(target, command, timeout)
+            return await self._detached(target, command, timeout, keys)
         # The guest timeout also ends the process when the host docker client is cancelled.
         token = secrets.token_hex(16)
         script = 'echo $$ > "$1"; shift; exec timeout --signal=TERM --kill-after=2 "$@"'
         pidfile = f"/tmp/raphael-exec-{token}.pid"
         shell = ["env", "-u", "DISPLAY", "sh", "-lc"] if target.container else ["sh", "-lc"]
-        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, f"cd {GUEST} && {command}"])
+        args = exec_args(target, ["sh", "-c", script, "sh", pidfile, str(timeout), *shell, f"cd {GUEST} && {command}"], env=tuple(keys or ()))
         try:
-            result = await self.run_for(target, args, timeout=timeout + 5)
+            result = await self.run_for(target, args, timeout=timeout + 5, **carried)
             output = (result.stdout + result.stderr)[:MAX_OUTPUT]
             return {"exit_code": result.code, "output": output, "truncated": result.truncated or len(result.stdout + result.stderr) > MAX_OUTPUT}
         except (asyncio.CancelledError, TimeoutError):
@@ -1344,14 +1364,14 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         finally:
             await asyncio.shield(self.run_for(target, exec_args(target, ["rm", "-f", pidfile])))
 
-    async def _detached(self, target, command, timeout):
+    async def _detached(self, target, command, timeout, keys=None):
         job = secrets.token_hex(6)
         base = f"{GUEST}/.raphael-jobs/{job}"
         shell = "env -u DISPLAY sh" if target.container else "sh"
         script = ('mkdir -p "$1" && { timeout --signal=TERM --kill-after=2 "$2" ' + shell + ' -lc "$3"; echo $? > "$5"; } > "$4" 2>&1')
         args = exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs", str(timeout),
-                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True)
-        result = await self.run_for(target, args, timeout=30)
+                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True, env=tuple(keys or ()))
+        result = await self.run_for(target, args, timeout=30, **({"env": keys} if keys else {}))
         if result.code:
             raise VmError("start_failed")
         return {"job": job, "log": f"{base}.log", "exit_file": f"{base}.exit"}

@@ -2091,6 +2091,53 @@ PRAGMA user_version = 84;
 COMMIT;
 """
 
+# A key the owner pasted on a card for a program in a member's computer (`request_secret`, kind `key`): the card
+# and the saved entry both gain the kind. The tables are rebuilt because SQLite cannot widen a CHECK.
+_MIGRATIONS[85] = """
+BEGIN;
+DROP TRIGGER clear_secret_cards;
+ALTER TABLE secret_cards RENAME TO secret_cards_previous;
+CREATE TABLE secret_cards (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    server_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('env','header','login','messaging','key')),
+    secret TEXT NOT NULL,
+    name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','failed','saved','resuming','resumed','cancelled','expired')),
+    error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    done TEXT NOT NULL DEFAULT '[]',
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL,
+    resumed_at_ms INTEGER,
+    UNIQUE(turn_id, server_id, kind, secret)
+);
+INSERT INTO secret_cards SELECT * FROM secret_cards_previous;
+DROP TABLE secret_cards_previous;
+CREATE TRIGGER clear_secret_cards AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM secret_cards WHERE turn_id=OLD.id;
+END;
+ALTER TABLE vault_entries RENAME TO vault_entries_previous;
+CREATE TABLE vault_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('login','contact','card','key')),
+    label TEXT NOT NULL,
+    hint TEXT NOT NULL DEFAULT '',
+    origin TEXT NOT NULL DEFAULT '',
+    members TEXT NOT NULL,
+    credential TEXT NOT NULL
+);
+INSERT INTO vault_entries SELECT * FROM vault_entries_previous;
+DROP TABLE vault_entries_previous;
+PRAGMA user_version = 85;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

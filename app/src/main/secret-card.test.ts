@@ -197,3 +197,44 @@ test("settled secrets have a short pill and keep the saved/resumed decision fold
  expect(document.querySelector('.card-status')?.textContent).toBe(t("cards.done"));
  expect(document.querySelector('.card-detail[hidden]')?.textContent).toContain(t("card.keyResumed"));
 });
+
+describe("a key for a program in a member's computer", () => {
+  const key = (over: Partial<SecretCard> = {}): SecretCard => card({ key: true, name: "OPENROUTER_API_KEY", secret: "OPENROUTER_API_KEY", purpose: "價格腳本要呼叫模型", ...over });
+  test("names the variable and what it is for, says where it goes, and shows the same masked field and Save", () => {
+    const html = secretCardHTML(key());
+    const text = visible(html);
+    expect(text).toContain("儲存 OPENROUTER_API_KEY");
+    expect(text).toContain("價格腳本要呼叫模型");
+    expect(text).toContain(t("cards.keyForComputer"));
+    expect(html).toContain('type="password"');
+    expect(html).toContain('aria-label="OPENROUTER_API_KEY"');
+    expect(html).toContain('class="btn sm pri" data-act="card-save" data-card="k1" disabled');
+    expect(html).not.toMatch(/\bvalue=/);
+    expect(html).toContain("data-key-card");
+    // It is no connection: nothing of a connection's plug or a program's own mark.
+    expect(html).not.toContain(t("cards.keyWhy"));
+    expect(html).not.toContain("連結");
+  });
+
+  test("each state has the one action it can take, as the other secret cards", () => {
+    expect(actions(secretCardHTML(key()))).toEqual(["card-save"]);
+    expect(actions(secretCardHTML(key({ state: "failed", error: "invalid" })))).toEqual(["card-save"]);
+    expect(actions(secretCardHTML(key({ state: "saved" })))).toEqual([]);
+    expect(actions(secretCardHTML(key({ state: "saved", error: "resume_failed" })))).toEqual(["card-resume"]);
+    expect(visible(secretCardHTML(key({ state: "saved" })))).toContain("已安全儲存");
+    expect(secretCardHTML(key({ state: "saved" }))).not.toContain("<input");
+  });
+
+  test("a card with no purpose still says why, in the words every secret card uses", () => {
+    expect(visible(secretCardHTML(key({ purpose: undefined })))).toContain(t("cards.keyWhy"));
+  });
+
+  test("says the same in every language and keeps the name as written", () => {
+    for (const locale of ["en", "ja", "de"] as const) {
+      setLocale(locale);
+      const text = visible(secretCardHTML(key()));
+      expect(text).toContain("OPENROUTER_API_KEY");
+      expect(text).toContain(t("cards.keyForComputer").replace("'", "&#39;"));
+    }
+  });
+});

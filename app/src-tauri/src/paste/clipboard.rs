@@ -339,6 +339,50 @@ fn restore_due(
     quiet || now.saturating_duration_since(published_at) >= limit
 }
 
+/// The text on the owner's clipboard (`CF_UNICODETEXT`), read once and kept nowhere (the desktop viewer's paste into a
+/// member's computer, while the owner holds its control). `None` when the clipboard holds no text, or more than
+/// `max_chars` characters: a cut-off key pasted into a program is worse than none.
+pub fn read_text(max_chars: usize) -> Result<Option<String>, String> {
+    let mut error = String::new();
+    for attempt in 0..OPEN_ATTEMPTS {
+        if attempt > 0 {
+            std::thread::sleep(OPEN_RETRY);
+        }
+        // SAFETY: the clipboard is closed again when `_opened` ends, on this thread.
+        match unsafe { OpenClipboard(None) } {
+            Ok(()) => {
+                let _opened = Opened(PhantomData);
+                return Ok(unsafe { unicode_text(max_chars) });
+            }
+            Err(e) => error = e.to_string(),
+        }
+    }
+    Err(format!("could not open the clipboard: {error}"))
+}
+
+/// The clipboard's `CF_UNICODETEXT`, which must be open: nothing when absent, or bigger than `max_chars` could be.
+unsafe fn unicode_text(max_chars: usize) -> Option<String> {
+    let handle = unsafe { GetClipboardData(UNICODETEXT) }.ok()?;
+    let block = HGLOBAL(handle.0);
+    // UTF-16 takes at most two units for one character: a block past that is too big before any byte of it is copied.
+    if unsafe { GlobalSize(block) } > max_chars.saturating_mul(4).saturating_add(2) {
+        return None;
+    }
+    text_from_utf16(&unsafe { copy_global(block) }?, max_chars)
+}
+
+/// The text of a `CF_UNICODETEXT` block: its UTF-16 up to the first NUL, or `None` when it is empty, not valid, or longer
+/// than `max_chars` characters.
+fn text_from_utf16(bytes: &[u8], max_chars: usize) -> Option<String> {
+    let units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .take_while(|unit| *unit != 0)
+        .collect();
+    let text = String::from_utf16(&units).ok()?;
+    (!text.is_empty() && text.chars().count() <= max_chars).then_some(text)
+}
+
 /// The clipboard is open, by this thread, while this lives.
 struct Opened(PhantomData<*const ()>);
 
@@ -677,6 +721,32 @@ mod tests {
 
     fn ms(n: u64) -> Duration {
         Duration::from_millis(n)
+    }
+
+    #[test]
+    fn the_text_of_a_clipboard_block_stops_at_its_nul_and_is_bounded() {
+        let block = |text: &str| -> Vec<u8> {
+            text.encode_utf16()
+                .chain([0u16, 0xdead])
+                .flat_map(u16::to_le_bytes)
+                .collect()
+        };
+        assert_eq!(
+            text_from_utf16(&block("sk-or-v1-清單"), 100).as_deref(),
+            Some("sk-or-v1-清單")
+        );
+        assert_eq!(
+            text_from_utf16(&block("12345"), 5).as_deref(),
+            Some("12345")
+        );
+        assert_eq!(text_from_utf16(&block("123456"), 5), None);
+        assert_eq!(text_from_utf16(&block(""), 5), None);
+        assert_eq!(
+            text_from_utf16(&[0xff, 0xdc, 0, 0], 5),
+            None,
+            "a lone surrogate is not text"
+        );
+        assert_eq!(text_from_utf16(&[], 5), None);
     }
 
     #[test]
