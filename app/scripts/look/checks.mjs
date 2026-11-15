@@ -2382,7 +2382,7 @@ export function checkRendered(name, context = {}) {
       require(document.activeElement === document.querySelector('#pv-dialog [data-pv="replace"]'), 'provider repair focuses its credential action');
     } else if (name === 'missing-card-repair') {
       require(visible(document.querySelector('#conn-key')), 'the shared card opens the existing Composio key field');
-      require(document.querySelector('.cs-key-form .note')?.textContent.includes('專案設定 › API 金鑰'), 'the form says where to obtain the project key before typing it');
+      require(document.querySelector('.cs-key-form .note')?.textContent.includes('Project Settings › API Keys'), 'the form says where to obtain the project key before typing it');
     } else if (name.endsWith('-repair')) {
       const field = document.querySelector('#svc-url');
       require(visible(field), 'repair reaches the existing exact field');
@@ -2398,13 +2398,13 @@ export function checkRendered(name, context = {}) {
       require(reply.getBoundingClientRect().bottom <= note.getBoundingClientRect().top + 1, 'the repair comes after the reply');
       if (name === 'missing-card') {
         const card = note.closest('.conversation-card');
-        require(card && (card.textContent.match(/設定 › 連接 › 商店/g) ?? []).length === 1, 'the card names its existing repair form once, with one action');
+        require(card && (card.textContent.match(/側欄的「連結應用程式」/g) ?? []).length === 1, 'the card names its existing repair form once, with one action');
       }
     } else {
       require(visible(note) && note.textContent.length > 20, 'the reason is visible text');
       require(!note.querySelector('[title]'), 'no reason depends on a hover title');
       if (name === 'missing-search') require(note.textContent.includes('尚未設定 SearXNG 網址') && note.querySelectorAll('button').length === 1, 'the step says address, not key, with one action');
-      if (name === 'missing-card') require(note.textContent.includes('設定 › 連接 › 商店') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
+      if (name === 'missing-card') require(note.textContent.includes('側欄的「連結應用程式」') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
       if (name === 'missing-vision') require(document.querySelector('[data-svc="use"]').disabled && note.textContent.includes('回答模型無法讀取圖片'), 'same-as-answer says why it cannot be used');
     }
     return {check:name};
@@ -8551,17 +8551,19 @@ export function checkRendered(name, context = {}) {
     require(add.length > 0 && add.every(button => button.className === add[0].className && button.className === 'btn cs-connect'), "every 連結 button has the same class list");
     for (const row of rows) {
       const [main, action] = row.children;
-      require(row.className === 'cs-card' && row.children.length === 2, "every app row has the same two slots");
+      // A connected app's 已連結 is part of its one button (owner, 2026-11-14: the button and 已連結 are one); any other row has that button and one action beside it.
+      const connected = !!main.querySelector(':scope > .cs-state');
+      require(row.className === 'cs-card' && row.children.length === (connected ? 1 : 2), "every app row is its page button, with one action beside it unless the app is connected");
       require(main.tagName === 'BUTTON' && main.className === 'btn cs-main' && main.dataset.conn === 'open-store', "every source uses the same page button");
-      require(main.children.length === 2 && main.children[0].className === 'cs-tile' && main.children[1].className === 'tx', "every row has the same tile and text structure");
+      require(main.children.length === (connected ? 3 : 2) && main.children[0].className === 'cs-tile' && main.children[1].className === 'tx' && (!connected || main.children[2].className === 'cs-state'), "every row has the same tile and text structure");
       const [title, summary] = main.children[1].children;
       // A row is the tile and the name; the line under it only says that a sign-in waits.
       require(title.tagName === 'SPAN' && title.className === 'nm' && (!summary || summary.classList.contains('wait')), "a row's line is only its waiting sign-in");
-      require(action.matches('button.btn.cs-connect[data-conn="join"], button.btn.cs-connect[data-conn="cancel-login"], span.cs-state'), "every state stays in the one action slot");
+      require(connected ? action === undefined : action.matches('button.btn.cs-connect[data-conn="join"], button.btn.cs-connect[data-conn="cancel-login"]'), "every state stays in the one action slot, or in the button of a connected app");
       const style = window.getComputedStyle(row);
       require(style.display === 'flex' && !row.querySelector('.need'), "every row is one line with nothing it would have to explain");
       const frame = row.getBoundingClientRect();
-      require([main, action, title].filter(visible).every(node => {
+      require([main, action, title].filter(node => node && visible(node)).every(node => {
         const box = node.getBoundingClientRect();
         return box.top >= frame.top - 1 && box.bottom <= frame.bottom + 1;
       }), "names and actions fit inside their row");
@@ -8749,7 +8751,7 @@ export function checkRendered(name, context = {}) {
       ja: "これは Composio のコンシューマーキー（ck_ で始まるキー）です。Composio の「Settings → Project Settings → API Keys」にあるプロジェクトキーを使用してください。",
     } : {
       "zh-TW": "這是 OpenRouter 的金鑰，請到「設定 → 模型與用量」輸入。",
-      en: "This is an OpenRouter key. Enter it in Settings → Models and usage.",
+      en: "This is an OpenRouter key. Enter it in Settings → Models & usage.",
       ja: "これは OpenRouter のキーです。「設定 → モデルと使用量」で入力してください。",
     };
     require(visible(alert) && Object.values(expected).includes(alert.textContent), "the key form explains how to correct the key type");
@@ -9574,7 +9576,7 @@ export function checkRendered(name, context = {}) {
       require(card.dataset.cardState === "failed" && state === "這把金鑰沒有被接受，請再填一次", `the card says the key was not accepted (${state})`);
       require(visible(card.querySelector("[data-inline-submit]")) && card.querySelector("input[type=password]").value === "", "the inline form returns with its secret cleared");
       const reply = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible).at(-1);
-      require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("設定 › 連接 › 商店"), "the member names what to do and where");
+      require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("側欄的「連結應用程式」"), "the member names what to do and where");
     }
     return { check: name, state };
   }
@@ -10129,7 +10131,7 @@ export function checkRendered(name, context = {}) {
     const end = performance.now() + 4000;
     while (!(image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
     require(image.complete && image.naturalWidth > 0 && visible(image), 'the picture is drawn');
-    const field = bubble.querySelector('[data-edit-input]'), text = field ? field.value : bubble.querySelector('.message-text').textContent;
+    const text = bubble.querySelector('.message-text').textContent;
     // The same words in a bubble with no picture, drawn in the same line and measured, is what the bubble's width must be.
     const reference = document.createElement('div');
     reference.className = 'me'; reference.style.visibility = 'hidden';
@@ -10141,64 +10143,101 @@ export function checkRendered(name, context = {}) {
     line.querySelector('.me').after(reference);
     const bare = reference.querySelector('.bubble').getBoundingClientRect().width;
     reference.remove();
-    const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = field ? 2 : 1;
+    const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = 1;
     require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
     if (picture.matches('.attachment-grid')) require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
     if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);
-    return { check: name, bubble: Math.round(b.width * 10) / 10, without: Math.round(bare * 10) / 10, picture: Math.round(p.width), editing: !!field, pending: line.classList.contains('is-pending') };
+    return { check: name, bubble: Math.round(b.width * 10) / 10, without: Math.round(bare * 10) / 10, picture: Math.round(p.width), pending: line.classList.contains('is-pending') };
     })();
   }
   if (name === "message-edit-before") {
-    // The sent message's bubble as it is: the editor must be this bubble, not another box.
-    const bubble = document.querySelector('.tn[data-id="8201"] .owner-message .bubble'), r = bubble.getBoundingClientRect(), style = getComputedStyle(bubble);
-    window.__look.beforeBubble = { rect: { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }, style: Object.fromEntries(["backgroundColor", "color", "borderRadius", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "fontFamily", "lineHeight", "fontWeight", "borderTopWidth", "boxShadow"].map(key => [key, style[key]])) };
-    return { check: name, width: Math.round(r.width) };
+    // The sent message as it is, so that what 編輯 does to it (takes it into the composer, gives it back) can be told from what it was.
+    const turn = document.querySelector('.tn[data-id="8201"]'), bubble = turn.querySelector('.owner-message .bubble'), r = bubble.getBoundingClientRect();
+    window.__look.beforeMessage = { text: bubble.querySelector('.message-text').textContent, pictures: turn.querySelectorAll('.owner-message .me-files .attachment-picture img').length, rect: { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height } };
+    return { check: name, width: Math.round(r.width), pictures: window.__look.beforeMessage.pictures };
   }
-  if (name === "message-edit-open" || name === "message-edit-armed" || name === "message-edit-sent") {
-    // R-UI-148: the owner's message is edited in its own bubble, in its place; the composer is not touched and what is sent is the composer's own edit.
-    const turn = document.querySelector('.tn[data-id="8201"]'), composerField = document.querySelector('.cmp-input');
-    require(composerField && composerField.value === '', 'the composer keeps its own (empty) draft: nothing of the message went into it');
-    if (name === "message-edit-sent") {
-      const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
-      const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
-      require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words && asks[0].memberId === 1, 'Enter asks once, with the edited words and the message it replaces, as the composer\'s edit did');
-      require(!document.querySelector('[data-edit-input], [data-msg-editor]'), 'the editor is gone');
-      const bubbles = [...document.querySelectorAll('.thread .owner-message .bubble')];
-      require(bubbles.length === 1 && bubbles[0].querySelector('.message-text').textContent.trim() === words && visible(bubbles[0]), 'the edited message stands in its bubble, once');
-      require(document.querySelectorAll('.tn[data-id="8201"]').length === 1 && !document.querySelector('.tn.is-pending'), 'it is the same message, in its place, and nothing is left waiting beside it');
-      return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
-    }
-    const field = turn.querySelector('[data-edit-input]'), message = turn.querySelector('.owner-message[data-msg-editor]'), bubble = field.closest('.bubble'), me = turn.querySelector('.me');
-    require(visible(field) && visible(bubble) && message && message.classList.contains('is-editing'), 'the message is open as an editor');
-    require(!turn.querySelector('.msg-editor') && !bubble.querySelector('.btn'), 'the bubble is not wrapped in another box and holds no button');
-    require(document.activeElement === field && (name === "message-edit-armed" || field.selectionStart === field.value.length && field.selectionEnd === field.value.length), 'the field has the focus, the caret after its words');
-    require(!turn.querySelector('.owner-message .message-actions:not([inert])') && [...turn.querySelectorAll('.owner-message .message-actions')].every(held => getComputedStyle(held).visibility === 'hidden'), 'no action can be pressed beside the bubble while it is edited (its room is held)');
-    const before = window.__look.beforeBubble, b = bubble.getBoundingClientRect(), style = getComputedStyle(bubble), m = me.getBoundingClientRect();
-    require(before, 'the sent bubble was measured before it opened');
-    for (const [key, value] of Object.entries(before.style)) require(style[key] === value, `the editor is the bubble's own: ${key} is ${style[key]}, it was ${value}`);
-    require(Math.abs(b.right - before.rect.right) <= 1 && Math.abs(b.top - before.rect.top) <= 1, `the bubble stays where it stood (right ${Math.round(b.right)} vs ${Math.round(before.rect.right)}, top ${Math.round(b.top)} vs ${Math.round(before.rect.top)})`);
-    require(b.right <= m.right + 1, 'the bubble ends inside its column');
-    if (name === "message-edit-open" && field.value.length < 40) require(Math.abs(b.width - before.rect.width) <= 2 && Math.abs(b.height - before.rect.height) <= 2, `a short message keeps its bubble's size (${Math.round(b.width)}x${Math.round(b.height)} vs ${Math.round(before.rect.width)}x${Math.round(before.rect.height)})`);
-    require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
-    const under = turn.querySelector('.msg-editor-under'), buttons = [...under.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
-    require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, 'Cancel and, last, the primary Send, ready');
-    const [cancel, send] = buttons.map(button => button.getBoundingClientRect()), u = under.getBoundingClientRect();
-    require(cancel.right <= send.left && Math.abs(cancel.height - send.height) < .5 && Math.abs(send.height - 30) < .5, `Cancel and Send are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
-    const box = getComputedStyle(under);
-    require(Math.abs(send.right - b.right) <= 1.5 && cancel.top >= b.bottom - 1 && box.borderTopWidth === '0px' && /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(box.backgroundColor), `Send ends at the bubble's right edge and under it, in no box (${Math.round(send.right)} vs ${Math.round(b.right)})`);
-    require(!document.querySelector('.tn.is-pending'), 'nothing was sent');
-    if (name === "message-edit-armed") {
-      const armed = buttons[0];
-      require(armed.dataset.cancelArmed === 'true' && armed.dataset.cancelHint && document.activeElement === field && field.isConnected, 'the first Escape arms Cancel with its hint and leaves the editor open');
-    } else {
-      require(!buttons[0].dataset.cancelArmed, 'Cancel is not armed');
-    }
-    return { check: name, bubble: `${Math.round(b.width)}x${Math.round(b.height)}`, was: `${Math.round(before.rect.width)}x${Math.round(before.rect.height)}`, words: field.value.length, underTop: Math.round(u.top) };
+  if (name === "message-edit-open" || name === "message-edit-armed") {
+    // R-UI-158: 編輯 takes the owner's message into the composer (its words, its pictures as chips); its bubble is not in the thread; nothing was sent.
+    return (async () => {
+    const before = window.__look.beforeMessage, turn = document.querySelector('.tn[data-id="8201"]'), field = document.querySelector('.cmp-input'), composer = field.closest('.composer');
+    const same = (a, b) => a.replace(/\s+/g, '') === b.replace(/\s+/g, '');
+    require(before, 'the sent message was measured before 編輯');
+    require(composer.hasAttribute('data-replacing'), 'the composer is marked as replacing the message');
+    require(!turn.querySelector('.owner-message, .me-files, .bubble'), 'the sent bubble, with its pictures, is not in the thread');
+    require(!document.querySelector('[data-edit-input], [data-msg-editor], .msg-editor-input, .msg-editor-under'), 'the editor of the bubble (R-UI-148) is gone');
+    require(turn.querySelector('.ra') && visible(turn.querySelector('.ra')), 'what the member answered stays');
+    require(same(field.value, name === "message-edit-armed" ? '改到一半的字' : before.text), `the composer holds the words (${field.value.length} characters)`);
+    require(visible(field) && document.activeElement === field, 'the composer has the focus');
+    if (name === "message-edit-open") require(field.selectionStart === field.value.length && field.selectionEnd === field.value.length, 'the caret is after the words');
+    const chips = [...composer.querySelectorAll('.cmp-chip')];
+    require(chips.length === before.pictures, `the composer holds a chip for each picture (${chips.length} of ${before.pictures})`);
+    const images = chips.map(chip => chip.querySelector('img.cmp-thumb')).filter(Boolean), end = performance.now() + 4000;
+    while (!images.every(image => image.complete && image.naturalWidth > 0) && performance.now() < end) await new Promise(resolve => setTimeout(resolve, 50));
+    require(images.length === before.pictures && images.every(image => visible(image) && image.naturalWidth > 0), 'each picture shows its thumbnail in its chip');
+    const box = composer.getBoundingClientRect();
+    require(box.bottom <= window.innerHeight + 1 && box.top >= 0, 'the composer is on screen');
+    require(!document.querySelector('.tn.is-pending') && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'nothing was sent');
+    const voice = composer.querySelector('.cmp-voice');
+    if (name === "message-edit-armed") require(voice.dataset.cancelArmed === 'true' && voice.dataset.cancelHint && document.activeElement === field, 'the first Escape on changed words arms the cancel with its hint and leaves the edit as it is');
+    else require(!composer.querySelector('[data-cancel-armed]'), 'no cancel is armed');
+    return { check: name, words: field.value.length, chips: chips.length, composer: `${Math.round(box.width)}x${Math.round(box.height)}` };
+    })();
+  }
+  if (name === "message-edit-cancelled") {
+    // R-UI-158: Escape on the words as 編輯 gave them gives the edit up: the message is back as it was, with its pictures, and the composer is empty.
+    const before = window.__look.beforeMessage, turn = document.querySelector('.tn[data-id="8201"]'), field = document.querySelector('.cmp-input'), composer = field.closest('.composer');
+    const bubble = turn.querySelector('.owner-message .bubble');
+    require(before && bubble && visible(bubble), 'the message is back in the thread');
+    require(bubble.querySelector('.message-text').textContent === before.text, 'with its own words');
+    require(turn.querySelectorAll('.owner-message .me-files .attachment-picture img').length === before.pictures, 'with its pictures');
+    const r = bubble.getBoundingClientRect();
+    require(['left', 'right', 'top', 'width', 'height'].every(side => Math.abs(r[side] - before.rect[side]) <= 1), `its bubble is where and as large as it was (${Math.round(r.width)}x${Math.round(r.height)} vs ${Math.round(before.rect.width)}x${Math.round(before.rect.height)})`);
+    require(!composer.hasAttribute('data-replacing') && field.value === '' && !composer.querySelector('.cmp-chip'), 'the composer is empty and no longer replaces anything');
+    require(!document.querySelector('.tn.is-pending') && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'nothing was sent');
+    return { check: name, bubble: `${Math.round(r.width)}x${Math.round(r.height)}`, pictures: before.pictures };
+  }
+  if (name === "message-edit-sent") {
+    // R-UI-158: Enter in the composer sends the edit as the replacement of the message: the edited words, the message it replaces, once, in its place.
+    const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。", field = document.querySelector('.cmp-input'), composer = field.closest('.composer');
+    const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+    require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words && asks[0].memberId === 1, 'Enter asks once, with the edited words and the message it replaces');
+    require(field.value === '' && !composer.hasAttribute('data-replacing') && !composer.querySelector('.cmp-chip'), 'the composer is empty again and replaces nothing');
+    const bubbles = [...document.querySelectorAll('.thread .owner-message .bubble')];
+    require(bubbles.length === 1 && bubbles[0].querySelector('.message-text').textContent.trim() === words && visible(bubbles[0]), 'the edited message stands in its bubble, once');
+    require(document.querySelectorAll('.tn[data-id="8201"]').length === 1 && !document.querySelector('.tn.is-pending'), 'it is the same message, in its place, and nothing is left waiting beside it');
+    return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
+  }
+  if (name === "owner-picture-actions") {
+    // R-UI-159: the actions of a message with pictures above its bubble stand beside the bubble, centred on it and as far from it as on a message
+    // without a picture; they are never between the pictures and the bubble.
+    const messages = [...document.querySelectorAll('.owner-message')].filter(item => visible(item) && item.querySelector('.me-files + .bubble'));
+    require(messages.length > 0, 'an owner message with pictures and words');
+    const found = messages.map(message => {
+      const actions = message.querySelector(':scope > .message-actions'), bubble = message.querySelector('.bubble'), files = message.querySelector('.me-files');
+      require(actions, 'the message has its actions beside it');
+      // The same words and actions without a picture, drawn in the same column: where the actions stand there is where they must stand here.
+      const reference = document.createElement('div');
+      reference.className = 'me'; reference.style.visibility = 'hidden';
+      reference.innerHTML = '<div class="chat-message owner-message"><div class="bubble"><div class="message-text"></div></div></div>';
+      reference.querySelector('.message-text').textContent = bubble.querySelector('.message-text').textContent;
+      reference.querySelector('.owner-message').prepend(actions.cloneNode(true));
+      message.closest('.me').after(reference);
+      const ra = reference.querySelector('.message-actions').getBoundingClientRect(), rb = reference.querySelector('.bubble').getBoundingClientRect();
+      reference.remove();
+      const a = actions.getBoundingClientRect(), b = bubble.getBoundingClientRect(), f = files.getBoundingClientRect();
+      require(a.width > 0 && a.height > 0 && b.height >= a.height, `the actions have a place beside a bubble that is as high (${Math.round(a.height)} and ${Math.round(b.height)} px)`);
+      require(a.right <= b.left + .5 && Math.abs((b.left - a.right) - (rb.left - ra.right)) <= 1, `the actions end where the bubble begins, as without a picture (${Math.round(b.left - a.right)} vs ${Math.round(rb.left - ra.right)} px apart)`);
+      require(a.top >= b.top - 1 && a.bottom <= b.bottom + 1, `the actions are within the bubble's height (${Math.round(a.top)}-${Math.round(a.bottom)} in ${Math.round(b.top)}-${Math.round(b.bottom)})`);
+      require(Math.abs(((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) - ((ra.top + ra.bottom) / 2 - (rb.top + rb.bottom) / 2)) <= 1.5, 'they are centred on the bubble as without a picture');
+      require(a.top >= f.bottom - 1, `they are not at the pictures' height, nor between the pictures and the bubble (actions from ${Math.round(a.top)}, pictures to ${Math.round(f.bottom)})`);
+      return { actions: `${Math.round(a.left)},${Math.round(a.top)}`, bubble: `${Math.round(b.left)},${Math.round(b.top)}`, gap: Math.round(b.left - a.right) };
+    });
+    return { check: name, messages: found };
   }
   if (name === "message-edit-pending" || name === "message-edit-written" || name === "message-edit-answered") {
-    // R-UI-148: an edit stands where its message stood (the thread has routine turns after it), on its way, written and answered; never at the end, never twice.
+    // R-UI-148, R-UI-158: an edit stands where its message stood (the thread has routine turns after it), on its way, written and answered; never at the end, never twice.
     const words = "改過的說法：請整理這份範例研究摘要，並列出三個重點。";
     const lines = [...document.querySelectorAll('.thread > .tn')].map(line => line.classList.contains('is-pending') ? 'pending' : line.dataset.id);
     const mine = [...document.querySelectorAll('.thread .owner-message .message-text')].filter(node => node.textContent.trim() === words);
@@ -10206,7 +10245,7 @@ export function checkRendered(name, context = {}) {
     require(lines.length === 3 && lines[1] === '8203' && lines[2] === '8204' && lines[0] === (name === "message-edit-pending" ? 'pending' : '8201'), `the edit stands first, before the 07:00 and 08:00 routine turns that came after its message: ${lines.join(',')}`);
     const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
     require(asks.length === 1 && asks[0].replaceTurnId === 8201, 'one edit was sent, naming the message it replaces');
-    require(!document.querySelector('[data-edit-input]'), 'no editor is left open');
+    require(!document.querySelector('.composer[data-replacing]'), 'the composer replaces nothing any more');
     const line = document.querySelector('.thread > .tn'), bubble = mine[0].closest('.bubble').getBoundingClientRect(), later = document.querySelector('.tn[data-id="8203"]').getBoundingClientRect();
     require(bubble.bottom <= later.top, 'the edit is above the routine turns on screen');
     if (name === "message-edit-written") require(line.dataset.status === 'running' && !document.querySelector('.is-pending'), 'the member is answering the written message: nothing waits beside it');

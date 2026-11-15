@@ -188,7 +188,9 @@
 .au-source[aria-checked="false"] .au-source-name { color: var(--text-3); }
 .au-calendar-side > .cal-notice { flex: none; flex-wrap: wrap; margin-top: var(--sp-3); }
 .au-calendar-side > .cal-notice .cal-notice-words { flex: 1 1 calc(100% - 56px); }
-.au-awake { display: flex; flex: none; justify-content: space-between; align-items: center; gap: var(--sp-3); margin-top: auto; padding-top: var(--sp-4); font-size: var(--fs-xs); color: var(--text-2); }
+.au-awake-box { flex: none; margin-top: auto; padding-top: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-1); }
+.au-awake { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); font-size: var(--fs-xs); color: var(--text-2); }
+.au-awake-note { margin: 0; font-size: var(--fs-2xs); line-height: 1.4; color: var(--text-3); }
 
 .au-calendar-main { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; margin: 0 var(--sp-4) var(--sp-3) 0; border: 1px solid var(--edge); border-radius: var(--r-lg); overflow: hidden; background: var(--content); }
 .au-calendar-scroll { --au-hour: inherit; flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; user-select: none; }

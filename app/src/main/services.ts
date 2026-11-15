@@ -113,8 +113,10 @@ export function isServiceUrl(text: string): boolean {
 
 const loaded = (v: ServicesView): ServicesStatus | null => (typeof v.status === "object" ? v.status : null);
 
-/** The last part of a model's id: what the small muted words say of it (`anthropic/claude-haiku-5.5` is `claude-haiku-5.5`). */
+/** The last part of a model's id (`anthropic/claude-haiku-5.5` is `claude-haiku-5.5`), for a window that has no catalogue to name it. */
 const shortModel = (id: string): string => id.slice(id.lastIndexOf("/") + 1);
+/** What the small muted words call a model: the catalogue's name for it ("GPT-6 Sol"), never its id. */
+export type ModelNames = (id: string) => string;
 
 /**
  * Whether the owner has `kind` on. The settings the window holds are the freshest (they change the
@@ -167,17 +169,17 @@ export function usableOption(option: ServiceOption): boolean {
 }
 
 /** The services of `kind` as the dialog lists them; none until the core has said. */
-export function serviceRows(kind: Capability, status: ServicesStatus | null, brain: BrainSettings | null): ServiceRow[] {
+export function serviceRows(kind: Capability, status: ServicesStatus | null, brain: BrainSettings | null, names: ModelNames = shortModel): ServiceRow[] {
   if (!status) return [];
   const chosen = chosenOf(kind, status, brain);
   if (kind === "vision") {
     const model = status.vision.model;
     const sees = status.vision.supports_images !== false;
     // The model that really reads the images: a command-line brain never does, so the core names the one it falls back to.
-    const resolved = shortModel(status.vision.resolved_model ?? "");
+    const resolved = names(status.vision.resolved_model ?? "");
     return [
       { id: VISION_SAME, name: t("services.sameAsAnswer"), note: chosen === VISION_SAME ? resolved : "", chosen: chosen === VISION_SAME, usable: chosen !== VISION_SAME || sees, mark: null },
-      { id: VISION_MODEL, name: t("services.visionModel"), note: shortModel(model), chosen: chosen === VISION_MODEL, usable: model !== "" && sees, mark: null },
+      { id: VISION_MODEL, name: t("services.visionModel"), note: names(model), chosen: chosen === VISION_MODEL, usable: model !== "" && sees, mark: null },
     ];
   }
   return status[kind].options.map((option) => ({
@@ -190,11 +192,14 @@ export function serviceRows(kind: Capability, status: ServicesStatus | null, bra
   }));
 }
 
-/** The words that say which service is in use, whole, under a row's name: never a cut name or a raw model id. */
-function nowLabel(kind: Capability, status: ServicesStatus | null, brain: BrainSettings | null): string {
+/** The words under a row's name that say which service is in use, whole: never a cut name or a raw model id; 「尚未設定」 while none is set up. */
+function nowLabel(kind: Capability, status: ServicesStatus | null, brain: BrainSettings | null, names: ModelNames): string {
   const chosen = chosenOf(kind, status, brain);
-  if (kind === "vision") return shortModel(status?.vision.resolved_model || status?.vision.model || brain?.vision_model || "") || t("services.sameAsAnswer");
-  return serviceName(chosen);
+  if (kind === "vision") return t("services.nowUsing", { p0: names(status?.vision.resolved_model || status?.vision.model || brain?.vision_model || "") || t("services.sameAsAnswer") });
+  // The core says "none" while nothing is set up (the default search): no service is no name. Before it has said (the setting
+  // is still "auto", or unknown), the line stays empty rather than name a service that may not be the one.
+  if (chosen === "none") return t("services.nowNone");
+  return chosen === "" || chosen === "auto" ? "" : t("services.nowUsing", { p0: serviceName(chosen) });
 }
 
 /** Whether the service in use for `kind` can be used now (a status the core has not given: no). */
@@ -212,7 +217,7 @@ const capIcon = (icon: IconName, size = ""): string => `<span class="ic svc-ic${
 const closeButton = (): string => iconButton("x", t("common.close"), ' data-svc="close" data-k="svc-close" data-nav-back');
 
 /** One row of the list, the same markup as 「連接」: the name opens the capability's dialog, the switch is its own. */
-function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: BrainSettings | null): string {
+function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: BrainSettings | null, names: ModelNames): string {
   const status = loaded(v);
   const on = isOn(entry.kind, status, brain);
   const name = entry.label();
@@ -221,7 +226,7 @@ function itemHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: 
     `<div class="cs-item svc-item${on ? "" : " off"}" data-svc="open" data-id="${id}">` +
     btn(
       `${capIcon(entry.icon)}<span class="tx"><span class="nm">${esc(name)}</span><span class="ds">${esc(entry.about())}</span>` +
-        `<span class="svc-now">${esc(t("services.nowUsing", { p0: nowLabel(entry.kind, status, brain) }))}</span></span>`,
+        `<span class="svc-now">${esc(nowLabel(entry.kind, status, brain, names))}</span></span>`,
       "cs-open",
       ` data-svc="open" data-id="${id}" data-k="svc-open:${id}" aria-haspopup="dialog"`,
     ) +
@@ -263,7 +268,7 @@ function urlLineHTML(option: ServiceOption, v: ServicesView, url: string): strin
 }
 
 /** The dialog's first view: the services of the capability, under 「已安裝」. */
-function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: BrainSettings | null): string {
+function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, brain: BrainSettings | null, names: ModelNames): string {
   const status = loaded(v);
   const name = entry.label();
   const on = isOn(entry.kind, status, brain);
@@ -276,7 +281,7 @@ function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, bra
     const body = v.status === "failed" ? `<div class="alert core-note" role="alert">${st("err", t("services.loadFailed"))}</div>` : `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
     return head + body;
   }
-  const rows = serviceRows(entry.kind, status, brain)
+  const rows = serviceRows(entry.kind, status, brain, names)
     .map((row) => {
       const mark = row.mark ? iconHTML(row.name, row.mark, "md") : `<span class="mono md" aria-hidden="true">${ico(LOCAL_ICONS[row.id] ?? "plug")}</span>`;
       const why = whyOf(entry.kind, row.id);
@@ -296,9 +301,9 @@ function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, bra
 }
 
 /** The service setup page owns its shared key/address and Use action. */
-function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: ServicesView, visionPicker: string, brain: BrainSettings | null): string {
+function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: ServicesView, visionPicker: string, brain: BrainSettings | null, names: ModelNames): string {
   const status = loaded(v);
-  const row = serviceRows(entry.kind, status, brain).find((r) => r.id === service);
+  const row = serviceRows(entry.kind, status, brain, names).find((r) => r.id === service);
   const option = entry.kind === "vision" ? undefined : status?.[entry.kind].options.find((o) => o.id === service);
   const name = row?.name ?? (service === VISION_SAME ? t("services.sameAsAnswer") : service === VISION_MODEL ? t("services.visionModel") : serviceName(service));
   const on = isOn(entry.kind, status, brain);
@@ -331,11 +336,11 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
  * opens (`data-dialog`, ui.ts `swapHTML`), not each time it is drawn again; a click on the dimmed
  * part closes it, as Esc and its × do.
  */
-function dialogHTML(v: ServicesView, visionPicker: string, brain: BrainSettings | null): string {
+function dialogHTML(v: ServicesView, visionPicker: string, brain: BrainSettings | null, names: ModelNames): string {
   const open = v.open;
   const entry = open ? capability(open.kind) : undefined;
   if (!open || !entry) return "";
-  const inner = open.service === null ? listViewHTML(entry, v, brain) : subViewHTML(entry, open.service, v, visionPicker, brain);
+  const inner = open.service === null ? listViewHTML(entry, v, brain, names) : subViewHTML(entry, open.service, v, visionPicker, brain, names);
   const slide = v.slide === "in" ? " slide-in" : v.slide === "out" ? " slide-out" : "";
   return (
     `<div class="cs-scrim" data-svc="scrim" data-dialog="svc:${entry.kind}">` +
@@ -350,12 +355,12 @@ function dialogHTML(v: ServicesView, visionPicker: string, brain: BrainSettings 
  * dialog's page for 「指定模型」 only. `brain` gives what is chosen while the core has not said
  * (`status` is loading or failed).
  */
-export function servicesHTML(v: ServicesView, visionPicker: string, brain: BrainSettings | null): string {
-  const rows = CAPABILITIES.map((entry) => itemHTML(entry, v, brain)).join("");
+export function servicesHTML(v: ServicesView, visionPicker: string, brain: BrainSettings | null, names: ModelNames = shortModel): string {
+  const rows = CAPABILITIES.map((entry) => itemHTML(entry, v, brain, names)).join("");
   const failed = v.status === "failed" && !v.open ? `<div class="note" role="alert">${st("err", t("services.loadFailed"))}</div>` : "";
   return (
     `<section class="sgroup svc" data-svc-section><h2>${esc(t("services.title"))}</h2><div class="cs-list" data-stagger="svc">${rows}</div>${failed}</section>` +
-    dialogHTML(v, visionPicker, brain)
+    dialogHTML(v, visionPicker, brain, names)
   );
 }
 

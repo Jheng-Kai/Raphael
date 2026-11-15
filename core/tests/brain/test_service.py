@@ -1177,7 +1177,7 @@ async def test_an_invalid_selection_of_languages_is_invalid_params(router, value
 
 async def test_the_assistants_settings_are_in_settings_get_and_can_be_set(router):
     settings = (await router.call("settings.get", {}))["settings"]
-    assert (settings["agent_model"], settings["agent_city"]) == ("openai/gpt-6-luna", "台北")
+    assert (settings["agent_model"], settings["agent_city"]) == ("openai/gpt-6-luna", "")
     assert "agent_router" not in settings  # Jev always routes: there is no choice to show
     # Before OpenRouter's list of models has been read, the model is one of Raphael's own
     # (test_model_choice.py has the rest).

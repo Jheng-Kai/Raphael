@@ -636,3 +636,39 @@ test("a message just sent takes the one slime from a task that waits", async () 
   expect(presences()).toHaveLength(1);
   expect($(".thread > li:last-child").contains(presences()[0]!)).toBe(true);
 });
+
+// R-PUMP-03: Stop is offered only while something it can stop is in progress, and a refresh reads the truth.
+const seven = (state: string, over: Partial<NonNullable<AgentTurn["task"]>> = {}) => task(7, { state, ...over } as Partial<NonNullable<AgentTurn["task"]>>);
+const ended = (state: string) => seven(state, { finished_at_ms: 2 });
+
+test.each([
+  ["a running turn the restart expired", { status: "running" }, { status: "expired" }],
+  ["a task the restart interrupted", { status: "done", task: seven("waiting") }, { status: "error", task: ended("interrupted") }],
+  ["a queued hand-off the restart ended", { status: "running", task: seven("queued") }, { status: "error", task: ended("interrupted") }],
+] as const)("a core that restarted and ended %s takes Stop away without any other event", async (_name, before, after) => {
+  turns = [live(before as Partial<AgentTurn>)];
+  mount(); await flush(); expectStop();
+  // The restart sweeps the rows and tells the page nothing but that it is ready again.
+  turns = [live(after as Partial<AgentTurn>)];
+  await refresh({ type: "CoreReady" });
+  expect($(".composer").dataset.taskState).toBe("idle");
+  expect($(".cmp-voice").querySelector(".av")).not.toBeNull();
+});
+
+test("an end the page was never told of still takes Stop away, by the read it makes while Stop shows", async () => {
+  turns = [live({ status: "done", task: seven("running") })];
+  mount(); await flush(); expectStop();
+  turns = [live({ status: "done", text: "Finished", task: ended("done") })];
+  // No AgentTurn, no WorkerChanged: the event was dropped (a window that was hidden, a channel that lost it).
+  await vi.advanceTimersByTimeAsync(20_000); await flush();
+  expect($(".composer").dataset.taskState).toBe("idle");
+});
+
+test("the read made while Stop shows stops with it: an idle composer reads nothing by itself", async () => {
+  turns = [live({ status: "done", text: "Finished" })];
+  mount(); await flush();
+  expect($(".composer").dataset.taskState).toBe("idle");
+  api.agentHistoryList.mockClear();
+  await vi.advanceTimersByTimeAsync(120_000); await flush();
+  expect(api.agentHistoryList).not.toHaveBeenCalled();
+});

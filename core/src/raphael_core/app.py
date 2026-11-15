@@ -864,6 +864,7 @@ class App(Router):
             models=self.brain.known_models,
             transcribe=self._transcribe_from_messaging,
             transport=offline_transport() if fake_llm else None,
+            openrouter_ready=lambda: self.brain._has_key_or_none() is True,
         )
         self.services.register(self)
         if agent_actions is None:
@@ -1584,6 +1585,7 @@ class App(Router):
         if not self._closed:
             self.messaging.start()  # Receiving and persistent inbox recovery cannot wait.
             self.agent.start()
+            self.background.start()  # What the last run left queued was put back before the loop ran, and starts here.
             self.members.start_ingress()  # Signed webhook deliveries must not wait for routine maintenance.
             if self._startup_handle is None and not self._deferred_started:
                 self._startup_handle = asyncio.get_running_loop().call_later(STARTUP_GRACE_S, self._start_deferred)

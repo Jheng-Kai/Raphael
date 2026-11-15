@@ -273,20 +273,20 @@ in the thread: exactly one, on the line that works with its words, none under th
 npm run look -- slime-one-working composer-stop-background composer-queued composer-send-while-working composer-stop-pending transcript-working running --theme both --width 1120,720,1920x1080
 ```
 
-## The owner edits a sent message in its own bubble, where it stands (owner, 2026-11-14, R-UI-148)
+## The owner edits a sent message in the composer; the edit stands where it stood (owner, 2026-11-15, R-UI-158; 2026-11-14, R-UI-148)
 
-Owner: 「如果使用者選擇編輯的時候，不要把它拉回到我們的對話框裡面，而是直接在原本畫面上的 Message Bubble 做編輯，然後編輯完就直接重新發布出去，邏輯是一樣的」, then, on his build of 7231ae74:
-「我編輯的時候不用特別改那個 message bubble，用原本的 message bubble 下去編輯就好了。那你現在編輯完我傳送之後呢，它就不見了，訊息就不見了？」
+Owner, 2026-11-14 (R-UI-148, withdrawn the next day): the message was edited in its own bubble. Owner, 2026-11-15: 「編輯訊息我覺得改成會直接把 message bubble 直接拿回來放到輸入框好了 附帶的檔案也都要 原本的 message bubble 就直接拿掉沒關係」.
 
-**The editor is the bubble.** Choosing 編輯 in a message's ⋯ keeps the bubble as it is (`.bubble` of the owner's message: its colour, shape, padding,
-type, width behaviour) and its words become a field in it (`message-edit.ts`, drawn by `turnHTML` while `TimelineState.editing` names the turn;
-`.msg-editor-input` takes the words' own size, `field-sizing: content`, up to ten lines then it scrolls), the caret after them. The bubble grows with
-the words, as the composer does. 取消 and the primary 送出 (`btn sm`, 30 px) stand under it at its right edge (`.msg-editor-under`), in no box. The
-composer keeps its draft. Enter and 送出 call the composer's `send` (`send(edit)` in `pages/agent.ts`), so the same `agent_ask_text` goes out with the
-edited words, the files and the quote of the original and `replaceTurnId`. A failed send brings the editor back with the words as typed and says so. Escape
-leaves at once while the words are the original's, and goes through the app's cancel gesture once they changed (first press arms 取消, which shows Esc and
-「再按一次取消」; the second within 1.5 s leaves). Shift+Enter is a new line. Files that are not stored any more show as chips with × (under the bubble) and
-block 送出 until dropped. A group room has no edit. Not in the editor: attaching more files, removing the quote or a stored file.
+**編輯 takes the message into the composer.** Choosing 編輯 in a private conversation's ⋯ (a room's messages have no edit) calls `editMessage` in `pages/agent.ts`:
+`draftFor` reads the message's words, quote and files (a stored copy by its id; a missing one shows as a chip to drop), `restoreDraft` puts them in the composer
+with `replacing` set to the turn and `render()` marks the composer `data-replacing`. While `replacing` names a turn of the thread, `render` sets
+`TimelineState.editingTurnId` and `turnHTML` leaves that turn's owner bubble (its pictures and quote with it) out; what the member answered stays. The
+`data-edit-input` field, `message-edit.ts`, `.msg-editor-*` and 取消/送出 under the bubble no longer exist. Sending is the composer's own `send`: the edited words,
+the files and the quote, `replaceTurnId`; `Outgoing.replaces` keeps the message's place for the edit on its way. A failed send gives the words back in the composer, still
+replacing, with the failure card. Giving the edit up (`abandonEdit`) empties the composer and draws the bubble again: Escape in the composer, at once while it holds what
+編輯 gave it (`editUntouched`), and through the app's cancel gesture once it changed (the voice slot shows Esc and 「再按一次取消」); a running task or a recording keeps its own
+Escape. `saveComposerDraft` never keeps a draft that replaces a message, so leaving the conversation gives the edit up and nothing of it comes back as a second copy.
+An unsent draft the composer held is kept aside (`editOrigin.before`) and comes back once the edit is sent or given up (`resumeDraft`), unless something newer is in the composer; words typed or a file added while the message's files are read stop 編輯 from writing over them. Not covered: small files (4 MB or less) are read back and sent as bytes again, not by stored id.
 
 **The edit stands where its message stood.** Found by reading, then by running the real core with a member, its own conversation id and routine turns
 newer than the owner's message: the core removed the message and wrote the edit at the end of the thread, and when the message was the newest the new row
@@ -301,17 +301,19 @@ Unchecked: an edit sent while the member is working on a later message is steere
 place as a message without a reply of its own.
 
 ```powershell
-npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-sent message-edit-placed chat actions message-hugs-bubble reaction-owner reaction-row member-text --theme both --width 1120,720,1920x1080
+npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-cancelled message-edit-sent message-edit-placed message-edit-picture chat actions message-hugs-bubble reaction-owner reaction-row member-text --theme both --width 1120,720,1920x1080
 ```
 
-`message-edit-before` (a step of the scenes) records the sent bubble. `message-edit-open` and `message-edit-long` (a message of several lines) assert
-the editor against it: every colour, padding, type and radius of the bubble the same, its right edge and top where they were, a short message the same
-size (±2 px), the caret and focus, every word in view, no wrapper box, no pressable action beside it (their room is held, hidden and inert, so the bubble and a picture above it keep their size), 取消 and a ready primary 送出 of 30 px under the bubble and
-ending at its right edge, the composer empty; `message-edit-armed` is the first Escape on changed words (取消 armed, editor open); `message-edit-sent`
-types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`, one `.tn[data-id]` with the new words, nothing waiting.
-`message-edit-placed` runs a thread with the 07:00 and 08:00 routine turns after the message against the look mock, which now retracts and writes the
+`message-edit-before` (a step of the scenes) records the sent message (its words, its pictures, its bubble's box). `message-edit-open` and `message-edit-long` (a message of
+several lines) assert, after 編輯: the composer marked `data-replacing`, holding the words (the caret after them, the focus in it), one chip with a loaded thumbnail for each
+picture, no `.owner-message`, `.me-files` or `.bubble` in the message's line, the member's answer still there, no editor of R-UI-148 anywhere, the composer on screen and nothing
+sent; `message-edit-armed` is the first Escape on changed words (the voice slot armed with its hint, edit and composer unchanged); `message-edit-cancelled` is Escape on a
+message with a picture straight after 編輯: the bubble and its picture are back, as large and where they were, the composer empty and no longer replacing; `message-edit-sent`
+types new words and presses Enter: one `agent_ask_text` with the words and `replaceTurnId`, one `.tn[data-id]` with the new words, the composer empty, nothing waiting.
+`message-edit-placed` runs a thread with the 07:00 and 08:00 routine turns after the message against the look mock, which retracts and writes the
 edit as the core does: `message-edit-pending` (the edit stands first, above the routine turns, nothing at the end), `message-edit-written` (the same
-place with the member answering) and `message-edit-answered`.
+place with the member answering) and `message-edit-answered`. `message-edit-picture` is `message-edit-open` for a message with a picture (the chip shows its thumbnail), after
+`owner-picture-actions` on the sent message.
 
 ## A message with a picture keeps the bubble's own width (owner, 2026-11-14, R-UI-149)
 
@@ -322,14 +324,24 @@ and the message is as wide as the wider of the picture and the bubble, both at i
 The group room's messages and threads draw the same markup and follow.
 
 ```powershell
-npm run look -- owner-picture-short owner-picture-long owner-picture-pending message-edit-picture message-edit-open room-files-sent chat --theme both --width 1120,720,1920x1080
+npm run look -- owner-picture-short owner-picture-long owner-picture-pending owner-pictures-four message-edit-picture message-edit-open room-files-sent room-files-words-sent chat --theme both --width 1120,720,1920x1080
 ```
 
-`owner-picture-bubble` (the check of the first three, and of `message-edit-picture` with the editor open) draws the same words in a bubble without a picture in the
-same line, measures it and requires the bubble to be as wide (±1 px; ±2 px for the editor's field), the picture to keep its size (200 to 420 px), a short
+`owner-picture-bubble` (the check of the first three) draws the same words in a bubble without a picture in the
+same line, measures it and requires the bubble to be as wide (±1 px), the picture to keep its size (200 to 420 px), a short
 message's bubble not to equal the picture's width, a long one to be wider than the picture, and the bubble to stand under the picture at its right edge.
 `owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
-Enter, the call held), `message-edit-picture` the message open in its editor.
+Enter, the call held), `message-edit-picture` the message taken into the composer by 編輯 (R-UI-158).
+
+**The actions stand beside the bubble, not the pictures (owner, 2026-11-15, R-UI-159).** Owner, with his message that had a picture above its purple bubble: 「那個三個點點，還有一些回覆的 icon，不要放在圖片跟 message bubble 的中間。理論上它都會預附在 message bubble 旁邊，不要因為圖片而改變它的位置」.
+Cause: the actions were the message's first column, centred on the whole of picture and bubble (a private conversation, `.owner-content` one grid item) or in row 1, at the pictures (a room's message,
+`filesHTML` and the bubble its own children). Now the message keeps its own layout (R-UI-149) and the actions are anchored to the bubble
+(`agent.css`: `anchor-name` on the bubble, `position-anchor` on `.message-actions`, `right: anchor(left)` plus the usual gap, centred on it, `anchor-scope` per message),
+out of the grid, with no column gap left behind, so a wider picture never moves them and R-UI-104's measure holds. Two earlier tries (a
+`display: contents` box and a three-column subgrid) left the actions at the picture's left edge or squeezed the bubble.
+A message of pictures only keeps them beside the pictures. `owner-picture-actions` (on `owner-picture-short`, `owner-pictures-four`, `message-edit-picture`
+and the room's `room-files-words-sent`) draws the same words and actions without a picture in the same column and requires the actions to end where the bubble begins at the same gap, to be within the
+bubble's height and centred on it as without a picture, and not at the pictures' height. `room-files-words-sent` was written without a run (see the PR).
 
 ## Several pictures: a scrolling row in the composer, small squares once sent (owner, 2026-11-15, R-ATTACH-01, R-ATTACH-02)
 
@@ -1068,6 +1080,17 @@ is processing before any turn exists. Roster/avatar redraws retain the actual St
 accessible label. The same target chooses the glyph and cancellation: an outgoing request first,
 then the newest active turn/task, then pre-turn voice. A repeated Stop is disabled until its call
 settles; it never sends a voice key. Request/worker cancellation preserves history.
+
+Stop is only ever as true as the last read (R-PUMP-03, owner 2026-11-15: Stop stayed after the work ended). The page reads
+its live turns again on `CoreReady` (a restarted core expires the turns and interrupts the tasks and sends no other word)
+and, while the composer offers Stop for work (not a recording), every `STOP_RECHECK_MS` (15 s) whatever events came; an idle
+composer reads nothing by itself. `pages/agent-stop.test.ts` replays a restart and a dropped event; the core side is
+R-PUMP-01 and R-PUMP-02 (`work-truth.md`). A group room's composer follows its exchange and hand-offs and reads again on
+`CoreReady` already.
+
+A stop leaves nothing in the thread (R-STOP-01): no 「任務已中止。已執行 N 次工具呼叫。」 line (the core writes none), and a
+cancelled task with no steps and no words draws no line at all (`conversation.ts` `visibleTurn`, `stoppedQuietly`); the
+composer and the member's presence go idle. `conversation.test.ts` covers the drawing, `core/tests/background` the endings.
 
 Composer voice processing belongs to the conversation selected when recording began.
 Desktop hotkey voice belongs to Raphael's quick conversation, including navigation into it after Alt+Space. Older voice history cannot settle a new
@@ -2893,6 +2916,8 @@ read from the conversation's own words (`conversation_language`). Chinese prose 
 chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chinese`), never
 ui_language; kana, code and English stay unchanged. The configured voice language remains
 independent, including Japanese rendering on a Japanese interface.
+
+R-LANG-05 (2026-11-16, owner: 「工程師又開始說英文了」): the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from his own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that every text it writes is in that language (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
 
 Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
 brain/test_db.py, agent/test_persona.py, agent/test_answers.py,

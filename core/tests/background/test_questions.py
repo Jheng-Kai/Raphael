@@ -310,8 +310,7 @@ async def test_a_waiting_task_can_be_stopped(make_rig, plugins, calls, clock):
     task_id = rig.submit()
     asked = await paused(rig, task_id)
     assert await rig.rpc.call("worker.cancel", {"task_id": task_id}) == {"cancelled": True}
-    [ended] = rig.reports()
-    assert ended["state"] == "cancelled" and calls == []
+    assert rig.reports() == [] and rig.task(task_id).state == "cancelled" and calls == []  # a stop says nothing (R-STOP-01)
     assert questions(rig)[-1]["state"] == "cancelled"
     answer = {"task_id": task_id, "question_id": asked["question_id"], "approved": True}
     assert await rig.rpc.call("background.answer", answer) == {"status": "cancelled"}

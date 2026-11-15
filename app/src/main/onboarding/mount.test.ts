@@ -25,6 +25,12 @@ const api = vi.hoisted(() => ({
   openExternalUrl: vi.fn(),
 }));
 vi.mock("../api", () => api);
+// The picker of the window's language answers at once with the language the test names.
+const chosen = vi.hoisted(() => ({ language: "fr" }));
+vi.mock("../language-picker", async (original) => ({
+  ...(await original<typeof import("../language-picker")>()),
+  openLanguagePicker: (_button: unknown, _choices: unknown, _current: unknown, pick: (value: string) => void) => pick(chosen.language),
+}));
 
 import { setLocale } from "../i18n";
 import type { AppContext } from "../types";
@@ -93,6 +99,22 @@ afterEach(() => {
 });
 
 describe("the guide", () => {
+  test("the language chosen on the welcome is the language dictation listens for, not a fixed 繁體中文 (R-DEFAULT-03)", async () => {
+    await open();
+    for (const [language, spoken] of [["fr", "fr-FR"], ["ja", "ja-JP"], ["en", "en-US"], ["zh-TW", "zh-TW"]] as const) {
+      chosen.language = language;
+      api.settingsSet.mockClear();
+      await press('[data-ob="lang"]');
+      expect(setDevice).toHaveBeenLastCalledWith({ ui_language: language });
+      expect(api.settingsSet).toHaveBeenCalledWith("languages", [spoken]);
+    }
+    // A core that cannot take it leaves the default; the window's language is changed all the same.
+    chosen.language = "de";
+    api.settingsSet.mockRejectedValueOnce(new Error("the core is not running"));
+    await press('[data-ob="lang"]');
+    expect(setDevice).toHaveBeenLastCalledWith({ ui_language: "de" });
+  });
+
   test("opens on the welcome, with nothing to go back to on a first run", async () => {
     await open();
     expect(root.dataset.step).toBe("welcome");

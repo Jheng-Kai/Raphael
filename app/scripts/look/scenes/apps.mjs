@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { scene, click, wait, waitGone, check, key } from "./steps.mjs";
 
-// Settings > Connections owns the app inventory and its connected count.
+// Connect apps (the sidebar's dialog) owns the app inventory and its connected count.
 // Every scene uses the real account footer and Settings entry.
 const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
 const open = [click("#nav .sidebar-apps"), wait('.modal-scrim[data-standalone="connections"] .modal-body .cs'), check("settings-shell")];

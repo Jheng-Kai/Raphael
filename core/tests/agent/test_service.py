@@ -973,7 +973,9 @@ async def test_a_saved_setting_that_is_not_valid_reads_as_its_default(rig, clien
     client.replies.append(spoken())
     await rig.ask("天氣")
     assert client.json_calls[0]["model"] == "openai/gpt-6-luna"
-    assert rig.meteo.requests[0].url.params["name"] == "Taipei"
+    # R-DEFAULT-01: with no city saved the weather is not looked up for a guess; the answer is told to ask which city.
+    assert rig.meteo.requests == []
+    assert "Ask the user which city" in client.json_calls[0]["user"]
     assert len(client.decide_calls) == 1  # jev
 
 

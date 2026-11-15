@@ -679,23 +679,33 @@ class TaskStore:
         self,
         report: Callable[[str, int], tuple[str, str]] | None = None,
         reason: str = "restart",
+        stale_before_ms: int | None = None,
     ) -> list[Task]:
         """Mark the tasks that were queued, running or waiting as interrupted: the worker they ran
         in is gone (and the conversation a waiting one would go on with), and a task is never
         started again by itself. Safe queued handoffs and persisted waiting continuations remain
         recoverable; uncertain running effects are never replayed. Their questions are cancelled. With `report` (the task's language and
         the tool calls it made, to a prefix and a line) each gets that report, to be said once
-        (`announced` 0). Returns the tasks as they are now."""
+        (`announced` 0). A hand-off that never began and has waited since before `stale_before_ms` is not put back either: it
+        ends as `stale_queue`, without a report (nothing was done, nothing is said: R-STOP-01), so that work the owner has long
+        since done another way is not started unseen hours later and a parent that waits for it is woken (R-PUMP-01). Returns
+        the tasks as they are now."""
         with self._conn:
             rows = self._conn.execute(
-                "SELECT id, language FROM worker_tasks"
+                "SELECT id, language, (state='queued' AND mode IS NOT NULL AND started_at_ms IS NULL"
+                " AND ready_at_ms < ?) AS stale FROM worker_tasks"
                 " WHERE state IN ('queued', 'running', 'waiting')"
-                " AND NOT ((mode IS NOT NULL OR continuation IS NOT NULL) AND state='queued')"
-                " AND NOT (state='waiting' AND continuation IS NOT NULL)"
+                " AND (stale OR (NOT ((mode IS NOT NULL OR continuation IS NOT NULL) AND state='queued')"
+                " AND NOT (state='waiting' AND continuation IS NOT NULL)))",
+                (-1 if stale_before_ms is None else stale_before_ms,),
             ).fetchall()
             for row in rows:
+                ended = "stale_queue" if row["stale"] else reason
+                if row["stale"]:
+                    self._conn.execute("UPDATE task_stage_owners SET state='blocked',reason=? WHERE owner_task_id=?",
+                                       (ended, row["id"]))
                 self._conn.execute("UPDATE task_executions SET state='interrupted',ended_at_ms=?,outcome=? "
-                    "WHERE task_id=? AND state='running'",(self._now_ms(),reason,row['id']))
+                    "WHERE task_id=? AND state='running'",(self._now_ms(),ended,row['id']))
                 self._conn.execute(
                     "UPDATE worker_questions SET state = 'cancelled' WHERE task_id = ?"
                     " AND state = 'waiting'",
@@ -711,14 +721,15 @@ class TaskStore:
                     self._conn.execute(
                         "UPDATE worker_tasks SET state = 'interrupted', finished_at_ms = ?,"
                         " reason = ? WHERE id = ?",
-                        (self._now_ms(), reason, row["id"]),
+                        (self._now_ms(), ended, row["id"]),
                     )
                     continue
-                prefix, text = report(row["language"], self.tool_steps(row["id"]))
+                # A hand-off nobody began says nothing when it ends: no report, and nothing to announce (R-STOP-01).
+                prefix, text = ("", "") if row["stale"] else report(row["language"], self.tool_steps(row["id"]))
                 self._conn.execute(
                     "UPDATE worker_tasks SET state = 'interrupted', finished_at_ms = ?,"
-                    " reason = ?, report_prefix = ?, report_text = ?, announced = 0 WHERE id = ?",
-                    (self._now_ms(), reason, prefix, text, row["id"]),
+                    " reason = ?, report_prefix = ?, report_text = ?, announced = ? WHERE id = ?",
+                    (self._now_ms(), ended, prefix, text, 1 if row["stale"] else 0, row["id"]),
                 )
                 self._conn.execute("INSERT OR IGNORE INTO task_outbox "
                     "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "

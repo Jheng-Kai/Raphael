@@ -79,7 +79,7 @@ class Cause:
     retry: bool
     kind: str
     said: str
-    fix: str = ""  # "settings": the Composio key in Settings > Connections > Store; "form": what the card asks for
+    fix: str = ""  # "settings": the Composio key in Connect apps (sidebar); "form": what the card asks for
 
 
 CAUSES: dict[str, Cause] = {cause.name: cause for cause in (
@@ -99,8 +99,8 @@ CAUSES: dict[str, Cause] = {cause.name: cause for cause in (
     Cause("address", True, "tool_broken", "The service sent a sign-in address that does not belong to it, so Raphael did not open it. Try again."),
     Cause("not_allowed", False, "permission_denied", "Composio does not allow this app for the owner's project. The owner can allow it in the Composio dashboard."),
     # The keys and the owner's own setup.
-    Cause("needs_composio_key", False, "auth_expired", "Composio's API key is missing. The owner adds it in Settings > Connections > Store.", "settings"),
-    Cause("key_refused", False, "auth_expired", "Composio refused its API key. The owner checks or replaces it in Settings > Connections > Store.", "settings"),
+    Cause("needs_composio_key", False, "auth_expired", "Composio's API key is missing. The owner adds it in Connect apps (sidebar).", "settings"),
+    Cause("key_refused", False, "auth_expired", "Composio refused its API key. The owner checks or replaces it in Connect apps (sidebar).", "settings"),
     Cause("not_configured", False, "auth_expired", "Raphael's own Google sign-in is not set up.", "settings"),
     Cause("needs_key", False, "auth_expired", "This app signs in with the owner's own key, which the card asks for.", "form"),
     Cause("needs_own_app", False, "auth_expired", "This app needs a developer app of the owner's own, which the card asks for.", "form"),
@@ -140,7 +140,7 @@ _RAW = {
 }
 # The failures that are the owner's to put right, each with a place in the window to do it.
 SETUP = frozenset(("needs_composio_key", "key_refused", "needs_key", "needs_own_app", "key_rejected", "needs_own_google", "client_rejected"))
-WHERE = "Settings > Connections > Store"
+WHERE = "Connect apps (sidebar)"
 DETAIL_CHARS = 140
 # The steps of the owner's own Google, for the member to explain; the card shows the same in the window's language.
 GOOGLE_STEPS = (
@@ -648,8 +648,8 @@ class ConnectorCards:
             own = (" Or the owner can connect their own Google account instead: connect_app with the id google, which walks them through a Google Cloud client."
                    if app.provider == "google" else "")
             return Failure("auth_expired", f"No app can be added yet: Composio's API key is {'missing' if kind == 'needs_composio_key' else 'refused'}. The owner "
-                                           f"{'adds' if kind == 'needs_composio_key' else 'checks or replaces'} it in Settings > "
-                                           f"Connections > Store (Composio key, made at composio.dev); then {name} can be added from the card or from {WHERE}.{own}",
+                                           f"{'adds' if kind == 'needs_composio_key' else 'checks or replaces'} it in {WHERE}, "
+                                           f"in the Composio key form (made at composio.dev); then {name} can be added from the card or from {WHERE}.{own}",
                            missing=_card_missing("needs_composio_key") if kind == "needs_composio_key" else None)
         if kind == "key_rejected":
             return Failure("auth_expired", f"{name} did not accept the key the owner entered. The owner checks it and enters it again "

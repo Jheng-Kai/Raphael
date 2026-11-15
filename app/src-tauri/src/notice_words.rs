@@ -226,43 +226,43 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
                 _ => None,
             }
         }
-        "《Negative. No microphone is available. Connect one and select it in Settings > Dictation > Microphone.》" => {
+        "《Negative. No microphone is available. Connect one and select it in Settings > Dictation & shortcuts > Microphone.》" => {
             match language {
-                "zh-CN" => {
-                    Some("《否。未侦测到麦克风。请接上设备，再到「设置 › 听写 › 麦克风」选择。》")
-                }
+                "zh-CN" => Some(
+                    "《否。未侦测到麦克风。请接上设备，再到「设置 › 听写与快捷键 › 麦克风」选择。》",
+                ),
                 "ko" => Some(
-                    "《거절. 마이크를 사용할 수 없습니다. 연결한 뒤 설정 > 받아쓰기 > 마이크에서 선택해 주세요.》",
+                    "《거절. 마이크를 사용할 수 없습니다. 연결한 뒤 설정 > 받아쓰기 및 단축키 > 마이크에서 선택해 주세요.》",
                 ),
                 "es" => Some(
-                    "《No. No hay micrófono disponible. Conecta uno y selecciónalo en Ajustes > Dictado > Micrófono.》",
+                    "《No. No hay micrófono disponible. Conecta uno y selecciónalo en Configuración > Dictado y atajos > Micrófono.》",
                 ),
                 "fr" => Some(
-                    "《Non. Aucun microphone disponible. Branchez-en un et sélectionnez-le dans Paramètres > Dictée > Microphone.》",
+                    "《Non. Aucun microphone disponible. Branchez-en un et sélectionnez-le dans Réglages > Dictée et raccourcis > Microphone.》",
                 ),
                 "de" => Some(
-                    "《Nein. Kein Mikrofon verfügbar. Schließe eines an und wähle es unter Einstellungen > Diktat > Mikrofon.》",
+                    "《Nein. Kein Mikrofon verfügbar. Schließe eines an und wähle es unter Einstellungen > Diktat und Tastenkürzel > Mikrofon.》",
                 ),
                 "pt-BR" => Some(
-                    "《Não. Nenhum microfone disponível. Conecte um e selecione em Configurações > Ditado > Microfone.》",
+                    "《Não. Nenhum microfone disponível. Conecte um e selecione em Configurações > Ditado e atalhos > Microfone.》",
                 ),
                 "it" => Some(
-                    "《No. Nessun microfono disponibile. Collegane uno e selezionalo in Impostazioni > Dettatura > Microfono.》",
+                    "《No. Nessun microfono disponibile. Collegane uno e selezionalo in Impostazioni > Dettatura e scorciatoie > Microfono.》",
                 ),
                 "ru" => Some(
-                    "《Нет. Микрофон недоступен. Подключите его и выберите в Настройки > Диктовка > Микрофон.》",
+                    "《Нет. Микрофон недоступен. Подключите его и выберите в Настройки > Диктовка и горячие клавиши > Микрофон.》",
                 ),
                 "vi" => Some(
-                    "《Không. Không có micrô. Kết nối và chọn tại Cài đặt > Đọc chính tả > Micrô.》",
+                    "《Không. Không có micrô. Kết nối và chọn tại Cài đặt > Đọc chính tả và phím tắt > Micrô.》",
                 ),
                 "th" => Some(
-                    "《ไม่. ไม่มีไมโครโฟนให้ใช้ เชื่อมต่อแล้วเลือกที่ การตั้งค่า > การเขียนตามคำบอก > ไมโครโฟน》",
+                    "《ไม่. ไม่มีไมโครโฟนให้ใช้ เชื่อมต่อแล้วเลือกที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด > ไมโครโฟน》",
                 ),
                 "id" => Some(
-                    "《Tidak. Mikrofon tidak tersedia. Hubungkan dan pilih di Pengaturan > Dikte > Mikrofon.》",
+                    "《Tidak. Mikrofon tidak tersedia. Hubungkan dan pilih di Pengaturan > Dikte dan pintasan > Mikrofon.》",
                 ),
                 "tr" => Some(
-                    "《Hayır. Mikrofon kullanılamıyor. Bağlayıp Ayarlar > Dikte > Mikrofon’dan seçin.》",
+                    "《Hayır. Mikrofon kullanılamıyor. Bağlayıp Ayarlar > Dikte ve kısayollar > Mikrofon’dan seçin.》",
                 ),
                 _ => None,
             }
@@ -308,164 +308,166 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
                 _ => None,
             }
         }
-        "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation.》" => {
+        "《Negative. Cloud recognition is not connected. Set the OpenRouter key in Settings > Models & usage > Usage, or download a local model in Settings > Dictation & shortcuts.》" => {
             match language {
                 "zh-CN" => Some(
-                    "《否。云端语音辨识尚未连接。请到「设置 › 模型与用量 › 用量」设置 OpenRouter 密钥，或到「设置 › 听写」下载本机模型。》",
+                    "《否。云端语音辨识尚未连接。请到「设置 › 模型与用量 › 用量」设置 OpenRouter 密钥，或到「设置 › 听写与快捷键」下载本机模型。》",
                 ),
                 "ko" => Some(
-                    "《거절. 클라우드 음성 인식이 연결되지 않았습니다. 설정 > 모델 및 사용량 > 사용량에서 OpenRouter 키를 설정하거나 설정 > 받아쓰기에서 로컬 모델을 다운로드해 주세요.》",
+                    "《거절. 클라우드 음성 인식이 연결되지 않았습니다. 설정 > 모델 및 사용량 > 사용량에서 OpenRouter 키를 설정하거나 설정 > 받아쓰기 및 단축키에서 로컬 모델을 다운로드해 주세요.》",
                 ),
                 "es" => Some(
-                    "《No. El reconocimiento en la nube no está conectado. Configura la clave OpenRouter en Ajustes > Modelos y uso > Uso o descarga un modelo local en Ajustes > Dictado.》",
+                    "《No. El reconocimiento en la nube no está conectado. Configura la clave OpenRouter en Configuración > Modelos y uso > Uso o descarga un modelo local en Configuración > Dictado y atajos.》",
                 ),
                 "fr" => Some(
-                    "《Non. La reconnaissance cloud n’est pas connectée. Définissez la clé OpenRouter dans Paramètres > Modèles et utilisation > Utilisation ou téléchargez un modèle local dans Paramètres > Dictée.》",
+                    "《Non. La reconnaissance cloud n’est pas connectée. Définissez la clé OpenRouter dans Réglages > Modèles et utilisation > Utilisation ou téléchargez un modèle local dans Réglages > Dictée et raccourcis.》",
                 ),
                 "de" => Some(
-                    "《Nein. Cloud-Spracherkennung ist nicht verbunden. Hinterlege den OpenRouter-Schlüssel unter Einstellungen > Modelle und Nutzung > Nutzung oder lade unter Einstellungen > Diktat ein lokales Modell herunter.》",
+                    "《Nein. Cloud-Spracherkennung ist nicht verbunden. Hinterlege den OpenRouter-Schlüssel unter Einstellungen > Modelle und Nutzung > Nutzung oder lade unter Einstellungen > Diktat und Tastenkürzel ein lokales Modell herunter.》",
                 ),
                 "pt-BR" => Some(
-                    "《Não. O reconhecimento na nuvem não está conectado. Configure a chave OpenRouter em Configurações > Modelos e uso > Uso ou baixe um modelo local em Configurações > Ditado.》",
+                    "《Não. O reconhecimento na nuvem não está conectado. Configure a chave OpenRouter em Configurações > Modelos e uso > Uso ou baixe um modelo local em Configurações > Ditado e atalhos.》",
                 ),
                 "it" => Some(
-                    "《No. Il riconoscimento cloud non è collegato. Imposta la chiave OpenRouter in Impostazioni > Modelli e utilizzo > Utilizzo o scarica un modello locale in Impostazioni > Dettatura.》",
+                    "《No. Il riconoscimento cloud non è collegato. Imposta la chiave OpenRouter in Impostazioni > Modelli e utilizzo > Utilizzo o scarica un modello locale in Impostazioni > Dettatura e scorciatoie.》",
                 ),
                 "ru" => Some(
-                    "《Нет. Облачное распознавание не подключено. Задайте ключ OpenRouter в Настройки > Модели и использование > Использование или скачайте локальную модель в Настройки > Диктовка.》",
+                    "《Нет. Облачное распознавание не подключено. Задайте ключ OpenRouter в Настройки > Модели и использование > Использование или скачайте локальную модель в Настройки > Диктовка и горячие клавиши.》",
                 ),
                 "vi" => Some(
-                    "《Không. Chưa kết nối nhận dạng đám mây. Đặt khóa OpenRouter tại Cài đặt > Mô hình và mức dùng > Mức dùng hoặc tải mô hình cục bộ tại Cài đặt > Đọc chính tả.》",
+                    "《Không. Chưa kết nối nhận dạng đám mây. Đặt khóa OpenRouter tại Cài đặt > Mô hình và mức dùng > Mức dùng hoặc tải mô hình cục bộ tại Cài đặt > Đọc chính tả và phím tắt.》",
                 ),
                 "th" => Some(
-                    "《ไม่. ยังไม่เชื่อมต่อการรู้จำบนคลาวด์ ตั้งคีย์ OpenRouter ที่ การตั้งค่า > โมเดลและการใช้งาน > การใช้งาน หรือดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > การเขียนตามคำบอก》",
+                    "《ไม่. ยังไม่เชื่อมต่อการรู้จำบนคลาวด์ ตั้งคีย์ OpenRouter ที่ การตั้งค่า > โมเดลและการใช้งาน > การใช้งาน หรือดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด》",
                 ),
                 "id" => Some(
-                    "《Tidak. Pengenalan cloud belum terhubung. Atur kunci OpenRouter di Pengaturan > Model dan penggunaan > Penggunaan atau unduh model lokal di Pengaturan > Dikte.》",
+                    "《Tidak. Pengenalan cloud belum terhubung. Atur kunci OpenRouter di Pengaturan > Model dan penggunaan > Penggunaan atau unduh model lokal di Pengaturan > Dikte dan pintasan.》",
                 ),
                 "tr" => Some(
-                    "《Hayır. Bulut tanıma bağlı değil. Ayarlar > Modeller ve kullanım > Kullanım’da OpenRouter anahtarını ayarlayın veya Ayarlar > Dikte’den yerel model indirin.》",
+                    "《Hayır. Bulut tanıma bağlı değil. Ayarlar > Modeller ve kullanım > Kullanım’da OpenRouter anahtarını ayarlayın veya Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden yerel model indirin.》",
                 ),
                 _ => None,
             }
         }
-        "《Negative. The local speech model is not downloaded. Download it in Settings > Dictation before recording.》" => {
-            match language {
-                "zh-CN" => Some("《否。尚未下载本机语音模型。请到「设置 › 听写」下载后再录音。》"),
-                "ko" => Some(
-                    "《거절. 로컬 음성 모델이 다운로드되지 않았습니다. 녹음 전에 설정 > 받아쓰기에서 다운로드해 주세요.》",
-                ),
-                "es" => Some(
-                    "《No. El modelo de voz local no está descargado. Descárgalo en Ajustes > Dictado antes de grabar.》",
-                ),
-                "fr" => Some(
-                    "《Non. Le modèle vocal local n’est pas téléchargé. Téléchargez-le dans Paramètres > Dictée avant d’enregistrer.》",
-                ),
-                "de" => Some(
-                    "《Nein. Das lokale Sprachmodell wurde nicht heruntergeladen. Lade es vor der Aufnahme unter Einstellungen > Diktat herunter.》",
-                ),
-                "pt-BR" => Some(
-                    "《Não. O modelo de fala local não foi baixado. Baixe em Configurações > Ditado antes de gravar.》",
-                ),
-                "it" => Some(
-                    "《No. Il modello vocale locale non è scaricato. Scaricalo in Impostazioni > Dettatura prima di registrare.》",
-                ),
-                "ru" => Some(
-                    "《Нет. Локальная речевая модель не скачана. Скачайте её в Настройки > Диктовка перед записью.》",
-                ),
-                "vi" => Some(
-                    "《Không. Chưa tải mô hình giọng nói cục bộ. Tải tại Cài đặt > Đọc chính tả trước khi ghi âm.》",
-                ),
-                "th" => Some(
-                    "《ไม่. ยังไม่ได้ดาวน์โหลดโมเดลเสียงในเครื่อง ดาวน์โหลดที่ การตั้งค่า > การเขียนตามคำบอก ก่อนบันทึกเสียง》",
-                ),
-                "id" => Some(
-                    "《Tidak. Model suara lokal belum diunduh. Unduh di Pengaturan > Dikte sebelum merekam.》",
-                ),
-                "tr" => Some(
-                    "《Hayır. Yerel konuşma modeli indirilmemiş. Kayıttan önce Ayarlar > Dikte’den indirin.》",
-                ),
-                _ => None,
-            }
-        }
-        "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation; for cloud recognition check the connection in Settings > Models & usage.》" => {
-            match language {
-                "zh-CN" => Some(
-                    "《否。语音辨识尚未就绪。请到「设置 › 听写」下载本机模型；使用云端辨识时，请在「设置 › 模型与用量」确认连接。》",
-                ),
-                "ko" => Some(
-                    "《거절. 음성 인식이 준비되지 않았습니다. 설정 > 받아쓰기에서 로컬 모델을 다운로드해 주세요. 클라우드 인식은 설정 > 모델 및 사용량에서 연결을 확인해 주세요.》",
-                ),
-                "es" => Some(
-                    "《No. El reconocimiento de voz no está listo. Descarga un modelo local en Ajustes > Dictado; para la nube comprueba la conexión en Ajustes > Modelos y uso.》",
-                ),
-                "fr" => Some(
-                    "《Non. La reconnaissance vocale n’est pas prête. Téléchargez un modèle local dans Paramètres > Dictée ; pour le cloud, vérifiez la connexion dans Paramètres > Modèles et utilisation.》",
-                ),
-                "de" => Some(
-                    "《Nein. Die Spracherkennung ist nicht bereit. Lade unter Einstellungen > Diktat ein lokales Modell herunter; prüfe für Cloud-Erkennung die Verbindung unter Einstellungen > Modelle und Nutzung.》",
-                ),
-                "pt-BR" => Some(
-                    "《Não. O reconhecimento de fala não está pronto. Baixe um modelo local em Configurações > Ditado; para a nuvem, confira a conexão em Configurações > Modelos e uso.》",
-                ),
-                "it" => Some(
-                    "《No. Il riconoscimento vocale non è pronto. Scarica un modello locale in Impostazioni > Dettatura; per il cloud controlla la connessione in Impostazioni > Modelli e utilizzo.》",
-                ),
-                "ru" => Some(
-                    "《Нет. Распознавание речи не готово. Скачайте локальную модель в Настройки > Диктовка; для облака проверьте подключение в Настройки > Модели и использование.》",
-                ),
-                "vi" => Some(
-                    "《Không. Nhận dạng giọng nói chưa sẵn sàng. Tải mô hình cục bộ tại Cài đặt > Đọc chính tả; với đám mây, kiểm tra kết nối tại Cài đặt > Mô hình và mức dùng.》",
-                ),
-                "th" => Some(
-                    "《ไม่. การรู้จำเสียงยังไม่พร้อม ดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > การเขียนตามคำบอก สำหรับคลาวด์ตรวจสอบการเชื่อมต่อที่ การตั้งค่า > โมเดลและการใช้งาน》",
-                ),
-                "id" => Some(
-                    "《Tidak. Pengenalan suara belum siap. Unduh model lokal di Pengaturan > Dikte; untuk cloud periksa koneksi di Pengaturan > Model dan penggunaan.》",
-                ),
-                "tr" => Some(
-                    "《Hayır. Konuşma tanıma hazır değil. Ayarlar > Dikte’den yerel model indirin; bulut tanıma için Ayarlar > Modeller ve kullanım’da bağlantıyı kontrol edin.》",
-                ),
-                _ => None,
-            }
-        }
-        "《Negative. Cloud transcription failed and there is no local model. Download one in Settings > Dictation, then try again.》" => {
+        "《Negative. The local speech model is not downloaded. Download it in Settings > Dictation & shortcuts before recording.》" => {
             match language {
                 "zh-CN" => {
-                    Some("《否。云端辨识失败，且没有本机模型。请到「设置 › 听写」下载后再试。》")
+                    Some("《否。尚未下载本机语音模型。请到「设置 › 听写与快捷键」下载后再录音。》")
                 }
                 "ko" => Some(
-                    "《거절. 클라우드 전사에 실패했고 로컬 모델도 없습니다. 설정 > 받아쓰기에서 다운로드한 뒤 다시 시도해 주세요.》",
+                    "《거절. 로컬 음성 모델이 다운로드되지 않았습니다. 녹음 전에 설정 > 받아쓰기 및 단축키에서 다운로드해 주세요.》",
                 ),
                 "es" => Some(
-                    "《No. La transcripción en la nube falló y no hay modelo local. Descarga uno en Ajustes > Dictado y reintenta.》",
+                    "《No. El modelo de voz local no está descargado. Descárgalo en Configuración > Dictado y atajos antes de grabar.》",
                 ),
                 "fr" => Some(
-                    "《Non. La transcription cloud a échoué et aucun modèle local n’est disponible. Téléchargez-en un dans Paramètres > Dictée, puis réessayez.》",
+                    "《Non. Le modèle vocal local n’est pas téléchargé. Téléchargez-le dans Réglages > Dictée et raccourcis avant d’enregistrer.》",
                 ),
                 "de" => Some(
-                    "《Nein. Die Cloud-Transkription ist fehlgeschlagen und es gibt kein lokales Modell. Lade eines unter Einstellungen > Diktat herunter und versuche es erneut.》",
+                    "《Nein. Das lokale Sprachmodell wurde nicht heruntergeladen. Lade es vor der Aufnahme unter Einstellungen > Diktat und Tastenkürzel herunter.》",
                 ),
                 "pt-BR" => Some(
-                    "《Não. A transcrição na nuvem falhou e não há modelo local. Baixe um em Configurações > Ditado e tente novamente.》",
+                    "《Não. O modelo de fala local não foi baixado. Baixe em Configurações > Ditado e atalhos antes de gravar.》",
                 ),
                 "it" => Some(
-                    "《No. La trascrizione cloud non è riuscita e manca un modello locale. Scaricane uno in Impostazioni > Dettatura e riprova.》",
+                    "《No. Il modello vocale locale non è scaricato. Scaricalo in Impostazioni > Dettatura e scorciatoie prima di registrare.》",
                 ),
                 "ru" => Some(
-                    "《Нет. Облачная расшифровка не удалась, локальной модели нет. Скачайте её в Настройки > Диктовка и повторите попытку.》",
+                    "《Нет. Локальная речевая модель не скачана. Скачайте её в Настройки > Диктовка и горячие клавиши перед записью.》",
                 ),
                 "vi" => Some(
-                    "《Không. Chép lời đám mây thất bại và không có mô hình cục bộ. Tải một mô hình tại Cài đặt > Đọc chính tả rồi thử lại.》",
+                    "《Không. Chưa tải mô hình giọng nói cục bộ. Tải tại Cài đặt > Đọc chính tả và phím tắt trước khi ghi âm.》",
                 ),
                 "th" => Some(
-                    "《ไม่. ถอดเสียงบนคลาวด์ล้มเหลวและไม่มีโมเดลในเครื่อง ดาวน์โหลดที่ การตั้งค่า > การเขียนตามคำบอก แล้วลองอีกครั้ง》",
+                    "《ไม่. ยังไม่ได้ดาวน์โหลดโมเดลเสียงในเครื่อง ดาวน์โหลดที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด ก่อนบันทึกเสียง》",
                 ),
                 "id" => Some(
-                    "《Tidak. Transkripsi cloud gagal dan tidak ada model lokal. Unduh di Pengaturan > Dikte lalu coba lagi.》",
+                    "《Tidak. Model suara lokal belum diunduh. Unduh di Pengaturan > Dikte dan pintasan sebelum merekam.》",
                 ),
                 "tr" => Some(
-                    "《Hayır. Bulut dökümü başarısız ve yerel model yok. Ayarlar > Dikte’den bir model indirip yeniden deneyin.》",
+                    "《Hayır. Yerel konuşma modeli indirilmemiş. Kayıttan önce Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden indirin.》",
+                ),
+                _ => None,
+            }
+        }
+        "《Negative. Speech recognition is not ready. Download a local model in Settings > Dictation & shortcuts; for cloud recognition check the connection in Settings > Models & usage.》" => {
+            match language {
+                "zh-CN" => Some(
+                    "《否。语音辨识尚未就绪。请到「设置 › 听写与快捷键」下载本机模型；使用云端辨识时，请在「设置 › 模型与用量」确认连接。》",
+                ),
+                "ko" => Some(
+                    "《거절. 음성 인식이 준비되지 않았습니다. 설정 > 받아쓰기 및 단축키에서 로컬 모델을 다운로드해 주세요. 클라우드 인식은 설정 > 모델 및 사용량에서 연결을 확인해 주세요.》",
+                ),
+                "es" => Some(
+                    "《No. El reconocimiento de voz no está listo. Descarga un modelo local en Configuración > Dictado y atajos; para la nube comprueba la conexión en Configuración > Modelos y uso.》",
+                ),
+                "fr" => Some(
+                    "《Non. La reconnaissance vocale n’est pas prête. Téléchargez un modèle local dans Réglages > Dictée et raccourcis ; pour le cloud, vérifiez la connexion dans Réglages > Modèles et utilisation.》",
+                ),
+                "de" => Some(
+                    "《Nein. Die Spracherkennung ist nicht bereit. Lade unter Einstellungen > Diktat und Tastenkürzel ein lokales Modell herunter; prüfe für Cloud-Erkennung die Verbindung unter Einstellungen > Modelle und Nutzung.》",
+                ),
+                "pt-BR" => Some(
+                    "《Não. O reconhecimento de fala não está pronto. Baixe um modelo local em Configurações > Ditado e atalhos; para a nuvem, confira a conexão em Configurações > Modelos e uso.》",
+                ),
+                "it" => Some(
+                    "《No. Il riconoscimento vocale non è pronto. Scarica un modello locale in Impostazioni > Dettatura e scorciatoie; per il cloud controlla la connessione in Impostazioni > Modelli e utilizzo.》",
+                ),
+                "ru" => Some(
+                    "《Нет. Распознавание речи не готово. Скачайте локальную модель в Настройки > Диктовка и горячие клавиши; для облака проверьте подключение в Настройки > Модели и использование.》",
+                ),
+                "vi" => Some(
+                    "《Không. Nhận dạng giọng nói chưa sẵn sàng. Tải mô hình cục bộ tại Cài đặt > Đọc chính tả và phím tắt; với đám mây, kiểm tra kết nối tại Cài đặt > Mô hình và mức dùng.》",
+                ),
+                "th" => Some(
+                    "《ไม่. การรู้จำเสียงยังไม่พร้อม ดาวน์โหลดโมเดลในเครื่องที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด สำหรับคลาวด์ตรวจสอบการเชื่อมต่อที่ การตั้งค่า > โมเดลและการใช้งาน》",
+                ),
+                "id" => Some(
+                    "《Tidak. Pengenalan suara belum siap. Unduh model lokal di Pengaturan > Dikte dan pintasan; untuk cloud periksa koneksi di Pengaturan > Model dan penggunaan.》",
+                ),
+                "tr" => Some(
+                    "《Hayır. Konuşma tanıma hazır değil. Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden yerel model indirin; bulut tanıma için Ayarlar > Modeller ve kullanım’da bağlantıyı kontrol edin.》",
+                ),
+                _ => None,
+            }
+        }
+        "《Negative. Cloud transcription failed and there is no local model. Download one in Settings > Dictation & shortcuts, then try again.》" => {
+            match language {
+                "zh-CN" => Some(
+                    "《否。云端辨识失败，且没有本机模型。请到「设置 › 听写与快捷键」下载后再试。》",
+                ),
+                "ko" => Some(
+                    "《거절. 클라우드 전사에 실패했고 로컬 모델도 없습니다. 설정 > 받아쓰기 및 단축키에서 다운로드한 뒤 다시 시도해 주세요.》",
+                ),
+                "es" => Some(
+                    "《No. La transcripción en la nube falló y no hay modelo local. Descarga uno en Configuración > Dictado y atajos, y reintenta.》",
+                ),
+                "fr" => Some(
+                    "《Non. La transcription cloud a échoué et aucun modèle local n’est disponible. Téléchargez-en un dans Réglages > Dictée et raccourcis, puis réessayez.》",
+                ),
+                "de" => Some(
+                    "《Nein. Die Cloud-Transkription ist fehlgeschlagen und es gibt kein lokales Modell. Lade eines unter Einstellungen > Diktat und Tastenkürzel herunter und versuche es erneut.》",
+                ),
+                "pt-BR" => Some(
+                    "《Não. A transcrição na nuvem falhou e não há modelo local. Baixe um em Configurações > Ditado e atalhos, e tente novamente.》",
+                ),
+                "it" => Some(
+                    "《No. La trascrizione cloud non è riuscita e manca un modello locale. Scaricane uno in Impostazioni > Dettatura e scorciatoie, e riprova.》",
+                ),
+                "ru" => Some(
+                    "《Нет. Облачная расшифровка не удалась, локальной модели нет. Скачайте её в Настройки > Диктовка и горячие клавиши, и повторите попытку.》",
+                ),
+                "vi" => Some(
+                    "《Không. Chép lời đám mây thất bại và không có mô hình cục bộ. Tải một mô hình tại Cài đặt > Đọc chính tả và phím tắt rồi thử lại.》",
+                ),
+                "th" => Some(
+                    "《ไม่. ถอดเสียงบนคลาวด์ล้มเหลวและไม่มีโมเดลในเครื่อง ดาวน์โหลดที่ การตั้งค่า > เขียนตามคำบอกและปุ่มลัด แล้วลองอีกครั้ง》",
+                ),
+                "id" => Some(
+                    "《Tidak. Transkripsi cloud gagal dan tidak ada model lokal. Unduh di Pengaturan > Dikte dan pintasan lalu coba lagi.》",
+                ),
+                "tr" => Some(
+                    "《Hayır. Bulut dökümü başarısız ve yerel model yok. Ayarlar > Dikte ve kısayollar ve kısayollar bölümünden bir model indirip yeniden deneyin.》",
                 ),
                 _ => None,
             }

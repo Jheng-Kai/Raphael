@@ -146,7 +146,7 @@ async def test_a_search_with_a_service_that_has_no_key_fails_and_the_answer_says
     client.decisions.append(decision("answer", search=0.9))
     client.replies.append(spoken("否", "查不到。"))
     await rig.ask("今天的新聞")
-    assert "Settings > Raphael > Services > Search the web" in client.json_calls[0]["user"]
+    assert "Settings > Tools > Services > Web search" in client.json_calls[0]["user"]
     (turn,) = await rig.turns()
     (step,) = steps(turn, "web_search")
     assert (step["outcome"], step["reason"], step["detail"]) == ("error", "missing_secret", "tavily")
@@ -154,6 +154,7 @@ async def test_a_search_with_a_service_that_has_no_key_fails_and_the_answer_says
 
 async def test_the_openrouter_search_is_as_it_was_and_says_so_in_its_step(services_rig, client):
     rig = services_rig
+    rig.settings.set("web_search_service", "openrouter")
     client.decisions.append(decision("answer", search=0.9))
     client.texts.append(found("明天有雨。"))
     client.replies.append(spoken("告", "明天有雨。"))
@@ -290,7 +291,7 @@ async def test_a_vision_model_that_reads_no_images_is_not_asked(services_rig, cl
     client.replies.append(spoken("否", "我看不到圖。"))
     await ask(services_rig, "這是什麼", [wire("a.png", "image/png", PNG)])
     assert client.text_calls == []
-    assert "Settings > Raphael > Services > See images" in client.json_calls[0]["user"]
+    assert "Settings > Tools > Services > Images" in client.json_calls[0]["user"]
 
 
 async def test_the_files_go_with_a_task_handed_to_the_background(services_rig, client):

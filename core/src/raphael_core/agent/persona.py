@@ -206,8 +206,8 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         unclear="無法辨識指示。請再說一次。",
 
         cannot="目前無法執行此操作。",
-        vision_off="看圖片已關閉，請到「設定 › 拉斐爾 › 服務 › 看圖片」開啟後重新送出圖片。",
-        pdf_off="讀 PDF 已關閉，請到「設定 › 拉斐爾 › 服務 › 讀 PDF」開啟後重新送出檔案。",
+        vision_off="看圖片已關閉，請到「設定 › 工具 › 服務 › 看圖片」開啟後重新送出圖片。",
+        pdf_off="讀 PDF 已關閉，請到「設定 › 工具 › 服務 › 讀 PDF」開啟後重新送出檔案。",
         no_key="未設定 OpenRouter 金鑰。",
         auth="OpenRouter 金鑰無法使用。",
         budget="本月可用額度已用完，請到「設定 › 模型與用量 › 用量」確認供應商額度，或改用其他模型。",
@@ -286,8 +286,8 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         unclear="The instruction could not be recognized. Please repeat it.",
 
         cannot="That action is not yet within my capabilities.",
-        vision_off="Image reading is off. Enable it in Settings > Raphael > Services > See images, then send the image again.",
-        pdf_off="PDF reading is off. Enable it in Settings > Raphael > Services > Read PDF, then send the file again.",
+        vision_off="Image reading is off. Enable it in Settings > Tools > Services > Images, then send the image again.",
+        pdf_off="PDF reading is off. Enable it in Settings > Tools > Services > PDFs, then send the file again.",
         no_key="No OpenRouter key is set.",
         auth="The OpenRouter key cannot be used.",
         budget="This month's allowance is spent. Check provider usage in Settings > Models & usage > Usage, or choose another model.",
@@ -373,8 +373,8 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         unclear="指示を認識できませんでした。もう一度お願いします。",
 
         cannot="その操作は現在の機能では実行できません。",
-        vision_off="画像の読み取りはオフです。「設定 › ラファエル › サービス › 画像を見る」で有効にして再送してください。",
-        pdf_off="PDF の読み取りはオフです。「設定 › ラファエル › サービス › PDF を読む」で有効にして再送してください。",
+        vision_off="画像の読み取りはオフです。「設定 › ツール › サービス › 画像」で有効にして再送してください。",
+        pdf_off="PDF の読み取りはオフです。「設定 › ツール › サービス › PDF を読む」で有効にして再送してください。",
         no_key="OpenRouter のキーが未設定です。",
         auth="OpenRouter のキーを使用できません。",
         budget="今月の利用枠を使い切りました。「設定 › モデルと使用量 › 使用量」で確認するか、別のモデルを選んでください。",
@@ -459,12 +459,12 @@ _MONTHLY_BUDGET = {
     "zh-CN": "已达到你设置的本月支出上限 US${limit}。请到「设置 › 模型与用量」调整上限，或改用订阅制 CLI 模型。",
     "ko": "설정한 월 지출 한도 US${limit}에 도달했습니다. 설정 > 모델 및 사용량에서 한도를 변경하거나 구독형 CLI 모델을 사용하세요.",
     "es": "Se alcanzó el límite mensual de gasto configurado de US${limit}. Cámbialo en Configuración > Modelos y uso, o usa un modelo CLI por suscripción.",
-    "fr": "La limite de dépenses mensuelles fixée à US${limit} est atteinte. Modifiez-la dans Paramètres > Modèles et utilisation, ou utilisez un modèle CLI par abonnement.",
+    "fr": "La limite de dépenses mensuelles fixée à US${limit} est atteinte. Modifiez-la dans Réglages > Modèles et utilisation, ou utilisez un modèle CLI par abonnement.",
     "de": "Das festgelegte monatliche Ausgabenlimit von US${limit} ist erreicht. Ändere es unter Einstellungen > Modelle und Nutzung oder verwende ein CLI-Modell mit Abonnement.",
     "pt-BR": "O limite mensal de gastos definido de US${limit} foi atingido. Altere-o em Configurações > Modelos e uso ou use um modelo CLI por assinatura.",
     "it": "È stato raggiunto il limite di spesa mensile impostato di US${limit}. Modificalo in Impostazioni > Modelli e utilizzo oppure usa un modello CLI in abbonamento.",
     "ru": "Достигнут установленный месячный лимит расходов US${limit}. Измените его в разделе «Настройки › Модели и использование» или используйте модель CLI по подписке.",
-    "vi": "Đã đạt giới hạn chi tiêu hằng tháng US${limit} bạn đã đặt. Hãy đổi giới hạn trong Cài đặt > Mô hình và mức sử dụng, hoặc dùng mô hình CLI theo gói đăng ký.",
+    "vi": "Đã đạt giới hạn chi tiêu hằng tháng US${limit} bạn đã đặt. Hãy đổi giới hạn trong Cài đặt > Mô hình và mức dùng, hoặc dùng mô hình CLI theo gói đăng ký.",
     "th": "ใช้จ่ายถึงวงเงินรายเดือน US${limit} ที่คุณตั้งไว้แล้ว เปลี่ยนวงเงินได้ที่ การตั้งค่า > โมเดลและการใช้งาน หรือใช้โมเดล CLI แบบสมัครสมาชิก",
     "id": "Batas pengeluaran bulanan US${limit} yang Anda tetapkan telah tercapai. Ubah di Pengaturan > Model dan penggunaan, atau gunakan model CLI berlangganan.",
     "tr": "Belirlediğiniz aylık US${limit} harcama sınırına ulaşıldı. Ayarlar > Modeller ve kullanım bölümünden sınırı değiştirin veya abonelikli bir CLI modeli kullanın.",
@@ -661,7 +661,7 @@ The owner's PC (quick question)
 This quick question can reach the owner's Windows computer through the offered local command tools, as well as your own
 computer for work that needs one. For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
 local__local_exec first. It runs on the owner's Windows PC, subject to their approval setting.
-If local commands are off, say so and point to Settings > Raphael > Local commands. Do not claim
+If local commands are off, say so: the owner can ask you to turn them back on. Do not claim
 the capability is missing.
 Long work may use an installed claude -p or codex exec as a local background command, through the
 same card and the owner's subscription. Keep exact commands on their permission cards; public

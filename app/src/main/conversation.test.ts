@@ -66,6 +66,13 @@ describe("one thread", () => {
     ], now)).toEqual([]);
     expect(threadItems([turn(3, "2026-10-20T09:00:00+08:00", { ...empty, status: "running" })], now)).toHaveLength(2);
   });
+  test("a task that was stopped before it did anything leaves no line, and one stopped after some work keeps its steps (R-STOP-01)", () => {
+    const stopped = { question: "", text: "", detail: null, messages: [], route: "worker", source: "worker", status: "cancelled" as const };
+    const task = { id: 7, state: "cancelled", started_at_ms: null, finished_at_ms: 2 };
+    expect(threadItems([turn(1, "2026-10-20T09:00:00+08:00", { ...stopped, task })], now)).toEqual([]);
+    const step = { kind: "tool", name: "local_time", server: "Raphael", outcome: "ok", ms: 20, at_ms: 1 } as unknown as NonNullable<AgentTurn["steps"]>[number];
+    expect(threadItems([turn(2, "2026-10-20T09:00:00+08:00", { ...stopped, task, steps: [step] })], now).filter(item => item.kind === "turn")).toHaveLength(1);
+  });
   test("every turn in one thread, oldest first, whatever its source; each day under its heading", () => {
     const items = threadItems(
       [

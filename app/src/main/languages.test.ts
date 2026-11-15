@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { setLocale } from "./i18n";
+import { LOCALES, setLocale } from "./i18n";
 import { ico } from "./ui";
 import {
   DEFAULT_LANGUAGES,
   type LanguageGroup,
   chooseLanguageVariant,
+  dictationLanguagesFor,
   languagePanelHTML,
   languageSelectHTML,
   languageSummary,
@@ -160,4 +161,19 @@ describe("the language picker", () => {
   test("the setting remains a non-empty list of variant ids", () => {
     for (const bad of [undefined, null, "zh-TW", [], [1, ""], {}]) expect(normalizeLanguages(bad)).toEqual(DEFAULT_LANGUAGES);
   });
+});
+
+// R-DEFAULT-03: the dictation language that goes with each interface language is one the core's list (languages.py) has.
+test("every interface language has a dictation language of the core's list, and one language only", () => {
+  const core = ["zh-TW", "zh-HK", "zh-CN", "yue-HK", "en-US", "en-GB", "en-AU", "en-IN", "ja-JP", "ko-KR", "fr-FR", "de-DE", "es-ES", "es-MX", "it-IT", "pt-BR", "vi-VN", "th-TH", "id-ID"];
+  for (const { id } of LOCALES) {
+    const spoken = dictationLanguagesFor(id);
+    expect(spoken, id).toHaveLength(1);
+    expect(core, id).toContain(spoken[0]);
+  }
+  expect(dictationLanguagesFor("fr")).toEqual(["fr-FR"]);
+  expect(dictationLanguagesFor("zh-CN")).toEqual(["zh-CN"]);
+  // no Russian or Turkish variant is listed: English stands for "no Chinese script to convert to"
+  expect(dictationLanguagesFor("ru")).toEqual(["en-US"]);
+  expect(dictationLanguagesFor("unknown")).toEqual(["en-US"]);
 });

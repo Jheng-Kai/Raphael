@@ -668,119 +668,194 @@ const press = (target: HTMLElement, key: string, more: KeyboardEventInit = {}): 
 };
 const typeInto = (field: HTMLTextAreaElement, words: string): void => { field.value = words; field.dispatchEvent(new Event("input", { bubbles: true })); };
 
-describe("a sent message is edited in its own bubble (owner, 2026-11-14)", () => {
-  test("choosing Edit turns the bubble into an editor, its words ready, and the composer keeps its draft", async () => {
+describe("a sent message is taken back into the composer to be edited (owner, 2026-11-15)", () => {
+  const SHOT = `${"c".repeat(32)}.png`, QUOTE = { text: "Saved passage", author: "You" };
+  /** A member's thread whose newest message carries a picture and a quote, as stored (the core hands its bytes back by id). */
+  const withPicture = (): AgentTurn => {
+    const original = turn(8, { member_id: 3, session_id: "saved", attachments: [{ id: SHOT, name: "shot.png", mime: "image/png", size: 6 }], quote: QUOTE });
+    api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
+    api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "image/png", data: btoa("pixels") }
+      : method === "conversations.list" ? { conversations: [{ id: 81, member_id: 3, is_default: 1, kind: "standard", title: "", created_at_ms: 1, updated_at_ms: 1 }] } : { questions: [] });
+    return original;
+  };
+  const box = (): HTMLTextAreaElement => $<HTMLTextAreaElement>(".cmp-input");
+
+  test("choosing Edit puts the words, the picture's chip and the quote into the composer, and the bubble leaves the thread", async () => {
+    const original = withPicture();
     const agent = mount(); await flush(); await pick(3);
-    const composerInput = $<HTMLTextAreaElement>(".cmp-input");
-    typeInto(composerInput, "半個草稿");
-    pickMessage('[data-id="31"]', 'edit'); await flush();
-    const field = $<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]');
-    expect(field.value).toBe("問題 31");
-    expect(document.activeElement).toBe(field);
-    expect([field.selectionStart, field.selectionEnd]).toEqual([field.value.length, field.value.length]);
-    // The bubble itself holds the words; nothing wraps it in another box, and Cancel and Send stand under it, outside.
-    expect(field.closest(".owner-message .bubble .message-text")).not.toBeNull();
-    expect(document.querySelector('[data-id="31"] .msg-editor')).toBeNull();
-    expect(field.closest(".bubble")!.querySelector(".btn")).toBeNull();
-    expect(document.querySelector('[data-id="31"] [data-act="more-message"][data-owner-act]')).toBeNull();
-    expect([...document.querySelectorAll('[data-id="31"] .msg-editor-actions .btn')].map(button => button.textContent)).toEqual(["取消", "送出"]);
-    expect(composerInput.value).toBe("半個草稿");
-    expect(api.agentRetract).not.toHaveBeenCalled();
+    expect($('[data-id="8"] .owner-message .bubble').textContent).toContain("問題 8");
+    pickMessage('[data-id="8"]', 'edit'); await flush();
+    expect(box().value).toBe("問題 8");
+    expect(document.activeElement).toBe(box());
+    expect($(".composer .cmp-chip .cmp-pic").getAttribute("aria-label")).toBe("shot.png");
+    expect($<HTMLImageElement>(".composer .cmp-chip img.cmp-thumb").src).toBe(`data:image/png;base64,${btoa("pixels")}`);
+    expect($(".cmp-quote .quote-text").textContent).toBe("Saved passage");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(true);
+    expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(false);
+    // The original bubble, its picture and its quote are gone from the thread at once; what the member answered stays.
+    expect(document.querySelector('[data-id="8"] .owner-message')).toBeNull();
+    expect(document.querySelector('[data-id="8"] .me-files')).toBeNull();
+    expect($('[data-id="8"]').textContent).toContain("回答 8");
+    // Nothing was sent or taken back from the core, and the stored message is untouched.
     expect(api.agentAskText).not.toHaveBeenCalled();
+    expect(api.agentRetract).not.toHaveBeenCalled();
+    expect(original.attachments).toEqual([{ id: SHOT, name: "shot.png", mime: "image/png", size: 6 }]);
     agent.hide();
   });
 
-  test("Enter sends the edit with the same call the composer's edit made, and the composer is left as it was", async () => {
+  test("the editor of the bubble (R-UI-148) is gone: no field, no Cancel or Send under the bubble", async () => {
     const agent = mount(); await flush(); await pick(3);
-    const composerInput = $<HTMLTextAreaElement>(".cmp-input");
-    typeInto(composerInput, "半個草稿");
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    const field = $<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]');
-    typeInto(field, "corrected");
-    expect(press(field, "Enter", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(api.agentAskText).not.toHaveBeenCalled();
-    expect(press(field, "Enter").defaultPrevented).toBe(true); await flush();
-    expect(api.agentAskText).toHaveBeenCalledTimes(1);
-    expect(api.agentAskText).toHaveBeenCalledWith("corrected", [], 3, expect.objectContaining({ replaceTurnId: 31 }));
-    expect(document.querySelector("[data-edit-input]")).toBeNull();
-    expect(composerInput.value).toBe("半個草稿");
-    expect(api.agentRetract).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-edit-input], [data-msg-editor], .msg-editor-input, .msg-editor-under, [data-act="edit-send"], [data-act="edit-cancel"], [data-act="drop-edit-missing"]')).toBeNull();
+    expect(box().value).toBe("問題 31");
     agent.hide();
   });
 
-  test("Send is the same send, emptying the words stops it, and a second press goes nowhere", async () => {
+  test("sending replaces the turn with the edited words, the same picture and the same quote, and the edit stands in its place", async () => {
     let finish!: () => void;
     api.agentAskText.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    withPicture();
     const agent = mount(); await flush(); await pick(3);
-    pickMessage('[data-id="31"]', 'edit'); await flush();
-    const field = $<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]');
-    typeInto(field, "  ");
-    expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(true);
-    press(field, "Enter"); await flush();
+    pickMessage('[data-id="8"]', 'edit'); await flush();
+    typeInto(box(), "corrected");
+    expect(press(box(), "Enter", { shiftKey: true }).defaultPrevented).toBe(false);
     expect(api.agentAskText).not.toHaveBeenCalled();
-    typeInto(field, "again");
-    expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(false);
-    $('[data-act="edit-send"]').click(); await flush();
+    expect(press(box(), "Enter").defaultPrevented).toBe(true); await flush();
     expect(api.agentAskText).toHaveBeenCalledTimes(1);
-    // The edit stands in the message's place while it is on its way: the thread never shows both.
-    expect(document.querySelector('[data-id="31"]')).toBeNull();
+    expect(api.agentAskText).toHaveBeenCalledWith("corrected", [{ name: "shot.png", mime: "image/png", data: btoa("pixels") }], 3, expect.objectContaining({ replaceTurnId: 8, quote: QUOTE }));
+    expect(api.agentRetract).not.toHaveBeenCalled();
+    // On its way the edit stands in the message's place, once; the composer is empty and no longer marks a replacement.
+    expect(document.querySelector('[data-id="8"]')).toBeNull();
     expect(document.querySelectorAll(".is-pending").length).toBe(1);
-    expect($(".is-pending .message-text").textContent).toBe("again");
+    expect($(".is-pending .message-text").textContent).toBe("corrected");
+    expect(box().value).toBe("");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    expect(document.querySelector(".composer .cmp-chip")).toBeNull();
     finish(); await flush();
     agent.hide();
   });
 
-  test("a send that fails brings the editor back with what was typed, and says so", async () => {
-    api.agentAskText.mockRejectedValueOnce(new Error("offline"));
+  test("words emptied stop the send, and a second Enter after a send goes nowhere", async () => {
+    let finish!: () => void;
+    api.agentAskText.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
     const agent = mount(); await flush(); await pick(3);
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "kept words");
-    $('[data-act="edit-send"]').click(); await flush();
-    expect($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]').value).toBe("kept words");
-    expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
-    expect(document.querySelector(".composer-failure")).toBeNull();
+    typeInto(box(), "  ");
+    expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
+    press(box(), "Enter"); await flush();
+    expect(api.agentAskText).not.toHaveBeenCalled();
+    typeInto(box(), "again");
+    press(box(), "Enter"); await flush();
+    press(box(), "Enter"); await flush();
+    expect(api.agentAskText).toHaveBeenCalledTimes(1);
+    finish(); await flush();
     agent.hide();
   });
 
-  test("Cancel and a single Escape on untouched words leave the message as it was; a changed one needs Escape twice", async () => {
+  test("a send that fails gives the words back in the composer, still replacing the message, whose bubble stays away", async () => {
+    api.agentAskText.mockRejectedValueOnce(new Error("offline"));
     const agent = mount(); await flush(); await pick(3);
-    const composerInput = $<HTMLTextAreaElement>(".cmp-input");
-    typeInto(composerInput, "draft stays");
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    $('[data-act="edit-cancel"]').click(); await flush();
-    expect(document.querySelector("[data-edit-input]")).toBeNull();
+    typeInto(box(), "kept words");
+    press(box(), "Enter"); await flush();
+    expect(box().value).toBe("kept words");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(true);
+    expect(document.querySelector('[data-id="31"] .owner-message')).toBeNull();
+    expect(document.querySelector(".composer-failure")).not.toBeNull();
+    api.agentAskText.mockResolvedValue(undefined);
+    press(box(), "Enter"); await flush();
+    expect(api.agentAskText).toHaveBeenLastCalledWith("kept words", [], 3, expect.objectContaining({ replaceTurnId: 31 }));
+    agent.hide();
+  });
+
+  test("Escape on the words as 編輯 gave them leaves at once and the bubble comes back as it was, and changed words need Escape twice", async () => {
+    withPicture();
+    const agent = mount(); await flush(); await pick(3);
+    const before = $('[data-id="8"] .owner-message').outerHTML;
+    pickMessage('[data-id="8"]', 'edit'); await flush();
+    press(box(), "Escape"); await flush();
+    expect(box().value).toBe("");
+    expect(document.querySelector(".composer .cmp-chip")).toBeNull();
+    expect(document.querySelector(".cmp-quote .quote-text")).toBeNull();
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    expect($('[data-id="8"] .owner-message').outerHTML).toBe(before);
+    pickMessage('[data-id="8"]', 'edit'); await flush();
+    typeInto(box(), "changed");
+    press(box(), "Escape"); await flush();
+    expect($(".cmp-voice").dataset.cancelArmed).toBe("true");
+    expect(box().value).toBe("changed");
+    expect(document.querySelector('[data-id="8"] .owner-message')).toBeNull();
+    press(box(), "Escape"); await flush();
+    expect(box().value).toBe("");
+    expect(document.querySelector(".composer .cmp-chip")).toBeNull();
+    expect($('[data-id="8"] .owner-message').outerHTML).toBe(before);
+    expect(api.agentAskText).not.toHaveBeenCalled();
+    expect(api.agentRetract).not.toHaveBeenCalled();
+    agent.hide();
+  });
+
+  test("words being written before 編輯 come back once the edit is given up, and once it is sent", async () => {
+    const agent = mount(); await flush(); await pick(3);
+    typeInto(box(), "half a new question");
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    expect(box().value).toBe("問題 31");
+    press(box(), "Escape"); await flush();
+    expect(box().value).toBe("half a new question");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    typeInto(box(), "corrected");
+    press(box(), "Enter"); await flush();
+    expect(api.agentAskText).toHaveBeenLastCalledWith("corrected", [], 3, expect.objectContaining({ replaceTurnId: 31 }));
+    expect(box().value).toBe("half a new question");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    agent.hide();
+  });
+
+  test("words typed while the message's files are read stay: 編輯 does not write over them", async () => {
+    withPicture();
+    let give!: () => void;
+    const read = api.core.getMockImplementation()!;
+    api.core.mockImplementation((method: string, ...rest: unknown[]) => method === "attachments.get"
+      ? new Promise(resolve => { give = () => resolve({ mime: "image/png", data: btoa("pixels") }); }) : read(method, ...rest));
+    const agent = mount(); await flush(); await pick(3);
+    pickMessage('[data-id="8"]', 'edit'); await flush();
+    typeInto(box(), "something newer");
+    give(); await flush();
+    expect(box().value).toBe("something newer");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
+    expect($('[data-id="8"] .owner-message .bubble').textContent).toContain("問題 8");
+    agent.hide();
+  });
+
+  test("leaving the conversation gives the edit up: the bubble is there as it was, and nothing of the edit comes back as a draft", async () => {
+    const agent = mount(); await flush(); await pick(3);
+    pickMessage('[data-id="31"]', 'edit'); await flush();
+    typeInto(box(), "half edited");
+    await pick(4);
+    expect(box().value).toBe("");
+    expect(document.querySelector("[data-replacing]")).toBeNull();
+    await pick(3);
+    expect(box().value).toBe("");
+    expect($(".composer").hasAttribute("data-replacing")).toBe(false);
     expect($('[data-id="31"] .owner-message .bubble').textContent).toContain("問題 31");
+    // The words emptied before leaving give it up in the same way.
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    press($('[data-id="31"] [data-edit-input]'), "Escape"); await flush();
-    expect(document.querySelector("[data-edit-input]")).toBeNull();
-    pickMessage('[data-id="31"]', 'edit'); await flush();
-    const field = $<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]');
-    typeInto(field, "changed");
-    press(field, "Escape"); await flush();
-    expect($('[data-act="edit-cancel"]').dataset.cancelArmed).toBe("true");
-    expect(field.isConnected).toBe(true);
-    press(field, "Escape"); await flush();
-    expect(document.querySelector("[data-edit-input]")).toBeNull();
+    typeInto(box(), "");
+    await pick(4); await pick(3);
     expect($('[data-id="31"] .owner-message .bubble').textContent).toContain("問題 31");
-    expect(composerInput.value).toBe("draft stays");
     expect(api.agentAskText).not.toHaveBeenCalled();
     agent.hide();
   });
 
-  test("the typed words survive the thread being drawn again, and the editor does not follow a member switch", async () => {
+  test("the composer's own draft stands again for a message that is not being edited, and a thread drawn again keeps the bubble away", async () => {
     const agent = mount(); await flush(); await pick(3);
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    const field = $<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]');
-    typeInto(field, "typed so far");
     api.agentHistoryList.mockResolvedValueOnce({ turns: [turn(32, { member_id: 3 }), ...THREADS[3]] });
     send({ type: "AgentTurn", turn_id: 32, member_id: 3 });
     await new Promise(resolve => setTimeout(resolve, 450)); await flush();
-    const now = $<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]');
-    expect(now.value).toBe("typed so far");
-    await pick(4);
-    expect(document.querySelector("[data-edit-input]")).toBeNull();
-    await pick(3);
-    expect(document.querySelector("[data-edit-input]")).toBeNull();
+    expect(document.querySelector('[data-id="31"] .owner-message')).toBeNull();
+    expect($('[data-id="32"] .owner-message')).not.toBeNull();
+    expect(box().value).toBe("問題 31");
     agent.hide();
   });
 });
@@ -821,12 +896,11 @@ test("editing a legacy attachment without a stored copy requires reattachment, w
   api.agentHistoryList.mockResolvedValue({ turns: [original] });
   const agent = mount(); await flush();
   pickMessage('[data-id="8"]', 'edit'); await flush();
-  expect($("[data-msg-editor] .quote-text").textContent).toBe("Saved passage");
-  expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(true);
+  expect($(".cmp-quote .quote-text").textContent).toBe("Saved passage");
+  expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
   expect($("[data-missing]").textContent).toContain("original.pdf");
-  $('[data-act="drop-edit-missing"]').click();
-  expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(false);
-  expect(document.activeElement).toBe($('[data-edit-input]'));
+  $('[data-act="drop-missing"]').click();
+  expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(false);
   expect(original.attachments).toEqual([{ name: "original.pdf", mime: "application/pdf" }]);
   expect(api.agentRetract).not.toHaveBeenCalled();
   agent.hide();
@@ -844,14 +918,7 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
   $(`[data-id="8"] ${action === "regenerate" ? ".ra" : ".me"} [data-act="more-message"]`).click(); await flush();
   $(`[data-pick="${action}"]`).click(); await flush();
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
-  if (action === "edit") {
-    expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("");
-    expect($<HTMLTextAreaElement>("[data-edit-input]").value).toBe("問題 8");
-    expect(document.querySelector("[data-missing]")).toBeNull();
-    expect($("[data-msg-editor] .quote-text").textContent).toBe("Saved passage");
-    expect($<HTMLButtonElement>('[data-act="edit-send"]').disabled).toBe(false);
-    $('[data-act="edit-send"]').click(); await flush();
-  } else if (action === "cancel") {
+  if (action === "edit" || action === "cancel") {
     expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("問題 8");
     expect($(".cmp-chip-t").textContent).toBe("report.csv");
     expect(document.querySelector("[data-missing]")).toBeNull();
@@ -1844,8 +1911,8 @@ describe("an edited message stands where its message stood (owner, 2026-11-14)",
     const agent = mount(); await flush(); await pick(3);
     expect(lineIds()).toEqual(["30", "31", "32", "33"]);
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "corrected");
-    $('[data-act="edit-send"]').click(); await flush();
+    typeInto($<HTMLTextAreaElement>(".cmp-input"), "corrected");
+    $(".cmp-send").click(); await flush();
     // On its way: the edit stands where the message stood, with the routine turns after it, and nothing is waiting at the end.
     expect(lineIds()).toEqual(["30", "pending", "32", "33"]);
     expect($(".tn.is-pending .message-text").textContent).toBe("corrected");
@@ -1865,8 +1932,8 @@ describe("an edited message stands where its message stood (owner, 2026-11-14)",
     const core = editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" })], "in place");
     const agent = mount(); await flush(); await pick(3);
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "corrected");
-    $('[data-act="edit-send"]').click(); await flush();
+    typeInto($<HTMLTextAreaElement>(".cmp-input"), "corrected");
+    $(".cmp-send").click(); await flush();
     await settle();
     // The member is answering: the message is on screen, once, with the new words.
     expect(lineIds()).toEqual(["30", "31"]);
@@ -1882,8 +1949,8 @@ describe("an edited message stands where its message stood (owner, 2026-11-14)",
     const scroller = $(".ra-scroll");
     scroller.scrollTop = 17;
     pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>('[data-id="31"] [data-edit-input]'), "corrected");
-    $('[data-act="edit-send"]').click(); await flush();
+    typeInto($<HTMLTextAreaElement>(".cmp-input"), "corrected");
+    $(".cmp-send").click(); await flush();
     expect(scroller.scrollTop).toBe(17);
     agent.hide();
   });

@@ -43,10 +43,10 @@ _OWNER_MESSAGES = {
         "rate_limit": "{name} 暫時收到太多請求，請稍後再試。",
         "overloaded": "{name} 目前忙碌中，請稍後再試或選擇其他模型。",
         "server": "{name} 的服務暫時出問題了，請稍後再試。",
-        "auth_expired": "{name} 還沒登入或缺少金鑰，請到設定 › 連接完成連線。",
+        "auth_expired": "{name} 還沒登入或缺少金鑰，請到側欄的「連結應用程式」完成連線。",
         "network": "{name} 目前無法連線，請確認網路後再試。",
         "cli_stopped": "{name} 在回答完成前停止了。",
-        "permission_denied": "{name} 尚未取得執行此操作的權限，請到「設定 › 連接」檢查它的讀寫工具，並在需要時重新登入授權。",
+        "permission_denied": "{name} 尚未取得執行此操作的權限，請到側欄的「連結應用程式」檢查它的讀寫工具，並在需要時重新登入授權。",
         "not_found": "找不到 {name} 這次工作需要的項目，請重新選擇原檔、連結或模型，若是連接工具請先重新讀取工具。",
         "tool_broken": "目前無法確認 {name} 這次失敗的原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。",
         "timeout": "{name} 等待回應太久了，請稍後再試。",
@@ -60,10 +60,10 @@ _OWNER_MESSAGES = {
         "rate_limit": "{name} へのリクエストが一時的に多すぎます。しばらくしてから再試行してください。",
         "overloaded": "{name} は現在混み合っています。しばらく待つか、別のモデルを選んでください。",
         "server": "{name} のサービスで一時的な問題が起きています。しばらくしてから再試行してください。",
-        "auth_expired": "{name} にログインしていないか、必要なキーがありません。設定の「接続」で接続を完了してください。",
+        "auth_expired": "{name} にログインしていないか、必要なキーがありません。サイドバーの「アプリを連携」で接続を完了してください。",
         "network": "{name} に接続できません。ネットワークを確認してから再試行してください。",
         "cli_stopped": "{name} は回答を完了する前に停止しました。",
-        "permission_denied": "{name} には操作の権限がありません。「設定 › 接続」で読み書きツールを確認し、必要なら再ログインして許可してください。",
+        "permission_denied": "{name} には操作の権限がありません。サイドバーの「アプリを連携」で読み書きツールを確認し、必要なら再ログインして許可してください。",
         "not_found": "{name} の作業に必要な項目がありません。元のファイル、リンク、モデルを選び直し、接続ツールなら再読み込みしてください。",
         "tool_broken": "{name} の失敗原因を確認できません。この会話を残して一度再試行し、続く場合は問題を報告してください。",
         "timeout": "{name} の応答を待つ時間が長すぎました。しばらくしてから再試行してください。",
@@ -77,10 +77,10 @@ _OWNER_MESSAGES = {
         "rate_limit": "{name} is receiving too many requests right now. Try again shortly.",
         "overloaded": "{name} is busy right now. Wait a little or choose another model.",
         "server": "{name} is having a temporary service problem. Try again later.",
-        "auth_expired": "{name} is signed out or missing a required key. Complete the connection in Settings > Connections.",
+        "auth_expired": "{name} is signed out or missing a required key. Complete the connection in Connect apps (sidebar).",
         "network": "{name} cannot connect right now. Check your network and try again.",
         "cli_stopped": "{name} stopped before finishing its answer.",
-        "permission_denied": "{name} lacks permission for this action. Check its read and write tools in Settings > Connections and sign in again if authorization is needed.",
+        "permission_denied": "{name} lacks permission for this action. Check its read and write tools in Connect apps (sidebar) and sign in again if authorization is needed.",
         "not_found": "{name} could not find an item this task needs. Reselect the original file, link or model. Reload tools for a connected app.",
         "tool_broken": "The cause of this failure in {name} is unknown. Keep this conversation and try once more. Report the problem if it continues.",
         "timeout": "{name} took too long to respond. Try again later.",
@@ -102,8 +102,8 @@ _OWNER_MESSAGES["zh-TW"].update({
 })
 _OWNER_MESSAGES["ja"].update({
     "chatgpt_unavailable": "{name} は現在サブスクリプションの利用可否を確認できません。後でもう一度お試しください。",
-    "chatgpt_plan_unavailable": "{name} が選択した ChatGPT アカウントはこのプランを利用できません。「設定 › モデルと使用量 › モデル › アカウント › ChatGPT」でアカウントとワークスペースの条件を確認するか、別のソースを選んでください。",
-    "chatgpt_scope": "{name} の ChatGPT プラン利用が許可されていません。「設定 › モデルと使用量 › モデル › アカウント › ChatGPT」で再ログインして許可してください。",
+    "chatgpt_plan_unavailable": "{name} が選択した ChatGPT アカウントはこのプランを利用できません。「設定 › モデルと使用量 › モデル › サブスクリプションアカウント › ChatGPT」でアカウントとワークスペースの条件を確認するか、別のソースを選んでください。",
+    "chatgpt_scope": "{name} の ChatGPT プラン利用が許可されていません。「設定 › モデルと使用量 › モデル › サブスクリプションアカウント › ChatGPT」で再ログインして許可してください。",
 })
 _OWNER_MESSAGES["en"].update({
     "context_overflow": "{name} cannot take this much text at once. Start a new conversation or shorten the request.",
@@ -231,9 +231,9 @@ class Missing:
     def sentence(self, language):
         language = _language(language)
         paths = with_ui_words({
-            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "設定 › 連接", "store": "設定 › 連接 › 商店", "search": "設定 › 拉斐爾 › 服務 › 搜尋網路", "read": "設定 › 拉斐爾 › 服務 › 讀網頁", "vision": "設定 › 拉斐爾 › 服務 › 看圖片", "pdf": "設定 › 拉斐爾 › 服務 › 讀 PDF", "computer": "設定 › 拉斐爾 › 電腦操作", "dictation": "設定 › 聽寫"},
-            "en": {"models": "Settings > Models & usage > Models", "connections": "Settings > Connections", "store": "Settings > Connections > Store", "search": "Settings > Raphael > Services > Search the web", "read": "Settings > Raphael > Services > Read web pages", "vision": "Settings > Raphael > Services > See images", "pdf": "Settings > Raphael > Services > Read PDF", "computer": "Settings > Raphael > Computer operation", "dictation": "Settings > Dictation"},
-            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "設定 › 接続", "store": "設定 › 接続 › ストア", "search": "設定 › ラファエル › サービス › ウェブ検索", "read": "設定 › ラファエル › サービス › ウェブページを読む", "vision": "設定 › ラファエル › サービス › 画像を見る", "pdf": "設定 › ラファエル › サービス › PDF を読む", "computer": "設定 › ラファエル › PC 操作", "dictation": "設定 › ディクテーション"},
+            "zh-TW": {"models": "設定 › 模型與用量 › 模型", "connections": "側欄的「連結應用程式」", "store": "側欄的「連結應用程式」", "search": "設定 › 工具 › 服務 › 搜尋網路", "read": "設定 › 工具 › 服務 › 讀網頁", "vision": "設定 › 工具 › 服務 › 看圖片", "pdf": "設定 › 工具 › 服務 › 讀 PDF", "computer": "成員的電腦分頁", "dictation": "設定 › 聽寫與快捷鍵"},
+            "en": {"models": "Settings > Models & usage > Models", "connections": "Connect apps (sidebar)", "store": "Connect apps (sidebar)", "search": "Settings > Tools > Services > Web search", "read": "Settings > Tools > Services > Read web pages", "vision": "Settings > Tools > Services > Images", "pdf": "Settings > Tools > Services > PDFs", "computer": "the member's Computer tab", "dictation": "Settings > Dictation & shortcuts"},
+            "ja": {"models": "設定 › モデルと使用量 › モデル", "connections": "サイドバーの「アプリを連携」", "store": "サイドバーの「アプリを連携」", "search": "設定 › ツール › サービス › ウェブ検索", "read": "設定 › ツール › サービス › ウェブページを読む", "vision": "設定 › ツール › サービス › 画像", "pdf": "設定 › ツール › サービス › PDF を読む", "computer": "メンバーのコンピュータータブ", "dictation": "設定 › 音声入力とショートカット"},
         })
         name = {"searxng": "SearXNG", "chatgpt": "ChatGPT", "composio": "Composio", "search": "Search", "read": "Page reader", "vision": "Image reading", "pdf": "PDF", "computer": "Computer"}.get(self.resource, with_ui_words({"zh-TW": "這項功能", "en": "This feature", "ja": "この機能"})[language])
         if self.resource in ("search", "read", "vision", "computer"):

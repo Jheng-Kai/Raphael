@@ -170,6 +170,18 @@ describe("the list", () => {
     expect(draw({}, { ...BRAIN, agent_model: "cli:claude:opus" })).not.toContain("cli:");
   });
 
+  test("names the model as people read it when the catalogue names it, and the search 「尚未設定」 while none is set up (R-COPY-04, R-DEFAULT-02)", () => {
+    const names = (id: string): string => (id === "openai/gpt-6-sol" ? "GPT-6 Sol" : id);
+    const sol = servicesHTML(view({ status: status({ model: "openai/gpt-6-sol" }) }), PICKER, BRAIN, names);
+    expect(sol).toContain('<span class="svc-now">正在用 GPT-6 Sol</span>');
+    expect(sol).not.toContain("gpt-6-sol");
+    // with no service chosen, the core says "none": the row says it is not set up, and nothing is marked in use
+    const none = servicesHTML(view({ status: status({ search: "none" }), open: { kind: "search", service: null } }), PICKER, BRAIN);
+    expect(none).toContain('<span class="svc-now">尚未設定</span>');
+    expect(none).not.toContain("正在用 none");
+    expect(none).not.toContain('role="img" aria-label="使用中"');
+  });
+
   test("is clean: no dropdown, no field, no text button, no helper paragraph, and no key or address anywhere", () => {
     const section = inSection(draw({}, { ...BRAIN, searxng_url: "https://searx.example/secret" }));
     expect(section).not.toContain("<input");

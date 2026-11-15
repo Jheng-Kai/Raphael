@@ -36,6 +36,7 @@ import contextlib
 import json
 import logging
 import os
+import sys
 import weakref
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -179,8 +180,16 @@ async def open_client(server: ServerConfig, secrets: Secrets) -> Any:
             cwd=Path.home(),
         )
         with open(os.devnull, "w", encoding="utf-8") as quiet:
-            async with Client(stdio_client(params, errlog=quiet)) as client:
-                yield client
+            try:
+                async with Client(stdio_client(params, errlog=quiet)) as client:
+                    yield client
+            finally:
+                if sys.platform == "win32":
+                    # The MCP SDK closes the subprocess transport, then its pipe transports
+                    # schedule connection_lost callbacks that finish detaching it from the loop.
+                    # Let those callbacks run before asyncio.run closes this core's loop.
+                    for _ in range(200):
+                        await asyncio.sleep(0)
         return
 
     import httpx2

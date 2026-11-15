@@ -1,4 +1,4 @@
-"""The owner's switches of the capabilities (Settings › 拉斐爾 › 服務) in the fast tier: a capability
+"""The owner's switches of the capabilities (Settings › 工具 › 服務) in the fast tier: a capability
 that is off is not used at all, whichever service is chosen for it. The search is not made and the
 answer says that Raphael cannot search now; pages are not read; an image or a PDF is refused in one
 line before any model is asked. Fakes for every service: no test reaches the network."""

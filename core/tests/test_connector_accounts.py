@@ -268,3 +268,53 @@ async def test_a_waiting_sign_in_does_not_stop_the_list_from_being_read(tmp_path
     assert [a["status"] for a in result["connectors"][0]["accounts"]] == ["INITIALIZING"] and fake.deleted == []
     await router.call("integrations.connect_cancel")
     assert (await task)["error"] == "cancelled" and fake.deleted == [("ca_test", False)]
+
+async def test_removing_the_account_whose_sign_in_is_waiting_ends_that_sign_in_and_removes_it_at_once(tmp_path, conn):
+    """The owner pressed 移除 on 帳號 2 (等待登入) again and again and it stayed: the sign-in waiting in the browser holds the
+    connector lock for its whole wait, so the removal queued behind it until it timed out. It ends that sign-in instead."""
+    entered = asyncio.Event()
+
+    async def browser(url):
+        entered.set()
+        await asyncio.Event().wait()
+
+    fake = Accounts(statuses=("INITIATED",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=browser, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    jack = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail", accounts=[account("ca_jack", "ACTIVE", label="Jack")])
+    service.store.connectors[jack.id] = jack
+    task = asyncio.create_task(router.call("connectors.connect", {"toolkit": "gmail"}))
+    await asyncio.wait_for(entered.wait(), 2)
+    assert [(a["id"], a["status"]) for a in jack.accounts] == [("ca_jack", "ACTIVE"), ("ca_test", "INITIALIZING")]
+    result = await asyncio.wait_for(router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_test"}), 2)
+    assert fake.deleted == [("ca_test", False)]  # given back at Composio, never revoked: it held no login
+    assert [a["id"] for a in result["connector"]["accounts"]] == ["ca_jack"] and result["connector"]["status"] == "ACTIVE"
+    assert [a["id"] for a in ConnectorStore(tmp_path).connectors["composio:gmail"].accounts] == ["ca_jack"]
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"  # the page that waited for it is told it ended
+    assert not service.login_pending and service._signing_in == set()
+    # and it stays gone: the next read of Composio lists nothing waiting
+    fake.listing = [listed("ca_jack", "ACTIVE", 99999)]
+    result = await router.call("connectors.status")
+    assert [a["id"] for a in result["connectors"][0]["accounts"]] == ["ca_jack"]
+
+
+async def test_removing_another_account_while_a_sign_in_waits_leaves_that_sign_in_alone(tmp_path, conn):
+    entered = asyncio.Event()
+
+    async def browser(url):
+        entered.set()
+        await asyncio.Event().wait()
+
+    fake = Accounts(statuses=("INITIATED",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=browser, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    old = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail",
+                    accounts=[account("ca_jack", "ACTIVE"), account("ca_gone", "EXPIRED", since=3000)])
+    service.store.connectors[old.id] = old
+    task = asyncio.create_task(router.call("connectors.connect", {"toolkit": "gmail"}))
+    await asyncio.wait_for(entered.wait(), 2)
+    result = await asyncio.wait_for(router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_gone"}), 2)
+    assert fake.deleted == [("ca_gone", False)] and service.login_pending and not task.done()
+    assert [a["id"] for a in result["connector"]["accounts"]] == ["ca_jack", "ca_test"]
+    await router.call("integrations.connect_cancel")
+    assert (await task)["error"] == "cancelled"

@@ -193,13 +193,13 @@ async def test_waiting_tree_cancel_keeps_reply_counts_and_cancelled_status(make_
     assert (task.model_calls, task.tool_calls, task.cost_usd) == (3, 7, 0.25)
     assert saved.status == "cancelled"
     assert saved.cost_usd == 0.25
-    stop_note = "The task was stopped. Tool calls made: 7."
-    assert task.report_text == stop_note
-    assert saved.text == "Findings already delivered.\n\n" + stop_note
+    # A stop that was asked for adds no line of its own (R-STOP-01): what was already said stays as it was.
+    assert task.report_text == ""
+    assert saved.text == "Findings already delivered."
     messages = history.messages([turn_id])[turn_id]
     assert sum(message['text'].count("Findings already delivered.") for message in messages) == 1
-    reports = [data for method, data in rig.notifications if method == "worker.report"]
-    assert reports[-1]["text"] == stop_note
+    assert not any("stopped" in message['text'] for message in messages)
+    assert not [data for method, data in rig.notifications if method == "worker.report"]
 
 
 @pytest.mark.parametrize("state, detail, expected", [
@@ -228,13 +228,12 @@ async def test_cancelled_delegate_keeps_real_replies_without_the_handoff_acknowl
     rig.service._store.start(task_id)
     rig.service._store.pause_for_children(task_id, {"owner_wait": True})
     assert (await rig.service._cancel({"task_id": task_id}))["cancelled"]
-    stop_note = "The task was stopped. Tool calls made: 0."
-    assert rig.task(task_id).report_text == stop_note
+    assert rig.task(task_id).report_text == ""
     saved = history.get(turn_id)
     assert saved.status == "cancelled"
-    assert saved.text == ("Findings already delivered.\n\n" if has_reply else "") + stop_note
-    messages = history.messages([turn_id])[turn_id]
-    assert [message["text"] for message in messages] == (["Findings already delivered."] if has_reply else []) + [stop_note]
+    assert saved.text == ("Findings already delivered." if has_reply else "")
+    messages = history.messages([turn_id]).get(turn_id, [])
+    assert [message["text"] for message in messages] == (["Findings already delivered."] if has_reply else [])
 
 
 async def test_conversation_handoff_persists_source_counters_before_tree_stop(make_rig):
@@ -250,7 +249,8 @@ async def test_conversation_handoff_persists_source_counters_before_tree_stop(ma
     rig.service.settle_asker(source.id, answered=True)
     assert (rig.task(parent_id).model_calls, rig.task(parent_id).tool_calls) == (3, 4)
     await rig.service._cancel({"task_id": parent_id})
-    assert "4" in history.get(source.id).text
+    # The stop says nothing, so the turn keeps its own words; the counters stay on the task (R-STOP-01).
+    assert history.get(source.id).text == "Initial findings."
     changed = [data for method, data in rig.notifications if method == "worker.changed" and data["task_id"] == parent_id]
     assert changed[-1]["tool_calls"] == 4
 

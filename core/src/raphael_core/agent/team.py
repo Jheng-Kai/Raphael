@@ -52,9 +52,11 @@ SKILL_TOOLS = (SKILL_READ, SKILLS_LIST, SKILL_MANAGE)
 ROOM_MEETING = "room_meeting"
 ROOM_TOOLS = ("room_list", "room_post")
 HANDOFF = "handoff"
+STOP_WORK = "stop_work"
+_STOP_WORK = re.compile(r"stop|cancel|abort|kill|halt|停|取消|中止|終止|终止|中斷|中断|止め|キャンセル", re.I)
 _MEETING = re.compile(r"meeting|discuss|brainstorm|開會|會議|会议|会議|討論|讨论|商量", re.I)
 _SKILLS = re.compile(r"skill|procedure|學會|技能|技巧|スキル|手順", re.I)
-TEAM_TOOLS = (ASK_MEMBER, CREATE_MEMBER, *SKILL_TOOLS, ROOM_MEETING, *ROOM_TOOLS, HANDOFF, "work_status")
+TEAM_TOOLS = (ASK_MEMBER, CREATE_MEMBER, *SKILL_TOOLS, ROOM_MEETING, *ROOM_TOOLS, HANDOFF, "work_status", STOP_WORK)
 TEAM_SERVER = "Raphael"
 TEAM_TIER = Tier.T1
 # The most of a request one member hands another, and of the answer that comes back, in characters.
@@ -117,6 +119,9 @@ def _definition(name: str) -> dict[str, Any]:
     if name == "work_status":
         return {"description": "Read the computed status board and decisions of this meeting. Check the existing stage owner before handoff. Read-only; never reads private conversation or approval content.",
                 "parameters": {"type":"object","properties":{},"additionalProperties":False}}
+    if name == STOP_WORK:
+        return {"description": "Stop one of your own unfinished background tasks, queued or running: one you handed on or that was handed to you, never another member's or the owner's. Without task_id it lists them (task_id, title, state, member_id); with it that task and the work waiting on it end, and nothing is posted in any conversation.",
+                "parameters": {"type": "object", "properties": {"task_id": {"type": "integer", "minimum": 1}}, "additionalProperties": False}}
     if name == HANDOFF:
         return {"description": "Assign real work NOW to a colleague, or use your own member_id in a private chat or meeting to start your own background lane. Do not self-handoff again inside a worker. Hand off now only what can start now: work that needs another's result waits until that result comes back to you. Once it is handed off the work is theirs: do not do it yourself as well. End your turn with one short sentence; each result comes back to you and you go on from there. Returns a durable task receipt immediately. Use handoff for assigned work; an @mention only requests a conversation reply. Source dates and deadlines NEVER schedule or defer work. Supply a stable stage_id per action item (a key for the system, never said to the owner: name the work by its title and the colleague by name); retries of the same stage return the same receipt. Results return to this room/thread or requesting chat. The colleague's report is its own claim: the result carries a state (completed, error or cancelled), the evidence the system recorded and the handles the colleague gave (URL, id, absolute path); check those before you call the work done. Never claim done from a promise. Only an explicit owner schedule request may use the routine tool instead.",
                 "parameters": {"type":"object", "properties": {
@@ -345,6 +350,10 @@ def team_tools_for(
             tools = [SKILL_READ, SKILLS_LIST]
     if team is not None and (always or any(other.id != speaker.id for other in team.named_in(text))):
         tools.append(HANDOFF)
+    # Listed only for a request about stopping; a worker or CLI brain (`always`) finds it with find_tools (its definition
+    # is not in the default prompt, which has a size budget).
+    if team is not None and not always and _STOP_WORK.search(text):
+        tools.append(STOP_WORK)
     if team is not None and (always or _MEETING.search(text)):
         tools.extend(ROOM_TOOLS)
     if team is None or not speaker.may_ask:

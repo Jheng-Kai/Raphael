@@ -91,15 +91,15 @@ def clean_precheck(value):
 def failure_message(language, name, *, stop=False):
     language = normalize_language(language)
     if language in NEW_LANGUAGES:
-        source = ("{name} connection or read permission is missing. Open Settings > Connections to reconnect and enable its read tool."
+        source = ("{name} connection or read permission is missing. Open Connect apps (sidebar) to reconnect and enable its read tool."
                   if stop else "Could not check {name}; retrying later.")
         return ui_word(source, language).format(name=name)
     if language == "zh-TW":
-        message = f"{name} 連接或讀取權限無法使用。請到設定 › 連接加入或重新連接，並開啟讀取工具；可開啟連接設定。" if stop else f"{name} 檢查失敗，稍後重試。"
+        message = f"{name} 連接或讀取權限無法使用。請到側欄的「連結應用程式」加入或重新連接，並開啟讀取工具。" if stop else f"{name} 檢查失敗，稍後重試。"
     elif language == "ja":
-        message = f"{name} の接続または読み取り権限がありません。設定 › 接続を開き、接続と読み取りツールを追加してください。" if stop else f"{name} を確認できません。後で再試行します。"
+        message = f"{name} の接続または読み取り権限がありません。サイドバーの「アプリを連携」を開き、接続と読み取りツールを追加してください。" if stop else f"{name} を確認できません。後で再試行します。"
     else:
-        message = f"{name} connection or read permission is missing. Open Settings > Connections to reconnect and enable its read tool." if stop else f"Could not check {name}; retrying later."
+        message = f"{name} connection or read permission is missing. Open Connect apps (sidebar) to reconnect and enable its read tool." if stop else f"Could not check {name}; retrying later."
     return message
 
 

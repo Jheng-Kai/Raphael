@@ -63,7 +63,7 @@ from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS
 from ..agent.plugins import Offer, PluginHub, PluginTool, make_offer
 from ..agent.policy import Tier
 from ..agent.speaker import RAPHAEL, Speaker
-from ..agent.team import TEAM_TIER, TEAM_TOOLS, worker_definition
+from ..agent.team import STOP_WORK, TEAM_TIER, TEAM_TOOLS, team_tool, worker_definition
 from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..agent.owner_questions import BACKGROUND_TOOLS
@@ -95,8 +95,8 @@ SELDOM = frozenset({*COMMANDS, "computer"}) - {"open"}
 _DEFINITIONS: dict[str, dict[str, Any]] = {
     "weather": {
         "description": (
-            "The weather now, today and tomorrow in a city. Leave the city out for the "
-            "user's own city. Present the known days in a forecast fenced block using the shared schema."
+            "The weather now, today and tomorrow in a city; ask which one if unsaid. "
+            "Present the known days in a forecast fenced block using the shared schema."
         ),
         "parameters": {
             "type": "object",
@@ -226,6 +226,8 @@ def _native_tool(name: str) -> PluginTool:
     if name in _DEFINITIONS:
         item = _DEFINITIONS[name]
         return PluginTool(name, BUILTIN_SERVER, name, item["description"], item["parameters"], Tier.T0)
+    if name in TEAM_TOOLS:
+        return team_tool(name)
     return harness_tool(name)
 
 
@@ -487,7 +489,10 @@ def take_snapshot(
             # The management catalog offers member_create to every owner-private chat.
             # Its legacy team alias must not consume a second native tool slot.
             continue
-        if name in TEAM_TOOLS:
+        if name == STOP_WORK:
+            # Found, not listed: the default prompt is held to a size budget (R-STOP-02), and a member stops its work seldom.
+            snapshot.work[name] = {key: value for key, value in worker_definition(name)["function"].items() if key != "name"}
+        elif name in TEAM_TOOLS:
             snapshot.refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             snapshot.definitions.append(worker_definition(name))
     # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.

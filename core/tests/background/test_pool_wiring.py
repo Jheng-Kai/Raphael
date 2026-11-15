@@ -51,12 +51,11 @@ async def test_a_task_the_user_stops_leaves_no_connection(make_rig, plugins, cal
         turn("", [use("Notes__look", {"topic": "a"}, "c1")]),
         turn("", [use("Notes__slow", {}, "c2")]),
     ]
-    rig.submit()
+    task_id = rig.submit()
     await until(lambda: "slow" in calls)
     assert plugins.servers.active == 1
     await rig.rpc.call("worker.cancel", {})
-    [done] = await rig.wait_for_reports()
-    assert done["state"] == "cancelled"
+    await until(lambda: rig.task(task_id).state == "cancelled")  # a stop says nothing: no report (R-STOP-01)
     await until(lambda: plugins.servers.active == 0)
 
 
