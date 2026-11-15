@@ -128,11 +128,9 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     "read_attachment": {
         "description": (
             "Read a file the user handed over with the task, by its number (1 for "
-            "the first): images, PDF/text/Office documents, transcribed audio, or a video (what its frames show, "
-            "each with its time, and what its audio says). Unsupported "
-            "formats return metadata and a reading limitation. Ask a question about it to "
-            "say what to look for. Text: numbered lines, 2000 a call; the result says the offset to go on from. "
-            "Video: start and end (seconds) look closer at one part of it."
+            "the first): images, PDF/text/Office documents, or transcribed audio/video. Other formats: "
+            "metadata only. Text: numbered lines, 2000 a call; "
+            "the result says the offset to go on from."
         ),
         "parameters": {
             "type": "object",
@@ -141,8 +139,8 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
                 "question": {"type": "string", "description": "What to look for in it."},
                 "offset": {"type": "integer", "description": "Text: first line, from 1."},
                 "limit": {"type": "integer", "description": "Text: lines to read."},
-                "start": {"type": "number", "description": "Video: second to start looking from."},
-                "end": {"type": "number", "description": "Video: second to stop looking at."},
+                "start": {"type": "number", "description": "Video: start second."},
+                "end": {"type": "number", "description": "Video: end second."},
             },
             "required": ["index"],
         },
