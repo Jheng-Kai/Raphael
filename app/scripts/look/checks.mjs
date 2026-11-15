@@ -2089,6 +2089,18 @@ export function checkRendered(name, context = {}) {
     require(menu.top >= row.bottom || menu.bottom <= row.top, `the menu clears the row (${Math.round(menu.top)} under ${Math.round(row.bottom)})`);
     return { check: name };
   }
+  if (name === 'video-full-screen-speed') {
+    // Owner, 2026-11-15: in the app's full screen the speeds fell below the window. The player is the window there, so the
+    // menu opens from the chip, above the controls, every speed on screen.
+    const popover = document.querySelector('#app-popover'), choices = [...popover.querySelectorAll('.menu-choice')];
+    require(choices.map(choice => choice.dataset.value).join() === '0.5,0.75,1,1.25,1.5,2', 'six speeds in the app menu');
+    const menu = popover.getBoundingClientRect(), bar = document.querySelector('.media-lightbox .lb-video .mp-bar').getBoundingClientRect();
+    require(menu.height > 0 && menu.top >= 0 && menu.bottom <= innerHeight, `the menu is inside the window: ${[menu.top, menu.bottom, innerHeight].map(Math.round)}`);
+    require(popover.scrollHeight <= popover.clientHeight + 1, 'every speed shows without scrolling');
+    require(choices.every(visible), 'each speed is visible');
+    require(menu.bottom <= bar.top + 1, `the menu stands above the controls: ${Math.round(menu.bottom)} over ${Math.round(bar.top)}`);
+    return { check: name };
+  }
   if (name === 'file-card-kinds') {
     const marks = [...document.querySelectorAll('.tn[data-id="826"] .attachment-file .attachment-icon')].map(icon => icon.dataset.mark).join();
     require(marks === 'fileText,fileArchive,report', `a document, an archive and a page each have their mark: ${marks}`);

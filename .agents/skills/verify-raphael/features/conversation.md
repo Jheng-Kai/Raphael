@@ -69,7 +69,7 @@ What a member or the owner can put in a conversation, and how it is shown:
 | Document (docx, xlsx, pptx, txt, md, csv, json), archive (zip, 7z, rar, tar, gz), other file, SVG | Thread | a book or file mark | a mark by kind, the Library's: document, archive, file (SVG is a document) | previews need a renderer, as PDF |
 
 ```powershell
-npm run look -- video-message video-message-hover video-message-playing video-message-space video-full-screen video-lightbox-playing video-message-reply audio-message audio-speed-menu file-cards media-reopen generated-video generated-image picture-message --theme both --width 1120,720,1920x1080
+npm run look -- video-message video-message-hover video-message-playing video-message-space video-full-screen video-full-screen-speed video-lightbox-playing video-message-reply audio-message audio-speed-menu file-cards media-reopen generated-video generated-image picture-message --theme both --width 1120,720,1920x1080
 ```
 
 `video-message` (小晴's thirty-second clip, `clip` in `media-fixture.mjs`) asserts at rest: no browser controls, `nodownload`, no
@@ -79,7 +79,7 @@ presses the picture and lets it play: playing, the scrubber part-way with its lo
 presses Space: paused part-way with the focus on the video and the bar kept. `video-full-screen` presses full screen: the lightbox with the same
 video and our controls, edge to edge under the caption strip at every size with its controls a size up, left by its bar's button (no second ×), the thread's video waiting. `video-lightbox-playing` presses F while it plays: the lightbox
 plays on from where it was. `video-message-reply` presses Reply: the composer's quote is the play mark, 小晴 and 影片. `audio-message` is the
-owner's sound: our row, its time 0:00 / 0:05, every control inside the row. `audio-speed-menu` opens the speed: six speeds, 1× checked, the menu below the row, clear of its time.
+owner's sound: our row, its time 0:00 / 0:05, every control inside the row. `video-full-screen-speed` opens the speed in the app's full screen: the menu stands above the bar with every speed on screen (owner, 2026-11-15). `audio-speed-menu` opens the speed: six speeds, 1× checked, the menu below the row, clear of its time.
 `file-cards`: a PDF, a ZIP and an HTML file wear the document, archive and page marks. `media-reopen` (two pictures with a photograph's
 grain, about 1.7 MB each, the browser cache on as in a real window) opens the conversation, opens 小森's, and opens it again; the second open
 makes no `attachments.get`, no `attachment_source` and no request on the media protocol (the runner serves `http://raphael-media.localhost/<id>`
