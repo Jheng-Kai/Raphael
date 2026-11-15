@@ -60,6 +60,22 @@ test("the thumbnails are squares of one token size in rows that wrap at the bubb
   expect(css).toContain(".attachment-thumbs .attachment-picture img { height: 100%; max-height: none; object-fit: cover; }");
 });
 
+test("the actions of a message with pictures stand against its bubble, never against the pictures (R-UI-159)", () => {
+  const css = readFileSync("src/main/agent.css", "utf8");
+  // The actions are anchored to the bubble (CSS anchor positioning), out of the message's grid, so a wider picture never moves them and the
+  // message keeps the layout of R-UI-149 and the width of R-UI-104. The rendered distance is the look check owner-picture-actions.
+  const root = parse(pendingTurnHTML("Caption", "app", { face: () => "" }, pictures(2)));
+  const message = root.querySelector(".owner-message")!;
+  expect([...message.querySelectorAll(".me-files + .bubble")]).toHaveLength(1);
+  expect(css).toContain(".owner-message:has(.me-files + .bubble) { anchor-scope: --owner-bubble; column-gap: 0; }");
+  expect(css).toContain(".owner-message:has(.me-files + .bubble) .bubble { anchor-name: --owner-bubble; }");
+  expect(css).toContain(".owner-message:has(.me-files + .bubble) > .message-actions { position: absolute; position-anchor: --owner-bubble; right: calc(anchor(left) + var(--sp-1)); top: anchor(center); translate: 0 -50%; }");
+  expect(css).not.toContain("display: contents");
+  expect(css).not.toContain("grid-template-columns: subgrid");
+  // Pictures with no words keep the actions beside the pictures.
+  expect(parse(pendingTurnHTML("", "app", { face: () => "" }, pictures(2))).querySelector(".owner-content > .bubble")).toBeNull();
+});
+
 test("pictures and video have no visible filename, size, or separate information card", () => {
   for (const attachment of [image, video]) {
     const root = parse(sentFileHTML(attachment));
