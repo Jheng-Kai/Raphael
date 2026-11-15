@@ -6,6 +6,8 @@ import { readFileSync } from "node:fs";
 import { columnHTML } from "./member-column";
 import { setLocale } from "./i18n";
 import { createSidebar } from "./sidebar";
+import { iconHTML } from "./service-mark";
+import { serviceIconOf } from "./service-icons";
 import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
 import type { Member } from "./types";
@@ -51,6 +53,27 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
   event({ type: 'ConnectionsChanged' });
   await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(0));
   observer.disconnect(); read.mockRestore();
+});
+
+test("with nothing connected the pill shows Gmail, Notion and Google Calendar, then the owner's own apps once one is connected", async () => {
+  // Owner, 2026-11-15: 「如果剛進來甚麼都還沒 connect 這邊還是要顯示 default…有連結了再慢慢換成現在這樣」.
+  const empty = { state: "complete", count: 0, apps: [{ name: "Slack", connected: false, last_used_at: null }] };
+  const read = vi.spyOn(api, "integrationsInventory").mockResolvedValue(empty as never);
+  let event!: (value: MainEvent) => void;
+  document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!;
+  const column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button data-col="add"></button></div>';
+  createSidebar(nav, column, { onEvent: handler => { event = handler; return () => {}; } } as AppContext);
+  const drawn = (): string[] => [...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.innerHTML);
+  const mark = (name: string): string => { const box = document.createElement('div'); box.innerHTML = iconHTML(name, serviceIconOf({ name }), 'md'); return box.innerHTML; };
+  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
+  expect(drawn()).toEqual(['Gmail', 'Notion', 'Google Calendar'].map(mark));
+  read.mockResolvedValue({ state: "complete", count: 1, apps: [{ name: "Slack", connected: true, last_used_at: 5 }] } as never);
+  event({ type: 'ConnectionsChanged' });
+  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(1));
+  expect(drawn()).toEqual([mark('Slack')]);
+  read.mockRestore();
 });
 
 test("the chief is an ordinary row until it is pinned, then a larger centered face above its name", () => {

@@ -2982,6 +2982,15 @@ export function checkRendered(name, context = {}) {
   const footBox = el => el.getBoundingClientRect();
   const footNear = (a, b, message) => require(Math.abs(a - b) <= 1, `${message}: ${Math.round(a * 10) / 10} not ${Math.round(b * 10) / 10}`);
   const footRail = () => document.documentElement.hasAttribute('data-sidebar-collapsed');
+  if (name === 'foot-starter-apps') {
+    // With nothing connected the pill shows what it is for: Gmail, Notion and Google Calendar (sidebar.ts STARTER_APPS).
+    const pill = document.querySelector('#nav .sidebar-apps[data-connect-apps]');
+    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) { require(![...pill.querySelectorAll('.sidebar-app-marks .mono')].some(visible), 'on the rail the door has no marks'); return { check: name, rail: true }; }
+    const marks = [...pill.querySelectorAll('.sidebar-app-marks .mono')].filter(visible);
+    require(marks.length === 3, `the three starter marks show beside the words: ${marks.length}`);
+    require(visible(pill.querySelector('.nav-t')), 'the words stay whole');
+    return { check: name };
+  }
   if(name==='foot-rest'){
     // The foot at rest, both shapes: the list's one row (measured by sidebar-air) or the rail's column; the app opens on a conversation, so no Home
     // and no page button of the foot's remain.

@@ -22,6 +22,8 @@ const CONVERSATION_MIN = 604;
  *  list between its two shapes. */
 const RAIL_WIDTH = 88, TO_RAIL = 150, FROM_RAIL = 170;
 const WIDTH_KEY = "raphael.sidebar.width";
+/** The Connections pill's marks before any app is connected: what most people connect first. */
+const STARTER_APPS = ["Gmail", "Notion", "Google Calendar"] as const;
 const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent" | "go">): void {
@@ -39,9 +41,12 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (apps.getAttribute("aria-label") !== label) apps.setAttribute("aria-label", label);
     // Nothing shows under the pointer over this button, in the list or on the rail (owner, 2026-11-12): its name is for a screen reader.
     if (apps.querySelector(".nav-t")!.textContent !== name) apps.querySelector(".nav-t")!.textContent = name;
-    const marks = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
-      .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0))
-      .flatMap(item => { const icon = serviceIconOf({ name: item.name }); return icon ? [iconHTML(item.name, icon, "md")] : []; }).slice(0, 3)
+    const connected = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
+      .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0)).map(item => item.name) : [];
+    // With nothing connected yet the pill still shows what it is for (owner, 2026-11-15: 「不然一開始很空」); a reading that failed shows none.
+    const names = typeof inventory === "object" && !connected.length ? STARTER_APPS : connected;
+    const marks = typeof inventory === "object" ? names
+      .flatMap(name => { const icon = serviceIconOf({ name }); return icon ? [iconHTML(name, icon, "md")] : []; }).slice(0, 3)
       // Each mark knows where it stands against the middle one, for the pill's hover (sidebar.css `--spread`).
       .map((mark, at, all) => `<span class="sidebar-app-mark" style="--spread:${at - (all.length - 1) / 2}">${mark}</span>`).join("") : "";
     const host = apps.querySelector(".sidebar-app-marks")!;
