@@ -904,9 +904,6 @@ class App(Router):
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
         self.desktop_viewer.register(self)
-        from .computer.checkpoint_service import Checkpoints
-        self.checkpoints = Checkpoints(self.vm, self.desktop_viewer.member_exists)
-        self.checkpoints.register(self)
         self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
         self.tool_hub.logins = self.login_vault
         from .computer.local_tools import LocalTools

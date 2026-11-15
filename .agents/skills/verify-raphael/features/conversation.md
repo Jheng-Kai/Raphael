@@ -184,37 +184,29 @@ native attach in the running app (no app file was changed).
 node scripts\verify.mjs --contract
 ```
 
-## The card of changed files says what happened (owner, 2026-11-14, R-CARD-15, R-CARD-16, R-CARD-17)
+## No card of changed files; the member undoes in chat (owner, 2026-11-15, R-CARD-15, R-CARD-17, R-COMP-UNDO-01)
 
-Owner, with a picture of a card titled 「工作結果」, a green 「● 完成」, 「53 個檔案變更 +0 −0」, 「顯示內容」, 「還原檔案」 and 「查看」:
-「這個卡片的部分，你可以看一下 grokbot 是怎麼做的，因為我不記得他們會有那個完成的點點。然後這個工作結果我也不知道是在幹嘛，你可能要看一下，去幫我調整一下 card 的 UI/UX」.
-What the card is: a member that ran commands on its computer (workspace or team folder) gets a file checkpoint at the start of the turn
-(`vm_tools._checkpoint`); when the turn's background task finishes (`task.state === "done"`) and files differ from the checkpoint, the thread draws
-`taskResultHTML` (`task-result.ts`) under it, private conversations and rooms alike. 還原檔案 put the files back to the checkpoint. Grok Bot has no such
-card: what a bot makes is a named file with its size and no state, and the card of its results came from the Cursor deck (`Done`, files changed with +/−).
-The count was wrong for files with nothing to count (R-CARD-16: the core compared text for the first twenty files only, and for no picture or document).
+The card under a finished turn (「改了 N 個檔案」 with 開啟檔案變更 and 復原這些變更; owner, 2026-11-14, with a picture of 「工作結果」, a green 「● 完成」 and
+「53 個檔案變更 +0 −0」) and the 檔案變更 entry of the member computer panel's ⋯ menu are removed (owner, 2026-11-15): Claude Code and Grok Bot show nothing like them.
+`task-result.ts`, `checkpoint-view.ts`, the `.task-result` and `.desktop-checkpoints` styles, the `data-task-result-slot` in `timeline.ts` and the owner RPC
+`computer.checkpoints` are gone. What is true now:
 
-Now (`task-result.ts`, `card.css` `.task-result`, core `checkpoints.py` `_view`): no pill and no dot. The title is 「改了 N 個檔案」 (「新增了」 when all are new, 「刪除了」 when all
-are gone, 「已復原 N 個檔案的變更」 once undone). Below it a well of rows: the name, its folder quiet, and at the right 「新增」, 「刪除」, `+12 −3` or 「已修改」. Five rows show, the rest fold under
-「還有 N 個檔案」; a text file opens under its row. Buttons: the primary 開啟檔案變更 (opens the member's computer panel on 檔案變更, all of that member's changes) and 復原這些變更, which asks in
-a dialog first (「復原這些變更？」, what comes back, what is kept) unless the mode is 全部允許, then toasts how many came back and were kept. An undo that fails says
-「沒能復原這些變更，請再試一次。」 beside 重試. Routine and background turns keep the card: the checkpoint is their only undo.
+- A finished turn that changed files shows its reply and nothing under it, in a private conversation, a room, a routine and a background task alike.
+- The record stays in the core: before a turn's first change the member's computer keeps a copy of its workspace (`core/src/raphael_core/computer/checkpoints.py`, at
+  most 20 per member). The owner asks in chat (「剛剛那個改壞了，改回去」, 「只把 report.md 改回原本的」) and the member undoes it with its tool `file_history`
+  (`list`, `show`, `restore`; T0 like `write_file`; it takes the run's own checkpoint first, and a file changed again since is kept). Nothing in the app lists or restores files.
+- What the member's `file_history` lists is still decided by the core's own rules: no hidden folder, package or build store, cache, lock or partial file, bare-hash name or
+  browser profile (R-CARD-18, R-CARD-20, `checkpoints.py` `noise_folder`, `noise_file`), and the counts are null where text could not be compared (R-CARD-16).
 
 ```powershell
-npm run look -- card-task-result card-task-few card-task-many card-task-new card-task-noise card-task-work-only card-task-confirm card-task-restored card-task-room card-task-files card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- card-task-no-file-card computer-menu-teach-only card-sheet --theme both --width 1120,720,1920x1080
 ```
 
-`card-task-few` (four files, a text file opened under its row), `card-task-many` (53 files with nothing to count: five rows and 「還有 48 個檔案」, no +0 −0), `card-task-new` (only new
-files), `card-task-confirm` (the dialog, nothing undone yet) and `card-task-restored` (「已復原 1 個檔案的變更」, one button) assert no pill or dot, none of the old words, one-line rows with their
-state at the right edge and the two buttons' words; the shared `card-shell` check (in `card-sheet`) holds the card to the no-pill rule beside every other card. Core: `core/tests/computer/test_checkpoints.py`;
-`npm run verify -- --contract` after a change to the file list the core sends.
+`card-task-no-file-card` (a done turn of a member whose computer changed files, fixture `cardTaskResult`) asserts the reply is on screen as prose, no `.task-result`,
+`[data-task-result-slot]` or `[data-task-result]`, none of the words 開啟檔案變更 and 復原這些變更, and no `computer.checkpoints` call; `card-sheet` waits on the turn
+`.tn[data-id="980"]`, not on a card. `computer-menu-teach-only` is in `member-computer.md`. Core: `core/tests/computer/test_checkpoints.py`;
+`npm run verify -- --contract` after a change to what the core lists.
 
-What tools leave is never on the card (R-CARD-20, owner 2026-11-14: a card 「新增了 30 個檔案」 of bare hashes, the content store of
-`npm i --cache /home/cua/workspace/.npm-cache`): the core's checkpoints neither walk nor list hidden folders, package and build stores, caches and
-temporary folders, lock files, temporary or partial files and bare-hash names (`checkpoints.py` `noise_folder`, `noise_file`); a review kept before is
-filtered when read, and undo leaves them alone. `card-task-noise` (a turn of leftovers alone: no card) and `card-task-work-only` (the same leftovers
-beside three work files: 「新增了 3 個檔案」 and only those rows) show the list the core's own `CheckpointStore` makes of a synthetic workspace
-(`scripts/look/core_fixtures.py`, through runner.mjs `coreFixtures`), not a mocked copy.
 
 ## A sign-in the CLI refused is mended once for every routine (2026-11-14, R-CLI-SIGNIN-03)
 
@@ -229,7 +221,7 @@ the core (`signinRetry` in `cli-signin.ts`) in place of asking the routine's tit
 
 Owner, with a picture of the card 「Added 110 files」 under a member that was asked to read email (`verified_contents.json`,
 `summarizer_gemma4_*_solution_config.binarypb`, under 「Workspace / member-b17ef6d19…」, with 「Undo these changes」):
-「看個 email 怎麼會改了一百多個檔案」, and 「Open file changes」 listed them only after a long wait.
+「看個 email 怎麼會改了一百多個檔案」, and 「Open file changes」 (the file-changes view of the day, removed 2026-11-15) listed them only after a long wait.
 Cause, as far as the code shows (the owner's volume was not read; the files are named by the picture only) (core `computer/checkpoints.py`): a turn's checkpoint is the workspace as it was at the turn's first command, and the card is the
 difference to the folder now, so anything that appears in `/home/cua/workspace` meanwhile counts as the member's. Only the names in
 `EXCLUDED` (`.browser-profiles`, `.cache`, ...) were left out, by folder name; the browser's own files lay under another name:
@@ -240,7 +232,7 @@ the change list read both sides of the first twenty files whole (models of tens 
 Now: `checkpoints.py` does not walk a browser's user-data directory (found by its marker files), `PROGRAM_FOLDERS` and lock files, and
 `_changes` also drops them from a checkpoint kept before (and `restore` never undoes them); a folder carried in whole in the window
 (`.raphael-carried-member`, 16 bytes) is not listed; text is read only for small text files (R-CARD-19), and a closed window is compared once.
-No image change, no UI change: a turn with only such files has no card. Not covered here: a real Chrome run on a computer.
+No image change, no UI change: a turn with only such files leaves nothing to list. Not covered here: a real Chrome run on a computer.
 
 ```powershell
 python -m pytest tests/computer/test_checkpoints.py tests/computer/test_checkpoint_revision.py   # from core/, PYTHONPATH=src
@@ -396,7 +388,7 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 red, no ×, no rule line, the focus on 取消, a sentence of two lines whose longest line takes at least three quarters of
 the box) and returns these numbers. The sentence wraps as ordinary text (`text-wrap: pretty`): `balance` cut it into two
 half-width lines with the right of the box empty (owner, 2026-11-12: 「為什麼字會卡在左邊」). The restore and reset confirmations and
-新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`, `computer-file-confirm`).
+新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`).
 
 ```powershell
 npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm quick-clear-confirm quick-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
@@ -430,7 +422,7 @@ npm run look -- admin-approval admin-approval-batch admin-approval-long admin-de
 ```
 
 ```
-npm run look -- room-delete quick-clear-confirm computer-file-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
+npm run look -- room-delete quick-clear-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
 ```
 
 ## Opening a conversation fast (owner, 2026-11-10)
@@ -2111,7 +2103,7 @@ npm run look -- handoff-group handoff-group-done handoff-group-many handoff-grou
 Rules R-CARD-01 through R-CARD-04 map to `app/src/main/card.ts` and `card.css`.
 Consumers: mail/offer, durable owner question, main/background approval,
 permission, connector and inline credential setup, MCP proposal, team draft and
-settled decision, page, computer takeover, checkpoint task result and composer
+settled decision, page, computer takeover and composer
 failure. Rooms reuse the same renderers and services.
 
 Run the `card-*` scenes listed by `npm run look -- --list`, plus existing
@@ -2132,15 +2124,15 @@ network, cargo or real-provider acceptance.
 
 
 `````sh
-npm run look -- card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-connect-expired card-connect-cancelled card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-task-result card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-connect-expired card-connect-cancelled card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-sheet --theme both --width 1120,720,1920x1080
 ```
 
 `````sh
-npm run look -- card-page-ready card-page-failed card-background card-task-files card-task-restored --theme both --width 1120,720,1920x1080
+npm run look -- card-page-ready card-page-failed card-background --theme both --width 1120,720,1920x1080
 ```
 
 `````sh
-npm run look -- card-task-room --theme both --width 1120,720,1920x1080
+npm run look -- card-task-no-file-card --theme both --width 1120,720,1920x1080
 ```
 
 Additional failed-card exits use the shared local Close action and preserve saved work.
@@ -2159,13 +2151,13 @@ npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
 
 ### Owner card review follow-up (2026-11-02)
 
-R-CARD-06: known approval action with localized member name; new visible disclosure content; one state per card; shared per-kind prompt table; one-line inline credential hints with folded guides. Regression tests: card.test.ts, card-behavior.test.ts, inline-connection.test.ts, task-result.test.ts, timeline.test.ts, pages/agent-cards.test.ts, scripts/look/audit.test.mjs. Selected visual consumers: card-sheet, card-approval, admin-approval*, card-mail-ready, email-draft-handed-off, card-mail-discarded/failed, card-task-result/files/restored/prose/room, card-key-waiting/guide-retry, card-login, card-secret/failed, connector-app/key-form/key-sent, chat-secret-saved-not-resumed, card-question-waiting/key, owner-question-background/room, card-permission-waiting/once, local-command-background, card-message-waiting, card-computer-waiting/handback, mcp-proposal-stdio, card-mcp-done, card-team-done.
+R-CARD-06: known approval action with localized member name; new visible disclosure content; one state per card; shared per-kind prompt table; one-line inline credential hints with folded guides. Regression tests: card.test.ts, card-behavior.test.ts, inline-connection.test.ts, timeline.test.ts, pages/agent-cards.test.ts, scripts/look/audit.test.mjs. Selected visual consumers: card-sheet, card-approval, admin-approval*, card-mail-ready, email-draft-handed-off, card-mail-discarded/failed, card-task-no-file-card, card-key-waiting/guide-retry, card-login, card-secret/failed, connector-app/key-form/key-sent, chat-secret-saved-not-resumed, card-question-waiting/key, owner-question-background/room, card-permission-waiting/once, local-command-background, card-message-waiting, card-computer-waiting/handback, mcp-proposal-stdio, card-mcp-done, card-team-done.
 ```sh
 npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080
 ```
 
 ```sh
-npm run look -- card-sheet card-approval admin-approval admin-approval-batch admin-approval-long card-mail-ready email-draft-handed-off card-mail-discarded card-mail-failed card-task-result card-task-files card-task-restored card-task-prose card-task-room card-key-waiting card-key-guide-retry card-login card-secret card-secret-failed connector-app connector-key-form connector-key-sent chat-secret-saved-not-resumed card-question-waiting card-question-key owner-question-background owner-question-room card-permission-waiting card-permission-once local-command-background card-message-waiting card-computer-waiting card-computer-handback mcp-proposal-stdio card-mcp-done card-team-done --theme both --width 1120,720,1920x1080
+npm run look -- card-sheet card-approval admin-approval admin-approval-batch admin-approval-long card-mail-ready email-draft-handed-off card-mail-discarded card-mail-failed card-task-no-file-card card-key-waiting card-key-guide-retry card-login card-secret card-secret-failed connector-app connector-key-form connector-key-sent chat-secret-saved-not-resumed card-question-waiting card-question-key owner-question-background owner-question-room card-permission-waiting card-permission-once local-command-background card-message-waiting card-computer-waiting card-computer-handback mcp-proposal-stdio card-mcp-done card-team-done --theme both --width 1120,720,1920x1080
 ```
 
 ### Real Composio approval and question-head review (2026-11-02)
@@ -2173,7 +2165,7 @@ npm run look -- card-sheet card-approval admin-approval admin-approval-batch adm
 R-CARD-07 and R-CARD-08: the real COMPOSIO_MULTI_EXECUTE_TOOL envelope is projected by the core before drawing the existing permission card. The member is the subject; the app identity and mark come from the inner slug and connector name. The router action, digest, and all execution arguments stay intact. Unknown actions use the localized member/app title without filler body text. Multiple calls keep the general form. An unanswered owner question has no waiting pill (the explicit shared-shell exception); Close is last in its head. Empty and typed answer controls remain visible, and the enabled primary is white on hover. Settled questions retain their decision status.
 
 ```powershell
-npm run look -- owner-question-room owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-background owner-question-text local-permission-card admin-approval admin-approval-batch admin-approval-long card-page-ready card-page-failed card-background card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-question-typed card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-connect-expired card-connect-cancelled card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry card-mail-close card-page-close card-connect-close card-key-guide-retry card-task-result card-task-room card-task-files card-task-restored card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+npm run look -- owner-question-room owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-background owner-question-text local-permission-card admin-approval admin-approval-batch admin-approval-long card-page-ready card-page-failed card-background card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-question-typed card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-connect-expired card-connect-cancelled card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry card-mail-close card-page-close card-connect-close card-key-guide-retry card-sheet --theme both --width 1120,720,1920x1080
 ```
 
 ### Review image regressions

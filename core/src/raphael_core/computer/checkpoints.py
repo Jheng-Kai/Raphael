@@ -48,6 +48,22 @@ DIFF_FILES = 20
 DIFF_SECONDS = 3.0
 
 
+def text_content(content):
+    """Decode the UTF-8 and BOM-marked UTF-16 text the computer's read_file accepts."""
+    for bom, encoding in ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be")):
+        if content.startswith(bom):
+            try:
+                return content[len(bom):].decode(encoding)
+            except UnicodeDecodeError:
+                return None
+    if b"\0" in content[:SNIFF_BYTES]:
+        return None
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def noise_folder(name):
     """A folder no file under which is the member's work, wherever it lies: hidden, a program's own, a package store, a cache."""
     return (name.startswith(".") or name in UNTRACKED or name in STORE_FOLDERS or name.lower() in SCRATCH_FOLDERS
@@ -265,6 +281,8 @@ class CheckpointStore:
                               created=time.time_ns() // 1_000_000, order=time.time_ns())
                 latest.pop("review", None)
                 latest.pop("reviews", None)
+                latest.pop("history", None)
+                latest.pop("restore_remaining", None)
                 self._write(latest["id"], latest)
                 self._prune()
             return None
@@ -351,14 +369,16 @@ class CheckpointStore:
             diff, added, removed = "", None, None
             if time.monotonic() < diff_deadline and diffed < DIFF_FILES and max((old or {}).get("size", 0), (new or {}).get("size", 0)) <= TEXT_DIFF_BYTES:
                 try:
-                    if b"\0" in self._peek(old, path, deadline) + self._peek(new, path, deadline):
+                    if old and text_content(self._peek(old, path, deadline)) is None or new and text_content(self._peek(new, path, deadline)) is None:
                         raise UnicodeError()
-                    diffed += 1
                     left = self._bytes(old)
                     right = self._bytes(new) if new and self._object(new["digest"]).exists() else self._read(path, deadline)[1] if new else b""
-                    if b"\0" in left + right:
+                    left_text = text_content(left)
+                    right_text = text_content(right)
+                    if left_text is None or right_text is None:
                         raise UnicodeError()
-                    lines = list(difflib.unified_diff(left.decode().splitlines(), right.decode().splitlines(), fromfile="before", tofile="after", lineterm=""))
+                    diffed += 1
+                    lines = list(difflib.unified_diff(left_text.splitlines(), right_text.splitlines(), fromfile="before", tofile="after", lineterm=""))
                     # The two header lines are not content. The counts come from the whole diff, not from the shortened text kept below.
                     body = [line for line in lines[2:] if not line.startswith("@@")]
                     added, removed = sum(line.startswith("+") for line in body), sum(line.startswith("-") for line in body)
@@ -376,7 +396,7 @@ class CheckpointStore:
         change = "added" if not file.get("before") else "removed" if not file.get("after") else "changed"
         return {"path": file["path"], "diff": file["diff"], "change": change, "added": file.get("added"), "removed": file.get("removed")}
 
-    def list(self, *, member):
+    def list(self, *, member, compact=False):
         records = self._records()
         if not records:
             return []
@@ -406,12 +426,17 @@ class CheckpointStore:
             noise = self._noise(file["path"] for file in files)
             if noise:
                 files = [file for file in files if file["path"] not in noise]
-            if not files and not incomplete:
+            if not files and not incomplete and data["state"] != "restored":
                 continue
+            if data["state"] != "restored" and not data.get("restore_remaining"):
+                data["history"] = files
+            else:
+                data.setdefault("history", files)
             token = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
             if data["state"] != "restored":
                 reviews = data.setdefault("reviews", {})
-                known = token in reviews and data.get("review") == files and data.get("review_after") == window
+                known = (token in reviews and data.get("review") == files and data.get("review_after") == window
+                         and data.get("history") == files)
                 reviews[token] = files
                 while len(reviews) > 5:
                     del reviews[next(iter(reviews))]
@@ -421,26 +446,69 @@ class CheckpointStore:
                     self._write(data["id"], data)
             output.append({key: data[key] for key in ("id", "member", "turn", "created", "state")} | {
                 "partial": incomplete, "uncovered": omitted, "review_token": token,
-                "files": [self._view(file) for file in files]})
+                "files": [{key: value for key, value in self._view(file).items() if key != "diff"}
+                          if compact else self._view(file) for file in data["history"]]})
         return list(reversed(output))[:MAX_CHECKPOINTS]
 
-    def restore(self, identifier, *, member, review_token=None):
+    def show(self, identifier, *, member, path):
+        data = self._get(identifier)
+        if data.get("member") != member or "manifest" not in data:
+            raise ValueError("unknown_checkpoint")
+        if "review" not in data:
+            self.list(member=member)
+            data = self._get(identifier)
+        files = data.get("history", data.get("review", []))
+        noise = self._noise(file["path"] for file in files)
+        file = next((entry for entry in files if entry["path"] == path and path not in noise), None)
+        if file is None:
+            raise ValueError("unknown_file")
+        before = file.get("before")
+        content = self._bytes(before) if before else b""
+        after = file.get("after")
+        after_content = self._bytes(after) if after and self._object(after["digest"]).exists() else (
+            self._read(file["path"], time.monotonic() + WALK_SECONDS)[1] if after else b"")
+        is_text = (max((before or {}).get("size", 0), (after or {}).get("size", 0)) <= TEXT_DIFF_BYTES
+                   and text_content(content) is not None and (not after or text_content(after_content) is not None))
+        text = text_content(content)[:20000] if is_text else None
+        result = {"path": path, "change": self._view(file)["change"], "text": text,
+                  "diff": file.get("diff", "") if text is not None else "", "is_text": text is not None}
+        if text is None:
+            result["message"] = "This file is not text; its bytes are not shown."
+        return result
+
+    def restore(self, identifier, *, member, review_token=None, paths=None):
         data = self._get(identifier)
         if data.get("member") != member or data.get("state") != "ready" or "manifest" not in data:
             raise ValueError("unknown_checkpoint")
         if "review" not in data:
             self.list(member=member)
             data = self._get(identifier)
-        restored, skipped = [], []
+        restored, skipped, reasons = [], [], {}
         deadline = time.monotonic() + WALK_SECONDS
         if review_token is not None and review_token not in data.get("reviews", {}):
             raise ValueError("checkpoint_changed")
         files = data.get("reviews", {}).get(review_token, data.get("review", []))
+        data.setdefault("history", files)
+        data["restore_remaining"] = True
         # A review kept before the core left a kind of noise out may still hold some: a tool's cache, store or temporary file the
         # owner was never shown is never put back or deleted.
         noise = self._noise(file["path"] for file in files)
+        if paths is not None:
+            if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+                raise ValueError("invalid_paths")
+            available = {file["path"] for file in files}
+            if any(path not in available for path in paths):
+                raise ValueError("unknown_file")
+            selected = set(paths)
+        else:
+            selected = {file["path"] for file in files}
+        remaining = []
         for file in files:
+            if file["path"] not in selected:
+                remaining.append(file)
+                continue
             if file["path"] in noise:
+                remaining.append(file)
                 continue
             try:
                 path = self._safe(file["path"])
@@ -461,11 +529,23 @@ class CheckpointStore:
                     self._atomic(path, content)
                     path.chmod(original["mode"])
                 restored.append(str(path))
-            except (ValueError, OSError, TimeoutError):
+            except ValueError as error:
                 skipped.append(file["path"])
-        data["state"] = "restored" if not skipped else "ready"
+                remaining.append(file)
+                reasons[file["path"]] = "changed_since_checkpoint" if str(error) == "later_change" else str(error)
+            except TimeoutError:
+                skipped.append(file["path"])
+                remaining.append(file)
+                reasons[file["path"]] = "restore_timeout"
+            except OSError:
+                skipped.append(file["path"])
+                remaining.append(file)
+                reasons[file["path"]] = "file_unavailable"
+        data["review"] = remaining
+        data["reviews"] = {hashlib.sha256(json.dumps(remaining, sort_keys=True).encode()).hexdigest(): remaining}
+        data["state"] = "restored" if not remaining else "ready"
         self._write(identifier, data)
-        return {"restored": restored, "skipped": skipped}
+        return {"restored": restored, "skipped": skipped, "reasons": reasons}
 
 
 def main():
@@ -474,9 +554,12 @@ def main():
     if action == "begin":
         result = store.begin(member=metadata["member"], turn=metadata["turn"])
     elif action == "list":
-        result = store.list(member=metadata["member"])
+        result = store.list(member=metadata["member"], compact=True)
+    elif action == "show":
+        result = store.show(metadata["id"], member=metadata["member"], path=metadata["path"])
     elif action == "restore":
-        result = store.restore(metadata["id"], member=metadata["member"], review_token=metadata.get("review_token"))
+        result = store.restore(metadata["id"], member=metadata["member"], review_token=metadata.get("review_token"),
+                               paths=metadata.get("paths"))
     else:
         raise ValueError("unknown_action")
     print(json.dumps(result))

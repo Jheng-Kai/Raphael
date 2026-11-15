@@ -8,7 +8,6 @@ import { openActions } from "./member-column";
 import "./desktop-viewer.css";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 import { mountMemberResources } from "./member-profile-resources";
-import { mountCheckpoints } from "./checkpoint-view";
 import { cardFailure } from "./card";
 import { mountComputerLocation } from "./computer-location";
 import { mountComputerLifecycle } from "./computer-lifecycle";
@@ -69,7 +68,7 @@ export function preparationHTML(state: DesktopState, face = ""): string {
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
-  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
+  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; face?(): string; closePanel?(): void; openPanel(): void; panelVisible(): boolean; status?(active: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; watch(): void; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.id = 'member-computer-panel'; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', 'member-tab-computer'); panel.hidden = true;
   // The preview is one button that opens the larger view; the larger view fills the window and folds back
@@ -124,11 +123,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let demonstration: api.TeachingDraft | undefined, skillName = "";
   let skillEditor: ReturnType<typeof mountMemberResources> | undefined;
   let teachingBusy = false, drafting = false;
-  const checkpoints = mountCheckpoints(panel, member);
-  panel.querySelector('.desktop-foot')!.before(panel.querySelector('.desktop-checkpoints')!);
   const timeline = mountDesktopTimeline(options.timeline);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined, watching = false;
-  let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
+  let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false;
   let returnedRequests: string[] = [];
   let state: DesktopState | undefined, session: DesktopSession | undefined;
   let maintenance: { member: number; phase: NonNullable<DesktopState['lifecycle']> } | undefined;
@@ -191,7 +188,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     // A closed panel with no card on screen shows no face, and building one on every render is most of a draw.
     const face = inline || options.panelVisible() || panel.hasAttribute('data-expanded') ? options.face?.() ?? "" : "";
     const fallback = defaultWallpaper(Date.now());
-    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, stalled, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.isRemote(), session, lastFrames.get(member()), fallback, wallpaperKnown, !!ownWallpaper]);
+    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, stalled, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.isRemote(), session, lastFrames.get(member()), fallback, wallpaperKnown, !!ownWallpaper]);
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
@@ -217,15 +214,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     attr(stop, 'title', t('agent.stop')); attr(stop, 'aria-label', t('agent.stop'));
     paint(collapseButton, 'hidden', !watching);
     paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
-    paint(backButton, 'hidden', !filesOpen && (!skillEditor || review.hidden));
-    panel.toggleAttribute('data-files', filesOpen);
-    // File changes opened from a result card hold and watch nothing: no pill, Back is the way home.
-    panel.toggleAttribute('data-files-only', filesOnly);
+    paint(backButton, 'hidden', !skillEditor || review.hidden);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
     paint(request, "hidden", !pending()); paint(request, "textContent", pending() ? desktopWorkText(pending()!) : "");
     panel.toggleAttribute("data-request", !!pending());
     const running = state?.state === "running", owner = state?.control === "owner";
-    checkpoints.update(!!running);
     const recording = demonstration && ["recording", "full"].includes(demonstration.state);
     panel.toggleAttribute('data-teaching', !!recording || drafting || !!demonstration);
     paint(teach, "textContent", t(drafting ? "teach.drafting" : recording ? "teach.stop" : demonstration ? "teach.review" : "teach.start"));
@@ -255,11 +248,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(modeLabel.dataset, "mode", mode);
     // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease (owner, 2026-11-14:
     // 「理論上不管甚麼時候我都應該要可以接手」): a pill that watches always offers the way out of it.
-    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || filesOnly || !!demonstration); paint(take, "disabled", changing || !connected);
+    paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
-    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || filesOnly || !owner && !pending());
-    paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching || filesOnly); paint(action, "disabled", changing);
+    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", watching || !expanded || !!recording || !owner && !pending());
+    paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", watching); paint(action, "disabled", changing);
     // A sleeping computer: its face and one short line, and the whole screen wakes it.
     paint(retry, "textContent", t(state?.error === 'docker_stopped' ? 'desktop.startDocker' : state?.state === 'missing' && state.image === false ? 'desktop.prepareImage' : "desktop.retry"));
     // One press on the screen starts it, whatever stopped it (the cover's click below); no button is drawn on it.
@@ -302,7 +295,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   function closeStream(): void {
     clearTimeout(lingering); clearTimeout(stallTimer); clearTimeout(takeTimer); stalled = false;
-    generation++; takeOnConnect = false; watching = false; filesOnly = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
+    generation++; takeOnConnect = false; watching = false; send(false); framesOn = false; frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
     panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
@@ -565,7 +558,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     await control(false);
     if (session !== opened || member() !== id || options.conversation() !== conversation) return false;
     if (state?.control === 'owner') { suspended = false; return false; }
-    expand(false); checkpoints.hide(); filesOpen = false; review.hidden = true; closeStream();
+    expand(false); review.hidden = true; closeStream();
     if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.();
     // The panel that stays open is a preview of a computer that runs: it streams again at once. `suspended` only keeps a
     // returned request's card from reopening its stream, and a visible panel is not that card (owner, 2026-11-14: a black
@@ -611,13 +604,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   });
   panel.addEventListener('click', event => { if ((event.target as Element).closest('[data-desktop-location]')) location.open(); });
   panel.querySelector('[data-desktop="menu"]')!.addEventListener('click', event => openActions(event.currentTarget as HTMLElement, [
-    { id: 'files', label: t('files.changes'), icon: 'file' },
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
-  ], choice => { if (choice === 'files') { filesOpen = true; void checkpoints.show(); draw(); } else teach.click(); }));
+  ], () => teach.click()));
   backButton.addEventListener('click', () => {
-    filesOpen = false; checkpoints.hide(); review.hidden = true;
-    // Opened from a card, nothing was taken over: Back is the way home.
-    if (filesOnly) { filesOnly = false; expand(false); if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.(); }
+    review.hidden = true;
     draw();
   });
   onLocaleChange(draw);
@@ -627,14 +617,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     refresh() {
       // Back to the conversation whose stream is still open: nothing to reconnect.
       if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+      closeStream(); opening = false; error.hidden = true; error.setAttribute('role', 'alert'); suspended = false; pollDelay = 2000; clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = waking = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
     },
     sync() { if (!options.panelVisible()) location.hide(); timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     carry(before) { if (before.contains(frame)) parkFrame(); },
     takeover() { visible = true; acquire(); void poll(); },
     /** The panel's computer row was pressed: a sleeping or stopped computer is started, a running one opens in the larger view. */
     watch() { visible = true; enlarge.click(); },
-    files() { visible = true; filesOnly = !panel.hasAttribute('data-expanded'); expand(true); filesOpen = true; void checkpoints.show(); draw(); },
     waitingForOwner: turnId => !!state?.works?.some(work => work.turn_id === turnId && work.state === "waiting_control"),
   };
 }

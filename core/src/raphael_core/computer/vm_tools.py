@@ -178,7 +178,7 @@ RUN_STEPS = {"description": "Perform 1–10 short driver actions, then return on
             "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
         "required": ["steps", "observation"], "additionalProperties": False}}
 
-EXEC = {"description": "Run a Linux shell command (sh, not PowerShell) inside the VM workspace, never on the host. Your own files are in /home/cua/workspace; /home/cua/team is the folder the whole team shares, so what a colleague or the owner needs goes there. Nothing it does shows on the screen the owner watches: use it for programs, never to fetch a page in place of opening it in the browser. For files use read_file, grep, glob, edit_file and write_file, not cat, find, sed or heredocs. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it. " + VM_CONTRACT,
+EXEC = {"description": "Run Linux shell commands (sh, not PowerShell) in the computer workspace, never on the host. Your files are in /home/cua/workspace; team files go in /home/cua/team. The shell has no screen: use it for programs, never to fetch a page. For files use read_file, grep, glob, edit_file and write_file, not cat, find, sed or heredocs. Commands wait timeout_seconds (60 default, 1800 max) then end. Run long builds or servers in background and read their logs and .exit files with vm_exec. Other members' commands and the screen are not held up. " + VM_CONTRACT,
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
@@ -960,8 +960,21 @@ class VmTools:
                             raise VmError("computer_changed")
                         if target.key in self.vm.held:
                             raise VmError("owner_holds_control")
+                    async def history(action, metadata):
+                        async with self.checkpoint_locks.setdefault(target.state_key, asyncio.Lock()):
+                            if target != self.vm.target(member):
+                                raise VmError("computer_changed")
+                            if target.key in self.vm.held:
+                                raise VmError("owner_holds_control")
+                            result = await self.vm.checkpoint(target, action, **metadata)
+                            if target != self.vm.target(member):
+                                raise VmError("computer_changed")
+                            if target.key in self.vm.held:
+                                raise VmError("owner_holds_control")
+                            return result
                     result = await file_tools.call(self.vm, target, tool.name, arguments, self.file_reads,
-                                                   self._file_run(target, member, owner, turn), checkpoint)
+                                                   self._file_run(target, member, owner, turn), checkpoint,
+                                                   history if tool.name == "file_history" else None)
                 elif tool.name == "attach_file":
                     data = await self.vm.read_file(target, arguments["path"], limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name
