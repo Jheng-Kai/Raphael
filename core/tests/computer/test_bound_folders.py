@@ -6,24 +6,24 @@ the file a member made in the team folder, and the work that named it failed for
 """
 
 import os
-import subprocess
+from pathlib import Path
 
 import pytest
 
+from raphael_core.computer import vm
 from raphael_core.computer.vm import bound_folder
 
-pytestmark = pytest.mark.skipif(os.name != "nt", reason="the folder access rules of Windows")
 
-
-def inherits(path):
-    shown = subprocess.run(["icacls", str(path)], capture_output=True, text=True, check=True).stdout
-    return "(I)" in shown
-
-
-def test_a_new_folder_takes_the_access_of_the_folder_it_is_in(tmp_path):
-    folder = tmp_path / "team"
-    bound_folder(folder)
-    assert folder.is_dir() and inherits(folder)
+@pytest.mark.parametrize(("system", "mode"), [("nt", None), ("posix", 0o700)])
+def test_a_bound_folder_is_never_made_closed_on_windows(monkeypatch, tmp_path, system, mode):
+    """The access a folder gets depends on the folder it is in, which differs from PC to PC; what the code decides is the
+    mode it asks for: none on Windows, where 0o700 closes the folder and what the engine makes in it, 0o700 elsewhere."""
+    made = []
+    real = Path.mkdir
+    monkeypatch.setattr(vm.os, "name", system)
+    monkeypatch.setattr(Path, "mkdir", lambda self, *args, **kwargs: (made.append(kwargs.get("mode")), real(self, parents=True, exist_ok=True)))
+    bound_folder(tmp_path / "team")
+    assert made == [mode] and (tmp_path / "team").is_dir()
 
 
 def test_what_is_already_in_a_folder_stays(tmp_path):
