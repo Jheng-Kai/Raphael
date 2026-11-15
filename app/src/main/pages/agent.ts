@@ -1,7 +1,6 @@
 import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
-import { mountTaskResults } from "../task-result";
 import { patchThread, threadLineIdentity } from "../thread-diff";
 import { sameWire, ThreadRenderCache } from "../thread-render";
 import { mountTranscriptWindow, TranscriptWindow } from "../transcript-window";
@@ -1060,7 +1059,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) previews.sync();
     else previews.pause();
     desktop.sync();
-    taskResults.sync();
     pagesHost.sync();
     measureMessages();
     updateLiveTimes(thread);
@@ -2479,7 +2477,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     } else await answer(choice !== "deny", choice === "always");
   }
 
-  const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
   mountMessageMetadata(thread, control => {
     const source = messageSource(control);
@@ -2991,10 +2988,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId, files, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean; draft?: string }>).detail;
+    const { memberId, turnId, draft } = (event as CustomEvent<{ memberId: number; turnId?: number; draft?: string }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
-      if (files) { desktop.files(); }
       // Words handed with the member (the calendar's ask for a routine) wait in its composer once it is the open one.
       if (typeof draft === "string" && jump === memberJump && memberId === members.current()) { putDraft(draft.slice(0, TYPED_MAX_CHARS)); focusComposer(); }
       if (!turnId) return;

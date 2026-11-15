@@ -272,10 +272,10 @@ describe("rendered look checks", () => {
       expect(() => checkRendered('login-private')).toThrow('without clipping the account');
     } finally { vi.unstubAllGlobals(); vi.restoreAllMocks(); browser.happyDOM.abort(); }
   });
-  it("file scenes bind their own viewer without another selected desktop scene", () => {
-    const files = scenes.filter(scene => scene.name.startsWith('computer-file-'));
-    expect(files).toHaveLength(5);
-    for (const scene of files) expect(needsDesktopFixture([scene]), scene.name).toBe(true);
+  it("the computer menu scene binds its own viewer without another selected desktop scene", () => {
+    const menus = scenes.filter(scene => scene.name === 'computer-menu-teach-only');
+    expect(menus).toHaveLength(1);
+    for (const scene of menus) expect(needsDesktopFixture([scene]), scene.name).toBe(true);
     expect(needsDesktopFixture([{name:'sidebar', fixture:{}}])).toBe(false);
     expect(needsDesktopFixture([{name:'desktop-owner', fixture:{}}])).toBe(true);
     expect(needsDesktopFixture([{name:'card-sheet', fixture:{cardDeck:true}}])).toBe(true);
@@ -1352,15 +1352,6 @@ it("waits for the card's takeover to become interactive in the larger view and r
   expect(typing.steps.some(step => step.action === 'desktop-owner-typing')).toBe(true);
   const done = scenes.find(scene => scene.name === 'desktop-takeover-done');
   expect(done.steps.some(step => step.selector === '[data-desktop="return"]')).toBe(true);
-});
-
-it("dispatches task room, file-view and restore assertions through the shared rendered check", () => {
-  const browser = new Window(); browser.document.body.innerHTML='<section data-task-result="950">+1 −1</section><section data-task-result="980"><b class="card-title">已復原 1 個檔案的變更</b><footer class="card-actions"><button>開啟檔案變更</button></footer></section><section class="desktop-checkpoints"></section>';
-  browser.document.querySelector('.desktop-checkpoints').getBoundingClientRect=()=>({width:300,height:300});
-  browser.__look={calls:[{method:'computer.checkpoints',params:{action:'restore',review_token:'a'.repeat(64)}}]};
-  const previous={document:globalThis.document,window:globalThis.window}; globalThis.document=browser.document; globalThis.window=browser;
-  try { for (const name of ['card-task-room','card-task-files','card-task-restored']) expect(checkRendered(name)).toEqual({check:name}); }
-  finally { globalThis.document=previous.document; globalThis.window=previous.window; browser.happyDOM.abort(); }
 });
 
 it("requires every card disclosure to add visible text rather than repeat its face", () => {

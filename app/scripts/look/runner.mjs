@@ -52,8 +52,8 @@ export async function pageBaseDocuments(html, python = process.env.RAPHAEL_CORE_
 }
 
 /**
- * What the core itself sends for the work card (`computer.checkpoints`) and the member Library (`members.library`) of a synthetic
- * workspace and database (core_fixtures.py, R-CARD-20, R-PANEL-10): a scene shows the list the core's rules make, never a copy of them.
+ * What the core itself sends for the member Library (`members.library`) of a synthetic database (core_fixtures.py, R-PANEL-10):
+ * a scene shows the list the core's rules make, never a copy of them.
  */
 export async function coreFixtures(now = Date.now(), python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe")) {
   const { stdout } = await promisify(execFile)(python, [join(import.meta.dirname, "core_fixtures.py"), String(now)], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,

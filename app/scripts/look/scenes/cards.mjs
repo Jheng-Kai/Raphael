@@ -2,7 +2,7 @@ import chat from "./chat.mjs";
 import questions from "./owner-questions.mjs";
 import mcp from "./mcp-proposals.mjs";
 import pages from "./pages.mjs";
-import { scene, check, click, key, member, room, scroll, type, wait } from "./steps.mjs";
+import { scene, check, click, key, member, scroll, type, wait } from "./steps.mjs";
 
 const source = [...chat, ...questions, ...mcp, ...pages];
 const alias = (name, original) => ({...source.find(scene => scene.name === original), name});
@@ -39,17 +39,6 @@ export default [
   scene('card-page-close','Closing an unavailable page does not open it again', [member(1),wait('.pg-failed:not([hidden])'),click('.pg-card > .card-head [data-card-failed-close]'),check('card-failed-close')],{pageTurn:true,pageGone:true}),
   (() => { const failed=alias('card-connect-close','connector-invalid-request'); return {...failed, steps:[...failed.steps,click('[data-connector] [data-card-failed-close]'),check('card-failed-close')]}; })(),
   (() => { const key=alias('card-key-guide-retry','connector-key-form'); return {...key, fixture:{...key.fixture,cardLinkFailure:true}, steps:[...key.steps,click('[data-inline-setup] [data-card-disclosure]'),click('[data-inline-setup] [data-dlg="guide"]'),wait('[data-card-retry]'),click('[data-card-retry]'),check('card-guide-retry')]}; })(),
-  scene('card-task-result','Only checkpoint-backed file changes make a result card', [member(1),wait('[data-task-result="980"]'),check('card-task-result')],{cardTaskResult:true,checkpoints:true}),
-  scene('card-task-few','A few changed files: a title that says what happened, one row each, a text file opened under its row, no pill',[member(1),wait('[data-task-result="980"]'),click('[data-task-result="980"] details.tr-file > summary'),check('card-task-few')],{cardTaskResult:true,checkpoints:true,checkpointShape:'few'}),
-  scene('card-task-many','Fifty-three files with nothing to count: five rows, the rest folded, never +0 −0',[member(1),wait('[data-task-result="980"]'),check('card-task-many')],{cardTaskResult:true,checkpoints:true,checkpointShape:'many'}),
-  scene('card-task-new','Only new files are titled as new, and each says 新增',[member(1),wait('[data-task-result="980"]'),check('card-task-new')],{cardTaskResult:true,checkpoints:true,checkpointShape:'new'}),
-  // The core's own lists (R-CARD-20): a turn of tools' leftovers alone (npm's store named by bare hashes, caches, lock and partial files) and the same beside the work's files.
-  scene('card-task-noise','A turn whose only changes are what tools left behind has no card: the core sends no files and the reply stays prose',[member(1),wait('.tn[data-id="980"] [data-message="reply"] .message-text'),check('card-task-noise')],{cardTaskResult:true,checkpoints:true,checkpointShape:'core-noise',coreFixtures:true}),
-  scene('card-task-work-only','Beside what tools left behind, the card lists only the work\'s own files, as the core sends them',[member(1),wait('[data-task-result="980"]'),check('card-task-work-only')],{cardTaskResult:true,checkpoints:true,checkpointShape:'core-work',coreFixtures:true}),
-  scene('card-task-confirm','Undoing asks first, in words that say what comes back, and has done nothing yet',[member(1),wait('[data-task-result="980"]'),click('[data-task-restore]'),wait('.mb-confirm'),check('card-task-confirm')],{cardTaskResult:true,checkpoints:true,checkpointShape:'few'}),
-  scene('card-task-room','Room checkpoint cards open the same member file view', [room(1),wait('[data-task-result="950"]'),check('card-task-room'),click('[data-task-files]'),wait('.desktop-checkpoints:not([hidden])'),check('card-task-files')],{roomOwnerCard:'result',checkpoints:true}),
-  scene('card-task-files','Task files open the existing checkpoint view even without a running desktop', [member(1),wait('[data-task-result="980"]'),click('[data-task-files]'),wait('.desktop-checkpoints:not([hidden])'),check('card-task-files'),check('computer-foot-layout')],{cardTaskResult:true,checkpoints:true}),
-  scene('card-task-restored','Restore uses the current checkpoint review token and settles the result', [member(1),wait('[data-task-result="980"]'),click('[data-task-restore]'),wait('.mb-confirm'),click('[data-dlg="restore"]'),wait('[data-task-result="980"]:not(:has([data-task-restore]))'),check('card-task-restored')],{cardTaskResult:true,checkpoints:true}),
-  scene('card-task-prose','A completed task without files stays prose', [member(1),wait('.tn[data-id="980"]'),check('card-task-prose')],{cardTaskResult:true,checkpoints:false}),
-  {...scene('card-sheet','Production cards in one conversation column', [member(1),wait('[data-task-result="980"]'),wait('[data-card-desktop-screen] iframe:not([hidden])'),scroll('.tn[data-id="980"]'),check('card-sheet')],{cardDeck:true}), captureColumn:true},
+  scene('card-task-no-file-card','A finished turn of a member whose computer changed files shows its reply and no file card',[member(1),wait('.tn[data-id="980"] [data-message="reply"] .message-text'),check('card-task-no-file-card')],{cardTaskResult:true}),
+  {...scene('card-sheet','Production cards in one conversation column', [member(1),wait('.tn[data-id="980"]'),wait('[data-card-desktop-screen] iframe:not([hidden])'),scroll('.tn[data-id="980"]'),check('card-sheet')],{cardDeck:true}), captureColumn:true},
 ].map(scene => scene.name.startsWith('card-message-') ? {...scene, captureColumn:true} : scene);

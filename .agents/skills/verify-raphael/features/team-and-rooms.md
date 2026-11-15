@@ -275,7 +275,7 @@ npm run look -- room-concurrent-replies room-status-board room-report-card group
 ```
 
 Inspect every contact sheet and relevant full-size image. Compare with private
-owner-question-pending, card-task-result and team-file-reply scenes at the same
+owner-question-pending, card-task-no-file-card and team-file-reply scenes at the same
 themes and widths, then judge the
 same run with authorized external references. Formal subscription judge remains
 SKIP without references and network authorization. Manual image review is required
