@@ -69,10 +69,13 @@ test("with nothing connected the pill shows Gmail, Notion and Google Calendar, t
   const mark = (name: string): string => { const box = document.createElement('div'); box.innerHTML = iconHTML(name, serviceIconOf({ name }), 'md'); return box.innerHTML; };
   await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
   expect(drawn()).toEqual(['Gmail', 'Notion', 'Google Calendar'].map(mark));
-  read.mockResolvedValue({ state: "complete", count: 1, apps: [{ name: "Slack", connected: true, last_used_at: 5 }] } as never);
+  // An app we draw no mark for (Outlook) shows the catalogue's picture, as every other place does; one with neither is left out.
+  const logo = "https://logos.composio.dev/api/outlook";
+  read.mockResolvedValue({ state: "complete", count: 3, apps: [{ name: "Slack", connected: true, last_used_at: 5 }, { name: "Outlook", connected: true, last_used_at: 4, logo }, { name: "Unknown sample", connected: true, last_used_at: 3 }] } as never);
   event({ type: 'ConnectionsChanged' });
-  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(1));
-  expect(drawn()).toEqual([mark('Slack')]);
+  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(2));
+  expect(drawn()[0]).toBe(mark('Slack'));
+  expect(nav.querySelector<HTMLImageElement>('.sidebar-app-mark .logo-art img.logo')!.getAttribute('src')).toBe(logo);
   read.mockRestore();
 });
 

@@ -22,6 +22,7 @@ import type { MessageKey } from "./i18n/zh-TW";
 import { pickPicture, readPicture } from "./member-dialogs";
 import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, stableMember } from "./members";
 import { entryIcon } from "./service-mark";
+import { rememberAppLogos } from "./app-logos";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import type { AppContext, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
@@ -59,7 +60,7 @@ export interface MemberSettings {
 type View = { kind: "main" } | { kind: "skill"; id: number } | { kind: "command"; id: number | null };
 type Field = "personality" | "instructions";
 type Loaded<T> = T | "loading" | "failed";
-interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean }[] }
+interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean; logo?: string }[] }
 
 /** The kinds of settings in the page's left column, in the owner's order, the same for every member (owner, 2026-11-09). */
 type Category = "tools" | "skills" | "soul" | "notify";
@@ -136,7 +137,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
     if (skillList.status === "fulfilled") skills = skillList.value?.skills ?? []; else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
-    if (tools.status === "fulfilled" && tools.value) toolChoices = tools.value; else if (typeof toolChoices !== "object") toolChoices = "failed";
+    if (tools.status === "fulfilled" && tools.value) { toolChoices = tools.value; rememberAppLogos(tools.value.connections); } else if (typeof toolChoices !== "object") toolChoices = "failed";
     draw();
   }
 
@@ -219,7 +220,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     else {
       const apps = toolChoices.connections.filter(connection => connection.enabled);
       rows = apps.map(app =>
-        `<div class="ms-row ms-app" data-k="ms-app:${esc(app.id)}">${entryIcon({ name: app.name, icon: app.id }, "md")}<span class="ms-label">${esc(app.name)}</span>` +
+        `<div class="ms-row ms-app" data-k="ms-app:${esc(app.id)}">${entryIcon({ name: app.name, icon: app.id, logo: app.logo }, "md")}<span class="ms-label">${esc(app.name)}</span>` +
         `${tg(member.tools === null || member.tools.includes(app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
     }
     return section("", rows, "", "ms-tools") +

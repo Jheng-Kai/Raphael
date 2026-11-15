@@ -1,4 +1,5 @@
 import { entryIcon } from "./service-mark";
+import { rememberAppLogos } from "./app-logos";
 import { RECALL } from "./composer-history";
 import { catalogs, getLocale, t } from "./i18n";
 import { faceHTML, primaryFirst, primaryIdOf, RAPHAEL_ID } from "./members";
@@ -29,6 +30,7 @@ export function mentionTargets(list: MembersList, allowed?: number[]): TargetRos
   const known = targetRosters.get(version);
   if (known) return known;
   const team = (): string => ico("grid");
+  rememberAppLogos(list.team_context?.apps ?? []);
   const targets: TargetRoster = [
     { name: t("team.everyone"), kind: "everyone", aliases: EVERYONE, mark: team },
     ...people.filter(m => !allowed || allowed.includes(m.id)).map(m => ({ id: m.id, name: m.name, kind: "member" as const, aliases: m.id === RAPHAEL_ID ? RAPHAEL : [],

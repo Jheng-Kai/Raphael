@@ -472,6 +472,17 @@ describe("tools and notifications", () => {
     expect(host.update).toHaveBeenCalledWith(3, { tools: ["read_file", "notion"] });
   });
 
+  test("an app we draw no mark for shows the catalogue's picture of it, the one source every place draws from", async () => {
+    // Owner, 2026-11-15, of Outlook with a plug in a member's tools: 「不是說統一來源嗎? 為甚麼這邊還是沒有 outlook 的 icon」.
+    const logo = "https://logos.composio.dev/api/outlook";
+    api.membersToolChoices.mockResolvedValue({ tools: [], connections: [{ id: "composio:outlook", name: "Outlook", enabled: true, logo }] });
+    await open();
+    await cat("tools");
+    const row = page.el.querySelector<HTMLElement>('.ms-row.ms-app[data-k="ms-app:composio:outlook"]')!;
+    expect(row.querySelector<HTMLImageElement>(".mono.logo-art img.logo")!.getAttribute("src")).toBe(logo);
+    expect(row.querySelector("svg.i")).toBeNull();
+  });
+
   test("a member limited to some apps shows only those on, and all on again is the default (null)", async () => {
     list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, tools: ["read_file", "notion"] } : m) };
     await open();
