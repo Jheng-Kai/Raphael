@@ -986,6 +986,23 @@ class AgentService:
         speaker = ask.speaker
         return chat_language(said, " ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
 
+    def _words_language(self, ask: "_Ask") -> str | None:
+        """The language the owner writes in, as the words say it firmly: this message, else the owner's latest words in the
+        conversation (a message of one English word, `continue`, says nothing of it), else the speaker's own profile.
+        None when no words say it. What a member says while it works is held to this (R-LANG-05); the interface language
+        never decides it."""
+        if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text, firm=True)):
+            return language
+        try:
+            earlier = self._history.list(limit=12, member_id=ask.speaker.id, conversation_id=ask.conversation_id)
+        except sqlite3.Error:
+            earlier = []
+        for turn in earlier:
+            if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
+                return language
+        speaker = ask.speaker
+        return detect_language(" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)), firm=True)
+
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
         try:
@@ -2716,7 +2733,7 @@ class AgentService:
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
                     member_id=ask.speaker.id, event=lambda text: self._message(ask, "event", text),
-                    expire=lambda: self._expire(self._confirmations.sweep()),
+                    expire=lambda: self._expire(self._confirmations.sweep()), owner_language=self._words_language(ask),
                     # `ask.made` is the calls that succeeded and were not reads, kept for the turn and for what it resumed.
                     acted=lambda: bool(ask.made or ask.resumption is not None and ask.resumption.done),
                     stall_s=CLI_SILENCE_S, tool_s=CLI_TOOL_S, **common)

@@ -148,7 +148,7 @@ class ConnectorsService:
             # A whole operation has a ceiling, including pagination, lock acquisition and browser launch.
             budget = self.poll_timeout + RPC_TIMEOUT_S if name == "connect" else 120 + RPC_TIMEOUT_S if name == "google.connect" else RPC_TIMEOUT_S
             async with asyncio.timeout(budget):
-                if name in {"catalog", "categories", "toolkit", "status"}:
+                if name in {"catalog", "categories", "toolkit", "status", "remove_account"}:  # remove_account takes the lock itself
                     return await handler(params)
                 async with self._lock:
                     return await handler(params)
@@ -297,14 +297,36 @@ class ConnectorsService:
                 self._settle(entry)
                 self._save()
 
+    async def _end_sign_in(self, params) -> bool:
+        """Whether the account about to be removed is the one a sign-in is waiting for: that sign-in is ended first and its
+        call is waited for, so the account it made is given back by the sign-in itself (`_give_up`)."""
+        account_id, task = params.get("account_id"), self._connect_task
+        if account_id not in self._signing_in or task is None or task.done():
+            return False
+        task.cancel()
+        await asyncio.wait({task}, timeout=RPC_TIMEOUT_S / 2)
+        return True
+
     async def remove_account(self, params):
         """Remove one account of an app. One that is waiting, expired, revoked, failed or not active goes at once; an
-        ACTIVE one is revoked at Composio first. The last connected account is the app itself: that is a disconnect."""
+        ACTIVE one is revoked at Composio first. The last connected account is the app itself: that is a disconnect.
+        A sign-in waiting in the browser holds the connector lock for its whole wait: removing its account ends it, and
+        removing any other account does not queue behind it (a removal of the waiting account used to time out, and the
+        account stayed listed)."""
+        ended = await self._end_sign_in(params)
+        if self.login_pending:
+            return await self._remove_account(params, ended)
+        async with self._lock:
+            return await self._remove_account(params, ended)
+
+    async def _remove_account(self, params, ended):
         entry = self._entry(params)
         account_id = _text(params, "account_id")
         if entry.kind != "composio":
             raise invalid_params("Only an app of Composio has accounts to remove")
         account = next((a for a in entry.accounts if a["id"] == account_id), None)
+        if account is None and ended:  # the sign-in just ended gave it back: removed, as asked
+            return {"connector": self._view(entry)}
         if account is None:
             raise invalid_params("No such connected account")
         active = account["status"] == "ACTIVE"

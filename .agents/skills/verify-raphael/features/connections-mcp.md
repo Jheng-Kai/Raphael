@@ -91,7 +91,7 @@ Owner decision 2026-10-30: Settings > Connections is the only connected-app entr
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
-## Accounts of an app, and a sign-in that waits (2026-11-13): R-ACCT-01, R-ACCT-02
+## Accounts of an app, and a sign-in that waits (2026-11-13): R-ACCT-01, R-ACCT-02, R-ACCT-03
 
 Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他會有超級多沒有用的帳號卡在這裡」 and 「為什麼大部分人都沒有辦法連結？」.
 
@@ -104,6 +104,7 @@ Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他
   `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.
 - A waiting sign-in holds nothing back: the waiting row says 請在瀏覽器登入… with an enabled 取消 (a Composio one too), every other 連結
   stays pressable, and pressing another one ends the waiting one at the core first (`integrations.connect_cancel`).
+- 移除 of a waiting row works while its sign-in waits (2026-11-16, R-ACCT-03): the core ends that sign-in and removes the row at once, and another account's 移除 does not queue behind a waiting sign-in. The mock core of `look` cannot prove it (it holds no connector lock); `core/tests/test_connector_accounts.py::test_removing_the_account_whose_sign_in_is_waiting_ends_that_sign_in_and_removes_it_at_once` does. The window needed no change: its 移除 on a not-connected row was already a plain call that waits for the core's answer.
 - Driving it: open Connect Apps (`#nav .sidebar-apps`), the chip 已連結, the app's row; the ⋯ is `[data-conn="account-menu"][data-account]`.
   Gotchas: the menu's items are `account-label` and `account-remove`; a stale account is a fixture row with `stale: true` that the mock
   drops on `connectors.status`; a waiting sign-in is the fixture flag `pluginsConnecting` (the mock holds the connect call until

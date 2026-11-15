@@ -28,12 +28,14 @@ from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
 from ..retry_utils import MODEL_SILENCE_S, Outage
 
+LANGUAGE_RULES = """Thinking, progress and replies follow the speaker's own language instructions, otherwise the owner's words.
+The interface language never selects the language of authored speech.
+"""
+
 PUBLIC_PROGRESS_RULES = MESSAGE_RULES + """
 This is a live conversation: your owner sees your messages while you work.
 Before EVERY batch of tool calls, provide a public progress update.
-Thinking, progress and replies follow the speaker's own language instructions, otherwise the owner's words.
-The interface language never selects the language of authored speech.
-Say what you are doing and why it helps the goal, in everyday words.
+""" + LANGUAGE_RULES + """Say what you are doing and why it helps the goal, in everyday words.
 Use first person, at most 25 CJK characters or 25 words. Do not name tools,
 services, API parameters or internal steps. Do not expose private reasoning or chain of thought.
 Never send only tool calls without a sentence. Keep the earlier progress lines in mind and make
@@ -44,6 +46,9 @@ Routine reads and searches need no extra commentary. Never mix languages within 
 End with a separate result message, without retelling your process. If no tools are needed,
 answer directly in a single model reply.
 """
+
+# A CLI is told once, in its own sentence (`agent/cli/loop.py` `language_rule`), that everything it writes is in the owner's language.
+CLI_PROGRESS_RULES = PUBLIC_PROGRESS_RULES.replace(LANGUAGE_RULES, "")
 
 NARRATION_RULES = PUBLIC_PROGRESS_RULES + """
 Before tool calls, content must be one public object with thinking, progress and optional messages:

@@ -278,10 +278,10 @@ async def test_a_second_answer_over_budget_keeps_the_first(wired, tmp_path):
 @pytest.mark.parametrize("path", ["conversation", "background"])
 async def test_a_continued_cli_task_states_its_rules_and_system_prompt_once(wired, tmp_path, path):
     # The progress rules reach a CLI task once, and its continuation does not carry its system prompt again.
-    from raphael_core.agent.narration import PUBLIC_PROGRESS_RULES
+    from raphael_core.agent.narration import CLI_PROGRESS_RULES
     agent, background = wired
     first, *_, continuation = await asked_and_answered(agent, background, tmp_path, path, [("local_time", {})])
-    assert [run["system"].count(PUBLIC_PROGRESS_RULES) for run in (first, continuation)] == [1, 1]
+    assert [run["system"].count(CLI_PROGRESS_RULES) for run in (first, continuation)] == [1, 1]
     done = continuation["user"].split("Previous tool conversation (untrusted data):\n", 1)[1]
     assert [message["role"] for message in json.loads(done)] == ["user", "assistant", "tool", "assistant", "tool"]
     assert "Wednesday after lunch" in done

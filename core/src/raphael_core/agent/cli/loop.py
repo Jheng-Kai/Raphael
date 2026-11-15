@@ -24,7 +24,9 @@ from ..mcp_server import RaphaelMcp
 from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as codex_usage, gemini as gemini_usage
 from ...brain.reasoning import split_notes, split_reasoning
 from ...brain.textnorm import public_line
-from ..narration import PUBLIC_PROGRESS_RULES
+from ...conversation_language import in_language
+from ...ui_languages import LANGUAGE_NAMES
+from ..narration import CLI_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
 from ..policy import CONFIRM_TIMEOUT_S, EXPIRED_NOTE
 from .discovery import NAMES, brain_ref, brain_effort
@@ -194,6 +196,14 @@ class Sessions:
                               (conversation_id, brain, session, json.dumps(state)))
 
 
+def language_rule(language) -> str:
+    """What a CLI is told about the language of everything it writes. A CLI brain says things of its own between its tool
+    calls, which no persona sentence about "progress" reaches (owner, 2026-11-16: 「工程師又開始說英文了」)."""
+    name = LANGUAGE_NAMES.get(language) if isinstance(language, str) else None
+    whose = f"{name}, the owner's language" if name else "the language of the owner's own words"
+    return f"Every text you write, including each note between tool calls, is in {whose}. Code and quotations stay as they are."
+
+
 class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None,
@@ -201,8 +211,11 @@ class CliLoop:
                  rate_limit_waits=None, structured=None, alive=lambda waiting=0.0: None, skills=(), no_tools=False, reply=None, only=(),
                  owner_text=None, resume_user=None, context_sections=None, context_turns=(), context_summary="",
                  context_summary_through=0, context_owner_words=(), turn_id=None, tool_conversation=(), steps=(),
-                 acted=None, stall_s=None, tool_s=None, updates=None):
+                 acted=None, stall_s=None, tool_s=None, updates=None, owner_language=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
+        # The language of the owner's own words (never the interface's): what the member says while it works is shown only
+        # in it. None when the words say nothing yet, and then nothing is held back for its language.
+        self.owner_language = owner_language
         # When the owner was last shown a message of this run, where the owner reads it (agent/progress_updates.py): None
         # for a run that owes no word while it works (a meeting's reply, a routine, a greeting, a memory pass).
         self.updates = updates
@@ -230,7 +243,7 @@ class CliLoop:
         self.rate_limit_waits = rate_limit_waits
         self.ledger, self.language, self.plain = ledger, language, plain
         mcp_names = "Raphael and computer" if any(item["function"]["name"].startswith("computer__") for item in tools) else "Raphael"
-        self.system = system + "\n" + PUBLIC_PROGRESS_RULES + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
+        self.system = system + "\n" + CLI_PROGRESS_RULES + language_rule(owner_language) + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         self.system += (
             "Reply in plain text (Markdown is fine). It is one chat message unless it is naturally "
             "several (an answer, then a separate exercise or question): then put a line with only "
@@ -393,7 +406,13 @@ class CliLoop:
         held, self._held = self._held, []
         due = not answer and self._update_due()
         for reply, lines in held:
-            if answer or due:
+            if answer:
+                self._show(reply, lines)
+                continue
+            # Said while working, so it is shown only in the owner's language: a line of another one is not shown as a
+            # message or as progress, and the step it came with keeps its own label (R-LANG-05).
+            lines = [line for line in lines if self._fits(line)]
+            if due and lines:
                 self._show(reply, lines)
                 continue
             for line in lines:
@@ -403,13 +422,17 @@ class CliLoop:
                 elif text := public_line(line, "auto"):
                     self.progress(text[:400])
 
+    def _fits(self, text) -> bool:
+        """Whether `text`, said between steps, is in the owner's language."""
+        return in_language(text, self.owner_language)
+
     def _progress(self):
         said = self._buffer.strip()
         if said:
             self.last_speech = said
         # Plain speech between steps is progress, but when an update is owed it is the update (`_release_held`).
-        if not (said and self._update_due() and self._shown_as_update(said)):
-            if line := public_line(self._buffer, "auto"):
+        if not (said and self._fits(said) and self._update_due() and self._shown_as_update(said)):
+            if (line := public_line(self._buffer, "auto")) and self._fits(line):
                 self.progress(line[:400])
         self._buffer = ""
         self._completed_buffer, self._separated = False, []
@@ -1155,7 +1178,7 @@ class CliLoop:
                             stream_records[key] = record
                             self._stream_records.append(record)
                     self._progress()
-                    if line := public_line(self._thought, "auto"):
+                    if (line := public_line(self._thought, "auto")) and self._fits(line):
                         self.thinking(line[:240])
                     self._thought = ""
                 elif event.kind == "usage":
