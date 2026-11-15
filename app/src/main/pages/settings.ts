@@ -1111,8 +1111,9 @@ export function createSettings(app: AppContext): SettingsPage {
         app.closeSettings();
         break;
       case "rec":
-      case "rec-agent": {
-        const field = act === "rec" ? "dictation_keys" : "agent_keys";
+      case "rec-agent":
+      case "rec-tidy": {
+        const field = act === "rec" ? "dictation_keys" : act === "rec-agent" ? "agent_keys" : "tidy_keys";
         const cell = el.querySelector<HTMLElement>(`[data-row="${HOTKEY_ROWS[field]}"] .caps`);
         if (cell) void recording.start(field, cell);
         break;

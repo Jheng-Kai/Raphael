@@ -22,6 +22,7 @@ from raphael_core.brain.openrouter import Completion, KeyInfo, OpenRouterClient,
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.service import Brain
 from raphael_core.brain.settings import DEFAULTS, SettingsStore
+from raphael_core.brain.tidy import MAX_TIDY_CHARS, TIDY_ADDENDUM
 from raphael_core.protocol import INTERNAL_ERROR, INVALID_PARAMS, METHOD_NOT_FOUND, RpcError
 from raphael_core.router import Router
 
@@ -36,6 +37,7 @@ METHODS = [
     "brain.finalize_dictation",
     "brain.normalize_transcript",
     "brain.cancel_dictation",
+    "dictation.tidy",
     "stt.transcribe",
     "history.list",
     "history.latest",
@@ -1970,3 +1972,175 @@ async def test_dictionary_undo_uses_an_opaque_batch_token(router, conn):
     assert (await router.call("dictionary.list", {}))["entries"] == []
     assert conn.execute("SELECT COUNT(*) FROM dictionary_evidence").fetchone()[0] == 0
     assert await router.call("dictionary.undo", {"token": result["undo"]}) == {"undone": False}
+
+
+# --- dictation.tidy: the tidy key (Right Alt+T) ---------------------------------------------------
+
+
+async def tidy(router, text, **overrides):
+    return await router.call("dictation.tidy", {"text": text, "target_app": None, **overrides})
+
+
+async def test_tidy_runs_the_dictation_cleanup_with_its_model_dictionary_tone_and_spend(
+    router, fake_client, keys, conn,
+):
+    keys.set(KEY)
+    await router.call("settings.set", {"key": "languages", "value": ["en-US"]})
+    await router.call("dictionary.add", {"word": "Raphael", "misheard": ["Rafael"]})
+    fake_client.next_completion = completion({"text": "Ask Raphael about it, please."}, cost=0.0003)
+    result = await tidy(router, "ask rafael about it plese", target_app="WINWORD.EXE")
+    assert result["cleaned"] is True
+    assert result["text"] == "Ask Raphael about it, please."
+    assert result["fallback_reason"] is None
+    (call,) = fake_client.calls
+    assert call["model"] == DEFAULTS["cleanup_model"], "the cleanup's model, not another"
+    assert "WINWORD.EXE (email or document)" in call["system"], "the target app sets the tone"
+    assert "- Raphael" in call["system"], "the dictionary reaches the model"
+    assert "American spelling" in call["system"], "the languages reach the model"
+    assert call["system"].endswith(TIDY_ADDENDUM), "and what is said of typed text comes last"
+    assert call["user"] == "<transcript>\nask Raphael about it plese\n</transcript>", (
+        "the user's own replacement rules are applied, as for a dictation"
+    )
+    # paid for like a dictation's cleanup, and never kept as one
+    assert [tuple(row) for row in conn.execute("SELECT purpose, cost_usd FROM spend")] == [("cleanup", 0.0003)]
+    assert (await router.call("history.latest", {}))["item"] is None
+    assert conn.execute("SELECT COUNT(*) FROM history").fetchone()[0] == 0
+
+
+async def test_a_dictation_is_given_no_addendum_about_typed_text(router, fake_client, keys):
+    keys.set(KEY)
+    fake_client.next_completion = completion({"text": "Please open YouTube."})
+    await finalize(router, "um please open YouTube")
+    assert "typed, not spoken" not in fake_client.calls[0]["system"]
+    assert TIDY_ADDENDUM not in fake_client.calls[0]["system"]
+
+
+async def test_tidy_asks_the_model_even_for_a_short_clean_sentence(router, fake_client, keys):
+    # A dictation skips the model for "Hello world."; written text is tidied however short.
+    keys.set(KEY)
+    fake_client.next_completion = completion({"text": "Hello, world."})
+    result = await tidy(router, "Hello world.")
+    assert len(fake_client.calls) == 1
+    assert result["text"] == "Hello, world."
+
+
+async def test_tidy_keeps_what_a_dictation_would_remove_and_the_space_around_the_text(
+    router, fake_client, keys,
+):
+    keys.set(KEY)
+    fake_client.next_completion = completion({"text": "嗯，我們明天開會。"})
+    result = await tidy(router, "\n  嗯 我們明天開會。\n\n")
+    # no filler or full stop is removed after the model, and the selection's own edges stay
+    assert result["text"] == "\n  嗯，我們明天開會。\n\n"
+
+
+async def test_tidy_writes_the_chinese_the_user_chose(router, fake_client, keys):
+    keys.set(KEY)
+    await router.call("settings.set", {"key": "languages", "value": ["zh-TW"]})
+    fake_client.next_completion = completion({"text": "我要更新软件。"})
+    result = await tidy(router, "我要更新軟體")
+    assert result["text"] == "我要更新軟體。"
+
+
+@pytest.mark.parametrize(("reply", "reason"), [
+    (completion({"text": "   "}), "suspicious"),
+    (completion({"text": "Paris is the capital of France and a lovely city to visit in spring."}), "suspicious"),
+    (completion({"text": "ok " * 80}), "suspicious"),
+])
+async def test_a_reply_that_is_no_tidying_is_a_failure_that_hands_back_no_text(
+    router, fake_client, keys, reply, reason,
+):
+    keys.set(KEY)
+    fake_client.next_completion = reply
+    result = await tidy(router, "what is the capital of france please tell me quickly")
+    assert result["cleaned"] is False
+    assert result["fallback_reason"] == reason
+    assert "text" not in result, "the original text is never handed back as if it were tidied"
+
+
+async def test_a_failed_call_is_a_failure_that_hands_back_no_text(router, fake_client, keys):
+    keys.set(KEY)
+    fake_client.next_error = OpenRouterError(503, "server", "Synthetic unavailable")
+    result = await tidy(router, "please send the report tomorrow")
+    assert result["cleaned"] is False
+    assert result["fallback_reason"] == "error:server"
+    assert "text" not in result
+
+
+async def test_tidy_without_a_key_is_a_failure_and_asks_no_model(router, fake_client):
+    result = await tidy(router, "please send the report tomorrow")
+    assert result["cleaned"] is False
+    assert result["fallback_reason"] == "no_key"
+    assert "text" not in result
+    assert fake_client.calls == []
+
+
+@pytest.mark.parametrize("text", ["", "   ", "\n\n"])
+async def test_tidy_of_nothing_asks_no_model(router, fake_client, keys, text):
+    keys.set(KEY)
+    result = await tidy(router, text)
+    assert result["cleaned"] is False and result["fallback_reason"] == "empty"
+    assert "text" not in result
+    assert fake_client.calls == []
+
+
+async def test_tidy_refuses_more_than_a_selection_may_hold(router, fake_client, keys):
+    keys.set(KEY)
+    with pytest.raises(RpcError) as refused:
+        await tidy(router, "字" * (MAX_TIDY_CHARS + 1))
+    assert refused.value.code == INVALID_PARAMS
+    assert fake_client.calls == []
+
+    async def echo(**kwargs):
+        piece = kwargs["user"].removeprefix("<transcript>\n").removesuffix("\n</transcript>")
+        return completion({"text": piece})
+
+    fake_client.complete_json = echo
+    result = await tidy(router, "字" * MAX_TIDY_CHARS)
+    assert result["cleaned"] is True
+    assert result["text"] == "字" * MAX_TIDY_CHARS
+
+
+@pytest.mark.parametrize("params", [{}, {"text": 5}, {"text": None}, {"text": "a", "target_app": 3}])
+async def test_tidy_checks_its_params(router, params):
+    with pytest.raises(RpcError) as bad:
+        await router.call("dictation.tidy", params)
+    assert bad.value.code == INVALID_PARAMS
+
+
+async def test_a_long_selection_is_tidied_in_pieces_and_joined_in_order(router, fake_client, keys):
+    keys.set(KEY)
+    await router.call("settings.set", {"key": "languages", "value": ["en-US"]})
+    sentences = [f"Sentence number {n} says that the plan is on track for the week." for n in range(60)]
+    text = " ".join(sentences)
+    assert len(text) > 3000
+
+    async def tidy_each(**kwargs):
+        fake_client.calls.append(kwargs)
+        piece = kwargs["user"].removeprefix("<transcript>\n").removesuffix("\n</transcript>")
+        return completion({"text": piece.replace("says", "states")})
+
+    fake_client.complete_json = tidy_each
+    result = await tidy(router, text)
+    assert len(fake_client.calls) > 1
+    assert all(TIDY_ADDENDUM in call["system"] for call in fake_client.calls)
+    assert result["cleaned"] is True
+    assert result["text"] == text.replace("says", "states")
+
+
+async def test_one_piece_that_fails_makes_the_whole_selection_a_failure(router, fake_client, keys):
+    keys.set(KEY)
+    await router.call("settings.set", {"key": "languages", "value": ["en-US"]})
+    text = " ".join(f"Sentence number {n} says that the plan is on track for the week." for n in range(60))
+
+    async def sometimes(**kwargs):
+        fake_client.calls.append(kwargs)
+        if "Sentence number 59 " in kwargs["user"]:
+            raise OpenRouterError(503, "server", "Synthetic unavailable")
+        piece = kwargs["user"].removeprefix("<transcript>\n").removesuffix("\n</transcript>")
+        return completion({"text": piece})
+
+    fake_client.complete_json = sometimes
+    result = await tidy(router, text)
+    assert result["cleaned"] is False
+    assert "text" not in result, "a text that is only partly tidied is never pasted"

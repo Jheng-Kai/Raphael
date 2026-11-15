@@ -7,6 +7,7 @@ const exact = [
   "backend.micTimeout", "backend.emptyDictation", "backend.emptyPaste", "backend.duplicateDictation",
   "backend.duplicatePaste", "backend.conflictingKeys", "backend.invalidKeys", "backend.emptyAgent",
   "backend.duplicateAgent", "backend.conflictingDictationAgent", "backend.conflictingPasteAgent",
+  "backend.duplicateTidy", "backend.conflictingTidyDictation", "backend.conflictingTidyPaste", "backend.conflictingTidyAgent",
   "backend.hotkeysOff", "backend.hotkeysOffChange", "backend.memoryBody",
   "keys.004", "keys.005", "keys.006",
   "backend.agentBusy", "backend.agentEmpty", "backend.agentTooLong", "backend.agentOff", "backend.questionGone",

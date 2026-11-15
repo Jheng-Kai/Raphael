@@ -16,6 +16,7 @@ import {
   APPEARANCES,
   PANES,
   canonicalPane,
+  HOTKEY_ROWS,
   RETENTIONS,
   type SettingsView,
   loadingHTML,
@@ -49,6 +50,7 @@ const device: DeviceSettings = {
   dictation_mode: "toggle",
   paste_last_keys: ["AltRight+KeyV"],
   agent_keys: ["AltRight+Space"],
+  tidy_keys: ["AltRight+KeyT"],
   microphone: null,
   emblem_size: 150,
   subtitles: "on",
@@ -347,7 +349,7 @@ describe("聽寫", () => {
   test("is how a dictation starts, how Raphael listens, then how long the history is kept", () => {
     const html = tab("dictation");
     expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式", "聽寫紀錄"]);
-    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "取消", "聽寫方式", "你說的語言", "麥克風", "保留聽寫紀錄"]);
+    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "整理選取文字", "取消", "聽寫方式", "你說的語言", "麥克風", "保留聽寫紀錄"]);
   });
 
   test("shows each shortcut as key caps, with a pencil (變更) on the one that can be changed here", () => {
@@ -430,6 +432,32 @@ describe("拉斐爾", () => {
 
   test("has no Telegram: it is in 一般's 訊息平台", () => {
     expect(tab("agent")).not.toContain("Telegram");
+  });
+
+  test("lists the tidy key with its keys and a pencil, after the dictation ones and before Esc", () => {
+    const html = tab("dictation");
+    const row = rowOf(html, "整理選取文字");
+    expect(row).toContain('data-row="tidy-hotkey"');
+    expect(row).toContain('data-act="rec-tidy"');
+    expect(row).toContain("<kbd>右 Alt</kbd>");
+    expect(row).toContain("<kbd>T</kbd>");
+    const at = (name: string): number => html.indexOf(`<div class="t">${name}</div>`);
+    expect(at("整理選取文字")).toBeGreaterThan(at("聽寫"));
+    expect(at("整理選取文字")).toBeGreaterThan(at("貼上上一次"));
+    expect(at("整理選取文字")).toBeLessThan(at("取消"));
+    expect(HOTKEY_ROWS.tidy_keys).toBe("tidy-hotkey");
+  });
+
+  test("changes the tidy key in English, and says it is not set when no key is", () => {
+    setLocale("en");
+    expect(rowOf(tab("dictation"), "Tidy selected text")).toContain('data-act="rec-tidy"');
+    setLocale("zh-TW");
+    const none = rowOf(tab("dictation", { device: { ...device, tidy_keys: [] } }), "整理選取文字");
+    expect(none).toContain("尚未設定");
+    expect(none).toContain('data-act="rec-tidy"');
+    const older = { ...device } as Partial<DeviceSettings>;
+    delete older.tidy_keys;
+    expect(rowOf(tab("dictation", { device: older as DeviceSettings }), "整理選取文字")).toContain("尚未設定");
   });
 
   test("shows the missing shortcut beside its change action", () => {

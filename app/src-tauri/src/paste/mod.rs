@@ -6,6 +6,10 @@
 //! text pasted with the key chord it understands ([`shortcut_for`]); anything else (no target,
 //! focus moved on, an elevated window we cannot type into) gets the text left on the clipboard
 //! instead, so the user can paste it by hand after Raphael's notice.
+//!
+//! The same window can be asked for the text that is selected in it ([`Paster::copy_selection`]):
+//! the program's own copy chord ([`copy_shortcut_for`]) is sent, the new clipboard text is read
+//! and the user's clipboard is put back, before anything is done with the text.
 
 #[cfg(windows)]
 mod clipboard;
@@ -40,6 +44,51 @@ pub enum Shortcut {
     CtrlV,
     CtrlShiftV,
     ShiftInsert,
+}
+
+/// The key chord that makes a program copy, the partner of [`Shortcut`]. A terminal copies with
+/// Ctrl+Shift+C: its Ctrl+C is an interrupt, and must never be sent to it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CopyShortcut {
+    CtrlC,
+    CtrlShiftC,
+    CtrlInsert,
+}
+
+/// The copy chord of the program that pastes with `paste` (see [`shortcut_for`]).
+pub fn copy_shortcut_for(paste: Shortcut) -> CopyShortcut {
+    match paste {
+        Shortcut::CtrlV => CopyShortcut::CtrlC,
+        Shortcut::CtrlShiftV => CopyShortcut::CtrlShiftC,
+        Shortcut::ShiftInsert => CopyShortcut::CtrlInsert,
+    }
+}
+
+/// How long [`Paster::copy_selection`] waits for the program to put its copy on the clipboard
+/// before it decides that nothing was selected.
+pub const COPY_WAIT: std::time::Duration = std::time::Duration::from_millis(400);
+/// How often the clipboard's sequence number is looked at while waiting.
+pub const COPY_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+
+/// Whether `sequence()` differs from `before` within `wait`, looked at every `poll` (`pause` waits
+/// that long). The clipboard's sequence number goes up with every change of its contents, even
+/// when the program copies what was on it already, so a number that stays is a copy that brought
+/// nothing.
+pub fn changed_within(
+    before: u32,
+    wait: std::time::Duration,
+    poll: std::time::Duration,
+    mut sequence: impl FnMut() -> u32,
+    mut pause: impl FnMut(std::time::Duration),
+) -> bool {
+    let polls = (wait.as_millis() / poll.as_millis().max(1)).max(1);
+    for _ in 0..polls {
+        if sequence() != before {
+            return true;
+        }
+        pause(poll);
+    }
+    sequence() != before
 }
 
 /// Why the text was left on the clipboard instead of being pasted.
@@ -89,6 +138,22 @@ impl PasteReceipt {
             input: None,
         }
     }
+}
+
+/// What [`Paster::copy_selection`] found in the focused window.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Selection {
+    /// The text that was selected, with its line breaks as LF. The user's clipboard is back as
+    /// it was.
+    Text(String),
+    /// The copy brought nothing new, or nothing that is text: nothing was selected. The clipboard
+    /// holds what it held.
+    Nothing,
+    /// Raphael may not send keys to that window ([`decide`] said so): another window has focus
+    /// than when the key was pressed, or it runs elevated. Nothing was sent.
+    Refused(CopyReason),
+    /// The keys or the clipboard could not be used. The clipboard was put back if it was touched.
+    Failed,
 }
 
 /// A paste outcome and its own input evidence; copy-only and failed sends carry no receipt.
@@ -164,6 +229,14 @@ pub trait Paster: Send + Sync + 'static {
         }
     }
 
+    /// Copies what is selected in `at_key` (the window that had focus when the key was pressed),
+    /// if it still has focus and Raphael may send it keys: the program's copy chord is sent, the
+    /// text that appears on the clipboard is read, and the user's clipboard is put back (every
+    /// format of it), whatever the outcome. Blocks until then, about half a second at most when
+    /// nothing was selected. The held modifier keys are let go first, so that the program
+    /// never sees Ctrl+Alt+C.
+    fn copy_selection(&self, at_key: Option<&Target>) -> Selection;
+
     /// Gives the focus back to `target`, the window that had it before one of Raphael's own
     /// took it. Whether Windows let it.
     fn refocus(&self, target: &Target) -> bool {
@@ -195,6 +268,47 @@ mod tests {
             ),
             Decision::Paste(Shortcut::CtrlV)
         );
+    }
+
+    #[test]
+    fn a_program_copies_with_the_partner_of_its_paste_chord() {
+        // A terminal's Ctrl+C is an interrupt: it is never what is sent to one.
+        for (name, copy) in [
+            ("notepad.exe", CopyShortcut::CtrlC),
+            ("Code.exe", CopyShortcut::CtrlC),
+            ("WindowsTerminal.exe", CopyShortcut::CtrlShiftC),
+            ("powershell.exe", CopyShortcut::CtrlShiftC),
+            ("cmd.exe", CopyShortcut::CtrlShiftC),
+            ("mintty.exe", CopyShortcut::CtrlInsert),
+        ] {
+            assert_eq!(copy_shortcut_for(shortcut_for(name)), copy, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_copy_that_changes_the_clipboard_is_seen_at_once() {
+        let mut calls = 0;
+        let mut pauses = 0;
+        let seen = changed_within(
+            7,
+            COPY_WAIT,
+            COPY_POLL,
+            || {
+                calls += 1;
+                if calls > 3 { 8 } else { 7 }
+            },
+            |_| pauses += 1,
+        );
+        assert!(seen);
+        assert_eq!(pauses, 3, "it stopped waiting when the number moved");
+    }
+
+    #[test]
+    fn a_copy_that_leaves_the_sequence_number_is_nothing_after_about_400_ms() {
+        let mut waited = std::time::Duration::ZERO;
+        let seen = changed_within(7, COPY_WAIT, COPY_POLL, || 7, |step| waited += step);
+        assert!(!seen);
+        assert_eq!(waited, COPY_WAIT);
     }
 
     #[test]

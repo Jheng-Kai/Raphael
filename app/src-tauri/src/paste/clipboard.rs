@@ -11,6 +11,11 @@
 //! once the reads have stopped, unless the user copied something new meanwhile;
 //! [`ClipboardSession::keep`] leaves the text on the clipboard instead.
 //!
+//! The same session also serves the other direction, copying what is selected in a program:
+//! [`sequence_number`] is read after `begin`, the program is sent its copy chord,
+//! [`ClipboardSession::read_text`] reads what it put on the clipboard once the number has moved,
+//! and [`ClipboardSession::restore`] puts the snapshot back.
+//!
 //! A session belongs to the thread that began it (it is not `Send`): Windows' requests to its
 //! window are answered only while that thread is inside a session method that waits. After
 //! `publish_text` the first such wait is the paste chord's hold, so every read the session sees
@@ -33,7 +38,8 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Gdi::{CopyEnhMetaFileW, HBITMAP, HENHMETAFILE};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData, GetClipboardOwner,
-    GetClipboardSequenceNumber, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard,
+    RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{
@@ -80,6 +86,12 @@ const MARKERS: [(PCWSTR, u32); 3] = [
     (w!("CanIncludeInClipboardHistory"), 0),
     (w!("CanUploadToCloudClipboard"), 0),
 ];
+
+/// The clipboard's sequence number now: it goes up with every change of the contents.
+pub fn sequence_number() -> u32 {
+    // SAFETY: a plain query.
+    unsafe { GetClipboardSequenceNumber() }
+}
 
 /// One paste on the clipboard: snapshot the user's clipboard, offer the text, then restore the
 /// snapshot or keep the text.
@@ -164,6 +176,35 @@ impl ClipboardSession {
         self.shared.pending.set(true);
         self.shared.lost.set(false);
         Ok(())
+    }
+
+    /// The Unicode text on the clipboard now, with its line breaks as `\n`; `None` when the
+    /// clipboard holds no text (an image, say, or nothing). Asking makes a program that only
+    /// promised the text render it.
+    pub fn read_text(&self) -> Result<Option<String>, String> {
+        let _opened = self.open()?;
+        // SAFETY: the clipboard is open, by our window.
+        if unsafe { IsClipboardFormatAvailable(UNICODETEXT) }.is_err() {
+            return Ok(None);
+        }
+        let handle = unsafe { GetClipboardData(UNICODETEXT) }
+            .map_err(|e| format!("could not read the clipboard's text: {e}"))?;
+        let Some(bytes) = (unsafe { copy_global(HGLOBAL(handle.0)) }) else {
+            return Ok(None);
+        };
+        let units: Vec<u16> = bytes
+            .as_chunks()
+            .0
+            .iter()
+            .map(|&pair| u16::from_le_bytes(pair))
+            .take_while(|&unit| unit != 0)
+            .collect();
+        Ok(Some(String::from_utf16_lossy(&units).replace("\r\n", "\n")))
+    }
+
+    /// Puts the clipboard back as it was when the session began, whatever is on it now.
+    pub fn restore(mut self) -> Result<(), String> {
+        self.put_back(false).map(|_| ())
     }
 
     /// Waits until the reads of the text have stopped for [`QUIET_PERIOD`] (or until

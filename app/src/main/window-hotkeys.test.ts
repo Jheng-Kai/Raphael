@@ -98,6 +98,27 @@ describe("focused-window hotkeys", () => {
     expect(up.preventDefault).toBe(true);
   });
 
+  test("AltRight+T tidies once, swallows its release and repeats, and the Right Alt still lets go", () => {
+    const withTidy = { ...defaults, tidy_keys: ["AltRight+T"] };
+    const alt = reduceHotkey(emptyHotkeyState(), key("AltRight"), withTidy);
+    // the Right Alt goes down first and starts a dictation, which the app drops, as for Right Alt+V
+    expect(alt.actions).toEqual(["dictation_down"]);
+    const tidy = reduceHotkey(alt.state, key("KeyT"), withTidy);
+    expect(tidy.actions).toEqual(["tidy"]);
+    expect(tidy.preventDefault).toBe(true);
+    const repeat = reduceHotkey(tidy.state, key("KeyT", "keydown", true), withTidy);
+    expect(repeat.actions).toEqual([]);
+    expect(repeat.preventDefault).toBe(true);
+    const up = reduceHotkey(repeat.state, key("KeyT", "keyup"), withTidy);
+    expect(up.actions).toEqual([]);
+    expect(up.preventDefault).toBe(true);
+    expect(reduceHotkey(up.state, key("AltRight", "keyup"), withTidy).actions).toEqual(["dictation_up"]);
+    // a bare T types; and without the key set (or in an app that does not know it) Right Alt+T is nothing
+    expect(reduceHotkey(emptyHotkeyState(), key("KeyT"), withTidy).actions).toEqual([]);
+    expect(reduceHotkey(alt.state, key("KeyT"), defaults).actions).toEqual([]);
+    expect(reduceHotkey(alt.state, key("KeyT"), { ...defaults, tidy_keys: [] }).actions).toEqual([]);
+  });
+
   test("ignores dictation repeat and orphan key-up", () => {
     expect(reduceHotkey(emptyHotkeyState(), key("AltRight", "keyup"), defaults).actions).toEqual([]);
     const down = reduceHotkey(emptyHotkeyState(), key("AltRight"), defaults);

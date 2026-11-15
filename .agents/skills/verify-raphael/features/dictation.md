@@ -1,5 +1,48 @@
 # Dictation
 
+## The tidy key: Right Alt+T tidies the text that is selected (2026-11-15)
+
+Owner, 2026-11-15 (「把一個對話或文字框起來，然後按某個鍵它可以幫我做潤稿」): in any app, select text and press Right Alt+T; the
+dictation cleanup tidies it and it replaces the selection, the clipboard is what it was, and Ctrl+Z in that app undoes it as
+for any paste. R-TIDY-01. It is a dictation feature and nothing else was added to the app: one key, stored in the device
+settings as `tidy_keys` beside `paste_last_keys` (empty allowed: then there is no key), one row in Settings > 聽寫 (`settings-tidy-key`:
+named 整理選取文字, with its key caps and a pencil, between 貼上上一次 and 取消) and one line in the 聽寫 overview's shortcut card. No first-run lesson.
+
+How it runs. The hook reports `HotkeyEvent::Tidy` for the chord exactly as it reports `PasteLast` for Right Alt+V: the Right Alt
+went down first and started a dictation, and `DictationController::tidy_at` drops a recording that is less than a second old
+as quietly as paste-last does (the release of the Right Alt then does nothing and the next press is a start, in both modes), and
+does nothing while a longer dictation, a processing one or a YES/NO question is there. The work is a processing session of its own
+(the window's Stop ends it, the dictation key waits for it, Esc stays the app's, the overlay shows the dictation's own thinking state and its percentage, then the
+completion). `Paster::copy_selection` snapshots every format of the clipboard, lets go of the held modifiers, sends the program's
+copy chord (Ctrl+C; Ctrl+Shift+C for a terminal, whose Ctrl+C is an interrupt; Ctrl+Insert for mintty), waits at most 400 ms for
+the clipboard's sequence number to change, reads the text and puts the snapshot back. Nothing new on the clipboard is "nothing
+selected": nothing is pasted and the overlay says 《告。未選取任何文字。》. The text goes to the core's `dictation.tidy` (Brain: the
+cleanup's model, dictionary, languages, target-app tone, chunking, guards and spend, plus `brain/tidy.py`'s addendum that the text
+was typed, not spoken, so the prompt template is untouched), and the reply is pasted through the dictation's own paster into the
+same window; if the focus moved meanwhile it stays on the clipboard with the dictation's notice. A failure (no key or model, no
+connection, a reply that is no tidying, a window that cannot be copied from, a selection of more than 30,000 characters) pastes
+nothing, keeps the selection and the clipboard, and says 《否。這次沒有整理成功，原文未更動。》: the raw text is never pasted as
+if it were tidied, and the answer of the core carries no `text` unless it was tidied.
+
+```powershell
+npm run look -- settings-tidy-key dictation-overview dictation --theme both --width 1120,720,1920x1080
+```
+
+The other layers, each from its own folder (the core's tests, the shell's):
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; .\.venv\Scripts\python.exe -m pytest tests/brain -q
+cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_settings:: paste:: notices:: core_process::
+```
+
+`settings-tidy-key` opens Settings > 聽寫 and checks that the row is there after the dictation shortcuts and before Esc, shows
+右 Alt and T, has its pencil where the question key's is, is as high and as wide as that row, has a whole name and does not make
+the page scroll sideways; `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
+selection in a real app. A test cannot press keys or use the clipboard, so the owner tries it in a chat box, a document and
+a terminal: the selection is replaced, Ctrl+Z undoes it, what he had copied is still on the clipboard, Win+V shows his copied
+text once (the program's own copy is the one thing that cannot be kept out of clipboard history), nothing selected shows the
+short line, and no recording is left running behind Right Alt+T.
+
 ## Automatic microphone picks the headset and stays on it (2026-11-14)
 
 Owner, 2026-11-14, with a picture of the microphone menu (自動偵測（目前：麥克風排列）, 麥克風 (3- HyperX Cloud II Core Wi…),

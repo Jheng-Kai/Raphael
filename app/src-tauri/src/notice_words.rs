@@ -574,6 +574,50 @@ pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
             "tr" => Some("《Hayır. Şu anda yanıt verilemiyor.》"),
             _ => None,
         },
+        "《Notice. No text is selected.》" => match language {
+            "zh-CN" => Some("《告。未选取任何文字。》"),
+            "ko" => Some("《알림. 선택된 텍스트가 없습니다.》"),
+            "es" => Some("《Aviso. No hay texto seleccionado.》"),
+            "fr" => Some("《Avis. Aucun texte n’est sélectionné.》"),
+            "de" => Some("《Hinweis. Es ist kein Text markiert.》"),
+            "pt-BR" => Some("《Aviso. Nenhum texto está selecionado.》"),
+            "it" => Some("《Avviso. Nessun testo è selezionato.》"),
+            "ru" => Some("《Уведомление. Текст не выделен.》"),
+            "vi" => Some("《Thông báo. Chưa chọn văn bản nào.》"),
+            "th" => Some("《แจ้งให้ทราบ. ยังไม่ได้เลือกข้อความ》"),
+            "id" => Some("《Pemberitahuan. Tidak ada teks yang dipilih.》"),
+            "tr" => Some("《Bildirim. Seçili metin yok.》"),
+            _ => None,
+        },
+        "《Negative. Tidying did not finish this time. The text is unchanged.》" => {
+            match language {
+                "zh-CN" => Some("《否。这次没有整理成功，原文未更动。》"),
+                "ko" => Some("《거절. 이번에는 다듬지 못했습니다. 텍스트는 그대로입니다.》"),
+                "es" => Some("《No. No se pudo pulir el texto esta vez. El texto no cambió.》"),
+                "fr" => Some(
+                    "《Non. La mise au propre n’a pas abouti cette fois. Le texte est inchangé.》",
+                ),
+                "de" => Some(
+                    "《Nein. Das Überarbeiten ist diesmal nicht gelungen. Der Text ist unverändert.》",
+                ),
+                "pt-BR" => Some(
+                    "《Não. Não foi possível revisar o texto desta vez. O texto não foi alterado.》",
+                ),
+                "it" => Some(
+                    "《No. Questa volta non è stato possibile rifinire il testo. Il testo è invariato.》",
+                ),
+                "ru" => Some(
+                    "《Нет. В этот раз привести текст в порядок не удалось. Текст не изменён.》",
+                ),
+                "vi" => Some("《Không. Lần này chưa chỉnh sửa được văn bản. Văn bản vẫn như cũ.》"),
+                "th" => Some("《ไม่. ครั้งนี้ยังเกลาข้อความไม่สำเร็จ ข้อความยังเหมือนเดิม》"),
+                "id" => {
+                    Some("《Tidak. Kali ini teks tidak berhasil dirapikan. Teks tidak berubah.》")
+                }
+                "tr" => Some("《Hayır. Bu sefer metin düzenlenemedi. Metin değişmedi.》"),
+                _ => None,
+            }
+        }
         "《Understood. Noted.》" => match language {
             "zh-CN" => Some("《了。已记下。》"),
             "ko" => Some("《확인. 기록했습니다.》"),

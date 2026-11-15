@@ -849,6 +849,12 @@ export interface DeviceSettings {
   paste_last_keys: string[];
   /** The shortcut that asks Raphael (Right Alt+Space by default); never the same as another one. */
   agent_keys: string[];
+  /**
+   * The shortcut that tidies the text selected in the focused window (Right Alt+T by default); never the
+   * same as another one. May be empty (no such key), and is missing from the settings of an app that does
+   * not know it yet.
+   */
+  tidy_keys?: string[];
   /** The name of the microphone; null is the system's default one. */
   microphone: string | null;
   emblem_size: 120 | 150 | 194;
@@ -1191,7 +1197,7 @@ export interface Routine {
   next_run: number | null;
 }
 
-export type HotkeyKind = "dictation_down" | "dictation_up" | "agent_down" | "agent_up" | "paste_last" | "cancel" | "cancel_key" | "cancel_reset";
+export type HotkeyKind = "dictation_down" | "dictation_up" | "agent_down" | "agent_up" | "paste_last" | "tidy" | "cancel" | "cancel_key" | "cancel_reset";
 export type DictationPhase = "listening" | "processing" | "pasted" | "cancelled" | "failed";
 
 /** What `mic_access` answers: whether the privacy settings of Windows let desktop apps use the microphone. */

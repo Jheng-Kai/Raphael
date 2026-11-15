@@ -8229,6 +8229,27 @@ export function checkRendered(name, context = {}) {
     require(visible(document.querySelector('.page-overview .heat')) && !visible(document.querySelector('.day-row')) && document.querySelector('.page-overview:not([hidden])'), 'pressing a day leaves the grid as it was: no history opened');
     return { check: name };
   }
+  if (name === "settings-tidy-key") {
+    const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
+    const rows = [...scrim.querySelectorAll('.row-shortcut')], at = id => scrim.querySelector(`[data-row="${id}"]`);
+    const tidy = at("tidy-hotkey"), agent = at("agent-hotkey"), dictation = at("hotkey");
+    require(visible(tidy) && visible(agent) && visible(dictation), "the tidy, question and dictation shortcuts are all on the page");
+    // After the shortcuts that start something, before Esc, which is not changeable.
+    require(rows.indexOf(tidy) > rows.indexOf(dictation) && rows.indexOf(tidy) === rows.length - 2, "the tidy shortcut stands after the dictation ones and before Esc");
+    const caps = [...tidy.querySelectorAll('.caps kbd')].map(cap => cap.textContent.trim());
+    require(caps.length === 2 && caps[1] === "T", `its keys are Right Alt and T (${caps.join(" + ")})`);
+    const pencil = tidy.querySelector('[data-act="rec-tidy"]');
+    require(visible(pencil) && pencil.getAttribute("aria-label"), "a pencil changes the key, and says so");
+    const label = tidy.querySelector('.lbl .t');
+    require(label.scrollWidth <= label.clientWidth + 1 && label.textContent.trim().length > 0, "its name is whole");
+    const box = tidy.getBoundingClientRect(), other = agent.getBoundingClientRect();
+    require(Math.abs(box.height - other.height) < 1 && Math.abs(box.left - other.left) < 1 && Math.abs(box.right - other.right) < 1, "it is a row like the question key's: same height and width");
+    require(Math.abs(pencil.getBoundingClientRect().right - agent.querySelector('[data-act="rec-agent"]').getBoundingClientRect().right) < 1, "its pencil is where the question key's is");
+    const list = tidy.closest('.list') ?? tidy.parentElement;
+    require(list.scrollWidth <= list.clientWidth + 1, "the shortcuts fit their list");
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    return { check: name, keys: caps.join(" + ") };
+  }
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");
@@ -8246,6 +8267,8 @@ export function checkRendered(name, context = {}) {
   if (name === "dictation-overview") {
     const cards = [...document.querySelectorAll('.page-overview .icard')];
     require(cards.length === 4, "four independent totals are visible");
+    // Dictation, question, paste last, tidy and cancel: the tidy key is among the shortcuts (R-TIDY-01).
+    require(document.querySelectorAll('.page-overview .keys-card .kc-row').length === 5, "the shortcuts card lists the tidy key beside the others");
     const boxes = cards.map(card => card.getBoundingClientRect());
     const desktop = document.querySelector('.dictation-content').clientWidth >= 700;
     require(boxes[0].top === boxes[1].top && boxes[2].top > boxes[0].bottom && boxes[2].top === boxes[3].top, "totals keep two by two rows at every width");

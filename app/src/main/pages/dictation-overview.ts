@@ -10,7 +10,7 @@ import { buildGrid, heatmapSVG, weeksThatFit } from "../heatmap";
 import { bindingLabels } from "../keys";
 import { loadingHTML } from "../loading";
 import { durationParts, formatCount, hasDictations, periodSpeed } from "../stats";
-import type { AppContext, Page, PageId, SettingsPane, StatsSummary } from "../types";
+import type { AppContext, DeviceSettings, Page, PageId, SettingsPane, StatsSummary } from "../types";
 import { esc, iconBtn, keys } from "../ui";
 import "../dictation-overview.css";
 
@@ -71,6 +71,24 @@ function activityHTML(s: StatsSummary): string {
 /** The lasting usage cards: the four numbers, then the activity. */
 export const usageHTML = (s: StatsSummary): string => statsHTML(s) + activityHTML(s);
 
+/** The shortcuts: what each does and its keys. A key that is not set is not listed. */
+export function keysCardHTML(d: DeviceSettings): string {
+  const shortcut = (name: string, bindings: string[]): string =>
+    `<div class="kc-row"><div class="kc-name">${esc(name)}</div>` +
+    `<div class="kc-keys">${bindings.map((b) => keys(bindingLabels(b))).join(t("home.017"))}</div></div>`;
+  // an app from before the question key has no `agent_keys` yet, nor one from before the tidy key `tidy_keys`
+  const agentKeys = d.agent_keys ?? [];
+  const tidyKeys = d.tidy_keys ?? [];
+  return (
+    `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${iconBtn("pencil", t("home.018"), ' data-go="settings" data-pane="dictation"')}</div>` +
+    shortcut(t("home.020"), d.dictation_keys) +
+    (agentKeys.length ? shortcut(t("home.askRaphael"), agentKeys) : "") +
+    (d.paste_last_keys.length ? shortcut(t("home.021"), d.paste_last_keys) : "") +
+    (tidyKeys.length ? shortcut(t("settings.tidyKeys"), tidyKeys) : "") +
+    shortcut(t("common.cancel"), ["Escape"])
+  );
+}
+
 /** Usage beside the shortcuts; the conversation lives on its own page. */
 export const overviewHTML = (): string =>
   `<div class="home">` +
@@ -106,23 +124,6 @@ export function createDictationOverview(app: AppContext): Page {
     return `${parts.join(t("home.017"))}<span>${esc(homeHint(app.device().dictation_mode))}</span>`;
   }
 
-  /** The shortcuts: what each does and its keys. */
-  function keysCardHTML(): string {
-    const d = app.device();
-    const shortcut = (name: string, bindings: string[]): string =>
-      `<div class="kc-row"><div class="kc-name">${esc(name)}</div>` +
-      `<div class="kc-keys">${bindings.map((b) => keys(bindingLabels(b))).join(t("home.017"))}</div></div>`;
-    // an app from before the question key has no `agent_keys` yet
-    const agentKeys = d.agent_keys ?? [];
-    return (
-      `<div class="card-head"><h2>${esc(t("home.shortcuts"))}</h2>${iconBtn("pencil", t("home.018"), ' data-go="settings" data-pane="dictation"')}</div>` +
-      shortcut(t("home.020"), d.dictation_keys) +
-      (agentKeys.length ? shortcut(t("home.askRaphael"), agentKeys) : "") +
-      (d.paste_last_keys.length ? shortcut(t("home.021"), d.paste_last_keys) : "") +
-      shortcut(t("common.cancel"), ["Escape"])
-    );
-  }
-
   /** The activity grid alone, drawn again when the page changes width or pages back. */
   function paintGrid(): void {
     const box = el.querySelector<HTMLElement>(".heat-box");
@@ -135,7 +136,7 @@ export function createDictationOverview(app: AppContext): Page {
   }
 
   function paint(s: StatsSummary | null): void {
-    keysCard.innerHTML = keysCardHTML();
+    keysCard.innerHTML = keysCardHTML(app.device());
     stats = s;
     if (s && hasDictations(s)) {
       usage.innerHTML = usageHTML(s);
