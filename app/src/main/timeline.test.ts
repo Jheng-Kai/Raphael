@@ -78,6 +78,13 @@ test("terminal tasks add no centred status row, and failed replies own their rer
   expect(document.querySelector('.chat-message .message-actions [data-act="rerun"]')).not.toBeNull();
 });
 
+test("a finished turn of a member whose computer changed files shows its reply and no file card (R-CARD-15)", () => {
+  document.body.innerHTML = turnHTML(turn(75, { text: "The sample report is ready.", task: { id: 75, state: "done" } as AgentTask }), emptyTimelineState(), false, LOOK);
+  expect(document.body.textContent).toContain("The sample report is ready.");
+  expect(document.querySelector(".task-result, [data-task-result-slot], [data-task-result]")).toBeNull();
+  expect(document.body.textContent).not.toMatch(/開啟檔案變更|復原這些變更/);
+});
+
 test("a settled permission card also owns its task's completed state", () => {
   const item=turn(72,{task:{id:72,state:"done"} as AgentTask,permissions:[{id:"settled",source:"ask",kind:"tool",service:"Sample",tool:"send",summary:"Send a review",reason:null,digest:"digest",always:false,state:"allowed",expires_at_ms:0}]});
   document.body.innerHTML=turnHTML(item,emptyTimelineState(),false,LOOK);

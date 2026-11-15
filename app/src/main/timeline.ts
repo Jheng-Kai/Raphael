@@ -423,7 +423,7 @@ const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDone
  * the room message the turn belongs to: a picture of the turn stands as a message with it beside it (pictureActionsHTML).
  */
 export function conversationCardsHTML(turn: AgentTurn, memberName?: string, pictureActions?: string): string {
-  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
+  return connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + chatCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
     (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq, replySpeaks(turn), pictureActions === undefined ? undefined : { actions: pictureActions })).join("");
 }
@@ -1253,7 +1253,6 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     permissionCardsHTML(turn, look.answerable, false, name) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn, false) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
-    (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (want && !look.deferPresence && (look.presenceTurnId === undefined || look.presenceTurnId === turn.id) ? livePresenceHTML(look, latestProgress(turn), want === "words") : "") +
     `</div></div>`) +
     // What the reply led to (a meeting opened, a skill learned) follows it as one quiet line.

@@ -117,9 +117,10 @@ def _sentence(tool, arguments, language, *, server=None):
         target = target or with_ui_words({"en": "a command", "ja": "コマンド"}).get(language, "指令")
     elif short == "local_job":
         action = "job"
-    elif short in ("read_file", "Read", "read_document", "write_file", "Write", "edit_file", "Edit", "apply_patch", "read_attachment"):
-        action = "write" if "write" in short.lower() else "edit" if short in ("Edit", "edit_file", "apply_patch") else "read"
-        path = args.get("path", args.get("file_path", args.get("filename", "")))
+    elif short in ("read_file", "Read", "read_document", "write_file", "Write", "edit_file", "Edit", "apply_patch", "read_attachment", "file_history"):
+        action = ("write" if "write" in short.lower() else
+                  "edit" if short in ("Edit", "edit_file", "apply_patch") or short == "file_history" and args.get("action") == "restore" else "read")
+        path = args.get("path", args.get("file_path", args.get("filename", args.get("checkpoint", ""))))
         target = _safe(str(path).replace("\\", "/").rsplit("/", 1)[-1]) or with_ui_words({"en": "a file", "ja": "ファイル"}).get(language, "檔案")
     elif short in ("web_search", "search_query", "search_code", "code_search", "Grep", "grep", "rg", "Glob", "glob"):
         action = "search"
