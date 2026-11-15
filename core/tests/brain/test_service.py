@@ -79,7 +79,7 @@ async def test_incomplete_transcript_keeps_gap_marker_in_paste_and_history(
     result = await finalize(
         router, raw_text=f"Before. {marker} After.", incomplete=True, ui_language=language,
     )
-    assert result["text"] == f"Before. {marker} After."
+    assert result["text"] == f"Before. {marker} After"  # only the closing full stop goes, in any language
     assert result["fallback_reason"] == "incomplete_stt"
     assert fake_client.calls == []
     latest = await router.call("history.latest", {})
@@ -111,7 +111,7 @@ async def test_incomplete_speech_cleans_heard_regions_without_showing_a_gap_to_t
     fake_client.complete_json = clean
     result = await finalize(router, raw_text=f"{before}\n\n{marker}\n\n{after}", incomplete=True, ui_language="en")
     assert result["text"].startswith("Schedule the review for tomorrow at four.\n\n" + marker + "\n\n")
-    assert result["text"].endswith("send the summary to the review team" if fail_second else "Send the summary to the review team.")
+    assert result["text"].endswith("send the summary to the review team" if fail_second else "Send the summary to the review team")
     assert not result["cleaned"] and result["fallback_reason"] == "incomplete_stt"
     latest = (await router.call("history.latest"))["item"]
     assert latest["text"] == result["text"] and not latest["cleaned"]
@@ -122,7 +122,7 @@ async def test_incomplete_speech_cleans_heard_regions_without_showing_a_gap_to_t
 async def test_short_punctuated_sentence_needs_no_model(router, fake_client, keys, text):
     keys.set(KEY)
     result = await finalize(router, raw_text=text)
-    assert result["text"] == text.removesuffix("。")
+    assert result["text"] == text.removesuffix("。").removesuffix(".")
     assert result["cleaned"]
     assert result["llm_ms"] == 0
     assert fake_client.calls == []
@@ -143,7 +143,7 @@ async def test_a_short_sentence_with_a_dictionary_word_misheard_goes_to_the_mode
     fake_client.next_completion = completion({"text": "像是grokbot這樣子區分開來嗎？"})
     await finalize(router, raw_text=text)
     [call] = fake_client.calls
-    assert "- grokbot（這次可能是：" in call["system"]
+    assert "- grokbot (maybe misheard here as: " in call["system"]
 
 
 async def test_a_short_sentence_that_spells_the_dictionary_right_keeps_the_shortcut(
@@ -174,7 +174,7 @@ async def test_a_correction_is_kept_as_a_form_and_the_next_dictation_respells_it
     assert result["text"] == "為什麼這邊顯示的是claude的用量，我不是有連線Codex嗎？"
     english = "Move the files to the Cloud for the night."
     fake_client.next_completion = completion({"text": english})
-    assert (await finalize(router, raw_text=english))["text"] == english
+    assert (await finalize(router, raw_text=english))["text"] == english.removesuffix(".")
 
 
 @pytest.mark.parametrize("text", [
@@ -523,8 +523,8 @@ async def test_a_fallback_after_the_call_pastes_the_converted_raw_text(router, f
 @pytest.mark.parametrize(
     "spoken",
     [
-        "只要這個系統發佈，周末就不會干擾你。",
-        "我們只要有一個干擾，就會停下來。",
+        "只要這個系統發佈周末就不會干擾你。",
+        "我們只要有一個干擾就會停下來。",
     ],
 )
 async def test_short_clean_text_pastes_and_saves_traditional_speech_as_it_is(router, spoken):
@@ -637,7 +637,7 @@ async def test_replacements_apply_to_cleaned_text_that_has_hiragana(router, fake
     fake_client.next_completion = completion({"text": "ラファエロさんに会います。"})
     r = await finalize(router, "ラファエロさんに会います")
     assert r["raw_text"] == "ラファエルさんに会います"
-    assert r["text"] == "ラファエルさんに会います。"
+    assert r["text"] == "ラファエルさんに会います"
 
 
 async def test_fallback_text_is_not_normalized_a_second_time(router):
@@ -1078,8 +1078,8 @@ async def test_the_hints_of_the_dictionary_reach_the_cleanup_prompt(router, fake
     system = fake_client.calls[0]["system"]
     # A rule has written the word already, and no form of it is left in the transcript to name.
     assert "- 拉斐爾" not in system
-    assert "- Claude（常被聽成：cloud）" in system, "a hint is told to the model like a rule"
-    assert "- 手機（常被聽成：首機）" in system
+    assert "- Claude (often misheard as: cloud)" in system, "a hint is told to the model like a rule"
+    assert "- 手機 (often misheard as: 首機)" in system
     # The words learned come newest first.
     assert system.index("- 手機") < system.index("- Claude")
 
@@ -1252,7 +1252,7 @@ async def test_without_chinese_nothing_is_converted(router, fake_client, keys):
     await router.call("settings.set", {"key": "languages", "value": ["en-GB"]})
     fake_client.next_completion = completion({"text": "这个 colour."})
     r = await finalize(router, "这个 colour")
-    assert (r["raw_text"], r["text"]) == ("这个 colour", "这个 colour.")
+    assert (r["raw_text"], r["text"]) == ("这个 colour", "这个 colour")
 
 
 # --- brain.normalize_transcript -----------------------------------------------------------------
@@ -1928,7 +1928,7 @@ async def test_cleanup_contract_and_cost_are_shared_and_agent_keeps_paste_last(
     keys.set(KEY)
     fake_client.next_completion = completion({"text": "Please open YouTube."}, cost=0.0002)
     result = await finalize(router, "um please open YouTube", purpose=purpose)
-    assert result["text"] == "Please open YouTube."
+    assert result["text"] == "Please open YouTube"
     assert result["cleaned"]
     assert fake_client.calls
     spend = conn.execute("SELECT purpose, cost_usd FROM spend").fetchall()
@@ -1945,7 +1945,7 @@ async def test_cleanup_contract_and_cost_are_shared_and_agent_keeps_paste_last(
 async def test_agent_cleanup_retains_the_short_sentence_shortcut(router, fake_client, keys, conn):
     keys.set(KEY)
     result = await finalize(router, "Hello world.", purpose="agent")
-    assert result["text"] == "Hello world." and result["cleaned"]
+    assert result["text"] == "Hello world" and result["cleaned"]
     assert result["llm_ms"] == 0 and isinstance(result["id"], int)
     assert fake_client.calls == []
     assert conn.execute("SELECT COUNT(*) FROM spend").fetchone()[0] == 0

@@ -446,7 +446,7 @@ def test_load_cases_reads_misheard_hints_for_the_prompt_only(tmp_path):
     assert case.prompt_words == ["Alt", "視窗"]
     assert case.prompt_hints == [("試床", "視窗"), ("視床", "視窗"), ("O S", "Alt")]
     prompt = brain_cleanup.build_system_prompt(case.prompt_words, case.prompt_hints)
-    assert "視窗（常被聽成：試床、視床）" in prompt
+    assert "視窗 (often misheard as: 試床, 視床)" in prompt
     # A hint is not a replacement rule: what the model is sent is the transcript as heard.
     assert eval_cleanup.transcript_for(case) == "試床"
 
@@ -837,12 +837,12 @@ def test_the_prompt_still_has_its_general_rules():
     prompt = brain_cleanup.build_system_prompt([], [])
     # Keep the general rules concise.
     for kept in (
-        "Keep every point, name, number, condition, negation and aside",
-        "Never drop a sentence, never summarize, never add anything",
-        "Turn a word into a name only when the context clearly means that product",
-        "Write repeated, restarted or reworded phrases once, in their final form",
-        "On a self-correction keep only the correction",
-        "wrong Traditional conversions",
+        "Never drop a point, name, number, condition or negation the speaker meant",
+        "never rephrase, merge or summarize their sentences, never translate",
+        "Fix a word speech recognition got wrong only when the context or the dictionary makes the intended word clear",
+        "otherwise keep it as heard, never drop it",
+        "Write a repeated or restarted phrase once",
+        "write only the final version",
     ):
         assert kept in prompt, kept
     assert len(prompt) < 5_000, "general rules must stay within the short cleanup prompt"

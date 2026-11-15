@@ -49,24 +49,26 @@ CLEANUP_SCHEMA = {
 }
 
 
-def already_clean_short(text: str) -> bool:
-    """Conservative fast path: one punctuated sentence, at most 80 characters/16 words.
+# A word said twice in a row ("the the"), or, in a script written without spaces, a run of one to
+# four characters said twice ("我我", "設定設定"). Either may be a stutter, which the model removes.
+_SAID_AGAIN = re.compile(r"\b(\w+)\s+\1\b|([^\x00-\u024f\s]{1,4})\2", re.IGNORECASE)
 
-    Do not guess punctuation, remove fillers, repair repetition, format lists, or interpret code.
-    Dictionary replacement and script selection still happen in Brain before and after this.
+
+def already_clean_short(text: str) -> bool:
+    """Conservative fast path: one punctuated sentence, at most 80 characters/16 words, of
+    letters and spaces only, with nothing said twice in a row.
+
+    No language's words are listed here: a comma or any other mark inside the sentence (where a
+    filler, a pause, a list or a self-correction usually shows) sends it to the model, and so does
+    a repeat. Do not guess punctuation, remove fillers, repair repetition, format lists, or
+    interpret code. Dictionary replacement and script selection still happen in Brain before and
+    after this.
     """
     if not text or len(text) > 80 or len(text.split()) > 16 or "\n" in text or "\r" in text:
         return False
-    if text[-1] not in ".!?。！？" or any(c in ".!?。！？" for c in text[:-1]):
+    if text[-1] not in ".!?。！？" or any(not (c.isalpha() or c in " '’") for c in text[:-1]):
         return False
-    if any(not (c.isalpha() or c in " ,，、'’。！？.!?") for c in text):
-        return False
-    if re.search(r"\b(?:um|uh|er|actually|first|second|third)\b|\bI mean\b|\b(\w+)\s+\1\b",
-                 text, re.IGNORECASE):
-        return False
-    if any(word in text for word in ("嗯", "呃", "那個", "就是", "不對", "應該說", "第一", "第二")):
-        return False
-    return True
+    return _SAID_AGAIN.search(text) is None
 
 
 def timeout_for(audio_seconds: float) -> float:
@@ -396,8 +398,7 @@ _SCRIPT_RULES = {
     "zh-CN": (
         "Write Chinese in Simplified characters with Mainland usage (软件, 程序, 数据),"
         " also when the transcript is in Traditional characters: 設定軟體 → 设定软件;"
-        " use “” for quotation marks. The examples below are in Traditional characters: write"
-        " your Chinese in Simplified characters all the same."
+        " use “” for quotation marks."
     ),
     "yue-HK": (
         "Write Chinese as written Cantonese in Traditional characters with Hong Kong usage"
@@ -424,7 +425,41 @@ def script_rules(languages: Sequence[str]) -> str:
     return "".join(f" {_SCRIPT_RULES[item]}" for item in languages if item in _SCRIPT_RULES)
 
 
-_PLACEHOLDER = re.compile(r"\{(dictionary|target_app|languages|script_rules)\}")
+# Worked examples in the speaker's own languages. The template itself is in no one language; a
+# small model still learns what a filler or a list looks like in a language best from that
+# language's own examples, so each chosen language adds its file, cleanup_examples.<subtag>.md,
+# when there is one. They are data: a language is supported by adding its file, never by a rule
+# in code. Mainland Chinese takes the Chinese examples in Simplified characters (character by
+# character: a phrase conversion turns 投影片 into 投视频).
+_EXAMPLES_FILE = "cleanup_examples.{}.md"
+
+
+@functools.cache
+def _examples_for(subtag: str) -> str:
+    """The example lines of one language subtag ("zh", "en", "ja"); empty when it has none."""
+    path = resources.files("raphael_core.brain.prompts").joinpath(_EXAMPLES_FILE.format(subtag))
+    return path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+
+
+def language_examples(languages: Sequence[str]) -> str:
+    """The example lines for the chosen languages, in their order, each language once; empty
+    when none of them has examples."""
+    blocks: list[str] = []
+    seen: set[str] = set()
+    for code in languages:
+        subtag = code.split("-", 1)[0].lower()
+        if subtag in seen:
+            continue
+        seen.add(subtag)
+        text = _examples_for(subtag)
+        if text and code == "zh-CN":
+            text = to_simplified(text)
+        if text:
+            blocks.append(text)
+    return "\n".join(blocks)
+
+
+_PLACEHOLDER = re.compile(r"\{(dictionary|target_app|languages|script_rules|language_examples)\}")
 
 # The dictionary in the prompt is cut off, so that a dictionary of hundreds of words (learned ones
 # pile up, up to three a dictation) cannot make each cleanup slower and dearer, or bury the rules
@@ -495,7 +530,7 @@ def build_system_prompt(
     forms the brain has only seen in corrections so far, which the model reads in context. There
     is one line per word, in the order of `words`, and a word that speech-to-text tends to get
     wrong also lists how it comes out, in the order of `replacements`. An empty dictionary is
-    written as （空）. A line break inside a word becomes a space, and a blank word or form is left
+    written as (empty). A line break inside a word becomes a space, and a blank word or form is left
     out. The block is cut off at the end of `words` (PROMPT_MAX_WORDS, PROMPT_MAX_FORMS and
     PROMPT_MAX_CHARS above).
 
@@ -503,7 +538,10 @@ def build_system_prompt(
     hold (`mishearing.may_be_heard_in`): a Latin word with nothing like it in a Chinese or Japanese
     transcript only invites the model to translate what was said into it. Those words do not count
     towards the cut-off. A word that the transcript may hold misheard (`dictionary_spans`) also
-    names those parts of the transcript ("這次可能是").
+    names those parts of the transcript ("maybe misheard here as").
+
+    The labels of the block are plain English and ASCII punctuation, the language of the rules,
+    so that the block reads the same whichever languages the user speaks.
     """
     misheard_forms = _forms_by_word(replacements)
     spans = {} if heard is None else dictionary_spans(words, replacements, heard)
@@ -519,21 +557,22 @@ def build_system_prompt(
             continue
         notes = []
         if forms:
-            notes.append(f"常被聽成：{'、'.join(forms[:PROMPT_MAX_FORMS])}")
+            notes.append(f"often misheard as: {', '.join(forms[:PROMPT_MAX_FORMS])}")
         named = {form.casefold() for form in forms or ()}
         fresh = [span for span in spans.get(word, ()) if span.casefold() not in named]
         if fresh:
-            notes.append(f"這次可能是：{'、'.join(fresh[:PROMPT_MAX_FORMS])}")
-        line = f"- {word}（{'；'.join(notes)}）" if notes else f"- {word}"
+            notes.append(f"maybe misheard here as: {', '.join(fresh[:PROMPT_MAX_FORMS])}")
+        line = f"- {word} ({'; '.join(notes)})" if notes else f"- {word}"
         if size + len(line) + 1 > PROMPT_MAX_CHARS:
             continue
         lines.append(line)
         size += len(line) + 1
     values = {
-        "dictionary": "\n".join(lines) or "（空）",
+        "dictionary": "\n".join(lines) or "(empty)",
         "target_app": describe_target_app(target_app),
         "languages": describe_languages(languages),
         "script_rules": script_rules(languages),
+        "language_examples": language_examples(languages),
     }
     # One pass of re.sub, not str.format or one str.replace after another: the prompt has braces
     # of its own (the JSON of the reply), and a word or an app name may look like a placeholder.

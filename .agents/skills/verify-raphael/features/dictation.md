@@ -22,6 +22,23 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 - Verify on a Mac by hand in `npm run tauri -- dev` (the terminal is the app macOS asks permissions for); `npm run
   native` is Windows-only.
 
+## The spoken languages: one row each, written forms beside the picker; cleanup in no one language (2026-11-16)
+
+Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A chosen
+language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a chip naming the form in
+use (`data-variant-menu`); the chip, or Right on it, opens the forms in a submenu beside the picker (`placement: "beside"`,
+`variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
+The core rules are unchanged: one form per language, the order is the priority.
+
+The cleanup prompt (`prompts/cleanup_system.md`) names fillers, correction cues and particles by kind, in no one language; the
+semantic calls are the model's and only hard limits are rules. Each chosen language adds its own worked examples
+(`prompts/cleanup_examples.<subtag>.md`, one for every language of the settings; mainland Chinese gets them in Simplified,
+character by character). After the model only the whole text's final full stop is dropped (`drop_final_full_stop`).
+
+```powershell
+npm run look -- dictation-languages dictation-language-variants --theme both --width 1120,720,1920x1080
+```
+
 ## The tidy key: Right Alt+T tidies the text that is selected (2026-11-15)
 
 Owner, 2026-11-15 (「把一個對話或文字框起來，然後按某個鍵它可以幫我做潤稿」): in any app, select text and press Right Alt+T; the

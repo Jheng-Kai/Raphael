@@ -55,7 +55,6 @@ def test_shipped_candidate_uses_the_real_renderer_and_matches_production():
 
 
 def test_particle_comparison_cases_cover_spoken_tags_and_no_invented_question():
-    from raphael_core.brain.textnorm import remove_unspoken_ma
     from raphael_core.evaluate.cleanup import failed_checks, load_cases
 
     cases = load_cases(Path(__file__).parent / "data/cleanup_particles_cases.jsonl")
@@ -63,7 +62,6 @@ def test_particle_comparison_cases_cover_spoken_tags_and_no_invented_question():
     assert {"不是嗎", "嘛", "吧", "呢", "啊"} <= {word for case in cases for word in case.must_contain}
     for case in cases:
         assert failed_checks(case, case.input) == []
-        assert remove_unspoken_ma(case.input, case.input) == case.input
         if "嗎" in case.must_not_contain:
             assert any("不該出現" in failure for failure in failed_checks(case, case.input + "嗎"))
 

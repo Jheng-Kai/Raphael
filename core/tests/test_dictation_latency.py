@@ -2,8 +2,10 @@ from raphael_core.tools.dictation_latency import measure
 
 
 async def test_short_clean_tail_skips_paid_cleanup_through_real_stop_and_brain():
-    baseline = await measure(legacy=True, scale=.001)
-    current = await measure(legacy=False, scale=.001)
+    # A short clear sentence the dictation keeps exactly: a closing full stop would be dropped in
+    # any language, and the harness compares the pasted text with what was said.
+    baseline = await measure(legacy=True, scale=.001, text="Is this ready?")
+    current = await measure(legacy=False, scale=.001, text="Is this ready?")
     assert (baseline.cloud_calls, baseline.cleanup_calls) == (1, 1)
     assert (current.cloud_calls, current.cleanup_calls) == (1, 0)
     assert "transcribing" in current.stages

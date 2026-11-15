@@ -78,11 +78,9 @@ from .stats import StatsStore
 from .usage import UsageAnalytics
 from .textnorm import (
     apply_replacements,
+    drop_final_full_stop,
     finish_cleaned_text,
-    finish_chinese_dictation,
     guard_cleanup_text,
-    remove_dictation_fillers,
-    remove_unspoken_ma,
     normalize_transcript,
     remove_stutters,
     respell_dictionary_words,
@@ -468,8 +466,7 @@ class Brain:
             def finish_part(index, part):
                 if not part.cleaned:
                     return remove_stutters(part.text)
-                finished = finish_cleaned_text(part.text, rules, chinese=chinese)
-                return remove_unspoken_ma(chunks[index][0] if chunks else normalized, finished) if chinese is not None else finished
+                return finish_cleaned_text(part.text, rules, chinese=chinese)
 
             text = join_parts(
                 [
@@ -479,8 +476,6 @@ class Brain:
             )
         elif result.cleaned:
             text = finish_cleaned_text(result.text, rules, chinese=chinese)
-            if chinese is not None:
-                text = remove_unspoken_ma(normalized, text)
         else:
             # A fallback is the normalized text already; doing it twice could repeat a replacement.
             # Nobody has tidied it, so its obvious stutters go; the history keeps it as it was.
@@ -489,9 +484,9 @@ class Brain:
         # An English name inside Chinese as the dictionary spells it: in its letter case, joined, or
         # spelled right where speech-to-text wrote it as a name it did not know (`respell_dictionary_words`).
         text = respell_dictionary_words(text, self._dictionary.hint_words(), self._dictionary.hint_forms())
-        text = remove_dictation_fillers(text)
-        if chinese is not None:
-            text = finish_chinese_dictation(text)
+        # The words are the model's to clean (fillers, particles, punctuation inside the text): no
+        # rule of one language edits them here. Only the closing full stop goes, in any language.
+        text = drop_final_full_stop(text)
 
         item = HistoryItem(
             id=None,
