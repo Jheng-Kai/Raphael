@@ -86,6 +86,18 @@ test("a wheel turned over the header moves the thread under it, or the report op
   expect([thread.scrollTop, report.scrollTop]).toEqual([500, 600]);
 });
 
+test("the thread hears a wheel turned over the header before it moves, so a wheel up there lets go of the bottom too (R-FOLLOW-01)", () => {
+  document.body.innerHTML = '<section><header class="mb-head"></header><div class="ra-stage"><div class="ra-scroll"></div></div></section>';
+  const head = document.querySelector<HTMLElement>(".mb-head")!, stage = document.querySelector<HTMLElement>(".ra-stage")!, thread = document.querySelector<HTMLElement>(".ra-scroll")!;
+  Object.defineProperty(thread, "scrollHeight", { value: 2000 }); Object.defineProperty(thread, "clientHeight", { value: 600 }); thread.scrollTop = 1400;
+  const heard: [number, number][] = [];
+  thread.addEventListener("wheel", event => heard.push([event.deltaY, thread.scrollTop]));
+  passWheelUnder(head, stage);
+  head.dispatchEvent(new WheelEvent("wheel", { cancelable: true, bubbles: true, deltaY: -40 }));
+  expect(heard).toEqual([[-40, 1400]]);
+  expect(thread.scrollTop).toBe(1360);
+});
+
 test("a wheel turned over the header moves an HTML page's area too, which scrolls as a whole (R-PAGE-08)", () => {
   document.body.innerHTML = '<section><header class="mb-head"></header><div class="ra-stage is-page"><div class="ra-scroll"></div><div class="pgv"><div class="pgv-page"></div></div></div></section>';
   const head = document.querySelector<HTMLElement>(".mb-head")!, stage = document.querySelector<HTMLElement>(".ra-stage")!;

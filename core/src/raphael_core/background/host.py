@@ -447,7 +447,8 @@ class WorkerHost:
         return await self._run_for(params).chat(params)
 
     async def _tool(self, params: dict) -> dict:
-        return await self._run_for(params).tool(params)
+        run = self._run_for(params)
+        return run.reminded(await run.tool(params))
 
     async def _summarize(self, params: dict) -> dict:
         return await self._run_for(params).summarize(params)

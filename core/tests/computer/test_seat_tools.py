@@ -459,12 +459,13 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     assert 'install -m 0755 /opt/raphael-desktop/raphael-seat-browser /usr/local/bin/raphael-seat-browser' in dockerfile
     # Layer 6 is main's (the desktop's picture, its keys, a lost X server); the seat browser and the grant came on top
     # as 7, 8 is what a computer has from its first start (Google's Chrome, the tools, the fonts), 9 is the
-    # desktop saying which browser that is, and 10 is the computer without Firefox ESR.
-    assert module.IMAGE.endswith("-v11") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "11"
-    assert 'org.raphael.computer.layer="11"' in dockerfile and "librsvg2-common" in dockerfile
-    launcher = (image / "layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    # desktop saying which browser that is, 10 is the computer without Firefox ESR, 11 the loaded PC's waits, and 12 a
+    # screen a person can use (a window list, a dock's Browser icon, no marker page, tabs, windows inside their screen).
+    assert module.IMAGE.endswith("-v12") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "12"
+    assert 'org.raphael.computer.layer="12"' in dockerfile and "librsvg2-common" in dockerfile
+    launcher = (image / "layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and "settle_deadline" in launcher
-    assert 'data:text/html,<title>$marker</title>' in launcher and '${5' not in launcher
+    assert 'data:text/html,<title>$marker</title>' in launcher and 'shows=${5:-chrome://newtab/}' in launcher
     assert "uniq -u" not in launcher and '!($0 in old)' in launcher
     # The title is not at a fixed column: the class of a browser with its own profile folder has a space in it.
     assert '$3 == pid' in launcher and 'if ($i == marker)' in launcher and '$6 == marker' not in launcher
@@ -475,7 +476,7 @@ def test_a_loaded_pc_gets_a_minute_for_the_browsers_window_and_every_outer_bound
     # and members saw browser_window_missing: the launcher waited 15 s (150 looks of 0.1 s, each look several processes,
     # so a loaded PC counted fewer seconds still), the settle wait 5 s, the driver's own launch 5 s.
     from raphael_core.computer import carry
-    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert '-lt 150' not in launcher and '-lt 50' not in launcher
     first = int(re.search(r'deadline=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)', launcher)[1])
     settle = int(re.search(r'settle_deadline=\$\(\( \$\(date \+%s\) \+ (\d+) \)\)', launcher)[1])
@@ -489,11 +490,11 @@ def test_a_loaded_pc_gets_a_minute_for_the_browsers_window_and_every_outer_bound
 
 @pytest.mark.parametrize("appears_after", [0, 2, None])
 def test_the_launcher_waits_for_the_window_by_the_clock_and_then_says_how_long(appears_after, tmp_path):
-    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     shell = shutil.which("sh")
     if shell is None:
         pytest.skip("An installed POSIX shell is required for the launcher's wait test")
-    loop = launcher[launcher.index("new=\nattempt=0"):launcher.index("# The browser opens a new window beside its first")]
+    loop = launcher[launcher.index("new=\nattempt=0"):launcher.index("# The browser opens a new window where its last one was")]
     # The launcher's deadline is in whole seconds (`date +%s`): a wait of N seconds ends after N-1 to N, so 3 here waits at least 2.
     loop = re.sub(r"(deadline=\$\(\( \$\(date \+%s\) \+ )60", r"\g<1>3", loop)
     count = (tmp_path / "looks").as_posix()
@@ -560,7 +561,7 @@ def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
     assert 'if [ "$(dpkg --print-architecture)" = amd64 ]; then' in dockerfile
     assert "signed-by=/usr/share/keyrings/google-linux.asc] https://dl.google.com/linux/chrome/deb/ stable main" in dockerfile
     assert "apt-get install -y --no-install-recommends google-chrome-stable;" in dockerfile
-    launcher = (image / "layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (image / "layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert "if [ -x /opt/google/chrome/chrome ]; then" in launcher and "chromium=/usr/lib/chromium/chromium window_class=chromium-browser" in launcher
 
 
@@ -683,7 +684,7 @@ def test_the_members_browser_is_one_a_person_signs_in_with():
     # bar about --no-sandbox, and "Restore pages?". A browser started with --remote-debugging-port=0 tells every
     # page it is automated; --test-type keeps the unsupported-flag bars away; a computer is stopped by ending its
     # processes, so the profile is marked as closed before the browser is started.
-    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     flags = next(line for line in launcher.splitlines() if line.startswith('flags="'))
     for flag in ("--disable-blink-features=AutomationControlled", "--test-type", "--hide-crash-restore-bubble", "--no-sandbox"):
         assert flag in flags.split('"')[1].split(), flag
@@ -711,7 +712,7 @@ KEEPS_NOTHING = {"credentials_enable_service": False, "credentials_enable_autosi
 def test_a_profile_whose_browser_was_ended_is_marked_closed_and_any_other_file_is_left(tmp_path, before, after):
     # The same step keeps passwords, cards and addresses out of the profile every member reads (2026-11-13: an owner
     # signing in at a seat was offered "Save password?").
-    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     source = launcher[launcher.index("<<'PY' || true\n") + len("<<'PY' || true\n"):launcher.index("\nPY\n")]
     preferences = tmp_path / "Default" / "Preferences"
     if before is not None:
@@ -731,7 +732,7 @@ def test_a_profile_whose_browser_was_ended_is_marked_closed_and_any_other_file_i
     ("google-chrome", "google-chrome (/home/cua/workspace/.browser-profiles/driver/main).Google-chrome"),
 ])
 def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pid_popups(prefix, window_class):
-    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     # Run the shipped selection itself against a pure shell wmctrl double; no browser, X or Docker.
     selection = launcher[launcher.index("  candidates=$("):launcher.index('  [ -n "$new" ]')]
     shell = shutil.which("sh")
@@ -767,7 +768,7 @@ wmctrl() { printf '%s\\n' "0x2  0 99   $class  host old - Chromium" "0x3  0 99  
     ("_NET_WM_STATE_MAXIMIZED_VERT", "2580 920 1200 851", 2560, False),                                 # half maximized
 ])
 def test_launcher_takes_a_maximized_window_that_keeps_its_own_frame_as_settled_on_its_own_screen(state, geometry, x, settled):
-    launcher = (Path(module.__file__).parent / "image/layer11/raphael-seat-browser").read_text(encoding="utf-8")
+    launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     function = launcher[launcher.index("filling() {"):launcher.index("attempt=0\nsettled=")]
     shell = shutil.which("sh")
     if shell is None:
@@ -783,7 +784,7 @@ wmctrl() {{ printf '%s\\n' '0x4  0 0 0 1280 851 host other' '0x5  0 {geometry} h
     assert '[ "$attempt" -ge 15 ] && filling' in launcher
 
 
-@pytest.mark.parametrize("layer", ["7", "8", "9"])
+@pytest.mark.parametrize("layer", ["7", "8", "9", "10", "11"])
 async def test_the_shared_computer_of_layer_seven_is_made_again_on_the_next_layer(shared_vm, layer):
     # The owner's own computer on the day layer 8 came: six screens, 6 GiB, four cores, labelled layer 7. The
     # acceptance run found that layer 7 was not yet named as a released one, and such a computer did not start.

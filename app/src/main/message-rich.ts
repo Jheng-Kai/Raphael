@@ -20,15 +20,24 @@ export function firstBelow<T extends Element>(nodes: readonly T[], y: number): T
 
 interface ReadingAnchor {
   node?: HTMLElement; scrollTop: number; queued: boolean; correction: boolean; follows: boolean;
+  /** The owner scrolled up himself: following waits until he is back at the very bottom. */
+  held: boolean;
+  /** The thread's height when `scrollTop` was last measured: a move up it explains (the end clamped) is not the owner's. */
+  height: number;
   position?: number; turnId?: string; roomId?: string; content?: string | null;
   generation: number;
 }
 const anchors = new WeakMap<HTMLElement, ReadingAnchor>();
 const ANCHOR_CONTENT = ".rich-block, .message-text, .message-actions";
+/** How far above its bottom a thread still follows the newest turn, unless the owner scrolled up himself. */
+const NEAR_BOTTOM_PX = 80;
+/** The very bottom, where a thread the owner scrolled up follows again. */
+const AT_BOTTOM_PX = 2;
+const SCROLL_UP_KEYS = new Set(["PageUp", "ArrowUp", "Home"]);
 function readingAnchor(root: HTMLElement): ReadingAnchor {
   const known = anchors.get(root);
   if (known) return known;
-  const state: ReadingAnchor = { scrollTop: root.scrollTop, queued: false, correction: false, follows: true, generation: 0 };
+  const state: ReadingAnchor = { scrollTop: root.scrollTop, height: 0, queued: false, correction: false, follows: true, held: false, generation: 0 };
   anchors.set(root, state);
   selectAnchor(root, state);
   const observed = typeof IntersectionObserver === 'function' && !!root.querySelector('.conversation-end');
@@ -39,7 +48,10 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
   };
   root.addEventListener("conversation-near-bottom", event => {
     if (!observed || root.closest('[hidden]')) return;
-    state.follows = (event as CustomEvent<boolean>).detail;
+    const near = (event as CustomEvent<boolean>).detail;
+    // The place the owner scrolled to is his until he is back at the bottom (selectAnchor), however near it is.
+    if (near && state.held) return;
+    state.follows = near;
     if (state.follows) { state.node = undefined; state.position = undefined; }
     else schedule();
   });
@@ -49,11 +61,52 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
     if (observed) { if (!state.follows) schedule(); return; }
     if (state.scrollTop !== root.scrollTop) schedule();
   }, { passive: true });
+  // The owner's own scrolling up lets go of the bottom at once, before the scroll it starts has moved anything, so nothing that
+  // grows meanwhile pulls him back (R-FOLLOW-01). A thread that cannot scroll up is not let go: no scroll would come to take it again.
+  const letGo = (): void => {
+    if (!state.follows) return;
+    const top = root.scrollTop;
+    if (top <= 0) return;
+    state.follows = false; state.held = true; state.scrollTop = top; state.height = root.scrollHeight;
+    state.node = undefined; state.position = undefined;
+  };
+  root.addEventListener("wheel", event => { if (event.deltaY < 0 && !event.ctrlKey) letGo(); }, { passive: true });
+  root.addEventListener("keydown", event => {
+    const target = event.target as HTMLElement;
+    if ((SCROLL_UP_KEYS.has(event.key) || (event.key === " " && event.shiftKey)) && !target.closest?.("input, textarea, select, [contenteditable]")) letGo();
+  });
+  let touchY: number | undefined;
+  root.addEventListener("touchstart", event => { touchY = event.touches[0]?.clientY; }, { passive: true });
+  root.addEventListener("touchmove", event => {
+    const y = event.touches[0]?.clientY;
+    if (y !== undefined && touchY !== undefined && y > touchY + 2) letGo();
+  }, { passive: true });
+  // The owner asked for the newest turn: the thread follows it from this press on.
+  root.addEventListener("conversation-latest", () => { state.held = false; state.follows = true; state.node = undefined; state.position = undefined; });
+  // One place keeps a following thread at its bottom, whatever changed its height or its scroller's: words drawn, a picture
+  // or a card that loads late, the work line or the slime going, the composer growing or shrinking under it. A ResizeObserver is
+  // told after layout and before paint, so the correction lands in the frame of the change and no frame is seen above the
+  // bottom (owner, 2026-11-14: 「成員回覆的時候，有時候畫面會從最底部往上跳一點」). A clamped write, no geometry read.
+  if (typeof ResizeObserver === "function") {
+    const stick = new ResizeObserver(() => {
+      if (state.follows && !Number(root.dataset.windowLater) && root.isConnected && !root.closest("[hidden]")) root.scrollTop = 1e9;
+    });
+    const watch = (node: Node): void => { if (node instanceof Element) stick.observe(node); };
+    stick.observe(root);
+    root.childNodes.forEach(watch);
+    new MutationObserver(records => { for (const record of records) record.addedNodes.forEach(watch); }).observe(root, { childList: true });
+  }
   return state;
 }
 function selectAnchor(root: HTMLElement, state: ReadingAnchor): void {
-  state.scrollTop = root.scrollTop;
-  state.follows = !Number(root.dataset.windowLater) && root.scrollHeight - state.scrollTop - root.clientHeight < 80;
+  const was = state.scrollTop, before = state.height;
+  state.scrollTop = root.scrollTop; state.height = root.scrollHeight;
+  const gap = state.height - state.scrollTop - root.clientHeight, later = Number(root.dataset.windowLater) > 0;
+  // A thread the owner scrolled up follows again only at its very bottom, and not while his scroll is still going up. A move
+  // up that a shorter thread explains (its end clamped, another room drawn in its place) is the thread's, not his.
+  const up = was - state.scrollTop;
+  if (state.held) state.held = later || gap > AT_BOTTOM_PX || (up > 0.5 && before - state.height < up - 0.5);
+  state.follows = !state.held && !later && gap < NEAR_BOTTOM_PX;
   if (state.follows) { state.node = undefined; state.position = undefined; return; }
   const top = root.getBoundingClientRect().top + 2;
   const thread = root.querySelector<HTMLElement>(".thread") ?? root;
@@ -70,13 +123,13 @@ export function richScrollFollows(root: HTMLElement): boolean { return readingAn
 /** Follow the latest with a clamped write instead of a layout-producing scrollHeight read. */
 export function followRichScroll(root: HTMLElement): void {
   const state = readingAnchor(root);
-  state.follows = true; state.node = undefined; state.position = undefined;
+  state.follows = true; state.held = false; state.node = undefined; state.position = undefined;
   queueRichCorrection(root, state);
 }
 /** Explicit navigation owns its destination; an older deferred correction cannot move it. */
 export function releaseRichScroll(root: HTMLElement): void {
   const state = readingAnchor(root);
-  state.generation++; state.correction = false; state.follows = false;
+  state.generation++; state.correction = false; state.follows = false; state.held = false;
   state.node = undefined; state.position = undefined;
 }
 interface ScrollProbe { phase: string; richScroll: unknown[] }

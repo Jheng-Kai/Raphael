@@ -145,7 +145,7 @@ def test_opening_a_page_is_its_own_read_and_a_click_after_it_still_needs_one():
     assert not check.required
 
 
-IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v11"
+IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v12"
 
 
 def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):

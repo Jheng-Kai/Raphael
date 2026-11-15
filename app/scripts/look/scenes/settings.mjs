@@ -177,8 +177,8 @@ export default [
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
   scene("usage-owner", "The owner's own mix: Codex live, Claude whose window has reset (已重置, no stale number or bar), the ChatGPT sign-in and OpenRouter's own spend, one card each as the account menu's blocks", [...usage, wait('[data-allowance="openrouter"]'), check("usage-plain"), check("usage-owner-cards")], { usageOwner: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
-  scene("usage-opens-quietly", "Settings reads the allowances each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
-    ...settings("general"), check("usage-open-general"),
+  scene("usage-opens-quietly", "The app reads the allowances once after it starts, and Settings again each time it opens, on any tab: no refresh button, the numbers already there, the same numbers touch nothing, a new number replaces the old in place", [
+    check("usage-open-launch"), ...settings("general"), check("usage-open-general"),
     click('.modal-scrim [data-pane="models"]'), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-plain"), check("usage-open-arm"),
     click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-same"),
     check("usage-open-lower"), click(".modal-x"), { action: "advance-time", ms: 31000 }, ...settings("models"), click('[data-models-tab="usage"]'), wait(".run-subscription"), check("usage-open-changed"), check("usage-plain"),

@@ -241,3 +241,115 @@ test("scrolling reuses the observer's code list and only measures nearby blocks"
   expect(query.mock.calls.some(([selector]) => selector === ".message-code")).toBe(false);
   expect(blocks.reduce((count, block) => count + vi.mocked(block.getBoundingClientRect).mock.calls.length, 0)).toBeLessThan(40);
 });
+
+/** A thread with real-looking geometry: its content height, its viewport and a clamped scroll position; the stick's observer is ours to call. */
+function stickThread(view = { height: 2000, client: 600, top: 1400 }) {
+  let resized: () => void = () => {};
+  const watched: Element[] = [];
+  vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { resized = callback; } observe(node: Element) { watched.push(node); } disconnect() {} });
+  vi.stubGlobal("IntersectionObserver", class {});
+  const root = document.createElement("div");
+  root.innerHTML = '<div class="ra-col"><ol class="thread"></ol></div><span class="conversation-end"></span>';
+  document.body.append(root);
+  Object.defineProperties(root, {
+    scrollHeight: { configurable: true, get: () => view.height },
+    clientHeight: { configurable: true, get: () => view.client },
+    scrollTop: { configurable: true, get: () => view.top, set: (value: number) => { view.top = Math.max(0, Math.min(value, view.height - view.client)); } },
+  });
+  vi.spyOn(root, "getBoundingClientRect").mockReturnValue({ top: 0 } as DOMRect);
+  richScrollFollows(root);
+  const gap = (): number => view.height - view.top - view.client;
+  // A change of size is told after layout: the content grew or shrank, or what stands under the scroller did.
+  const change = (next: Partial<typeof view>): void => { Object.assign(view, next); view.top = Math.min(view.top, view.height - view.client); resized(); };
+  const scroll = async (top: number): Promise<void> => { root.scrollTop = top; root.dispatchEvent(new Event("scroll")); await new Promise(requestAnimationFrame); };
+  return { root, view, watched, gap, change, scroll };
+}
+
+test("a thread at its bottom stays there through every change of its height or its scroller's, in the frame of the change", () => {
+  const thread = stickThread();
+  // The column and the end marker are watched as well as the scroller: words, a late picture, a card, the work line going.
+  expect(thread.watched).toEqual([thread.root, thread.root.querySelector(".ra-col"), thread.root.querySelector(".conversation-end")]);
+  for (const next of [{ height: 2272 }, { height: 2316 }, { height: 2290 }, { client: 520 }, { client: 640 }, { height: 2900, client: 560 }]) {
+    thread.change(next);
+    expect(thread.gap()).toBe(0);
+  }
+});
+
+test("the stick to the bottom writes a clamped position and reads no container geometry", () => {
+  const thread = stickThread();
+  const read = vi.fn(() => { throw new Error("Unexpected geometry read while following"); });
+  const write = vi.fn();
+  Object.defineProperties(thread.root, { scrollTop: { get: read, set: write }, scrollHeight: { get: read }, clientHeight: { get: read } });
+  for (let index = 0; index < 5; index++) thread.change({});
+  expect(write.mock.calls).toEqual(Array.from({ length: 5 }, () => [1e9]));
+  expect(read).not.toHaveBeenCalled();
+});
+
+test("a thread the owner scrolled up stays where he reads, near the bottom or far from it, until he is back at its bottom", async () => {
+  const thread = stickThread();
+  // His wheel lets go of the bottom before the scroll it starts has moved anything: the growth in that frame does not pull him back.
+  thread.root.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  thread.change({ height: 2040 });
+  expect(thread.view.top).toBe(1400);
+  await thread.scroll(1370);
+  // Thirty pixels up is still his place: nearer than the 80 px band, and the end observer saying "near" changes nothing.
+  thread.root.dispatchEvent(new CustomEvent("conversation-near-bottom", { detail: true }));
+  thread.change({ height: 2300 });
+  thread.change({ client: 520 });
+  expect(thread.view.top).toBe(1370);
+  expect(richScrollFollows(thread.root)).toBe(false);
+  // Back at the very bottom by his own scroll down: the thread follows again.
+  await thread.scroll(1780);
+  expect(richScrollFollows(thread.root)).toBe(true);
+  thread.change({ height: 2500 });
+  expect(thread.gap()).toBe(0);
+});
+
+test("a scroll still going up does not take the bottom again, a thread that cannot scroll is not let go, and the latest button follows", async () => {
+  const thread = stickThread();
+  thread.root.dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp", bubbles: true }));
+  // The first frame of a smooth scroll up has moved one pixel: within the bottom, but going up.
+  await thread.scroll(1399);
+  expect(richScrollFollows(thread.root)).toBe(false);
+  thread.root.dispatchEvent(new Event("conversation-latest"));
+  expect(richScrollFollows(thread.root)).toBe(true);
+  thread.change({ height: 2400 });
+  expect(thread.gap()).toBe(0);
+  // Words typed in a message edited in place, and a wheel on a thread at its top, let nothing go.
+  const field = document.createElement("textarea"); thread.root.querySelector(".thread")!.append(field);
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  expect(richScrollFollows(thread.root)).toBe(true);
+  const short = stickThread({ height: 400, client: 600, top: 0 });
+  short.root.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  short.change({ height: 900 });
+  expect(short.gap()).toBe(0);
+});
+
+test("a thread the owner scrolled up that comes to its bottom by getting shorter follows again", async () => {
+  const thread = stickThread();
+  thread.root.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  await thread.scroll(1300);
+  expect(richScrollFollows(thread.root)).toBe(false);
+  // What stood under him went (another room drawn in its place, the end of a long card): the end clamps to the bottom.
+  thread.change({ height: 1500 });
+  thread.root.dispatchEvent(new Event("scroll"));
+  await new Promise(requestAnimationFrame);
+  expect(richScrollFollows(thread.root)).toBe(true);
+  thread.change({ height: 1800 });
+  expect(thread.gap()).toBe(0);
+});
+
+test("a hidden thread, an older window and explicit navigation are not pulled to the bottom", () => {
+  const thread = stickThread();
+  thread.root.hidden = true;
+  thread.change({ height: 2300 });
+  expect(thread.view.top).toBe(1400);
+  thread.root.hidden = false;
+  thread.root.dataset.windowLater = "20";
+  thread.change({ height: 2400 });
+  expect(thread.view.top).toBe(1400);
+  delete thread.root.dataset.windowLater;
+  releaseRichScroll(thread.root);
+  thread.change({ height: 2500 });
+  expect(thread.view.top).toBe(1400);
+});

@@ -896,7 +896,9 @@ describe("a turn", () => {
       LOOK,
     );
     expect(html).toContain('data-act="lightbox" data-src="https://example.com/chart.png"');
-    expect(html).toContain('<video class="media-video" controls preload="metadata" src="https://example.com/clip.mp4"></video>');
+    // An older URL video plays in our own player too (R-MEDIA-01), never the browser's.
+    expect(html).toContain('<video class="media-video" preload="metadata" src="https://example.com/clip.mp4" playsinline disablepictureinpicture');
+    expect(html).not.toMatch(/<video[^>]*\scontrols[\s>=]/);
     expect(html).toContain('<iframe class="media-pdf-frame" src="https://example.com/report.pdf"');
     expect(html).toContain('data-act="pdf-expand"');
     expect(html).not.toContain("javascript:alert");

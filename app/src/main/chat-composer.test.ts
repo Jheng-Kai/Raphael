@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 const api=vi.hoisted(()=>({roomTranscribe:vi.fn(),core:vi.fn()}));
 vi.mock("./api",()=>api);
 import { createChatComposer, drawTaskSlot, wavBytes } from "./chat-composer";
+import { watchChipRows } from "./chip-scroll";
 import { setLocale } from "./i18n";
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "ask" } } : {});});
@@ -255,6 +256,23 @@ test("too many files says so and the first ones stay",async()=>{
  const {view}=mount();view.addFiles(Array.from({length:21},(_,i)=>png(`${i}.png`)));await new Promise(resolve=>setTimeout(resolve,10));await flush();
  expect(view.el.querySelectorAll(".cmp-chip")).toHaveLength(20);
  expect(document.querySelector(".toasts")?.textContent??"").toContain("20");
+});
+test("the files wait in one row that the mouse wheel scrolls sideways, and every picture and its × stay buttons in order",async()=>{
+ vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});
+ const stop=watchChipRows(document.body);
+ try{
+  const {view}=mount();view.addFiles(Array.from({length:12},(_,i)=>png(`${i}.png`)));await new Promise(resolve=>setTimeout(resolve,10));await flush();
+  const row=view.el.querySelector<HTMLElement>(".cmp-files[data-chip-row]")!,strip=row.querySelector<HTMLElement>(":scope > .cmp-file[data-chip-scroll]")!;
+  expect(strip.hidden).toBe(false);
+  expect(strip.querySelectorAll(":scope > .cmp-chip")).toHaveLength(12);
+  expect([...row.querySelectorAll<HTMLButtonElement>(":scope > button[data-chip-step]")].map(button=>button.tabIndex)).toEqual([-1,-1]);
+  Object.defineProperty(strip,"scrollWidth",{configurable:true,value:12*64});Object.defineProperty(strip,"clientWidth",{configurable:true,value:400});
+  const wheel=new WheelEvent("wheel",{deltaY:120,bubbles:true,cancelable:true});strip.dispatchEvent(wheel);
+  expect(wheel.defaultPrevented).toBe(true);expect(strip.scrollLeft).toBe(120);
+  const buttons=[...strip.querySelectorAll<HTMLButtonElement>("button")];
+  expect(buttons.map(button=>button.classList.contains("cmp-pic")?"picture":button.classList.contains("chip-x")?"remove":"other")).toEqual(Array.from({length:12},()=>["picture","remove"]).flat());
+  expect(buttons.every(button=>button.tabIndex===0)).toBe(true);
+ }finally{stop();vi.unstubAllGlobals();}
 });
 test("a file still being read does not reach the next room's draft",async()=>{
  const {view}=mount();view.addFiles([png()]);view.setDraft("Other room");await new Promise(resolve=>setTimeout(resolve,10));await flush();

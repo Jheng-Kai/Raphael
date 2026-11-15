@@ -254,7 +254,33 @@ RUN set -eux; \
     sh -n /usr/local/bin/raphael-seat-browser; \
     /usr/bin/python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' /opt/raphael-desktop/screens.py; \
     rm -rf /opt/raphael-layer11
+# Layer 12 (owner, 2026-11-14, watching a member's screen, in translation: the members never open tabs; he only pressed
+# minimize and when it came back Chrome could not find the original page; a picture of an empty page whose tab and address
+# read data:text/html,<title>raphael-seat-...</title>). A screen is a desktop a person can use. Each panel has a button
+# for each window of its own screen beside its three launchers (screens.py writes it for every screen, xfce4-panel.xml
+# for the first), so a minimized window comes back. The Browser
+# icon is a dock's (raphael-browser): it brings the screen's window of the browser back with a new tab and makes a window
+# only when the screen has none. A seat's new window shows the new tab page once it has been found by its marker
+# (raphael-seat-browser), and the tabs of one window of the browser are listed, opened and brought to the front through
+# the browser's own DevTools port (raphael-browser-tabs), which the members' tab tools use. As with layer 11, these are
+# copies in layer12/ written over what the earlier steps installed, so a PC that built layer 11 reruns only this step;
+# layer11/ and desktop/ stay byte for byte, and nothing reads their copies of these files but the steps that write them.
+COPY layer12/ /opt/raphael-layer12/
+RUN set -eux; \
+    install -m 0755 /opt/raphael-layer12/raphael-seat-browser /usr/local/bin/raphael-seat-browser; \
+    install -m 0755 /opt/raphael-layer12/raphael-browser /usr/local/bin/raphael-browser; \
+    install -m 0755 /opt/raphael-layer12/raphael-browser-tabs /usr/local/bin/raphael-browser-tabs; \
+    install -m 0644 /opt/raphael-layer12/screens.py /opt/raphael-desktop/screens.py; \
+    install -o cua -g cua -m 0644 /opt/raphael-layer12/xfce4-panel.xml /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml; \
+    sh -n /usr/local/bin/raphael-seat-browser; \
+    sh -n /usr/local/bin/raphael-browser; \
+    for script in /opt/raphael-desktop/screens.py /usr/local/bin/raphael-browser-tabs; do \
+      /usr/bin/python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' "$script"; \
+    done; \
+    /usr/bin/python3 -c 'import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])' /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml; \
+    test -z "$(grep -il firefox /usr/local/bin/raphael-browser || true)"; \
+    rm -rf /opt/raphael-layer12
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="11"
+      org.raphael.computer.layer="12"

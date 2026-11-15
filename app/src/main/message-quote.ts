@@ -1,5 +1,5 @@
 import { t } from "./i18n";
-import { quotedPicture } from "./picture-message";
+import { quotedPicture, quotedVideo } from "./picture-message";
 import type { MessageQuote } from "./types";
 import { esc, ico } from "./ui";
 
@@ -12,8 +12,12 @@ export const QUOTE_MAX_CHARS = 20_000;
 export function quoteHTML(quote: MessageQuote, jump = false): string {
   const tag = jump ? 'button type="button" data-act="jump-quote"' : "span";
   const picture = quotedPicture(quote.text);
-  const shown = picture ? `<img class="quote-thumb" data-attachment="${esc(picture.id)}" alt=""><span class="quote-text">${esc(t("chat.image"))}</span>` : `<span class="quote-text">${esc(quote.text)}</span>`;
-  return `<${tag} class="message-quote${picture ? " has-picture" : ""}"><span class="quote-author">${esc(quote.author)}</span>${shown}</${jump ? "button" : "span"}>`;
+  // A quoted video shows the play mark and the word for a video, never the link (R-MEDIA-02).
+  const video = picture ? null : quotedVideo(quote.text);
+  const shown = picture ? `<img class="quote-thumb" data-attachment="${esc(picture.id)}" alt=""><span class="quote-text">${esc(t("chat.image"))}</span>`
+    : video ? `<span class="quote-thumb quote-mark" aria-hidden="true">${ico("play")}</span><span class="quote-text">${esc(t("chat.video"))}</span>`
+      : `<span class="quote-text">${esc(quote.text)}</span>`;
+  return `<${tag} class="message-quote${picture || video ? " has-picture" : ""}"><span class="quote-author">${esc(quote.author)}</span>${shown}</${jump ? "button" : "span"}>`;
 }
 
 /** A selection can quote exactly one message; toolbar/composer selections are never eligible. */

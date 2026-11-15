@@ -73,6 +73,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // scrolls under it and fades there. What has scrolled under the row is covered on purpose; a control of the row itself is not.
     const row = top.closest?.('[data-window-drag]');
     if (row && !row.contains(element)) return null;
+    // R-PAGE-11: an open page runs under the composer, which floats over it at the window's foot; the page scrolls its last line clear
+    // above it. What has scrolled under the composer's row is covered on purpose, as under the top row; a control of the row itself is not.
+    const foot = top.closest?.('.ra-stage.is-page > .ra-dock');
+    if (foot && !foot.contains(element)) return null;
     const layer = fixedLayer(top);
     return layer && !layer.contains(element) ? null : top;
   };
@@ -303,7 +307,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     checkMarkdown(element);
     if (element.matches('.work-time, .work-toggle, .step-ms') && /\b(?:NaN|Infinity)\b/.test(element.textContent)) invalidDurations.push(description);
-    if (element.matches('select,input[type="time"]')) nativeControls.push(description);
+    // The browser's own media player is a native control too: every video and sound plays in ours (R-MEDIA-01).
+    if (element.matches('select,input[type="time"],video[controls],audio[controls]')) nativeControls.push(description);
     // Owner-authored text is data; labels, titles and placeholders remain UI copy. So is the name of a file a member
     // delivered (its Library's rows).
     const authored = element.matches(".cs-info-row .v, .modal-body .data-record > .data-record-text, .output-path, .output-name, .template-path, .lib-title, .task-result .tr-name, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");

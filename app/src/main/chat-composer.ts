@@ -15,6 +15,7 @@ import { getLocale, onLocaleChange, t } from "./i18n";
 import type { WireAttachment } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover, patchHTML, sendGlyph, toaster } from "./ui";
 import { openMediaLightbox } from "./media-lightbox";
+import { chipSteps } from "./chip-scroll";
 import "./agent.css";
 
 /** `recording`: the owner is speaking into this composer and the button that ends it sends what was said. */
@@ -69,7 +70,8 @@ export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping
 }
 
 export function composerHTML(): string {
-  return `<div class="cmp-quote" hidden></div><div class="cmp-file" hidden></div><div class="cmp-row">` +
+  // The files wait in one row that scrolls sideways under the mouse wheel, with an arrow and a fade at an end with more (chip-scroll.ts, R-ATTACH-01).
+  return `<div class="cmp-quote" hidden></div><div class="cmp-files" data-chip-row><div class="cmp-file" data-chip-scroll hidden></div>${chipSteps()}</div><div class="cmp-row">` +
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
     `<div class="cmp-bar"><button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
     `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +

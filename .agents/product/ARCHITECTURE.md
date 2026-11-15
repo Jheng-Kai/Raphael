@@ -179,9 +179,20 @@ memory edits and growth; there is no separate owner-import RPC or model authorit
 attachments.upload handles bounded sequential chunks, validates offset and declared length,
 then atomically publishes an opaque ID. Both conversation and room admissions resolve those
 IDs through AttachmentStore, using a read-only memory map. Existing readers keep their budgets;
-Office and ffmpeg read stored paths without whole-file copies. The native asset command
-resolves an ID through the core before granting access to that exact file. No caller path or
+Office and ffmpeg read stored paths without whole-file copies. `attachment_source` resolves an ID
+through the core (`attachments.path`, which also names the stored type) before granting that exact
+file to the app's own media protocol, `raphael-media` (media_protocol.rs, 2026-11-15, R-MEDIA-03).
+The protocol answers only the main window, only an ID granted in this run, only raster pictures,
+video and audio, under the stable URL `/<id>` with `Cache-Control: private, max-age=31536000,
+immutable`, the ID as ETag, nosniff and byte ranges of at most 2 MiB: a stored ID names its bytes
+for good, so the URL carries no token and the grant is checked by the shell. The window asks for an
+ID's URL once a session and keeps its last drawn pictures (media-cache.ts); a conversation opened
+again asks nothing. Nothing that changes (pages, computer frames) goes through it. Tauri's asset
+protocol stays configured with an empty scope and no attachment uses it. No caller path or
 recursive filesystem scope is accepted (A-06/10/11).
+
+Every stored video and sound plays in the app's own player (media-player.ts, R-MEDIA-01), bound by
+attachment-media.ts on each thread draw; its full screen is the lightbox (media-lightbox.ts).
 
 ## Smooth member computers (2026-11-05)
 
@@ -718,7 +729,12 @@ found the computer ready, ends any `wallpaper.py --watch` and starts its own, wi
 owner's JPEG when there is one; the session's `prepare-desktop` no longer starts a
 watcher, and the image carries `librsvg2-common` so the town's SVG is drawn (its build
 checks for the loader). What was started is remembered per computer together with the
-picture's time and size, and forgotten when the computer stops or is restarted. The
+picture's time and size, and forgotten when the computer stops or is restarted.
+Since 2026-11-14 (R-UI-92) the default picture is two JPEGs, `day.jpg` and `night.jpg`, and
+the watcher that chooses between them by the hour comes with them from
+`core/src/raphael_core/computer/wallpaper/`, outside the image's build context: what the build
+copies (`image/desktop/` with the town's files) stays as layer 11 built it, so a PC that built
+that layer downloads nothing again for a new picture. The
 helper `screens.py`, for any number of screens and before the ready mark, sets one
 workspace and unbinds the keys that act on the whole desktop (and, with more than one
 screen, those that reach every screen or start a program), after waiting for the session

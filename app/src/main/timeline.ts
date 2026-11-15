@@ -1,5 +1,6 @@
 import { missingHTML, missingRepairHTML, missingText, type Missing } from "./missing";
 import { fileKind, sentFileHTML } from "./attachments";
+import { videoPlayerHTML } from "./media-player";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
@@ -34,7 +35,7 @@ import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draf
 import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
-import { mediaPicture } from "./picture-message";
+import { mediaPicture, mediaVideo } from "./picture-message";
 import { ownerEditorHTML, type OwnerEditing } from "./message-edit";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
@@ -647,13 +648,19 @@ export function routineLineHTML(turn: AgentTurn): string {
 }
 
 /**
- * Visual media share a grid; audio and documents stack underneath it.
+ * Several pictures stand side by side as small square thumbnails, in as many rows as they need, as Claude, ChatGPT and Grok
+ * show the pictures a person sent (R-ATTACH-02); one picture keeps its own size (R-UI-149). Other visual media share a grid;
+ * audio and documents stack underneath.
  */
 export function filesHTML(files: readonly TurnAttachment[] | undefined): string {
   if (!files || files.length === 0) return "";
-  const visual = files.filter(file => ["image", "video"].includes(fileKind(file.mime)) && (file.id || file.preview));
-  const rest = files.filter(file => !visual.includes(file));
-  return `<div class="me-files">${visual.length ? `<div class="attachment-grid${visual.length > 1 ? " is-multiple" : ""}">${visual.map(sentFileHTML).join("")}</div>` : ""}${rest.map(sentFileHTML).join("")}</div>`;
+  const drawn = (file: TurnAttachment): boolean => !!(file.id || file.preview);
+  const pictures = files.filter(file => fileKind(file.mime) === "image" && drawn(file));
+  const thumbs = pictures.length > 1 ? pictures : [];
+  const visual = files.filter(file => !thumbs.includes(file) && ["image", "video"].includes(fileKind(file.mime)) && drawn(file));
+  const rest = files.filter(file => !thumbs.includes(file) && !visual.includes(file));
+  return `<div class="me-files">${thumbs.length ? `<div class="attachment-thumbs">${thumbs.map(file => sentFileHTML(file)).join("")}</div>` : ""}` +
+    `${visual.length ? `<div class="attachment-grid${visual.length > 1 ? " is-multiple" : ""}">${visual.map(file => sentFileHTML(file)).join("")}</div>` : ""}${rest.map(file => sentFileHTML(file)).join("")}</div>`;
 }
 
 /** Background task controls without raw tool labels or a collapsed steps box. */
@@ -849,6 +856,13 @@ function artifactHTML(text: string, seq: number, replied = false, picture?: { ac
   const shown = picture && mediaPicture(text);
   // Its reaction is drawn inside the picture's own frame, so it stands on the picture's corner, never on the actions' side.
   if (shown) return `<div class="chat-message" data-message="${seq}" data-picture="true">${sentFileHTML(shown).replace(/<\/div>$/, `${reactionRowHTML(picture.reactions)}</div>`)}${picture.actions}</div>`;
+  // A video is a message of its own too (R-MEDIA-02): the same actions beside our player, its reaction on its corner. A room's
+  // row has no Copy for it, as no clipboard takes a video.
+  const video = picture && mediaVideo(text);
+  if (video) {
+    const actions = picture.actions.replace(action("copy", t("chat.copyImage"), "copy-picture"), "").replace(action("copy", t("chat.copy"), "copy-message"), "");
+    return `<div class="chat-message" data-message="${seq}" data-video="true">${sentFileHTML(video, { open: false }).replace(/<\/div>$/, `${reactionRowHTML(picture.reactions)}</div>`)}${actions}</div>`;
+  }
   try {
     const payload = JSON.parse(text);
     const file = payload?.attachment as TurnAttachment | undefined;
@@ -978,7 +992,8 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
     const player = ytEmbed
       ? `<div class="media-player"><iframe class="media-iframe" src="${esc(ytEmbed)}" title="${esc(title || site || "Video")}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
       : safeUrl
-        ? `<div class="media-player"><video class="media-video" controls preload="${thumb ? "none" : "metadata"}"${thumb ? ` poster="${esc(thumb)}"` : ""} src="${esc(safeUrl)}"></video></div>`
+        // Our own player here too (R-MEDIA-01); its thumbnail stands in for the first frame until it plays.
+        ? `<div class="media-player">${videoPlayerHTML(` class="media-video" preload="${thumb ? "none" : "metadata"}"${thumb ? ` poster="${esc(thumb)}"` : ""} src="${esc(safeUrl)}"`, title || site || t("chat.video"))}</div>`
         : "";
     return (
       `<div class="media-card media-video-card" data-media-type="video"${seqAttr}>` +

@@ -14,7 +14,8 @@ a core that is gone leaves it nothing to do. The core calls:
 and, while a task runs, the worker calls the core's `host.chat {task_id, messages, tools}` for a
 reply of the model (with `room`, how many times the usual limit on a reply, when it asks again for a
 call that the limit cut off; the reply says `finish_reason: "length"` when it was cut off),
-`host.tool {task_id, call_id, name, arguments}` for the result of a tool and
+`host.tool {task_id, call_id, name, arguments}` for the result of a tool (with `note`, a line of the core's that
+goes after it) and
 `host.summarize {task_id, system, user, max_tokens}` for the checkpoint of a long task. A refusal of
 any comes as an error whose data says `stop`, and the loop ends with it. A task here has nobody in it
 to read a note about a call that repeats itself, so the loop ends it (`tool_guardrails`).
@@ -94,6 +95,7 @@ class CoreHost:
         content = reply.get("content")
         kind = reply.get("kind")
         instruction = reply.get("instruction")
+        note = reply.get("note")
         return ToolOutcome(
             ok=reply.get("ok") is True,
             kind=kind if isinstance(kind, str) else None,
@@ -103,6 +105,7 @@ class CoreHost:
             instruction=instruction if isinstance(instruction, str) else "",
             blocks=reply.get("blocks") or [],
             replace_tools=reply.get("replace_tools") is True,
+            note=note if isinstance(note, str) else "",
         )
 
 

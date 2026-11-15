@@ -22,7 +22,7 @@ import { openActions } from "./member-column";
 import { lightHTML, lightOf } from "./sidebar-light";
 import { createChatComposer } from "./chat-composer";
 import { messageHTML, messagePlainText, replyContentHTML } from "./message-content";
-import { mountRichContent, preserveRichScroll, richScrollFollows, releaseRichScroll } from "./message-rich";
+import { followRichScroll, mountRichContent, preserveRichScroll, richScrollFollows, releaseRichScroll } from "./message-rich";
 import { mountConversationScroll, passWheelUnder } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews, messagePreviewMeasure } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
@@ -637,7 +637,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
     composer.setTaskState("idle");const draft=drafts.get(id)??readDraftWords<RoomMessage>(`room:${id}`);replyTo=draft?.quote;composer.setDraft(draft?.text??"",drafts.get(id)?.files??[],draft?.pageId);el.hidden=false;
     await refresh();void questions.load();
-    if(opened&&roomId===id&&room){canOlder=messages.length===100;draw();scroll.scrollTop=scroll.scrollHeight;composer.input.focus();}
+    if(opened&&roomId===id&&room){canOlder=messages.length===100;draw();followRichScroll(scroll);scroll.scrollTop=scroll.scrollHeight;composer.input.focus();}
   },get active(){return opened;}};
 }
 

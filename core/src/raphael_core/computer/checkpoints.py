@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import stat
 import sys
@@ -24,6 +25,15 @@ PROGRAM_FOLDERS = {".config", ".local", ".mozilla", ".pki", ".npm", ".tmp", ".th
                    "Crashpad", "BrowserMetrics"}
 UNTRACKED = EXCLUDED | PROGRAM_FOLDERS
 LOCK_FILES = {"SingletonLock", "SingletonSocket", "SingletonCookie", ".parentlock"}
+# Nor is what a tool leaves behind while the member works (owner, 2026-11-14: a card 「新增了 30 個檔案」 of bare hashes, the content store
+# `npm i --cache /home/cua/workspace/.npm-cache` writes): a hidden folder (a tool's own store: .git, .npm-cache, .next, .claude), a package
+# or build store, a cache or temporary folder, lock files, temporary and partial downloads, and a file named by a bare hash. The card lists
+# only what the owner would recognise as the work's result: documents, code, data, pictures, video, audio and pages.
+STORE_FOLDERS = {"node_modules", "__pycache__", "bower_components", "jspm_packages", "site-packages", "venv", "_cacache"}
+SCRATCH_FOLDERS = {"cache", "caches", "tmp", "temp"}
+SCRATCH_FILES = {"package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "bun.lockb", ".DS_Store", "Thumbs.db", "desktop.ini"}
+SCRATCH_SUFFIXES = (".tmp", ".temp", ".part", ".partial", ".crdownload", ".swp", ".swo", ".pyc", ".pyo", ".lock", ".pid", "~")
+BARE_HASH = re.compile(r"[0-9a-fA-F]{32,}(?:\.[A-Za-z0-9]{1,10})*")
 # A folder the carry-over published whole (computer/carry.py): the files of an older computer's home, put there by the core.
 CARRIED = ".raphael-carried-member"
 MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -38,8 +48,21 @@ DIFF_FILES = 20
 DIFF_SECONDS = 3.0
 
 
-def program_file(name):
-    return name in LOCK_FILES or name.startswith(".~lock.")
+def noise_folder(name):
+    """A folder no file under which is the member's work, wherever it lies: hidden, a program's own, a package store, a cache."""
+    return (name.startswith(".") or name in UNTRACKED or name in STORE_FOLDERS or name.lower() in SCRATCH_FOLDERS
+            or name.endswith(".egg-info"))
+
+
+def noise_file(name):
+    """A file that is no work's result by its name alone: a lock, a temporary or partial file, a bare hash with or without an extension."""
+    return (name in LOCK_FILES or name in UNTRACKED or name in SCRATCH_FILES or name.startswith((".~lock.", "~$"))
+            or name.lower().endswith(SCRATCH_SUFFIXES) or BARE_HASH.fullmatch(name) is not None)
+
+
+def noise_parts(parts):
+    """The same test for a path as parts below its root: a noisy folder anywhere above it, or a noisy name."""
+    return bool(parts) and (any(noise_folder(part) for part in parts[:-1]) or noise_file(parts[-1]))
 
 
 def browser_profile(names, dirs):
@@ -70,7 +93,7 @@ class CheckpointStore:
     def _safe(self, path):
         path = Path(path)
         root = next((root for root in self.roots if path.is_relative_to(root) and path != root), None)
-        if root is None or ".." in path.parts or any(part in UNTRACKED for part in path.relative_to(root).parts) or program_file(path.name):
+        if root is None or ".." in path.parts or noise_parts(path.relative_to(root).parts):
             raise ValueError("outside_workspace")
         for part in [path, *path.parents]:
             if part == root.parent:
@@ -146,12 +169,13 @@ class CheckpointStore:
                 if browser_profile(names, dirs):
                     dirs[:] = []
                     continue
-                dirs[:] = sorted(name for name in dirs if name not in UNTRACKED and not (Path(directory) / name).is_symlink())
+                # A hidden folder, a package store or a cache is not walked: what a tool keeps there cannot fill the walk or the archive.
+                dirs[:] = sorted(name for name in dirs if not noise_folder(name) and not (Path(directory) / name).is_symlink())
                 for name in sorted(names):
                     if time.monotonic() >= deadline or len(files) >= MAX_FILES:
                         return files, uncovered + [str(Path(directory) / name)], True
                     path = Path(directory) / name
-                    if name in UNTRACKED or program_file(name):
+                    if noise_file(name):
                         continue
                     key = str(path)
                     try:
@@ -278,18 +302,20 @@ class CheckpointStore:
     def _relative(self, path):
         path = Path(path)
         root = next((root for root in self.roots if path.is_relative_to(root)), None)
-        return path.relative_to(root).parts if root else path.parts
+        # A path outside every root is no one's noise by the names above it (a temporary folder may hold the roots themselves): it is
+        # refused where it is used, and reported as not restored.
+        return path.relative_to(root).parts if root else ()
 
-    def _program_paths(self, paths):
-        """Which of these paths are what programs wrote by themselves (a browser's profile, an app's state and caches, lock
-        files), by folder and file names and by the browser profiles the list itself shows. A checkpoint kept before the
-        core left them out is read the same way, so nothing it holds of them is shown or undone."""
+    def _noise(self, paths):
+        """Which of these paths are no work's result (a browser's profile, an app's state and caches, a tool's hidden store, a
+        package store, lock, temporary and bare-hash files), by folder and file names and by the browser profiles the list itself
+        shows. A checkpoint kept before the core left them out is read the same way, so nothing it holds of them is shown or undone."""
         paths = list(paths)
         roots = profile_roots(paths)
         output = set()
         for path in paths:
             parts = Path(path).parts
-            if any(part in PROGRAM_FOLDERS for part in self._relative(path)) or program_file(parts[-1]) or any(parts[:len(root)] == root for root in roots):
+            if noise_parts(self._relative(path)) or any(parts[:len(root)] == root for root in roots):
                 output.add(path)
         return output
 
@@ -309,7 +335,7 @@ class CheckpointStore:
         # The folder a carry-over published whole in this window is the core's doing, not the member's work: its files are not listed.
         carried = {Path(path).parts[:-1] for path, value in after.items()
                    if Path(path).name == CARRIED and value.get("size") == 16 and path not in before}
-        noise = self._program_paths(before.keys() | after.keys())
+        noise = self._noise(before.keys() | after.keys())
         files, diffed = [], 0
         # The text of a change is read only for the first files, within a few seconds, and never for a picture, a model or any file
         # past a megabyte: the list of changes must open at once, and a binary file is only named.
@@ -376,6 +402,10 @@ class CheckpointStore:
                 files = data["review"]
             else:
                 files = self._changes(data["manifest"], after, deadline)
+            # A review kept before a kind of noise was known still lists it: it is left out as a new review would leave it.
+            noise = self._noise(file["path"] for file in files)
+            if noise:
+                files = [file for file in files if file["path"] not in noise]
             if not files and not incomplete:
                 continue
             token = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
@@ -406,10 +436,11 @@ class CheckpointStore:
         if review_token is not None and review_token not in data.get("reviews", {}):
             raise ValueError("checkpoint_changed")
         files = data.get("reviews", {}).get(review_token, data.get("review", []))
-        # A review kept before the core left program files out may still hold some: they are never put back or deleted.
-        program = self._program_paths(file["path"] for file in files)
+        # A review kept before the core left a kind of noise out may still hold some: a tool's cache, store or temporary file the
+        # owner was never shown is never put back or deleted.
+        noise = self._noise(file["path"] for file in files)
         for file in files:
-            if file["path"] in program:
+            if file["path"] in noise:
                 continue
             try:
                 path = self._safe(file["path"])

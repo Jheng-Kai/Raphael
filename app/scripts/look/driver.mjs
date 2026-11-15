@@ -6,6 +6,7 @@ import { eventStorm } from "./event-storm.mjs";
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
 import { sendProbe } from "./send-probe.mjs";
 import { dragProbe } from "./drag-probe.mjs";
+import { followProbe } from "./follow-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 /**
@@ -508,10 +509,11 @@ export async function perform(page, step, evidenceDirectory) {
       await element.dispose();
       break;
     }
-    // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows.
+    // The page's own scroll, which the app cannot read (its frame is another origin): the wheel over it, then what it shows. A report
+    // open in the same place (`.rp-scroll`) is turned by the same wheel.
     case "frame-scroll": {
       // The middle of what is on screen of the page: the area scrolls as a whole and a page can be far taller than it.
-      const at = await page.evaluate(() => { const box = (document.querySelector(".pgv-page") ?? document.querySelector(".pgv-frame-box"))?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + Math.min(box.height, innerHeight - box.y) / 2 }; });
+      const at = await page.evaluate(() => { const box = (document.querySelector(".pgv-page") ?? document.querySelector(".pgv:not([hidden]) .rp-scroll") ?? document.querySelector(".pgv-frame-box"))?.getBoundingClientRect(); return box && { x: box.x + box.width / 2, y: box.y + Math.min(box.height, innerHeight - box.y) / 2 }; });
       if (!at) throw new Error("No page in the conversation's place to scroll");
       await page.mouse.move(at.x, at.y);
       await page.mouse.wheel({ deltaY: step.deltaY });
@@ -708,6 +710,7 @@ export async function perform(page, step, evidenceDirectory) {
     case "late-roster": await page.evaluate(ms => { window.__look.rosterDelay = ms; }, step.ms); break;
     case "send-probe": return await sendProbe(page, step);
     case "drag-probe": return await dragProbe(page, step, evidenceDirectory);
+    case "follow-probe": return await followProbe(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
       await page.evaluate(ms => { window.__look.now = Date.now() + ms; }, step.ms);
@@ -878,9 +881,17 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "clipboard-paste": case "file-drop": {
       if (step.action === "clipboard-paste") await page.focus(step.selector);
-      await page.$eval(step.selector, (element, { action, name, image, text, hold, mime, size }) => {
-        // One opaque pixel, a real picture for the composer to show and the look to load.
-        const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), c => c.charCodeAt(0));
+      await page.$eval(step.selector, (element, { action, name, image, text, hold, mime, size, fill, label }) => {
+        // One opaque pixel, a real picture for the composer to show and the look to load. `fill` (and `label`) draw a picture of that
+        // colour with its number on it instead, so that pictures in a row can be told apart where it scrolls.
+        let picture = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        if (fill) {
+          const canvas = document.createElement("canvas"); canvas.width = 160; canvas.height = 120;
+          const ctx = canvas.getContext("2d"); ctx.fillStyle = fill; ctx.fillRect(0, 0, 160, 120);
+          if (label) { ctx.fillStyle = "#ffffff"; ctx.font = "bold 56px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, 80, 62); }
+          picture = canvas.toDataURL("image/png").split(",")[1];
+        }
+        const bytes = Uint8Array.from(atob(picture), c => c.charCodeAt(0));
         const transfer = new DataTransfer(), file = image ?? name;
         if (file) {
           const input = new File([bytes], file, { type: mime ?? "image/png" });

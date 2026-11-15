@@ -185,7 +185,9 @@ describe("files dropped onto the thread", () => {
     for (const [ext, mime, tag] of [["mp4", "video/mp4", "video"], ["mp3", "audio/mpeg", "audio"]]) {
       const html = sentFileHTML({ id: `${id}.${ext}`, name: `clip.${ext}`, mime });
       expect(html).toContain(`<${tag}`);
-      expect(html).toContain(tag === "video" ? "controls" : "data-audio-toggle");
+      // Our own players (R-MEDIA-01): the browser's controls are never drawn.
+      expect(html).toContain('data-mp-act="toggle"');
+      expect(html).not.toMatch(/<(?:video|audio)[^>]*\scontrols[\s>=]/);
       expect(html).toContain(`data-attachment="${id}.${ext}"`);
     }
     const file = sentFileHTML({ id: `${id}.html`, name: "page.html", mime: "text/html", size: 2048 });

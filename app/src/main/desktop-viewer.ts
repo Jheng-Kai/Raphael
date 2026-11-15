@@ -39,6 +39,13 @@ export function isAsleep(state: DesktopState | undefined): boolean {
     && state.error !== 'docker_stopped' && state.error !== 'remote_unavailable';
 }
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
+/** R-UI-92: the computer's default picture at a moment, light by day (06:00 to 17:59) and dark by night, as wallpaper.py
+ * chooses it in the computer. The computer's clock runs in the zone this window tells the core with members.viewing
+ * (its own Intl zone, the zone of its Date), so the window's local hour is the computer's hour. */
+export function defaultWallpaper(at: number): string {
+  const hour = new Date(at).getHours();
+  return `/wallpapers/${hour >= 6 && hour < 18 ? "day" : "night"}.jpg`;
+}
 
 export function preparationHTML(state: DesktopState, face = ""): string {
   const stages = ["starting", "building", "preparing"] as const;
@@ -145,7 +152,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const TAKE_MS = 6_000;
   let takeTimer: ReturnType<typeof setTimeout> | undefined;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
-  // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
+  // Nothing is painted until the read answers, so the default picture never flashes under the owner's.
   let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
   const readWallpaper = (): void => {
     wallpaperRead ??= Promise.resolve().then(() => api.desktopWallpaper())
@@ -179,16 +186,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (target.getAttribute(name) !== value) target.setAttribute(name, value);
   }
 
-  const timeOfDay = (): string => {
-    const hour = new Date().getHours();
-    return hour >= 6 && hour < 11 ? 'morning' : hour >= 11 && hour < 16 ? 'noon' : hour >= 16 && hour < 19 ? 'dusk' : hour >= 19 && hour < 22 ? 'evening' : 'night';
-  };
   function draw(): void {
     const inline = options.timeline.querySelector<HTMLElement>('[data-card-desktop-screen], [data-card-screen]');
     // A closed panel with no card on screen shows no face, and building one on every render is most of a draw.
     const face = inline || options.panelVisible() || panel.hasAttribute('data-expanded') ? options.face?.() ?? "" : "";
-    const period = timeOfDay();
-    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, stalled, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.isRemote(), session, lastFrames.get(member()), period, wallpaperKnown, !!ownWallpaper]);
+    const fallback = defaultWallpaper(Date.now());
+    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, stalled, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, ""), getLocale(), location.ready(), location.isRemote(), session, lastFrames.get(member()), fallback, wallpaperKnown, !!ownWallpaper]);
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
@@ -263,7 +266,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(retry, "hidden", true); paint(retry, "disabled", opening);
     paint(enlarge, 'hidden', expanded || !!preparing);
     paint(enlarge, 'disabled', asleep && opening);
-    const source = ownWallpaper ?? `/wallpapers/${period}.svg`;
+    const source = ownWallpaper ?? fallback;
     const paintWallpaper = (image: HTMLImageElement): void => {
       if (wallpaperKnown && image.getAttribute('src') !== source) image.setAttribute('src', source);
       image.toggleAttribute('data-own', !!ownWallpaper);

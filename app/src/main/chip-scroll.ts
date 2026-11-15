@@ -79,10 +79,14 @@ export function watchChipRows(root: ParentNode & Node = document.body): () => vo
   for (const scroller of scrollersIn(root as Node)) watch(scroller);
   if (!(root instanceof HTMLElement)) for (const scroller of root.querySelectorAll<HTMLElement>(SCROLLER)) watch(scroller);
   const lines = new MutationObserver(records => {
+    const changed = new Set<HTMLElement>();
     for (const record of records) {
       for (const node of record.removedNodes) for (const scroller of scrollersIn(node)) if (!scroller.isConnected) sizes.unobserve(scroller);
       for (const node of record.addedNodes) for (const scroller of scrollersIn(node)) watch(scroller);
+      // Chips added to or taken from a row (the composer's files) change what lies past its ends without changing its size.
+      if (record.target instanceof HTMLElement && record.target.matches(SCROLLER)) changed.add(record.target);
     }
+    for (const scroller of changed) if (scroller.isConnected) chipEdges(scroller);
   });
   lines.observe(root, { childList: true, subtree: true });
   const focused = (event: FocusEvent): void => {

@@ -43,8 +43,9 @@ describe("content security policy", () => {
 
   test("sources are the app itself, its IPC, loopback desktop and allowed media/YouTube embeds: no wildcard host", () => {
     const allowed = new Set(["'self'", "'none'", "data:", "ipc:", "http://ipc.localhost"]);
-    // Tauri's local asset URLs serve only files granted by the opaque attachment ID resolver.
-    const mediaSources = new Set([...allowed, "https:", "blob:", "asset:", "http://asset.localhost"]);
+    // Tauri's local asset URLs and the app's own media protocol (media_protocol.rs, R-MEDIA-03) serve only files granted by
+    // the opaque attachment ID resolver.
+    const mediaSources = new Set([...allowed, "https:", "blob:", "asset:", "http://asset.localhost", "raphael-media:", "http://raphael-media.localhost"]);
     const frameHosts = new Set(["'self'", "http://127.0.0.1:*", "https://www.youtube-nocookie.com", "https://www.youtube.com"]);
     for (const [name, sources] of policy()) {
       for (const source of sources) {
@@ -62,6 +63,14 @@ describe("content security policy", () => {
     expect(policy().get("frame-src")).toEqual(
       expect.arrayContaining(["https://www.youtube-nocookie.com", "https://www.youtube.com"]),
     );
+  });
+
+  test("stored attachments load from the app's own media protocol as pictures and media only, never as scripts, frames or connections", () => {
+    for (const name of ["img-src", "media-src"]) expect(policy().get(name)).toEqual(expect.arrayContaining(["raphael-media:", "http://raphael-media.localhost"]));
+    for (const name of ["script-src", "connect-src", "frame-src", "default-src", "style-src"]) {
+      expect(policy().get(name) ?? []).not.toContain("raphael-media:");
+      expect(policy().get(name) ?? []).not.toContain("http://raphael-media.localhost");
+    }
   });
 
   test("the desktop port exception is only for loopback frames and cannot load main-window scripts or connections", () => {

@@ -1,0 +1,69 @@
+#!/bin/sh
+set -eu
+# No browser is started with the desktop.
+export DISPLAY="${DISPLAY:-:1}"
+# The computer every member shares has one browser, the members' own: what an owner signs in to there is every
+# member's. The Browser icon, and a link another program opens, go to the window of it on the screen the pointer is on.
+# A second browser with a profile of its own would be where an owner signs in for nobody.
+width=$(xprop -root _NET_DESKTOP_GEOMETRY 2>/dev/null | awk '{print $3 + 0}')
+if [ "${width:-0}" -gt 1280 ]; then
+    origin=$(/usr/bin/python3 - <<'PY'
+import ctypes
+x11 = ctypes.CDLL("libX11.so.6")
+x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+x11.XDefaultRootWindow.restype = ctypes.c_ulong
+display = x11.XOpenDisplay(None)
+if not display:
+    raise SystemExit(1)
+window = ctypes.c_ulong()
+x, y, ignored = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+mask = ctypes.c_uint()
+x11.XQueryPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong] + [ctypes.c_void_p] * 7
+x11.XQueryPointer(display, x11.XDefaultRootWindow(display), ctypes.byref(window), ctypes.byref(window),
+                  ctypes.byref(x), ctypes.byref(y), ctypes.byref(ignored), ctypes.byref(ignored), ctypes.byref(mask))
+print(max(0, x.value) // 1280 * 1280, max(0, y.value) // 900 * 900)
+PY
+    ) || origin="0 0"
+    left=${origin% *} top=${origin#* }
+    # The screen's own window of the browser, minimized or not (the oldest, as the core takes it). The Browser icon is a
+    # dock's: it brings that window back with a new tab, and makes a window only when the screen has none (owner,
+    # 2026-11-14: he minimized his member's browser, pressed the icon, and got a second, empty window, not his page).
+    window=$(wmctrl -lG | awk -v left="$left" -v top="$top" '
+        {x = $3 + $5 / 2; y = $4 + $6 / 2}
+        x >= left && x < left + 1280 && y >= top && y < top + 900 {print $1}' | while read -r id; do
+            class=$(xprop -id "$id" WM_CLASS 2>/dev/null) || continue
+            case "$class" in *'"google-chrome'*|*'"chromium-browser'*) printf '%d\n' "$id" ;; esac
+        done | sort -n | head -n 1)
+    if [ -z "$window" ]; then
+        # A new window shows the first address, or the new tab page; any other address opens in a tab of it.
+        made=$(/usr/local/bin/raphael-seat-browser "$left" "$top" 1280 900 ${1+"$1"})
+        [ "$#" -gt 0 ] && shift
+        window=${made##*window_id=}
+    elif [ "$#" -eq 0 ]; then
+        raphael-browser-tabs new "$window" >/dev/null || wmctrl -i -a "$window"
+    fi
+    for address in "$@"; do
+        raphael-browser-tabs new "$window" "$address" >/dev/null || wmctrl -i -a "$window"
+    done
+    exit 0
+fi
+# A computer of a member's own: its driver starts the member's browser, and this is the desktop's.
+# Nothing in a computer can make a browser's own sandbox (every capability is dropped; the container is one).
+# Debian's Chromium is told so in /etc/chromium.d; Google's Chrome is told here, and --test-type keeps its warning
+# bar about it away.
+for browser in /usr/bin/google-chrome-stable /usr/bin/google-chrome; do
+    if [ -x "$browser" ]; then
+        exec "$browser" --no-sandbox --test-type --disable-background-networking --disable-background-mode \
+            --disable-extensions --disable-sync --no-first-run --no-default-browser-check \
+            --disable-features=MediaRouter --renderer-process-limit=4 "$@"
+    fi
+done
+for browser in /usr/bin/chromium /usr/bin/chromium-browser; do
+    if [ -x "$browser" ]; then
+        exec "$browser" --disable-background-networking --disable-background-mode \
+            --disable-extensions --disable-sync --no-first-run --no-default-browser-check \
+            --disable-features=MediaRouter --renderer-process-limit=4 "$@"
+    fi
+done
+echo "raphael-browser: this computer has no browser" >&2; exit 1

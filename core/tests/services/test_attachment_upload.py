@@ -31,6 +31,16 @@ async def test_native_open_retains_reviewed_document_media_and_archive_types(tmp
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("name", "mime"), [("office.png", "image/png"), ("clip.mp4", "video/mp4"), ("note.m4a", "audio/mp4")])
+async def test_the_path_of_a_stored_file_names_the_type_it_was_stored_as(tmp_path, name, mime):
+    """The shell serves a stored picture, video or sound by its id with the stored type (media_protocol.rs)."""
+    from raphael_core.services.attachments import Attachment
+    store = AttachmentStore(tmp_path)
+    file = store.save(Attachment(name, mime, b"synthetic attachment"))
+    assert await store.open_path({"id": file.stored_id}) == {"path": str(store.path(file.stored_id)), "mime": mime}
+
+
+@pytest.mark.asyncio
 async def test_chunked_upload_is_atomic_mapped_and_read_by_existing_text_reader(tmp_path):
     store = AttachmentStore(tmp_path)
     token = (await store.upload({"action":"begin","name":"notes.txt","mime":"text/plain","size":6}))["token"]

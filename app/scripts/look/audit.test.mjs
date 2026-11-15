@@ -340,6 +340,25 @@ describe("rendered look checks", () => {
     expect(found('panel')).toEqual(['Share', 'Open file']);
     win.happyDOM.abort();
   });
+  it("lets the composer floating over an open page stand over what scrolls under it, and still rejects a covered control of its own (R-PAGE-11)", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<div class="ra-stage is-page"><div class="pgv"><div class="rp-scroll"><button id="tab">全部</button></div></div><div class="ra-dock"><div id="notice">notice</div><div class="composer" id="composer"><button id="send">送出</button></div></div><div id="panel">card</div></div>' +
+      '<div class="ra-stage"><div class="ra-scroll"><button id="file">Open file</button></div><div class="ra-dock"><div class="composer" id="thread-composer"></div></div></div>';
+    const rect = { left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 };
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => rect;
+    const found = cover => {
+      win.document.elementFromPoint = () => win.document.getElementById(cover);
+      return auditDocument(win.document, { width: 1120, height: 900 }, [], []).productRules.filter(item => item.rule === 'R-UI-145').map(item => item.text);
+    };
+    // A report's tab has scrolled under the floating composer: it stands there on purpose, and the page scrolls it clear.
+    expect(found('composer')).toEqual([]);
+    // Over the composer's own button anything else is still a finding, even what stands in the same row; so is anything else over the
+    // page, and a composer over a thread, which never runs under it.
+    expect(found('notice')).toEqual(['送出']);
+    expect(found('panel')).toEqual(['全部', '送出', 'Open file']);
+    expect(found('thread-composer')).toEqual(['全部', '送出', 'Open file']);
+    win.happyDOM.abort();
+  });
   it("completion checks reject a lost alias result and an inner scrollbar", () => {
     const win = new Window();
     win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden">${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;
@@ -1095,6 +1114,13 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, ["members", "settings"]);
     expect(result.missingI18nKeys.map(item => item.key)).toEqual(["members.missingLabel"]);
     expect(result.nativeControls.map(item => item.tag)).toEqual(["select", "input"]);
+  });
+  it("reports the browser's own media player as a native control, and our player as none (R-MEDIA-01)", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<video controls src="a.mp4"></video><div class="mp"><video src="b.mp4" controlslist="nodownload"></video></div>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, []);
+    expect(result.nativeControls.map(item => item.tag)).toEqual(["video"]);
   });
 
   it("fails an element with the hidden attribute that a stylesheet draws anyway (R-UI-140)", () => {

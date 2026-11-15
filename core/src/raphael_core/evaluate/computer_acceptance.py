@@ -51,8 +51,24 @@ NO_FIREFOX = ('for found in /usr/bin/firefox /usr/bin/firefox.real /usr/bin/fire
 OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-local-vm:driver-0.37.0-v5",
               "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
               "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9",
-              "10": "raphael/cua-local-vm:driver-0.37.0-v10"}
+              "10": "raphael/cua-local-vm:driver-0.37.0-v10", "11": "raphael/cua-local-vm:driver-0.37.0-v11"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
+# A panel leads with its three launchers, 48 px each (146 px with its border, measured), and its window list follows
+# them (image layer 12): it is as wide as that and its windows' buttons, and its terminal launcher is 121 px from its left.
+LAUNCHERS_PX, TERMINAL_LAUNCHER_X, PANEL_HIGH = 146, 121, 49
+# Where the browser's own helper puts a window back, from the image's own copy (layer 12).
+X_ICONIFY = ("import ctypes, sys\nx = ctypes.CDLL('libX11.so.6'); x.XOpenDisplay.restype = ctypes.c_void_p\nd = x.XOpenDisplay(None)\n"
+             "x.XIconifyWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int]; x.XDefaultScreen.argtypes = [ctypes.c_void_p]\n"
+             "x.XIconifyWindow(d, int(sys.argv[1]), x.XDefaultScreen(d)); x.XFlush.argtypes = [ctypes.c_void_p]; x.XFlush(d)\n")
+X_WARP = ("import ctypes, sys\nx = ctypes.CDLL('libX11.so.6'); x.XOpenDisplay.restype = ctypes.c_void_p\nd = x.XOpenDisplay(None)\n"
+          "x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]; x.XDefaultRootWindow.restype = ctypes.c_ulong\n"
+          "x.XWarpPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong] + [ctypes.c_int] * 6\n"
+          "x.XWarpPointer(d, 0, x.XDefaultRootWindow(d), 0, 0, 0, 0, int(sys.argv[1]), int(sys.argv[2])); x.XFlush.argtypes = [ctypes.c_void_p]; x.XFlush(d)\n")
+
+
+def whole_panel(rectangle):
+    """A screen's panel with its launchers loaded (a panel holding nothing is 12 px wide)."""
+    return rectangle[3] == PANEL_HIGH and rectangle[2] >= LAUNCHERS_PX
 # A 64x48 JPEG, teal on the left half and orange on the right: an owner's picture no desktop draws by itself.
 OWN_PICTURE = base64.b64decode(
     "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMU"
@@ -72,7 +88,7 @@ TEAL, ORANGE = bytes((128, 128, 0)), bytes((0, 140, 255))
 
 def image_helper():
     # Import by source, so the Docker context never acquires __pycache__.
-    path = IMAGE_FOLDER / "layer11/screens.py"
+    path = IMAGE_FOLDER / "layer12/screens.py"
     module = ModuleType("acceptance_image_screens")
     exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)
     return module
@@ -194,10 +210,10 @@ def colour_share(pixels, colour):
 
 
 def desktop_shows(top, lower, own):
-    """Whether one screen shows the owner's picture (teal left, orange right), or else the drawn town.
+    """Whether one screen shows the owner's picture (teal left, orange right), or else a drawn picture.
 
-    `top` is one row of pixels high on the screen, `lower` the two rows the town's houses and slimes cross. The town
-    is many colours there; a desktop that drew nothing is one."""
+    `top` is one row of pixels high on the screen, `lower` two rows across its middle. The default pictures are soft
+    gradients, yet many colours there (measured at 1280x900: 95 by day, 28 by night); a desktop that drew nothing is one."""
     left, right = colour_share(top[100:540], TEAL), colour_share(top[740:1180], ORANGE)
     seen = (round(left, 2), round(right, 2), len(set(lower)))
     return (left >= .9 and right >= .9 if own else left < .1 and right < .1 and len(set(lower)) >= 12), seen
@@ -379,10 +395,9 @@ class IsolatedDocker:
         elif command == "cp":
             source, destination = args[1:]
             name, guest_path = destination.split(":", 1)
-            desktop = IMAGE_FOLDER / "desktop"
             require((Path(source), guest_path) in (
-                (desktop / "wallpaper.py", "/opt/raphael-desktop/wallpaper.py"),
-                (desktop / "wallpapers", "/opt/raphael-desktop/"),
+                (vm.WALLPAPER_FOLDER / "wallpaper.py", "/opt/raphael-desktop/wallpaper.py"),
+                (vm.WALLPAPER_FOLDER / "wallpapers", "/opt/raphael-desktop/"),
                 *([(self.picture, vm.GUEST_OWN_WALLPAPER)] if self.picture else [])), "Expected product wallpaper copy only")
             await self.owned(name)
         elif command == "ps":
@@ -625,7 +640,7 @@ class Acceptance:
                     bad.append(window)
                 elif window.rectangle[2:] == (10, 10):
                     continue
-                elif window.rectangle[2:] == (146, 49):
+                elif whole_panel(window.rectangle):
                     panels.append(window)
                 else:
                     bad.append(window)
@@ -635,13 +650,13 @@ class Acceptance:
                 break
             await asyncio.sleep(1)
         waited = time.monotonic() - began
-        require(whole, f"Expected one 146x49 panel per output within 60 s, only 10x10 helpers, no Displays/tooltip; observed panels={panels}, "
+        require(whole, f"Expected one whole panel per output within 60 s, only 10x10 helpers, no Displays/tooltip; observed panels={panels}, "
                        f"unexpected={bad}" + ("" if whole else f", plugin ids {await self.panel_plugins(target)}"))
-        # What makes a panel whole is its launchers: every screen's three, by their own ids.
+        # What makes a panel whole is its launchers: every screen's three, by their own ids, and its window list (18 + its number).
         plugins = await self.panel_plugins(target)
-        expected = {i: [str(n) for n in range(i * 3 - 2, i * 3 + 1)] for i in range(1, target.screens + 1)}
-        require(plugins == expected, f"Expected each screen's panel to hold its own three launchers {expected}, observed {plugins}")
-        return ("No viewable Displays dialog or panel tooltip; one panel per screen with its three launchers"
+        expected = {i: [*map(str, range(i * 3 - 2, i * 3 + 1)), str(18 + i)] for i in range(1, target.screens + 1)}
+        require(plugins == expected, f"Expected each screen's panel to hold its own three launchers and window list {expected}, observed {plugins}")
+        return ("No viewable Displays dialog or panel tooltip; one panel per screen with its three launchers and its window list"
                 + (f", whole after {waited:.1f} s" if waited > 3 else ""))
 
     async def panel_plugins(self, target):
@@ -717,11 +732,11 @@ class Acceptance:
         before = {w.identifier for w in initial if w.terminal}
         require(not before, f"Expected no terminal before steering screen {seat}, observed {[w for w in initial if w.terminal]}")
         panels = [w for w in initial if w.title == "xfce4-panel"
-                  and w.rectangle[2:] == (146, 49) and inside(rect, centre(w.rectangle))]
+                  and whole_panel(w.rectangle) and inside(rect, centre(w.rectangle))]
         require(len(panels) == 1, f"Expected one panel on screen {seat}, observed {panels}")
         px, py, pw, ph = panels[0].rectangle
-        # Three launchers occupy equal thirds of the measured panel, including its border.
-        click = (px - rect[0] + pw * 5 // 6, py - rect[1] + ph // 2)
+        # The three launchers lead the panel, its window list follows them.
+        click = (px - rect[0] + TERMINAL_LAUNCHER_X, py - rect[1] + ph // 2)
         port, password = await self.machine.viewer_connection(target)
         sock, client = await asyncio.to_thread(self.connect, port, f"/websockify?token=screen-{seat}", password)
         other = 1 if seat != 1 else target.screens
@@ -866,9 +881,9 @@ class Acceptance:
             sock.close()
 
     async def wallpaper(self, target):
-        """What the desktop shows: the owner's picture while there is one, and the drawn town once there is none.
-        Neither was true of layer 5: a watcher that was merely left running kept the town over the picture, and the
-        town (SVG) was never drawn, so the desktop was one flat colour."""
+        """What the desktop shows: the owner's picture while there is one, and the default picture once there is none.
+        Neither was true of layer 5: a watcher that was merely left running kept the default (then a drawn town) over the
+        picture, and the town (SVG) was never drawn, so the desktop was one flat colour."""
         picture = self.root / vm.OWN_WALLPAPER
         aside = picture.with_suffix(".aside")
 
@@ -882,17 +897,17 @@ class Acceptance:
                     right, observed[screen] = desktop_shows(top, lower, own)
                     matched = matched and right
                 if matched and not own:
-                    # Many colours are not yet the town: the desktop's own default picture is a drawing too.
+                    # Many colours are not yet ours: the desktop's own default picture is a drawing too.
                     files = {(await self.text(target, ["xfconf-query", "-c", "xfce4-desktop", "-p",
                                                        f"/backdrop/screen0/monitorVNC-{screen - 1}/workspace0/last-image"])).strip()
                              for screen in observed}
-                    names = {f"/opt/raphael-desktop/wallpapers/{period}.svg" for period in ("morning", "noon", "dusk", "evening", "night")}
+                    names = {f"/opt/raphael-desktop/wallpapers/{name}" for name in ("day.jpg", "night.jpg")}
                     matched = len(files) == 1 and files <= names
                     observed = {**observed, "file": sorted(files)}
                 if matched:
                     return observed
                 require(time.monotonic() < deadline,
-                        f"Expected {'the owner picture' if own else 'the drawn town, not one flat colour'} within 40 s; "
+                        f"Expected {'the owner picture' if own else 'the default picture, not one flat colour'} within 40 s; "
                         f"observed per screen (teal share left, orange share right, colours in two lower rows) {observed}")
                 await asyncio.sleep(1)
 
@@ -905,7 +920,7 @@ class Acceptance:
         picture.rename(aside)
         try:
             await again()
-            town = await shown(False)
+            default = await shown(False)
         finally:
             aside.rename(picture)
         await again()
@@ -913,7 +928,7 @@ class Acceptance:
         watchers = [line for line in (await self.text(target, ["ps", "-eo", "args"])).splitlines()
                     if line.startswith("/opt/venv/bin/python /opt/raphael-desktop/wallpaper.py")]
         require(len(watchers) == 1 and "--image" in watchers[0], f"Expected one watcher holding the picture, observed {watchers}")
-        return f"owner picture shown {first}; without it the town is drawn {town}; picture put back and shown; one watcher"
+        return f"owner picture shown {first}; without it the default picture is shown {default}; picture put back and shown; one watcher"
 
     async def keys(self, target):
         """One workspace and no key that acts on the whole desktop. Layer 5 had four workspaces and every default
@@ -1290,6 +1305,117 @@ class Acceptance:
                 "; moved private window withheld on peer seat" if peer is not None else "")
         finally:
             await self.text(target, ["python3", "-c", FORM_STOP, self.machine.owner])
+
+    async def seat_windows(self, tool, target, member):
+        """A seat is a desktop a person can use (owner, 2026-11-14, watching a member's screen: the members never open tabs,
+        a page he minimized could not be found again, the window showed data:text/html,<title>raphael-seat-...</title>, and
+        the window stood larger than the screen with the panel over its page). The seat's window fills its screen above the
+        panel and shows no marker; a member's tool opens a site in a new tab and brings a tab back to the front; the
+        window, minimized, comes back from the panel's button for it with its page; the Browser icon gives that window a new
+        tab and makes no second one; restored and maximized again it fills the screen again."""
+        x, y, width, height = vm.screen_grid(target.screens)[0][target.screen - 1]
+
+        def lines(text):
+            return [line.split() for line in text.splitlines()]
+        windows = [row for row in lines(await self.text(target, ["wmctrl", "-lGx"]))
+                   if len(row) > 6 and row[6].lower().startswith(("google-chrome", "chromium"))
+                   and x <= int(row[2]) + int(row[4]) // 2 < x + width and y <= int(row[3]) + int(row[5]) // 2 < y + height]
+        require(len(windows) == 1, f"Expected one browser window on screen {target.screen}, observed {windows}")
+        window = int(windows[0][0], 16)
+        panel = next((row for row in lines(await self.text(target, ["wmctrl", "-lG"])) if len(row) > 7 and row[-1] == "xfce4-panel"
+                      and whole_panel(tuple(map(int, row[2:6]))) and x <= int(row[2]) < x + width and y <= int(row[3]) < y + height), None)
+        require(panel, f"Expected the panel of screen {target.screen}")
+        px, py = int(panel[2]) - x, int(panel[3]) - y
+        work = (x, y, width, int(panel[3]) - y)
+
+        async def geometry():
+            return next(tuple(map(int, row[2:6])) for row in lines(await self.text(target, ["wmctrl", "-lG"])) if row and int(row[0], 16) == window)
+
+        async def tabs():
+            return json.loads(await self.text(target, ["raphael-browser-tabs", "list", str(window)]))
+
+        async def geometry_is(rectangle):
+            return await geometry() == rectangle
+
+        async def seen_inside():
+            # What is seen of it: its rectangle less the shadow the browser draws round it. A window the core fitted
+            # inside its screen (a moved private window) is not maximized, and is as right as a maximized one.
+            x0, y0, w0, h0 = await geometry()
+            found = re.search(r"\((?:CARDINAL)\) = (\d+), (\d+), (\d+), (\d+)",
+                              await self.text(target, ["xprop", "-id", hex(window), "_GTK_FRAME_EXTENTS"]))
+            left, right, top, bottom = map(int, found.groups()) if found else (0, 0, 0, 0)
+            return (work[0] <= x0 + left and work[1] <= y0 + top and x0 + w0 - right <= work[0] + work[2]
+                    and y0 + h0 - bottom <= work[1] + work[3])
+
+        async def wait(condition, seconds, detail):
+            until = time.monotonic() + seconds
+            while not await condition():
+                require(time.monotonic() < until, detail())
+                await asyncio.sleep(.25)
+        compositor = (await self.text(target, ["xfconf-query", "-c", "xfwm4", "-p", "/general/use_compositing"])).strip()
+        require(compositor == "false", f"Expected the window manager without a compositor, observed {compositor!r}")
+        await wait(seen_inside, 10, lambda: f"Expected the seat's window inside {work} above the panel")
+        listed = await tabs()
+        marked = [tab for tab in listed["tabs"] if "raphael-seat-" in tab["url"] + tab["title"]]
+        require(not marked, f"Expected no marker page on screen {target.screen}, observed {marked}")
+
+        # A member's own tool: a site in a new tab, shown, the other kept; then the first brought back.
+        before = [tab for tab in listed["tabs"] if tab["shown"]]
+        opened = await tool(member, "browser_open", {"url": "about:blank#seat-windows", "new_tab": True})
+        after = await tabs()
+        shown = [tab for tab in after["tabs"] if tab["shown"]]
+        require(len(after["tabs"]) == len(listed["tabs"]) + 1 and [tab["url"] for tab in shown] == ["about:blank#seat-windows"],
+                f"Expected a new tab shown beside {listed['tabs']}, observed {after['tabs']} ({opened.text[-300:]})")
+        state = json.loads((await tool(member, "browser_tabs", {})).text.splitlines()[-1])
+        own = [row for row in state["tabs"] if row["shown"] is True]
+        require([row["url"] for row in own] == ["about:blank#seat-windows"], f"Expected browser_tabs to say the new tab is shown, observed {state}")
+        if before:
+            back = next((row for row in state["tabs"] if (row["url"], row["title"]) == (before[0]["url"], before[0]["title"])), None)
+            require(back, f"Expected the first tab in the member's list, observed {state}")
+            await tool(member, "browser_tabs", {"show": back["tab_id"]})
+            require([tab["url"] for tab in (await tabs())["tabs"] if tab["shown"]] == [before[0]["url"]],
+                    "Expected the first tab brought back to the front")
+        # Minimized, the window comes back from the panel's button for it, with the page it had.
+        page = [tab["url"] for tab in (await tabs())["tabs"] if tab["shown"]]
+        await self.guest(target, ["python3", "-c", X_ICONIFY, str(window)])
+
+        async def hidden():
+            return "_NET_WM_STATE_HIDDEN" in await self.text(target, ["xprop", "-id", hex(window), "_NET_WM_STATE"])
+        await wait(hidden, 5, lambda: "Expected the window minimized")
+        port, password = await self.machine.viewer_connection(target)
+        sock, client = await asyncio.to_thread(self.connect, port, f"/websockify?token=screen-{target.screen}", password)
+        try:
+            def press(point):
+                client.pointer(*point)
+                client.pointer(*point, 1)
+                client.pointer(*point)
+            await asyncio.to_thread(press, (px + LAUNCHERS_PX + 24, py + PANEL_HIGH // 2))
+
+            async def shown_again():
+                return not await hidden()
+            await wait(shown_again, 5, lambda: "Expected the panel's button to bring the minimized window back")
+            require([tab["url"] for tab in (await tabs())["tabs"] if tab["shown"]] == page, f"Expected the window back with {page}")
+            # The Browser icon with the window open: a new tab in it, no second window.
+            count = len((await tabs())["tabs"])
+            await asyncio.to_thread(press, (px + 24, py + PANEL_HIGH // 2))
+
+            async def tab_added():
+                return len((await tabs())["tabs"]) == count + 1
+            await wait(tab_added, 15, lambda: "Expected the Browser icon to add a tab to the open window")
+            again = [row for row in lines(await self.text(target, ["wmctrl", "-lGx"]))
+                     if len(row) > 6 and row[6].lower().startswith(("google-chrome", "chromium"))
+                     and x <= int(row[2]) + int(row[4]) // 2 < x + width and y <= int(row[3]) + int(row[5]) // 2 < y + height]
+            require(len(again) == 1, f"Expected no second window from the Browser icon, observed {again}")
+        finally:
+            sock.close()
+        # Restored and maximized again by the window manager, it fills its screen above the panel again.
+        await self.guest(target, ["wmctrl", "-i", "-r", str(window), "-b", "remove,maximized_vert,maximized_horz"])
+        await asyncio.sleep(1)
+        await self.guest(target, ["wmctrl", "-i", "-r", str(window), "-b", "add,maximized_vert,maximized_horz"])
+        await wait(lambda: geometry_is(work), 10, lambda: f"Expected the window maximized again to fill {work}")
+        return (f"screen {target.screen}: the window inside {work} with no marker; a new tab from browser_open and the first "
+                "brought back by browser_tabs; minimized and back from the panel with its page; the Browser icon added a tab "
+                "and no window; maximized again it fills the screen; no compositor")
 
     async def per_bot_form(self, target, member):
         old_command = self.machine.bridge_command
@@ -1757,8 +1883,11 @@ class Acceptance:
                 await self.guest(target, ["wmctrl", "-i", "-c", str(int(identifier, 16))])
                 require(said == "raphael-webdriver-false", f"Expected a page to be told this is not an automated browser, observed {said}")
                 # The desktop's Browser icon gives a window of this same browser. A second browser with a profile of
-                # its own is where an owner would sign in for nobody.
+                # its own is where an owner would sign in for nobody. On a screen with no window of it (the pointer is put
+                # on one nobody holds), the icon makes one; pressed again it is a dock's and makes no second (layer 12).
                 listed = lambda text: {line.split()[0]: line.split()[2] for line in text.splitlines() if len(line.split()) > 2}
+                empty = vm.screen_grid(target.screens)[0][target.screens - 1]
+                await self.guest(target, ["python3", "-c", X_WARP, str(empty[0] + 640), str(empty[1] + 400)])
                 before = listed(await self.text(target, ["wmctrl", "-lp"]))
                 await self.guest(target, ["raphael-browser"])
                 until, new = time.monotonic() + 15, {}
@@ -1766,6 +1895,10 @@ class Acceptance:
                     require(time.monotonic() < until, "Expected the Browser icon to open a window")
                     await asyncio.sleep(.3)
                     new = {key: pid for key, pid in listed(await self.text(target, ["wmctrl", "-lp"])).items() if key not in before}
+                await self.guest(target, ["raphael-browser"])
+                await asyncio.sleep(1)
+                again = {key for key in listed(await self.text(target, ["wmctrl", "-lp"])) if key not in before}
+                require(again == set(new), f"Expected the Browser icon pressed again to make no second window, observed {sorted(again)} after {sorted(new)}")
                 for key in new:
                     await self.guest(target, ["wmctrl", "-i", "-c", str(int(key, 16))])
                 mains = [line.split()[0] for line in (await self.text(target, ["pgrep", "-af", "/chrome|/chromium"])).splitlines()
@@ -1790,12 +1923,15 @@ class Acceptance:
                 named, _ = await self.browser_named(target)
                 version = (await self.text(target, [binary, "--version"])).strip()
                 return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
-                        f"every screen's launcher is {named} and opens a window of the same browser; it keeps no password, card or address, "
+                        f"every screen's launcher is {named} and opens a window of the same browser, and no second one when pressed again; "
+                        "it keeps no password, card or address, "
                         "and by policy is never signed in to as a browser and never syncs")
             if browsers_ok:
                 await self.check("shared browser is a person's", persons_browser)
+                await self.check("shared seat windows", lambda: self.seat_windows(tool, targets[members[0]], members[0]))
             else:
                 self.record("shared browser is a person's", "skipped", "shared computer browser failed")
+                self.record("shared seat windows", "skipped", "shared computer browser failed")
 
             async def page_text():
                 result = await tool(members[1], "get_browser_state", active_tab(pages[members[1]]))
@@ -1906,14 +2042,14 @@ class Acceptance:
                     waited, panels, seen = time.monotonic(), [], []
                     while len(panels) != 1:
                         seen = [w.rectangle for w in await self.tree(target) if w.title == "xfce4-panel" and inside(rect, centre(w.rectangle))]
-                        panels = [rectangle for rectangle in seen if rectangle[2:] == (146, 49)]
+                        panels = [rectangle for rectangle in seen if whole_panel(rectangle)]
                         require(len(panels) == 1 or time.monotonic() < waited + 20,
                                 f"Expected one whole panel on screen {target.screen} within 20 s, observed {seen}")
                         if len(panels) != 1:
                             await asyncio.sleep(.5)
                     waited = time.monotonic() - waited
                     px, py, pw, ph = panels[0]
-                    launcher = (px - rect[0] + pw * 5 // 6, py - rect[1] + ph // 2)
+                    launcher = (px - rect[0] + TERMINAL_LAUNCHER_X, py - rect[1] + ph // 2)
 
                     def press(point):
                         client.pointer(*point)
@@ -2064,7 +2200,8 @@ class Acceptance:
                 require(leftover not in {row['window_id'] for row in listed} and not any(
                     seat_view.overlaps(row['bounds'], 3, 6) and row['app_name'].lower() not in machine.DESKTOP_WINDOWS
                     and row['window_id'] != beside['window_id'] for row in listed),
-                    'Free screen was handed over with a leftover window')
+                    f'Free screen was handed over with a leftover window: leftover {leftover}, beside {beside["window_id"]}, on screen 3 '
+                    f'{[(row["window_id"], row["app_name"], row["bounds"]) for row in listed if seat_view.overlaps(row["bounds"], 3, 6)]}')
                 require(beside['window_id'] in {row['window_id'] for row in listed},
                         "A seated member's window was closed because a colleague sat down beside it")
                 await machine.fit_window(seat_two, placed)

@@ -5,14 +5,24 @@ import type { TurnAttachment } from "./types";
 
 const STORED_ID = /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/;
 
-/** The stored picture a member's media message carries (its `{attachment}`, an image the window draws), or null. */
-export function mediaPicture(text: string): TurnAttachment | null {
+/** The stored file of `kind` a member's media message carries (its `{attachment}`), or null. */
+function mediaFile(text: string, kind: "image" | "video"): TurnAttachment | null {
   try {
     const file = JSON.parse(text)?.attachment;
-    if (!file || typeof file.id !== "string" || !STORED_ID.test(file.id) || typeof file.name !== "string" || typeof file.mime !== "string" || fileKind(file.mime) !== "image") return null;
+    if (!file || typeof file.id !== "string" || !STORED_ID.test(file.id) || typeof file.name !== "string" || typeof file.mime !== "string" || fileKind(file.mime) !== kind) return null;
     return { id: file.id, name: file.name, mime: file.mime, ...(typeof file.size === "number" && Number.isFinite(file.size) && file.size >= 0 ? { size: file.size } : {}) };
   } catch { return null; }
 }
+
+/** The stored picture a member's media message carries (its `{attachment}`, an image the window draws), or null. */
+export const mediaPicture = (text: string): TurnAttachment | null => mediaFile(text, "image");
+
+/**
+ * The stored video a member's media message carries, or null. A video is a message of its own as a picture is (owner,
+ * 2026-11-15, R-MEDIA-02): react and reply beside it, its reaction on its corner, its ⋯ with 回覆; no Copy, as no clipboard
+ * takes a video.
+ */
+export const mediaVideo = (text: string): TurnAttachment | null => mediaFile(text, "video");
 
 /**
  * What a reply to a picture quotes: a link to its stored file, in the form a model writes and the core reads
@@ -20,11 +30,15 @@ export function mediaPicture(text: string): TurnAttachment | null {
  */
 export const pictureQuote = (file: Pick<TurnAttachment, "id" | "name">): string => `[${file.name.replace(/[[\]\n]/g, "")}](attachment:${file.id})`;
 
-/** The stored picture a quote names, when its words are only such a link to an image; otherwise null. */
-export function quotedPicture(text: string): { id: string; name: string } | null {
+/** The stored file a quote names, when its words are only such a link to a file of `kind`; otherwise null. */
+function quotedFile(text: string, kind: "image" | "video"): { id: string; name: string } | null {
   const match = /^\[([^\]\n]*)\]\(attachment:([a-f0-9]{32}\.[a-z0-9]{1,12})\)$/.exec(text.trim());
-  return match && fileKind(fileMime({ name: match[2]!, type: "" })) === "image" ? { id: match[2]!, name: match[1]! } : null;
+  return match && fileKind(fileMime({ name: match[2]!, type: "" })) === kind ? { id: match[2]!, name: match[1]! } : null;
 }
+/** The stored picture a quote names, when its words are only such a link to an image; otherwise null. */
+export const quotedPicture = (text: string): { id: string; name: string } | null => quotedFile(text, "image");
+/** The stored video a quote names, when its words are only such a link to a video; otherwise null. */
+export const quotedVideo = (text: string): { id: string; name: string } | null => quotedFile(text, "video");
 
 /** The stored id of the picture a control stands beside: the picture of its message. */
 export const pictureIdAt = (control: HTMLElement): string | undefined =>

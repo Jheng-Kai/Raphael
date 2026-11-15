@@ -44,6 +44,12 @@ export function installMock(fixture, config = {}, target = window) {
     }
     // The owner's message carries one screenshot (the message is stored with it; `attachments.get` gives its picture back).
     if (variant.ownerPicture) turn.attachments = [{ id: `${'a'.repeat(32)}.png`, name: '畫面截圖.png', mime: 'image/png', size: 4096 }];
+    // Several pictures in one message (R-ATTACH-02): `ownerPictures` of them, each drawn by `attachments.get` in its own colour and
+    // shape (square, landscape, portrait); `ownerFile` puts a document among them.
+    if (variant.ownerPictures) {
+      const shots = Array.from({ length: variant.ownerPictures }, (_, i) => ({ id: `${String(i + 1).padStart(2, '0').repeat(16)}.png`, name: `畫面-${i + 1}.png`, mime: 'image/png', size: 48_000 }));
+      turn.attachments = variant.ownerFile ? [shots[0], { id: `${'d'.repeat(32)}.pdf`, name: '研究摘要.pdf', mime: 'application/pdf', size: 182_000 }, ...shots.slice(1)] : shots;
+    }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
     if (variant.ownerEdit === 'placed') {
       // A member's thread as the owner's has it: routine turns posted after his message (07:00 and 08:00), so an edit that
@@ -1149,6 +1155,64 @@ export function installMock(fixture, config = {}, target = window) {
     const head = text.startsWith("---") ? text.split("---")[1] ?? "" : "";
     return head.split("\n").map(line => line.trim()).find(line => line.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? "";
   };
+  // The stored copies the scene holds, by id ({ mime, data } or null): what attachments.get reads back and what the shell's media
+  // protocol serves (`attachment_source` grants an id it holds; the runner answers http://raphael-media.localhost/<id> from here).
+  const drawnFiles = new Map();
+  // The owner's several pictures (`ownerPictures`, ids of one two-digit number sixteen times) come in turn in their own colours and shapes.
+  function drawnPicture(id) {
+    const shot = variant.ownerPictures && /^(\d\d)\1{15}\.png$/.exec(id ?? ""), n = shot ? Number(shot[1]) : 0, hue = (n * 37) % 360;
+    return variant.drawnPictures?.[id] ?? (shot ? { width: [1024, 1280, 720][n % 3], height: [1024, 720, 1280][n % 3],
+      wall: `hsl(${hue}, 35%, 78%)`, window: `hsl(${(hue + 180) % 360}, 45%, 62%)`, floor: `hsl(${hue}, 25%, 45%)`, desk: `hsl(${hue}, 30%, 28%)` } : null);
+  }
+  function storedFile(id) {
+    if (variant.ownerPicture && id === `${'a'.repeat(32)}.png`) return { mime: "image/png", data: "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" };
+    if (variant.generatedFile?.id === id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
+    if (variant.storedFiles?.[id]) return variant.storedFiles[id];
+    // Pictures a member sent (R-UI-156), drawn here at the size the scene gives (a square, a landscape) and read back as stored copies.
+    const drawn = drawnPicture(id);
+    if (drawn && drawnFiles.has(id)) return drawnFiles.get(id);
+    if (drawn) {
+      const canvas = document.createElement("canvas"); canvas.width = drawn.width; canvas.height = drawn.height;
+      const ctx = canvas.getContext("2d"), w = drawn.width, h = drawn.height;
+      ctx.fillStyle = drawn.wall; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = drawn.window; ctx.fillRect(w * 0.12, h * 0.12, w * 0.46, h * 0.42);
+      ctx.fillStyle = drawn.floor; ctx.fillRect(0, h * 0.72, w, h * 0.28);
+      ctx.fillStyle = drawn.desk; ctx.fillRect(w * 0.5, h * 0.58, w * 0.4, h * 0.08); ctx.fillRect(w * 0.54, h * 0.66, w * 0.03, h * 0.14); ctx.fillRect(w * 0.83, h * 0.66, w * 0.03, h * 0.14);
+      // A photograph's grain (`grain`: how far each pixel strays), from a fixed seed: a picture as heavy as a camera's, not a few flat fills.
+      if (drawn.grain) {
+        const image = ctx.getImageData(0, 0, w, h), pixels = image.data;
+        for (let at = 0, seed = 7; at < pixels.length; at += 4) {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          const shift = (seed % (2 * drawn.grain + 1)) - drawn.grain;
+          pixels[at] += shift; pixels[at + 1] += shift; pixels[at + 2] += shift;
+        }
+        ctx.putImageData(image, 0, 0);
+      }
+      const file = { mime: "image/png", data: canvas.toDataURL("image/png").split(",")[1] }; drawnFiles.set(id, file); return file;
+    }
+    if (data.keptFiles?.[id]) return data.keptFiles[id];
+    return null;
+  }
+  const STORED_ID = /^[a-f0-9]{32}.[a-z0-9]{1,12}$/;
+  // Each answer of the media protocol is counted (`mediaServed`), as the window's own Resource Timing never sees an intercepted one.
+  state.mediaServed = [];
+  state.storedLength = id => storedFile(id)?.data.length ?? 0;
+  target.__lookMedia = id => { state.mediaServed.push(id); return storedFile(id); };
+  // What a conversation's pictures cost to show (`media-reopen`): a mark before its open counts the calls and media requests from
+  // there, and when every picture of the thread has decoded.
+  state.mediaMarks = [];
+  // A step that only lets time pass (a video plays on while the scene waits).
+  state.letTimePass = () => {};
+  state.mediaMark = label => {
+    const mark = { label, calls: state.calls.length, requests: state.mediaServed.length, at: performance.now(), paintMs: null };
+    state.mediaMarks.push(mark);
+    const poll = () => {
+      const pictures = [...document.querySelectorAll(".page-agent:not([hidden]) .ra-body img[data-attachment]")];
+      if (pictures.length && pictures.every(image => image.complete && image.naturalWidth > 0)) mark.paintMs = Math.round(performance.now() - mark.at);
+      else if (performance.now() - mark.at < 15000) requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+  };
   async function core(method, p = {}) {
     // Settings reads the hidden list as it opens, before the list's section is drawn; the sidebar keeps the roster it already read.
     switch (method) {
@@ -1235,20 +1299,10 @@ export function installMock(fixture, config = {}, target = window) {
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
       case "attachments.get": {
-        if (variant.ownerPicture && p.id === `${'a'.repeat(32)}.png`) return { mime: "image/png", data: "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" };
-        if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
-        // Pictures a member sent (R-UI-156), drawn here at the size the scene gives (a square, a landscape) and read back as stored copies.
-        const drawn = variant.drawnPictures?.[p.id];
-        if (drawn) {
-          const canvas = document.createElement("canvas"); canvas.width = drawn.width; canvas.height = drawn.height;
-          const ctx = canvas.getContext("2d"), w = drawn.width, h = drawn.height;
-          ctx.fillStyle = drawn.wall; ctx.fillRect(0, 0, w, h);
-          ctx.fillStyle = drawn.window; ctx.fillRect(w * 0.12, h * 0.12, w * 0.46, h * 0.42);
-          ctx.fillStyle = drawn.floor; ctx.fillRect(0, h * 0.72, w, h * 0.28);
-          ctx.fillStyle = drawn.desk; ctx.fillRect(w * 0.5, h * 0.58, w * 0.4, h * 0.08); ctx.fillRect(w * 0.54, h * 0.66, w * 0.03, h * 0.14); ctx.fillRect(w * 0.83, h * 0.66, w * 0.03, h * 0.14);
-          return { mime: "image/png", data: canvas.toDataURL("image/png").split(",")[1] };
-        }
-        if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
+        const stored = storedFile(p.id);
+        if (stored) return stored;
+        // A well-formed id with no stored copy is what the core answers for a file that is gone (`attachment is unavailable`).
+        if (STORED_ID.test(p.id ?? "")) throw new Error("attachment is unavailable");
         return unsupported(method);
       }
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
@@ -1289,6 +1343,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.library": {
         // As the core since brief 10: only what the member delivered, newest first, with the day it was handed over.
         if (!variant.memberPanelFiles) return { files: [], has_more: false };
+        // `core`: the Library the core's own snapshot reads from a synthetic database (runner.mjs `coreFixtures`).
+        if (variant.memberPanelFiles === "core") return data.coreLibrary;
         const sample = data.memberPanelSample, now = Date.now(), limit = p.limit ?? 12;
         const dayOf = at => { const d = new Date(at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
         // Three pictures it sent in its replies, stored as attachments (drawn here, read back through attachments.get).
@@ -2086,6 +2142,9 @@ export function installMock(fixture, config = {}, target = window) {
             picture('/home/cua/workspace/預算.xlsx', 'added'), picture('/home/cua/team/封面.png', 'added'),
           ],
         };
+        // `core-noise` and `core-work`: what the core's own CheckpointStore sends for a turn of tools' leftovers alone, and beside the
+        // work's files (runner.mjs `coreFixtures`).
+        if (variant.checkpointShape?.startsWith('core-')) return {checkpoints:data.coreCheckpoints[variant.checkpointShape],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
         const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:variant.roomOwnerCard === 'result' ? 950 : variant.cardTaskResult || variant.cardDeck ? 980 : 7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:shapes[variant.checkpointShape] ?? [{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
         if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:checkpoint.files.map(file => file.path),skipped:[]}; }
         return {checkpoints:variant.checkpoints || variant.cardDeck ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
@@ -2103,7 +2162,8 @@ export function installMock(fixture, config = {}, target = window) {
     transformCallback(fn) { callbacks.set(++callbackId, fn); return callbackId; },
     unregisterCallback(id) { callbacks.delete(id); },
     runCallback(id, value) { callbacks.get(id)?.(value); },
-    convertFileSrc(path) { return path; },
+    // Tauri's own form on Windows: http://<protocol>.localhost/<path>.
+    convertFileSrc(path, protocol = "asset") { return protocol === "raphael-media" ? `http://raphael-media.localhost/${encodeURIComponent(path)}` : path; },
     async invoke(command, args = {}) {
       const recorded = command === "core_call" && args.method === "integrations.card_save" && args.params?.id === "card-login" ? {...args,params:{...args.params,value:"[private login]"}} : args;
       // `traceCalls` keeps where in the app each call came from, to find who asks for what.
@@ -2238,10 +2298,13 @@ export function installMock(fixture, config = {}, target = window) {
         const sample = data.appUpdateSample;
         return { state: variant.appUpdate === "ready" || data.device.auto_update ? "ready" : variant.appUpdate ? "found" : "idle", version: variant.appUpdate ? sample.version : "", notes: variant.appUpdate ? sample.notes : "", error: "" };
       }
-      // The native asset protocol streams stored media from disk; the browser harness serves the same bytes as a Blob.
+      // The shell grants a stored id it can serve and answers with the id; the page asks for http://raphael-media.localhost/<id>
+      // (convertFileSrc below), which the runner answers from storedFile with the native protocol's headers (media_protocol.rs).
       if (command === "attachment_source") {
-        if (variant.generatedFile?.id === args.id) return URL.createObjectURL(new Blob([Uint8Array.from(atob(variant.generatedData), c => c.charCodeAt(0))], {type: variant.generatedFile.mime}));
-        return `C:\\synthetic\\${args.id}`;
+        // A busy core answers for a stored picture late (`pictureLate`, ms): the thread is drawn and placed before it comes.
+        if (variant.pictureLate && drawnPicture(args.id)) await new Promise(resolve => setTimeout(resolve, variant.pictureLate));
+        if (storedFile(args.id)) return args.id;
+        throw new Error("attachment unavailable");
       }
       if (command === "device_settings_get") return copy(data.device);
       if (command === "device_settings_set") { Object.assign(data.device, args.patch); notify("DeviceSettings", { settings: copy(data.device) }); return copy(data.device); }

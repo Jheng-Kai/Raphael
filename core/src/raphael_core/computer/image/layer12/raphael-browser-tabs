@@ -1,0 +1,362 @@
+#!/usr/bin/python3
+"""The tabs of one window of the computer's own browser, through that browser's own DevTools port.
+
+usage:
+  raphael-browser-tabs settle WINDOW MARKER [URL]  the tab titled MARKER, by which a launcher has just found WINDOW, shows
+                                                   URL (the new tab page) and keeps no history of the marker
+  raphael-browser-tabs list WINDOW                 the window's tabs: target, url, title, and whether it is the one shown
+  raphael-browser-tabs new WINDOW [URL]            a new tab in the window, shown (the new tab page, or URL)
+  raphael-browser-tabs show WINDOW URL TITLE       the window's tab with this url and title comes to the front
+  raphael-browser-tabs fit WINDOW X Y WIDTH HEIGHT the window fills that screen above its panel, maximized by the browser
+WINDOW is the X window id (decimal or 0x hex). One JSON object on stdout; on failure exit 1 with one line on stderr.
+
+Owner, 2026-11-14, watching a member's screen: the members never open tabs, a page he minimized could not be found again,
+and the seat's window showed an empty page whose tab and address read data:text/html,<title>raphael-seat-...</title>.
+The browser can say which tabs a window has and which one is shown, open a tab in a window and bring one to the front;
+its X window cannot, and the driver's tools neither open nor switch a tab. Standard library only: Debian's Python runs it.
+"""
+
+import base64
+import json
+import os
+import re
+import socket
+import struct
+import subprocess
+import sys
+import time
+
+NEW_TAB = 'chrome://newtab/'
+# What the browser adds to a window's title after its shown tab's title.
+TITLE_SUFFIXES = (' - Google Chrome', ' - Chromium')
+SCREEN = (1280, 900)
+
+
+class Failure(Exception):
+    pass
+
+
+def run(args):
+    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=10).stdout
+
+
+def x_window(window):
+    """The X window's process, geometry, title and whether it is minimized, as the window manager has them."""
+    for line in run(['wmctrl', '-lpG']).splitlines():
+        parts = line.split(None, 8)
+        if len(parts) >= 8 and int(parts[0], 16) == window:
+            state = run(['xprop', '-id', hex(window), '_NET_WM_STATE'])
+            return dict(pid=int(parts[2]), x=int(parts[3]), y=int(parts[4]), width=int(parts[5]), height=int(parts[6]),
+                        title=parts[8] if len(parts) > 8 else '', hidden='_NET_WM_STATE_HIDDEN' in state)
+    raise Failure(f'no window {hex(window)}')
+
+
+def profile_of(pid):
+    with open(f'/proc/{pid}/cmdline', 'rb') as stream:
+        for argument in stream.read().split(b'\0'):
+            if argument.startswith(b'--user-data-dir='):
+                return argument.split(b'=', 1)[1].decode()
+    raise Failure(f'process {pid} names no profile')
+
+
+class DevTools:
+    """One WebSocket connection to the browser's own endpoint (RFC 6455, text frames, client frames masked)."""
+
+    def __init__(self, profile, timeout=10):
+        try:
+            with open(os.path.join(profile, 'DevToolsActivePort'), encoding='ascii') as stream:
+                port, path = stream.read().split('\n')[:2]
+        except (OSError, ValueError) as error:
+            raise Failure(f'the browser has no DevTools port: {error}') from None
+        self.sock = socket.create_connection(('127.0.0.1', int(port)), timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall((f'GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+                           f'Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n').encode())
+        data = b''
+        while b'\r\n\r\n' not in data:
+            chunk = self.sock.recv(4096)
+            if not chunk or len(data) > 65536:
+                raise Failure('the browser closed its DevTools connection')
+            data += chunk
+        head, self.buffer = data.split(b'\r\n\r\n', 1)
+        if b' 101 ' not in head.split(b'\r\n', 1)[0]:
+            raise Failure('the browser refused its DevTools connection')
+        self.counter = 0
+
+    def _read(self, size):
+        while len(self.buffer) < size:
+            chunk = self.sock.recv(65536)
+            if not chunk:
+                raise Failure('the browser closed its DevTools connection')
+            self.buffer += chunk
+        data, self.buffer = self.buffer[:size], self.buffer[size:]
+        return data
+
+    def _send(self, opcode, payload):
+        mask = os.urandom(4)
+        size = len(payload)
+        if size < 126:
+            header = bytes([0x80 | opcode, 0x80 | size])
+        elif size < 65536:
+            header = bytes([0x80 | opcode, 0x80 | 126]) + struct.pack('>H', size)
+        else:
+            header = bytes([0x80 | opcode, 0x80 | 127]) + struct.pack('>Q', size)
+        self.sock.sendall(header + mask + bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload)))
+
+    def _message(self):
+        parts = b''
+        while True:
+            first, second = self._read(2)
+            size = second & 0x7f
+            if size == 126:
+                size = struct.unpack('>H', self._read(2))[0]
+            elif size == 127:
+                size = struct.unpack('>Q', self._read(8))[0]
+            payload = self._read(size)
+            opcode = first & 0x0f
+            if opcode == 9:  # ping
+                self._send(10, payload)
+                continue
+            if opcode == 8:
+                raise Failure('the browser closed its DevTools connection')
+            parts += payload
+            if first & 0x80:
+                return json.loads(parts)
+
+    def call(self, method, params=None, session=None):
+        self.counter += 1
+        request = {'id': self.counter, 'method': method, 'params': params or {}}
+        if session:
+            request['sessionId'] = session
+        self._send(1, json.dumps(request).encode())
+        while True:
+            reply = self._message()
+            if reply.get('id') == self.counter:
+                if 'error' in reply:
+                    raise Failure(f"{method}: {reply['error'].get('message', reply['error'])}")
+                return reply.get('result', {})
+
+    def pages(self):
+        found = []
+        for info in self.call('Target.getTargets')['targetInfos']:
+            if info.get('type') == 'page':
+                try:
+                    window = self.call('Browser.getWindowForTarget', {'targetId': info['targetId']})
+                except Failure:
+                    continue  # closed meanwhile
+                found.append(dict(target=info['targetId'], url=info.get('url', ''), title=info.get('title', ''),
+                                  window=window['windowId'], bounds=window['bounds']))
+        return found
+
+    def _evaluate(self, target, expression):
+        """A page's own answer, read in a world of its own: what the page's scripts do cannot change it."""
+        session = self.call('Target.attachToTarget', {'targetId': target, 'flatten': True})['sessionId']
+        try:
+            world = self.call('Page.createIsolatedWorld', {'frameId': target, 'worldName': 'raphael-browser-tabs'}, session)
+            value = self.call('Runtime.evaluate', {'expression': expression, 'returnByValue': True,
+                                                   'contextId': world['executionContextId']}, session)
+            return value.get('result', {}).get('value')
+        finally:
+            self.call('Target.detachFromTarget', {'sessionId': session})
+
+    def shown(self, target):
+        """Whether this tab is the one its window shows."""
+        return self._evaluate(target, 'document.visibilityState') == 'visible'
+
+    def focused(self, target):
+        return self._evaluate(target, 'document.hasFocus()') is True
+
+
+def cell(x, y, width, height):
+    return (x + width // 2) // SCREEN[0], (y + height // 2) // SCREEN[1]
+
+
+def browser_window(tools, window):
+    """The browser's own window id for an X window, and its tabs. The browser names its windows by numbers of its own,
+    so it is found by where it is (its screen, then the nearest geometry) and, when two of its windows stand on one
+    screen, by the title the window manager shows, which is the shown tab's."""
+    found = x_window(window)
+    windows = {}
+    for page in tools.pages():
+        windows.setdefault(page['window'], []).append(page)
+    here = cell(found['x'], found['y'], found['width'], found['height'])
+    candidates = []
+    for identifier, tabs in windows.items():
+        bounds = tabs[0]['bounds']
+        if cell(bounds['left'], bounds['top'], bounds['width'], bounds['height']) != here:
+            continue
+        distance = (abs(bounds['left'] - found['x']) + abs(bounds['top'] - found['y'])
+                    + abs(bounds['width'] - found['width']) + abs(bounds['height'] - found['height']))
+        minimized = bounds.get('windowState') == 'minimized'
+        candidates.append((distance, minimized != found['hidden'], identifier, tabs))
+    if not candidates:
+        raise Failure(f'the browser has no window where {hex(window)} is')
+    candidates.sort(key=lambda item: item[:2])
+    best = [item for item in candidates if item[:2] == candidates[0][:2]]
+    if len(best) > 1:
+        titled = [item for item in best if any(found['title'] in (tab['title'] + suffix for suffix in TITLE_SUFFIXES)
+                                               for tab in item[3])]
+        if len(titled) == 1:
+            best = titled
+        elif len(titled) > 1:
+            shown = [item for item in titled if any(found['title'] in (tab['title'] + suffix for suffix in TITLE_SUFFIXES)
+                                                    and tools.shown(tab['target']) for tab in item[3])]
+            best = shown if len(shown) == 1 else titled
+    if len(best) > 1:
+        # Two windows alike in place and title (two new tab pages, one above the other): the one brought to the front
+        # is the one whose shown tab has the focus.
+        activate(window)
+        focused = [item for item in best if any(tools.focused(tab['target']) for tab in item[3])]
+        best = focused if len(focused) == 1 else best
+    if len(best) != 1:
+        raise Failure(f'more than one window of the browser could be {hex(window)}')
+    return best[0][2], best[0][3], found
+
+
+def activate(window, seconds=3):
+    """Bring the X window to the front (a minimized one comes back): the browser opens a new tab in the window it was last
+    brought to, and only an X window knows where it is."""
+    run(['wmctrl', '-i', '-a', hex(window)])
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        active = re.search(r'window id # (0x[0-9a-fA-F]+)', run(['xprop', '-root', '_NET_ACTIVE_WINDOW']))
+        if active and int(active[1], 16) == window:
+            time.sleep(.2)  # the browser hears of its activation a moment after the window manager
+            return True
+        time.sleep(.05)
+    return False
+
+
+def settle(tools, window, marker, url):
+    page = None
+    deadline = time.monotonic() + 10
+    while page is None:
+        page = next((page for page in tools.pages() if page['title'] == marker), None)
+        if page is None:
+            if time.monotonic() >= deadline:
+                raise Failure(f'no tab is titled {marker}')
+            time.sleep(.2)
+    session = tools.call('Target.attachToTarget', {'targetId': page['target'], 'flatten': True})['sessionId']
+    tools.call('Page.navigate', {'url': url}, session)
+    # Leaving a data: page for the browser's own new tab page moves the tab to another process, and a session attached
+    # before it answers "Not attached to an active page" for a moment (measured): it is attached again until it answers.
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            history = tools.call('Page.getNavigationHistory', {}, session)
+            current = history['entries'][history['currentIndex']]
+            if marker not in current.get('url', '') and marker not in current.get('title', ''):
+                # Back must not lead to the marker either.
+                tools.call('Page.resetNavigationHistory', {}, session)
+                history = tools.call('Page.getNavigationHistory', {}, session)
+                if len(history['entries']) == 1:
+                    break
+        except Failure:
+            try:
+                tools.call('Target.detachFromTarget', {'sessionId': session})
+            except Failure:
+                pass
+            session = tools.call('Target.attachToTarget', {'targetId': page['target'], 'flatten': True})['sessionId']
+        if time.monotonic() >= deadline:
+            raise Failure('the marker tab did not leave its page within 10 seconds')
+        time.sleep(.1)
+    tools.call('Target.detachFromTarget', {'sessionId': session})
+    return dict(target=page['target'], window=page['window'], url=url)
+
+
+def new_tab(tools, window, url):
+    identifier, _, _ = browser_window(tools, window)
+    for _ in range(3):
+        activate(window)
+        made = tools.call('Target.createTarget', {'url': url})['targetId']
+        if tools.call('Browser.getWindowForTarget', {'targetId': made})['windowId'] == identifier:
+            return dict(target=made, window=identifier, url=url)
+        # Another window was brought to the front between the two: the tab is no one's there.
+        tools.call('Target.closeTarget', {'targetId': made})
+        time.sleep(.3)
+    raise Failure(f'the new tab kept opening in another window than {hex(window)}')
+
+
+def show(tools, window, url, title):
+    _, tabs, _ = browser_window(tools, window)
+    matches = [tab for tab in tabs if tab['url'] == url and tab['title'] == title] or [tab for tab in tabs if tab['url'] == url]
+    if not matches:
+        raise Failure('the window has no tab with that address')
+    tools.call('Target.activateTarget', {'targetId': matches[0]['target']})
+    return dict(target=matches[0]['target'], matches=len(matches))
+
+
+def work_area(x, y, width, height):
+    """A screen above its panel: the panel's own window says where that is."""
+    bottom = y + height
+    for line in run(['wmctrl', '-lGx']).splitlines():
+        parts = line.split()
+        if len(parts) >= 7 and parts[6].lower().startswith('xfce4-panel') and int(parts[5]) > 10:
+            left, top, wide, high = map(int, parts[2:6])
+            if x <= left + wide // 2 < x + width and y <= top + high // 2 < y + height:
+                bottom = min(bottom, top)
+    return x, y, width, bottom - y
+
+
+def fit(tools, window, x, y, width, height):
+    """The window fills its screen above the panel, maximized by the browser itself.
+
+    A new window opens where the browser's last one was (often another screen), and one maximized while it still had
+    its shadow kept a size for the shadow: 1312x893, cut on three sides with the panel over its page (the owner's picture
+    of 2026-11-14). The window manager sizes a maximized window for the shadow the window has when it is asked, and the
+    browser drops its shadow once maximized; such a window was neither unmaximized nor maximized again by the window
+    manager. It is still moved when the window manager is told where, and the browser, asked to maximize from there, has
+    it sized for the frame it has then (measured 2026-11-14). So: moved onto this screen, maximized by the browser, and
+    looked at until it fills the screen above the panel, again while it does not.
+    """
+    identifier, _, _ = browser_window(tools, window)
+    want = work_area(x, y, width, height)
+    for attempt in range(4):
+        run(['wmctrl', '-i', '-r', hex(window), '-e', f'0,{x + 20},{y + 20},{width - 80},{height - 120}'])
+        time.sleep(.3)
+        tools.call('Browser.setWindowBounds', {'windowId': identifier, 'bounds': {'windowState': 'maximized'}})
+        deadline, last, since = time.monotonic() + 5, None, time.monotonic()
+        while time.monotonic() < deadline:
+            now = x_window(window)
+            place = (now['x'], now['y'], now['width'], now['height'])
+            if place == want:
+                return dict(window=identifier, geometry=list(want), attempts=attempt + 1)
+            if place != last:
+                last, since = place, time.monotonic()
+            elif time.monotonic() - since > 1 and place != (x + 20, y + 20, width - 80, height - 120):
+                break  # maximized to the wrong size, and staying so: once more
+            time.sleep(.1)
+    raise Failure(f'{hex(window)} did not fill {want} above the panel')
+
+
+def tab_list(tools, window):
+    identifier, tabs, found = browser_window(tools, window)
+    # A minimized window shows no tab: the caller brings it back first when it needs to know.
+    return dict(window=identifier, minimized=found['hidden'],
+                tabs=[dict(target=tab['target'], url=tab['url'], title=tab['title'], shown=tools.shown(tab['target'])) for tab in tabs])
+
+
+def main(argv):
+    if len(argv) < 2 or argv[0] not in ('settle', 'list', 'new', 'show', 'fit'):
+        raise Failure('usage: raphael-browser-tabs settle|list|new|show|fit WINDOW ...')
+    command, window = argv[0], int(argv[1], 0)
+    tools = DevTools(profile_of(x_window(window)['pid']))
+    if command == 'settle' and len(argv) in (3, 4):
+        return settle(tools, window, argv[2], argv[3] if len(argv) == 4 else NEW_TAB)
+    if command == 'list' and len(argv) == 2:
+        return tab_list(tools, window)
+    if command == 'new' and len(argv) in (2, 3):
+        return new_tab(tools, window, argv[2] if len(argv) == 3 else NEW_TAB)
+    if command == 'show' and len(argv) == 4:
+        return show(tools, window, argv[2], argv[3])
+    if command == 'fit' and len(argv) == 6:
+        return fit(tools, window, *map(int, argv[2:]))
+    raise Failure(f'wrong arguments for {command}')
+
+
+if __name__ == '__main__':
+    try:
+        print(json.dumps(main(sys.argv[1:])))
+    except (Failure, OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f'raphael-browser-tabs: {error}', file=sys.stderr)
+        sys.exit(1)

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn() }));
 vi.mock("./api", () => api);
-import { mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
+import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
 import { computerStateText } from './computer-state';
@@ -602,7 +602,7 @@ test('real build percent updates change only the state in data and an unchanged 
 });
 
 const OWN_PICTURE = 'data:image/jpeg;base64,/9j/sample';
-test.each(['data-card-desktop-screen','data-card-screen'])('the owner picture replaces the town on the panel and the %s card',async attribute=>{
+test.each(['data-card-desktop-screen','data-card-screen'])('the owner picture replaces the default picture on the panel and the %s card',async attribute=>{
  panelOpen=true; api.desktopWallpaper.mockResolvedValue({image:OWN_PICTURE});
  const inline=document.createElement('div'); inline.setAttribute(attribute,''); host.querySelector('ol')!.append(inline);
  api.desktopStatus.mockResolvedValue({state:'starting',ready:false,control:'member'}); mounted.show(); await flush();
@@ -612,16 +612,37 @@ test.each(['data-card-desktop-screen','data-card-screen'])('the owner picture re
  }
 });
 
-test('the picture is read once and a failed read keeps the town without any owner marking',async()=>{
+test('the picture is read once and a failed read keeps the default picture without any owner marking',async()=>{
  panelOpen=true; api.desktopWallpaper.mockRejectedValue(new Error('Synthetic read failure'));
  mounted.show(); await flush(); mounted.hide(); await flush(); mounted.show(); await flush();
  const picture=panel().querySelector('.desktop-wallpaper')!;
- expect(picture.getAttribute('src')).toMatch(/^\/wallpapers\/(morning|noon|dusk|evening|night)\.svg$/);
+ expect(picture.getAttribute('src')).toMatch(/^\/wallpapers\/(day|night)\.jpg$/);
  expect(picture.hasAttribute('data-own')).toBe(false);
  expect(api.desktopWallpaper).toHaveBeenCalledTimes(1);
 });
 
-test('the town never flashes before the picture read answers',async()=>{
+// R-UI-92: the same hours as wallpaper.py in the computer, by the window's clock, which is the zone the core gives the
+// computer (members.viewing sends this window's Intl zone; the tests run in Asia/Taipei, vitest.config.ts).
+test.each([['05:59','night'],['06:00','day'],['17:59','day'],['18:00','night']])('at %s the default picture is the %s one, on the panel and in the computer alike',async(time,expected)=>{
+ expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('Asia/Taipei');
+ const at=new Date(`2026-11-14T${time}:00+08:00`).getTime();
+ expect(defaultWallpaper(at)).toBe(`/wallpapers/${expected}.jpg`);
+ vi.setSystemTime(at); panelOpen=true; api.desktopWallpaper.mockResolvedValue({});
+ api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'}); mounted.show(); await flush();
+ expect(panel().querySelector('.desktop-wallpaper')?.getAttribute('src')).toBe(`/wallpapers/${expected}.jpg`);
+});
+
+test('an open panel turns to the night picture at 18:00 without being opened again',async()=>{
+ vi.setSystemTime(new Date('2026-11-14T17:59:58+08:00')); panelOpen=true; api.desktopWallpaper.mockResolvedValue({});
+ api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'}); mounted.show(); await flush();
+ const picture=panel().querySelector('.desktop-wallpaper')!;
+ expect(picture.getAttribute('src')).toBe('/wallpapers/day.jpg');
+ await vi.advanceTimersByTimeAsync(5000); await flush();
+ expect(picture.getAttribute('src')).toBe('/wallpapers/night.jpg');
+ expect(api.desktopWallpaper).toHaveBeenCalledTimes(1);
+});
+
+test('the default picture never flashes before the picture read answers',async()=>{
  panelOpen=true; let answer!:(value:{image?:string})=>void;
  api.desktopWallpaper.mockReturnValue(new Promise(resolve=>{answer=resolve;}));
  mounted.show(); await flush();
