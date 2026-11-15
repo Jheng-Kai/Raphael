@@ -960,7 +960,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             }
             HotkeyEvent::Cancel => self.cancel_current(),
             HotkeyEvent::PasteLast => {
-                if self.question_waits() {
+                if self.chord_question_waits(now_ms) {
                     // Like the other keys: while a question waits for its answer, nothing else
                     // may put a report or a paste in its way.
                     log::debug!("paste-last key ignored: Raphael is asking");
@@ -969,7 +969,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 Some(self.paste_last_at(now_ms))
             }
             HotkeyEvent::Tidy => {
-                if self.question_waits() {
+                if self.chord_question_waits(now_ms) {
                     log::debug!("tidy key ignored: Raphael is asking");
                     return None;
                 }
@@ -983,6 +983,25 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     fn question_waits(&self) -> bool {
         lock(&self.state).agent == Some(AgentStage::Asking)
             || (self.phase() == Phase::Idle
+                && self
+                    .typed_contexts()
+                    .iter()
+                    .any(|turn| lock(&turn.state).agent == Some(AgentStage::Asking)))
+    }
+
+    /// `question_waits` for a Right Alt chord (Right Alt+V, Right Alt+T). The hook reports the
+    /// dictation key first, so the chord arrives over a recording its Right Alt has just started,
+    /// which `question_waits` reads as busy and so lets a typed question waiting go unseen. A
+    /// typed question waiting holds the chord back then as it does at rest.
+    fn chord_question_waits(&self, now_ms: u64) -> bool {
+        let fresh_chord = {
+            let state = lock(&self.state);
+            state.phase == Phase::Recording
+                && state.kind() == Some(Kind::Dictation)
+                && now_ms.saturating_sub(state.started_ms) < CHORD_CANCELS_WITHIN_MS
+        };
+        self.question_waits()
+            || (fresh_chord
                 && self
                     .typed_contexts()
                     .iter()
@@ -8346,6 +8365,29 @@ mod tests {
         );
         assert_eq!(c.overlay().events(), ["show:listening"]);
         run(&c, Cancel, 100).await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_chord_does_nothing_while_a_typed_question_waits() {
+        // Right Alt+T and Right Alt+V report the dictation key first; a typed YES/NO question that
+        // waits still holds them back (R-TIDY-01).
+        for chord in [HotkeyEvent::Tidy, HotkeyEvent::PasteLast] {
+            let (c, _) = questioning(question("waiting", 30_000));
+            let typed = c.ask_typed("Confirm").unwrap();
+            until_stage(&c, AgentStage::Asking).await;
+            run(&c, DictationDown, 0).await;
+            assert!(c.on_hotkey(chord, 100).is_none(), "{chord:?} ran over a typed question");
+            settle().await;
+            assert!(c.paster().delivered().is_empty());
+            assert_eq!(c.core().count("dictation.tidy"), 0);
+            assert_eq!(c.core().count("history.latest"), 0);
+            run(&c, Cancel, 200).await;
+            tokio::time::advance(FRONT_POLL).await;
+            settle().await;
+            assert_eq!(c.open_question().unwrap().id, "waiting");
+            c.on_confirm("waiting", false);
+            typed.await.unwrap();
+        }
     }
 
     #[tokio::test(start_paused = true)]
