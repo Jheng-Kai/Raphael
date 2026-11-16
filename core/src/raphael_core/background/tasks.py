@@ -52,6 +52,15 @@ FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html?|xlsx?|pdf|csv|tsv|txt
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
+# Chinese, Japanese and Korean say in one character what English says in two or three: a character of theirs counts twice, so that
+# a hundred of them (a paragraph) is as much work in the words as two hundred letters.
+_WIDE = re.compile(r"[⺀-鿿가-힯豈-﫿＀-￯]")
+
+
+def written_length(said: str) -> int:
+    """How much work a reply holds in its words, in letters; a character of Chinese, Japanese or Korean counts for two."""
+    said = said.strip()
+    return len(said) + len(_WIDE.findall(said))
 MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
 
 
@@ -479,7 +488,7 @@ class TaskStore:
         if requires_artifact and not artifacts:
             return 'missing_artifact'
         if not evidence:
-            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
+            return None if not requires_artifact and written_length(said) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
                 root = local_storage_root(item['workspace'])

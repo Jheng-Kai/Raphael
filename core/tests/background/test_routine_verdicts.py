@@ -491,3 +491,23 @@ async def test_work_that_did_not_count_says_why_in_the_owners_language(make_rig,
     task = rig.task(task_id)
     assert (task.state, task.reason) == ("failed", ending)
     assert task.report_text.startswith(phrase(language, words))
+
+
+@pytest.mark.parametrize("said, counts", [
+    ("明早我會完成。", False),
+    ("選 B：成本比較低，現有程式已經測過，而且上線時間也比較短。" * 3, False),
+    ("選 B：成本比較低，現有程式已經測過，而且上線時間也比較短，風險也比較小。" * 4, True),
+    ("Pick B: it is cheaper and already tested. " * 3, False),
+    ("Pick B: it is cheaper and already tested. " * 5, True),
+    ("Bを選びます。コストが低く、すでにテスト済みで、公開までの時間も短いです。" * 3, True),
+])
+async def test_a_reply_that_is_the_work_in_its_words_counts_in_any_language(make_rig, said, counts):
+    """Work whose whole result is words (a plan, a choice with its reasons) used no tool; how much is enough is read in the
+    letters of a language, not in the characters, so that a paragraph of Chinese is as much as a paragraph of English."""
+    from raphael_core.agent.speaker import RAPHAEL
+    from .test_handoff import args
+    rig = make_rig()
+    target, source = setup(rig)
+    receipt = rig.service.handoff(RAPHAEL, args(target), source_turn_id=source.id, language="en")
+    task = rig.task(receipt.data["task_id"])
+    assert rig.service._store.completion_reason(task, said=said) == (None if counts else "work_without_action")
