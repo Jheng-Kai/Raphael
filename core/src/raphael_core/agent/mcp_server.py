@@ -21,7 +21,7 @@ class RaphaelMcp:
         self.token = secrets.token_urlsafe(32)
         # A request's id is only its endpoint's own count, and /mcp and /computer both count from 1 (as does a CLI that
         # started again in the same turn): a call is recorded under this server's, the endpoint's and the request's ids,
-        # or one tool's record replaced another's (owner's data, 2026-11-14: a picture's result over a command's).
+        # or one tool's record replaced another's (in one run a picture's result replaced a command's).
         self._calls = secrets.token_hex(4)
         self.server = None
         self.url = ""

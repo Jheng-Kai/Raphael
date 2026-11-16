@@ -2,7 +2,6 @@
 
 Only public text and explicit reasoning summaries are forwarded. Raw diagnostics,
 reasoning blocks, command output and provider credentials never become UI messages.
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import asyncio

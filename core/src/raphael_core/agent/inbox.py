@@ -1,6 +1,5 @@
 """Durable FIFO admission. Started work is never replayed.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 Raphael deliberately has no queue limit or epochs.
 """
 

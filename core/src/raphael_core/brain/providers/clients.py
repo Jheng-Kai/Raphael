@@ -1,4 +1,3 @@
-# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """Provider wire formats. Only configured endpoints are reached; credentials never enter errors."""
 
 import asyncio

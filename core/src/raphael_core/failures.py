@@ -1,7 +1,4 @@
-"""Shared, bounded failure diagnostics. Raw packets and credentials never leave ingress.
-
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
-"""
+"""Shared, bounded failure diagnostics. Raw packets and credentials never leave ingress."""
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import json

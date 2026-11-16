@@ -4,8 +4,7 @@ The worker is offered the tools by an alias and a schema and nothing else; the t
 tool an alias is stays here in the core.
 
 The tools a member uses in most turns are listed, sorted by name, and the list stays the same, byte
-for byte, while the task runs and from one turn of a conversation to the next (owner, 2026-11-09,
-decision 2): it is the first block of every prompt, so a list that followed the request's words, the
+for byte, while the task runs and from one turn of a conversation to the next: it is the first block of every prompt, so a list that followed the request's words, the
 tools a search showed or a connection that came or went started the provider's cache again. Which
 tools are listed depends on the member and the kind of work (`take_snapshot`), never on what the task
 says. Every other tool of the task is found with `find_tools`, which returns its name, description
@@ -86,10 +85,10 @@ BUILTIN_SERVER = "Raphael"
 FIND_TOOLS = "find_tools"
 USE_TOOL = "use_tool"
 
-# Raphael's own tools a member seldom calls: none of these was called in the owner's 2,600 private and
-# background tool calls up to 2026-11-10. They are found, like a connection's tools, not listed. `open`
+# Raphael's own tools a member seldom calls: none of these was called in a sample of 2,600 private and
+# background tool calls. They are found, like a connection's tools, not listed. `open`
 # stays listed: live, a model asked to open an address showed it with `show` instead of looking for it
-# (Guardian's "open" cell, 2026-11-10); `update_page` stays beside `show_page`, whose description names it.
+# (Guardian's "open" cell); `update_page` stays beside `show_page`, whose description names it.
 SELDOM = frozenset({*COMMANDS, "computer"}) - {"open"}
 
 _DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -312,7 +311,7 @@ class Snapshot:
     def nearest(self, name: Any, count: int = 5) -> list[str]:
         """The tools of the task whose names are closest to `name`, a name that is none of them: what a model that
         called a tool by a name it was given in its instructions (or made up) is told, so that the run goes on with
-        the real one (owner, 2026-11-11: `unknown_tool` four times in a health check)."""
+        the real one (`unknown_tool` four times in a health check)."""
         if not isinstance(name, str) or not name.strip():
             return []
         names = sorted({*self.catalog(), *self.refs, FIND_TOOLS, USE_TOOL})
@@ -501,8 +500,8 @@ def take_snapshot(
     for name in everywhere:
         native(name, HARNESS_DEFINITIONS[name])
     # Work that runs by itself reads the team as its member does in the conversation (`team_overview`, `team_work`: reads
-    # only, T0): a routine's run lists them, as a conversation does, because its instructions name them (owner, 2026-11-11:
-    # a health check called them and got `unknown_tool`, four times); other background work finds them.
+    # only, T0): a routine's run lists them, as a conversation does, because its instructions name them (a health check
+    # called them and got `unknown_tool`, four times); other background work finds them.
     for name in () if interactive else sorted(TEAM_READS):
         if routine:
             own(name, harness_tool(name).tier, HARNESS_DEFINITIONS[name])

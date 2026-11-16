@@ -168,7 +168,7 @@ ROUTINE_PARALLEL = 2
 # Routine runs on one subscription CLI start at least this far apart (seconds): a refused sign-in shows in the first one's
 # first seconds, and the ones after it are not started into it.
 ROUTINE_CLI_GAP_S = 10.0
-# A reply in a room has no clock of its own (Hermes, tools/delegate_tool.py): it goes on while it makes progress (a word or
+# A reply in a room has no clock of its own: it goes on while it makes progress (a word or
 # a step of its CLI, a model's reply, a tool coming back, a new attempt) and ends after this long with none. A chosen wait
 # before another attempt is not a stall. A total of 60 seconds used to cut long rooms off mid-reply.
 ROOM_STALL_S = 180.0
@@ -189,7 +189,7 @@ AT_THIS_COMPUTER = "app"
 _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 # Endings that are the app's judgement of the work, not a fault of the brain: the turn's words say what was missing, and no
 # brain failure is recorded with them. Recorded as one ("unknown" on `cli:claude`), a member asked about its failed routine
-# told the owner of a Claude error of unknown cause (2026-11-16, R-ROUTINE-05).
+# told the owner of a Claude error of unknown cause (R-ROUTINE-05).
 _JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
                              "missing_terminal", "dangling_mention", "child_work_incomplete"))
 # The most of a routine's last report that its next run is shown.
@@ -238,7 +238,7 @@ HANDED_WORK_BACK = (
     "only the owner can settle. Then tell the owner briefly what finished and where to read each colleague's work in their private conversation. "
     "Keep the chief's conversation brief; do not copy colleagues' full work here. Include checks, artifact handles and anything unfinished."
 )
-# What a routine's last message is (owner, 2026-11-14: the report of a daily reading page was one thin line he could not act on):
+# What a routine's last message is (the report of a daily reading page was one thin line the owner could not act on):
 # the owner reads only it, so it names what the run made.
 ROUTINE_REPORT = (
     "\nThis run is a routine, and the owner reads only your last message. Do the whole of what the routine asks, then end with "
@@ -349,8 +349,7 @@ def _interrupted_report(language: str, steps: int) -> tuple[str, str]:
 
 
 # What a task is told of the language to write in, with the task (R-CACHE-02), naming no language: the owner's own words
-# say which. It took the place of the interface language the task was told before (owner, 2026-11-14: 「它的 UI 語言就是
-# 單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」).
+# say which. It took the place of the interface language the task was told before.
 TASK_LANGUAGE = ("Language: unless the owner or your own persona asks for another, write every message and the report "
                  "in the language the owner writes in, as their own messages here show it; when there are none, in the "
                  "language of this task's text.")
@@ -839,8 +838,7 @@ class BackgroundService:
         return {*snapshot.catalog(), *snapshot.refs}
 
     def _last_run(self, task: Task) -> str:
-        """When the routine of this run last ran, whether that run worked and what it reported, as data (owner, 2026-11-11:
-        「上次檢查時間無法確認」 in 16 of 66 reports, the same notices over and over): the run can say what changed since."""
+        """When the routine of this run last ran, whether that run worked and what it reported, as data (otherwise reports repeated the same notices over and over): the run can say what changed since."""
         from datetime import datetime, timezone
         from zoneinfo import ZoneInfo
         row = self._metrics_conn.execute(
@@ -1788,7 +1786,7 @@ class BackgroundService:
             prepare = getattr(self._gate.plugins, 'prepare', None)
             if prepare is not None:
                 await prepare(speaker.id)
-            # The same tools for every task of this kind, whatever it asks (owner, 2026-11-09, decision 2).
+            # The same tools for every task of this kind, whatever it asks.
             snapshot = take_snapshot(self._gate.plugins,memory=memory is not None,history=private,
                 speaker=speaker,team=team,turned_off=self._tools.turned_off(),
                 max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER,

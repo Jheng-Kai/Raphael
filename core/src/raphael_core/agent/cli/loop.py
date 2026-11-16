@@ -400,9 +400,8 @@ class CliLoop:
     def _release_held(self, *, answer):
         """What the model said since its last step. Followed by the end of its turn (`answer`), it stands as
         said. Followed by more work, it was said while working: only one short opening before the first step
-        reaches the owner, as Grok Bot's 「可以，我先…」, and the rest is progress in the folded work (owner,
-        2026-11-09: 「不會太多不重要的思考文字 然後重點都有說到」), unless the owner has heard nothing for a while
-        (`_update_due`, owner 2026-11-14: 「我可能會覺得它是不是當機了」): then it is a message too."""
+        reaches the owner, such as 「可以，我先…」, and the rest is progress in the folded work, unless the owner has heard nothing for a while
+        (`_update_due`): then it is a message too."""
         held, self._held = self._held, []
         due = not answer and self._update_due()
         for reply, lines in held:
@@ -888,7 +887,7 @@ class CliLoop:
                 # A stable, empty workspace keeps native CLI resume independent of turn temp files.
                 workspace_root = native_directory("workspaces") or self.brains.home / ".raphael" / "cli-workspaces"
                 # Claude Code shares a cached prefix only within one working directory, which its own system prompt
-                # names: one per member (owner, 2026-11-09, decision 3), so all the member's conversations and tasks
+                # names: one per member, so all the member's conversations and tasks
                 # start from the same cached prefix. Codex keys its cache by thread and keeps its login beside its
                 # workspace, and Gemini rewrites its instructions there every turn: one per conversation for them.
                 member_root = workspace_root / str(self.member_id)
@@ -996,7 +995,7 @@ class CliLoop:
                             # the sentence of a turn that has failed ("choose another model") for a call about to be repeated.
                             self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
                                           (self.failure_reason or Failure(failure, failure)).waiting(NAMES[name], self.language, wait))
-                        # The next attempt has all of its own time, after a wait that is no stall (Hermes's delegate heartbeat).
+                        # The next attempt has all of its own time, after a wait that is no stall.
                         self.alive(wait)
                         await asyncio.sleep(wait)
                         self.alive()

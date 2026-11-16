@@ -1,6 +1,5 @@
 """A model that stops short: it says what it will do and makes no call, or the output limit cuts its reply off.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 The continuation checks recognize English, Chinese and Japanese endings.
 
 A false alarm costs one more model call that sends the same answer again, so the nudges are few and bounded.

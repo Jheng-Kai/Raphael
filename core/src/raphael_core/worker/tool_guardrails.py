@@ -1,6 +1,5 @@
 """Notes to a model that repeats itself or keeps failing, and the end of a task nobody is in.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
 A call is judged by what came of it, never by its arguments alone: the tests run again after an edit, or a
 log polled while it grows, are not repeats. A repeat is the same tool with the same arguments and the same

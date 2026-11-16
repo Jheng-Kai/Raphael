@@ -137,7 +137,7 @@ def _disk_rows(output):
 
 async def disk_pressure(vm, target):
     """Read only, once per pressure episode, with a five-minute probe interval. The disk named is the one that is at
-    90 percent: the computer's own, or the one holding its workspace (owner, 2026-11-14: a PC whose C: was at 94 percent
+    90 percent: the computer's own, or the one holding its workspace (a PC whose C: was at 94 percent
     was told the computer's few hundred MiB of folders were what filled it)."""
     now = vm.clock()
     if now - vm.disk_checked.get(target.physical, float("-inf")) < 300:

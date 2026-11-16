@@ -96,8 +96,7 @@ READ_WITHOUT_BROWSER = (
     "This page was fetched without a browser. If its text stops short, asks for a consent or a click, or needs "
     "scripts, and you have a computer, open the page in its browser and read it there before saying it cannot be read."
 )
-# A page that needs a real browser, while the member's computer sleeps: reading a page never wakes it (R-COMP-WAKE-01,
-# owner, 2026-11-14). The member chooses, with its own computer tool, and the conversation then says it did.
+# A page that needs a real browser, while the member's computer sleeps: reading a page never wakes it (R-COMP-WAKE-01). The member chooses, with its own computer tool, and the conversation then says it did.
 READ_NEEDS_BROWSER = (
     "This page needs a real browser: its text stops short, asks for a consent or a click, or needs scripts. Your computer "
     "is asleep and reading a page does not wake it. If you need this page, call browser_open with its address yourself: "

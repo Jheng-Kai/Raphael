@@ -1,6 +1,5 @@
 """Context-compression policy with independent session lifecycle.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 DEFAULT_THRESHOLD_CAP = 24_000

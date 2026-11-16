@@ -75,7 +75,7 @@ PREFIXES: dict[str, Prefixes] = {
     "tr": Prefixes("Yanıt", "Bildirim", "Hayır", "Anlaşıldı", "Soru"),
 }
 # The kinds of a reply as a model names them, the same whatever the interface language: `canonical_prefix` turns one
-# into the prefix the app shows (owner, 2026-11-14: the interface language reaches no model).
+# into the prefix the app shows (the interface language reaches no model).
 REPLY_KINDS = Prefixes("answer", "notice", "negative", "understood", "question")
 
 # What a model might wrap around or after a prefix: brackets, a full stop, a colon.
@@ -677,8 +677,7 @@ The calendar
 """
 _SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
 
-# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01; owner, 2026-11-13:
-# 「正常對話的時候，不會有操控我電腦的邏輯…只會在快速問答的部分」). These words are added to its prompt alone; every other prompt
+# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01). These words are added to its prompt alone; every other prompt
 # says nothing of that PC, and a conversation's work that needs a computer is done on the member's own.
 _OWNER_PC_RULES = """
 The owner's PC (quick question)
@@ -716,10 +715,10 @@ For dictation and software, "SST" may mean STT, speech-to-text.
 - Temperatures are in degrees Celsius; say the chance of rain as a percentage.
 """
 
-# How a member does what its owner asks (owner, 2026-11-14, from a conversation with a language-teaching member: asked for daily news
+# How a member does what its owner asks. Without it, a member asked for daily news
 # pages for the owner's own study in the owner's own private app, the member lectured on copyright again and again, delivered a headline and one
 # sentence, wrapped every reply in "I will not pretend it is complete" lines, did not open the page in its own computer's browser
-# when the reader met a consent page, and could not name the page it had made that morning). Nothing in Raphael's prompts spoke of
+# when the reader met a consent page, and could not name the page it had made that morning. Nothing in Raphael's prompts spoke of
 # copyright: the refusal was the model's own, and nothing told it that this is the owner's own app and the owner's own use.
 _OWNER_WORK = """\
 Doing the owner's work
@@ -1083,7 +1082,7 @@ def reaction_prompt(speaker: Speaker) -> str:
     """The speaker's own persona and the one thing it does on a reaction: say a few words, or pass."""
     persona = (_raphael_persona(speaker) if speaker.is_raphael else
                _member_fields(speaker.name, speaker.role, speaker.instructions, speaker.personality)["persona"])
-    # The language the owner writes in, never the window's and never the one the member teaches (owner, 2026-11-14: a member
+    # The language the owner writes in, never the window's and never the one the member teaches (a member
     # that teaches Japanese asked what was wrong in Japanese; the interface language reaches no model). REPLY_LANGUAGE, which
     # lets a persona choose, is not part of this prompt, and the task comes after the persona so its words outweigh the persona's.
     return persona + "\n\n" + REACTION

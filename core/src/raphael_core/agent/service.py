@@ -86,7 +86,7 @@ be taken fails the request as a bad request, with its kind in the error's data):
 the vision model together, with the question, and each PDF is read by the PDF service chosen; what
 they hold is data for the call that words the answer. A request of only files (no words) asks
 「看這個」 in the language of the conversation (`ui_language` is the window's: it picks the words the app draws
-and reaches no model, owner, 2026-11-14). The files are kept in memory for the turn, and for the
+and reaches no model). The files are kept in memory for the turn, and for the
 task when the request is handed to the background worker: never in the database, on disk or in a
 log. The history keeps their names and types (`attachments: [{name, mime}]` of a turn), for the
 conversation view. A request routed to `operate` or to a command makes nothing of them.
@@ -662,7 +662,7 @@ DECLINED_NOTE = (
 )
 # What a new member's first turn is asked, with no word of the owner's yet. `language` there is the interface's, for the
 # turn's notices only: the greeting's language is the member's own, or the owner's as what it knows of them shows it
-# (owner, 2026-11-14: the interface language goes to no model).
+# (the interface language goes to no model).
 GREETING_NOW = ("Write your greeting now, in the language your own instructions set; when they set none, in the language "
                 "the owner's profile and your memory of them are written in, else the language of your name, role and "
                 "instructions.")
@@ -2433,7 +2433,7 @@ class AgentService:
                             user += "\n" + wrap_untrusted("read_attachment", json.dumps(
                                 result.data if result.ok else {"error": result.error}, ensure_ascii=False,
                             ), ok=result.ok)
-            # The same tools every turn of the conversation, whatever it asks (owner, 2026-11-09, decision 2).
+            # The same tools every turn of the conversation, whatever it asks.
             snapshot = take_snapshot(
                 self._plugins, memory=self._memory is not None, speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
@@ -2743,7 +2743,7 @@ class AgentService:
                 loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
                 # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
-                # cached for an hour (owner, 2026-11-09, decisions 1 and 4).
+                # cached for an hour.
                 loop.cache_session = f"raphael-{ask.speaker.id}-{ask.conversation_id}"
                 loop.cache_ttl = "1h"
             def listed():

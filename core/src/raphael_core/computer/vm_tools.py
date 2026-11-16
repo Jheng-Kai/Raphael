@@ -1,5 +1,4 @@
 """Local desktops as a PluginHub adapter, under the existing gate and snapshots."""
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses/NOTICES.md.
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
@@ -64,15 +63,14 @@ WAITING_FOR = with_ui_words({
 })
 
 
-# The line a member shows while Docker Desktop is being started for it (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
-# 它也會自動自己打開才對」); one line per start, the wait itself polls silently.
+# The line a member shows while Docker Desktop is being started for it; one line per start, the wait itself polls silently.
 ENGINE_STARTING = with_ui_words({
     "zh-TW": "正在啟動 Docker Desktop 來準備電腦，大約需要一分鐘",
     "ja": "コンピューター用に Docker Desktop を起動しています。1分ほどかかります",
     "en": "Starting Docker Desktop for the computer; this takes about a minute",
 })
 
-# The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01, owner, 2026-11-14: the
+# The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01: the
 # computer wakes when a member decides a task needs it, or when he starts it, and never silently). One quiet line in the
 # conversation, naming the member and why; no toast, and never a reply bubble (R-TEXT-08). The status's `woken` is no
 # longer read by the app (R-PANEL-06).
@@ -101,7 +99,7 @@ def _waking(member, tool):
 
 
 # The states a computer passes through on its way up, which a member's first call waits out instead of reporting
-# (owner, 2026-11-14: the first action after a wake failed nine times with these, and "try again" made it work with
+# (the first action after a wake failed with these, and "try again" made it work with
 # nothing changed): the engine not answering yet, the container not started or not healthy yet. What is not here is a
 # real answer and is reported at once: Docker not installed (`absent`), Docker Desktop that could not be launched
 # (`docker_start_failed`) or that did not come up in its two minutes (`docker_start_timeout`), no image, an image that
@@ -160,7 +158,7 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
 # per-action approval in the sandbox, nothing while the owner holds control, approve or the API equivalent for the
 # exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, as Claude Code keeps
 # a tool's description about the tool and its policy in the system prompt: the 350 characters it was, on 34 listed
-# tools, were about 1,560 tokens more in every request of a member with a computer (measured 2026-11-14).
+# tools, were about 1,560 tokens more in every request of a member with a computer (measured).
 VM_CONTRACT = ("Outward acts (send a message, post, delete outside the workspace, pay) need the owner's yes for the exact "
                "act first (approve on CLI); sandbox success is not approval.")
 # Named: "files shared" beside vm_exec's "your own files are in /home/cua/workspace" read as two things.
@@ -252,7 +250,7 @@ class VmTools:
     # of it: another may take it, and the holder looks at it again when it comes back.
     lease_idle_s = 60.0
     read_progress_s = 10.0
-    # A browser's first window took 13 to 41 s on a loaded PC (2026-11-13), so the waits for it are minutes' worth of
+    # A browser's first window took 13 to 41 s on a loaded PC, so the waits for it are minutes' worth of
     # patience, not seconds': the member's call says it is still reading after `read_progress_s` and reports its elapsed
     # time. A window is polled with a growing pause, so a long wait is not a hundred driver calls.
     browser_window_wait_s = 60.0
@@ -573,7 +571,7 @@ class VmTools:
         # True once the member's own computer has a tool catalog. The snapshot then leaves out the owner's-desktop
         # `computer` tool, so that two tools called computer never leave the choice of machine to the model. Without a
         # catalog (computer tools off, no Docker on this PC) a member simply has no computer: only a quick question
-        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01, PR #78).
+        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01).
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
@@ -1305,7 +1303,7 @@ class VmTools:
             selected = tabs[0]
         else:
             # The page goes to the tab the owner sees. The driver cannot say which one that is among the browser's own pages
-            # (a new tab page), and its first tab was taken, which could be one behind the shown one (2026-11-14).
+            # (a new tab page), and its first tab was taken, which could be one behind the shown one.
             listing = None if shown_tab(tabs) else await self._tab_listing(target, window)
             selected = shown_tab(tabs, listing)
             if selected is None and listing is not None:
@@ -1578,8 +1576,8 @@ class VmTools:
         found = [row for row in own if row.get("app_name", "").lower() in BROWSER_APPS]
         if found:
             window = min(found, key=lambda row: row["window_id"])
-            # A window the owner minimized is still listed, and a member went on working in it where nobody could see
-            # (2026-11-14): it comes back to the screen first. The driver says so of a window it lists.
+            # A window the owner minimized is still listed, and a member went on working in it where nobody could see:
+            # it comes back to the screen first. The driver says so of a window it lists.
             if window.get("is_on_screen") is False:
                 await self.vm.restore_window(target, window["window_id"])
             return window
@@ -1651,7 +1649,7 @@ class VmTools:
         window = None
         if own and name == "get_browser_state" and not args.get("window_id") and (
                 "target_id" not in args or (target.key, args["target_id"]) not in self.page_windows):
-            # What real members sent at a seat (2026-11-12). The driver's reply to browser_prepare says the next call
+            # What real members sent at a seat. The driver's reply to browser_prepare says the next call
             # is get_browser_state, and a member then names the browser's process, or nothing; and a CLI turn that is
             # started again when the computer's catalog changes has only a cut record of its last reply, and names
             # ids it never had ("2"). Each was told its window was not on its screen and gave up. One browser serves

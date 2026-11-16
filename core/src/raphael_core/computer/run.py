@@ -428,7 +428,7 @@ class ComputerRun:
         self.cache_session = f"raphael-computer-{member_id}-{self.run_id if conversation_id is None else conversation_id}"
         # A run begins with a request made at this computer, which the owner waits on (its tools need their
         # presence: background work never starts one), and it may wait for them in turn, half an hour for a
-        # sign-in: an hour, as their conversation (owner, 2026-11-09, decision 1). Work nobody waits on takes "5m".
+        # sign-in: an hour, as their conversation. Work nobody waits on takes "5m".
         self.cache_ttl: str | None = ONE_HOUR
         self.language = language
         self.request = request

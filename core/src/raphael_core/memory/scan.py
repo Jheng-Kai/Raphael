@@ -223,7 +223,6 @@ _INJECTION = (
     # is a fact, and so is a link with a query string (owner, 2026-11-14: only credentials are secret).
     re.compile(r"!\[[^\]]*\]\(\s*<?(?:https?:)?//[^)\s>]*\?[^)\s>]*="),
     *(re.compile(pattern, re.I) for pattern in (
-        # Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
         # Offensive tool names are excluded: they are ordinary words too, and a fact here is about a person.
         rf"disregard\s+{_FILLER}(your|all|any)\s+{_FILLER}(instructions|rules|guidelines)",
         rf"act\s+as\s+(if|though)\s+{_FILLER}you\s+{_FILLER}(have\s+no|don't\s+have)\s+{_FILLER}(restrictions|limits|rules)",

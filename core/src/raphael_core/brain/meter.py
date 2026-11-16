@@ -1,4 +1,4 @@
-"""What each model call used, in one shape for every provider (owner, 2026-11-09: every cost counted as exactly as
+"""What each model call used, in one shape for every provider (every cost counted as exactly as
 Claude Code's and DeepSeek's harnesses count it; internal, never shown to the user).
 
 A provider reports a call's tokens in its own shape. `Usage` is the shape the spend keeps: input read at the full
@@ -158,7 +158,7 @@ def claude_code_rows(run_usage, model_usage, marks, *, main_model: str, resumed:
     the same session.
 
     `modelUsage` names every model the run used (subagents and Claude Code's own small calls too), but it adds
-    up every run of a resumed session (measured 2026-11-09), so each model's row is its total less the total kept
+    up every run of a resumed session (as measured), so each model's row is its total less the total kept
     after the previous run (`marks`). A resumed session with nothing kept (one started before marks existed) can
     only be counted by this run's own `usage`, which covers the main model's calls. `usage` also says which written
     tokens are kept for an hour; that split goes to the main model's row."""
@@ -192,7 +192,7 @@ def billing_of(model: str | None) -> str | None:
 
 def context_size(usage) -> int | None:
     """How long the conversation was at the last call of a run, from Claude Code's `usage`: it adds every call of
-    the run up, so only its last iteration measures the context (2026-11-09). None without iterations."""
+    the run up, so only its last iteration measures the context. None without iterations."""
     iterations = usage.get("iterations") if isinstance(usage, dict) else None
     if not isinstance(iterations, list) or not iterations or not isinstance(iterations[-1], dict):
         return None

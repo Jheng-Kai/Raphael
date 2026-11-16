@@ -1,4 +1,3 @@
-# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """What stands between a tool's result and the model: marking it as data and cutting it down.
 
 A tool's result is text that nobody vetted: a web page, a note, a mail. Whatever it says, it is data

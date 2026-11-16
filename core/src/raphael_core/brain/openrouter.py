@@ -60,8 +60,7 @@ _TOKEN = re.compile(r"[\x21-\x7e]+")
 # `languages`, which replaces the singular `language` (OpenAI's speech-to-text guide); Whisper on
 # Groq takes a `prompt` (OpenRouter's speech-to-text guide). MAI-Transcribe 2 (tag "azure") takes the
 # words as an Azure phrase list, `phraseList.phrases`; OpenRouter refuses its top-level `keyterms`
-# and Azure ignores a `prompt` for it (a live check on 2026-11-14 wrote "herdr" for "Herder" and
-# "grokbot" for "Grokbot" with the list, and refused `keyterms` with a 400). The other models get the
+# and Azure ignores a `prompt` for it (a live check wrote "herdr" for "Herder" with the list, and refused `keyterms` with a 400). The other models get the
 # language only: their hint fields are not documented, and some providers (Azure) refuse a field
 # they do not know. The models that are given the dictionary that way, for the settings page to say
 # so.
@@ -949,7 +948,7 @@ class OpenRouterClient:
         """One turn of a conversation in which `model` may call `tools` (the chat format, as for
         plan_tools).
 
-        `session` names the conversation the turn belongs to (owner, 2026-11-09, decision 4): OpenRouter
+        `session` names the conversation the turn belongs to: OpenRouter
         keeps every turn of it on the same upstream (`x-session-id`), whose cache holds its prefix, rather
         than choosing the fastest upstream each time and finding no cache there. `cache_ttl` ("1h" or "5m")
         marks an Anthropic model's prompt for caching (brain/prompt_cache.py). `messages` are the whole conversation so far, in the chat format: the system

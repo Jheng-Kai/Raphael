@@ -219,7 +219,7 @@ OWN_CONNECTIONS_RULE = ("The owner chose which connected apps this member may us
 
 
 def own_connections(speaker, connections):
-    """Which connected apps the asking member may use (R-PERSIST-07, owner, 2026-11-14: a member limited to one app long ago
+    """Which connected apps the asking member may use (R-PERSIST-07: a member limited to one app long ago
     did not know why the others were missing). Built-in tools and its own computer are never limited."""
     if speaker is None or speaker.tools is None:
         return {"limited": False}

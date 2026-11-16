@@ -1,10 +1,10 @@
 """A member's file tools on its own computer, as Claude Code's Read, Edit, Write, Glob and Grep.
 
-Owner, 2026-11-14: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member changed its files
+A member changed its files
 through `vm_exec` (`sed`, heredocs): nothing checked that the text it replaced was the text it had read, and a whole
 file had to fit a 16,000-character command. These tools copy Claude Code's semantics and its words: an exact string
 replaced, unique unless `replace_all`; a file read in this run before it is changed and refused when it changed since
-(on a shared computer another member may have edited it; Hermes Agent's read-before-write guard is the same idea);
+(on a shared computer another member may have edited it);
 a whole file sent over stdin. Each takes the turn's file checkpoint first, so the card of changed files and its undo
 see the change as they see a command's. Files are found and searched with ripgrep, which is in the computer image, with
 Claude Code's options and output modes; a search that finds nothing is an answer, not a failure.

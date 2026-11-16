@@ -5,14 +5,14 @@ so it is a page like any other: the same table, revisions, card in the turn and 
 with every value escaped; no model-written markup or script runs. The page's `html` is a plain rendition of the same
 facts, for the revision history and anything that reads a page as HTML.
 
-The owner's request (2026-11-09, after Grok Bot's Page): a title, the date the data is as of and the promise that it only
+A report holds a title, the date the data is as of and the promise that it only
 states recorded facts, a table of contents, findings with coloured status words under a summary box, an overview table
 with tabs, and a team diagram: members as boxes with their colour, labelled arrows between them, notes under it.
-Shared, a report is a file of the app's own drawing (2026-11-10): see `checked_file` below.
-Since 2026-11-14 (the owner's daily overview, in place of the old home) a report also holds tiles of figures (`stats`) and
+Shared, a report is a file of the app's own drawing: see `checked_file` below.
+A report also holds tiles of figures (`stats`) and
 charts of every common kind (`chart`), drawn by app/src/main/report-chart.ts, and a section may stand at half the width.
-Also since 2026-11-14 (the owner, after Grok Bot's pages: a summary line under the title, a box that lists the sections, a note
-with an icon, a dropdown over a table and a column of links): `summary`, the `callout` section, a table's link cells and `filter`.
+A report also has a summary line under the title, a box that lists the sections, a note
+with an icon, a dropdown over a table and a column of links: `summary`, the `callout` section, a table's link cells and `filter`.
 """
 
 import html as html_lib
@@ -30,7 +30,7 @@ STATUSES = ("running", "done", "pending", "waiting", "blocked", "paused", "faile
 CHARTS = ("line", "area", "bar", "stacked", "hbar", "pie", "donut")
 # Charts of one whole, and those whose parts add up: no part below zero.
 PARTS = ("stacked", "hbar", "pie", "donut")
-# A daily overview (owner, 2026-11-14: weather, schedule, investments, projects and members on one page) has more sections
+# A daily overview (weather, schedule, investments, projects and members on one page) has more sections
 # than a report; a section may take half the page's width beside another where the page is wide enough.
 SECTIONS_MAX = 12
 SPANS = ("half",)
@@ -351,7 +351,7 @@ def checked_report(value, *, exists, as_of_ms):
     # scanned for secrets as a whole.
     as_of = datetime.fromtimestamp(as_of_ms / 1000, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     # The line under the title. Left out, the page says when its data is from and that it states recorded facts only; given, it
-    # says what the member says (the owner, 2026-11-14: a one-line summary, as Grok Bot's pages have).
+    # says what the member says (a one-line summary).
     summary = _text(value.get("summary"), "report.summary", SUMMARY, line=True)
     return {"as_of": as_of, **({"summary": summary} if summary else {}), "sections": sections}
 
@@ -431,7 +431,7 @@ def report_fallback(title, report):
 
 # ---------- the file a report is shared as ----------
 
-# The owner shares a report as a file (2026-11-10, 存成檔案): the app's own drawing of the page and its style, as one HTML
+# A report is shared as a file: the app's own drawing of the page and its style, as one HTML
 # document any browser opens (app/src/main/report-page.ts `reportFile`). Nothing in it may run or load: its policy stands
 # first in its head, and the rest is held to the elements and attributes that drawing makes, its links within the page.
 FILE_BYTES = 2 * 1024 * 1024

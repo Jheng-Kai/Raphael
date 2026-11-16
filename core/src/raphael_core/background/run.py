@@ -635,7 +635,7 @@ class TaskRun:
                     failure = classify(error)
                     wait = outage.wait(failure.retry_after) if failure.transient else None
                     # A room reply's attempt that heard nothing for its whole stall time has stalled, and ends the
-                    # reply; any other failure is tried again with all of its own time (Hermes's delegate heartbeat).
+                    # reply; any other failure is tried again with all of its own time.
                     if wait is None or (failure.kind == "timeout" if self.room_speech else wait >= self._remaining_s()):
                         raise
                     if failure.kind == "timeout":

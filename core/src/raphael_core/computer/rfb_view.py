@@ -232,7 +232,7 @@ class Rfb:
     def type_text(self, text):
         """Type `text` at a screen the way a person at a keyboard does: a character that is Shift's on a US keyboard is
         sent with Shift held, as a browser's page holds it. A view server types only the key it is sent: measured on a
-        real computer (2026-11-14), `!@#$%^&*_+{}|:>?~` sent as bare keysyms never arrived, and `()<` and capitals only
+        real computer, `!@#$%^&*_+{}|:>?~` sent as bare keysyms never arrived, and `()<` and capitals only
         by luck of the layout; with Shift_L held around each, all of them did. Only this keyboard is meant: a character
         of another layout is not sent."""
         for character in text:

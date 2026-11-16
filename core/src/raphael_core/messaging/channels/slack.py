@@ -1,6 +1,5 @@
 """Slack direct messages through the same pairing switchboard as Telegram.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 Bot tokens stay in the shared vault.
 """
 

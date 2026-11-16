@@ -1,6 +1,5 @@
 """Docker desktops on this computer or an SSH host.
 
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 The engine owns containers; only the workspace survives
 removal. Remote workspaces are engine volumes, never paths on this PC.
 """
@@ -48,7 +47,7 @@ LABEL = "org.raphael.computer"
 IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "13"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 # The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
-# waits for him and a recording are held until he says so): a lease nobody uses blocks every member (2026-11-14).
+# waits for him and a recording are held until he says so): a lease nobody uses blocks every member.
 OWNER_IDLE_S = 300
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -65,8 +64,7 @@ WALLPAPER_FOLDER = Path(__file__).parent / "wallpaper"
 # Docker Desktop on Windows starts WSL first, so a cold start takes the better part of a minute.
 ENGINE_WAIT_S = 120
 ENGINE_POLL_S = 1.0
-# Set only while a member's own tool call prepares its computer. (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
-# 它也會自動自己打開才對」) A viewer opening or any other read never starts the engine, so the contextvar defaults off.
+# Set only while a member's own tool call prepares its computer. A viewer opening or any other read never starts the engine, so the contextvar defaults off.
 _MAY_START_ENGINE = ContextVar("computer_may_start_engine", default=False)
 # shutil.which walks PATH on the event loop, and one status poll asks many times.
 DOCKER_LOOKUP_S = 30.0
@@ -211,7 +209,7 @@ def resources(target, size=None):
 def bound_folder(path):
     """Make a folder of this PC that a computer binds. On Windows, Python 3.12.4 and later give a folder made with mode 0o700
     a DACL closed to all but its owner, and the files the engine makes in it inherit that: it makes them as another account,
-    so the owner could not read what a member made there (owner, 2026-11-15, task 797). There the folder takes the access of
+    so the owner could not read what a member made there. There the folder takes the access of
     the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is his to do."""
     path = Path(path)
     if os.name == "nt":
@@ -381,7 +379,7 @@ def known_previous(raw, target, owner):
         layer = labels.get(f"{LABEL}.layer")
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
-        # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
+        # Layer 7 is the one the computer every member shares was released on: six screens, and the
         # owner's own computer the day layer 8 came; layers 8 to 12 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it. Layer 13 is
         # the first with the UTF-8 locale in its environment: every layer before it is made again once.
@@ -570,8 +568,8 @@ class LocalVm:
             raise VmError("window_move_failed")
 
     async def restore_window(self, target, window_id):
-        """Bring a minimized window back to its screen (owner, 2026-11-14: he minimized his member's browser, and the member
-        went on working in it where nobody could see)."""
+        """Bring a minimized window back to its screen (a member went on working in a minimized
+        browser where nobody could see)."""
         if type(window_id) is not int or window_id <= 0:
             raise ValueError("Expected a positive window id")
         result = await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-a", str(window_id)]))
@@ -610,7 +608,7 @@ class LocalVm:
             if result.code:
                 raise VmError("window_move_failed")
 
-    # The launcher script ends itself: 60 s for the browser's first window (a loaded PC took 13 to 41 s, 2026-11-13) and
+    # The launcher script ends itself: 60 s for the browser's first window (a loaded PC took 13 to 41 s) and
     # 30 s for the window to settle on its screen. This is only the outer bound, so that the script's own answer comes first.
     seat_browser_s = 120
 
@@ -748,7 +746,7 @@ class LocalVm:
     def mode(self):
         """One computer for every member is the default where it has been run on real computers: this PC's Docker.
         On another host the members keep a computer each until the owner's data says otherwise: seats, the six
-        screens and the carry-over have never run on a real remote host (2026-11-12). A saved choice always wins."""
+        screens and the carry-over have never run on a real remote host. A saved choice always wins."""
         if self.settings is None:
             return "per-bot"
         chosen = getattr(self.settings, "chosen", None)

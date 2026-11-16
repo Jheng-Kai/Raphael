@@ -1,5 +1,4 @@
 """Vault references for private page filling."""
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses/NOTICES.md.
 
 import hashlib
 import json

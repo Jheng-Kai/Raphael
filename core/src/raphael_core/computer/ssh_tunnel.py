@@ -1,6 +1,5 @@
 """Temporary loopback viewer forwards.
 
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 
 Uses the owner's SSH config alias, never keys or an interactive password prompt.
 """
