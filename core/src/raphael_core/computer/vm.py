@@ -16,6 +16,7 @@ import math
 import os
 import re
 import secrets
+import sqlite3
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -817,6 +818,7 @@ class LocalVm:
                         return self._waits("volume")
                     os.rename(earlier, destination)
                     moved += 1
+                    self._repoint(earlier, destination)
             except OSError:
                 return self._waits("rename")
             finally:
@@ -829,6 +831,29 @@ class LocalVm:
                     self.changes += 1
             logger.info("Moved %d computer folders to the machine-local folder", moved)
             return "moved"
+
+    def _repoint(self, earlier, destination):
+        """A task's receipts keep the folder of this PC that held each file it left (background.tasks: the artifact's
+        root, and the full path of a file it found before or could not read): one in a folder that moved names it at its
+        new place, or a finished task's file would no longer open and a task under way would miss its own work."""
+        conn = self.data.conn
+        if conn is None:
+            return
+
+        def moved(value):
+            try:
+                return str(destination / Path(value).relative_to(earlier)) if isinstance(value, str) and value else None
+            except ValueError:
+                return None
+        try:
+            rows = conn.execute("SELECT id, workspace, uri FROM task_evidence").fetchall()
+            changes = [(moved(row[1]) or row[1], moved(row[2]) or row[2], row[0]) for row in rows
+                       if moved(row[1]) or moved(row[2])]
+            if changes:
+                with conn:
+                    conn.executemany("UPDATE task_evidence SET workspace=?, uri=? WHERE id=?", changes)
+        except sqlite3.Error as error:
+            logger.warning("The receipts of tasks in a moved computer folder still name its old place (%s)", type(error).__name__)
 
     async def _release_folders(self, folders, probe):
         """Remove every computer of this app on this PC's engine that binds one of `folders`, all of them stopped:

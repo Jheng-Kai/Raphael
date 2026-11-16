@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -213,6 +214,26 @@ async def test_a_folder_made_again_at_the_old_place_after_the_move_is_never_used
     assert vm.target_for("", "shared").shared == local.resolve() / "vm-shared"
     assert await vm.relocate() == "nothing"
     assert (data / "vm-shared").exists()  # left as it is: never merged, never deleted
+
+
+async def test_the_receipts_of_tasks_name_their_files_at_the_new_place(tmp_path, conn):
+    data, local = earlier_install(tmp_path)
+    vm = LocalVm(data, runner=Engine(), clock=lambda: 0, machine_dir=local, conn=conn)
+    team, output = data.resolve() / "vm-shared", tmp_path / "Owner" / "output"
+    conn.executemany(
+        "INSERT INTO task_evidence(task_id, tool_call_id, kind, uri, digest, mime, scope, verified_at_ms, verdict, workspace) "
+        "VALUES (1, ?, ?, ?, '', 'text/plain', 'private', 0, 'verified', ?)",
+        [("made", "artifact", "projects/plan.md", str(team)),
+         ("before", "file_before", str(team / "projects" / "plan.md"), None),
+         ("output", "artifact", "report.md", str(output))])
+
+    assert await vm.relocate() == "moved"
+
+    rows = {row[0]: (row[1], row[2]) for row in conn.execute("SELECT tool_call_id, workspace, uri FROM task_evidence")}
+    moved = local.resolve() / "vm-shared"
+    assert rows == {"made": (str(moved), "projects/plan.md"), "before": (None, str(moved / "projects" / "plan.md")),
+                    "output": (str(output), "report.md")}
+    assert (Path(rows["made"][0]) / rows["made"][1]).read_text(encoding="utf-8") == "plan"
 
 
 async def test_a_member_computer_is_erased_from_its_moved_home(tmp_path):
