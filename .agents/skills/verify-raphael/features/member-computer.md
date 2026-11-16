@@ -40,10 +40,11 @@ Now (`computer/seat_launch.py`, `VmTools._seat_launch`, `LocalVm.command_path` a
   (`This launch's window on your screen:` and the window rows). An untied window is left where it opened, and when it stands
   outside the seat the reply says so and how to start a separate copy (`xfce4-terminal --disable-server`, `browser_open` for pages);
   a launch with no window says so after the wait.
-- What this relies on (from the programs' own sources, not measured here): GTK writes `DESKTOP_STARTUP_ID` as
-  `_NET_STARTUP_ID` on its client leader window at display open, and `gtk_window_set_startup_id` writes it on the window;
-  xfce4-terminal's client passes its `DESKTOP_STARTUP_ID` to the running copy as `--startup-id`, which sets it on the new window.
-  The acceptance check below measures it on the image.
+- What this relies on: xfce4-terminal (1.0.4 `main.c`) reads `DESKTOP_STARTUP_ID` before `gtk_init`, removes it from its
+  environment and passes it on as `--startup-id` (to the copy already running, or to itself), and `terminal_app_open_window`
+  calls `gtk_window_set_startup_id`, which writes `_NET_STARTUP_ID` on the new window. Measured on the image by the
+  acceptance check below: each of the three windows carried its own launch's id on the window itself, three different ids,
+  and their one leader carried one too, so the window's own id has to decide.
 - `browser_window_missing` (a member's `browser_open` at seat 1, three times, in the same evening) is not this defect: a seat's
   browser window is found by `raphael-seat-browser`'s per-launch title marker, never by the launch's pid or a lone new
   window. The code is one for both of its waits (60 s for the window, 30 s to settle); `LocalVm.seat_browser` now logs the
@@ -69,8 +70,14 @@ never starts Docker). The pointer is put on screen 6 (nobody's); seats 1 and 2 l
 together through `launch_app`, then seat 2 launches a second one; each launch's reply must name its window, the window must be
 wholly inside its seat in that member's `list_windows`, on its seat's screen on the canvas, absent from the other member's list
 and desktop, with no other new window on either seat. Its detail says whether the windows were opened by another process than
-their launch's (the copy) and whether the second seat's second window is in the copy that holds the first seat's window. Not
-run yet (no Docker allowed while the owner's own shared computer is in use).
+their launch's (the copy), whether the second seat's second window is in the copy that holds the first seat's window, and on
+how many windows a startup id stood (on the window itself, on its leader). The terminal wall before it launches
+`xfce4-terminal` by name with `--disable-server` at each seat. From `core/`, Docker already running:
+`python -m raphael_core.evaluate.computer_acceptance --out <folder>` (about 15 minutes; it makes and removes its own
+`raphael-acceptance*` image and containers). With this change: 85 ok, 0 failed, 9 skipped (the previous-layer images this
+PC does not hold); the terminal wall passed, and "shared launches land" passed with the first seat's launch the copy (its
+own process) and both of the second seat's windows opened in it, each wholly inside its own screen, startup ids on 3 of 3
+windows (3 different); every check behind the terminal wall ran and passed.
 
 ## Where the app's data lives
 
