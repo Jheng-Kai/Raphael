@@ -128,7 +128,7 @@ async def test_persistent_recall_benchmark_five_thousand_turns(memory, history):
     result = {'turns': 5000, 'samples': 3, 'before_median_ms': statistics.median(before),
               'after_median_ms': statistics.median(after), 'before_ms': before, 'after_ms': after,
               'baseline': 'rebuild in-memory FTS from all permitted turn text per query'}
-    destination = Path('.test-results/hermes-recall-benchmark.json')
+    destination = Path('.test-results/recall-benchmark.json')
     destination.parent.mkdir(exist_ok=True)
     destination.write_text(json.dumps(result, indent=2), encoding='utf-8')
     assert not memory.session_search(1, 'aurora release').data['hits']
@@ -168,7 +168,7 @@ async def test_synthetic_cap_cost_comparison(conn, history, clock):
                          'history_input_tokens_after_fold': estimate_tokens(context.summary) + sum(estimate_tokens(turn_text(turn, detail=True)) for turn in context.turns),
                          'auxiliary_calls': len(inputs), 'auxiliary_input_tokens_estimated': sum(inputs),
                          'auxiliary_output_tokens_estimated': sum(outputs), 'real_requests': 0})
-    destination = Path('.test-results/hermes-compression-cost.json')
+    destination = Path('.test-results/compression-cost.json')
     destination.parent.mkdir(exist_ok=True)
     destination.write_text(json.dumps(rows, indent=2), encoding='utf-8')
     for offset in (0, 2):

@@ -1,4 +1,4 @@
-"""A group has no separate listener (Hermes, gateway/hosted_room_discussion.py): an address is answered, a message that
+"""A group has no separate listener: an address is answered, a message that
 names no one goes to the room's default responder first, and everyone else reads that answer in a turn of their own and
 speaks or passes. A member the owner addresses may not pass. A reply that fails is a status line in the room, never words
 in a member's or the chief's mouth."""

@@ -30,7 +30,7 @@ def worked(results):
 
 def found(tools, results, suffix):
     """The name of the tool ending with `suffix`: listed, or among the definitions find_tools returned (a connection's
-    tools are found, never listed: owner, 2026-11-09, decision 2)."""
+    tools are found, never listed)."""
     for name in tools:
         if name.endswith(suffix):
             return name

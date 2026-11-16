@@ -214,7 +214,7 @@ def test_a_delivered_picture_whose_mime_is_unknown_is_still_media(conn):
 
 
 def test_a_file_the_member_hands_over_from_its_own_background_work_is_in_the_library(conn):
-    # Owner, 2026-11-14: two videos a member attached at the end of its background work were in the conversation and not in its
+    # Two videos a member attached at the end of its background work were once in the conversation and not in its
     # Library. Such a turn names the member itself as `peer_id`; a colleague's hand-off names another member and stays out.
     history, work = turn(conn, member=3, at=3000, source='worker', peer_id=3)
     media(history, work, name='launch-film.mp4', key='d' * 32 + '.mp4', mime='video/mp4')

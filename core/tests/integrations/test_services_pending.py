@@ -76,7 +76,7 @@ async def test_builtin_login_never_blocks_parallel_guide_reads_and_releases_its_
     router, service, hub, vault = setup_service(tmp_path, conn, Platform())
     vault.set("connectors:composio:key", "synthetic-key")
     # The sign-in must still be under way while the reads and the two refused connects below run. At 80 ms it was over
-    # before them on a slow CI machine, and the refusal no longer said "under way" (2026-11-11). The run that is
+    # before them on a slow CI machine, and the refusal no longer said "under way". The run that is
     # cancelled needs no end of its own. The run that times out gets a second, twelve times what those calls take.
     hub._login_timeout_s = 30 if cancel else 1
     monkeypatch.setattr(builtin_service, "REFRESH_TOTAL_S", 0)

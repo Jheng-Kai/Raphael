@@ -1,4 +1,4 @@
-"""A room thread stops a spiral by itself (owner, 2026-11-11: a meeting ran 330 member turns in 70 minutes, 97 of them
+"""A room thread stops a spiral by itself (a meeting once ran 330 member turns in 70 minutes, 97 of them
 failing for length, and nothing stopped it). After BREAKER_FAILURES replies in a row that failed for one cause the room
 stops asking its members, says so once in the owner's language, and stays stopped until the owner writes there again."""
 import json

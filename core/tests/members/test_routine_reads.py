@@ -134,7 +134,7 @@ WRITE_ACTIONS = ({"action": "member_routine_update", "arguments": {"id": 1, "mem
 
 
 async def test_a_routines_run_reads_any_member_with_no_card_and_a_change_still_asks(setup):
-    """Owner, 2026-11-14: a team health check raised a card for each member it read (16, two timed out) and was cancelled."""
+    """A team health check once raised a card for each member it read (16, two timed out) and was cancelled."""
     from raphael_core.management import background_management, background_requires_approval
 
     rig, team = setup

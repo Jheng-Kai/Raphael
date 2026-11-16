@@ -325,7 +325,7 @@ async def test_driver_check_makes_the_products_own_connection_with_arguments_the
 
 async def test_driver_check_fails_when_the_driver_refuses_a_set_up_argument(tmp_path, monkeypatch):
     run, target = driver_run(tmp_path, monkeypatch)
-    # What the product sent until 2026-11-12: the real driver answered "unknown argument cursor_id".
+    # What the product once sent: the real driver answered "unknown argument cursor_id".
     monkeypatch.setitem(MemoryDriver.accepted, "set_agent_cursor_enabled", {"session"})
     with pytest.raises(vm.VmError, match="^driver_configuration_failed$"):
         await run.driver(target)
@@ -1653,7 +1653,7 @@ class PanelAcceptance:
 
 
 async def test_a_panel_that_loads_late_is_waited_for_and_one_that_stays_empty_fails_naming_what_it_holds(monkeypatch):
-    # Seat 2's panel was seen 12 px wide, holding nothing, for twenty seconds and more (2026-11-13).
+    # Seat 2's panel was seen 12 px wide, holding nothing, for twenty seconds and more.
     target = vm.Target("k", "n", None, None, screen=1, screens=4, container="shared")
     ids = {i: [*map(str, range(i * 3 - 2, i * 3 + 1)), str(18 + i)] for i in range(1, 5)}
     sleeps = []

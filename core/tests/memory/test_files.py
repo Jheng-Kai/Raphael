@@ -378,7 +378,7 @@ def test_a_secret_or_an_instruction_is_never_written(memory, tmp_path, content, 
     "身分證字號 A123456789 填在表單上",
 ])
 def test_a_link_or_a_personal_fact_is_written_as_it_is_not_being_a_credential(memory, tmp_path, content):
-    # Owner, 2026-11-14 (R-SECRET-01): only credentials and payment secrets are refused.
+    # R-SECRET-01: only credentials and payment secrets are refused.
     assert edit(memory, 1, add(content)).ok
     assert content in own_file(tmp_path, 1) and content in str(memory.snapshot(1))
 
@@ -730,7 +730,7 @@ ADDRESS = "使用者住家地址是新北市示範區仁愛路1號"
 
 
 def test_the_owners_own_correction_in_a_turn_that_read_outside_content_replaces_a_confirmed_entry(memory, tmp_path):
-    """Owner, 2026-11-14: 5 corrections were refused as unconfirmed_only and the typo stayed in memory."""
+    """5 corrections were once refused as unconfirmed_only and the typo stayed in memory."""
     from raphael_core.memory.store import is_unconfirmed
 
     assert edit(memory, 1, add(ADDRESS)).ok

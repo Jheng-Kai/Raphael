@@ -3,8 +3,8 @@
 Live, a member asked to read the owner's mail searched Composio seven times and never executed
 anything: the tool that executes what Composio discovers shares no word with any request, so a list
 narrowed by the request's words never offered it. Composio's router is the core's own (pinned) and
-always listed. Every other tool of a connection is found with find_tools and called with use_tool
-(owner, 2026-11-09, decision 2): a subscription CLI reads its tool list once, when it starts, and the
+always listed. Every other tool of a connection is found with find_tools and called with use_tool:
+a subscription CLI reads its tool list once, when it starts, and the
 list never changes, so it calls what it found without starting again.
 
 These tests send a request through the ordinary turn, for Raphael and for a member, to an API model

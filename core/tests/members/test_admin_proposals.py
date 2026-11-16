@@ -285,7 +285,7 @@ async def test_owner_edits_are_checked_against_current_safety_rules(setup, brain
 
 
 async def test_a_card_answered_after_five_minutes_still_applies(setup, brain):
-    # Owner, 2026-11-11: the card of a change waited thirty seconds and the yes found nothing. In the conversation it has no timer.
+    # The card of a change once waited thirty seconds and the yes found nothing. In the conversation it has no timer.
     rig, team = setup
     brain(("member_create", {"name": "Research", "role": "Research"}))
     asked = await typed(rig, "Create member Research", 0)
