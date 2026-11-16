@@ -77,6 +77,16 @@ async def test_images_go_to_the_model_together_with_the_question_and_are_paid_fo
     assert spent(conn) == [("agent", "vision/model", 0.002)]
 
 
+async def test_an_image_read_has_the_time_its_attachment_read_has(ledger):
+    # read_attachment timed out at exactly 40 s twice while its own limit was 70 s: this call's limit ended it first.
+    from raphael_core.agent.tools import ATTACHMENT_TIMEOUT_S
+    client = Client("seen")
+    vision = Vision(client, lambda: ("vision/model", True))
+    await vision.look([checked("a.png", "image/png", PNG)], "?", ledger)
+    given = client.calls[0]["timeout_s"]
+    assert ATTACHMENT_TIMEOUT_S - 10 <= given < ATTACHMENT_TIMEOUT_S
+
+
 async def test_a_model_the_list_says_reads_no_images_is_not_asked(conn, ledger):
     client = Client()
     vision = Vision(client, lambda: ("text/only", False))

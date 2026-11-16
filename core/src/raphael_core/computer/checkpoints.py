@@ -40,6 +40,14 @@ MAX_ARCHIVE_BYTES = 500 * 1024 * 1024
 MAX_CHECKPOINTS = 20
 MAX_FILES = 10000
 WALK_SECONDS = 8.0
+# The whole run of this script is ended by the guest's `timeout` after GUEST_SECONDS (computer/vm.py runs it so). Reading
+# the records already took most of the ten seconds it had (listing them took 8.6 to 12.1 s, measured), so a begin whose
+# walk then ran its eight seconds was killed before it wrote anything and the run had no checkpoint at all. A begin stops
+# walking WRITE_SECONDS before the end, counted from the start of the script, and writes what it found as partial.
+GUEST_SECONDS = 25.0
+WRITE_SECONDS = 6.0
+# Only the script the guest runs has that end; a store used in place (the core's tests) has the walk's own limit alone.
+STARTED = time.monotonic() if __name__ == "__main__" else None
 # The change view reads text only: a file over this size or with a NUL byte in its first bytes is not compared.
 TEXT_DIFF_BYTES = 1024 * 1024
 SNIFF_BYTES = 8192
@@ -272,7 +280,13 @@ class CheckpointStore:
         if any(item["member"] == member and item["turn"] == turn for item in records):
             return None
         previous = records[-1]["manifest"] if records else {}
-        manifest, uncovered, partial = self._capture(previous, time.monotonic() + WALK_SECONDS, store=True)
+        deadline = time.monotonic() + WALK_SECONDS
+        if STARTED is not None:
+            deadline = min(deadline, STARTED + GUEST_SECONDS - WRITE_SECONDS)
+        if deadline <= time.monotonic():
+            # Nothing walked would be a checkpoint of no files, and every file would then read as added by this run.
+            raise TimeoutError("no time left to walk the workspace")
+        manifest, uncovered, partial = self._capture(previous, deadline, store=True)
         if records and self._same(manifest, previous) and uncovered == records[-1].get("uncovered", []) and partial == records[-1].get("partial", False):
             latest = records[-1]
             if latest["member"] != member or manifest != previous or "review" in latest or latest["state"] == "restored":

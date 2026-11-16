@@ -44,6 +44,7 @@ Nothing here logs a name, a command, an address, a value, an argument or a resul
 """
 
 import asyncio
+import datetime
 import json
 import logging
 import secrets
@@ -83,6 +84,16 @@ logger = logging.getLogger(__name__)
 # The tier of a tool that is on: the one the gate lets through without a yes. A tool that is off has
 # none. (The tiers T2 and T3, which ask first, are for Raphael's own commands.)
 ON_TIER = Tier.T1
+
+# A tool its service answered is not in this account's plan is not called again for this long, or until the connection
+# is refreshed or signed in again: a morning routine's member was refused the same way every morning, while its other
+# tools worked. An allowance that is used up holds a tool only until the time the service said, and never when it said
+# none. A server that routes to many apps (`managed_by`) is never held: one app's answer is not another's.
+PLAN_HOLD_MS = 24 * 3600 * 1000
+ALLOWANCE_HOLD_MAX_MS = 24 * 3600 * 1000
+# How many of the app's other tools the words name, and how much of the service's own words they keep.
+OTHER_TOOLS_NAMED = 12
+SERVICE_WORDS_CHARS = 300
 
 
 def _not_saved(exc: OSError) -> RpcError:
@@ -140,6 +151,8 @@ class IntegrationsService:
         self._call_timeout_s = call_timeout_s
         # server id -> the kind of failure of the latest job with it; a server not here is fine.
         self._failure: dict[str, str] = {}
+        # tool key -> (kind, until in ms, the service's words): tools not called again for now (`PLAN_HOLD_MS`).
+        self._held: dict[str, tuple[str, int, str]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._open_browser = open_browser
         self._login_timeout_s = login_timeout_s
@@ -195,6 +208,65 @@ class IntegrationsService:
         """Note that the latest job with a server worked, and tell the windows if it had failed before."""
         if self._failure.pop(server_id, None) is not None:
             self._changed()
+
+    # --- answers that stay the same for a while -------------------------------------------------
+
+    def _hold(self, key: str, said: str) -> tuple[str, int, str] | None:
+        """Keep `key` from being called again when its service's answer `said` will be the same for a while: a plan
+        that does not include it (`PLAN_HOLD_MS`), or an allowance used up until a time the service named. None for
+        any other failure, and for a spent allowance that named no time: those may pass on the next try."""
+        from ..failures import allowance_wait, plan_refusal, redact
+        now = self._now_ms()
+        words = redact(said, limit=SERVICE_WORDS_CHARS)
+        if plan_refusal(said):
+            self._held[key] = ("plan_excluded", now + PLAN_HOLD_MS, words)
+            logger.info("A connected tool is held: its service said the plan does not include it")
+            return self._held[key]
+        spent, seconds = allowance_wait(said)
+        if spent:
+            until = now + min(int(seconds * 1000), ALLOWANCE_HOLD_MAX_MS) if seconds else 0
+            if until > now:
+                self._held[key] = ("allowance_spent", until, words)
+                logger.info("A connected tool is held for %d s: its service said its allowance is used up", round(seconds))
+                return self._held[key]
+            return ("allowance_spent", 0, words)
+        return None
+
+    def _still_held(self, key: str) -> tuple[str, int, str] | None:
+        held = self._held.get(key)
+        if held is not None and held[1] <= self._now_ms():
+            del self._held[key]
+            return None
+        return held
+
+    def _release(self, server_id: str) -> None:
+        """Forget what was held of a server: the owner refreshed or signed in to it again, so its answers may differ."""
+        for key in [key for key in self._held if (_parse_key(key) or ("",))[0] == server_id]:
+            del self._held[key]
+
+    def _held_words(self, server: ServerConfig, name: str, held: tuple[str, int, str], *, made: bool) -> str:
+        """What the member is told of a held tool: what the service said, until when nothing is sent, and which of the
+        app's other tools were not refused so; the service's own words follow, held short."""
+        kind, until, said = held
+        others = [tool.name for tool in server.tools if tool.name != name and server.tool_on(tool)
+                  and self._still_held(tool_key(server.id, tool.name)) is None][:OTHER_TOOLS_NAMED]
+        still = ("Tools of this app not refused so: " + ", ".join(others) + "." if others
+                 else "This app has no other tool to use instead.")
+        if kind == "plan_excluded":
+            head = (f"{'The service answered' if made else 'Not sent: earlier the service answered'} that this account's "
+                    f"plan does not include {name}, and that answer is the same whatever the arguments. It is not sent "
+                    "again until the owner refreshes or reconnects this app, or for a day. Tell the owner once if the "
+                    "work needs it; otherwise do it another way.")
+        elif until:
+            minutes = max(1, round((until - self._now_ms()) / 60000))
+            clock = datetime.datetime.fromtimestamp(until / 1000).strftime("%H:%M")
+            head = (f"{'The service answered' if made else 'Not sent: earlier the service answered'} that its allowance "
+                    f"for {name} is used up. It said to try again in about {minutes} min (at {clock}); a call before "
+                    "then is refused the same way and is not sent. Do other work first, or use another tool or source.")
+        else:
+            head = (f"The service answered that its allowance for {name} is used up and did not say when it lifts. "
+                    "Calls of it may keep failing for a while: do other work first, or use another tool or source.")
+        return f"{head} {still}\nThe service said: {said}"
 
     def _view(self, server: ServerConfig) -> dict[str, Any]:
         """A server as the window sees it: nothing secret, only the names of what is."""
@@ -332,6 +404,7 @@ class IntegrationsService:
         server.tools = result.tools
         server.tools_checked_at_ms = self._now_ms()
         server.revocation_url = result.revocation_url
+        self._release(server.id)  # signed in again: the account, and with it the plan, may be another
         try:
             if new:
                 self._config.add(server)
@@ -593,6 +666,7 @@ class IntegrationsService:
                 raise RpcError(INTERNAL_ERROR, "Could not refresh the MCP server") from None
             else:
                 self._failure.pop(server.id, None)
+                self._release(server.id)
                 if self._config.get(server.id) is server:  # not removed while it was away
                     server.tools = tools
                     server.tools_checked_at_ms = self._now_ms()
@@ -931,6 +1005,9 @@ class IntegrationsService:
         # service's allowance is not spent on trying again and again (R-TOOL-01).
         if (problem := shape_problem(tool.name, tool.input_schema, arguments)) is not None:
             return end("error", PluginResult(False, "bad_arguments", problem))
+        if (held := self._still_held(key)) is not None:
+            # Not sent: the service's answer would be the same, and an allowance would be spent on hearing it.
+            return end("blocked", PluginResult(False, held[0], self._held_words(server, tool.name, held, made=False)))
         # A pool is passed on only when there is one: a connector of a test may not know it.
         kept = {} if pool is None else {"pool": pool}
         try:
@@ -976,6 +1053,8 @@ class IntegrationsService:
             fitted = outcome.fresh or {t.name: t for t in outcome.listed or []}.get(tool.name) or tool
             if (advice := shape_advice(tool.name, fitted.input_schema, outcome.text)) is not None:
                 return end("error", PluginResult(False, "bad_arguments", advice))
+            if not server.managed_by and (held := self._hold(key, outcome.text)) is not None:
+                return end("error", PluginResult(False, held[0], self._held_words(server, tool.name, held, made=True)))
             result = PluginResult(False, "tool_error", outcome.text, outcome.truncated,
                                   page=getattr(outcome, "page", None), mcp_result=getattr(outcome, "mcp_result", None))
             return end("error", result)

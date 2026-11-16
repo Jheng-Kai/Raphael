@@ -72,7 +72,9 @@ async def test_original_command_bytes_reach_the_original_executor(desktop, tmp_p
     assert any(expected in args for args, _ in runtime.calls)
     assert not any("signal.signal" in str(args) for args, _ in runtime.calls)
     snapshots = [kwargs for args, kwargs in runtime.calls if any("class CheckpointStore" in arg for arg in args)]
-    assert len(snapshots) == 1 and snapshots[0]["timeout"] <= 12
+    # Bounded, though no longer by 12 s: a store that needed longer was killed before it wrote anything (R-COMP-UNDO-02).
+    from raphael_core.computer.checkpoints import GUEST_SECONDS
+    assert len(snapshots) == 1 and snapshots[0]["timeout"] <= GUEST_SECONDS + 2
 
 
 def test_unchanged_manifests_reuse_objects_without_reading_files(tmp_path, monkeypatch):
