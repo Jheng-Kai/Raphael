@@ -119,6 +119,7 @@ def _size_words(kib):
     return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
 
 
+# How long a turn waits for its first file checkpoint: past the guest's own end of the store's script.
 CHECKPOINT_WAIT_S = checkpoint_store.GUEST_SECONDS + 3
 
 # A computer call that broke in the core itself, not in the computer or the page: what the member is told.
@@ -1156,9 +1157,9 @@ class VmTools:
             result = PluginResult(False, "connection_error")
             return result
         except Exception as error:
-            # Nothing the computer said: a fault of this layer. It was once kept as a bare "error" with no line in the
-            # log, and the owner and the member were told only that the cause was unknown. Its type and where it was
-            # raised are written down (never its message, which can hold what the screen showed).
+            # Nothing the computer said: a fault of this layer, told as one to the member and the owner rather than as a
+            # cause unknown. Its type and where it was raised are written down (never its message, which can hold what
+            # the screen showed).
             self.vm.invalidate(target)
             logger.warning("Computer tool %s failed in the core: %s at %s", tool.name, type(error).__name__, _raised_at(error))
             result = PluginResult(False, COMPUTER_FAULT, COMPUTER_FAULT_NOTE.format(kind=type(error).__name__))
