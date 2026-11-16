@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, test } from "vitest";
 import { dayBounds } from "../format";
-import { historyQuery, itemHTML } from "./history";
+import { historyQuery, itemHTML, programName } from "./history";
 import type { HistoryItem } from "../types";
 
 describe("a day of the history", () => {
@@ -43,5 +43,16 @@ describe("a row of the history", () => {
     expect(meta(row({ kind: "ask", target_app: "小晴" }))).toBe("傳給 小晴");
     expect(meta(row({ kind: "ask", target_app: null }))).toBe("傳給 拉斐爾");
     expect(meta(row({ target_app: "Code.exe" }))).toBe("Code");
+  });
+});
+
+describe("the app a dictation went to", () => {
+  test("is named as people know it, on Windows and on a Mac", () => {
+    expect(programName("notepad.exe")).toBe("notepad");
+    expect(programName("code - insiders.exe")).toBe("code - insiders");
+    expect(programName("foo.bar.exe")).toBe("foo.bar");
+    expect(programName("com.tinyspeck.slackmacgap")).toBe("Slack");
+    expect(programName("com.apple.mail")).toBe("Mail");
+    expect(programName("com.example.someeditor")).toBe("someeditor");
   });
 });

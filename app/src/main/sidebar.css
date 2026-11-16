@@ -48,6 +48,8 @@
 :root[data-sidebar-collapsed] { --sidebar-width: 88px; }
 :root[data-sidebar-collapsed] .side { padding-inline: 0; }
 :root[data-sidebar-collapsed] .side .mb-top { flex-direction: column; min-height: 0; }
+/* On a Mac the traffic lights stand at the rail's top (styles.css): the faces start under them. */
+:root[data-platform="macos"][data-sidebar-collapsed] .side .mb-top { min-height: 40px; }
 :root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.au-room-more { display: none; }
 :root[data-sidebar-collapsed] .side .mb-pinned { grid-template-columns: minmax(0, 1fr); padding-bottom: 0; }
 :root[data-sidebar-collapsed] .side :is(.mb-pinned, .mb-list > .mb-item:has(> .mb-chief))::after, :root[data-sidebar-collapsed] .side :is(.mb-list > .mb-sec[data-open="true"] ~ .mb-sec[data-open="true"], .au-rooms-section:has(.au-room-row))::before { content: ""; display: block; height: 1px; width: var(--side-row); margin: var(--sp-2) auto; background: var(--rail-line); }

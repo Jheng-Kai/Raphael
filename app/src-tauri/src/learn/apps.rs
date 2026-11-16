@@ -8,9 +8,10 @@ pub enum AppKind {
     Other,
 }
 
-/// The Electron editors built on VS Code, by executable basename and by the name the main window
-/// knows them by. All have the `editor.accessibilitySupport` setting.
-const EDITORS: [(&str, &str); 7] = [
+/// The Electron editors built on VS Code, by executable basename (Windows) or lowercased bundle
+/// identifier (macOS) and by the name the main window knows them by. All have the
+/// `editor.accessibilitySupport` setting.
+const EDITORS: [(&str, &str); 14] = [
     ("code.exe", "vscode"),
     ("code - insiders.exe", "vscode"),
     ("cursor.exe", "cursor"),
@@ -18,6 +19,13 @@ const EDITORS: [(&str, &str); 7] = [
     ("windsurf.exe", "windsurf"),
     ("trae.exe", "trae"),
     ("positron.exe", "positron"),
+    ("com.microsoft.vscode", "vscode"),
+    ("com.microsoft.vscodeinsiders", "vscode"),
+    ("com.todesktop.230313mzl4w4u92", "cursor"),
+    ("com.vscodium", "vscodium"),
+    ("com.exafunction.windsurf", "windsurf"),
+    ("com.trae.app", "trae"),
+    ("com.rstudio.positron", "positron"),
 ];
 
 fn basename(process_name: &str) -> String {
@@ -53,13 +61,30 @@ pub fn classify(process_name: &str) -> AppKind {
         | "wezterm-gui.exe"
         | "alacritty.exe"
         | "mintty.exe" => AppKind::Terminal,
+        // macOS terminals, by bundle identifier.
+        "com.apple.terminal"
+        | "com.googlecode.iterm2"
+        | "com.github.wez.wezterm"
+        | "org.alacritty"
+        | "net.kovidgoyal.kitty"
+        | "dev.warp.warp-stable"
+        | "com.mitchellh.ghostty" => AppKind::Terminal,
         "chrome.exe" | "msedge.exe" | "line.exe" | "discord.exe" | "slack.exe" | "chatgpt.exe"
         | "notion.exe" => AppKind::Chromium,
+        // macOS Chromium browsers and Electron apps, by bundle identifier.
+        "com.google.chrome"
+        | "com.microsoft.edgemac"
+        | "com.brave.browser"
+        | "com.hnc.discord"
+        | "com.tinyspeck.slackmacgap"
+        | "notion.id"
+        | "com.anthropic.claudefordesktop" => AppKind::Chromium,
         _ => AppKind::Other,
     }
 }
 
 /// Only code editors have the editor.accessibilitySupport setting named by the hint.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn needs_accessibility_hint(kind: AppKind) -> bool {
     kind == AppKind::CodeEditor
 }
@@ -104,6 +129,23 @@ mod tests {
             assert_eq!(classify(name), AppKind::CodeEditor, "{name}");
         }
         assert!(needs_accessibility_hint(AppKind::CodeEditor));
+    }
+
+    #[test]
+    fn mac_apps_are_recognized_by_bundle_identifier() {
+        for id in [
+            "com.apple.terminal",
+            "com.googlecode.iterm2",
+            "net.kovidgoyal.kitty",
+        ] {
+            assert_eq!(classify(id), AppKind::Terminal, "{id}");
+        }
+        for id in ["com.google.chrome", "com.tinyspeck.slackmacgap"] {
+            assert_eq!(classify(id), AppKind::Chromium, "{id}");
+        }
+        assert_eq!(classify("com.microsoft.vscode"), AppKind::CodeEditor);
+        assert_eq!(editor_id("com.microsoft.vscode"), Some("vscode"));
+        assert_eq!(classify("com.apple.textedit"), AppKind::Other);
     }
 
     #[test]

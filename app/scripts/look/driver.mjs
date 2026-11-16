@@ -160,6 +160,11 @@ export function findVisibleElement(selector) {
   return null;
 }
 
+/** The window's command key as the page counts it: "Meta" (⌘) where it runs as on a Mac, "Control" elsewhere. */
+async function primaryKey(page) {
+  return await page.evaluate(() => document.documentElement.dataset.platform === "macos") ? "Meta" : "Control";
+}
+
 export async function perform(page, step, evidenceDirectory) {
   // A step marked `wide` is for the full list: on a window narrower than 860 px the list is the rail of faces, which has
   // no folder headings, no ⋯ and no edge to drag, so the step is left out there (its check returns at once the same way).
@@ -409,10 +414,10 @@ export async function perform(page, step, evidenceDirectory) {
         const mark=document.querySelector('mark.is-current'); return mark?.closest('.ra-scroll, .au-room-scroll')?.scrollTop;
       });
       const top = await offset();
-      await field.focus(); await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('needl');
+      await field.focus(); const selectAll = await primaryKey(page); await page.keyboard.down(selectAll); await page.keyboard.press('a'); await page.keyboard.up(selectAll); await page.keyboard.type('needl');
       await expectCount(`${step.total}/${step.total}`);
       if (await offset() !== top) throw new Error('typing moved the conversation');
-      await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('absent-word');
+      await page.keyboard.down(selectAll); await page.keyboard.press('a'); await page.keyboard.up(selectAll); await page.keyboard.type('absent-word');
       await page.waitForFunction(() => !document.querySelector('mark[data-find-match]') && [...document.querySelectorAll('.ra-find:not([hidden]) .ra-find-count')].some(el=>el.textContent && !el.textContent.includes('/') && !el.textContent.includes('…')), {timeout:6000});
       if (!await page.$eval(`${bar} .ra-find-count`, el=>el.scrollWidth<=el.clientWidth+1)) throw new Error('no-match words are clipped');
       const after = await geometry();
@@ -1002,14 +1007,17 @@ export async function perform(page, step, evidenceDirectory) {
     case "require":
       if (!await page.$(step.selector)) throw new Error(`Unavailable in this checkout: ${step.reason} (${step.selector})`);
       break;
-    case "key":
-      if (step.ctrl) await page.keyboard.down("Control");
+    case "key": {
+      // `ctrl` is the window's command key: Ctrl on Windows, ⌘ where the page runs as on a Mac (shared/platform.ts `primaryKey`).
+      const primary = step.ctrl ? await primaryKey(page) : null;
+      if (primary) await page.keyboard.down(primary);
       if (step.shift) await page.keyboard.down("Shift");
       try { await page.keyboard.press(step.key); } finally {
         if (step.shift) await page.keyboard.up("Shift");
-        if (step.ctrl) await page.keyboard.up("Control");
+        if (primary) await page.keyboard.up(primary);
       }
       break;
+    }
     case "wheel": {
       const element = await visible(step.selector);
       try {

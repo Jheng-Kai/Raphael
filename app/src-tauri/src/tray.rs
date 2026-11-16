@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use tauri::{
     AppHandle, Manager, Wry,
     menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
-    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
 };
 
 use crate::commands::{self, MainEvent, TrayAction, TrayPage};
@@ -370,20 +370,29 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .icon(icon)
         .tooltip("Raphael")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        // Windows opens the window with a left click and the menu with a right one; a menu bar
+        // extra on macOS opens its menu with any click, and the menu's first item opens the window.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| match Action::from_id(event.id().as_ref()) {
             Some(action) => run(app, action),
             None => log::warn!("unknown tray menu item: {}", event.id().as_ref()),
         })
         .on_tray_icon_event(|tray, event| match event {
+            #[cfg(not(target_os = "macos"))]
             TrayIconEvent::Click {
-                button: MouseButton::Left,
+                button: tauri::tray::MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
             } => crate::show_main_window(tray.app_handle()),
             // A right click follows almost every time the pointer comes to the icon, and the
             // menu opens at the end of it: read the microphones now so that it is right then.
             TrayIconEvent::Enter { .. } => rescan(tray.app_handle()),
+            // On macOS the menu opens as the button goes down.
+            #[cfg(target_os = "macos")]
+            TrayIconEvent::Click {
+                button_state: MouseButtonState::Down,
+                ..
+            } => rescan(tray.app_handle()),
             _ => {}
         })
         .build(app)

@@ -562,6 +562,21 @@ fn is_function_key(key: Key) -> bool {
 /// does not count as a modifier here, because Shift+V is a capital V; a modifier on its own
 /// must be Right Alt, never Left Alt, Shift, Ctrl or Win alone; and Esc, which cancels a
 /// dictation, is never part of a hotkey.
+/// What [`validate_binding`] says of a lone modifier: the keys as the keyboard names them (Alt, Ctrl
+/// and Win on Windows; Option, Control and Command on a Mac, the same as keys.ts on each).
+const LONE_MODIFIER: &str = if cfg!(target_os = "macos") {
+    "只有右 Option 可以單獨當快捷鍵；左 Option、Control、Shift、Command 要搭配其他按鍵"
+} else {
+    "只有右 Alt 可以單獨當快捷鍵；左 Alt、Ctrl、Shift、Win 要搭配其他按鍵"
+};
+
+/// What [`validate_binding`] says of a bare letter, digit or symbol.
+const BARE_KEY: &str = if cfg!(target_os = "macos") {
+    "單獨的字母、數字或符號鍵會干擾平常打字，請搭配 Option、Control 或 Command，或使用功能鍵（F1 到 F24）"
+} else {
+    "單獨的字母、數字或符號鍵會干擾平常打字，請搭配 Alt、Ctrl 或 Win，或使用功能鍵（F1 到 F24）"
+};
+
 pub fn validate_binding(text: &str) -> Result<(), String> {
     let Hotkey { modifiers, key } =
         parse_binding(text).map_err(|_| "這組按鍵無法使用".to_owned())?;
@@ -570,10 +585,7 @@ pub fn validate_binding(text: &str) -> Result<(), String> {
             if modifiers == Modifiers::OPT_RIGHT {
                 Ok(())
             } else {
-                Err(
-                    "只有右 Alt 可以單獨當快捷鍵；左 Alt、Ctrl、Shift、Win 要搭配其他按鍵"
-                        .to_owned(),
-                )
+                Err(LONE_MODIFIER.to_owned())
             }
         }
         Some(Key::Escape) => Err("Esc 用來取消聽寫，不能當快捷鍵".to_owned()),
@@ -583,14 +595,14 @@ pub fn validate_binding(text: &str) -> Result<(), String> {
             if is_function_key(key) || has_command_modifier {
                 Ok(())
             } else {
-                Err("單獨的字母、數字或符號鍵會干擾平常打字，請搭配 Alt、Ctrl 或 Win，或使用功能鍵（F1 到 F24）".to_owned())
+                Err(BARE_KEY.to_owned())
             }
         }
     }
 }
 
 /// Raphael's data folder: `override_dir` (the value of `RAPHAEL_DATA_DIR`) if it is set and not
-/// empty, else `Raphael` in `appdata` (the value of `APPDATA`).
+/// empty, else `Raphael` in `appdata` (the roaming folder of `identity::user_folders`).
 fn data_dir_in(
     override_dir: Option<OsString>,
     appdata: Option<OsString>,
@@ -608,7 +620,7 @@ fn data_dir_in(
 pub fn data_dir() -> Result<PathBuf, String> {
     data_dir_in(
         std::env::var_os("RAPHAEL_DATA_DIR"),
-        std::env::var_os("APPDATA"),
+        crate::identity::user_folders().0,
     )
 }
 
@@ -1583,9 +1595,12 @@ mod tests {
     #[test]
     fn only_right_alt_may_be_alone() {
         // keys.ts gives the same words
-        let lone = "只有右 Alt 可以單獨當快捷鍵；左 Alt、Ctrl、Shift、Win 要搭配其他按鍵";
         for text in ["AltLeft", "Alt", "ShiftRight", "ControlLeft", "MetaRight"] {
-            assert_eq!(validate_binding(text), Err(lone.to_owned()), "{text}");
+            assert_eq!(
+                validate_binding(text),
+                Err(LONE_MODIFIER.to_owned()),
+                "{text}"
+            );
         }
         assert_eq!(validate_binding("AltRight"), Ok(()));
     }

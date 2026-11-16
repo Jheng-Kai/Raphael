@@ -239,6 +239,50 @@ Use the PR template to record rule IDs, commands/exits, look/judge/live artifact
 images inspected and all incomplete/native acceptance. Never infer deployed or native
 acceptance from offline gates.
 
+## macOS
+
+The same app runs on macOS (Apple silicon, macOS 13 or later). The shell's native code for it is
+in `app/src-tauri/src/macos` (the accessibility API, posted keys, the pasteboard, power and
+permissions), with a macOS file beside each Windows one: `paste/macos.rs`, `media/macos.rs`,
+`learn/ax.rs`, `computer/ax.rs`, and the event tap of the vendored keyboard listener
+(`vendor/handy-keys/src/platform/macos/listener.rs`). On a Mac:
+
+- `npm run look` renders in the installed Chrome, whose user agent says Macintosh, so the page draws
+  its macOS frame (no Windows window controls). On a Mac every main-window scene also draws the native
+  traffic lights where `tauri.macos.conf.json` puts them, and fails when a control, face or word is under
+  them (`scripts/look/traffic-lights.mjs`); change `trafficLightPosition` and that check together. The real
+  app uses WKWebView (Safari's engine), which Chrome does not show: check a change to fonts, scrolling,
+  form controls, clipping or iframes in the packaged app too. WebKit differs from WebView2 in ways that
+  broke features here before:
+  - The Enter, Escape or arrow that picks an IME candidate comes after `compositionend` with only
+    keyCode 229: `guardImeKeys()` (shared/ime.ts) keeps it from every page handler; keep it first in main.ts.
+  - A clicked `<button>` takes no focus (`focusout.relatedTarget` is null), and the page may not read the
+    clipboard (`api.clipboardText` asks the shell on a Mac).
+  - No `overflow-clip-margin` (use the `@supports not` clip-path fallbacks), no `field-sizing` before
+    Safari 26 (shared/field-sizing.ts), no `Element.moveBefore` (a moved iframe reloads: page cards and
+    the member computer's view reconnect when moved), no Referer from `tauri://` (YouTube plays from
+    the core's page host, `pages.video_base`).
+  - ⌘ is the window's command key (`primaryKey`, `shortcutText`), Control combinations stay with text
+    fields, Option+arrows move by word (back/forward is ⌘[ / ⌘]), and no keyup comes for a key let go
+    under ⌘.
+  - Words: `systemMessage` reads `macCatalogs`, then `macRenames` (PC → Mac, Enter → Return); i18n.test.ts
+    fails when a message names a Windows key, program or store on a Mac.
+- Dictation, pasting, learning from corrections and operating the desktop need the permissions macOS
+  asks for once: Microphone, Accessibility (the hotkeys and ⌘V) and Input Monitoring (the watch on the
+  owner's input during a run). A development build runs from the terminal, so macOS asks for, and
+  records, the terminal app; grant it there, then restart `tauri dev`.
+  The packaged app asks for itself: a refused or unanswered microphone stops the dictation before it
+  records (`MicrophoneGate`, NO_SOUND's Mac words), keys waiting for Accessibility tell the window once
+  (`missing.accessibility`, with a button to the pane), and an ad-hoc signed rebuild is a new app to
+  macOS, so its Accessibility must be allowed again.
+- Claude Code keeps its sign-in in the login Keychain on a Mac (R-CLI-SIGNIN-04): only the item's
+  existence and date are read, never its secret.
+- `npm run native` and `--computer` stay Windows/Docker gates; on a Mac verify native behavior by hand
+  in `tauri dev` and say so in the PR.
+- Pausing media: macOS 15.4 and later answer MediaRemote only for Apple's processes, so the media
+  paused while a recording lasts are the scriptable players that run (Music, Spotify, TV, VLC); a video
+  in a browser keeps playing there.
+
 ## Native regression gate
 
 Every owner report and every native change must be reproduced in a native journey

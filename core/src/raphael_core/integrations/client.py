@@ -62,7 +62,7 @@ for _sdk_logger in ("mcp", "httpx2", "httpcore2"):
 
 # Who is asking, on every request to a plugin server or an authorization server: some of them turn
 # away a client that does not say (their firewalls look at it).
-USER_AGENT = f"Raphael/{__version__} (Windows)"
+USER_AGENT = f"Raphael/{__version__} ({'macOS' if sys.platform == 'darwin' else 'Windows'})"
 
 # The most a job may take, connecting included. Starting a server that is fetched first (npx) can
 # take most of the refresh's time; a call the assistant makes waits for much less, since someone is

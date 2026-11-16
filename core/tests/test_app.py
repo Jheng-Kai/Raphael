@@ -2084,10 +2084,13 @@ async def test_the_fake_llm_does_nothing_to_the_computer(make_app):
     assert isinstance(make_app().agent._actions, NullActions)
 
 
-async def test_the_real_core_gets_windows_actions_unless_it_is_given_others(make_app):
-    from raphael_core.agent.device import WindowsActions
+async def test_the_real_core_gets_windows_actions_unless_it_is_given_others(make_app, monkeypatch):
+    from raphael_core.agent.device import MacActions, WindowsActions
 
+    monkeypatch.setattr("raphael_core.agent.device.PLATFORM", "win32")
     assert isinstance(make_app(fake_llm=False).agent._actions, WindowsActions)
+    monkeypatch.setattr("raphael_core.agent.device.PLATFORM", "darwin")
+    assert isinstance(make_app(fake_llm=False).agent._actions, MacActions)
     actions = RecordingActions()
     assert make_app(fake_llm=False, agent_actions=actions).agent._actions is actions
 

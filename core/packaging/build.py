@@ -1,4 +1,4 @@
-"""Build and audit a locked Windows x64 core, independent of the caller's working directory."""
+"""Build and audit a locked Windows x64 or macOS core, independent of the caller's working directory."""
 
 from __future__ import annotations
 
@@ -22,14 +22,43 @@ BUNDLE = CORE / "dist" / "raphael-core"
 DEVELOPMENT_SUFFIXES = {".lib", ".exp", ".pdb", ".h", ".hpp", ".cmake", ".pc"}
 
 
-def required_files() -> list[str]:
+def windows(platform: str | None = None) -> bool:
+    return (platform or sys.platform) == "win32"
+
+
+def executable(platform: str | None = None) -> str:
+    """The core's executable in the bundle."""
+    return "raphael-core.exe" if windows(platform) else "raphael-core"
+
+
+def native_files(platform: str | None = None) -> list[str]:
+    """The native libraries without which the core cannot listen, transcribe or decode audio."""
+    if windows(platform):
+        return [
+            "_internal/python312.dll",
+            "_internal/sherpa_onnx/lib/onnxruntime.dll",
+            "_internal/sherpa_onnx/lib/sherpa-onnx-c-api.dll",
+            "_internal/sherpa_onnx/lib/sherpa-onnx-cxx-api.dll",
+            "_internal/_sounddevice_data/portaudio-binaries/libportaudio64bit.dll",
+            "_internal/_soundfile_data/libsndfile_x64.dll",
+        ]
+    arch = "arm64" if platform_machine() in {"arm64", "aarch64"} else "x86_64"
     return [
-        "raphael-core.exe", "_internal/python312.dll",
-        "_internal/sherpa_onnx/lib/onnxruntime.dll",
-        "_internal/sherpa_onnx/lib/sherpa-onnx-c-api.dll",
-        "_internal/sherpa_onnx/lib/sherpa-onnx-cxx-api.dll",
-        "_internal/_sounddevice_data/portaudio-binaries/libportaudio64bit.dll",
-        "_internal/_soundfile_data/libsndfile_x64.dll",
+        "_internal/sherpa_onnx/lib/libonnxruntime.dylib",
+        "_internal/sherpa_onnx/lib/libsherpa-onnx-c-api.dylib",
+        "_internal/sherpa_onnx/lib/libsherpa-onnx-cxx-api.dylib",
+        "_internal/_sounddevice_data/portaudio-binaries/libportaudio.dylib",
+        f"_internal/_soundfile_data/libsndfile_{arch}.dylib",
+    ]
+
+
+def platform_machine() -> str:
+    return platform.machine().lower()
+
+
+def required_files(platform: str | None = None) -> list[str]:
+    return [
+        executable(platform), *native_files(platform),
         "_internal/raphael_core/brain/prompts/cleanup_system.md",
         "_internal/raphael_core/connectors/finder-data.json",
         "_internal/raphael_core/computer/driver_schemas.json",
@@ -37,7 +66,7 @@ def required_files() -> list[str]:
         "_internal/licenses/pyinstaller/pyinstaller-6.22.3.dist-info/licenses/COPYING.txt",
         *(f"_internal/licenses/{name}" for name in ADAPTED_LICENSE_FILES),
         "_internal/opencc/clib/share/opencc/s2twp.json",
-        *(f"_internal/licenses/upstream/{item['file']}" for item in load_source_manifest()["licenses"]),
+        *(f"_internal/licenses/upstream/{item['file']}" for item in load_source_manifest(platform)["licenses"]),
     ]
 
 
@@ -46,8 +75,10 @@ def development_file(relative: PurePosixPath) -> bool:
     return (
         suffix in DEVELOPMENT_SUFFIXES
         or (suffix == ".exe" and relative != PurePosixPath("raphael-core.exe"))
+        # OpenCC's command-line tools, which have no suffix on macOS.
+        or relative.parts[:4] == ("_internal", "opencc", "clib", "bin")
         # NumPy's C test helpers (_multiarray_tests.pyd, ...) are imported only by its own tests.
-        or (suffix in {".pyd", ".dll"} and relative.name.split(".")[0].endswith(("_test", "_tests")))
+        or (suffix in {".pyd", ".dll", ".so", ".dylib"} and relative.name.split(".")[0].endswith(("_test", "_tests")))
     )
 
 
@@ -73,8 +104,12 @@ def audit_bundle(bundle: Path) -> dict:
 
 
 def main() -> None:
-    if sys.platform != "win32" or platform.machine().lower() not in {"amd64", "x86_64"}:
-        raise SystemExit("Build this artifact with Windows x64 Python.")
+    supported = (
+        (sys.platform == "win32" and platform_machine() in {"amd64", "x86_64"})
+        or (sys.platform == "darwin" and platform_machine() in {"arm64", "x86_64"})
+    )
+    if not supported:
+        raise SystemExit("Build this artifact with Windows x64 or macOS Python.")
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("The locked core requires Python 3.12.")
     write_notices(CORE / "build" / "notices")

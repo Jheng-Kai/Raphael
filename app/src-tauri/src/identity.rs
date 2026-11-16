@@ -131,8 +131,8 @@ impl Identity {
     /// changes or resets its picture never touches the release's. `data_dir` is the value of
     /// `RAPHAEL_DATA_DIR` as the caller set it, read before [`use_own_data`] sets it for a
     /// development build: a run kept apart by it (the tests, the end-to-end runs) keeps these
-    /// files under it too, as it does the rest of its data. `local_appdata` is the value of
-    /// `LOCALAPPDATA`. `None` when neither is set (not Windows).
+    /// files under it too, as it does the rest of its data. `local_appdata` is the local folder of
+    /// [`user_folders`]. `None` when neither is known.
     pub fn local_dir(
         &self,
         data_dir: Option<OsString>,
@@ -146,6 +146,36 @@ impl Identity {
     }
 }
 
+/// The per-user folders Raphael's files go in, as `(roaming, local)`: on Windows the values of
+/// `APPDATA` and `LOCALAPPDATA`. macOS has no roaming profile, so both are
+/// `~/Library/Application Support`, which is what Tauri's `$DATA` and `$LOCALDATA` are there and
+/// what the core's `paths.data_dir` and `paths.local_dir` use.
+pub fn user_folders() -> (Option<OsString>, Option<OsString>) {
+    #[cfg(windows)]
+    {
+        (
+            std::env::var_os("APPDATA"),
+            std::env::var_os("LOCALAPPDATA"),
+        )
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let support = std::env::var_os("HOME")
+            .filter(|home| !home.is_empty())
+            .map(|home| {
+                Path::new(&home)
+                    .join("Library")
+                    .join("Application Support")
+                    .into_os_string()
+            });
+        (support.clone(), support)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        (None, None)
+    }
+}
+
 /// Gives this process the data folder of its identity (see [`Identity::data_env`]). The core
 /// inherits the environment, and the device settings and the data migration read it.
 ///
@@ -153,11 +183,12 @@ impl Identity {
 ///
 /// It changes the environment of the process, so no other thread may be running.
 pub unsafe fn use_own_data(identity: &Identity) {
+    let (roaming, local) = user_folders();
     let env = identity.data_env(
         std::env::var_os("RAPHAEL_DATA_DIR"),
         std::env::var_os("RAPHAEL_MODELS_DIR"),
-        std::env::var_os("APPDATA"),
-        std::env::var_os("LOCALAPPDATA"),
+        roaming,
+        local,
     );
     for (name, value) in env {
         // SAFETY: the caller promises that no other thread runs.

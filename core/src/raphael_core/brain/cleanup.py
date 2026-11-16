@@ -287,9 +287,24 @@ def _one_line(text: str) -> str:
     return " ".join(text.splitlines()).strip()
 
 
-# The kind of app each process is, by its name in lower case, so that the model can set the tone.
+# The kind of app each process is, by its name in lower case, so that the model can set the tone: a Windows process
+# name, or on a Mac the app's bundle identifier (the shell lowercases it, paste/macos.rs).
 _APP_KINDS = {
     "chat": (
+        "jp.naver.line.mac",
+        "com.hnc.discord",
+        "com.facebook.archon",
+        "com.facebook.archon.developerid",
+        "ru.keepcoder.telegram",
+        "org.telegram.desktop",
+        "net.whatsapp.whatsapp",
+        "desktop.whatsapp",
+        "com.tinyspeck.slackmacgap",
+        "com.microsoft.teams2",
+        "com.microsoft.teams",
+        "org.whispersystems.signal-desktop",
+        "com.tencent.xinwechat",
+        "com.apple.mobilesms",
         "line.exe",
         "discord.exe",
         "messenger.exe",
@@ -303,6 +318,15 @@ _APP_KINDS = {
         "weixin.exe",
     ),
     "email or document": (
+        "com.microsoft.outlook",
+        "com.microsoft.word",
+        "com.apple.mail",
+        "org.mozilla.thunderbird",
+        "com.microsoft.onenote.mac",
+        "notion.id",
+        "md.obsidian",
+        "com.apple.notes",
+        "com.apple.iwork.pages",
         "outlook.exe",
         "olk.exe",  # the new Outlook
         "winword.exe",
@@ -312,6 +336,19 @@ _APP_KINDS = {
         "obsidian.exe",
     ),
     "code editor or terminal": (
+        "com.microsoft.vscode",
+        "com.microsoft.vscodeinsiders",
+        "com.todesktop.230313mzl4w4u92",  # Cursor
+        "com.exafunction.windsurf",
+        "dev.zed.zed",
+        "com.apple.dt.xcode",
+        "com.jetbrains.intellij",
+        "com.jetbrains.pycharm",
+        "com.sublimetext.4",
+        "com.apple.terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.warp-stable",
+        "com.mitchellh.ghostty",
         "code.exe",
         "code - insiders.exe",
         "cursor.exe",

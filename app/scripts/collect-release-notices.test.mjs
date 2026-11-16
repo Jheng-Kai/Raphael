@@ -366,15 +366,23 @@ describe("version-pinned upstream license supplements", () => {
   it("checks in exact-version provenance and matching hashes for every real upstream supplement", () => {
     const directory = join(scripts, "release-licenses");
     const manifest = JSON.parse(readFileSync(join(directory, "manifest.json"), "utf8"));
+    const objc2Frameworks = ["app-kit", "cloud-kit", "core-data", "core-foundation", "core-graphics", "core-image", "core-text",
+      "core-video", "io-surface", "metal", "osa-kit", "quartz-core", "security", "service-management", "web-kit"];
     expect(manifest.packages.map((entry) => `${entry.name}@${entry.version}`)).toEqual([
-      "alloc-stdlib@0.3.0", "selectors@0.38.0", "webview2-com@0.39.1", "webview2-com-macros@0.8.1", "webview2-com-sys@0.39.1",
+      "alloc-stdlib@0.3.0", "block2@0.6.2", "dispatch2@0.3.1", "mac-notification-sys@0.6.15", "objc2@0.6.5",
+      ...objc2Frameworks.slice(0, 8).map((name) => `objc2-${name}@0.3.2`),
+      "objc2-encode@4.1.0", "objc2-exception-helper@0.1.1", "objc2-foundation@0.3.2",
+      ...objc2Frameworks.slice(8).map((name) => `objc2-${name}@0.3.2`),
+      "selectors@0.38.0", "webview2-com@0.39.1", "webview2-com-macros@0.8.1", "webview2-com-sys@0.39.1",
     ]);
     for (const entry of manifest.packages) {
       expect(entry.gitCommit).toMatch(/^[a-f0-9]{40}$/);
       for (const file of entry.files) {
         expect(createHash("sha256").update(readFileSync(join(directory, file.file))).digest("hex")).toBe(file.sha256);
         expect(file.sourceUrl).toMatch(/^https:\/\//);
-        if (entry.name !== "selectors") expect(file.sourceUrl).toContain(entry.gitCommit);
+        // A text taken from elsewhere (the license steward, or the later upstream commit that added the
+        // missing file) is backed by the license declaration at the published crate's own commit.
+        if (!file.sourceUrl.includes(entry.gitCommit)) expect(entry.evidenceUrl).toContain(entry.gitCommit);
       }
     }
     expect(manifest.packages.find((entry) => entry.name === "selectors").evidenceUrl).toContain("572ecba2d1600e7c3d490586692a209faf703baa/selectors/lib.rs");

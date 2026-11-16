@@ -803,11 +803,14 @@ async def test_disconnect_purges_raphael_credentials_hides_models_and_reconnects
         assert ("brains.changed", {}) in events
 
         popen_calls = []
-        monkeypatch.setattr(discovery.subprocess, "Popen", lambda *args, **kwargs: popen_calls.append((args, kwargs)) or SignInProcess(held=False))
+        fake_popen = lambda *args, **kwargs: popen_calls.append((args, kwargs)) or SignInProcess(held=False)  # noqa: E731
 
         events.clear()
-        assert brains.login("claude") == {"started": False, "reconnected": True}
-        assert brains.login("codex") == {"started": False, "reconnected": True}
+        # Only the sign-in is given a fake console: off Windows asyncio starts its processes with Popen too.
+        with monkeypatch.context() as patch:
+            patch.setattr(discovery.subprocess, "Popen", fake_popen)
+            assert brains.login("claude") == {"started": False, "reconnected": True}
+            assert brains.login("codex") == {"started": False, "reconnected": True}
         assert popen_calls == []
         assert settings.get("disconnected_clis") == ["gemini"]
         assert events == [("brains.changed", {}), ("brains.changed", {})]
@@ -818,8 +821,14 @@ async def test_disconnect_purges_raphael_credentials_hides_models_and_reconnects
 
         gemini_cred.unlink()
         if os.name == "nt":
+            monkeypatch.setattr(discovery.subprocess, "Popen", fake_popen)
             assert brains.login("gemini") == {"started": True}
             assert len(popen_calls) == 1
+            assert settings.get("disconnected_clis") == []
+        elif sys.platform == "darwin":
+            monkeypatch.setattr(discovery, "TerminalSignIn", lambda argv: popen_calls.append(argv) or SignInProcess(held=False))
+            assert brains.login("gemini") == {"started": True}
+            assert popen_calls == [cmd]
             assert settings.get("disconnected_clis") == []
     finally:
         await brains.aclose()
@@ -866,3 +875,31 @@ def test_a_vendor_cli_waits_for_our_tools_as_long_as_the_loop_gives_a_call_in_fl
     from raphael_core.agent.cli.drivers import MCP_TOOL_S
     from raphael_core.agent.cli.loop import CLI_TOOL_S
     assert MCP_TOOL_S == CLI_TOOL_S
+
+
+def test_a_mac_signs_in_in_a_terminal_window_that_reports_how_the_cli_ended(tmp_path):
+    from pathlib import Path
+    from raphael_core.agent.cli.process import API_KEYS
+    from raphael_core.agent.cli.terminal_login import TerminalSignIn
+    opened = []
+    sign_in = TerminalSignIn(["fake node", "entry.js", "login"], opener=lambda args, **kwargs: opened.append(args)
+                             or subprocess.CompletedProcess(args, 0), poll_s=0.01)
+    script = Path(opened[0][-1])
+    assert opened[0][:3] == ["/usr/bin/open", "-a", "Terminal"] and script.suffix == ".command"
+    text = script.read_text(encoding="utf-8")
+    assert "'fake node' entry.js login" in text and all(key in text.split("unset ", 1)[1].splitlines()[0] for key in API_KEYS)
+    assert sign_in.poll() is None
+    (sign_in.folder / "code").write_text("0\n", encoding="utf-8")
+    assert sign_in.wait() == 0 and sign_in.poll() == 0 and not sign_in.folder.exists()
+
+
+def test_a_mac_sign_in_that_is_stopped_or_cannot_open_ends_as_a_failure(tmp_path):
+    from raphael_core.agent.cli.terminal_login import TerminalSignIn
+    ok = lambda args, **kwargs: subprocess.CompletedProcess(args, 0)  # noqa: E731
+    sign_in = TerminalSignIn(["codex", "login"], opener=ok)
+    sign_in.terminate()
+    assert sign_in.wait() == 1
+    timed_out = TerminalSignIn(["codex", "login"], opener=ok, timeout_s=0.02, poll_s=0.01)
+    assert timed_out.wait() == 1
+    with pytest.raises(OSError):
+        TerminalSignIn(["codex", "login"], opener=lambda args, **kwargs: subprocess.CompletedProcess(args, 1))

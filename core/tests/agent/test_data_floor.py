@@ -1,5 +1,7 @@
 """Protected app data cannot be changed through an untrusted command or file tool."""
 
+import sys
+
 import pytest
 
 from raphael_core.agent.data_floor import DataFloor
@@ -172,3 +174,21 @@ def test_credentials_and_the_rest_of_the_data_folder_stay_protected_beside_attac
     assert floor.access("local__local_exec", {"command": f"Get-Content '{path}'"}) == "read"
     assert floor.access("local__local_exec", {"command": f"Get-Content '{_ATTACHED}'; Get-Content '{path}'"}) == "read"
     assert floor.access("local__local_exec", {"command": f"$p='{path}'; if ($p) {{ Get-Content $p }}"}) == "write"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the Mac's own folders")
+@pytest.mark.parametrize("command", [
+    "echo x > ~/Library/Application\\ Support/Raphael/device.json",
+    "rm -rf '/Users/someone/Library/Application Support/Raphael Dev/memory'",
+    "sqlite3 ~/Library/Application\\ Support/Raphael/raphael.db 'delete from tasks'",
+])
+def test_the_mac_data_folder_of_either_build_is_protected(command):
+    floor = DataFloor(environ={"HOME": "/Users/someone"})
+    assert floor.access("local_exec", {"command": command}) == "write"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="a Mac has no drive letters")
+def test_a_drive_path_is_never_a_folder_of_raphael_on_a_mac(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    floor = DataFloor(environ={"HOME": "/Users/someone"}, core_root=tmp_path)
+    assert floor.access("local_exec", {"command": "Get-Content C:\\app\\.env"}) is None

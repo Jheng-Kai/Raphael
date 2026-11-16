@@ -302,3 +302,25 @@ test("beside the window's hotkeys, the right Alt still starts and ends a dictati
   expect(steps).toEqual(["back"]);
   expect(sent).toHaveBeenCalledTimes(2);
 });
+
+describe("on a Mac", () => {
+  const mac = (event: NavKeyInput) => reduceNavKey(emptyNavKeyState(), event, true);
+  test("⌘[ goes back and ⌘] goes forward, once for each press", () => {
+    expect(mac(key("BracketLeft", { metaKey: true }))).toMatchObject({ step: "back", preventDefault: true });
+    expect(mac(key("BracketRight", { metaKey: true }))).toMatchObject({ step: "forward", preventDefault: true });
+    expect(mac(key("BracketLeft", { metaKey: true, repeat: true }))).toMatchObject({ step: null, preventDefault: true });
+  });
+  test("Option with the arrows stays with the text field, which moves the caret a word", () => {
+    let state = emptyNavKeyState();
+    for (const event of [altDown("AltLeft"), arrow("ArrowLeft"), arrow("ArrowRight"), altUp("AltLeft")]) {
+      const result = reduceNavKey(state, event, true);
+      expect(result).toMatchObject({ step: null, preventDefault: false });
+      state = result.state;
+    }
+  });
+  test("⌘[ with another modifier, or taken by something else first, is no step", () => {
+    for (const init of [{ shiftKey: true }, { altKey: true }, { ctrlKey: true }, { handled: true }, { type: "keyup" as const }]) {
+      expect(mac(key("BracketLeft", { metaKey: true, ...init }))).toMatchObject({ step: null, preventDefault: false });
+    }
+  });
+});

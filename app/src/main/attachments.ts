@@ -4,6 +4,7 @@ import type { TurnAttachment } from "./types";
 import { esc, ico, iconButton } from "./ui";
 import * as api from "./api";
 import { audioPlayerHTML, videoPlayerHTML } from "./media-player";
+import { IS_MAC } from "../shared/platform";
 
 /** Shared with the core. Large files cross IPC only as bounded chunks and stored IDs. */
 export const ATTACH_MAX = 20;
@@ -55,11 +56,18 @@ export function fileMime(file: { name: string; type: string }): string {
   if (type === "image/jpg") return "image/jpeg";
   return type && type !== "application/octet-stream" ? type : EXTENSIONS[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream";
 }
-export function fileKind(mime: string): "image" | "video" | "audio" | "file" {
+/** Whether the webview can play `mime`. WebKit (macOS) plays no Matroska video, and older versions no Ogg or FLAC. */
+function playable(mime: string, mac: boolean): boolean {
+  if (!mac || typeof document === "undefined") return true;
+  return document.createElement(mime.startsWith("audio/") ? "audio" : "video").canPlayType(mime) !== "";
+}
+
+export function fileKind(mime: string, mac = IS_MAC): "image" | "video" | "audio" | "file" {
   // SVG is a document, not trusted image markup.
   if (/^image\/(png|jpeg|webp|gif|avif|bmp)$/.test(mime)) return "image";
-  if (mime.startsWith("video/")) return "video";
-  if (mime.startsWith("audio/")) return "audio";
+  // A sound or video the webview cannot play is a file to open, not a player that stays at 0:00.
+  if (mime.startsWith("video/")) return playable(mime, mac) ? "video" : "file";
+  if (mime.startsWith("audio/")) return playable(mime, mac) ? "audio" : "file";
   return "file";
 }
 export function fileSize(size?: number): string {

@@ -394,7 +394,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     }
     let copied: string;
     try {
-      copied = await navigator.clipboard.readText();
+      copied = await api.clipboardText();
     } catch {
       // the webview does not let the page read the clipboard: the field takes Ctrl+V
       input?.focus();

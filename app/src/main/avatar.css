@@ -27,6 +27,8 @@
 .av-crop-view img { position: absolute; display: block; max-width: none; user-select: none; -webkit-user-drag: none; pointer-events: none; }
 /* The corners reach 10 px past the frame: it clips, with room enough for them to paint and take the pointer. */
 .av-crop-frame { position: absolute; overflow: clip; overflow-clip-margin: 14px; }
+/* WebKit (macOS) has no overflow-clip-margin: the corners drawn outside the frame keep their room by a clip path. */
+@supports not (overflow-clip-margin: 1px) { .av-crop-frame { overflow: visible; clip-path: inset(-14px); } }
 /* The circle the picture will show in: what falls outside it is dimmed, the thirds show inside it while held. */
 .av-crop-ring { position: absolute; overflow: hidden; border-radius: var(--r-pill); pointer-events: none; box-shadow: inset 0 0 0 1px var(--photo-edge), 0 0 0 100vmax var(--photo-dim); }
 .av-crop-grid { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }

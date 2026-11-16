@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from raphael_core.system_words import for_this_system
 from raphael_core.agent import routing
 from raphael_core.agent.commands import COMMAND_NAMES, COMMANDS, NONE
 from raphael_core.agent.failure import AgentFailure
@@ -54,7 +55,8 @@ def test_the_seven_routes_are_these():
 
 
 def test_the_criteria_of_the_routes_are_these():
-    assert ROUTE_CRITERIA == {
+    # As written for Windows; a Mac says its own words in their place (`system_words`).
+    assert ROUTE_CRITERIA == {route: for_this_system(text) for route, text in {
         "command": "A one-step action on this computer that a fixed command covers: open any "
         "website, app or Windows settings page (or search on a site), change the volume, pause or "
         "play media, lock the screen.",
@@ -73,7 +75,7 @@ def test_the_criteria_of_the_routes_are_these():
         "open-ended conversation rather than one answer.",
         "chat": "Small talk, a greeting or thanks, needing no action and no facts.",
         "unclear": "Too garbled or incomplete to act on; Raphael should ask what was meant.",
-    }
+    }.items()}
     assert tuple(ROUTE_CRITERIA) == ROUTES
 
 

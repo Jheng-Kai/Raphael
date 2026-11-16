@@ -57,8 +57,18 @@ describe("wireKeyField", () => {
     return { sent, handlers };
   }
 
-  test("listens to the keyboard and to focus, never to change (which comes when a field is left)", () => {
-    expect(Object.keys(wired().handlers).sort()).toEqual(["focusout", "keydown"]);
+  test("listens to the keyboard, to focus and to presses, never to change (which comes when a field is left)", () => {
+    expect(Object.keys(wired().handlers).sort()).toEqual(["focusout", "keydown", "mousedown"]);
+  });
+
+  test("a press on the paste button keeps the focus in the field: WebKit does not focus a clicked button", () => {
+    const { handlers } = wired();
+    let prevented = false;
+    handlers.mousedown({ target: paste, preventDefault: () => (prevented = true) });
+    expect(prevented).toBe(true);
+    prevented = false;
+    handlers.mousedown({ target: elsewhere, preventDefault: () => (prevented = true) });
+    expect(prevented).toBe(false);
   });
 
   test("Enter in the field sends the typed key and stops the key there", () => {

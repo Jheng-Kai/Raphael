@@ -36,6 +36,8 @@ import re
 import unicodedata
 from collections.abc import Iterable
 
+from ..system_words import MAC
+
 HANDOFF = "handoff"
 CONFIRM = "confirm"
 REFUSE = "refuse"
@@ -272,6 +274,31 @@ def check_keys(chord: tuple[str, ...]) -> None:
 def chord_text(chord: tuple[str, ...]) -> str:
     """A chord as the shell takes it and the owner reads it: "Ctrl+Shift+Tab"."""
     return "+".join(part.upper() if len(part) == 1 else part.capitalize() for part in chord)
+
+
+# How the shell presses a chord (written for Windows) on a Mac (computer/ax.rs `mac_chord_with`): Ctrl with a letter,
+# Return, Home or End is ⌘; with an arrow or a delete key it is Option; with Tab or a page key it stays Control.
+_MAC_CTRL = {"enter": "⌘", "home": "⌘", "end": "⌘", "left": "⌥", "right": "⌥", "up": "⌥", "down": "⌥",
+             "backspace": "⌥", "delete": "⌥", "tab": "⌃", "pageup": "⌃", "pagedown": "⌃"}
+# The keys as a Mac names them; Home and End with ⌘ are its ⌘↑ and ⌘↓.
+_MAC_KEYS = {"enter": "Return", "backspace": "Delete", "delete": "⌦", "escape": "Esc", "esc": "Esc", "space": "Space",
+             "left": "←", "right": "→", "up": "↑", "down": "↓", "pageup": "Page Up", "pagedown": "Page Down"}
+
+
+def chord_label(chord: tuple[str, ...], mac: bool | None = None) -> str:
+    """A chord as the owner reads it: "Ctrl+Shift+Tab" on Windows, and on a Mac the keys the shell presses there, written
+    as macOS writes them ("⌘Return", "⇧⌘S", "⌥←"). The shell itself is always sent `chord_text`."""
+    if not (MAC if mac is None else mac):
+        return chord_text(chord)
+    *mods, key = chord
+    marks = set()
+    if "ctrl" in mods:
+        marks.add(_MAC_CTRL.get(key, "⌘"))
+        key = {"home": "up", "end": "down"}.get(key, key) if "⌘" in marks else key
+    if "shift" in mods:
+        marks.add("⇧")
+    order = "⌃⌥⇧⌘"
+    return "".join(mark for mark in order if mark in marks) + _MAC_KEYS.get(key, key.upper() if len(key) == 1 else key.capitalize())
 
 
 def confirm_by_keys(chord: tuple[str, ...]) -> bool:

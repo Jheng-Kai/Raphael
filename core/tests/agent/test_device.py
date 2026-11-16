@@ -7,6 +7,7 @@ none of these tests presses a key, locks a screen, opens a page or touches the c
 import base64
 import ctypes
 import json
+import plistlib
 import subprocess
 from pathlib import Path
 
@@ -16,11 +17,15 @@ from raphael_core.agent.device import (
     CF_UNICODETEXT,
     CREATE_NO_WINDOW,
     KEYEVENTF_KEYUP,
+    MAC_SETTINGS,
     VIRTUAL_KEYS,
+    MacActions,
     NullActions,
     StartApp,
     WindowsActions,
+    system_actions,
 )
+from raphael_core.agent.opening import SETTINGS_URIS
 
 
 class FakeUser32:
@@ -450,3 +455,162 @@ def test_the_null_actions_do_nothing_and_find_no_apps():
     actions.open_settings("ms-settings:display")
     actions.copy_to_clipboard("x")
     assert actions.list_start_apps() == []
+
+
+# --- macOS ---------------------------------------------------------------------------------------
+
+
+class MacRig:
+    """`MacActions` with its processes, its lock and its folders of apps given: nothing is opened,
+    pressed, locked or copied."""
+
+    def __init__(self, folders=(), returncode=0, fail_jxa=False, lock_fails=False):
+        self.ran = []
+        self.locked = 0
+        self.returncode = returncode
+        self.fail_jxa = fail_jxa
+        self.lock_fails = lock_fails
+        self.actions = MacActions(run=self._run, lock=self._lock, app_folders=folders)
+
+    def _run(self, args, **kwargs):
+        self.ran.append((args, kwargs))
+        code = 1 if self.fail_jxa and args[1:3] == ["-l", "JavaScript"] else self.returncode
+        return subprocess.CompletedProcess(args, code, stdout=b"", stderr=b"")
+
+    def _lock(self):
+        if self.lock_fails:
+            raise OSError("no login framework")
+        self.locked += 1
+
+
+def make_bundle(folder, name, info):
+    contents = folder / f"{name}.app" / "Contents"
+    contents.mkdir(parents=True)
+    if info is not None:
+        with open(contents / "Info.plist", "wb") as file:
+            plistlib.dump(info, file)
+    return folder / f"{name}.app"
+
+
+def test_the_mac_opens_a_web_page_with_open_and_nothing_that_is_not_one():
+    rig = MacRig()
+    rig.actions.open_url("https://example.com/a")
+    assert rig.ran[0][0] == ["/usr/bin/open", "--", "https://example.com/a"]
+    for url in ("file:///etc/passwd", "/Applications/Calculator.app", "javascript:alert(1)", "http://127.0.0.1/"):
+        with pytest.raises(ValueError):
+            rig.actions.open_url(url)
+    assert len(rig.ran) == 1
+
+
+def test_every_page_of_the_settings_has_a_pane_of_system_settings_on_the_mac():
+    assert set(MAC_SETTINGS) == set(SETTINGS_URIS)
+    for uri, target in MAC_SETTINGS.items():
+        assert target.startswith("x-apple.systempreferences:com.apple.") or target.endswith(".app"), uri
+
+
+def test_the_mac_opens_the_pane_of_a_page_and_no_other_address():
+    rig = MacRig()
+    rig.actions.open_settings("ms-settings:bluetooth")
+    rig.actions.open_settings("ms-settings:fonts")
+    assert rig.ran[0][0] == ["/usr/bin/open", "--", "x-apple.systempreferences:com.apple.BluetoothSettings"]
+    assert rig.ran[1][0] == ["/usr/bin/open", "-a", "/System/Applications/Font Book.app"]
+    with pytest.raises(ValueError):
+        rig.actions.open_settings("x-apple.systempreferences:com.apple.BluetoothSettings")
+
+
+def test_the_mac_moves_the_volume_by_a_sixteenth_a_press():
+    rig = MacRig()
+    rig.actions.press_key("volume_up", 2)
+    rig.actions.press_key("volume_down")
+    assert rig.ran[0][0][-1] == "set volume output volume ((output volume of (get volume settings)) + 12.5)"
+    assert rig.ran[1][0][-1] == "set volume output volume ((output volume of (get volume settings)) + -6.25)"
+
+
+def test_the_mac_mutes_on_an_odd_number_of_presses_only():
+    rig = MacRig()
+    rig.actions.press_key("volume_mute", 2)
+    assert rig.ran == []
+    rig.actions.press_key("volume_mute", 3)
+    assert rig.ran[0][0][-1] == "set volume output muted (not (output muted of (get volume settings)))"
+
+
+def test_the_mac_sends_a_media_key_as_the_keyboard_does():
+    rig = MacRig()
+    rig.actions.press_key("next_track", 2)
+    args = rig.ran[0][0]
+    assert args[:4] == ["/usr/bin/osascript", "-l", "JavaScript", "-e"]
+    assert "key(17, true); key(17, false);" in args[4] and "i < 2;" in args[4]
+
+
+def test_without_the_media_key_the_mac_tells_only_a_player_that_runs():
+    rig = MacRig(fail_jxa=True)
+    rig.actions.press_key("play_pause")
+    told = [args[-1] for args, _ in rig.ran[1:]]
+    assert told == [
+        'if application id "com.apple.Music" is running then tell application id "com.apple.Music" to playpause',
+        'if application id "com.spotify.client" is running then tell application id "com.spotify.client" to playpause',
+    ]
+
+
+def test_the_mac_refuses_a_key_that_is_none_of_them_or_pressed_no_times():
+    rig = MacRig()
+    for name, times in (("enter", 1), ("volume_up", 0), ("volume_up", 21)):
+        with pytest.raises(ValueError):
+            rig.actions.press_key(name, times)
+    assert rig.ran == []
+
+
+def test_the_mac_locks_with_the_login_framework_and_falls_back_to_the_shortcut():
+    rig = MacRig()
+    rig.actions.lock_screen()
+    assert rig.locked == 1 and rig.ran == []
+    rig = MacRig(lock_fails=True)
+    rig.actions.lock_screen()
+    assert rig.ran[0][0][-1] == 'tell application "System Events" to keystroke "q" using {control down, command down}'
+
+
+def test_the_mac_lists_the_apps_of_the_applications_folders_by_name_and_bundle(tmp_path):
+    make_bundle(tmp_path, "Safari", {"CFBundleDisplayName": "Safari", "CFBundleIdentifier": "com.apple.Safari"})
+    make_bundle(tmp_path, "Notes", {"CFBundleName": "備忘錄", "CFBundleIdentifier": "com.apple.Notes"})
+    make_bundle(tmp_path, "Broken", None)
+    make_bundle(tmp_path / "Utilities", "Terminal", {"CFBundleName": "Terminal", "CFBundleIdentifier": "com.apple.Terminal"})
+    (tmp_path / "notes.txt").write_text("not an app")
+    apps = MacRig(folders=[tmp_path, tmp_path / "missing"]).actions.list_start_apps()
+    assert StartApp("Safari", "com.apple.Safari") in apps
+    assert StartApp("備忘錄", "com.apple.Notes") in apps
+    assert StartApp("Terminal", "com.apple.Terminal") in apps
+    assert StartApp("Broken", str(tmp_path / "Broken.app")) in apps
+    assert len(apps) == 4
+
+
+def test_the_mac_starts_an_app_by_bundle_or_by_a_path_in_the_applications_folders(tmp_path):
+    bundle = make_bundle(tmp_path, "Tool", {})
+    rig = MacRig(folders=[tmp_path])
+    rig.actions.launch_app("com.apple.Safari")
+    rig.actions.launch_app(str(bundle))
+    assert rig.ran[0][0] == ["/usr/bin/open", "-b", "com.apple.Safari"]
+    assert rig.ran[1][0] == ["/usr/bin/open", "-a", str(bundle.resolve())]
+    elsewhere = make_bundle(tmp_path.parent / f"{tmp_path.name}-other", "Other", {})
+    for bad in ("", "com.apple.Safari\n", str(elsewhere), "/bin/sh"):
+        with pytest.raises(ValueError):
+            rig.actions.launch_app(bad)
+
+
+def test_the_mac_puts_text_on_the_clipboard_in_utf8_with_pbcopy():
+    rig = MacRig()
+    rig.actions.copy_to_clipboard("拉斐爾 ok")
+    args, kwargs = rig.ran[0]
+    assert args == ["/usr/bin/pbcopy"]
+    assert kwargs["input"] == "拉斐爾 ok".encode()
+    assert kwargs["env"]["LANG"] == "en_US.UTF-8"
+
+
+def test_a_mac_helper_that_fails_is_an_error():
+    with pytest.raises(OSError):
+        MacRig(returncode=1).actions.copy_to_clipboard("x")
+
+
+@pytest.mark.parametrize(("platform", "kind"), [("darwin", MacActions), ("win32", WindowsActions)])
+def test_the_system_actions_are_those_of_the_system(monkeypatch, platform, kind):
+    monkeypatch.setattr("raphael_core.agent.device.PLATFORM", platform)
+    assert isinstance(system_actions(), kind)

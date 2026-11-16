@@ -20,7 +20,10 @@ crate-type = ["rlib"]
 tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
-tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset"] }
+# `macos-private-api`: transparent windows on macOS (the overlay, the learned-word pill). tauri-build wants the
+# feature and `macOSPrivateApi` in tauri.conf.json to agree on every system, so both are set for Windows too,
+# where they do nothing.
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset", "macos-private-api"] }
 tauri-plugin-autostart = "2.7"
 tauri-plugin-window-state = "2.5"
 tauri-plugin-log = "2"
@@ -42,6 +45,13 @@ uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2.5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# The Objective-C runtime and Foundation's strings (src/macos): the pasteboard, the running apps,
+# the microphone permission, the passive panels. The C frameworks are declared in src/macos/ffi.rs.
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSObject"] }
+block2 = "0.6"
 
 [target.'cfg(windows)'.dependencies]
 # Pasting (src/paste): the paste key chord.
@@ -96,7 +106,7 @@ windows = { version = "0.62", features = [
 tempfile = "3"
 # The mock runtime, for tests that start the app's first plugins in processes of their own (a
 # second launch handing over to the first).
-tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset", "test"] }
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset", "macos-private-api", "test"] }
 # Tests of the controller's timers (a question that is not answered, an answer on screen) run on
 # a clock that they move themselves.
 tokio = { version = "1", features = ["test-util"] }

@@ -35,6 +35,10 @@ import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
 import { followTemplateFile, openPendingTemplate, type TemplateOpenTarget } from "./template-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
+import { IS_MAC, markPlatform } from "../shared/platform";
+import { guardImeKeys } from "../shared/ime";
+import { setVideoBase } from "./timeline";
+import { sizeFieldsByScript } from "../shared/field-sizing";
 import { installWindowZoom } from "./window-zoom";
 import { stopOffscreenSlimes } from "./slime-offscreen";
 import { watchChipRows } from "./chip-scroll";
@@ -47,6 +51,9 @@ import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import { warnQuota } from "./quota-warning";
 import "./styles.css";
 import "./sidebar.css";
+
+guardImeKeys();
+sizeFieldsByScript();
 
 /** The glyph ring texture (app/public/brand/glyph-ring.png); if it fails to load the emblem draws a plain ring. */
 const GLYPH_URL = "/brand/glyph-ring.png";
@@ -96,6 +103,7 @@ prefersDark.addEventListener("change", applyTheme);
 // ---------- start ----------
 
 function mountWindowChrome(): void {
+  markPlatform();
   const chrome = document.getElementById("window-chrome")!;
   const translate = (): void =>
     labelWindowControls(chrome, {
@@ -372,8 +380,13 @@ watchChipRows(document.body);
   };
   ctx.onEvent((event) => followTemplateFile(event, templateFile));
 
+  // On a Mac a YouTube video plays in a page of the core's own host (timeline.ts `youtubeFrameUrl`); a new core has a new one.
+  const readVideoBase = (): void => {
+    if (IS_MAC) api.pagesVideoBase().then(({ base }) => setVideoBase(base), () => setVideoBase(null));
+  };
+  readVideoBase();
   api.subscribeMainEvents((event) => {
-    if (event.type === "CoreReady") console.info("main page: CoreReady");
+    if (event.type === "CoreReady") { console.info("main page: CoreReady"); readVideoBase(); }
     if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
     if (event.type === "QuotaWarning") warnQuota(event);
     if (event.type === "Dictation") followDictation(event.phase, event.agent);

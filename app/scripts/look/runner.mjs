@@ -13,6 +13,7 @@ import { contactSheets } from "./contact-sheet.mjs";
 import { requestDisposition } from "./requests.mjs";
 import { saveReport } from "./report.mjs";
 import { navigationRequests, warmupEntries } from "./navigation.mjs";
+import { coveredByTrafficLights, drawTrafficLights, trafficLights } from "./traffic-lights.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 // Integrated model and service names, and bundled license attributions, stay in Latin letters.
@@ -21,6 +22,8 @@ export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Go
 LATIN_NAMES.push("1Password");
 // The shell a host repair is pasted into on Windows is named as Windows names it.
 LATIN_NAMES.push("PowerShell");
+// The keys as a Mac names them (keys.ts on macOS): 右 Option, Control, Command, Return; and the Mac itself.
+LATIN_NAMES.push("Option", "Control", "Command", "Return", "Mac");
 
 /** Typed owner values are synthetic data, just like the initial fixture's values. */
 export function sceneLatinNames(scene, locale, fixture) {
@@ -44,7 +47,12 @@ export const REQUIRED_PUPPETEER = `puppeteer-core@${requireFromApp("./package.js
  * What the core serves of an HTML page that writes no style of its own, for each theme (core agent/pages.py `document`, R-PAGE-06): the
  * page with the app's base style in front of it. The core makes it, so a scene sees the style the owner's page gets, never a copy.
  */
-export async function pageBaseDocuments(html, python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe")) {
+/** The core's development interpreter: `Scripts/python.exe` of its venv on Windows, `bin/python` elsewhere. */
+export function corePython() {
+  return process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+}
+
+export async function pageBaseDocuments(html, python = corePython()) {
   const code = "import json,sys; from raphael_core.agent.pages import document; page={'title':'page','html':sys.argv[1],'source':'html'}; print(json.dumps({theme: document(page, theme) for theme in ('light', 'dark')}))";
   const { stdout } = await promisify(execFile)(python, ["-c", code, html], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" } });
@@ -55,7 +63,7 @@ export async function pageBaseDocuments(html, python = process.env.RAPHAEL_CORE_
  * What the core itself sends for the member Library (`members.library`) of a synthetic database (core_fixtures.py, R-PANEL-10):
  * a scene shows the list the core's rules make, never a copy of them.
  */
-export async function coreFixtures(now = Date.now(), python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe")) {
+export async function coreFixtures(now = Date.now(), python = corePython()) {
   const { stdout } = await promisify(execFile)(python, [join(import.meta.dirname, "core_fixtures.py"), String(now)], { windowsHide: true, maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1", PYTHONIOENCODING: "utf-8" } });
   return JSON.parse(stdout);
@@ -68,6 +76,9 @@ export function browserPath() {
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
     "/usr/bin/microsoft-edge", "/usr/bin/google-chrome", "/usr/bin/chromium"];
   const found = candidates.find(path => path && existsSync(path));
   if (!found) throw new Error("Installed Edge/Chrome not found; set LOOK_BROWSER to its executable path.");
@@ -99,7 +110,7 @@ export async function run(options) {
     let desktopResponses = {};
     if (needsDesktopFixture(options.selected)) {
       // Render the production bridge shell/bootstrap, replacing only remote RFB.
-      const python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe");
+      const python = corePython();
       const source = join(import.meta.dirname, "fixtures/desktop-upstream.html.txt");
       const { stdout } = await promisify(execFile)(python, ["-c", "import json,sys; from pathlib import Path; from raphael_core.computer.viewer import embedded_page,BOOTSTRAP; print(json.dumps({'page':embedded_page(Path(sys.argv[1]).read_text(encoding='utf-8')).decode(),'bootstrap':BOOTSTRAP.decode()}))", source], { windowsHide: true, env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1" } });
       const bridge = JSON.parse(stdout), base = "/scripts/look/fixtures/";
@@ -279,6 +290,14 @@ export async function run(options) {
             try { (result.assertions ??= []).push(await page.evaluate(checkRendered, name)); }
             catch (value) { error("layout", value.message); }
           }
+        }
+        // On a Mac the main window's page lies under macOS's own traffic lights: they are drawn where macOS puts them,
+        // and a control, face or word under them fails the scene (traffic-lights.mjs).
+        if (!scene.entry && !scene.file && await page.evaluate(() => document.documentElement.dataset.platform === "macos")) {
+          const lights = trafficLights(app);
+          const covered = await page.evaluate(coveredByTrafficLights, lights);
+          if (covered.length) error("layout", `under the macOS traffic lights: ${covered.join(", ")}`);
+          await page.evaluate(drawTrafficLights, lights);
         }
         if (!scene.entry && !scene.file && await page.evaluate(() => [...document.querySelectorAll('.conversation-card')].some(card => !card.closest('[hidden]')))) {
           try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "card-shell")); }

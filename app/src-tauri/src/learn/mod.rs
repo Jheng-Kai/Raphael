@@ -19,10 +19,15 @@
 //! kept: the word pairs that are learned are the only thing that is stored.
 
 mod apps;
+#[cfg(target_os = "macos")]
+mod ax;
 pub(crate) mod corrections;
+// Rebuilding a field from keystrokes and reading a console screen are Windows-only for now.
+#[cfg_attr(not(windows), allow(dead_code))]
 mod keystrokes;
 #[cfg(all(test, windows))]
 mod native_tests;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod terminal;
 mod terms;
 #[cfg(windows)]
@@ -36,11 +41,20 @@ use serde_json::{Value, json};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
+#[cfg(target_os = "macos")]
+pub use ax::AxProbe;
 pub use corrections::{Correction, MIN_KEPT_SHARE, Tracker};
 #[cfg(windows)]
 pub use uia::UiaProbe;
 
+/// The [`FieldProbe`] of the system the app runs on.
 #[cfg(windows)]
+pub type SystemProbe = UiaProbe;
+/// The [`FieldProbe`] of the system the app runs on.
+#[cfg(target_os = "macos")]
+pub type SystemProbe = AxProbe;
+
+#[cfg(any(windows, target_os = "macos"))]
 use crate::commands::MainEvent;
 use crate::notices::{self, LanguageCell};
 use crate::overlay::OverlayApi;
@@ -104,7 +118,7 @@ impl WatchScope {
 }
 
 /// Why learning is limited in an app, for the main window (see [`MainEvent::LearnLimited`]).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LimitReason {
     /// A code editor whose accessibility support is off keeps its text out of reach of other
@@ -112,7 +126,7 @@ enum LimitReason {
     AccessibilityOff,
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 impl LimitReason {
     /// The identifier the main window knows it by. It must not change.
     const fn id(self) -> &'static str {
@@ -123,11 +137,11 @@ impl LimitReason {
 }
 
 /// What has been reported, so that each thing is said once while Raphael runs.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 #[derive(Default)]
 struct Told(Vec<(&'static str, &'static str)>);
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 impl Told {
     /// Whether this is the first report of `reason` for `app`; remembers it.
     fn first(&mut self, app: &'static str, reason: LimitReason) -> bool {
@@ -140,16 +154,16 @@ impl Told {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 static TOLD: Mutex<Told> = Mutex::new(Told(Vec::new()));
 
 /// Tells the main window that learning is limited in `app`, the first time this session.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn report_limited(app: &'static str, reason: LimitReason) {
     report_once(&TOLD, app, reason, crate::commands::tell_main_window);
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn report_once(
     told: &Mutex<Told>,
     app: &'static str,
@@ -365,7 +379,7 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
             input: receipt.input,
         };
         drop(latest_delivery);
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "macos"))]
         if target.pid == std::process::id() {
             crate::commands::tell_main_window(MainEvent::DictationPasted {
                 text: text.to_owned(),

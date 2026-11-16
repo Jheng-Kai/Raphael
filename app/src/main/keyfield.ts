@@ -52,6 +52,13 @@ export function wireKeyField(host: HTMLElement, options: KeyFieldOptions): void 
     }
   }, { signal: options.signal });
 
+  // WebKit (macOS) does not focus a button that is clicked, so leaving the field for the paste button
+  // would say nothing of where the focus went and clear what was typed before the click arrives. A
+  // press on the paste button keeps the focus in the field instead; its click still comes.
+  host.addEventListener("mousedown", (e) => {
+    if ((e.target as Element | null)?.closest?.(options.pasteSelector)) e.preventDefault();
+  }, { signal: options.signal });
+
   // No redraw here: the click that moved the focus (on 取消, say) must still find its button.
   host.addEventListener("focusout", (e) => {
     const input = e.target as HTMLInputElement | null;

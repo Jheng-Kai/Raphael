@@ -1,6 +1,7 @@
 """Bounded local commands, explicit consent and scoped process ownership."""
 
 import asyncio
+import sys
 import json
 import os
 from unittest.mock import AsyncMock
@@ -194,8 +195,9 @@ async def test_powershell_defaults_read_and_write_utf8(tmp_path):
     assert target.read_text(encoding="utf-8-sig").strip() == content, result
 
 
+@pytest.mark.parametrize('platform', ['win32', 'darwin'])
 @pytest.mark.parametrize('kill_code', [0, -1])
-async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monkeypatch, kill_code):
+async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monkeypatch, kill_code, platform):
     from raphael_core.computer import local_host
     from types import SimpleNamespace
     made = []
@@ -214,13 +216,20 @@ async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monke
             self.killed = True
             self.process.returncode = kill_code
     monkeypatch.setattr(local_host, 'CommandChild', FakeChild)
+    monkeypatch.setattr(local_host, 'PLATFORM', platform)
     monkeypatch.setenv('LOCAL_TEST_API_KEY', 'synthetic')
     monkeypatch.setenv('LOCAL_TEST_PASSWORD', 'synthetic')
     result = await LocalHost().execute('Get-Process', timeout_seconds=.01)
     assert result['exit_code'] is None and result['timed_out'] is True, result
     assert made[-1].killed and made[-1].closed
     assert 'LOCAL_TEST_API_KEY' not in made[-1].environ and 'LOCAL_TEST_PASSWORD' not in made[-1].environ
-    assert '-NoProfile' in made[-1].command and '-NonInteractive' in made[-1].command
+    if platform == 'win32':
+        assert '-NoProfile' in made[-1].command and '-NonInteractive' in made[-1].command
+    else:
+        # zsh without the person's start-up files, reading the command from the environment it then empties.
+        assert made[-1].command == ['/bin/zsh', '-f', '-c', local_host.ZSH_RUNNER]
+        assert made[-1].environ['RAPHAEL_LOCAL_COMMAND'] == 'Get-Process'
+        assert made[-1].environ['LANG'] == 'en_US.UTF-8'
     task = asyncio.create_task(LocalHost().execute('Get-Process'))
     await asyncio.sleep(0)
     task.cancel()
@@ -261,3 +270,69 @@ async def test_statements_of_different_shapes_each_print_whole():
     assert failed["exit_code"] == 7 and "before" in failed["stdout"], failed
     broken = await LocalHost().execute("Get-Date |", timeout_seconds=30)
     assert broken["exit_code"] is not None and (broken["exit_code"] != 0 or broken["stderr"]), broken
+
+
+async def test_another_system_than_windows_or_macos_runs_no_command(monkeypatch):
+    from raphael_core.computer import local_host
+    monkeypatch.setattr(local_host, 'PLATFORM', 'linux')
+    with pytest.raises(OSError, match="windows_required"):
+        await LocalHost().execute('ls')
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS zsh adapter")
+async def test_zsh_runs_the_command_in_utf8_and_reports_its_exit_code(tmp_path):
+    content = "Synthetic: \u7e41\u9ad4\u4e2d\u6587, caf\u00e9"
+    result = await LocalHost().execute(f"printf '%s' '{content}'; echo; exit 3", cwd=str(tmp_path), timeout_seconds=REAL_SHELL_GUARD)
+    assert result["exit_code"] == 3 and content in result["stdout"], result
+    result = await LocalHost().execute("print -r -- ${RAPHAEL_LOCAL_COMMAND-gone}", timeout_seconds=REAL_SHELL_GUARD)
+    assert result["stdout"].strip() == "gone", result
+
+
+MAC_DANGEROUS = [
+    "diskutil eraseDisk APFS Empty disk2", "diskutil apfs deleteVolume disk3s1", "csrutil disable", "sudo spctl --master-disable",
+    "nvram boot-args=-v", "tmutil deletelocalsnapshots /", "srm -rf ~/Documents", "defaults delete com.apple.dock",
+    "launchctl bootout gui/501/com.example", "sudo shutdown -h now", "reboot", "pmset -a sleep 0",
+    "dscl . -create /Users/x", "sysadminctl -addUser x", "osascript -e 'do shell script \"x\" with administrator privileges'",
+    "sudo ls /var/root", "chflags schg file", "xattr -d com.apple.quarantine App.app", "cat ~/.ssh/id_ed25519",
+    "ls /Users/someone/.ssh", "cp ~/Library/Application\\ Support/Google/Chrome/Default/Cookies /tmp/x",
+    "sqlite3 ~/Library/Cookies/Cookies.binarycookies .dump",
+]
+
+
+@pytest.mark.parametrize("command", MAC_DANGEROUS)
+def test_the_mac_commands_that_change_the_system_or_reach_secrets_ask_the_owner(command):
+    from raphael_core.computer.local_tools import safety_patterns
+    dangerous, _, _ = safety_patterns("darwin")
+    assert any(pattern.search(command) for pattern in dangerous), command
+
+
+@pytest.mark.parametrize("command", ["diskutil list", "df -h", "ls ~/Documents", "top -l 1 -n 5", "defaults read com.apple.dock"])
+def test_ordinary_mac_commands_are_not_called_dangerous(command):
+    from raphael_core.computer.local_tools import safety_patterns
+    dangerous, _, _ = safety_patterns("darwin")
+    assert not any(pattern.search(command) for pattern in dangerous), command
+
+
+@pytest.mark.parametrize("command", [
+    "security find-generic-password -w -s Raphael", "security dump-keychain", "security export -k login.keychain -o x",
+    "cat ~/Library/Keychains/login.keychain-db", "cat .env",
+])
+def test_the_keychain_is_a_secret_store_on_the_mac(command):
+    from raphael_core.computer.local_tools import safety_patterns
+    _, secret, _ = safety_patterns("darwin")
+    assert secret.search(command), command
+
+
+def test_the_mac_rules_change_nothing_on_windows():
+    from raphael_core.computer.local_tools import safety_patterns
+    from raphael_core.computer.local_patterns import DANGEROUS_PATTERNS
+    dangerous, secret, opaque = safety_patterns("win32")
+    assert len(dangerous) == len(DANGEROUS_PATTERNS)
+    assert not secret.search("security dump-keychain") and not opaque.search("osascript -e x")
+
+
+@pytest.mark.parametrize("command", ["osascript -e 'tell app \"Finder\" to quit'", "bash ./setup.sh", "zsh -c 'x'", "./run.command"])
+def test_a_mac_script_is_opaque_and_always_asks(command):
+    from raphael_core.computer.local_tools import safety_patterns
+    _, _, opaque = safety_patterns("darwin")
+    assert opaque.search(command), command

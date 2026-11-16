@@ -10,7 +10,8 @@
 //!   refused (`refused_app`).
 //!
 //! An app is known by its executable's file name, in lower case (`excel.exe`), as the
-//! always-allowed list of the device settings keeps it.
+//! always-allowed list of the device settings keeps it; on macOS by its bundle identifier, in
+//! lower case (`com.apple.textedit`).
 //!
 //! Within a window, an element called like a sign-in, a payment field or a one-time code
 //! ([`is_handoff_name`]) is never clicked, typed into or sent keys: the step is the owner's. What
@@ -62,6 +63,39 @@ const REFUSED: &[&str] = &[
     "nordpass.exe",
     "roboform.exe",
     "proton pass.exe",
+    // macOS, by bundle identifier in lower case: terminals and shells
+    "com.apple.terminal",
+    "com.googlecode.iterm2",
+    "com.github.wez.wezterm",
+    "org.alacritty",
+    "net.kovidgoyal.kitty",
+    "dev.warp.warp-stable",
+    "com.mitchellh.ghostty",
+    "co.zeit.hyper",
+    // the system's tools of power: settings, processes, disks, installers, scripts
+    "com.apple.systempreferences",
+    "com.apple.activitymonitor",
+    "com.apple.diskutility",
+    "com.apple.installer",
+    "com.apple.scripteditor2",
+    "com.apple.automator",
+    "com.apple.keychainaccess",
+    // sign-in, consent and credentials
+    "com.apple.securityagent",
+    "com.apple.loginwindow",
+    "com.apple.coreservices.uiagent",
+    // password managers
+    "com.apple.passwords",
+    "com.1password.1password",
+    "com.agilebits.onepassword7",
+    "com.bitwarden.desktop",
+    "org.keepassxc.keepassxc",
+    "com.dashlane.dashlane",
+    "com.lastpass.lastpassmacdesktop",
+    "in.sinew.enpass-desktop",
+    "com.nordsec.nordpass",
+    "com.siber.roboform",
+    "me.proton.pass.electron",
 ];
 
 /// The window classes of the shell, which are not apps.
@@ -425,6 +459,7 @@ pub fn may_click(element: Closer<'_>, confirmed: bool) -> Result<(), Failure> {
 }
 
 /// An executable's file name as the lists keep it: the last part of `path`, in lower case.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn exe_of(path: &str) -> String {
     path.rsplit(['\\', '/'])
         .next()
@@ -503,6 +538,37 @@ mod tests {
             "notepad.exe",
         ] {
             assert!(!is_refused(exe), "{exe}");
+        }
+    }
+
+    #[test]
+    fn macos_terminals_password_managers_and_system_settings_are_refused_by_bundle_id() {
+        for id in [
+            "com.apple.terminal",
+            "com.googlecode.iterm2",
+            "com.apple.systempreferences",
+            "com.apple.activitymonitor",
+            "com.apple.keychainaccess",
+            "com.apple.passwords",
+            "com.1password.1password",
+            "com.agilebits.onepassword7",
+            "com.bitwarden.desktop",
+            "com.apple.securityagent",
+        ] {
+            assert!(is_refused(id), "{id}");
+        }
+        for id in [
+            "com.apple.textedit",
+            "com.apple.finder",
+            "com.google.chrome",
+            "com.apple.safari",
+            "com.microsoft.excel",
+        ] {
+            assert!(!is_refused(id), "{id}");
+        }
+        // every entry is written as the lists keep apps: in lower case
+        for exe in REFUSED {
+            assert_eq!(*exe, exe.to_lowercase(), "{exe}");
         }
     }
 

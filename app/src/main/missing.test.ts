@@ -104,3 +104,16 @@ test("a dictionary notice that could not be delivered names the dictionary and o
   expect(root.querySelector(".missing-note")?.textContent).toContain(t("missing.learned"));
   expect(root.querySelector("[data-missing-repair]")).toBeNull();
 });
+
+test("the keys waiting for Accessibility on a Mac say so and open the right privacy pane", async () => {
+  const api = await import("./api");
+  const open = vi.spyOn(api, "openLink").mockResolvedValue(undefined);
+  document.body.innerHTML = missingHTML({ resource: "hotkeys", requirement: "accessibility", state: "missing", repair: null });
+  expect(document.body.textContent).toContain(t("missing.accessibility"));
+  const go = vi.fn();
+  const stop = bindMissing(document, go);
+  document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
+  expect(open).toHaveBeenCalledWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+  expect(go).not.toHaveBeenCalled();
+  stop(); open.mockRestore();
+});

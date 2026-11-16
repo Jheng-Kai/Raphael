@@ -15,6 +15,7 @@ look at the element a step names (`safety.judge`). None of it is logged or store
 """
 
 import re
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -28,6 +29,8 @@ MAX_TITLE_CHARS = 160
 MAX_WINDOWS = 40
 # The executable of an app, as the shell names it: a file name, in lower case.
 _EXE = re.compile(r"[a-z0-9][a-z0-9 ._()\-]{0,126}\.exe")
+# On a Mac the shell names an app by its bundle identifier, lowercased (`com.apple.calculator`): words joined by dots.
+_MAC_APP = re.compile(r"(?=.{3,127}$)[a-z0-9][a-z0-9_\-]*(?:\.[a-z0-9_\-]+)+")
 _ROLE = re.compile(r"[A-Za-z]{1,32}")
 _ACTIONS = frozenset({"invoke", "toggle", "select", "expand", "value", "scroll", "text"})
 _STATES = frozenset({"on", "off", "mixed", "expanded", "collapsed", "selected"})
@@ -109,6 +112,8 @@ def parse_app(data: Any) -> App | None:
     if not isinstance(data, Mapping):
         return None
     exe = data.get("exe")
+    if sys.platform == "darwin" and isinstance(exe, str) and not _EXE.fullmatch(exe) and _MAC_APP.fullmatch(exe):
+        return App(exe=exe, name=clean_text(data.get("name"), 60) or exe.rsplit(".", 1)[-1])
     if not isinstance(exe, str) or not _EXE.fullmatch(exe):
         return None
     name = clean_text(data.get("name"), 60) or exe[:-4]

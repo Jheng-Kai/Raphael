@@ -325,7 +325,8 @@ async def test_a_new_login_starts_from_nothing(service):
 
 
 def test_the_user_agent_is_ours_and_says_so():
-    assert USER_AGENT == f"Raphael/{__version__} (Windows)"
+    import sys
+    assert USER_AGENT == f"Raphael/{__version__} ({'macOS' if sys.platform == 'darwin' else 'Windows'})"
 
 
 async def test_every_request_to_the_service_says_who_is_asking(service):

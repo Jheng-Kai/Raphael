@@ -97,6 +97,16 @@ describe("recording", () => {
     expect(r.keyUp("AltRight")).toEqual({ type: "done", codes: ["AltRight", "KeyV"] });
   });
 
+  test("on a Mac ⌘'s release lets go of the key macOS never releases while ⌘ is down", () => {
+    const mac = new KeyRecorder(true);
+    mac.keyDown("MetaLeft"); mac.keyDown("KeyK");
+    // No keyup comes for K.
+    expect(mac.keyUp("MetaLeft")).toEqual({ type: "done", codes: ["MetaLeft", "KeyK"] });
+    const windows = new KeyRecorder(false);
+    windows.keyDown("MetaLeft"); windows.keyDown("KeyK");
+    expect(windows.keyUp("MetaLeft")).toEqual({ type: "progress", codes: ["MetaLeft", "KeyK"] });
+  });
+
   test("a key on its own", () => {
     const r = new KeyRecorder();
     r.keyDown("AltRight");

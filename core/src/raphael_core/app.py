@@ -62,7 +62,7 @@ from typing import Any
 import keyring
 
 from . import __version__, paths
-from .agent.device import DeviceActions, NullActions, WindowsActions
+from .agent.device import DeviceActions, NullActions, system_actions
 from .agent.gate import ToolGate
 from .agent.safety import SafetyGuard, SafetyJudge, SafetyRules
 from .agent.service import AgentService
@@ -868,7 +868,7 @@ class App(Router):
         )
         self.services.register(self)
         if agent_actions is None:
-            agent_actions = NullActions() if fake_llm else WindowsActions()
+            agent_actions = NullActions() if fake_llm else system_actions()
         # The plugins: servers the user connected, and the hub the assistant reaches their tools by.
         self.integrations = IntegrationsService(self._conn, data_dir, self.vault, notify=self.notify)
         self.integrations.register(self)

@@ -112,7 +112,8 @@ class ChatGPTAuth:
 
     @asynccontextmanager
     async def session_lock(self):
-        """Serialize rotation across tasks and Windows sidecars on the same host."""
+        """Serialize rotation across tasks and sidecars on the same host (a named mutex on Windows,
+        a file lock elsewhere)."""
         async with self._lock:
             handle = None
             acquired = False
@@ -131,8 +132,20 @@ class ChatGPTAuth:
                 handle = kernel.CreateMutexW(None, False, name)
                 if not handle:
                     raise OpenRouterError(0, "tool_broken", "ChatGPT session lock could not be opened")
+            else:
+                # The same lock off Windows: an advisory lock on a file in this user's temporary
+                # folder, which every sidecar of this host names alike and which ends with its process.
+                import fcntl
+                import tempfile
+
+                host = self._state().get("host_id", "unregistered")
+                name = "RaphaelChatGPT-" + hashlib.sha256(host.encode()).hexdigest() + ".lock"
+                try:
+                    handle = os.open(os.path.join(tempfile.gettempdir(), name), os.O_RDWR | os.O_CREAT, 0o600)
+                except OSError:
+                    raise OpenRouterError(0, "tool_broken", "ChatGPT session lock could not be opened") from None
             try:
-                if handle:
+                if handle and os.name == "nt":
                     deadline = time.monotonic() + 60
                     while True:
                         result = kernel.WaitForSingleObject(handle, 0)
@@ -142,12 +155,27 @@ class ChatGPTAuth:
                         if result != 0x102 or time.monotonic() >= deadline:
                             raise OpenRouterError(0, "timeout", "ChatGPT session is busy; try again later")
                         await asyncio.sleep(0.05)
+                elif handle is not None:
+                    deadline = time.monotonic() + 60
+                    while True:
+                        try:
+                            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            acquired = True
+                            break
+                        except BlockingIOError:
+                            if time.monotonic() >= deadline:
+                                raise OpenRouterError(0, "timeout", "ChatGPT session is busy; try again later") from None
+                            await asyncio.sleep(0.05)
                 yield
             finally:
-                if handle:
+                if handle and os.name == "nt":
                     if acquired:
                         kernel.ReleaseMutex(handle)
                     kernel.CloseHandle(handle)
+                elif handle is not None:
+                    if acquired:
+                        fcntl.flock(handle, fcntl.LOCK_UN)
+                    os.close(handle)
 
     def session(self):
         return self._state().get("active", ""), self.revision

@@ -2,6 +2,7 @@
 // Kept independent of pages so the first-run try box uses the same listener.
 import { invoke } from "@tauri-apps/api/core";
 import { canonicalKey } from "./keys";
+import { IS_MAC } from "../shared/platform";
 
 export type WindowHotkey = "dictation_down" | "dictation_up" | "paste_last" | "tidy" | "cancel" | "cancel_key" | "agent_down" | "agent_up";
 /** `agent_keys` and `tidy_keys` are missing from the settings of an app that does not know those keys yet. */
@@ -38,7 +39,7 @@ function matchBinding(bindings: string[], held: string[], code: string): string[
 }
 
 /** Pure keyboard transition. The worker checks pauses, cancel enablement and hook duplicates again. */
-export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: Bindings, paused = false): {
+export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: Bindings, paused = false, mac = IS_MAC): {
   state: HotkeyState; actions: WindowHotkey[]; preventDefault: boolean;
 } {
   if (paused) return { state: emptyHotkeyState(), actions: [], preventDefault: false };
@@ -52,6 +53,9 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
   const actions: WindowHotkey[] = [];
   let preventDefault = state.swallowed.includes(code);
   if (event.type === "keyup") {
+    // macOS sends no release for a key let go while ⌘ is down (⌘V): with ⌘'s own release, the keys still held are
+    // its modifiers alone, or a V left behind would keep the next Right Option+V from being a press.
+    if (mac && (code === "metaleft" || code === "metaright")) state.held = state.held.filter((part) => MODIFIERS.has(part));
     if (state.dictation.includes(code)) {
       actions.push("dictation_up");
       state.dictation = [];

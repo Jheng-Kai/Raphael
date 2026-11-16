@@ -2,6 +2,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { openCommandPalette, shortcut } from "./shortcuts";
 import { closeMenu } from "./ui";
+import { shortcutText } from "./keys";
 
 afterEach(() => { closeMenu(); document.body.innerHTML = ""; });
 
@@ -81,4 +82,40 @@ test("palette filters escaped labels, executes once by Enter and dismisses throu
   document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(document.querySelector("#app-popover")).toBeNull();
   expect(document.activeElement).toBe(anchor);
+});
+
+test("on a Mac the window's shortcuts are ⌘'s, and Control stays with the text field's own editing keys", () => {
+  const field = document.createElement("textarea"); document.body.append(field);
+  const mac = (key: string, options: KeyboardEventInit = {}): string | null => {
+    const event = new KeyboardEvent("keydown", { key, metaKey: true, bubbles: true, cancelable: true, ...options });
+    field.dispatchEvent(event); return shortcut(event, true);
+  };
+  expect(mac("k")).toBe("palette");
+  expect(mac("f")).toBe("find");
+  expect(mac("F", { shiftKey: true })).toBe("search");
+  expect(mac("b")).toBe("sidebar");
+  expect(mac("n")).toBe("new");
+  expect(mac("3")).toBe("member:3");
+  // ⌃K deletes to the end of the line, ⌃F and ⌃B move the caret, ⌃N goes down a line.
+  for (const key of ["k", "f", "b", "n", "1"]) expect(mac(key, { metaKey: false, ctrlKey: true }), key).toBeNull();
+  expect(mac("k", { ctrlKey: true })).toBeNull();
+  for (const key of ["a", "c", "v", "x", "z"]) expect(mac(key)).toBeNull();
+});
+
+test("letters and digits are found by their place, so another keyboard layout reaches them", () => {
+  // A Russian layout types л on K and а on F.
+  expect(press(document.body, "л", { code: "KeyK" })).toBe("palette");
+  expect(press(document.body, "а", { code: "KeyF" })).toBe("find");
+  expect(press(document.body, "1", { code: "Digit1" })).toBe("member:1");
+  // Dvorak types f on the key QWERTY calls Y, and u on its F: the letter typed decides.
+  expect(press(document.body, "f", { code: "KeyY" })).toBe("find");
+  expect(press(document.body, "u", { code: "KeyF" })).toBeNull();
+});
+
+test("a shortcut is written as the system writes it", () => {
+  expect(shortcutText(["Primary", "Shift", "F"], true)).toBe("⇧⌘F");
+  expect(shortcutText(["Alt", "↑"], true)).toBe("⌥↑");
+  expect(shortcutText(["Primary", "Shift", "F"], false)).toBe("Ctrl+Shift+F");
+  expect(shortcutText(["Alt", "↓"], false)).toBe("Alt+↓");
+  expect(shortcutText(["Primary", "1"], false)).toBe("Ctrl+1");
 });

@@ -254,6 +254,64 @@ jobs:
       - name: Run Clippy with warnings denied
         run: cargo clippy --locked --all-targets -- -D warnings
 
+  # The same shell for macOS (Apple silicon): its own native modules (src/macos, the event tap of the
+  # vendored keyboard listener, the accessibility probes) build, pass their tests and Clippy here.
+  macos-shell:
+    name: macOS Rust and Tauri shell
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app/src-tauri
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+      RUSTUP_TOOLCHAIN: "1.98.0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            app/src-tauri -> target
+            app/src-tauri/vendor/handy-keys -> target
+          cache-bin: false
+          save-if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install locked frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build Tauri debug application
+        working-directory: app
+        run: node scripts/tauri.mjs build --debug --no-bundle --ci -- --locked
+
+      - name: Run Rust tests
+        run: cargo test --locked
+
+      - name: Run vendored keyboard listener unit tests
+        run: cargo test --locked --lib --manifest-path vendor/handy-keys/Cargo.toml
+
+      - name: Run Clippy with warnings denied
+        run: cargo clippy --locked --all-targets -- -D warnings
+
   # The frozen core builds and starts from the PyInstaller bundle, as in a release. It is not one of
   # the required gates: it runs only for changes that can break the freeze (see above).
   packaging:
@@ -300,7 +358,7 @@ jobs:
 
   required:
     name: Guardian required gates
-    needs: [changes, frontend, python, windows-shell]
+    needs: [changes, frontend, python, windows-shell, macos-shell]
     if: always() && github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -310,7 +368,9 @@ jobs:
           FRONTEND: ${{ needs.frontend.result }}
           PYTHON: ${{ needs.python.result }}
           RUST: ${{ needs.windows-shell.result }}
+          MACOS_RUST: ${{ needs.macos-shell.result }}
         run: |
           test "$FRONTEND" = success
           test "$PYTHON" = success
           test "$RUST" = success
+          test "$MACOS_RUST" = success

@@ -740,6 +740,11 @@ def test_launcher_difference_excludes_disappeared_windows_and_attributes_same_pi
     shell = shutil.which("sh")
     if shell is None:
         pytest.skip("An installed POSIX shell is required for the launcher's awk selection")
+    # The launcher runs in the computer's Linux image (gawk, mawk). macOS's own awk refuses a newline in a -v value,
+    # which the selection hands it, so on such a host the shipped selection cannot be run here.
+    probe = subprocess.run([shell, "-c", "awk -v rows=\"$(printf 'a\\nb')\" 'BEGIN {}'"], capture_output=True, timeout=10)
+    if probe.returncode != 0:
+        pytest.skip("This host's awk refuses a multi-line -v value (macOS's BSD awk); the launcher's awk is the Linux image's")
     script = '''before='0x1
 0x2'
 now='0x2

@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "pinned_versions": {
+    "python": "3.12.14",
+    "openssl": "3.5.8",
+    "expat": "2.8.4",
+    "libmpdec": "4.0.0",
+    "opencc": "1.4.2",
+    "soxr": "1.1.0",
+    "soundfile": "0.14.0",
+    "libsndfile": "1.2.2",
+    "python-build-standalone": "20260901"
+  },
+  "licenses": [
+    {
+      "file": "OpenMausBot-Apache-2.0.txt",
+      "url": "https://raw.githubusercontent.com/milind-soni/OpenMausBot/f9191b5384b9900b2371696336439ae5ad6e0117/LICENSE",
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+    },
+    {
+      "file": "onnxruntime-1.28.2-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/LICENSE",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    {
+      "file": "onnxruntime-1.28.2-ThirdPartyNotices.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/ThirdPartyNotices.txt",
+      "sha256": "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2"
+    },
+    {
+      "file": "portaudio-19.7.0-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/PortAudio/portaudio/v19.7.0/LICENSE.txt",
+      "sha256": "ec52a1952d701f94e5135719a47376da4ee0b4a0201f1cafb49f61db6480ac3d"
+    },
+    {
+      "file": "openssl-3.5.8-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/openssl/openssl/f4dc4d58b48d346a8270183f89acf826d459b0ca/LICENSE.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "component": "OpenSSL 3.5.8",
+      "license": "Apache-2.0",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the ssl and hashlib modules of the Python runtime (python-build-standalone 20260901)"
+    },
+    {
+      "file": "libffi-3.4.8-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/libffi/libffi/6a99edb8082f75e523e0d6ebaba42218b80e10c8/LICENSE",
+      "sha256": "67894089811f93fca47a76f85e017da6f8582d4ba0905963c6e0f1ad6df7a195",
+      "component": "libffi 3.4.8",
+      "license": "MIT",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the ctypes module of the Python runtime"
+    },
+    {
+      "file": "expat-2.8.4-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/libexpat/libexpat/12cf0b1f25f026a022fe728ad8f7e3d017285b80/expat/COPYING",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "component": "Expat 2.8.4",
+      "license": "MIT",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the pyexpat module of the Python runtime"
+    },
+    {
+      "file": "libmpdec-4.0.0-COPYRIGHT.txt",
+      "url": "https://raw.githubusercontent.com/python/cpython-source-deps/48316ec025c1ebe500854c332be0a12c640c7301/COPYRIGHT.txt",
+      "sha256": "2713324211652ce4a60e6e21e54f9dc3004299e591b0933a352f1a89c5fb53c2",
+      "component": "libmpdec 4.0.0",
+      "license": "BSD-2-Clause",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the decimal module of the Python runtime (the library of mpdecimal 4.0.0; the same text is in its release archive)"
+    },
+    {
+      "file": "bzip2-1.0.8-LICENSE.txt",
+      "url": "https://sourceware.org/git/?p=bzip2.git;a=blob_plain;f=LICENSE;hb=6a8690fc8d26c815e798c588f796eabe9d684cf0",
+      "sha256": "c6dbbf828498be844a89eaa3b84adbab3199e342eb5cb2ed2f0d4ba7ec0f38a3",
+      "component": "bzip2 1.0.8",
+      "license": "bzip2-1.0.6",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the bz2 module of the Python runtime"
+    },
+    {
+      "file": "xz-5.8.3-COPYING.0BSD.txt",
+      "url": "https://raw.githubusercontent.com/tukaani-project/xz/4b73f2ec19a99ef465282fbce633e8deb33691b3/COPYING.0BSD",
+      "sha256": "0b01625d853911cd0e2e088dcfb743261034a091bb379246cb25a14cc4c74bf1",
+      "component": "liblzma (XZ Utils) 5.8.3",
+      "license": "0BSD",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the lzma module of the Python runtime (XZ Utils' COPYING, which says liblzma is 0BSD, is in upstream/xz-5.8.3-COPYING.txt)"
+    },
+    {
+      "file": "xz-5.8.3-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/tukaani-project/xz/4b73f2ec19a99ef465282fbce633e8deb33691b3/COPYING",
+      "sha256": "616a3ad264ce29b8f1cb97e53037b139d406899ca8d1f799651e17bfa09830b8"
+    },
+    {
+      "file": "sqlite-3.53.1-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/sqlite/sqlite/ccd445d76a9362c63add000354fac84ba9022176/LICENSE.md",
+      "sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7",
+      "component": "SQLite 3.53.1",
+      "license": "Public domain",
+      "shipped_in": "libpython3.12.dylib, linked in statically for the sqlite3 module of the Python runtime"
+    },
+    {
+      "file": "marisa-trie-0.3.1-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/s-yata/marisa-trie/3e87d53b78e15f2f43783d5e376561a8c9722051/COPYING.md",
+      "sha256": "edf58dab34c3dc239ba4ba2d5d3d844d8c5b442aa4dd1149fac81b2d8c6cb8d1",
+      "component": "marisa-trie 0.3.1",
+      "license": "BSD-2-Clause OR LGPL-2.1-or-later",
+      "shipped_in": "opencc/clib/opencc_clib.cpython-312-darwin.so, compiled in by OpenCC 1.4.2; Raphael uses it under the BSD-2-Clause terms"
+    },
+    {
+      "file": "darts-clone-0.32h-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/s-yata/darts-clone/87b71afd6cf784953e3c08f24c64203397f3b724/COPYING.md",
+      "sha256": "c6ab19db56ed127201dfb05346ea702ab53c4e387f43eafc343a7f4c2f2ae91e",
+      "component": "Darts-clone 0.32h",
+      "license": "BSD-2-Clause",
+      "shipped_in": "opencc/clib/opencc_clib.cpython-312-darwin.so, compiled in by OpenCC 1.4.2"
+    },
+    {
+      "file": "rapidjson-1.1.0-license.txt",
+      "url": "https://raw.githubusercontent.com/Tencent/rapidjson/f54b0e47a08782a6131cc3d60f94d038fa6e0a51/license.txt",
+      "sha256": "a140e5d46fe734a1c78f1a3c3ef207871dd75648be71fdda8e309b23ab8b1f32",
+      "component": "RapidJSON 1.1.0",
+      "license": "MIT",
+      "shipped_in": "opencc/clib/opencc_clib.cpython-312-darwin.so, compiled in by OpenCC 1.4.2 (the license file also covers RapidJSON test code that Raphael does not use)"
+    },
+    {
+      "file": "pybind11-2.13.1-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/pybind/pybind11/941f45bcb51457884fa1afd6e24a67377d70f75c/LICENSE",
+      "sha256": "83965b843b98f670d3a85bd041ed4b372c8ec50d7b4a5995a83ac697ba675dcb",
+      "component": "pybind11 2.13.1",
+      "license": "BSD-3-Clause",
+      "shipped_in": "opencc/clib/opencc_clib.cpython-312-darwin.so, compiled in by OpenCC 1.4.2"
+    },
+    {
+      "file": "libsndfile-1.2.2-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/libsndfile/libsndfile/1.2.2/COPYING",
+      "sha256": "ad01ea5cd2755f6048383c8d54c88459cd6fcb17757c5c8892f8c5ea060f6140",
+      "component": "libsndfile 1.2.2",
+      "license": "LGPL-2.1-or-later",
+      "shipped_in": "_soundfile_data/libsndfile_arm64.dylib, shipped in the soundfile 0.14.0 wheel"
+    },
+    {
+      "file": "opus-1.4-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/xiph/opus/82ac57d9f1aaf575800cf17373348e45b7ce6c0d/COPYING",
+      "sha256": "8338ce8d922bb4416ce3dd1e5680173332435e3f0755007ac7801ccd674fe682",
+      "component": "libopus 1.4",
+      "license": "BSD-3-Clause",
+      "shipped_in": "inside libsndfile_arm64.dylib (the Opus codec, for Telegram voice messages)"
+    },
+    {
+      "file": "libvorbis-1.3.7-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/xiph/vorbis/v1.3.7/COPYING",
+      "sha256": "ec1815db59fcd302846df949d7424876cb2e2dc5ed1606c5fb0b36787b1cf43a",
+      "component": "libvorbis 1.3.7",
+      "license": "BSD-3-Clause",
+      "shipped_in": "inside libsndfile_arm64.dylib"
+    },
+    {
+      "file": "flac-1.4.3-COPYING.Xiph.txt",
+      "url": "https://raw.githubusercontent.com/xiph/flac/1.4.3/COPYING.Xiph",
+      "sha256": "12600ea1a7affcbf469bd0d8b2cd725e4167114a2ee834b88f5d2857bfd7ddbf",
+      "component": "libFLAC 1.4.3",
+      "license": "BSD-3-Clause",
+      "shipped_in": "inside libsndfile_arm64.dylib (only the libFLAC component of FLAC is used)"
+    },
+    {
+      "file": "libogg-1.3.5-COPYING.txt",
+      "url": "https://raw.githubusercontent.com/xiph/ogg/e1774cd77f471443541596e09078e78fdc342e4f/COPYING",
+      "sha256": "d2ab5758336489da61c12cc5bb757da5339c4ae9001f9bb0562b4370249af814",
+      "component": "libogg 1.3.5",
+      "license": "BSD-3-Clause",
+      "shipped_in": "inside libsndfile_arm64.dylib (the binary does not record the libogg version; the build script of the dylib names 1.3.5)"
+    },
+    {
+      "file": "lame-3.100-COPYING.txt",
+      "url": "https://svn.code.sf.net/p/lame/svn/tags/RELEASE__3_100/lame/COPYING",
+      "sha256": "bfe4a52dc4645385f356a8e83cc54216a293e3b6f1cb4f79f5fc0277abf937fd",
+      "component": "LAME 3.100",
+      "license": "LGPL-2.0-or-later",
+      "shipped_in": "inside libsndfile_arm64.dylib"
+    }
+  ],
+  "source_code": [
+    {
+      "component": "libsoxr 0.1.3-14-ga66f3ee",
+      "license": "LGPL-2.1-or-later",
+      "shipped_in": "soxr/soxr_ext.abi3.so, which python-soxr 1.1.0 links statically",
+      "sources": [
+        {
+          "label": "libsoxr at the commit python-soxr 1.1.0 builds",
+          "url": "https://github.com/dofuuz/soxr/tree/a66f3eeeeb62a32403ff143b756eed92b1ec6b62"
+        },
+        {
+          "label": "python-soxr 1.1.0 source distribution, which contains libsoxr",
+          "url": "https://files.pythonhosted.org/packages/ed/11/27cebce4a108f77afea7c80545115536b45e3f11ebfb914f638fdd9ba847/soxr-1.1.0.tar.gz",
+          "sha256": "9f228ae21c78fa9359ca98d8a5e8e91f30639e438e574133dace62c5b5309e44"
+        }
+      ]
+    },
+    {
+      "component": "marisa-trie 0.3.1",
+      "license": "BSD-2-Clause OR LGPL-2.1-or-later",
+      "shipped_in": "opencc/clib/opencc_clib.cpython-312-darwin.so, which OpenCC 1.4.2 builds with the copy in its deps/marisa-0.3.1",
+      "sources": [
+        {
+          "label": "marisa-trie v0.3.1",
+          "url": "https://github.com/s-yata/marisa-trie/tree/3e87d53b78e15f2f43783d5e376561a8c9722051"
+        },
+        {
+          "label": "OpenCC 1.4.2 source distribution, which contains the copy that is compiled in",
+          "url": "https://files.pythonhosted.org/packages/e0/12/09e62f051af1de7ca84be1d69154bd0514416ef72237e2081584cc268bc9/opencc-1.4.2.tar.gz",
+          "sha256": "47977905f131d7d9cfcec29fba5d841154907e1da73103105a4a68744e0f4f1a"
+        }
+      ]
+    },
+    {
+      "component": "libsndfile 1.2.2",
+      "license": "LGPL-2.1-or-later",
+      "shipped_in": "_soundfile_data/libsndfile_arm64.dylib, which soundfile 0.14.0 ships unmodified",
+      "sources": [
+        {
+          "label": "libsndfile 1.2.2",
+          "url": "https://github.com/libsndfile/libsndfile/tree/72f6af15e8f85157bd622ed45b979025828b7001"
+        },
+        {
+          "label": "the build script of the dylib, at the commit soundfile 0.14.0 ships",
+          "url": "https://github.com/bastibe/libsndfile-binaries/blob/a3e6f9769d0c7e91d2d036cf0fdbe5b4bbf18b87/mac_build.sh"
+        }
+      ]
+    },
+    {
+      "component": "LAME 3.100",
+      "license": "LGPL-2.0-or-later",
+      "shipped_in": "inside _soundfile_data/libsndfile_arm64.dylib",
+      "sources": [
+        {
+          "label": "LAME 3.100",
+          "url": "https://svn.code.sf.net/p/lame/svn/tags/RELEASE__3_100/lame/"
+        }
+      ]
+    },
+    {
+      "component": "mpg123 1.32.3",
+      "license": "LGPL-2.1-or-later",
+      "shipped_in": "inside _soundfile_data/libsndfile_arm64.dylib",
+      "sources": [
+        {
+          "label": "mpg123 1.32.3",
+          "url": "https://www.mpg123.de/download/mpg123-1.32.3.tar.bz2",
+          "sha256": "2d9913a57d4ee8f497a182c6e82582602409782a4fb481e989feebf4435867b4"
+        }
+      ]
+    }
+  ]
+}

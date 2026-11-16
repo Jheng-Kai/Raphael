@@ -11,15 +11,18 @@ job; this is the half that the worker's start adds.)
 It says nothing of a frozen build, whose executable is started the same way but is not tested here.
 """
 
-import ctypes
-import subprocess
 import sys
-import time
-from ctypes import wintypes
 
 import pytest
 
-pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Job Objects are Windows")
+if sys.platform != "win32":
+    # The module declares Win32 functions as it loads, which other systems do not have.
+    pytest.skip("Job Objects are Windows", allow_module_level=True)
+
+import ctypes  # noqa: E402
+import subprocess  # noqa: E402
+import time  # noqa: E402
+from ctypes import wintypes  # noqa: E402
 
 JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000

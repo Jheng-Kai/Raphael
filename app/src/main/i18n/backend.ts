@@ -1,5 +1,5 @@
-import { t } from "./index";
-import { zhTW } from "./zh-TW";
+import { systemMessage, t } from "./index";
+import { zhTW, type MessageKey } from "./zh-TW";
 
 /** Localize known Rust command errors at the UI boundary without changing the Rust contract. */
 const exact = [
@@ -20,10 +20,13 @@ const detailed = [
 
 export function backendMessage(text: string): string {
   if (text === t("mcp.badPair") || text === zhTW["mcp.badPair"]) return t("mcp.badPair");
-  for (const key of exact) if (text === zhTW[key]) return t(key);
+  // The shell writes its messages in Traditional Chinese, with the Mac's own words on a Mac (notice_words.rs).
+  const said = (key: MessageKey): string[] => [zhTW[key], systemMessage(key, "zh-TW")];
+  for (const key of exact) if (said(key).includes(text)) return t(key);
   for (const key of detailed) {
-    const prefix = zhTW[key].split("{p0}")[0];
-    if (text.startsWith(prefix)) return t(key, { p0: text.slice(prefix.length) });
+    for (const prefix of said(key).map(message => message.split("{p0}")[0])) {
+      if (text.startsWith(prefix)) return t(key, { p0: text.slice(prefix.length) });
+    }
   }
   return t("missing.unknown");
 }

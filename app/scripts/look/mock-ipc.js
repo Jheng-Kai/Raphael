@@ -1233,6 +1233,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "vault.update": Object.assign(data.vaultEntries.find(e => e.id === p.id), p); return { updated: true };
       case "vault.remove": data.vaultEntries = data.vaultEntries.filter(e => e.id !== p.id); return { removed: true };
       case "links.preview": return new URL(p.url).hostname === "example.com" ? { url: p.url, site: "example.com", title: "範例網頁標題", description: "這一頁的摘要很長：從產品的來歷、每一種尺寸與顏色、材質與保養方式，一路說到配送、退換貨與保固的每一條細節，沒有人會在預覽裡讀完它。", thumbnail: null } : { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
+      // A Mac's YouTube page lives on the core's own host (timeline.ts `youtubeFrameUrl`); a scene keeps the embed itself.
+      case "pages.video_base": throw { kind: "not_found", message: "no page host in a scene" };
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
         // A report has no frame: its checked content, which the app draws, and the time its data is from.
@@ -2395,6 +2397,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "keyboard_has_altgr") return false;
       // The owner's clipboard is never read by a look: the live view's paste asks only while he holds a real screen.
       if (command === "owner_clipboard_text") return null;
+      // The shell's read of the clipboard (macOS, where the page may not read it): a scene's clipboard is the browser's own.
+      if (command === "clipboard_text") return navigator.clipboard.readText().catch(() => "");
       if (command === "mic_access") return { allowed: true, blocked_by: null };
       if (command === "schedule_keep_awake_get") return data.awake ?? false;
       if (command === "schedule_keep_awake_set") return data.awake = args.enabled;

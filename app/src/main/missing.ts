@@ -1,4 +1,5 @@
 import { t } from "./i18n";
+import * as api from "./api";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { PageArgument, PageId } from "./types";
 import { btn, esc } from "./ui";
@@ -34,6 +35,7 @@ const messages: Record<string, MissingKey> = {
   "urlRead": "missing.urlRead",
   "unknown": "missing.unknown",
   "microphone": "missing.microphone",
+  "accessibility": "missing.accessibility",
   "docker": "missing.docker",
   "member_computer": "missing.memberComputer",
   "image_generation": "missing.imageGeneration",
@@ -58,8 +60,14 @@ export function missingText(value: Missing): string {
 }
 
 /** `action` is the note's own button where no repair page exists (a retry). */
+/** The macOS privacy pane each of its permissions is allowed in (commands.rs OPENABLE_LINKS). */
+const SYSTEM_PANES: Record<string, string> = {
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+};
+
 export function missingHTML(value: Missing, text = missingText(value), action = ""): string {
-  const repair = repairButton(value);
+  const pane = SYSTEM_PANES[value.requirement];
+  const repair = repairButton(value) || (pane ? btn(esc(t("missing.open")), "sm", ` data-missing-pane="${esc(pane)}"`) : "");
   return `<div class="missing-note" role="status"><span>${esc(text)}</span>` + (repair || action) + `</div>`;
 }
 
@@ -86,6 +94,8 @@ export function noticeHTML(requirement: string, repair: string | null = null, re
 /** Navigation is installed once on the real entry and follows elements redrawn by every consumer. */
 export function bindMissing(root: Document | HTMLElement, go: (page: PageId, arg?: PageArgument) => void): () => void {
   const click = (event: Event): void => {
+    const pane = (event.target as Element).closest<HTMLButtonElement>("[data-missing-pane]");
+    if (pane && Object.values(SYSTEM_PANES).includes(pane.dataset.missingPane ?? "")) { void api.openLink(pane.dataset.missingPane!); return; }
     const button = (event.target as Element).closest<HTMLButtonElement>("[data-missing-repair]");
     if (!button || button.disabled || !repairs.has(button.dataset.missingRepair ?? "")) return;
     button.closest(".toast")?.remove();

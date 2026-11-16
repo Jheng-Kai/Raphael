@@ -240,3 +240,57 @@ async def _until(condition, seconds=5):
             return
         await asyncio.sleep(0.01)
     raise AssertionError("the sign-in was not noticed")
+
+
+def test_claude_codes_sign_in_in_the_mac_keychain_is_a_sign_in(tmp_path):
+    """R-CLI-SIGNIN-04: on a Mac Claude Code keeps its sign-in in the Keychain, not in a file; whether the item is there
+    is all that is asked, and a look stands for KEYCHAIN_TTL_S."""
+    now = [100.0]
+    item = ["mdat 1"]
+    looks = []
+    def keychain():
+        looks.append(now[0])
+        return item[0]
+    brains = CliBrains(home=tmp_path, environ={}, commands={"claude": ["claude"]}, clock=lambda: now[0], keychain=keychain)
+    assert brains.logged_in("claude") is True and brains.available("claude")
+    assert brains.logged_in("claude") is True and len(looks) == 1  # the look stands
+    item[0] = None  # `claude auth logout` removed it
+    now[0] += discovery_module.KEYCHAIN_TTL_S
+    assert brains.logged_in("claude") is None and not brains.available("claude")
+    # The Keychain is Claude Code's alone: the other CLIs keep files.
+    item[0] = "mdat 2"
+    assert brains.logged_in("codex") is False
+
+
+def test_a_sign_in_done_anywhere_on_a_mac_moves_the_keychain_stamp(tmp_path):
+    """R-CLI-SIGNIN-03 on a Mac: the refusal ends when Claude Code's Keychain item changes (its date, never its secret)."""
+    item = ["mdat 1"]
+    brains = CliBrains(home=tmp_path, environ={}, commands={"claude": ["claude"]}, keychain=lambda: item[0])
+    brains.sign_in_lost("claude", "expired")
+    assert brains.sign_in_missing("claude") == "expired"
+    item[0] = "mdat 2"
+    assert brains.sign_in_missing("claude") is None
+
+
+def test_only_the_owners_own_home_on_a_mac_asks_the_keychain(tmp_path, monkeypatch):
+    monkeypatch.setattr(discovery_module.sys, "platform", "darwin")
+    assert discovery_module.owners_keychain(tmp_path) is None
+    assert discovery_module.owners_keychain(None) is discovery_module.keychain_stamp
+    monkeypatch.setattr(discovery_module.sys, "platform", "win32")
+    assert discovery_module.owners_keychain(None) is None
+
+
+def test_the_keychain_is_asked_for_attributes_alone(monkeypatch):
+    calls = []
+    class Found:
+        returncode = 0
+        stdout = 'keychain: "/Users/x/Library/Keychains/login.keychain-db"\n    "mdat"<timedate>=0x3230  "20261115120000Z\\000"\n'
+    monkeypatch.setattr(discovery_module.subprocess, "run", lambda args, **kwargs: calls.append(args) or Found())
+    assert "20261115120000Z" in discovery_module.keychain_stamp()
+    assert calls == [["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials"]]
+    assert not {"-g", "-w"} & set(calls[0])
+    class Missing:
+        returncode = 44
+        stdout = ""
+    monkeypatch.setattr(discovery_module.subprocess, "run", lambda args, **kwargs: Missing())
+    assert discovery_module.keychain_stamp() is None

@@ -2,6 +2,84 @@
 
 pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
     match source {
+        "《Notice. The focus moved to another window. The text is copied. Press Command+V.》" => {
+            match language {
+                "zh-CN" => Some("《告。检测到窗口切换。文字已拷贝，请按 ⌘V。》"),
+                "ko" => Some(
+                    "《알림. 다른 창으로 포커스가 이동했습니다. 텍스트를 복사했습니다. ⌘V를 눌러 주세요.》",
+                ),
+                "es" => {
+                    Some("《Aviso. El foco pasó a otra ventana. El texto está copiado. Pulsa ⌘V.》")
+                }
+                "fr" => Some(
+                    "《Avis. Le focus est passé à une autre fenêtre. Le texte est copié. Appuyez sur ⌘V.》",
+                ),
+                "de" => Some(
+                    "《Hinweis. Der Fokus ist zu einem anderen Fenster gewechselt. Der Text wurde kopiert. Drücke ⌘V.》",
+                ),
+                "pt-BR" => Some(
+                    "《Aviso. O foco mudou para outra janela. O texto foi copiado. Pressione ⌘V.》",
+                ),
+                "it" => Some(
+                    "《Avviso. Il focus è passato a un’altra finestra. Il testo è copiato. Premi ⌘V.》",
+                ),
+                "ru" => Some(
+                    "《Уведомление. Фокус перешёл в другое окно. Текст скопирован. Нажмите ⌘V.》",
+                ),
+                "vi" => Some(
+                    "《Thông báo. Tiêu điểm đã chuyển sang cửa sổ khác. Đã sao chép văn bản. Nhấn ⌘V.》",
+                ),
+                "th" => Some("《แจ้งให้ทราบ. โฟกัสย้ายไปยังหน้าต่างอื่น คัดลอกข้อความแล้ว กด ⌘V》"),
+                "id" => Some(
+                    "《Pemberitahuan. Fokus berpindah ke jendela lain. Teks telah disalin. Tekan ⌘V.》",
+                ),
+                "tr" => Some(
+                    "《Bildirim. Odak başka bir pencereye geçti. Metin kopyalandı. ⌘V’ye basın.》",
+                ),
+                _ => None,
+            }
+        }
+        "《Negative. No sound was received. Unmute the microphone and allow Raphael in System Settings > Privacy & Security > Microphone.》" => {
+            match language {
+                "zh-CN" => Some(
+                    "《否。未收到声音。请取消麦克风静音，并在“系统设置 › 隐私与安全性 › 麦克风”允许拉斐尔。》",
+                ),
+                "ko" => Some(
+                    "《거절. 소리가 수신되지 않았습니다. 마이크 음소거를 해제하고 시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Raphael을 허용해 주세요.》",
+                ),
+                "es" => Some(
+                    "《No. No se recibió sonido. Activa el micrófono y permite Raphael en Ajustes del Sistema › Privacidad y seguridad › Micrófono.》",
+                ),
+                "fr" => Some(
+                    "《Non. Aucun son reçu. Réactivez le microphone et autorisez Raphael dans Réglages Système › Confidentialité et sécurité › Microphone.》",
+                ),
+                "de" => Some(
+                    "《Nein. Kein Ton empfangen. Hebe die Stummschaltung auf und erlaube Raphael unter Systemeinstellungen › Datenschutz & Sicherheit › Mikrofon.》",
+                ),
+                "pt-BR" => Some(
+                    "《Não. Nenhum som recebido. Ative o microfone e permita o Raphael em Ajustes do Sistema › Privacidade e Segurança › Microfone.》",
+                ),
+                "it" => Some(
+                    "《No. Nessun suono ricevuto. Riattiva il microfono e consenti Raphael in Impostazioni di Sistema › Privacy e sicurezza › Microfono.》",
+                ),
+                "ru" => Some(
+                    "《Нет. Звук не получен. Включите микрофон и разрешите Raphael в Системных настройках › Конфиденциальность и безопасность › Микрофон.》",
+                ),
+                "vi" => Some(
+                    "《Không. Không nhận được âm thanh. Bỏ tắt micrô và cho phép Raphael trong Cài đặt hệ thống › Quyền riêng tư & Bảo mật › Micrô.》",
+                ),
+                "th" => Some(
+                    "《ไม่. ไม่ได้รับเสียง เปิดเสียงไมโครโฟนและอนุญาต Raphael ในการตั้งค่าระบบ › ความเป็นส่วนตัวและความปลอดภัย › ไมโครโฟน》",
+                ),
+                "id" => Some(
+                    "《Tidak. Tidak ada suara diterima. Aktifkan mikrofon dan izinkan Raphael di Pengaturan Sistem › Privasi & Keamanan › Mikrofon.》",
+                ),
+                "tr" => Some(
+                    "《Hayır. Ses alınmadı. Mikrofonun sesini açın ve Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon’da Raphael’e izin verin.》",
+                ),
+                _ => None,
+            }
+        }
         "《Notice. This window has higher privileges and refuses the paste. The text is copied. Press Ctrl+V.》" => {
             match language {
                 "zh-CN" => Some("《告。此窗口权限较高，无法粘贴。文字已拷贝，请按 Ctrl+V。》"),

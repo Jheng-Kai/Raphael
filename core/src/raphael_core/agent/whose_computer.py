@@ -19,9 +19,11 @@ MEMBER, OWNER, UNSURE = "member", "owner", "unsure"
 # A word for a computer. `pc` is cut out of a longer Latin word by lookarounds, since a Chinese character is a word
 # character and `\b` would not stand between 的 and pc.
 _PC = r"(?<![a-z0-9])pc(?![a-z0-9])"
-_MACHINE_ZH = rf"(?:電腦|电脑|筆電|笔电|筆記型電腦|笔记本|桌機|虛擬機|虚拟机|{_PC})"
-_MACHINE_EN = r"(?:computer|pc|laptop|machine)"
-_MACHINE_JA = rf"(?:パソコン|コンピューター|コンピュータ|ピーシー|{_PC})"
+# A Mac is a computer too, by its own names.
+_MAC = r"(?<![a-z0-9])(?:mac(?! address)|macbook(?: air| pro)?|imac|mac mini|mac studio)(?![a-z0-9])"
+_MACHINE_ZH = rf"(?:電腦|电脑|筆電|笔电|筆記型電腦|笔记本|桌機|虛擬機|虚拟机|{_PC}|{_MAC})"
+_MACHINE_EN = rf"(?:computer|pc|laptop|machine|{_MAC})"
+_MACHINE_JA = rf"(?:パソコン|コンピューター|コンピュータ|ピーシー|{_PC}|{_MAC})"
 # What stands between a person and their computer: 的, 自己, 這台.
 _ZH_BETWEEN = r"\s*(?:自己|本人|自身)?\s*的?\s*(?:那台|這台|那部|這部|那個|這個|虛擬|虚拟|雲端|云端)?\s*"
 _NAME_ZH = r"(?:拉斐爾|拉菲爾|拉斐尔|raphael)"

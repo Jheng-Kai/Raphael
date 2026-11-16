@@ -5,13 +5,34 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
 from .process import Child, subscription_env
+from .terminal_login import TerminalSignIn
 from .models import claude_cli_models, claude_models, codex_models, antigravity_models, find_model
 from ...brain.model_ref import CLI_NAMES as NAMES
+
+# Claude Code keeps its sign-in on a Mac in the login Keychain, as a password item of this name, not in a file.
+CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials"
+# How long a look at the Keychain stands for the next ones.
+KEYCHAIN_TTL_S = 30
+
+
+def keychain_stamp(service=CLAUDE_KEYCHAIN_SERVICE):
+    """When the Keychain item of `service` last changed, or None without one: `security` prints the item's attributes
+    alone (never its secret, `-g`/`-w` are not given) and asks the owner nothing."""
+    try:
+        found = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", service],
+                               capture_output=True, text=True, errors="replace", timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if found.returncode != 0:
+        return None
+    return next((line.strip() for line in found.stdout.splitlines() if '"mdat"' in line), "present")
+
 
 # "gemini" is Google's Antigravity CLI (`agy`), which replaced Gemini CLI.
 LOGIN = {"claude": "claude auth login", "codex": "codex login", "gemini": "agy"}
@@ -60,8 +81,15 @@ def resolve_command(path, environ=None):
     return [found, str(entry)]
 
 
+def owners_keychain(home):
+    """The Keychain look for Claude Code's sign-in: only for the owner's own home (none given) on a Mac."""
+    return keychain_stamp if home is None and sys.platform == "darwin" else None
+
+
 class CliBrains:
-    def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic):
+    def __init__(self, *, home=None, environ=None, commands=None, notify=None, settings=None, clock=time.monotonic, keychain=None):
+        self._keychain = keychain if keychain is not None else owners_keychain(home)
+        self._keychain_seen = None
         self.home = Path.home() if home is None else Path(home)
         self.environ = dict(os.environ if environ is None else environ)
         self.commands = commands
@@ -114,6 +142,11 @@ class CliBrains:
         executable = EXECUTABLE.get(name, name)
         found = shutil.which(executable, path=self.environ.get("PATH", ""))
         roots = [self.home / ".local" / "bin", self.home / ".bun" / "bin"]
+        if sys.platform == "darwin":
+            # An app opened from Finder has none of the shell's PATH: the places Homebrew, npm, Volta
+            # and Claude Code's own installer put these commands on a Mac.
+            roots.extend([Path("/opt/homebrew/bin"), Path("/usr/local/bin"), self.home / ".npm-global" / "bin",
+                          self.home / ".volta" / "bin", self.home / ".claude" / "local"])
         if self.environ.get("APPDATA"):
             roots.append(Path(self.environ["APPDATA"]) / "npm")
         if self.environ.get("LOCALAPPDATA"):
@@ -146,8 +179,21 @@ class CliBrains:
                 return True
         except OSError:
             return None
+        # Claude Code on a Mac keeps its sign-in in the Keychain (R-CLI-SIGNIN-04): the item being there is the sign-in.
+        if name == "claude" and self._keychain_item(fresh=False) is not None:
+            return True
         # Claude also uses OS credential storage. Settings alone do not establish a Google login.
         return None if name == "claude" else False
+
+    def _keychain_item(self, *, fresh):
+        """Claude Code's Keychain item's stamp, or None (none, or no Keychain here); a look stands for KEYCHAIN_TTL_S
+        unless a `fresh` one is asked for."""
+        if self._keychain is None:
+            return None
+        seen = self._keychain_seen
+        if fresh or seen is None or self._clock() >= seen[0]:
+            seen = self._keychain_seen = (self._clock() + KEYCHAIN_TTL_S, self._keychain())
+        return seen[1]
 
     def _credential_stamp(self, name):
         """When the CLI's credential files last changed (never what they hold): a sign-in done anywhere moves it."""
@@ -157,6 +203,9 @@ class CliBrains:
                 stamp.append(path.stat().st_mtime_ns)
             except OSError:
                 stamp.append(None)
+        # On a Mac a sign-in rewrites Claude Code's Keychain item instead of a file.
+        if name == "claude" and self._keychain is not None:
+            stamp.append(self._keychain_item(fresh=True))
         return tuple(stamp)
 
     def sign_in_lost(self, name, cause):
@@ -370,11 +419,15 @@ class CliBrains:
             if self.notify:
                 self.notify("brains.changed", {})
             return {"started": False, "reconnected": True}
-        if os.name != "nt":
+        if os.name != "nt" and sys.platform != "darwin":
             raise ValueError("cli_missing")
         arguments = {"claude": ["auth", "login"], "codex": ["login"], "gemini": []}[name]
-        process = subprocess.Popen([*command, *arguments], env=subscription_env(self.environ),
-                                   creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
+        if sys.platform == "darwin":
+            # A Mac signs in in a Terminal window, followed as the console's process is on Windows.
+            process = TerminalSignIn([*command, *arguments])
+        else:
+            process = subprocess.Popen([*command, *arguments], env=subscription_env(self.environ),
+                                       creationflags=subprocess.CREATE_NEW_CONSOLE, close_fds=True)
         self._signing[name] = process
         self._signed.pop(name, None)
         self._reconnect(name)

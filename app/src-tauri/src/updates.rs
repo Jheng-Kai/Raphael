@@ -151,7 +151,11 @@ fn idle_seconds() -> u64 {
         }
     }
 }
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn idle_seconds() -> u64 {
+    crate::macos::power::idle_seconds()
+}
+#[cfg(not(any(windows, target_os = "macos")))]
 fn idle_seconds() -> u64 {
     0
 }

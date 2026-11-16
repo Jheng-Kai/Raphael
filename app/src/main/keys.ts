@@ -4,19 +4,22 @@
 // again (`device_settings::validate_binding`), with the same rules.
 
 import { t } from "./i18n";
+import { IS_MAC } from "../shared/platform";
 
+// The keyboard of a Mac names its modifiers Control, Option (the same key code as Alt, and the
+// i18n words `keys.001`/`keys.002` say so on macOS) and Command (the Meta key).
 const LABELS: Record<string, string> = {
   get AltRight() { return t("keys.001"); },
   get AltLeft() { return t("keys.002"); },
-  ControlLeft: "Ctrl",
-  ControlRight: "Ctrl",
+  ControlLeft: IS_MAC ? "Control" : "Ctrl",
+  ControlRight: IS_MAC ? "Control" : "Ctrl",
   ShiftLeft: "Shift",
   ShiftRight: "Shift",
-  MetaLeft: "Win",
-  MetaRight: "Win",
+  MetaLeft: IS_MAC ? "Command" : "Win",
+  MetaRight: IS_MAC ? "Command" : "Win",
   Space: "Space",
   Escape: "Esc",
-  Enter: "Enter",
+  Enter: IS_MAC ? "Return" : "Enter",
   Tab: "Tab",
   Backspace: "Backspace",
   Delete: "Delete",
@@ -58,6 +61,26 @@ export function keyLabel(part: string): string {
 }
 
 /** The labels of the keys of a binding: `AltRight+V` is 「右 Alt」, 「V」. */
+/** How each part of a window shortcut is written: as macOS writes it in its menus, or as Windows does. */
+const SHORTCUT_PARTS: Record<"mac" | "windows", Record<string, string>> = {
+  mac: { Primary: "⌘", Shift: "⇧", Alt: "⌥", Control: "⌃" },
+  windows: { Primary: "Ctrl", Shift: "Shift", Alt: "Alt", Control: "Ctrl" },
+};
+
+/**
+ * A shortcut of the window for this system, from its parts: "Primary" is the system's command key
+ * (`primaryKey`: ⌘ or Ctrl), "Alt" is Option on a Mac. A Mac writes them run together in its order (⇧⌘F, ⌥↑),
+ * Windows joins them with "+" (Ctrl+Shift+F, Alt+↑).
+ */
+export function shortcutText(parts: string[], mac = IS_MAC): string {
+  const names = SHORTCUT_PARTS[mac ? "mac" : "windows"];
+  if (!mac) return parts.map(part => names[part] ?? part).join("+");
+  // macOS writes the modifiers in one order, ⌃⌥⇧⌘, before the key.
+  const order = ["Control", "Alt", "Shift", "Primary"];
+  const modifiers = order.filter(part => parts.includes(part)).map(part => names[part]);
+  return modifiers.join("") + parts.filter(part => !order.includes(part)).join("");
+}
+
 export function bindingLabels(binding: string): string[] {
   return binding.split("+").map((part) => keyLabel(part.trim()));
 }
@@ -144,9 +167,15 @@ export type RecorderResult =
  * Records one combination: everything that is pressed until all keys are released again. Feed it
  * the `keydown` and `keyup` events of the page.
  */
+/** The modifier keys, by their codes. */
+const MODIFIER_CODES = new Set(["AltLeft", "AltRight", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"]);
+
 export class KeyRecorder {
   private recorded: string[] = [];
   private held = new Set<string>();
+
+  /** `mac`: macOS sends no release for a key let go while ⌘ is down, so ⌘'s release lets go of the others. */
+  constructor(private readonly mac = IS_MAC) {}
 
   /**
    * `altGraph`: the event says AltGr is down (`getModifierState("AltGraph")`). On a keyboard
@@ -169,6 +198,9 @@ export class KeyRecorder {
   /** Null for a key that was not pressed during the recording (the Enter that pressed the button). */
   keyUp(code: string): RecorderResult | null {
     if (!this.held.delete(code)) return null;
+    if (this.mac && (code === "MetaLeft" || code === "MetaRight")) {
+      for (const held of this.held) if (!MODIFIER_CODES.has(held)) this.held.delete(held);
+    }
     if (this.held.size > 0) return { type: "progress", codes: [...this.recorded] };
     return { type: "done", codes: [...this.recorded] };
   }

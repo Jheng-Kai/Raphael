@@ -39,6 +39,7 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.pricing import builtin_catalog
 from ..memory.conversation import turn_text
+from ..system_words import for_this_system
 from .failure import AgentFailure, failure_kind
 from .history import Turn
 from .ledger import Ledger
@@ -355,6 +356,7 @@ says. Never invent a value, a name or an address.
 url: use only values the user gave or an earlier result held.
 - To find content in a service, call its search tool first.
 - If no tool fits, call none and answer with the single word none."""
+_PLANNER_SYSTEM = for_this_system(_PLANNER_SYSTEM)
 
 
 def build_plan_message(question: str, context: Sequence[Turn]) -> str:

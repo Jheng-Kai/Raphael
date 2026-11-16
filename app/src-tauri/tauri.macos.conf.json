@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "dragDropEnabled": false,
+        "create": false,
+        "title": "Raphael",
+        "url": "index.html",
+        "width": 1280,
+        "height": 800,
+        "center": true,
+        "minWidth": 720,
+        "minHeight": 480,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 27
+        },
+        "resizable": true,
+        "zoomHotkeysEnabled": false,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "entitlements": "./Entitlements.plist",
+      "hardenedRuntime": true
+    }
+  }
+}

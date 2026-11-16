@@ -15,6 +15,7 @@ import { lightHTML, lightOf } from "./sidebar-light";
 import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
+import { shortcutText } from "./keys";
 
 /** What the column is drawn from. */
 export interface ColumnView {
@@ -277,7 +278,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
       openActions(
         addButton,
         [
-          { id: "member", label: t("members.newMember") + "  Ctrl+N", icon: "plus" },
+          { id: "member", label: t("members.newMember") + "  " + shortcutText(["Primary", "N"]), icon: "plus" },
           { id: "group", label: t("members.newGroup"), icon: "folder" },
           { id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" },
           { id: "member-store", label: t("store.title"), icon: "store" },

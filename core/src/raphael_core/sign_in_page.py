@@ -4,6 +4,7 @@ It loads nothing and asks nothing, and it never repeats what the address carried
 the one-time code as soon as it is read, so that the browser's history does not keep it.
 """
 
+from raphael_core.system_words import MAC
 from raphael_core.ui_words import ui_word, with_ui_words
 import html
 import secrets
@@ -89,6 +90,42 @@ _CHATGPT = with_ui_words({
     },
 })
 USAGE_URL = "https://chatgpt.com/settings/usage"
+
+# On a Mac the sign-in is kept in the Keychain. Each language's words for "in Windows Credential Manager", as the
+# sentences above say them, and the Keychain's in their place (the name macOS gives it in that language).
+_KEYCHAIN = {
+    "zh": ("Windows 認證管理員", "macOS 鑰匙圈"),
+    "en": ("in Windows Credential Manager", "in the macOS Keychain"),
+    "ja": ("Windows 資格情報マネージャー", "macOS のキーチェーン"),
+    "zh-CN": ("Windows 认证管理员", "macOS 钥匙串"),
+    "ko": ("Windows 자격 증명 관리자", "macOS 키체인"),
+    "es": ("el Administrador de credenciales de Windows", "el llavero de macOS"),
+    "fr": ("le Gestionnaire d’identification Windows", "le trousseau macOS"),
+    "de": ("in der Windows-Anmeldeinformationsverwaltung", "im macOS-Schlüsselbund"),
+    "pt-BR": ("no Gerenciador de Credenciais do Windows", "no Chaveiro do macOS"),
+    "it": ("in Gestione credenziali di Windows", "nel Portachiavi di macOS"),
+    "ru": ("в диспетчере учётных данных Windows", "в связке ключей macOS"),
+    "vi": ("Trình quản lý thông tin xác thực Windows", "Chuỗi khóa macOS"),
+    "th": ("ในตัวจัดการข้อมูลประจำตัวของ Windows", "ในพวงกุญแจของ macOS"),
+    "id": ("Pengelola Kredensial Windows", "Rantai Kunci macOS"),
+    "tr": ("Windows Kimlik Bilgisi Yöneticisi'", "macOS Anahtar Zinciri'"),
+}
+
+
+def _on_mac(value, language: str):
+    """`value` (the words of one language) with the Keychain in place of Windows Credential Manager."""
+    if isinstance(value, str):
+        windows, mac = _KEYCHAIN[language]
+        return value.replace(windows, mac)
+    if isinstance(value, tuple):
+        return tuple(_on_mac(item, language) for item in value)
+    return {key: _on_mac(item, language) for key, item in value.items()}
+
+
+_CHATGPT_WINDOWS = _CHATGPT
+_CHATGPT_MAC = {language: _on_mac(words, language) for language, words in _CHATGPT_WINDOWS.items()}
+if MAC:
+    _CHATGPT = _CHATGPT_MAC
 
 
 @dataclass(frozen=True)

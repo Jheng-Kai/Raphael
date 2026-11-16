@@ -31,6 +31,16 @@ export type Corner = "nw" | "ne" | "sw" | "se";
 const clamp = (n: number, low: number, high: number): number => Math.min(high, Math.max(low, n));
 
 /** The whole picture `w` × `h` fitted in the stage, the frame over the largest square of it in the middle. */
+/**
+ * The zoom one wheel event asks for: a mouse's notch (about 100 px) is 1.08×, and a trackpad's many small deltas (a Mac's,
+ * with their momentum) add up to the same for the same distance instead of 1.08× each.
+ */
+export function wheelZoom(deltaY: number, deltaMode: number, page = 800): number {
+  // A notch is three lines where the wheel counts lines.
+  const pixels = deltaY * (deltaMode === 1 ? 100 / 3 : deltaMode === 2 ? page : 1);
+  return Math.min(1.08, Math.max(1 / 1.08, Math.exp((-pixels * Math.log(1.08)) / 100)));
+}
+
 export function startView(w: number, h: number, stage = STAGE_PX, pad = STAGE_PAD): CropView {
   const s = Math.min((stage - 2 * pad) / w, (stage - 2 * pad) / h);
   const ox = (stage - w * s) / 2, oy = (stage - h * s) / 2;
@@ -184,7 +194,7 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
       (e) => {
         e.preventDefault();
         if (!view) return;
-        view = zoomCrop(view, e.deltaY < 0 ? 1.08 : 1 / 1.08, ...local(e), ...size());
+        view = zoomCrop(view, wheelZoom(e.deltaY, e.deltaMode, stage.clientHeight), ...local(e), ...size());
         draw();
       },
       { passive: false },

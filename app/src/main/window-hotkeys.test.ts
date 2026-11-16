@@ -77,6 +77,13 @@ describe("Esc in the window while the voice is working", () => {
 });
 
 describe("focused-window hotkeys", () => {
+  test("on a Mac a V let go under ⌘ (⌘V, no release from macOS) does not keep the next Right Option+V from pasting", () => {
+    let state = emptyHotkeyState();
+    for (const event of [key("MetaLeft"), key("KeyV"), key("MetaLeft", "keyup")]) state = reduceHotkey(state, event, defaults, false, true).state;
+    const alt = reduceHotkey(state, key("AltRight"), defaults, false, true);
+    expect(reduceHotkey(alt.state, key("KeyV"), defaults, false, true).actions).toEqual(["paste_last"]);
+  });
+
   test("Right Alt down/up reaches dictation without a hook event", () => {
     const down = reduceHotkey(emptyHotkeyState(), key("AltRight"), defaults);
     expect(down.actions).toEqual(["dictation_down"]);

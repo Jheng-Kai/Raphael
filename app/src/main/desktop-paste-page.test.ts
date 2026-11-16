@@ -69,6 +69,20 @@ test("Ctrl+Shift+V pastes the same way with its shifted key, and a released Ctrl
   expect(rfb.sent).toEqual([[0xffe3, "ControlLeft", true], [0xffe1, "ShiftLeft", true], [0x56, "KeyV"], [0xffe1, "ShiftLeft", false], [0xffe3, "ControlLeft", false]]);
 });
 
+test("on a Mac his Command+V is the paste: the computer is told Ctrl+V, with its Super let go first", () => {
+  key("MetaLeft", "Meta", { metaKey: true });
+  const paste = key("KeyV", "v", { metaKey: true });
+  expect(paste.defaultPrevented).toBe(true);
+  expect(asked()).toHaveLength(1);
+  answer(asked()[0].id, "from the Mac");
+  vi.advanceTimersByTime(100);
+  expect(rfb.pasted).toEqual(["from the Mac"]);
+  expect(rfb.sent).toEqual([[0xffeb, "MetaLeft", false], [0xffe3, "ControlLeft", true], [0x76, "KeyV"], [0xffe3, "ControlLeft", false]]);
+  // Ctrl and Command together are no paste of his.
+  const both = key("KeyV", "v", { metaKey: true, ctrlKey: true });
+  expect(both.defaultPrevented).toBe(false);
+});
+
 test("when he only watches, or a member works, Ctrl+V is not held back and nothing is asked", () => {
   rfb.viewOnly = true;
   key("ControlLeft", "Control", { ctrlKey: true });

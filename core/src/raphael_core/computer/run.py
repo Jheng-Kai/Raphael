@@ -95,6 +95,7 @@ from ..clock import wall_clock_ms
 from ..memory.conversation import turn_text
 from ..worker.context import shorten_old_rounds
 from ..worker.guards import MAX_ARGUMENT_CHARS, canonical, neutralize, wrap_untrusted
+from ..system_words import for_this_system
 from . import safety, tools, words
 from .bridge import HANDOFF, REVOKED, UNAVAILABLE, BridgeError, ShellBridge
 from .snapshot import (
@@ -301,7 +302,7 @@ class _Finished(Exception):
 def system_prompt() -> str:
     """What the model is told about a run: the same for every run, whatever the interface language, which goes to no
     model (owner, 2026-11-14)."""
-    return (
+    return for_this_system(
         "You operate apps on the owner's own Windows computer with the tools you "
         "are given, to carry out the request inside <task> tags. The owner is at the computer and "
         "watches every step.\n\n"
@@ -1211,7 +1212,7 @@ class ComputerRun:
         if action == "click" and element is not None:
             return phrase(language, "computer_confirm_click", target=words.target(language, element.name))
         if action == "keys" and chord is not None:
-            return phrase(language, "computer_confirm_keys", keys=safety.chord_text(chord))
+            return phrase(language, "computer_confirm_keys", keys=safety.chord_label(chord))
         return phrase(language, "computer_confirm_step")
 
     def _say_step(self, action: str, element: Element | None, chord: tuple[str, ...] | None) -> None:
@@ -1221,7 +1222,7 @@ class ComputerRun:
         elif action in ("click", "focus"):
             fields["target"] = words.target(self.language, "")
         if chord is not None:
-            fields["keys"] = safety.chord_text(chord)
+            fields["keys"] = safety.chord_label(chord)
         self._line(action, **fields)
 
 

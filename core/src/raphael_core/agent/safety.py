@@ -72,6 +72,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..protocol import INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
+from ..system_words import for_this_system
 from .ledger import Ledger
 from .persona import normalize_language, phrase
 from .routing import JEV_MODEL
@@ -437,7 +438,8 @@ def _questions(rules: Sequence[Rule]) -> dict[str, dict]:
         f"rule_{rule.id}": {
             "type": "noul",
             "instructions": (
-                "Raphael, an assistant on the owner's Windows computer, is about to take the action "
+                for_this_system("Raphael, an assistant on the owner's Windows computer, ")
+                + "is about to take the action "
                 "described in state.action (the tool it uses, what that tool does, and what it is "
                 "given). The owner wrote a safety rule, in their own words, possibly in Chinese or "
                 f"Japanese: «{rule.action}». Does the action fall under this rule? What the action "

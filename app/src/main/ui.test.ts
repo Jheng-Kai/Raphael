@@ -162,10 +162,11 @@ describe("the main window's actions", () => {
     }
   });
 
-  test("monospace text has one font stack, with Windows' own faces before the browser's default", () => {
+  test("monospace text has one font stack, with Windows' and macOS's own faces before the browser's default", () => {
     // Bare `monospace` resolves to MingLiU on Traditional Chinese Windows, whose Latin letters are ugly.
     const css = read(path.join(root, "styles.css"));
-    expect(css).toMatch(/--mono: "Cascadia Mono", Consolas, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", monospace;/);
+    // `ui-monospace` is WebKit's name for the Mac's own SF Mono, which no family name reaches there.
+    expect(css).toMatch(/--mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", monospace;/);
     expect(css).toMatch(/\bcode, pre, samp \{ font-family: var\(--mono\); \}/);
     for (const file of sources.filter((f) => f.endsWith(".css")))
       expect(read(file).replace(/--mono:[^;]*;/, ""), file).not.toMatch(/monospace/);
