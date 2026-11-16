@@ -1,5 +1,5 @@
 import { visibilityGate, windowVisible } from "../window-visibility";
-// The app's own calendar, modelled on Google Calendar: the month, what it shows and 建立 in a rail on the left; a day, week
+// The app's own calendar: the month, what it shows and 建立 in a rail on the left; a day, week
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
 // here and say where they come from. A routine is made or changed by its member in the conversation: a routine opens to read, and 例行任務 at a time puts the
 // owner's words for it in the member's composer.
