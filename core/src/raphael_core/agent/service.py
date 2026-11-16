@@ -2740,7 +2740,7 @@ class AgentService:
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
-                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
+                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), owner_language=self._words_language(ask),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
                 # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
                 # cached for an hour (owner, 2026-11-09, decisions 1 and 4).

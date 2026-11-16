@@ -16,6 +16,7 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.prompt_cache import cache_options
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
+from ..conversation_language import in_language
 from ..background.run import estimate_cost, summary_reply
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
@@ -135,8 +136,12 @@ class NarratedLoop:
         context_window: int | None = None,
         reply: Callable[[Reply], None] | None = None,
         updates: ProgressUpdates | None = None,
+        owner_language: str | None = None,
     ) -> None:
         self.client, self.model, self.ledger = client, model, ledger
+        # The language the owner writes in (`AgentService._words_language`), which what the model says between its tool
+        # calls is held to (R-LANG-05); None holds nothing back.
+        self.owner_language = owner_language
         # When the owner was last shown a message of this turn (agent/progress_updates.py); None owes no word.
         self.updates = updates
         self.reasoning_effort = reasoning_effort
@@ -225,7 +230,7 @@ class NarratedLoop:
             usage=getattr(answer, "usage", None), prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
             ms=int((time.perf_counter() - began) * 1000),
         )
-        if thought := " ".join(getattr(answer, "reasoning", "").split()):
+        if (thought := " ".join(getattr(answer, "reasoning", "").split())) and self._fits(thought):
             # What the model wrote into the channel of its answer is its thinking, never its reply (brain/reasoning.py).
             self.thinking(thought[-240:])
         if answer.content.strip():
@@ -235,22 +240,30 @@ class NarratedLoop:
             for public in objects:
                 for kind, emit, limit in (("thinking", self.thinking, 120), ("progress", self.progress, 60)):
                     text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), "auto")
-                    if text:
+                    if text and self._fits(text):
                         emit(text)
             authored = public_reply(answer.content, self.language, plain=self.plain, explicit=True) if answer.calls else None
+            if authored is not None:
+                # Said while working, so shown only in the owner's language: the step it came with keeps its label.
+                lines = [line for line in (authored.messages or [authored.text]) if self._fits(line)]
+                authored = dataclasses.replace(authored, messages=lines, text="\n\n".join(lines)) if lines else None
             if authored is not None and self.publish_reply is not None:
                 self.publish_reply(authored)
                 if self.updates is not None:
                     self.updates.shown()
             if answer.calls and not objects and prose:
                 text = public_line(_public_text(prose, 60), "auto")
-                if text:
+                if text and self._fits(text):
                     self.progress(text)
         self.batch_calls = answer.calls
         return Turn(answer.content, [
             Call(call.id, call.name, call.arguments, call.raw_arguments) for call in answer.calls
         ], responses_output=getattr(answer, "responses_output", []), finish_reason=getattr(answer, "finish_reason", ""),
             prompt_tokens=answer.prompt_tokens, tools=list(tools))
+
+    def _fits(self, text: str) -> bool:
+        """Whether `text`, said between steps, is in the owner's language."""
+        return in_language(text, self.owner_language)
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)
