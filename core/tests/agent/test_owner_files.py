@@ -218,6 +218,26 @@ async def test_glob_and_grep_walk_the_home_but_not_packages_or_kept_places(home,
     assert not bad.ok and bad.kind == "bad_pattern"
 
 
+async def test_a_search_for_raphaels_database_by_name_is_made_and_finds_none_of_its_data(conn, home, files, monkeypatch):
+    # Through the gate: the data floor reads a search's path as its place, never its pattern.
+    data = home / "Raphael Data"
+    data.mkdir()
+    (data / "raphael.db").write_text("raphael.db SECRET ROW\n", encoding="utf-8")
+    monkeypatch.setenv("RAPHAEL_DATA_DIR", str(data))
+    (home / "Documents" / "setup.md").write_text("The app keeps raphael.db in its data folder.\n", encoding="utf-8")
+    gate = ToolGate(files, conn=conn)
+    found = await gate.call_plugin("mcp:owner_files/grep", {"pattern": "raphael.db", "path": "~", "output_mode": "content"})
+    assert found.ok and "setup.md" in found.text and "SECRET" not in found.text
+    named = await gate.call_plugin("mcp:owner_files/glob", {"pattern": "**/raphael.db", "path": "~"})
+    assert named.ok and "No files found" in named.text
+    # Where Raphael's data is the place asked for, it is refused as before: a read waits for the owner's consent, a search
+    # is refused.
+    read = await gate.call_plugin("mcp:owner_files/read_file", {"path": str(data / "raphael.db")})
+    assert not read.ok and read.kind == "approval_required" and "SECRET" not in read.text
+    searched = await gate.call_plugin("mcp:owner_files/grep", {"pattern": "SECRET", "path": str(data)})
+    assert not searched.ok and searched.kind == "protected_data"
+
+
 # --- writing ---------------------------------------------------------------------------------------------------------
 
 

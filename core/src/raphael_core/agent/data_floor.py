@@ -44,6 +44,11 @@ _CHANGES = re.compile(
 _ATTACHMENT_ID = re.compile(r"[a-f0-9]{32}\.[a-z0-9]{1,12}")
 _WRITE = re.compile(r"write|append|delete|remove|rename|move|copy|create|save|upload|edit|patch|set[-_]?content|add[-_]?content|new[-_]?item|truncate", re.I)
 _READ_TOOL = re.compile(r"read|list|stat|search|find|inspect|view|^(?:get|cat|head|tail)(?:[_-]|[A-Z])", re.I)
+# A search (the owner's file tools' grep and glob, a CLI brain's Grep and Glob) says in `pattern` what it looks for (a
+# regular expression, or a glob over names) and in `glob` and `type` which files: none of them is a place, so a pattern
+# that names raphael.db is no access to it. Its path is the place, and so is a glob pattern that starts at a folder of its own.
+_SEARCH_TOOL = re.compile(r"grep|glob", re.I)
+_SEARCH_TERMS = frozenset({"pattern", "glob", "type", "output_mode"})
 
 
 class DataFloor:
@@ -144,6 +149,13 @@ class DataFloor:
         if sys.platform == "darwin":
             yield from (match[0].replace("\\ ", " ") for match in _POSIX_PATH.finditer(expanded))
 
+    def _starts_at_a_folder(self, pattern):
+        """Whether a glob pattern names its own folder (`C:/data/**`, `~/x/*`) rather than names under the search's path."""
+        if not isinstance(pattern, str):
+            return False
+        text = self.expand(pattern)
+        return ntpath.isabs(text) or text.startswith(("/", "\\"))
+
     @staticmethod
     def _read_command(command):
         # Unknown programs and scripts with protected paths are treated as potentially writing.
@@ -182,6 +194,11 @@ class DataFloor:
         if not file_tool:
             return None
         cwd = arguments.get("cwd") or arguments.get("working_directory")
+        search = command is None and bool(_SEARCH_TOOL.fullmatch(name))
+        scanned = arguments
+        if search:
+            scanned = {key: value for key, value in arguments.items() if key not in _SEARCH_TERMS
+                       or key == "pattern" and name.casefold() == "glob" and self._starts_at_a_folder(value)}
         def strings(value):
             if isinstance(value, str):
                 yield value
@@ -194,7 +211,7 @@ class DataFloor:
             elif isinstance(value, (tuple, list)):
                 for item in value:
                     yield from strings(item)
-        values = list(strings(arguments))
+        values = list(strings(scanned))
         hits = [candidate for value in values for candidate in self._paths(value) if self.protected(candidate, cwd)]
         if not hits:
             return None
@@ -208,7 +225,12 @@ class DataFloor:
             if self._read_command(self.expand(command)):
                 return None if attached else "read"
             return None if attached and not _CHANGES.search(self.expand(command)) else "write"
-        operation = str(arguments.get("operation", arguments.get("mode", "")))
+        if search:
+            # A search of Raphael's own folders is refused, never asked: it would read every file there at once,
+            # credentials included, where a card for a read names one file; and the owner's file tools do not search
+            # those folders whatever the answer (`owner_files.PROTECTED`), so a yes would lead nowhere.
+            return "write"
+        operation =str(arguments.get("operation", arguments.get("mode", "")))
         if _WRITE.search(name + " " + operation) or operation.casefold() in {"w", "a", "r+", "w+", "a+"}:
             return "write"
         if _READ_TOOL.search(name) or operation.casefold() in {"read", "r", "list", "stat"}:
