@@ -331,7 +331,7 @@ class ConnectorsService:
             raise invalid_params("No such connected account")
         active = account["status"] == "ACTIVE"
         if active and sum(a["status"] == "ACTIVE" for a in entry.accounts) == 1:
-            return await self._disconnect(self._entry(params))  # read again: a press that waited for the lock may find it gone
+            return await self._disconnect(entry)
         await self._delete_account(account, revoke=active)
         entry.accounts = [a for a in entry.accounts if a["id"] != account_id]
         self._settle(entry)
@@ -880,7 +880,7 @@ class ConnectorsService:
         entry = self._entry(params)
         await self._end_sign_in([a["id"] for a in entry.accounts])
         async with self._lock:
-            return await self._disconnect(entry)
+            return await self._disconnect(self._entry(params))  # read again: a press that waited for the lock may find it gone
 
     async def _disconnect(self, entry):
         if entry.kind == "google":

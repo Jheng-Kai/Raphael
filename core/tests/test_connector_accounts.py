@@ -422,8 +422,10 @@ async def test_removing_the_waiting_account_twice_is_one_removal(tmp_path, conn)
 
 async def test_disconnecting_an_app_twice_at_once_is_one_disconnect_and_one_plain_refusal(tmp_path, conn):
     router, service, hub, entry = make(tmp_path, conn, Accounts(), [account("ca_me", "ACTIVE")])
-    first, second = await asyncio.gather(router.call("connectors.disconnect", {"id": "composio:gmail"}),
-                                         router.call("connectors.disconnect", {"id": "composio:gmail"}), return_exceptions=True)
+    async with service._lock:  # both presses find the app, and both wait for the lock
+        presses = [asyncio.create_task(service.disconnect({"id": "composio:gmail"})) for _ in range(2)]
+        await asyncio.sleep(0.05)
+    first, second = await asyncio.gather(*presses, return_exceptions=True)
     assert first == {"disconnected": True}
     assert isinstance(second, RpcError) and "no such connector" in str(second).lower()  # not an internal error
 
