@@ -49,6 +49,8 @@ PAGES = [
     ("不要重複昨天的內容，做成網頁", PAGE),
     ("不要做網頁，直接回報", None),
     ("不要製作頁面，也不要做草稿，只在對話裡回答", None),
+    ("不要做網頁，或擬郵件草稿，直接回答", None),
+    ("不要做網頁，但擬好郵件草稿", DRAFT),
     ("確認登入頁面能正常載入，不能的話回報", None),
     ("檢查官網首頁是否正常，並在對話裡回覆結果", None),
     ("寫一份關於首頁頁面改版的建議給我", None),
@@ -90,6 +92,8 @@ DRAFTS = [
     ("Compose a draft message to Alice", DRAFT),
     ("Do not write an email draft, tell me here", None),
     ("Do not make a page, or an email draft", None),
+    ("Do not make a page, or write an email draft", None),
+    ("Do not make a page, but write an email draft", DRAFT),
     ("Write a draft post about our launch and show it to me here", None),
     ("Draft a blog article about the week", None),
     ("Check whether the email draft to Bob was sent", None),
@@ -511,3 +515,16 @@ async def test_a_reply_that_is_the_work_in_its_words_counts_in_any_language(make
     receipt = rig.service.handoff(RAPHAEL, args(target), source_turn_id=source.id, language="en")
     task = rig.task(receipt.data["task_id"])
     assert rig.service._store.completion_reason(task, said=said) == (None if counts else "work_without_action")
+
+
+async def test_each_folder_has_its_own_budget_when_the_condition_names_no_file(make_rig, tmp_path, monkeypatch):
+    """The member's folder using up the budget never hides the team's (R-WORK-FILE-01): checked where every file is read."""
+    monkeypatch.setattr(background_service, "ARTIFACT_SCAN", 5)
+
+    def make(workspace, team, fresh):
+        for number in range(12):
+            old = leave(workspace, f"part{number}.txt")
+            os.utime(old, (1_000_000, 1_000_000))
+        fresh(leave(team, "projects/x/new.txt"))
+    task = await made_files(make_rig, tmp_path, "the notes are written up", make)
+    assert (task.state, task.reason) == ("done", None)
