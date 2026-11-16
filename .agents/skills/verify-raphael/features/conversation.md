@@ -22,7 +22,7 @@ while still going up) or they press the latest button. A thread that cannot scro
 unread line, the settings page's way back) keeps its own place as before (`releaseRichScroll`). No timer and no smooth scrolling.
 
 ```powershell
-npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom --theme both --width 1120,720,1920x1080
+npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom owner-question-brought owner-question-pending-page owner-question-pending-room --theme both --width 1120,720,1920x1080
 ```
 
 `follow-probe` (`scripts/look/follow-probe.mjs`) samples every painted frame: a 1 px probe changes size each animation frame, and its

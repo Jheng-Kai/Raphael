@@ -1687,7 +1687,8 @@ export function installMock(fixture, config = {}, target = window) {
         turn.owner_questions = turn.owner_questions.filter(item => item.id !== p.id);
         turn.task = null;
         data.turns.push(moved);
-        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: data.now, turn_id: moved.id, turn: moved });
+        // The core stamps the message it makes with the time of the press, so it stands after every message the room holds.
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: Math.max(data.now, ...data.messages.map(item => item.created)) + 1, turn_id: moved.id, turn: moved });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         notify("AgentTurn", { turn_id: moved.id, member_id: turn.member_id });
         notify("RoomsChanged", { room_id: 1 });

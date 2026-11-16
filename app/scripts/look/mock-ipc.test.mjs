@@ -60,7 +60,9 @@ describe("shared look IPC boundary", () => {
     const before = await checkTimes();
     const question = before.flatMap(message => message.turn?.owner_questions ?? [])[0];
     const moved = await invoke("owner_questions.bring", {id:question.id});
-    expect((await checkTimes()).at(-1).turn_id).toBe(moved.turn_id);
+    // The room draws its messages by `created`, so the card the core brings stands newest in time, not only by id.
+    const after = await checkTimes();
+    expect(after.reduce((newest, message) => message.created > newest.created ? message : newest).turn_id).toBe(moved.turn_id);
     expect(state.errors).toEqual([]);
   });
   it("offers connected event choices and returns ordinary detected conditions without creating", async () => {
