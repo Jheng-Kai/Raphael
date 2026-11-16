@@ -79,7 +79,7 @@ const PART_START = "/=?#&";
  * sentence around it is not part of it; a bracket the address opened itself is.
  */
 export function bareUrl(text: string): string {
-  let raw = /^https?:\/\/[^\s<>"'`‘-‟…　-〿＀-￯]+/i.exec(text)?.[0] ?? "";
+  let raw = /^https?:\/\/[^\s<>"'`\u2018-\u201f\u2026\u3000-\u303f\uff00-\uffef]+/i.exec(text)?.[0] ?? "";
   let at = 0, previous = "", inPart = false;
   for (const char of raw) {
     if (SPACELESS.test(char)) {
