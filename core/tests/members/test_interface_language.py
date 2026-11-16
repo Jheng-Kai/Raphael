@@ -59,7 +59,7 @@ async def test_a_member_is_told_nothing_of_a_japanese_interface_when_the_owner_w
 async def test_a_japanese_teachers_own_instructions_still_decide_her_language(setup, client):
     rig, team = setup
     rule = "You are a Japanese teacher. Always answer in Japanese, whatever language the owner writes in."
-    teacher = member(team, name="Shion", role="日本語の先生", instructions=rule)
+    teacher = member(team, name="Ada", role="日本語の先生", instructions=rule)
     english = await asked(rig, client, "今天教我一個 N2 文法", teacher.id, "en", session="a")
     chinese = await asked(rig, client, "今天教我一個 N2 文法", teacher.id, "zh-TW", session="b")
     system, user, _ = english

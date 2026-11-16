@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from ..slime_ids import current_avatar
 from .mishearing import may_become_rule
 from .room_scope import migrate as _migrate_room_scope
 from .textnorm import replacement_key
@@ -2137,6 +2138,22 @@ DROP TABLE vault_entries_previous;
 PRAGMA user_version = 85;
 COMMIT;
 """
+
+
+# Twenty-four slime faces were renamed to say what they look like (`slime_ids.py`). The face a member wears is stored
+# in `members.avatar`, and the one a shared recipe's card was drawn with in `member_template_cards.avatar`: both are
+# rewritten to the new id, and a database that has none of the old ids is left as it was, so running it again changes nothing.
+def _rename_slimes(conn):
+    with conn:
+        for table in ("members", "member_template_cards"):
+            for row in conn.execute(f"SELECT rowid, avatar FROM {table} WHERE avatar LIKE 'slime:%'").fetchall():
+                renamed = current_avatar(row[1])
+                if renamed != row[1]:
+                    conn.execute(f"UPDATE {table} SET avatar=? WHERE rowid=?", (renamed, row[0]))
+        conn.execute("PRAGMA user_version = 86")
+
+
+_MIGRATIONS[86] = _rename_slimes
 
 LATEST_VERSION = max(_MIGRATIONS)
 

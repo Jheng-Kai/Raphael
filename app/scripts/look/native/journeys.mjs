@@ -789,14 +789,14 @@ export async function drive(name, context) {
     await wait(page, ".cr-dialog");
     await capture("maker");
     await click(page, '.cr-dialog [data-slime-tab="characters"]');
-    await click(page, '.cr-dialog [data-slime-character="gobta"]');
+    await click(page, '.cr-dialog [data-slime-character="goggles-green"]');
     await type(page, "#mb-new-name", "NativeJob");
     await click(page, '.cr-dialog [data-dlg="create"]');
     await page.waitForSelector(".cr-dialog", { hidden: true });
     await wait(page, ".page-agent .ra-body");
     const member = (await context.rpc("members.list", {})).members.find(row => row.name === "NativeJob");
     if (!member) throw new Error("The member was not made");
-    if (member.avatar !== "slime:gobta") throw new Error(`The member lost its slime: ${member.avatar}`);
+    if (member.avatar !== "slime:goggles-green") throw new Error(`The member lost its slime: ${member.avatar}`);
     const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
     if (!conversation) throw new Error("The member has no conversation");
     // The member's own model writes its first words (R-COLLEAGUE-02), so the greeting is a hidden turn to wait for.

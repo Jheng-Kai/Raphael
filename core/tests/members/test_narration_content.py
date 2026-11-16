@@ -12,7 +12,7 @@ from .test_answering import client, setup, member, typed  # noqa: F401
 @pytest.mark.parametrize("speaker", ["member", "raphael"])
 async def test_tool_narration_precedes_the_complete_final_messages(setup, client, speaker):
     rig, team = setup
-    speaker_id = member(team, name="紫苑", role="Japanese teacher").id if speaker == "member" else 0
+    speaker_id = member(team, name="小葵", role="Japanese teacher").id if speaker == "member" else 0
     client.chats = [
         chat('{"thinking":"主人說不會這段文章，先從基礎開始。","progress":"我來逐句拆解這段新聞。"}', ("local_time", {})),
         chat('{"text":"換你練習。","detail":"","messages":["先看第一句。","弱点是弱點。","換你練習。"],"memory":[],"need":{}}'),

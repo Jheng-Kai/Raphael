@@ -320,7 +320,7 @@ test("routines show their own switches, on for the active one only, and no ⋯ m
 
 test("訊息平台: a bot not set up is one row whose 設定 asks the member in its conversation; a connected one is its card; Raphael's too", async () => {
   const off = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [], member_id: current, kind: "telegram", paired: false };
-  api.memberMessagingStatus.mockImplementation(async (_id: number, platform?: string) => platform === "slack" ? { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_slack" } } : off);
+  api.memberMessagingStatus.mockImplementation(async (_id: number, platform?: string) => platform === "slack" ? { ...off, connected: true, enabled: true, running: true, bot: { username: "ada_slack" } } : off);
   const panel = mount(); await flush();
   expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, undefined);
   expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, "slack");
@@ -329,7 +329,7 @@ test("訊息平台: a bot not set up is one row whose 設定 asks the member in 
   // The bots are all that stands under the routines: the member's settings are a page of their own.
   expect(suggest.querySelectorAll(".mb-dh")).toHaveLength(1);
   expect(suggest.querySelector("input")).toBeNull();
-  expect(suggest.textContent).toContain("@shion_slack");
+  expect(suggest.textContent).toContain("@ada_slack");
   expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord"]);
   suggest.querySelector<HTMLButtonElement>('[data-intent="setup-telegram"]')!.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("幫我設定 Telegram", [], current, { intent: "setup-telegram" });

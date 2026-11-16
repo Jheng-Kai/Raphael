@@ -46,7 +46,7 @@ export default [
   // A member's colour is on its switches too: a routine that is on in the member's panel, the panel of a yellow
   // and of a white-ish slime (a knob that still shows), and Raphael's own in his blue.
   scene('member-switch', 'In the member\'s panel a routine that is on has a switch in the member\'s colour, and the off ones are as they were', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
-  scene('member-switch-yellow', 'A yellow slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:ramiris')}),
-  scene('member-switch-white', 'A white-ish slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:testarossa')}),
+  scene('member-switch-yellow', 'A yellow slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:wings-yellow')}),
+  scene('member-switch-white', 'A white-ish slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:bowtie-pearl')}),
   scene('member-switch-raphael', 'Raphael\'s own panel wears Raphael\'s blue on a routine that is on', [{action:'open-details'}, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
 ];

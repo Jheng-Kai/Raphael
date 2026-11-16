@@ -62,7 +62,7 @@ async def read(rig, speaker, arguments):
 
 async def test_skill_read_gives_a_file_of_the_skill_and_never_the_database_the_vault_or_dot_env(setup):
     rig, team = setup
-    page = member(team, name="紫苑")
+    page = member(team, name="小葵")
     skill = team.members.capabilities.keep_skill(page.id, "local-test", DOCUMENT)
     folder = team.members.capabilities._path(page.id, skill["id"]).parent
     (folder / "templates").mkdir()

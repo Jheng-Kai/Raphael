@@ -35,6 +35,7 @@ from typing import Any
 
 from ..agent.speaker import Speaker, is_raphael_name
 from ..clock import wall_clock_ms
+from ..slime_ids import current_avatar
 from .schedule import Schedule, ScheduleError, parse_schedule
 
 # Shared read projection for routine_runs r and its agent_turns t. Waiting for children alone is not an owner question.
@@ -249,7 +250,7 @@ def clean_avatar(value: Any) -> str:
         return ""
     if not isinstance(value, str) or not _AVATAR.fullmatch(value) or ".." in value:
         raise MemberError("avatar", 'avatar must be "", "preset:<name>", "file:<name>" or "slime:<name>"')
-    return value
+    return current_avatar(value)
 
 
 def clean_tools(value: Any) -> tuple[str, ...] | None:

@@ -20,8 +20,7 @@ import { findsName } from "./find-match";
 /**
  * A member as a page about it draws it: without what changes with each word it says or step it takes (its last line,
  * its time, its unread mark, its activity and the words for it). The panel and the settings page compare this, not the
- * whole row, so a reply that streams in or a worker that moves on does not draw them again (owner, 2026-11-11: 「更新…
- * 就會閃現」). Its face carries the rest of it (a long silence, a wait) in its own markup.
+ * whole row, so a reply that streams in or a worker that moves on does not draw them again (an update would flash). Its face carries the rest of it (a long silence, a wait) in its own markup.
  */
 export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "unread_kind" | "waiting" | "activity" | "activity_label"> {
   const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, unread_kind: _unreadKind, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
@@ -135,7 +134,7 @@ export function orderedMembers(list: MembersList | null): Member[] {
 }
 
 /**
- * Who 換成其他成員 on a pinned tile offers (owner, 2026-11-11, after Grok Bot's 「Replace with different Bot」): the members
+ * Who 換成其他成員 on a pinned tile offers: the members
  * that are not pinned, in the column's order. Not Raphael (he is pinned by his own setting and holds the top slot), nobody
  * hidden from the sidebar, and not the primary, who already has the top slot and would stand there twice.
  */
@@ -182,15 +181,15 @@ export const isPictureUrl = (url: unknown): url is string => typeof url === "str
 export const initialOf = (name: string): string => Array.from(name.trim())[0] ?? "";
 
 /** Raphael's slime in the main window: the very first one, the cute blue slime. */
-export const RAPHAEL_SLIME = "slime:rimuru";
+export const RAPHAEL_SLIME = "slime:blue-plain";
 
 /**
  * A face at `size` px: a member's slime; for Raphael the owner's own picture when one is chosen (avatar.ts), else the
  * first blue slime. His emblem shows only in voice (the voice screen and its button, avatar.ts). Decorative: whoever
  * shows it names it.
  *
- * A face is a picture of the slime unless `moving`. Exactly two places move (owner, 2026-11-11: 「工作的時候，只要有左邊的…讓它有動畫就可以了。
- * 還有…在對話框思考那個，也要有動畫。其他…都不用有動畫」): a member's row in the left list, and the conversation's thinking line.
+ * A face is a picture of the slime unless `moving`. Exactly two places move: a member's row in the left list, and the
+ * conversation's thinking line.
  * They pass `moving`; nothing else does.
  */
 export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { moving?: boolean; cls?: string } = {}): string {

@@ -7125,7 +7125,7 @@ export function checkRendered(name, context = {}) {
         labels.slice(index + 1).forEach(other => require(!overlaps(label, other), "no label over another"));
       });
       require(new Set(nodes.map(({ node }) => getComputedStyle(node, "::before").backgroundColor)).size === 5, "each one's own colour down the left of its box");
-      require([...draw.querySelectorAll(".rp-node b")].map(name => name.textContent).join("|") === "Sam|拉斐爾|紫苑|小晴|小森", "the owner and the members by their names");
+      require([...draw.querySelectorAll(".rp-node b")].map(name => name.textContent).join("|") === "Sam|拉斐爾|小葵|小晴|小森", "the owner and the members by their names");
       require([...team.querySelectorAll(".rp-notes dt")].map(term => term.textContent).join("|") === "重複|缺口", "overlaps and gaps under the diagram");
       return { check: name, width: Math.round(box.width), height: Math.round(box.height) };
     }
@@ -7437,7 +7437,7 @@ export function checkRendered(name, context = {}) {
       require(face.outerHTML === window.__look.makerFace, "a tab changes no slime: the large one is as it was");
     } else if (name === "member-maker-chosen") {
       require(!start.disabled, "a name makes 建立 pressable");
-      require(picker.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true" && picker.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
+      require(picker.querySelector('[data-slime-character="horn-lavender"]').getAttribute("aria-pressed") === "true" && picker.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
       require(face.outerHTML !== window.__look.makerFace, "the large slime follows the one pressed");
       const parts = [...face.querySelectorAll("path")].filter(part => part.getBoundingClientRect().width && getComputedStyle(part).visibility !== "hidden").map(part => part.getBoundingClientRect());
       require(parts.length > 0 && getComputedStyle(face).clipPath === "none", "the chosen slime is painted whole");
@@ -7462,11 +7462,11 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "member-maker-made") {
     const made = window.__look.calls.filter(call => call.method === "members.create");
-    require(made.length === 1 && made[0].params.name === "哥布達" && made[0].params.avatar === "slime:gobta" && made[0].params.greet === true, "the member is made once, with its slime, and asked to greet");
+    require(made.length === 1 && made[0].params.name === "小綠" && made[0].params.avatar === "slime:goggles-green" && made[0].params.greet === true, "the member is made once, with its slime, and asked to greet");
     require(!document.querySelector(".cr-dialog, .mb-scrim"), "the dialog closed at once");
     require(visible(document.querySelector(".composer .cmp-input")), "its conversation is open");
     const greeting = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
-    require(greeting.length === 1 && greeting[0].textContent.includes("哥布達"), "it speaks first, in its own words");
+    require(greeting.length === 1 && greeting[0].textContent.includes("小綠"), "it speaks first, in its own words");
     const card = greeting[0].querySelector('[data-owner-question][data-card-state="asked"]');
     require(visible(card) && card.textContent.includes("你想先讓我接手哪一件事？") && card.querySelectorAll("[data-owner-option]").length === 4, "and asks what to take on first on one question card, with four options");
     require(visible(card.querySelector("[data-owner-answer-input]")), "the owner may answer in their own words");
@@ -7944,9 +7944,9 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "slime-picker") {
     const menu = document.querySelector(".mb-avpop");
-    require(menu && menu.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen slime");
+    require(menu && menu.querySelector('[data-slime-character="horn-lavender"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen slime");
     require(menu.querySelectorAll('[aria-pressed="true"]').length === 1, "nothing else looks chosen");
-    require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:shion", "the member keeps it");
+    require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:horn-lavender", "the member keeps it");
     // The slimes alone: no tab that draws a picture (R-UI-116, owner 2026-11-09); its tabs are the kinds of slime.
     require(!menu.querySelector('[data-avp-tab], [data-avp-pane], textarea, input'), "the picker is the slimes alone, with no 生成");
     require(menu.querySelector('[role="tab"][aria-selected="true"]')?.dataset.slimeTab === "characters", "it stands on the group of the chosen slime");
@@ -7955,7 +7955,7 @@ export function checkRendered(name, context = {}) {
     require(menu.scrollHeight <= menu.clientHeight + 1, "the picker has no scroll of its own");
     // No ring stays on the chosen one, and the picker stands under the middle of the face.
     // A copy of the chosen slime away from the pointer shows its own look, not the hover the click left behind.
-    const chosen = menu.querySelector('[data-slime-character="shion"]').cloneNode(true);
+    const chosen = menu.querySelector('[data-slime-character="horn-lavender"]').cloneNode(true);
     chosen.style.position = "fixed"; chosen.style.left = "-400px"; chosen.style.top = "0"; menu.append(chosen);
     const style = getComputedStyle(chosen);
     const probe = document.createElement("i"); probe.style.background = "var(--accent-soft)"; menu.append(probe);

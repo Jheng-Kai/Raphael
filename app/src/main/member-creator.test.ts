@@ -68,14 +68,14 @@ test("a tab shows its group and moves nothing, a slime is drawn large and is the
   expect($('[data-slime-group="characters"]').hasAttribute("data-active")).toBe(true);
   expect($('[data-slime-group="colors"]').hasAttribute("inert")).toBe(true);
   expect($(".cr-face").innerHTML).toBe(before);
-  $('[data-slime-character="shion"]').click();
-  expect($('[data-slime-character="shion"]').getAttribute("aria-pressed")).toBe("true");
+  $('[data-slime-character="horn-lavender"]').click();
+  expect($('[data-slime-character="horn-lavender"]').getAttribute("aria-pressed")).toBe("true");
   expect($(".cr-face").innerHTML).not.toBe(before);
   expect(dialog.el.querySelectorAll('.cr-picker [aria-pressed="true"]')).toHaveLength(1);
-  type(" 紫苑 ");
+  type(" 小葵 ");
   $('[data-dlg="create"]').click();
   await flush();
-  expect(create).toHaveBeenCalledWith({ name: "紫苑", group_id: 2, avatar: "slime:shion", greet: true });
+  expect(create).toHaveBeenCalledWith({ name: "小葵", group_id: 2, avatar: "slime:horn-lavender", greet: true });
   expect(document.querySelector(".mb-scrim")).toBeNull();
 });
 

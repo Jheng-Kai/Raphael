@@ -23,7 +23,7 @@ from raphael_core.memory.conversation import Conversation, turn_text
 from .test_card_context import insert, turn
 from .test_service import NOW_MS
 
-FIELDS = dict(name="Shion", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
+FIELDS = dict(name="Ada", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
 
 # What each prompt had that taught the behaviour, and no longer has.
 REMOVED = (

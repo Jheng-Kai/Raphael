@@ -21,7 +21,7 @@ async def rig(rig):
 
 async def test_export_preview_and_import_keep_only_the_recipe(rig):
     service = rig.service
-    original = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "instructions": "Publish a clear guide", "avatar": "slime:shuna"}))["member"]
+    original = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "instructions": "Publish a clear guide", "avatar": "slime:small-horns-pink"}))["member"]
     identifier = original["id"]
     skill = service.capabilities.keep_recipe(identifier, "---\nname: editing\ndescription: Check clarity\n---\nVerify claims.", {"references/check.md": "Check the source", "scripts/check.py": "print('checked')"})
     service.capabilities.homes.keep(identifier, "MEMORY.md", "PRIVATE-MEMORY")

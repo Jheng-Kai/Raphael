@@ -6,9 +6,9 @@ const fixture = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture
 const doing = (member_id, state) => ({ action: "main-event", event: { type: "MemberActivity", member_id, state } });
 const board = (rows, columns) => ({ action: "slime-board", rows, columns });
 
-const SKY = { color: "sky" }, SHION = { character: "shion" }, BENIMARU = { character: "benimaru" }, RIGURD = { character: "rigurd" }, TREYNI = { character: "treyni" };
+const SKY = { color: "sky" }, HORN = { character: "horn-lavender" }, RED_HORNS = { character: "horns-red" }, BOWTIE = { character: "bowtie-green" }, SPROUT = { character: "sprout-mint" };
 const SIDEBAR = 40, LARGE = 72;
-const CHARACTERS = ["rimuru", "shion", "diablo", "benimaru", "shuna", "souei", "hakurou", "gobta", "rigur", "rigurd", "milim", "veldora", "ranga", "gabiru", "geld", "treyni", "kurobe", "shizu", "hinata", "guy", "testarossa", "ultima", "carrera", "ramiris"];
+const CHARACTERS = ["blue-plain", "horn-lavender", "streaks-charcoal", "horns-red", "small-horns-pink", "horn-sash-blue", "mustache-gray", "goggles-green", "cap-green", "bowtie-green", "tuft-pink", "horns-blue", "wolf-star", "frill-periwinkle", "tusks-tan", "sprout-mint", "headband-brown", "mask-cornflower", "collar-indigo", "sash-crimson", "bowtie-pearl", "bowtie-purple", "necktie-amber", "wings-yellow"];
 
 // Every size the app really draws a slime at, from a calendar chip up to the maker, beside one of the app's own icons.
 const SIZES = [18, 19, 20, 22, 24, 26, 28, 30, 34, 36, 40, 44, 48, 64, 72, 88, 96, 104, 120];
@@ -19,17 +19,17 @@ const TELLING = [["閒著", "idle", 3000], ["思考", "thinking", 1000], ["工�
 const gallery = slime => TELLING.map(([label, state, at]) => ({ label, cells: [{ size: SIDEBAR, slime: SKY, state, at }, { size: 96, slime: SKY, state, at }, { size: SIDEBAR, slime, state, at }, { size: 96, slime, state, at }] }));
 
 // A strip of frames across a stretch of motion, with a mark that swings at the large size and the plain slime at the sidebar's.
-const strip = (label, state, times, slime = SHION) => [
+const strip = (label, state, times, slime = HORN) => [
   { label, paddingTop: state === "arriving" ? 28 : 0, cells: times.map(at => ({ size: LARGE, slime, state, at, caption: at })) },
   { paddingTop: state === "arriving" ? 16 : 0, cells: times.map(at => ({ size: SIDEBAR, slime: SKY, state, at })) },
 ];
-const change = (label, state, at, then, slime = SHION) => ({ label, cells: [{ size: LARGE, slime, state, at, caption: "前" }, ...[0, 40, 90, 150, 220, 320, 460].map(after => ({ size: LARGE, slime, state, at, then, after, caption: after }))] });
+const change = (label, state, at, then, slime = HORN) => ({ label, cells: [{ size: LARGE, slime, state, at, caption: "前" }, ...[0, 40, 90, 150, 220, 320, 460].map(after => ({ size: LARGE, slime, state, at, then, after, caption: after }))] });
 
 const sharp = [20, 40].map(size => ({ icon: true, size, caption: size })).concat(SIZES.map(size => ({ size, slime: SKY, state: "idle" })));
 
 const periods = { idle: 0, thinking: 2800, working: 1800, searching: 3200, computer: 1700, waiting: 6000, blocked: 1800, done: 1900, error: 6000, sleeping: 0, arriving: 1200 };
-const liquidSheet = TELLING.map(([label, state]) => ({ label, cells: [0, .25, .5, .75].flatMap(phase => [22, 28, 40].map(size => ({ size, slime: phase === .5 ? SHION : SKY, state, at: state === "working" ? [0, 162, 882, 1062][[0, .25, .5, .75].indexOf(phase)] : Math.round(periods[state] * phase), caption: `${size}/${state === "working" ? [0, 9, 49, 59][[0, .25, .5, .75].indexOf(phase)] : phase * 100}%` }))) }));
-const stillSheet = TELLING.map(([label, state]) => ({ label, cells: [22, 28, 40].flatMap(size => [{ size, slime: SKY, state, at: 0, caption: size }, { size, slime: SHION, state, at: 0, caption: size }, { size, slime: SKY, hat: true, state, at: 0, caption: size }]) }));
+const liquidSheet = TELLING.map(([label, state]) => ({ label, cells: [0, .25, .5, .75].flatMap(phase => [22, 28, 40].map(size => ({ size, slime: phase === .5 ? HORN : SKY, state, at: state === "working" ? [0, 162, 882, 1062][[0, .25, .5, .75].indexOf(phase)] : Math.round(periods[state] * phase), caption: `${size}/${state === "working" ? [0, 9, 49, 59][[0, .25, .5, .75].indexOf(phase)] : phase * 100}%` }))) }));
+const stillSheet = TELLING.map(([label, state]) => ({ label, cells: [22, 28, 40].flatMap(size => [{ size, slime: SKY, state, at: 0, caption: size }, { size, slime: HORN, state, at: 0, caption: size }, { size, slime: SKY, hat: true, state, at: 0, caption: size }]) }));
 
 export default [
   { ...scene('slime-motion-recovery', 'Error and blocked poses hand over from the painted cells without doubling the hidden vector transform', [board([change('↗','error',3000,'working'),change('↻','blocked',700,'thinking')]),check('slime-handover')]),motion:true },
@@ -47,14 +47,14 @@ export default [
   // R-SLIME-02: steps and words from the core change only the words that changed.
   { ...scene("busy-team-calm", "A member's steps and the words for them change only those words: no element is replaced, no text blinks, nothing scrolls and only the list and the thinking line move", [{ action: "member-column", collapsed: false }, member(1), wait('.tn[data-id="651"] .live-presence'), { action: "open-details" }, wait(".mb-det:not([hidden])"),
     { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", seconds: 5, wheelBy: 0, calm: true, measure: { name: "calm-storm", enforce: false }, limits: { replacedLines: 0, replacedCards: 0, longTaskMs: 600 } }], { presence: "working" }), motion: true },
-  scene("slime-picker", "A member's slime is a character or a colour, tried in a menu of tabs that stays open on the group of the face", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('.mb-panel-identity [data-det="avatar"]'), wait(".mb-avpop"), check("slime-picker-shape"), click('.mb-avpop [data-slime-color="coral"]'), click('.mb-avpop [data-slime-tab="characters"]'), click('.mb-avpop [data-slime-character="shion"]'), check("slime-picker"), check("slime-picker-shape")]),
+  scene("slime-picker", "A member's slime is a character or a colour, tried in a menu of tabs that stays open on the group of the face", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('.mb-panel-identity [data-det="avatar"]'), wait(".mb-avpop"), check("slime-picker-shape"), click('.mb-avpop [data-slime-color="coral"]'), click('.mb-avpop [data-slime-tab="characters"]'), click('.mb-avpop [data-slime-character="horn-lavender"]'), check("slime-picker"), check("slime-picker-shape")]),
   scene("slime-picker-tab", "Pressing another tab shows its group in the same place: the picker and its tabs do not move or change size", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('.mb-panel-identity [data-det="avatar"]'), wait(".mb-avpop"), check("slime-picker-box"), click('.mb-avpop [data-slime-tab="animals"]'), check("slime-picker-tab")]),
   scene("member-face-hover", "Under the pointer the panel's face shows a pencil on a dimmed circle, as the owner's photo in Settings", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), hover('.mb-panel-identity [data-det="avatar"]'), check("member-face-hover")]),
   // The picker's 生成 tab: off until an image model is chosen, then one picture to use.
-  scene("slime-sizes","A slime at every size the app draws it, at rest, as sharp as the icon beside it", [board([sizes("素色", SKY), sizes("角", SHION), sizes("帽", SKY, true)])]),
-  { ...scene("slime-gallery", "Every state at the sidebar's size and the large one", [board(gallery(SHION), 2)]), motion: true },
+  scene("slime-sizes","A slime at every size the app draws it, at rest, as sharp as the icon beside it", [board([sizes("素色", SKY), sizes("角", HORN), sizes("帽", SKY, true)])]),
+  { ...scene("slime-gallery", "Every state at the sidebar's size and the large one", [board(gallery(HORN), 2)]), motion: true },
   { ...scene("slime-characters-at-rest", "Every character keeps what it wears while it rests, at the sizes the sidebar and groups draw it", [board([40, 28, 20].map(size => ({ label: `${size}`, cells: CHARACTERS.map(character => ({ size, slime: { character }, state: "idle", at: 3000 })) })), 1), hover(".look-slime-board > div > span:first-child"), { action: "settle-motion" }, check("slime-marks-at-rest")]), motion: true },
-  scene("sidebar-characters-at-rest", "The sidebar's real rows show each character's marks at rest", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { members: fixture.members.map(item => ({ ...item, avatar: { 1: "slime:diablo", 2: "slime:rigurd", 3: "slime:souei" }[item.id] ?? item.avatar })) }),
+  scene("sidebar-characters-at-rest", "The sidebar's real rows show each character's marks at rest", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { members: fixture.members.map(item => ({ ...item, avatar: { 1: "slime:streaks-charcoal", 2: "slime:bowtie-green", 3: "slime:horn-sash-blue" }[item.id] ?? item.avatar })) }),
   { ...scene("slime-motion-idle", "Alive and curious: a breath, a blink, a look around and an occasional wobble", [board([
     ...strip("呼吸", "idle", [0, 500, 1000, 1500, 1900, 2400, 3000, 3600]),
     ...strip("眨眼", "idle", [420, 450, 480, 540, 590, 640, 680, 760]),
@@ -63,9 +63,9 @@ export default [
   ])]), motion: true },
   { ...scene("slime-motion-busy", "Thinking, working, searching and at the computer, each its own small performance", [board([
     ...strip("思考", "thinking", [0, 500, 1000, 1500, 1800, 2300, 2800, 3300]),
-    ...strip("工作", "working", [0, 100, 162, 360, 610, 720, 810, 882], BENIMARU),
-    ...strip("搜尋", "searching", [0, 380, 860, 1000, 1250, 1540, 1980, 2450], TREYNI),
-    ...strip("電腦", "computer", [0, 120, 240, 360, 600, 840, 1200, 1580], RIGURD),
+    ...strip("工作", "working", [0, 100, 162, 360, 610, 720, 810, 882], RED_HORNS),
+    ...strip("搜尋", "searching", [0, 380, 860, 1000, 1250, 1540, 1980, 2450], SPROUT),
+    ...strip("電腦", "computer", [0, 120, 240, 360, 600, 840, 1200, 1580], BOWTIE),
   ])]), motion: true },
   { ...scene("slime-motion-moments", "Waiting, a joyful finish, a sad deflate, sleep and an arrival", [board([
     ...strip("等待", "waiting", [2400, 2590, 2760, 2900, 3070, 3220, 3650, 4600]),
