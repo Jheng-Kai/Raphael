@@ -633,11 +633,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (composerKey === "deleted") return;
     // A pending file is not kept: leaving the conversation ends its reading (`attachmentEpoch`).
     const draft: ComposerDraft = { text: input.value, files: files.filter(file => !file.pending), missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
-    // A message taken back to be edited is not a draft: leaving its conversation gives the edit up, and its message is as it was
-    //. Nothing of it is kept, so it never comes back as a second copy of the words.
-    if (draft.replacing === undefined && (draft.text || draft.files.length || draft.missing.length || draft.quote)) restored.set(composerKey, draft);
-    else restored.delete(composerKey);
-    writeDraftWords(`member:${composerKey}`, draft.replacing === undefined ? { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId } : undefined);
+    // A message taken back to be edited is not a draft: leaving its conversation gives the edit up, and its message is as it was.
+    // Nothing of it is kept, so it never comes back as a second copy of the words; what the composer held before 編輯 is kept in its place.
+    keepDraft(composerKey, draft.replacing === undefined ? draft : editOrigin?.turnId === draft.replacing ? editOrigin.before : undefined);
+  }
+  /** What a conversation's composer comes back with when it is opened again: the draft, or nothing. */
+  function keepDraft(key: string, draft: ComposerDraft | undefined): void {
+    if (draft && (draft.text || draft.files.length || draft.missing.length || draft.quote)) restored.set(key, draft);
+    else restored.delete(key);
+    writeDraftWords(`member:${key}`, draft ? { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId } : undefined);
   }
   function loadComposerDraft(): void {
     composerKey = draftKey();
@@ -1357,6 +1361,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       canLoadEarlier = next.keptOlder ? canLoadEarlier : got.length === PAGE_SIZE;
       turns = next.turns;
     }
+    if (!earlier) releaseLostEdit(delta ? removed.includes(replacing ?? -1) : got.length < PAGE_SIZE || replacing !== undefined && replacing >= (oldestId(got) ?? Infinity));
     // A task that ended is no longer being stopped.
     for (const turn of turns) if (turn.task && !isLive(turn.task)) state.stopping.delete(turn.task.id);
     forgetReruns(state, turns);
@@ -1506,7 +1511,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
     const resume = draft.replacing !== undefined && editOrigin?.turnId === draft.replacing ? editOrigin.before : undefined;
     rememberDraft(requestId, draft);
-    clearTimeout(draftTimer); discardComposerDraft(composerKey);
+    // What the composer held before 編輯 stays the conversation's draft while the edit is on its way: leaving meanwhile loses nothing.
+    clearTimeout(draftTimer); keepDraft(composerKey, resume);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
     // The message an edit replaces comes back to its place as the edit's own bubble, and stays there until the edit has taken its place (lines).
     if (draft.replacing !== undefined) mine.replaces = turns.find(turn => turn.id === draft.replacing);
@@ -2170,7 +2176,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const epoch = attachmentEpoch;
     const draft = await draftFor(turn);
     if (memberId() !== member || attachmentEpoch !== epoch) return;
-    if (draft.missing.length) { restoreDraft(draft); toaster.info(t("chat.reattach")); return; }
+    if (draft.missing.length) { giveBack(draft); toaster.info(t("chat.reattach")); return; }
     regenerating.add(turn.id);
     rememberDraft(requestId, draft);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text: turn.question, sentAt: Date.now(), files: draft.files.map(({ name, mime }) => ({ name, mime })), quote: draft.quote };
@@ -2245,19 +2251,63 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     if (!source || source.key !== "question") return;
     if (replacing === source.turn.id) { focusComposer(); return; }
+    // A file still being read would be dropped when the composer is given the message: it is in the composer first.
+    if (attaching) await attachQueue;
     const member = memberId(), epoch = attachmentEpoch, key = draftKey(), typed = input.value, held = files.length;
     const draft = await draftFor(source.turn);
     // Words typed or a file added while the message's files were read are newer than the click: the composer keeps them.
     if (memberId() !== member || attachmentEpoch !== epoch || draftKey() !== key || input.value !== typed || files.length !== held) return;
-    // What the composer held before the edit comes back once the edit is sent or given up; it is never lost under it.
-    const before = replacing !== undefined ? editOrigin?.before
-      : input.value || files.length || missingFiles.length || composerQuote
-        ? { text: input.value, files: files.filter(file => !file.pending), missing: missingFiles.map(file => ({ ...file })), quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId }
-        : undefined;
+    // What the composer held before the edit comes back once the edit is sent or given up; it is never lost under it. Another edit
+    // taken up in its place keeps what was written in the first one, if it was changed, as one more thing that comes back.
+    const before = replacing !== undefined
+      ? editUntouched() ? editOrigin?.before : mergeDrafts(editOrigin?.before, heldDraft())
+      : heldDraft();
     const taken: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: source.turn.id };
     editOrigin = { turnId: source.turn.id, draft: taken, before };
     restoreDraft(taken);
     render();
+  }
+
+  /** What the composer holds as a draft, or nothing when it holds none: its words, files and quote (never a mark that it replaces a message). */
+  function heldDraft(): ComposerDraft | undefined {
+    if (!input.value && !files.length && !missingFiles.length && !composerQuote) return undefined;
+    return { text: input.value, files: files.filter(file => !file.pending), missing: missingFiles.map(file => ({ ...file })), quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
+  }
+
+  /** Two drafts as one, the first's words before the second's. */
+  function mergeDrafts(first: ComposerDraft | undefined, second: ComposerDraft | undefined): ComposerDraft | undefined {
+    if (!first || !second) return first ?? second;
+    return {
+      text: [first.text, second.text].filter(Boolean).join("\n\n"), files: [...first.files, ...second.files], missing: [...first.missing, ...second.missing],
+      quote: first.quote ?? second.quote, dictation: first.dictation, pageId: first.pageId,
+    };
+  }
+
+  /**
+   * Words and files that come back to the owner's composer from elsewhere (a message stopped, cancelled or returned from the queue). The
+   * composer that holds an edit keeps it as it is, and they wait with what it held before 編輯, to come back with it; any other
+   * composer takes them after what it holds.
+   */
+  function giveBack(draft: ComposerDraft): void {
+    if (replacing !== undefined) {
+      if (editOrigin?.turnId === replacing) editOrigin = { ...editOrigin, before: mergeDrafts(editOrigin.before, draft) };
+      return;
+    }
+    restoreDraft(mergeDrafts(heldDraft(), draft)!);
+  }
+
+  /**
+   * The message the composer holds for editing is no longer in the conversation (`gone` says the read covered it): the core would refuse
+   * to replace it, and nothing on the page shows what the composer would replace. The words stay as an ordinary draft after what the
+   * composer held before 編輯, and send as a new message.
+   */
+  function releaseLostEdit(gone: boolean): void {
+    if (replacing === undefined || !gone || turns.some(turn => turn.id === replacing)) return;
+    const before = editOrigin?.turnId === replacing ? editOrigin.before : undefined;
+    const held = heldDraft();
+    replacing = undefined; editOrigin = null;
+    restoreDraft(mergeDrafts(before, held) ?? { text: "", files: [], missing: [] }, false);
+    saveComposerDraft();
   }
 
   /** Puts back what the composer held before an edit, and keeps it as the conversation's draft again. */
@@ -2358,7 +2408,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         const sessions = new Set(result.returned.map(item => item.session_id));
         outgoing = outgoing.filter(item => !sessions.has(item.requestId));
         turns = turns.filter(item => !sessions.has(item.session_id ?? ""));
-        if (current) restoreDraft(combined); else restored.set(draftKey(member, conversation), combined);
+        if (!current) restored.set(draftKey(member, conversation), combined);
+        else if (replacing !== undefined) giveBack({ text: returned.map(draft => draft.text).filter(Boolean).join("\n\n"), files: returned.flatMap(draft => draft.files), missing: returned.flatMap(draft => draft.missing), quote: returned.find(draft => draft.quote)?.quote });
+        else restoreDraft(combined);
       }
     }
     finally { stoppingComposerTasks.delete(task.key); drawComposerTask(); }
@@ -2381,8 +2433,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       turns = turns.filter(item => item.session_id !== session && item.id !== turn?.id);
       if (questionOwner === member && (turn?.status === "confirm" || pending)) setQuestion(null);
       if (askingMember === member) askingMember = null;
-      if (memberId() === member && conversationId() === sentConversation) { render(); restoreDraft(draft); }
-      else restored.set(draftKey(member, sentConversation), draft);
+      if (memberId() === member && conversationId() === sentConversation) { render(); giveBack(draft); }
+      else restored.set(draftKey(member, sentConversation), mergeDrafts(restored.get(draftKey(member, sentConversation)), draft)!);
       members.changed();
     } catch (err) { toaster.info(describeError(err)); }
     finally { retracting.delete(session); }

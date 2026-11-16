@@ -286,6 +286,8 @@ replacing, with the failure card. Giving the edit up (`abandonEdit`) empties the
 Escape. `saveComposerDraft` never keeps a draft that replaces a message, so leaving the conversation gives the edit up and nothing of it comes back as a second copy.
 An unsent draft the composer held is kept aside (`editOrigin.before`) and comes back once the edit is sent or given up (`resumeDraft`), unless something newer is in the composer; words typed or a file added while the message's files are read stop 編輯 from writing over them. Not covered: small files (4 MB or less) are read back and sent as bytes again, not by stored id.
 
+**Nothing the composer held is swallowed by an edit (verified against every kind of message, state and ending, `pages/agent-edit.test.ts`).** The held draft is also the conversation's saved draft while the message is in the composer (`keepDraft`, called by `saveComposerDraft` and by `send`), so leaving the conversation, a refresh of the conversation list or closing the window does not lose it, and it is there again when the conversation is opened. Choosing 編輯 on a second message while one is open gives the first up: words changed in it come back as a draft with the held one (`mergeDrafts`); a file still being read is waited for first. Words that return from elsewhere while the composer holds an edit (Stop handing back queued messages, Cancel on a running one, 重新產生 of a reply whose files are gone) wait with the held draft and come back after the edit (`giveBack`); the composer of no edit takes them after what it holds, never in place of it. A message that leaves the conversation while the composer holds it (removed, or the history cleared) ends the edit: the words stay as an ordinary draft after the held one and send as a new message (`releaseLostEdit`), since the core refuses a replacement of a message that is not there. The kinds checked: words only, one picture, several pictures, a file, pictures without words, a quote, a mention, a skill, a spoken question; the states: an empty composer, words, words with a picture, a picture only, another edit (untouched or changed), a recording; the endings: sent, Escape, Escape after a change, another conversation and back, new turns from the core.
+
 **The edit stands where its message stood.** Found by reading, then by running the real core with a member, its own conversation id and routine turns
 newer than the owner's message: the core removed the message and wrote the edit at the end of the thread, and when the message was the newest the new row
 took the old row's id (the table reuses the id of a deleted last row), which the app hid by id until the member had finished answering, so the message
@@ -296,10 +298,10 @@ and does not follow the reader to the end; `settlePending` takes a turn that nam
 brain's resume session and the summary because they hold the old words, and `MembersService.forget_delivery` so the edit's "finished" is told again
 (its key is the id and the time, which the edit shares with the message).
 Unchecked: an edit sent while the member is working on a later message is steered into that work by the queue (as any message), and then stands in its
-place as a message without a reply of its own.
+place as a message without a reply of its own. While a later message works, Escape in the edit belongs to that work (Stop) and the edit is left by sending or by leaving the conversation (`pages/agent-edit.test.ts`, work that is under way).
 
 ```powershell
-npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-cancelled message-edit-sent message-edit-placed message-edit-picture chat actions message-hugs-bubble reaction-owner reaction-row member-text --theme both --width 1120,720,1920x1080
+npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-cancelled message-edit-sent message-edit-placed message-edit-picture message-edit-draft message-edit-draft-sent chat actions message-hugs-bubble reaction-owner reaction-row member-text --theme both --width 1120,720,1920x1080
 ```
 
 `message-edit-before` (a step of the scenes) records the sent message (its words, its pictures, its bubble's box). `message-edit-open` and `message-edit-long` (a message of
@@ -311,7 +313,9 @@ types new words and presses Enter: one `agent_ask_text` with the words and `repl
 `message-edit-placed` runs a thread with the 07:00 and 08:00 routine turns after the message against the look mock, which retracts and writes the
 edit as the core does: `message-edit-pending` (the edit stands first, above the routine turns, nothing at the end), `message-edit-written` (the same
 place with the member answering) and `message-edit-answered`. `message-edit-picture` is `message-edit-open` for a message with a picture (the chip shows its thumbnail), after
-`owner-picture-actions` on the sent message.
+`owner-picture-actions` on the sent message. `message-edit-draft` writes words in the composer first, takes the message in (`message-edit-draft-held`: the composer holds the message, not the words) and gives
+the edit up with Escape (`message-edit-draft-back`: the words are back, the message is in the thread once, nothing was sent); `message-edit-draft-sent` sends the edit instead
+(`message-edit-draft-sent`: the words are back, the edited message stands once in its place, one call naming it).
 
 ## A message with a picture keeps the bubble's own width (R-UI-149)
 
@@ -337,9 +341,9 @@ Cause: the actions were the message's first column, centred on the whole of pict
 (`agent.css`: `anchor-name` on the bubble, `position-anchor` on `.message-actions`, `right: anchor(left)` plus the usual gap, centred on it, `anchor-scope` per message),
 out of the grid, with no column gap left behind, so a wider picture never moves them and R-UI-104's measure holds. Two earlier tries (a
 `display: contents` box and a three-column subgrid) left the actions at the picture's left edge or squeezed the bubble.
-A message of pictures only keeps them beside the pictures. `owner-picture-actions` (on `owner-picture-short`, `owner-pictures-four`, `message-edit-picture`
+A message of pictures only keeps them beside the pictures. `owner-picture-actions` (on `owner-picture-short`, `owner-picture-long`, `owner-pictures-four`, `owner-pictures-twelve`, `owner-pictures-mixed` (with a document), `message-edit-picture`
 and the room's `room-files-words-sent`) draws the same words and actions without a picture in the same column and requires the actions to end where the bubble begins at the same gap, to be within the
-bubble's height and centred on it as without a picture, and not at the pictures' height. `room-files-words-sent` was written without a run.
+bubble's height and centred on it as without a picture, and not at the pictures' height. `room-files-words-sent` passed in a rendered run at 1120, 720 and 1920 in both themes.
 
 ## Several pictures: a scrolling row in the composer, small squares once sent (R-ATTACH-01, R-ATTACH-02)
 

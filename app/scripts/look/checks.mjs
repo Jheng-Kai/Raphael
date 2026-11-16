@@ -10201,6 +10201,35 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll('.tn[data-id="8201"]').length === 1 && !document.querySelector('.tn.is-pending'), 'it is the same message, in its place, and nothing is left waiting beside it');
     return { check: name, bubble: Math.round(bubbles[0].getBoundingClientRect().width) };
   }
+  if (name === "message-edit-draft-held" || name === "message-edit-draft-back" || name === "message-edit-draft-sent") {
+    // R-UI-158: words the owner was writing before 編輯 are not swallowed by it: they wait while the message is in the composer, and are in the
+    // composer again once the edit is given up or sent, with the message (or its edit) in the thread once.
+    return (async () => {
+      const draft = '寫到一半的新問題', words = '改過的說法：請整理這份範例研究摘要，並列出三個重點。', field = document.querySelector('.cmp-input'), composer = field.closest('.composer');
+      const settled = performance.now() + 4000;
+      const wanted = () => name === "message-edit-draft-held" ? field.value !== draft && composer.hasAttribute('data-replacing') : field.value === draft && !composer.hasAttribute('data-replacing');
+      while (!wanted() && performance.now() < settled) await new Promise(resolve => setTimeout(resolve, 50));
+      if (name === "message-edit-draft-held") {
+        require(composer.hasAttribute('data-replacing') && field.value !== '' && field.value !== draft, 'the composer holds the message, not the words that were being written');
+        require(!document.querySelector('.tn[data-id="8201"] .owner-message'), 'the message is not in the thread while the composer holds it');
+        return { check: name, held: field.value.length };
+      }
+      require(field.value === draft && !composer.hasAttribute('data-replacing'), `the words being written are back in the composer: ${JSON.stringify(field.value)}`);
+      const bubbles = [...document.querySelectorAll('.thread .owner-message .message-text')].map(node => node.textContent.trim());
+      const calls = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+      if (name === "message-edit-draft-back") {
+        const before = window.__look.beforeMessage;
+        require(bubbles.length === 1 && bubbles[0].replace(/\s+/g, '') === before.text.replace(/\s+/g, ''), 'the message is back in the thread, once');
+        require(calls.length === 0, 'nothing was sent');
+      } else {
+        require(bubbles.length === 1 && bubbles[0] === words, `the edited message stands once, in its place: ${JSON.stringify(bubbles)}`);
+        require(calls.length === 1 && calls[0].replaceTurnId === 8201 && calls[0].text === words, 'the edit was sent once, naming its message');
+        require(!document.querySelector('.tn.is-pending'), 'nothing is left waiting beside it');
+      }
+      require(visible(field) && composer.getBoundingClientRect().bottom <= window.innerHeight + 1, 'the composer is on screen');
+      return { check: name, draft: field.value.length, messages: bubbles.length };
+    })();
+  }
   if (name === "owner-picture-actions") {
     // R-UI-159: the actions of a message with pictures above its bubble stand beside the bubble, centred on it and as far from it as on a message
     // without a picture; they are never between the pictures and the bubble.
