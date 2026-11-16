@@ -3005,7 +3005,7 @@ and the longest name of a model that answers in the recorded OpenRouter list, wi
 798 window, the list open, a 520 px panel) and `composer-row-language` (the narrow case in Vietnamese).
 
 The idle emblem is a still drawn once per size and pixel ratio (`emblemStill` in `avatar.ts`): a bitmap of its CSS box times
-the ratio, drawn again when the ratio changes (a window moved to a screen of another scale, a zoom: the ratio's media query,
+the ratio, rounded (`stillSide`: a ratio reported as 1.5000000596 made a 48 px box a 49 px bitmap when it was rounded up), drawn again when the ratio changes (a window moved to a screen of another scale, a zoom: the ratio's media query,
 or the resize the move brings). At 32 px the 416 px rune texture sampled at the default quality broke into scattered dots,
 which is what looked muddy, so a small still averages it down (`imageSmoothingQuality: "high"`), stops its rays at the white
 ring, leaves out the faint circle at the letters' feet and draws a whole-pixel white ring with a one-pixel warm edge (`small`
