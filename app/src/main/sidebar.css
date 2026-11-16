@@ -69,7 +69,7 @@
 :root[data-sidebar-collapsed] .side .sidebar-account .owner-face { --owner-face: var(--side-face) !important; }
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 36px; min-height: 36px; height: 36px; padding: 0; border-radius: var(--r-sm); }
 /* Without its words the Connections pill is an icon button (the grid with a plus): no frame on the rail (R-UI-18), a soft fill under the pointer. */
-:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps { background: transparent; color: var(--text-2); }
+:root[data-sidebar-collapsed] .side .side-foot .sidebar-apps { background: transparent; box-shadow: none; color: var(--text-2); }
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:is(:hover, :active) { background: transparent; color: var(--text); }
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-apps:active { color: var(--text-3); }
 :root[data-sidebar-collapsed] .sidebar-app-marks { display: none; }
@@ -119,7 +119,7 @@
    (sidebar.ts `fitMarks`), and only a translation longer than the whole pill is cut with an ellipsis. */
 .side .side-foot .sidebar-apps { --marks-spread: 3px; --marks-lift: 1.5px; --marks-scale: 1.1; --marks-turn: 8deg; --marks-time-in: 180ms; --marks-ease-in: ease-out; --marks-time-out: 280ms; --marks-ease-out: ease-in-out;
   --marks-tile: var(--photo-mark); --marks-tile-w: 14px; --marks-tile-h: 16px; --marks-tile-radius: 4px;
-  flex: 1; justify-content: center; gap: var(--sp-2); min-width: 0; height: 36px; min-height: 36px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-medium); }
+  flex: 1; justify-content: center; gap: var(--sp-2); min-width: 0; height: 36px; min-height: 36px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text); font-size: var(--fs-sm); font-weight: var(--weight-medium); }
 .side .sidebar-apps:is(:hover, :active) { color: var(--text); background: var(--hover); }
 .side .sidebar-apps:active { background: var(--pressed); }
 .sidebar-apps .nav-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
