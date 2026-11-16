@@ -401,6 +401,22 @@ async def test_the_panel_reads_the_owner_picture_only_when_it_exists(viewer, tmp
     assert (await bridge.wallpaper({}))['image'].startswith('data:image/jpeg;base64,/9j/')
 
 
+async def test_the_panel_shows_the_default_when_the_owner_picture_goes_away_or_cannot_be_read(viewer, tmp_path, monkeypatch):
+    bridge, _, _ = viewer
+    picture = tmp_path / 'computer-wallpaper.jpg'
+    with monkeypatch.context() as patch:
+        patch.setattr(bridge.vm, 'own_wallpaper', lambda: picture)  # looked at and chosen, then replaced or removed before the read
+        assert await bridge.wallpaper({}) == {}
+        picture.mkdir()
+        assert await bridge.wallpaper({}) == {}
+    assert await bridge.wallpaper({}) == {}  # a folder is no picture
+    picture.rmdir()
+    picture.write_bytes(b'\xff\xd8\xff first')
+    first = (await bridge.wallpaper({}))['image']
+    picture.write_bytes(b'\xff\xd8\xff another one')
+    assert (await bridge.wallpaper({}))['image'] != first  # the panel reads the file as it is now, not as it was
+
+
 async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
     bridge, _, _ = viewer
     public = await bridge.status({"member_id": 1})
