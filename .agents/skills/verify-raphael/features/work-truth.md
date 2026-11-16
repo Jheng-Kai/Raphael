@@ -26,7 +26,9 @@ RPC, schema migration or alternative brain loop.
   never outlives the run that left it (`core/tests/background/test_queue_pump.py`).
   The agent's start-up sweep of turns left running (`AgentHistory.expire_pending`) leaves the turns kept work still holds (the
   work turn, the colleague's brief it answers) to that work, and a room drive asked for before the loop runs waits for
-  `RoomsService.start`. Checks: `core/tests/agent/test_restart_turns.py`, `test_room_exchanges.py`.
+  `RoomsService.start`. Work the core's ordinary close cut off writes its result (`TaskStore.finish_interrupted`) as a kill
+  does, delivered at the next start. Checks: `core/tests/agent/test_restart_turns.py`, `test_room_exchanges.py`,
+  `test_rerun_and_interrupts.py`.
 - Stop can end what it shows (R-PUMP-02): `worker.cancel` of a task that is `queued` ends it `cancelled` (turn closed,
   waiting parent woken) even when it is in no queue and has no carrier; `_withdraw` no longer answers false for it.
   A task being started (`running`, carried, no run yet) ends too: its run keeps the generation it was taken up at and
