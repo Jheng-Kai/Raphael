@@ -3314,7 +3314,11 @@ class BackgroundService:
             ending = asyncio.get_running_loop().create_task(self._cancel({"task_id": task_id, "_tree": True}))
         except RuntimeError:
             return  # no loop: its raised generation still ends it before it goes on
-        ending.add_done_callback(lambda done: done.cancelled() or done.exception())
+        def ended(done: asyncio.Task) -> None:
+            if not done.cancelled() and (error := done.exception()) is not None:
+                logger.warning("Ending waiting task %d with its parent failed: %s", task_id, type(error).__name__)
+
+        ending.add_done_callback(ended)
 
     def _withdraw(self, task_id: int, prefix: str | None = None) -> bool:
         """End a task that has not begun: it waits for its place, was given one a moment ago, or is queued and nothing carries it
