@@ -1,5 +1,54 @@
 # Member computer (Phases A and B)
 
+## Where the app's data lives
+
+R-COMP-PLACE-01, R-CLI-12, R-MEM-14. Every kind of data the app writes, where it goes, and what bounds it. `<F>` is the
+identity's folder name: `Raphael` for the release, `Raphael Dev` for a development build (app/src-tauri/src/identity.rs
+`RELEASE`/`DEVELOPMENT`; the shell sets `RAPHAEL_DATA_DIR` for a development build, `data_env`). On macOS `%APPDATA%\<F>`
+and `%LOCALAPPDATA%\<F>` are both `~/Library/Application Support/<F>`, so `paths.machine_dir(base)` is the data folder
+itself and nothing moves. Sizes are the ones read on the owner's PC when the layout changed (folder listings only).
+
+| Data | Where | Chosen in code | Size then | How it grows | What bounds it |
+| --- | --- | --- | --- | --- | --- |
+| Database `raphael.db` (+ WAL) | `%APPDATA%\<F>` | core `paths.data_dir`/`db_path`; shell `device_settings::data_dir` | 155 MB + 37 MB WAL (dev); release about 3 MB | turns, messages, steps, tool events, room messages, tasks | turns, messages and room messages: nothing (recall, search and history read them all); dictation history 30 days; `tool_audit` 2,000 rows |
+| Small settings (`device.json`, `integrations.json`, `connectors.json`, `messaging.json`, `schedule-awake.json`, `.window-state.json`) | `%APPDATA%\<F>` | shell `device_settings.rs`, `schedule_awake.rs`; core `IntegrationsService`, `MessagingStore` (data folder) | under 1 MB | rewritten | fixed shape |
+| `connectors-catalog.json` (a downloaded catalogue) | `%APPDATA%\<F>` | `connectors/service.py` `CATALOG_FILE` | 3.8 MB | replaced | one file |
+| Attachments | `%APPDATA%\<F>\attachments` | `services/attachment_store.py` (`root / "attachments"`) | 988 MB, 262 files | each attached file | nothing |
+| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal 30 days (R-MEM-14) |
+| Conversation folding | database (`conversation_summaries`, `conversation_context_summaries`, `room_thread_summaries`) | `memory/conversation.py`, `members/room_summary.py` | in the database | one row per conversation or thread | `SUMMARY_MAX_TOKENS`; goes with its conversation |
+| Vault, keys, sign-ins | Windows Credential Manager, macOS Keychain (never a file) | `brain/secrets.py` `CredentialKeyStore`, `CredentialVault` | none on disk | per secret | none needed |
+| Logs | `%LOCALAPPDATA%\<F>\logs` | shell `lib.rs` `log_plugin`, `identity.rs` | 3.5 MB | per line | 1 MB files, three kept |
+| Speech models | `%LOCALAPPDATA%\Raphael\models` (both builds) | `paths.models_dir`; `identity.rs` `data_env` | 956 MB | per model fetched | a fixed set; deleted from Settings |
+| Webview data | `%LOCALAPPDATA%\<F>\WebView2` | shell `data_layout.rs` `WEBVIEW_DIR` | 211 MB dev, 82 MB release | the webview's cache | WebView2's own |
+| Members' computer homes `vm-homes/<key>` and the team folder `vm-shared` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`) |
+| The owner's desktop picture for the computers | `%APPDATA%\<F>\computer-wallpaper.jpg` | `vm.py` `OWN_WALLPAPER` | none (a `wallpaper-own-kept` folder of 0.2 MB that no code writes) | one file | 8 MB |
+| Pictures of members | `%LOCALAPPDATA%\<F>\avatars`, `avatar` | shell `avatar.rs`; `MembersService` | 7.2 MB | one per member | replaced |
+| Exported templates | `%LOCALAPPDATA%\<F>\template-exports` | `members/member_catalog.py` | 4 folders, under 1 MB | per export | nothing |
+| CLI workspaces | `~\.raphael\cli-workspaces\<member>\claude`, `<member>\<conversation>\codex` and `\gemini` (Gemini's private home inside) | `agent/cli/records.py` `workspace_root` | 140 MB, 38 member folders | a folder per conversation for Codex and Gemini | nothing |
+| Members' Codex homes (their own `CODEX_HOME`, with Codex's records) | `~\.raphael\codex-brains\<sha256 of the workspace>` | `agent/cli/drivers.py` `codex_home` | 1,945 MB, 192 homes | one per conversation workspace | nothing |
+| Claude Code's records of the members' runs | `~\.claude\projects\<folder named after the working folder>` | Claude Code; the names come from `workspace_root` and `process.PRIVATE_PREFIX` | 1,225 folders: 336 of member workspaces (1,000 sessions), 822 of the model listing's temporary folders (an empty `memory` each), the rest the owner's own; none older than 19 days | a folder per working folder, a file per session | R-CLI-12 |
+| The CLIs' own homes `~\.codex`, `~\.gemini` | the owner's | the CLIs | not measured | | not Raphael's |
+| Swap backups `backup-<time>` | `%APPDATA%\Raphael Dev` | the owner's swap script, outside the repository | 3 x 190 MB | per swap | three kept |
+| Look and judge output | `app\.look` in the checkout, never in a user's data | `app/scripts/look` | | per run | git-ignored |
+
+Layout. Roaming (`%APPDATA%\<F>`) keeps the database and the small settings. Everything large or belonging to this PC
+is in `%LOCALAPPDATA%\<F>`: the memory, the logs, the webview, the pictures, the exported templates and now the computer
+folders; the speech models stay in the release's local folder for both builds. Proposed next, each the owner's call:
+the attachments (988 MB) and the downloaded catalogue to `%LOCALAPPDATA%\<F>` (turns name an attachment by id, but the
+data floor and the shell know the folder, so both move together); the swap backups out of Roaming; and `~\.raphael` to
+`%LOCALAPPDATA%\<F>\cli`, one per build. Today the release and a development build run members of the same id in the
+same `~\.raphael\cli-workspaces\<id>` and Codex homes, so their native sessions share folders. Moving it is not free:
+Claude Code finds a session to `--resume` in the records folder named after the working folder (`drivers.py` passes
+`--resume`, `loop.py` the workspace as `cwd`), and a Codex home is named by a hash of the workspace's path
+(`codex_home`), so every conversation's native session would be lost once. The loop survives that (a session not found
+is forgotten and a fresh one starts with a bounded record of the turns, `loop.py` `missing_session`), but it costs each
+conversation its native context; it is left until the owner decides.
+
+Checks: `core/tests/computer/test_relocation.py`, `core/tests/test_paths.py`, `core/tests/agent/cli/test_records.py`,
+`core/tests/agent/test_cli_models.py`, `core/tests/members/test_bot_homes.py`. On a real engine, with Docker already
+running, from `core/`: `python -m raphael_core.evaluate.computer_acceptance --relocation-only` (a throwaway image, data
+folder and owner label; `ok folders move: ...` then the cleanup lines). No scene changes: look does not apply.
+
 ## Housekeeping: size, scratch, locale
 
 A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
