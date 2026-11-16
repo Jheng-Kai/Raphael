@@ -761,7 +761,9 @@ class TaskStore:
             self._conn.execute("UPDATE worker_tasks SET announced = 1 WHERE announced = 0")
 
     def finish_interrupted(self, task_id: int, *, prefix: str, text: str, reason: str) -> None:
-        """End a task that was interrupted while it ran, with a report nobody has heard yet."""
+        """End a task that was interrupted while it ran, with a report nobody has heard yet. A hand-off's result is written
+        with it, as with every other end, and is delivered at the next start: closed the ordinary way, a room never heard of
+        the work again."""
         self.settle_in_progress(task_id)
         with self._conn:
             self._conn.execute(
@@ -770,6 +772,9 @@ class TaskStore:
                 " WHERE id = ?",
                 (self._now_ms(), reason, prefix, text, task_id),
             )
+            self._conn.execute("INSERT OR IGNORE INTO task_outbox "
+                "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "
+                "FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL", (self._now_ms(), task_id))
 
     def tool_steps(self, task_id: int) -> int:
         """How many tool calls the task made."""

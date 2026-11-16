@@ -31,6 +31,39 @@ def hand_over(rig, conn, *, language="en", source="voice", text=TASK_TEXT):
 # --- interrupted tasks are told ---------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("ending", ["the app closed", "the core was killed"])
+async def test_a_room_hand_off_the_end_of_the_core_cut_off_is_told_in_the_room_once(make_rig, ending):
+    """A member's work for a room was under way when the core ended. Killed, the next start told the room it was interrupted;
+    closed the ordinary way, it wrote no result, and the room never heard of the work again."""
+    from raphael_core.agent.speaker import RAPHAEL
+    from .test_handoff import args, setup, team_of, unused
+
+    rig = make_rig()
+    target, source = setup(rig)
+    started = asyncio.Event()
+
+    async def slow(**kwargs):
+        started.set()
+        await asyncio.sleep(30)
+
+    rig.client.replies.append(slow)
+    task_id = rig.service.handoff(RAPHAEL, args(target, mode="consult"), source_turn_id=source.id, language="en").data["task_id"]
+    await asyncio.wait_for(started.wait(), 5)
+    if ending == "the app closed":
+        await rig.service.aclose()
+    else:
+        rig.service._closing = True  # nothing more is written: the rows stay as the process left them
+    later = make_rig()
+    later.service.use_team(team_of(target), unused)
+    assert later.task(task_id).state == "interrupted"
+    told = rig.conn.execute("SELECT member_id, text FROM room_messages WHERE request_id=?", (f"handoff-{task_id}",)).fetchall()
+    assert [tuple(row) for row in told] == [(target.id, phrase("en", "worker_interrupted", steps="0"))]
+    later.service._deliver_handoffs()
+    assert rig.conn.execute("SELECT COUNT(*) FROM room_messages WHERE request_id=?", (f"handoff-{task_id}",)).fetchone()[0] == 1
+
+
+
+
 async def test_restart_closes_legacy_queued_and_interrupted_turns(make_rig, conn):
     first = make_rig()
     queued, queued_turn, history = hand_over(first, conn)
