@@ -85,16 +85,19 @@ export const isRunException = (entry: Pick<ChipEntry,"run">): boolean => !!entry
 /** The mark of a run that failed or waits for the owner; nothing for any other. */
 export const runMarkHTML = (entry: Pick<ChipEntry,"run">): string => entry.run && isRunException(entry)
   ? `<span class="cal-run-mark" data-status="${entry.run.status}" aria-label="${esc(t(entry.run.status === "error" ? "auto.error" : "auto.waiting"))}">${ico(entry.run.status === "error" ? "x" : "info")}</span>` : "";
-export function chipBody(entry: ChipEntry, o: { clock?: boolean; face?: number; timing?: boolean } = {}): string {
+/** The dot of a chip of the hours that says how its last run went, whatever the answer was. */
+const runDotHTML = (entry: Pick<ChipEntry,"run">): string => entry.run ? `<i class="au-history-mark" data-status="${entry.run.status}"></i>` : "";
+export function chipBody(entry: ChipEntry, o: { clock?: boolean; face?: number; timing?: boolean; history?: boolean } = {}): string {
   const time = o.clock === false || entry.rhythm ? "" : `<time>${esc(chipClock(entry))}</time>`;
   const lead = entry.kind === "event" ? googleMark() : entry.member && o.face ? faceHTML(entry.member, o.face) : "";
-  const status = runMarkHTML(entry);
+  // Both marks of a run stand in one place at the chip's end, so that the title is cut before them (R-CAL-10).
+  const marks = `${runMarkHTML(entry)}${o.history ? runDotHTML(entry) : ""}`;
   const copy = `<span class="cal-chip-copy">${time}<b>${esc(entry.title)}</b>${entry.rhythm && entry.timing && o.timing !== false ? `<small>&#160;${esc(entry.timing)}</small>` : ""}</span>`;
-  return entry.rhythm ? `${lead}${copy}` : `${copy}${status}${lead}`;
+  return entry.rhythm ? `${lead}${copy}` : `${copy}${marks ? `<span class="cal-chip-end">${marks}</span>` : ""}${lead}`;
 }
 
 /** The one chip of the calendar. `cls` and `attrs` place it. */
-export function chipHTML(entry: ChipEntry, cls = "", attrs = "", o: { clock?: boolean; face?: number; timing?: boolean } = {}): string {
+export function chipHTML(entry: ChipEntry, cls = "", attrs = "", o: { clock?: boolean; face?: number; timing?: boolean; history?: boolean } = {}): string {
   const style = entry.kind === "routine" || entry.kind === "own" ? chipColor(entry.member) : "";
   return btn(chipBody(entry, o), `cal-chip is-${entry.kind}${entry.rhythm ? " is-rhythm" : ""}${cls ? ` ${cls}` : ""}`, `${style}${attrs}`);
 }

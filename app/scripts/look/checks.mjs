@@ -9376,6 +9376,33 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, chips: chips.length };
   }
+  if (name === "calendar-chip-marks" || name === "calendar-chip-marks-cut") {
+    // The mark of a run (the icon of a failed or waiting one, the dot of the last) belongs to the chip's end: the title is cut before it, in
+    // every view that draws one, and no mark lies on a letter of the title or on its neighbour mark (R-CAL-10). The title's box is measured,
+    // not only the letters left in it, so that a short title cannot hide a layout that would cover a long one.
+    const hit = (a, b) => a.left < b.right - .5 && b.left < a.right - .5 && a.top < b.bottom - .5 && b.top < a.bottom - .5;
+    const marked = [...document.querySelectorAll('.au-page:not([hidden]) .cal-chip')].filter(chip => visible(chip) && chip.querySelector('.cal-run-mark, .au-history-mark'));
+    // A month's day that cannot hold every chip counts the rest in 「還有 N 個」: at a small window the marked chips may be among them.
+    const folded = !!document.querySelector('.au-page:not([hidden]) .au-month-chips > .cal-more:not([hidden])');
+    require(marked.length > 0 || folded, "the view draws a chip with the mark of its last run");
+    let cut = 0;
+    for (const chip of marked) {
+      const title = chip.querySelector('b'), box = title.getBoundingClientRect(), chipBox = chip.getBoundingClientRect(), marks = [...chip.querySelectorAll('.cal-run-mark, .au-history-mark')].filter(visible);
+      const shown = (title.scrollWidth > title.clientWidth + 1 || title.scrollHeight > title.clientHeight + 1);
+      if (shown) cut++;
+      for (const mark of marks) {
+        const spot = mark.getBoundingClientRect();
+        require(spot.left >= chipBox.left - .5 && spot.right <= chipBox.right + .5 && spot.top >= chipBox.top - .5 && spot.bottom <= chipBox.bottom + .5, `the ${mark.className} of "${title.textContent}" stays inside its chip`);
+        require(!hit(box, spot), `the ${mark.className} of "${title.textContent}" does not lie on the title's box (${Math.round(spot.left)}-${Math.round(spot.right)} against ${Math.round(box.left)}-${Math.round(box.right)})`);
+        const range = document.createRange(); range.selectNodeContents(title);
+        for (const line of range.getClientRects()) require(!hit({ left: Math.max(line.left, box.left), right: Math.min(line.right, box.right), top: Math.max(line.top, box.top), bottom: Math.min(line.bottom, box.bottom) }, spot), `the ${mark.className} does not cover a letter of "${title.textContent}"`);
+      }
+      for (const [i, a] of marks.entries()) for (const other of marks.slice(i + 1)) require(!hit(a.getBoundingClientRect(), other.getBoundingClientRect()), `the marks of "${title.textContent}" do not cover each other`);
+      require(getComputedStyle(title).display !== "none", "the title is drawn beside its marks");
+    }
+    if (name === "calendar-chip-marks-cut") require(cut > 0, "a title longer than its chip is among the marked ones, so that the check has a title to cut");
+    return { check: name, marked: marked.length, cut };
+  }
   if (name === "overlay-emblem-gold" || name === "overlay-emblem-angry") {
     // The rune band, sampled where the letters stand: gold for a report, red while it refuses.
     const canvas = document.querySelector('#emblem'), ctx = canvas.getContext('2d'), side = canvas.width, c = side / 2;

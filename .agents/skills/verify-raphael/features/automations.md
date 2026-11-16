@@ -237,6 +237,12 @@ automations-calendar/automations-day/automations-tools/automations-tools-awake r
 
 A routine's chip keeps a fixed visible 20px avatar at the top right, except side by side. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Viewport-derived compact hours replace the old 62px event/64px hour and corresponding time/title spacing; narrow-day horizontal padding lets the time and avatar fit at their existing sizes. calendar-chips still asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
 
+A chip's run marks never cover its title (R-CAL-10): the icon of a failed or waiting run and the dot of the last run stand together at the chip's end, in a column of their own beside the copy in the hours and after the title in a month's or an all-day row. calendar-chip-marks measures every chip with a mark in the shown view: the title's box and the letters left in it never meet a mark, marks never meet each other and never leave the chip. calendar-chip-marks-cut also needs a title longer than its chip. calendar-marks-week and calendar-marks-month run the rhythm data with a title longer than any chip; calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month and automations-calendar run the check on their own chips. A month that folds its marked chips into 「還有 N 個」 at a small window passes by the fold. The all-day band's bars carry no marks (a rhythm bar has none), so the band needs no scene.
+
+```powershell
+npm run look -- calendar-marks-week calendar-marks-month calendar-rhythm-week calendar-rhythm-day calendar-rhythm-month automations-calendar --theme both --width 1120,720,1920x1080
+```
+
 ## Calendar hours and the first position
 
 Day and week share a viewport-derived hour height (28-54px), fitting eleven working

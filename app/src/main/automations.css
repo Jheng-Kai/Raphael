@@ -221,8 +221,9 @@
 .is-movable .cal-chip.btn, .au-bar .cal-chip.is-own.btn { cursor: grab; }
 .btn.au-event-more { display: none; }
 .au-event.is-tight .cal-chip > .av, .au-event.is-tight .cal-chip > .cal-mark { display: none; }
-/* With its face hidden, a tight chip's run mark takes the top corner beside the time. */
-.au-event.is-tight .cal-chip > .cal-run-mark { top: 2px; bottom: auto; }
+/* With its face hidden, a tight chip's marks stand as they do in a chip without one: the run mark in the top corner, the dot at the foot. */
+.au-event.is-tight .cal-chip:not(.is-line) > .cal-chip-end { justify-content: flex-start; }
+.au-event.is-tight .cal-chip:not(.is-line) > .cal-chip-end > .au-history-mark { margin-top: auto; }
 .au-event-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .au-bar-edge { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .au-event.is-dragging { z-index: 5; opacity: 0.88; }
@@ -235,7 +236,7 @@
 /* The event whose panel is open, or that a link opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
 .cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
-.au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
+.au-history-mark { flex: none; width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
 .au-history-mark[data-status="done"] { background: var(--ok); }
 .au-history-mark[data-status="skipped"] { background: var(--text-3); }
 .au-hours > div { position: relative; height: var(--au-hour, 48px); }

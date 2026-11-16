@@ -3,7 +3,7 @@
 .cal-chip.btn { --chip: var(--text-3); position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; box-sizing: border-box; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 2px 6px; border: 0; border-radius: var(--r-sm); font-size: var(--fs-2xs); line-height: 1.3; text-align: left; white-space: normal; overflow: hidden; cursor: pointer; }
 .cal-chip-copy { display: block; min-width: 0; overflow: hidden; }
 /* Side by side two or three chips of the hours are each a few words wide: a time that does not fit is not drawn half ("11:("), and the title keeps the room; the tooltip holds the time (R-UI-142). */
-.cal-chip.btn:not(.is-line, .is-rhythm) { container: cal-chip / inline-size; }
+.cal-chip.btn:not(.is-line, .is-rhythm) > .cal-chip-copy { container: cal-chip / inline-size; }
 .cal-chip time { display: block; min-height: 16px; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
 @container cal-chip (max-width: 50px) { .cal-chip time { display: none; } }
 .cal-chip b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--fs-2xs); font-weight: 500; line-height: 1.25; overflow: hidden; overflow-wrap: anywhere; white-space: normal; text-wrap: balance; }
@@ -37,10 +37,15 @@
 .cal-chip.is-rhythm small { flex: 0 1 auto; min-width: 0; max-width: none; overflow: hidden; visibility: hidden; white-space: nowrap; font-size: var(--fs-2xs); color: var(--text-2); }
 .cal-run-mark { display: inline-flex; flex: none; color: var(--warn); }
 .cal-run-mark[data-status="error"] { color: var(--danger); }
-/* In a chip of the hours the mark stands in a corner beside the time, so the title keeps its lines; with a face there, the foot corner. */
-.cal-chip > .cal-run-mark { position: absolute; top: 2px; right: 3px; }
-.cal-chip:has(> .av) > .cal-run-mark { top: auto; bottom: 2px; }
-.cal-chip.is-line > .cal-run-mark { position: static; }
+/* The marks of the last run (the icon of a failed or waiting run, the dot of any run) are one group at the chip's end. A chip of the hours
+   gives the group a column of its own beside the copy, in the top corner by the time (the foot with a face there) and the dot at the foot:
+   the title takes the room that is left and is cut before the marks, and no mark lies on a letter (R-CAL-10). */
+.cal-chip-end { display: flex; flex: none; align-items: center; gap: var(--sp-1); }
+.cal-chip.btn:not(.is-line):has(> .cal-chip-end) { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); column-gap: var(--sp-1); }
+.cal-chip:not(.is-line) > .cal-chip-end { flex-direction: column; justify-content: flex-start; }
+.cal-chip:not(.is-line) > .cal-chip-end > .au-history-mark { margin-top: auto; }
+.cal-chip:not(.is-line):has(> .av) > .cal-chip-end { justify-content: flex-end; }
+.cal-chip:not(.is-line):has(> .av) > .cal-chip-end > .au-history-mark { margin-top: 0; }
 
 .cal-chip > .av { position: absolute; top: 2px; right: 3px; }
 .cal-chip.is-line > .av { position: static; flex: none; }

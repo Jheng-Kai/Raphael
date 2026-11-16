@@ -14,7 +14,7 @@ const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt
 const failedRoutine = { id: 2, member_id: 1, title: "每日新聞", prompt: "每天早上整理日本語的新聞，做成一個網頁。", schedule: { kind: "daily", time: "08:00" }, enabled: true,
   last_run: 1792803600000, next_run: 1792890000000, last_error: "這次執行需要的一個步驟被拒絕了，沒有完成。", last_failed: true };
 const eventDetails = [member(1), { action: "open-details" },  wait('[data-routine="90"]')];
-const rhythm = {calendarRhythm:true};
+const rhythm = {calendarRhythm:true}, longMarks = {calendarRhythm:true, calendarLongTitle:true};
 const rhythmDetail = [...auto, ...view("day"), wait('.au-all-day-row .is-rhythm'), click('.au-all-day-row .is-rhythm'), wait('.au-rhythm-runs')];
 const sentenceRoundTrip = [member(1),wait('[data-act="open-routine"]'),check('moving-sentence'),click('[data-act="open-routine"]'),wait('.mb-dialog.rv-dialog'),check('routine-view'),click('.rv-dialog [data-dlg="close"]'),waitGone('.rv-dialog')];
 export default [
@@ -34,9 +34,11 @@ export default [
   scene("calendar-view-reload", "Reload keeps the view preference and starts on today", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-view-stored"),{action:"reload"},...auto,check("calendar-view-reload")], rhythm),
   scene("calendar-week-fit", "Seven week columns and aligned all-day bars fit the available width", [...auto,check("calendar-shell"),check("calendar-week-fit")], rhythm),
   scene("calendar-today-controls", "Quiet previous, today and next controls stay aligned through hover and return", [...auto,click('[data-au="next"]'),check("calendar-nav-away"),hover('[data-au="today"]'),check("calendar-nav-hover"),click('[data-au="today"]'),check("calendar-nav-today")], rhythm),
-  scene("calendar-rhythm-week", "One quiet rhythm above the hours, daily work and exceptions keep their times", [...auto, check("calendar-rhythm-week")], rhythm),
-  scene("calendar-rhythm-day", "One daytime rhythm and the failed run in the day", [...auto,...view("day"),check("calendar-rhythm-day")], rhythm),
-  scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month")], rhythm),
+  scene("calendar-rhythm-week", "One quiet rhythm above the hours, daily work and exceptions keep their times", [...auto, check("calendar-rhythm-week"), check("calendar-chip-marks")], rhythm),
+  scene("calendar-rhythm-day", "One daytime rhythm and the failed run in the day", [...auto,...view("day"),check("calendar-rhythm-day"),check("calendar-chip-marks")], rhythm),
+  scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month"),check("calendar-chip-marks")], rhythm),
+  scene("calendar-marks-week", "A title longer than its chip is cut before the mark of its last run, in the week", [...auto, check("calendar-chip-marks-cut")], longMarks),
+  scene("calendar-marks-month", "A title longer than its chip is cut before the mark of its last run, in the month", [...auto, ...view("month"), check("calendar-chip-marks")], longMarks),
   scene("calendar-rhythm-popover", "Today's runs, icon statuses, next run, edit and off", [...rhythmDetail,check("calendar-rhythm-popover")], rhythm),
   scene("calendar-rhythm-hidden", "The member checkbox hides rhythm and exceptions together", [...auto,{action:"calendar-tools"},click('[data-source="member:1"]'),check("calendar-rhythm-hidden")], rhythm),
   scene("routine-event-profile", "The panel's Details lists an event routine with the app and its times, and its own switch", [...eventDetails, check("routine-event-profile")], { routines: [eventRoutine] }),
@@ -73,7 +75,7 @@ export default [
   scene("automations-sparse", "Sparse week keeps working hours in view", [...auto, check("calendar-shell")], { calendarSparse: true }),
   scene("automations-day-sparse", "Sparse day keeps working hours in view", [...auto, ...view("day"), check("calendar-shell")], { calendarSparse: true }),
   scene("automations-all-day", "A full week retains all-day items above compact timed rows", [...auto, check("calendar-shell"), check("calendar-all-day")], { calendarAllDay: true }),
-  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now")]),
+  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now"), check("calendar-chip-marks")]),
   scene("automations-day", "The day view, and the view dropdown keeps its place", [...calendar, ...view("day"), ...view("week"), ...view("day"), check("calendar-shell"), check("calendar-now")]),
   scene("automations-view-menu", "The view dropdown is the shared menu", [...auto, click('[data-au="view"]'), wait("#app-popover")]),
   scene("automations-month", "The month: chips in each day", [...auto, ...view("month"), check("calendar-month")]),
