@@ -90,11 +90,10 @@ const runDotHTML = (entry: Pick<ChipEntry,"run">): string => entry.run ? `<i cla
 export function chipBody(entry: ChipEntry, o: { clock?: boolean; face?: number; timing?: boolean; history?: boolean } = {}): string {
   const time = o.clock === false || entry.rhythm ? "" : `<time>${esc(chipClock(entry))}</time>`;
   const lead = entry.kind === "event" ? googleMark() : entry.member && o.face ? faceHTML(entry.member, o.face) : "";
-  // Both marks of a run stand in one place at the chip's end (R-CAL-10). The icon of a failed or waiting run gives the title a column of its
-  // own; the dot alone costs it nothing: it is a strip at the chip's foot.
+  // Both marks of a run stand in one place at the chip's end, icon first, and cost the title no width (R-CAL-10). `is-dot` says there is no icon.
   const icon = runMarkHTML(entry), marks = `${icon}${o.history ? runDotHTML(entry) : ""}`;
   const copy = `<span class="cal-chip-copy">${time}<b>${esc(entry.title)}</b>${entry.rhythm && entry.timing && o.timing !== false ? `<small>&#160;${esc(entry.timing)}</small>` : ""}</span>`;
-  return entry.rhythm ? `${lead}${copy}` : `${copy}${marks ? `<span class="cal-chip-end${icon ? "" : " is-foot"}">${marks}</span>` : ""}${lead}`;
+  return entry.rhythm ? `${lead}${copy}` : `${copy}${marks ? `<span class="cal-chip-end${icon ? "" : " is-dot"}">${marks}</span>` : ""}${lead}`;
 }
 
 /** The one chip of the calendar. `cls` and `attrs` place it. */

@@ -9370,52 +9370,80 @@ export function checkRendered(name, context = {}) {
         `time ${time.textContent} fits chip (${Math.round(text.width)}px text, ${Math.round(bounds.width)}px chip)`);
       require(text.right <= face.getBoundingClientRect().left - 1, "event time and fixed avatar do not overlap");
       require(chip.title.includes(label.textContent) && chip.title.includes(time.textContent), "tooltip preserves full title and time");
-      require(getComputedStyle(label).whiteSpace === "normal" && getComputedStyle(label).webkitLineClamp === '2', "calendar titles allow two recognisable lines");
+      // A chip with a face and the marks of a run has one line: its time row, the line and the marks' foot row take its hour (R-CAL-10).
+      require(getComputedStyle(label).whiteSpace === "normal" && getComputedStyle(label).webkitLineClamp === (chip.querySelector('.cal-chip-end') ? '1' : '2'), "calendar titles allow two recognisable lines");
       const titleBox = label.getBoundingClientRect();
       require(titleBox.bottom <= bounds.bottom + 1 && titleBox.height <= parseFloat(getComputedStyle(label).lineHeight) * 2 + 1, "two title lines fit inside the event");
     }
     return { check: name, chips: chips.length };
   }
   if (name.startsWith("calendar-chip-marks")) {
-    // The marks of a run (the icon of a failed or waiting one, the dot of the last) belong to the chip's end: the title is cut before the icon,
-    // in every view that draws one, and no mark lies on a letter of the title or on its neighbour mark (R-CAL-10). The title's box is measured,
-    // not only the letters left in it, so that a short title cannot hide a layout that would cover a long one. A dot alone costs the title no
-    // width: its box is as wide as the chip's content, unless the chip is too short for a line and the dot's strip (the dot is then beside it).
+    // The marks of a run (the icon of a failed or waiting one, the dot of the last) belong to the chip's end, and a mark changes nothing else of
+    // the chip (R-CAL-10): none lies on a letter of the title, of the time or on its neighbour mark; where the chip draws its time and has room,
+    // they stand in the time row, centred on the time; the title is as wide as the chip's content, and its first line, the time and the time
+    // row stand where they stand in an unmarked chip of the same routine and size. The title's box is measured, not only the letters left in
+    // it, so that a short title cannot hide a layout that would cover a long one. A chip too short for a line and the marks' row has them
+    // beside its single line, and its title is then narrower by exactly that.
     const hit = (a, b) => a.left < b.right - .5 && b.left < a.right - .5 && a.top < b.bottom - .5 && b.top < a.bottom - .5;
-    const marked = [...document.querySelectorAll('.au-page:not([hidden]) .cal-chip')].filter(chip => visible(chip) && chip.querySelector('.cal-run-mark, .au-history-mark'));
+    const all = [...document.querySelectorAll('.au-page:not([hidden]) .cal-chip')].filter(visible);
+    const marked = all.filter(chip => chip.querySelector('.cal-run-mark, .au-history-mark'));
+    const bare = all.filter(chip => chip.classList.contains('au-occurrence') && !chip.querySelector('.cal-run-mark, .au-history-mark'));
     // A month's day that cannot hold every chip counts the rest in 「還有 N 個」: at a small window the marked chips may be among them.
     const folded = !!document.querySelector('.au-page:not([hidden]) .au-month-chips > .cal-more:not([hidden])');
     require(marked.length > 0 || folded, "the view draws a chip with the mark of its last run");
-    let cut = 0, dotOnly = 0;
-    const range1 = node => { const r = document.createRange(); r.selectNodeContents(node); return [...r.getClientRects()].filter(x => x.width > 0); };
+    let cut = 0, dotOnly = 0, twins = 0;
+    const textBox = node => { const r = document.createRange(); r.selectNodeContents(node); return { boxes: [...r.getClientRects()].filter(x => x.width > 0), whole: r.getBoundingClientRect() }; };
+    const padding = (node, side) => parseFloat(getComputedStyle(node)[`padding${side}`]);
     for (const chip of marked) {
-      const title = chip.querySelector('b'), copy = chip.querySelector('.cal-chip-copy'), chipBox = chip.getBoundingClientRect(), marks = [...chip.querySelectorAll('.cal-run-mark, .au-history-mark')].filter(visible);
-      const own = title.getBoundingClientRect(), room = copy.getBoundingClientRect();
-      // What of the title the copy shows: the copy clips the lines that do not fit above the dot's strip.
+      const title = chip.querySelector('b'), copy = chip.querySelector('.cal-chip-copy'), time = chip.querySelector('time'), line = chip.classList.contains('is-line');
+      const chipBox = chip.getBoundingClientRect(), marks = [...chip.querySelectorAll('.cal-run-mark, .au-history-mark')].filter(visible);
+      const own = title.getBoundingClientRect(), room = copy.getBoundingClientRect(), label = title.textContent;
+      // What of the title the copy shows: the copy clips the lines that do not fit above the marks' row.
       const box = { left: Math.max(own.left, room.left), right: Math.min(own.right, room.right), top: Math.max(own.top, room.top), bottom: Math.min(own.bottom, room.bottom) };
       if (title.scrollWidth > title.clientWidth + 1 || title.scrollHeight > title.clientHeight + 1) cut++;
+      const letters = textBox(title).boxes.map(x => ({ left: Math.max(x.left, box.left), right: Math.min(x.right, box.right), top: Math.max(x.top, box.top), bottom: Math.min(x.bottom, box.bottom) }));
+      const timeLetters = visible(time) ? textBox(time).whole : null;
       for (const mark of marks) {
         const spot = mark.getBoundingClientRect();
-        require(spot.left >= chipBox.left - .5 && spot.right <= chipBox.right + .5 && spot.top >= chipBox.top - .5 && spot.bottom <= chipBox.bottom + .5, `the ${mark.className} of "${title.textContent}" stays inside its chip (mark ${Math.round(spot.left)},${Math.round(spot.top)}-${Math.round(spot.right)},${Math.round(spot.bottom)}; chip ${Math.round(chipBox.left)},${Math.round(chipBox.top)}-${Math.round(chipBox.right)},${Math.round(chipBox.bottom)})`);
-        require(!hit(box, spot), `the ${mark.className} of "${title.textContent}" does not lie on the title's box (${Math.round(spot.left)}-${Math.round(spot.right)} against ${Math.round(box.left)}-${Math.round(box.right)})`);
-        const range = document.createRange(); range.selectNodeContents(title);
-        for (const line of range.getClientRects()) require(!hit({ left: Math.max(line.left, box.left), right: Math.min(line.right, box.right), top: Math.max(line.top, box.top), bottom: Math.min(line.bottom, box.bottom) }, spot), `the ${mark.className} does not cover a letter of "${title.textContent}"`);
+        require(spot.left >= chipBox.left - .5 && spot.right <= chipBox.right + .5 && spot.top >= chipBox.top - .5 && spot.bottom <= chipBox.bottom + .5, `the ${mark.className} of "${label}" stays inside its chip (mark ${Math.round(spot.left)},${Math.round(spot.top)}-${Math.round(spot.right)},${Math.round(spot.bottom)}; chip ${Math.round(chipBox.left)},${Math.round(chipBox.top)}-${Math.round(chipBox.right)},${Math.round(chipBox.bottom)})`);
+        require(!hit(box, spot), `the ${mark.className} of "${label}" does not lie on the title's box (${Math.round(spot.left)}-${Math.round(spot.right)} against ${Math.round(box.left)}-${Math.round(box.right)})`);
+        for (const letter of letters) require(!hit(letter, spot), `the ${mark.className} does not cover a letter of "${label}"`);
+        if (timeLetters) require(!hit(timeLetters, spot), `the ${mark.className} of "${label}" does not cover its time (${Math.round(timeLetters.right)} against ${Math.round(spot.left)})`);
       }
-      for (const [i, a] of marks.entries()) for (const other of marks.slice(i + 1)) require(!hit(a.getBoundingClientRect(), other.getBoundingClientRect()), `the marks of "${title.textContent}" do not cover each other`);
+      for (const [i, a] of marks.entries()) for (const other of marks.slice(i + 1)) require(!hit(a.getBoundingClientRect(), other.getBoundingClientRect()), `the marks of "${label}" do not cover each other`);
       require(getComputedStyle(title).display !== "none", "the title is drawn beside its marks");
-      const end = chip.querySelector('.cal-chip-end');
-      if (!chip.querySelector('.cal-run-mark') && end && !chip.classList.contains('is-line')) {
-        dotOnly++;
-        const style = getComputedStyle(chip), content = chip.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-        if (getComputedStyle(end).position !== "absolute") require(own.width >= content - 1, `the dot costs "${title.textContent}" no width: the title is ${Math.round(own.width)}px of ${Math.round(content)}px`);
-        require(end.getBoundingClientRect().bottom <= chipBox.bottom + .5 && end.getBoundingClientRect().right >= chipBox.right - 12, "the dot keeps the chip's bottom right");
-        // Whole lines only: a line the strip leaves no room for is not drawn half.
-        for (const line of range1(title)) if (line.top < room.bottom - 1) require(line.bottom <= room.bottom + 1, `a line of "${title.textContent}" is cut by the dot's strip (${Math.round(line.bottom)} against ${Math.round(room.bottom)}; chip ${Math.round(chipBox.top)}-${Math.round(chipBox.bottom)}, strip ${Math.round(end.getBoundingClientRect().top)}-${Math.round(end.getBoundingClientRect().bottom)}, title ${Math.round(own.top)}-${Math.round(own.bottom)}, copy ${Math.round(room.top)}-${Math.round(room.bottom)})`);
+      if (line) continue;
+      if (!chip.querySelector('.cal-run-mark')) dotOnly++;
+      // An unmarked chip of the same routine and size: the same first line, time and time row.
+      const twin = bare.find(other => other.dataset.entry?.split(":")[1] === chip.dataset.entry?.split(":")[1] && Math.abs(other.getBoundingClientRect().width - chipBox.width) < .5 && Math.abs(other.getBoundingClientRect().height - chipBox.height) < .5);
+      if (twin && chip.classList.contains('au-occurrence')) {
+        twins++;
+        const twinBox = twin.getBoundingClientRect(), twinTitle = twin.querySelector('b').getBoundingClientRect(), twinTime = twin.querySelector('time');
+        if (visible(time) && visible(twinTime)) {
+          const a = time.getBoundingClientRect(), t = twinTime.getBoundingClientRect();
+          require(Math.abs(a.height - t.height) < .5 && Math.abs(a.top - chipBox.top - (t.top - twinBox.top)) < .5, `the time row of "${label}" is ${a.height}px at ${Math.round(a.top - chipBox.top)}, ${t.height}px at ${Math.round(t.top - twinBox.top)} in its unmarked twin`);
+        }
+        require(Math.abs(own.top - chipBox.top - (twinTitle.top - twinBox.top)) < .5, `the first line of "${label}" stands ${Math.round(own.top - chipBox.top)}px from its chip's top, ${Math.round(twinTitle.top - twinBox.top)}px in its unmarked twin`);
+        require(Math.abs(own.width - twinTitle.width) < .5 || padding(copy, "Right") > 0, `the title of "${label}" is ${Math.round(own.width)}px wide, ${Math.round(twinTitle.width)}px in its unmarked twin`);
       }
+      const content = chip.clientWidth - padding(chip, "Left") - padding(chip, "Right"), beside = padding(copy, "Right");
+      // The title keeps the chip's whole width, less what its single line gives the marks standing beside it.
+      require(own.width >= content - beside - 1, `the marks cost "${label}" no width: the title is ${Math.round(own.width)}px of ${Math.round(content)}px`);
+      // Whole lines only: a line the marks' row leaves no room for is not drawn half.
+      for (const text of textBox(title).boxes) if (text.top < room.bottom - 1) require(text.bottom <= room.bottom + 1, `a line of "${label}" is cut by the marks' row (${Math.round(text.bottom)} against ${Math.round(room.bottom)})`);
+      // Room for the marks in the time row: they stand there, centred on the time.
+      const face = [...chip.children].some(child => child.classList.contains('av') && visible(child));
+      const width = marks.reduce((sum, mark) => sum + mark.getBoundingClientRect().width, 0) + (marks.length - 1) * 4;
+      if (timeLetters && !face && timeLetters.right + 4 + width <= chipBox.right - padding(chip, "Right") + .5)
+        for (const mark of marks) {
+          const spot = mark.getBoundingClientRect();
+          require(Math.abs((spot.top + spot.bottom) / 2 - (timeLetters.top + timeLetters.bottom) / 2) <= 1.5 && spot.right <= chipBox.right - padding(chip, "Right") + .5, `the marks of "${label}" stand in the time row, centred on the time (mark ${Math.round(spot.top)}-${Math.round(spot.bottom)}, time ${Math.round(timeLetters.top)}-${Math.round(timeLetters.bottom)})`);
+        }
     }
     if (name === "calendar-chip-marks-cut") require(cut > 0, "a title longer than its chip is among the marked ones, so that the check has a title to cut");
     if (name === "calendar-chip-marks-dot") require(dotOnly > 0, "a chip with a dot and no icon is in the view, so that the check has a title the dot could narrow");
-    return { check: name, marked: marked.length, cut, dotOnly };
+    if (name === "calendar-chip-marks-twin") require(twins > 0, "a marked chip has an unmarked twin of its routine and size in the view, so that the check has a chip to compare it with");
+    return { check: name, marked: marked.length, cut, dotOnly, twins };
   }
   if (name === "overlay-emblem-gold" || name === "overlay-emblem-angry") {
     // The rune band, sampled where the letters stand: gold for a report, red while it refuses.
