@@ -19,7 +19,9 @@ from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
+from .file_tools import VmError
 from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
+from .owner_files import WRITES as OWNER_FILE_WRITES, place as owner_place
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
@@ -80,6 +82,18 @@ def owner_file_tool(key):
     prefix = tool_key(OWNER_FILES, "")
     name = key[len(prefix):] if key.startswith(prefix) else None
     return name if name in OWNER_FILE_DEFINITIONS else None
+
+
+def card_arguments(key, arguments):
+    """The arguments as the question for a call shows them. A write of the owner's file tools names the file it will
+    write, with `~` and links resolved as `OwnerFileTools.writable` judged it, not the path as the member wrote it: the
+    owner approves the place the write lands. The action that is approved keeps the arguments as they were."""
+    if owner_file_tool(key) not in OWNER_FILE_WRITES or not isinstance(arguments.get("path"), str):
+        return arguments
+    try:
+        return {**arguments, "path": owner_place(arguments["path"])}
+    except (VmError, OSError, ValueError):
+        return arguments
 
 
 def command_of(arguments):

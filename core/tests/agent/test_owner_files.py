@@ -308,6 +308,30 @@ async def test_a_search_for_every_match_reaches_the_model_cut_to_its_result_limi
     assert "ship entry 00000" in text and "ship entry 01999" in text
 
 
+async def test_the_card_for_a_write_names_the_file_that_will_be_written(make_rig, client, conn, home):
+    # The member wrote a path through a folder link; the owner approves the place the write lands, where `writable` judged.
+    rig = rig_with_files(make_rig, conn)
+    rig.settings.set("owner_write_folders", [str(home / "Documents")])
+    _link_folder(home / "Desk", home / "Documents")
+    landing = os.path.realpath(home / "Documents" / "new.md")
+    client.chats = [chat("Saving.", ("owner_files__write_file", {"path": "~/Desk/new.md", "content": "hello\n"}))]
+    asked = await rig.call("agent.ask", {"session_id": "files-card", "text": "Save a note on my desk",
+                                         "ui_language": "en", "member_id": 0, "source": "app"})
+    assert asked["status"] == "confirm"
+    card = PermissionCards(conn).get(asked["confirm"]["id"])
+    assert landing in card.summary and "~/Desk" not in card.summary
+    assert "~/Desk" not in asked["confirm"]["text"]
+    assert not (home / "Documents" / "new.md").exists()
+
+
+def test_a_card_shows_the_resolved_path_only_for_the_owners_file_writes(home):
+    from raphael_core.computer.local_tools import card_arguments
+    written = card_arguments("mcp:owner_files/edit_file", {"path": "~/Documents/budget.csv", "old_string": "a", "new_string": "b"})
+    assert written["path"] == os.path.realpath(home / "Documents" / "budget.csv") and written["old_string"] == "a"
+    for key in ("mcp:owner_files/read_file", "mcp:computer/write_file", "mcp:Notes/note"):
+        assert card_arguments(key, {"path": "~/Documents/budget.csv"}) == {"path": "~/Documents/budget.csv"}
+
+
 async def test_a_cli_brain_has_the_owners_file_tools(make_rig, conn, home, monkeypatch):
     rig = rig_with_files(make_rig, conn)
     rig.settings.set("agent_model", "cli:claude")
