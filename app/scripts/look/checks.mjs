@@ -3339,6 +3339,90 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, ...widths };
   }
+  // The composer's row of controls stays inside the composer however narrow it is (R-UI-160): one row, no control past the
+  // composer's inner edge or over another, the voice or send button whole at the right end. Short of room, the model's name
+  // shortens first (its chevron stays), then the permission's word goes and its shield stays, named still for a screen reader.
+  if (name === "composer-row-fits") return (async () => {
+    const forms = [...document.querySelectorAll('.composer')].filter(visible);
+    require(forms.length > 0, "a composer is on screen");
+    const box = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    const round = rect => Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * 10) / 10]));
+    const rows = forms.map(form => {
+      const style = getComputedStyle(form), outer = box(form), bar = form.querySelector('.cmp-bar');
+      const inner = { left: outer.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft), right: outer.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+        top: outer.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop), bottom: outer.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) };
+      const controls = [...bar.children].filter(child => !child.matches('.cmp-bar-fill') && visible(child));
+      const slot = [...form.querySelectorAll('.cmp-pair > button')].find(visible);
+      const rects = controls.map(control => ({ control: control.className.split(' ').find(word => word.startsWith('cmp-')), ...box(control) }));
+      const shown = { inner: round(inner), controls: rects.map(round), slot: slot && round(box(slot)) };
+      for (const rect of rects) require(rect.left >= inner.left - 0.5 && rect.right <= inner.right + 0.5 && rect.top >= inner.top - 0.5 && rect.bottom <= inner.bottom + 0.5, `${rect.control} lies inside the composer: ${JSON.stringify(shown)}`);
+      for (let i = 1; i < rects.length; i++) require(rects[i].left >= rects[i - 1].right - 0.5, `${rects[i].control} stands beside ${rects[i - 1].control}, not over it: ${JSON.stringify(shown)}`);
+      const middles = rects.map(rect => (rect.top + rect.bottom) / 2);
+      require(Math.max(...middles) - Math.min(...middles) <= 2 && bar.scrollWidth <= bar.clientWidth + 1, `one row, nothing scrolled or wrapped: ${JSON.stringify(shown)}`);
+      require(slot, "the voice or send button is shown");
+      const end = box(slot);
+      require(end.width >= 31.5 && end.height >= 31.5 && end.left >= inner.left - 0.5 && end.right <= inner.right + 0.5, `the voice or send button is whole inside the composer: ${JSON.stringify(shown)}`);
+      require(Math.abs(end.right - box(bar).right) <= 1 && rects.at(-1).control === 'cmp-pair', `the voice or send button stands at the row's right end: ${JSON.stringify(shown)}`);
+      const attach = form.querySelector('.cmp-attach'), mode = form.querySelector('.cmp-mode'), shield = mode?.querySelector('svg.i'), word = mode?.querySelector('span');
+      require(box(attach).width >= 31.5 && box(attach).height >= 31.5, `the + keeps its 32px: ${JSON.stringify(round(box(attach)))}`);
+      const result = { composer: Math.round(outer.width), controls: rects.map(rect => [rect.control, Math.round(rect.width)]) };
+      if (mode) {
+        const own = box(mode), mark = box(shield), letters = word && box(word);
+        require(own.height >= 25.5 && mark.width >= 15.5 && mark.left >= own.left && mark.right <= own.right + 0.5 && visible(shield), `the permission keeps its shield whole: ${JSON.stringify(round(own))}`);
+        const wordShown = !!word && visible(word) && letters.left >= own.left - 0.5 && letters.right <= own.right + 0.5 && letters.top >= own.top - 0.5 && letters.bottom <= own.bottom + 0.5;
+        require((mode.getAttribute('aria-label') ?? '').includes(word.textContent.trim()), "the permission is named for a screen reader whether its word shows or not");
+        const model = form.querySelector('.cmp-model .mp-trigger'), modelName = model?.querySelector('.mp-tname'), chevron = model?.querySelector(':scope > svg.i');
+        if (model) {
+          const trigger = box(model), arrow = box(chevron);
+          require(trigger.height >= 31.5 && visible(chevron) && arrow.width >= 15.5 && arrow.left >= trigger.left - 0.5 && arrow.right <= trigger.right + 0.5, `the model keeps its chevron whole: ${JSON.stringify(round(trigger))}`);
+          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5;
+          require(wordShown || shortened, `the model's name shortens before the permission's word goes: ${JSON.stringify(shown)}`);
+          Object.assign(result, { modelShortened: shortened });
+        }
+        Object.assign(result, { modeWord: word.textContent.trim(), modeWordShown: wordShown });
+      }
+      return result;
+    });
+    // How wide each language's words for the four modes are in the permission's own type, widest first: which language the
+    // narrow scenes must prove.
+    const mode = forms[0].querySelector('.cmp-mode span');
+    let words = [];
+    if (mode) {
+      const { catalogs } = await import('/src/main/i18n/index.ts');
+      const context = document.createElement('canvas').getContext('2d');
+      context.font = getComputedStyle(mode).font;
+      words = Object.entries(catalogs).flatMap(([locale, messages]) => ['chat.modeDirect', 'chat.modeAsk', 'chat.modePlan', 'chat.modeBypass'].map(key => [locale, key.slice(9), messages[key], Math.round(context.measureText(messages[key]).width * 10) / 10]))
+        .sort((a, b) => b[3] - a[3]).slice(0, 6);
+    }
+    return { check: name, rows, widestWords: words };
+  })();
+  // The composer's idle emblem is a bitmap of exactly its shown size on the screen's pixels (R-UI-161): as many pixels as its
+  // CSS box times the device pixel ratio, its box on whole device pixels, and nothing between it and the screen that resamples it.
+  if (name === "emblem-sharp") {
+    const ratio = devicePixelRatio, faces = [...document.querySelectorAll('.composer .cmp-voice .av > img')].filter(visible);
+    require(faces.length > 0, "the composer shows its idle emblem");
+    const measured = faces.map(img => {
+      const rect = img.getBoundingClientRect(), x = rect.left * ratio, y = rect.top * ratio, w = rect.width * ratio, h = rect.height * ratio;
+      const resampling = [];
+      for (let element = img; element && element !== document.documentElement; element = element.parentElement) {
+        const style = getComputedStyle(element);
+        if (style.transform !== 'none' && !/^matrix\(1, 0, 0, 1, -?\d+, -?\d+\)$/.test(style.transform)) resampling.push(`${element.className || element.tagName}: transform ${style.transform}`);
+        if (style.filter !== 'none') resampling.push(`${element.className || element.tagName}: filter ${style.filter}`);
+        if (style.backdropFilter && style.backdropFilter !== 'none') resampling.push(`${element.className || element.tagName}: backdrop-filter ${style.backdropFilter}`);
+        if (style.scale !== 'none' || (style.translate !== 'none' && !/^-?\d+px( -?\d+px)?$/.test(style.translate))) resampling.push(`${element.className || element.tagName}: scale ${style.scale} translate ${style.translate}`);
+      }
+      return { ratio, source: img.currentSrc.startsWith('data:') ? 'drawn' : img.currentSrc.replace(/^.*\/brand\//, 'brand/'), bitmap: [img.naturalWidth, img.naturalHeight],
+        box: [rect.width, rect.height], device: [x, y, w, h].map(value => Math.round(value * 1000) / 1000), rendering: getComputedStyle(img).imageRendering, resampling };
+    });
+    for (const face of measured) {
+      const [x, y, w, h] = face.device, whole = value => Math.abs(value - Math.round(value)) < 0.02;
+      require(face.source === 'drawn', `the emblem is drawn, not a stand-in picture: ${JSON.stringify(face)}`);
+      require(face.bitmap[0] === Math.round(w) && face.bitmap[1] === Math.round(h) && whole(w) && whole(h), `the emblem's bitmap is its box times the pixel ratio: ${JSON.stringify(face)}`);
+      require(whole(x) && whole(y), `the emblem's box stands on whole device pixels, so its centre is on the pixel grid: ${JSON.stringify(face)}`);
+      require(face.resampling.length === 0, `nothing resamples the emblem on its way to the screen: ${JSON.stringify(face)}`);
+    }
+    return { check: name, faces: measured };
+  }
   if (name === "panel-width" || name === "panel-closed") {
     const page = document.querySelector('.page-agent'), panel = page.querySelector('.mb-det');
     if (name === "panel-closed") {

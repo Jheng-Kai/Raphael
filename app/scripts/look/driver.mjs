@@ -664,6 +664,17 @@ export async function perform(page, step, evidenceDirectory) {
       return await slimeSharp(page, undefined, evidenceDirectory && `${evidenceDirectory}/sharp-${revision ?? "current"}-${await page.evaluate(() => document.documentElement.dataset.theme)}-${page.viewport().width}`, revision);
     }
     case "slime-pointer": return await slimePointer(page, step.selector);
+    // The composer's idle emblem as the screen shows it, at the run's pixel ratio, kept beside the run (R-UI-161).
+    case "emblem-picture": {
+      const clip = await page.evaluate(() => {
+        const button = [...document.querySelectorAll('.composer .cmp-voice')].find(element => element.checkVisibility()), rect = button.getBoundingClientRect();
+        return { x: rect.left - 4, y: rect.top - 4, width: rect.width + 8, height: rect.height + 8 };
+      });
+      const { width, deviceScaleFactor = 1 } = page.viewport(), theme = await page.evaluate(() => document.documentElement.dataset.theme);
+      const file = `emblem-${theme}-${width}-x${deviceScaleFactor}.png`;
+      if (evidenceDirectory) await page.screenshot({ path: `${evidenceDirectory}/${file}`, type: "png", clip });
+      return { action: "emblem-picture", file, clip };
+    }
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
     case "motion-cost": return await motionCost(page,step.revision);
     case "motion-details": return await motionDetails(page);
