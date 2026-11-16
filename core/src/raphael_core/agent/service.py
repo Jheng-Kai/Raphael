@@ -324,6 +324,22 @@ _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
 # What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
 _OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
+
+
+def owner_words_language(history, *, member_id: int, conversation_id: int | None, profile: str = "") -> str | None:
+    """The language of the owner's latest words in a conversation with a member, as the words say it firmly (a message of
+    one English word says nothing of it), else of the member's own profile; None when no words say it. What a member says
+    while it works is held to this (R-LANG-05), in a turn and in the task a turn handed on."""
+    try:
+        earlier = history.list(limit=12, member_id=member_id, conversation_id=conversation_id)
+    except sqlite3.Error:
+        earlier = []
+    for turn in earlier:
+        if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
+            return language
+    return detect_language(profile, firm=True)
+
+
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -993,15 +1009,9 @@ class AgentService:
         never decides it."""
         if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text, firm=True)):
             return language
-        try:
-            earlier = self._history.list(limit=12, member_id=ask.speaker.id, conversation_id=ask.conversation_id)
-        except sqlite3.Error:
-            earlier = []
-        for turn in earlier:
-            if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
-                return language
         speaker = ask.speaker
-        return detect_language(" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)), firm=True)
+        return owner_words_language(self._history, member_id=speaker.id, conversation_id=ask.conversation_id,
+                                    profile=" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
 
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
@@ -2740,7 +2750,7 @@ class AgentService:
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
-                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
+                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), owner_language=self._words_language(ask),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
                 # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
                 # cached for an hour.

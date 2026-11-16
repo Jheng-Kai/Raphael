@@ -25,7 +25,7 @@ from ...brain.meter import Usage, claude_code_model, claude_code_rows, codex as 
 from ...brain.reasoning import split_notes, split_reasoning
 from ...brain.textnorm import public_line
 from ...conversation_language import in_language
-from ...ui_languages import LANGUAGE_NAMES
+from ...ui_languages import LANGUAGE_NAMES, fixed_language
 from ..narration import CLI_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
 from ..policy import CONFIRM_TIMEOUT_S, EXPIRED_NOTE
@@ -194,6 +194,10 @@ class Sessions:
         with self.conn:
             self.conn.execute("INSERT OR REPLACE INTO agent_conversation_cli_contexts VALUES (?, ?, ?, ?)",
                               (conversation_id, brain, session, json.dumps(state)))
+
+
+# The quiet line of the conversation when a CLI says it changed a file, in every interface language.
+_FILE_CHANGE = with_ui_words({"zh-TW": "CLI 回報檔案已變更", "en": "CLI reported a file change", "ja": "CLI がファイルの変更を報告しました"})
 
 
 def language_rule(language) -> str:
@@ -1194,7 +1198,7 @@ class CliLoop:
                     if key in stream_records:
                         stream_records[key]["status"] = "completed" if event.data.get("ok") else "failed"
                     if event.data.get("effect") and event.data.get("ok"):
-                        self.event("CLI 回報檔案已變更" if self.language == "zh-TW" else "CLI reported a file change")
+                        self.event(_FILE_CHANGE[fixed_language(self.language)])
                 elif event.kind == "error":
                     native_capture("normalized-error", event.text)
                     if self._handed_off():

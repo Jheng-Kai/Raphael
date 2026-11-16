@@ -55,6 +55,7 @@ import sqlite3
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
+import dataclasses
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Protocol, TypeVar
@@ -80,7 +81,7 @@ from ..brain.openrouter import OpenRouterError, TextCompletion
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..brain.textnorm import public_line
-from ..conversation_language import chat_language
+from ..conversation_language import chat_language, in_language
 from ..brain.pricing import builtin_catalog
 from ..computer.vm_catalog import NOTICES
 from ..brain.spend import SpendTracker
@@ -386,6 +387,8 @@ class TaskRun:
         # A reply in a room: each of its model attempts has the whole stall time, and one that hears nothing for all of
         # it has stalled and ends the reply rather than being tried again. A reply is no work to ride an outage out for.
         self.room_speech = False
+        # The language the owner writes in, which what the model says while it works is held to (R-LANG-05); None holds nothing back.
+        self.owner_language: str | None = None
         # How long one tool call may be out before the task counts as stalled, where that is longer than the
         # window of the model's silence (`limits.seconds`); None: the same.
         self.tool_seconds: float | None = None
@@ -703,13 +706,17 @@ class TaskRun:
             update = authored is None and self._reply is not None and self.updates is not None and self.updates.due()
             if update:
                 authored = public_reply(turn.content, self.language, plain=True)
+            if authored is not None:
+                # Said while working, so shown only in the owner's language: the step it came with keeps its label.
+                lines = [line for line in (authored.messages or [authored.text]) if in_language(line, self.owner_language)]
+                authored = dataclasses.replace(authored, messages=lines, text="\n\n".join(lines)) if lines else None
             if authored is not None and self._reply is not None:
                 self._reply(authored)
                 if self.updates is not None:
                     self.updates.shown()
             text = " ".join(turn.content.split())[:200]
             text = public_line(text, "auto")
-            if text and not (update and authored is not None):
+            if text and in_language(text, self.owner_language) and not (update and authored is not None):
                 self._progress(text)
         return {
             "content": turn.content,

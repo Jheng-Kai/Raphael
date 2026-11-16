@@ -216,3 +216,46 @@ async def test_the_owners_words_decide_the_language_a_member_works_in_and_a_one_
     assert all(cli.language_rule("zh-TW") in system for _, system in systems)
     assert all("popover" not in line for line in plain_replies(stored(rig, "reply")) + stored(rig, "progress"))
     assert any(CHINESE in line for line in stored(rig, "progress"))
+
+
+# --- an API model's notes between its tool calls are held to the same language -----------------------------------------
+
+
+def said_before_a_tool(progress, thinking, messages=()):
+    import json
+    return json.dumps({"thinking": thinking, "progress": progress, "messages": list(messages)}, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("ui_language", ["en", "zh-TW"])
+async def test_an_api_models_notes_in_another_language_are_not_shown_to_a_chinese_owner_and_its_answer_still_is(
+        make_rig, client, ui_language):
+    import json
+    from .conftest import decision
+    from .test_narration import chat
+    rig = make_rig()
+    client.decisions.append(decision("answer", time=0.95))
+    client.chats = [
+        chat(said_before_a_tool("I am checking the time now", "The owner wants the time, so I read the clock first.",
+                                [ENGLISH]), ("local_time", {})),
+        chat(said_before_a_tool("我再確認一下日期", "時鐘讀到了，接著核對日期。", [CHINESE]), ("local_time", {})),
+        chat(json.dumps({"prefix": "Answer", "text": "Here is the time.", "detail": ""})),
+    ]
+    await ask(rig, "幫我看一下現在幾點，順便確認日期", "api-chinese", ui_language)
+    shown = stored(rig, "progress") + stored(rig, "thinking") + plain_replies(stored(rig, "reply"))
+    assert not any(in_language(line, "zh-TW") is False and line != "Here is the time." for line in shown), shown
+    assert any("我再確認一下日期" in line for line in stored(rig, "progress"))
+    assert any(CHINESE in line for line in stored(rig, "reply"))
+    assert any("Here is the time." in line for line in stored(rig, "reply"))  # the answer is never held back
+
+
+async def test_an_english_owner_sees_an_api_models_english_notes(make_rig, client):
+    import json
+    from .conftest import decision
+    from .test_narration import chat
+    rig = make_rig()
+    client.decisions.append(decision("answer", time=0.95))
+    client.chats = [chat(said_before_a_tool("I am checking the time now", "I read the clock first."), ("local_time", {})),
+                    chat(json.dumps({"prefix": "Answer", "text": "Done.", "detail": ""}))]
+    await ask(rig, "Please check the time and tell me the date too", "api-english")
+    assert any("I am checking the time now" in line for line in stored(rig, "progress"))
+    assert any("I read the clock first." in line for line in stored(rig, "thinking"))
