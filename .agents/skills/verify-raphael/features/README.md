@@ -212,7 +212,7 @@ and the existing local-permission-card consumer. Run both themes at
 
 Members are slimes drawn in code (`app/src/main/slime.ts`), not pictures: one body plus colour, costume and a
 seasonal hat by date (Halloween and Christmas weeks). A member's `avatar` is `slime:<id>`; a member without a
-picture gets a colour from its id; the owner's own pictures and presets still win. Raphael keeps his emblem.
+picture gets a colour from its id; the owner's own pictures and presets still win. Raphael keeps its emblem.
 Idle slimes stand still; motion in other states says what they are doing (`slime.css`, see [Members](members.md#how-a-slime-moves-and-why-it-stays-sharp));
 all of it stops under reduced motion. The picture menu shows them bareheaded so a costume stays visible.
 The composer is the words above a bar: plus attaches a file at once, a named control sets the action policy, and

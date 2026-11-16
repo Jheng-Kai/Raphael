@@ -34,11 +34,11 @@ Settings has no 導覽 entry any more;
 `settings-owner` checks that General has no way back into it.
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
-   canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
+   canvas renderer, appearing as on the desktop), its name as one wordmark for every language,
    「智慧之王ラファエル」 (`public/brand/wordmark.svg` through a CSS mask in the text colour; a reader
    hears `onboarding.welcomeTitle`), and under it what the team can do typed
    instead of a slogan: an ask appears a letter at a time with a caret, Raphael's
-   answer in his manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
+   answer in its manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
 1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): a store (every

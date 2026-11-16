@@ -61,7 +61,7 @@ cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_set
 右 Alt and T, has its pencil where the question key's is, is as high and as wide as that row, has a whole name and does not make
 the page scroll sideways; `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
 selection in a real app. A test cannot press keys or use the clipboard, so the owner tries it in a chat box, a document and
-a terminal: the selection is replaced, Ctrl+Z undoes it, what he had copied is still on the clipboard, Win+V shows his copied
+a terminal: the selection is replaced, Ctrl+Z undoes it, what they had copied is still on the clipboard, Win+V shows their copied
 text once (the program's own copy is the one thing that cannot be kept out of clipboard history), nothing selected shows the
 short line, and no recording is left running behind Right Alt+T.
 
@@ -88,7 +88,7 @@ No scene changes: the menu's words are the same. Not proved here: a real headset
 test); check that automatic shows and stays on 麥克風 (… HyperX …) with the headset on, and moves to 麥克風排列 only
 when it is unplugged.
 
-## Raphael stays in front of an open page while he is heard
+## Raphael stays in front of an open page while the owner is heard
 
 With an HTML page such as 每日總覽 open in Raphael's conversation, pressing the app's own voice button must show that the
 app is listening, so the indicator is never behind the page. The indicator is the voice
@@ -133,9 +133,8 @@ Where the dictionary could be lost, and what carries it (R-DICT-STT-01, R-DICT-S
 
 Learning (R-LEARN-UIA-01, R-LEARN-TERM-01, R-LEARN-SHOW-01): in a member's conversation the composer learned only
 when `agent_ask_text` returned, which is when the whole answer ended, so a long turn hid the pill for minutes; it now
-learns as the message goes (a group composer still learns on delivery). Outside the app, 69 of his 72 pastes from
-11-11 to 11-14 never started a
-watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\logs`): Claude's desktop composer is
+learns as the message goes (a group composer still learns on delivery). Outside the app, a paste into Claude's desktop composer never started a
+watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\logs`): the composer is
 36 levels deep and the walk stopped at 32. The walk now allows 128 and every `Chrome_WidgetWin_*` window is Chromium
 (retries). A lower-case name corrected from a plausible mishearing is learned; rewording never is. The first correction
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
@@ -420,7 +419,7 @@ Raphael, replies; typing must also work during dictation. Voice owns the overlay
 typed YES/NO cards remain answerable in the window and move to the overlay with their
 remaining timeout once voice ends. Two Escapes during dictation cancel only that recording.
 The existing `admin-approval` look scene now opens a second member question through the
-native event boundary, visits that member, then returns to Raphael and requires his original
+native event boundary, visits that member, then returns to Raphael and requires its original
 approval card. Window cards retain independent ids across members and conversations.
 
 Controller regressions live beside the existing fake-core/overlay Rust tests in

@@ -578,7 +578,7 @@ the safety rules' decisions, otherwise its own cause and that another way may wo
 on a failed call is sent one note of what failed and what it has not called (`failures.failure_ledger`;
 twice in a background run, with each tool's first failure for a CLI brain); the guardrails stay the
 only thing that ends a task nobody is in. A failed page read is read once more by the next reader the
-owner set up (`ServiceHub.read`): a service, never a model, and never one he did not set up.
+owner set up (`ServiceHub.read`): a service, never a model, and never one the owner did not set up.
 
 ## Shared cancellation boundary
 
