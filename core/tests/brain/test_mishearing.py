@@ -99,7 +99,7 @@ def test_these_pairs_are_plausible_recognition_errors(word, form):
         ("後天", "明天幾"),
         # CJK of different lengths, or the same length with nothing in common.
         ("服務器", "電腦網"),
-        ("利姆路", "李慕璐"),
+        ("陳大文", "李慕璐"),
         ("拉斐爾", "拉菲爾老師"),
         # Another script, or no text at all.
         ("Claude", "電腦"),
