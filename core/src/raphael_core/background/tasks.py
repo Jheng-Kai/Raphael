@@ -41,11 +41,14 @@ from ..paths import local_storage_root
 from ..agent.conversations import Conversations
 from ..agent.steps import reason_of
 from ..worker.stall_guards import stalled
+from .outcomes import file_named_in
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
 # File names narrow the scan only after the caller explicitly requires an artifact.
-FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json|md|docx|pptx|png|jpe?g|gif|svg|mp4|mov|webm|mp3|wav|zip))(?!\w)')
+FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html?|xlsx?|pdf|csv|tsv|txt|jsonl?|ndjson|md|docx?|pptx?|rtf|odt|ods|odp|epub|ipynb|'
+                        r'ya?ml|toml|ini|xml|log|sql|diff|patch|png|jpe?g|gif|svg|webp|bmp|tiff?|heic|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac|ogg|'
+                        r'zip|7z|rar|tar|tgz|gz))(?!\w)')
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
@@ -490,8 +493,9 @@ class TaskStore:
                 return 'missing_artifact'
         names = [Path(item['uri']).name.lower() for item in artifacts]
         # A filename extracted from prose can be the last word of a named path containing spaces.
+        # Chinese and Japanese have no spaces, so a name can stand against the words around it: it is that name alone.
         if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
-                       for found in names) for name in expected):
+                       or file_named_in(name, found) for found in names) for name in expected):
             return 'missing_artifact'
         return None
 

@@ -145,7 +145,7 @@ from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from .routine_outcome import failure as routine_failure
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
-from .outcomes import computer_files, named_files, worker_trace
+from .outcomes import computer_files, file_named_in, named_files, worker_trace
 from .handback import title
 from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
 
@@ -267,6 +267,8 @@ RESULTS_CHARS = 1_000_000
 # work, the most files looked at, and the most kept as evidence.
 ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs", ".browser-profiles"))
 ARTIFACT_SCAN = 20_000
+# The names a scan may list (not read) in one folder: files that are not named take none of ARTIFACT_SCAN.
+ARTIFACT_LISTING = 10 * ARTIFACT_SCAN
 ARTIFACT_KEEP = 20
 ARTIFACT_MAX_BYTES = 64 * 1024 * 1024
 
@@ -2937,22 +2939,38 @@ class BackgroundService:
                 path = root.joinpath(*below.parts)
                 if path.is_file() and self._gate.data_floor.access('read_file', {'path': str(path)}) is None:
                     keep(path, root)
-        wanted = {name.lower() for name in FILE_NAMES.findall(task.done_when)}
+        # A condition that names a file is met by a file of that name (whatever it holds: spaces, Chinese or Japanese); when it
+        # names none, any new file is the work.
+        named = bool(FILE_NAMES.findall(task.done_when))
         found = []
+
+        def freshest_first(base: str, folders: list[str]) -> list[str]:
+            """The folders worth a look, the one touched last first: a file made now is in one of those, and a tree of
+            thousands of files that nothing touched cannot use the budget before it is reached."""
+            def touched(folder):
+                try:
+                    return -os.stat(os.path.join(base, folder)).st_mtime
+                except OSError:
+                    return 0.0
+            return sorted((folder for folder in folders if folder not in ARTIFACT_SKIP), key=touched)
+
         for root in roots:
-            seen = 0  # each folder has its own budget: a large one never hides the other
+            seen = listed = 0  # each folder has its own budget: a large one never hides the other
             for base, folders, names in os.walk(root):
-                folders[:] = [folder for folder in folders if folder not in ARTIFACT_SKIP]
+                folders[:] = freshest_first(base, folders)
+                listed += len(names)
                 for name in names:
+                    if named and not file_named_in(task.done_when, name):
+                        continue  # nothing is read of a file that is not the one named: it takes none of the budget
                     seen += 1
                     path = Path(base) / name
                     try:
                         info = path.stat()
                     except OSError:
                         continue
-                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES and (not wanted or name.lower() in wanted):
+                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES:
                         found.append((info.st_mtime, str(path), root))
-                if seen > ARTIFACT_SCAN:
+                if seen > ARTIFACT_SCAN or listed > ARTIFACT_LISTING:
                     break
         # The newest that can be read and are kept: a file this PC cannot read takes none of the places.
         kept = tried = 0

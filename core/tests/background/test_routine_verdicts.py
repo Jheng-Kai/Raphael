@@ -220,3 +220,201 @@ async def test_an_ending_that_is_the_brains_still_records_its_failure(make_rig, 
     rig.service._conclude(rig.task(task_id), None, "failed", "", "The model failed.", None, reason)
     assert history.get(turn_id).failure is not None
 
+
+
+from .test_run import rig  # noqa: E402,F401
+
+
+async def test_a_run_remembers_the_tools_of_connected_apps_that_changed_something(rig):  # noqa: F811
+    """`written` is what the judgement of a routine reads: a write that went through, never a read, and kept across a pause."""
+    await rig.plugins.connect(look="T0", note="T0")
+    rig.resnap()
+    assert (await rig.tool("Notes__look", {"topic": "tea"}))["ok"] and rig.run.written == set()
+    assert (await rig.tool("Notes__note", {"text": "x"}, call_id="c2"))["ok"] and rig.run.written == {"note"}
+    state = rig.run.continuation_state()
+    rig.run.written.clear()
+    rig.run.restore_continuation(state)
+    assert rig.run.written == {"note"}
+    rig.run.restore_continuation({key: value for key, value in state.items() if key != "written"})
+    assert rig.run.written == {"note"}, "a continuation written before this was kept leaves what the run was told"
+
+
+# --- a file the work was to leave ---------------------------------------------------------------------------------------------
+
+import os  # noqa: E402
+
+from raphael_core.background import service as background_service  # noqa: E402
+
+from .conftest import report as said  # noqa: E402
+from .test_endings import _finish, _fresh, _team_rig  # noqa: E402
+from .test_handoff import setup  # noqa: E402
+
+
+async def made_files(make_rig, tmp_path, condition, make, *, reply="Done."):
+    """Run work whose condition is `condition`; `make(workspace, team, fresh)` leaves its files; the task as it ended."""
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+
+    def saved(**kwargs):
+        make(workspace, team, lambda path, ahead=0: _fresh(rig, path, ahead))
+        return said(reply)
+    rig.client.replies.append(saved)
+    return await _finish(rig, target, source, done_when=condition)
+
+
+def leave(folder, name, text="Synthetic work"):
+    path = folder / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf8")
+    return path
+
+
+# (what the condition says, the name of the file that is left, whether it counts)
+NAMES = [
+    ("report.md exists with sources", "report.md", True),
+    ("Save the summary as my report.md", "my report.md", True),
+    ("Save the summary as 'daily summary.pdf'", "daily summary.pdf", True),
+    ("請把結果存成report.md", "report.md", True),
+    ("結果は report.md に保存して", "report.md", True),
+    ("把摘要存成每日摘要.md", "每日摘要.md", True),
+    ("把摘要存成 每日摘要.md 並回報", "每日摘要.md", True),
+    ("結果を週報.md として保存", "週報.md", True),
+    ("Save the notes as NOTES.MD", "notes.md", True),
+    ("Save the result as result.yaml", "result.yaml", True),
+    ("Write the log to run.log", "run.log", True),
+    ("Save the summary as my report.md", "other.md", False),
+    ("請把結果存成report.md", "other.md", False),
+    ("把摘要存成每日摘要.md", "其他.md", False),
+    ("Save the result as result.yaml", "other.yaml", False),
+    ("Write the log to run.log", "other.log", False),
+    ("Save a copy as report.md.bak", "report.md", False),
+]
+
+
+@pytest.mark.parametrize("folder", ["workspace", "team", "nested"])
+@pytest.mark.parametrize("condition, name, counts", NAMES, ids=range(len(NAMES)))
+async def test_the_file_the_condition_names_is_the_one_that_must_exist(make_rig, tmp_path, condition, name, counts, folder):
+    def make(workspace, team, fresh):
+        where = {"workspace": workspace, "team": team, "nested": team / "projects" / "a b" / "週報"}[folder]
+        fresh(leave(where, name))
+        fresh(leave(team, "decoy-" + name))
+    task = await made_files(make_rig, tmp_path, condition, make)
+    assert (task.state, task.reason) == (("done", None) if counts else ("failed", "missing_artifact")), (condition, name)
+
+
+async def test_a_file_that_was_there_before_and_was_not_touched_is_not_the_work(make_rig, tmp_path):
+    def make(workspace, team, fresh):
+        old = leave(team, "plan.md")
+        os.utime(old, (1_000_000, 1_000_000))
+    task = await made_files(make_rig, tmp_path, "plan.md exists", make)
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_a_file_that_was_there_before_and_was_changed_is_the_work(make_rig, tmp_path):
+    def make(workspace, team, fresh):
+        old = leave(team, "plan.md", "old")
+        os.utime(old, (1_000_000, 1_000_000))
+        old.write_text("new words", encoding="utf8")
+        fresh(old)
+    task = await made_files(make_rig, tmp_path, "plan.md exists", make)
+    assert (task.state, task.reason) == ("done", None)
+
+
+async def test_a_file_named_in_the_report_and_not_in_the_condition_does_not_stand_for_the_one_that_is(make_rig, tmp_path):
+    def make(workspace, team, fresh):
+        fresh(leave(team, "projects/other.md"))
+    task = await made_files(make_rig, tmp_path, "plan.md exists", make, reply="Saved to /home/cua/team/projects/other.md")
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_a_file_named_only_in_the_report_counts_when_the_condition_names_none(make_rig, tmp_path):
+    def make(workspace, team, fresh):
+        fresh(leave(team, "projects/study.md"))
+    task = await made_files(make_rig, tmp_path, "the study is written up", make, reply="Saved to /home/cua/team/projects/study.md")
+    assert (task.state, task.reason) == ("done", None)
+
+
+@pytest.mark.parametrize("where", ["workspace", "team"])
+async def test_a_huge_folder_beside_the_file_does_not_hide_it(make_rig, tmp_path, monkeypatch, where):
+    """The scan has a budget so that a tree of thousands of files cannot stall the end of a task; it must not be spent on
+    the files whose names are not the one the condition names."""
+    monkeypatch.setattr(background_service, "ARTIFACT_SCAN", 5)
+
+    def make(workspace, team, fresh):
+        folder = workspace if where == "workspace" else team
+        fresh(leave(folder, "zzz/plan.txt"))
+        for number in range(12):  # made after it, so this folder is the one touched last, and the scan comes to it first
+            leave(folder, f"aaa/part{number}/file.txt")
+    task = await made_files(make_rig, tmp_path, "plan.txt exists", make)
+    assert (task.state, task.reason) == ("done", None)
+
+
+async def test_a_run_of_unreadable_files_does_not_hide_the_file_the_report_names(make_rig, tmp_path, monkeypatch):
+    """The newest files being ones this PC cannot read must not use the places kept as evidence, nor the budget of tries
+    (R-WORK-FILE-01), when the condition names no file and the report names the path."""
+    from raphael_core.background import tasks
+    digest = tasks._artifact_digest
+
+    def readable(path):
+        if "cache" in path.parts:
+            raise PermissionError(path)
+        return digest(path)
+    monkeypatch.setattr(tasks, "_artifact_digest", readable)
+
+    def make(workspace, team, fresh):
+        for number in range(260):
+            fresh(leave(workspace, f"cache/data_{number}"), ahead=5)
+        fresh(leave(team, "projects/research/findings.md"))
+    task = await made_files(make_rig, tmp_path, "the findings are written up", make,
+                            reply="Written to /home/cua/team/projects/research/findings.md")
+    assert (task.state, task.reason) == ("done", None)
+
+
+async def test_the_newest_files_being_unreadable_take_none_of_the_places_kept_as_evidence(make_rig, tmp_path, monkeypatch):
+    """R-WORK-FILE-01 (2): a browser's cache this PC cannot read was the newest of the member's files, and took every place."""
+    from raphael_core.background import tasks
+    digest = tasks._artifact_digest
+
+    def readable(path):
+        if "cache" in path.parts:
+            raise PermissionError(path)
+        return digest(path)
+    monkeypatch.setattr(tasks, "_artifact_digest", readable)
+
+    def make(workspace, team, fresh):
+        for number in range(30):
+            fresh(leave(workspace, f"cache/data_{number}"), ahead=5)
+        fresh(leave(team, "projects/findings.md"))
+    task = await made_files(make_rig, tmp_path, "the findings are written up", make)
+    assert (task.state, task.reason) == ("done", None)
+
+
+async def test_a_tree_nothing_touched_does_not_use_the_budget_before_the_folder_that_was(make_rig, tmp_path, monkeypatch):
+    """When the condition names no file the scan reads every file it comes to; the folders touched last come first."""
+    monkeypatch.setattr(background_service, "ARTIFACT_SCAN", 5)
+
+    def make(workspace, team, fresh):
+        for number in range(12):
+            leave(workspace, f"aaa/part{number}.txt")
+            os.utime(workspace / f"aaa/part{number}.txt", (1_000_000, 1_000_000))
+        os.utime(workspace / "aaa", (1_000_000, 1_000_000))
+        fresh(leave(workspace, "zzz/new.txt"))
+    task = await made_files(make_rig, tmp_path, "the notes are written up", make)
+    assert (task.state, task.reason) == ("done", None)
+
+
+@pytest.mark.parametrize("writes, state", [(True, "done"), (False, "failed")])
+async def test_a_routine_that_wrote_what_it_was_set_to_make_in_a_connected_app_is_done(make_rig, monkeypatch, writes, state):
+    """The run's own record of what a connected app changed reaches the judgement of how it ended."""
+    from raphael_core.background import routine_outcome
+    from .conftest import turn, use
+    from .test_members import ended
+    from .test_routine_health import routine_run
+    monkeypatch.setitem(routine_outcome.APP_PRODUCERS, "page", frozenset({"note"}))
+    rig = make_rig()
+    await rig.plugins.connect(look="T0", note="T0")
+    tool = use("Notes__note", {"text": "x"}, "c1") if writes else use("Notes__look", {"topic": "tea"}, "c1")
+    rig.client.replies = [turn("", [tool]), said("Made it.")]
+    task = await ended(rig, routine_run(rig, "Create a page in Notion with today's summary"))
+    assert (task.state, task.reason) == (state, None if writes else "routine_nothing")
