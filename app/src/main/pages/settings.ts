@@ -1098,6 +1098,20 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "write-folder-add": void api.pickOutputFolder().then(path => {
+        if (path === null) return;
+        const folders = brain?.owner_write_folders ?? [];
+        if (!folders.includes(path)) return changeBrain("owner_write_folders", [...folders, path]);
+      }).catch(error => toaster.info(describeError(error))); break;
+      case "write-folder-menu": {
+        const anchor = target.closest<HTMLElement>("[data-folder-index]")!, index = Number(anchor.dataset.folderIndex);
+        const folders = brain?.owner_write_folders ?? [], folder = folders[index];
+        if (folder === undefined) break;
+        const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+        openConfirmMenu(anchor, { label: t("writeFolders.remove", { p0: name }), ask: t("settings.keyRemoveConfirm"),
+          run: () => void changeBrain("owner_write_folders", (brain?.owner_write_folders ?? []).filter(item => item !== folder)) });
+        break;
+      }
       case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;

@@ -13,6 +13,7 @@ import { NAME, eventLineHTML } from "./event-line";
 import { appLogo } from "./app-logos";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
+import { linkedText } from "./message-content";
 import { connectionMarkHTML } from "./secret-card";
 import { serviceIconOf } from "./service-icons";
 import type { AgentTurn, MailDraft, MailDraftCard, MailDraftHanded } from "./types";
@@ -107,7 +108,7 @@ function settledHTML(draft: MailDraftCard): string {
   const sent = draft.state === "sent";
   return cardHTML({ title: draft.kind === "slack" ? t("slack.title") : draft.subject || plain("mail.title"), mark: senderMarkHTML(draft.from.name), status: sent ? "done" : "ready",
     statusText: sent ? t("cards.done") : t("mail.discardedShort"),
-    content: cardDisclosureHTML(draft.id, `<div class="card-well"><p class="card-body">${esc(sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : draft.kind === "slack" ? t("slack.discarded") : plain("mail.discarded"))}</p><p class="card-body">${esc(draft.subject)}</p><p class="card-body">${esc(draft.body)}</p></div>`),
+    content: cardDisclosureHTML(draft.id, `<div class="card-well"><p class="card-body">${esc(sent ? t("mail.sent", { p0: recipientsLine(draft.to) }) : draft.kind === "slack" ? t("slack.discarded") : plain("mail.discarded"))}</p><p class="card-body">${linkedText(draft.subject)}</p><p class="card-body">${linkedText(draft.body)}</p></div>`),
     cls: "mail-done", attrs: ` data-mail-card="${esc(draft.id)}" data-mail-state="${esc(draft.state)}"`,
   });
 }

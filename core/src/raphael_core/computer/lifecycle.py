@@ -59,6 +59,12 @@ async def maintain(vm, target, action, *, confirmed=False):
         raise VmError("bad_arguments")
     if action == "reset" and confirmed is not True:
         raise VmError("confirmation_required")
+    if action != "reset" and target.state_key not in vm.maintenance and vm.preparing_now(target):
+        # The computer is being started, built or made now, which is already a fresh start on the current image: a
+        # restart, update or repair pressed meanwhile joins it and answers with its state (the panel says it is being
+        # updated), never "busy" (R-COMP-UPDATE-01). A reset still waits for it: the confirmed deletion of a workspace is
+        # never silently dropped or done in the middle of a build.
+        return dict(vm.preparation.get(target.state_key) or {"state": "preparing", "ready": False})
     if target.state_key in vm.maintenance:
         raise VmError("busy")
     vm.maintenance[target.state_key] = asyncio.current_task()
@@ -77,7 +83,7 @@ async def maintain(vm, target, action, *, confirmed=False):
                 if str(target.workspace) != target.name + "-workspace":
                     raise VmError("outside_workspace")
             else:
-                root = vm.root / "vm-homes"
+                root = vm.homes
                 if root.is_symlink() or root.resolve() != root or workspace.is_symlink() or workspace.resolve() != root / target.unit:
                     raise VmError("outside_workspace")
         await vm.disconnect_unit(target)

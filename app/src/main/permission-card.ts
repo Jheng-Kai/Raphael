@@ -12,6 +12,7 @@ import { cardDisclosureHTML, cardHTML, cardPromptText } from "./card";
 import { composioText, isComposioTool } from "./composio-result";
 import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
+import { linkedText } from "./message-content";
 import { connectionMarkHTML } from "./secret-card";
 import { serviceIconOf } from "./service-icons";
 import type { AgentTurn, OwnerQuestion, PermissionCard } from "./types";
@@ -91,8 +92,8 @@ export function permissionCardHTML(card: PermissionCard, answerable = true, memb
   const message = card.message ? Object.entries(labels).map(([key, label]) => {
     const value = card.message?.[key as keyof typeof labels];
     return value ? `<div class="card-field"><span>${esc(t(label))}</span><span>${esc(value)}</span></div>` : "";
-  }).join("") + `<p class="card-body">${esc(card.message.body)}</p>` : "";
-  const details = `<div class="card-well">${!waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : ""}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${esc(card.summary)}</span></div>`}</div>`;
+  }).join("") + `<p class="card-body">${linkedText(card.message.body)}</p>` : "";
+  const details = `<div class="card-well">${!waiting ? `<p class="card-body">${esc(permissionStateText(card))}</p>` : ""}${card.message ? message : localCard(card) ? `<pre class="local-command">${esc(card.summary)}</pre>${card.reason ? `<p class="card-body">${esc(card.reason)}</p>` : ""}` : `<div class="card-field"><span>${esc(nameOf(card))}</span><span>${linkedText(card.summary)}</span></div>`}</div>`;
   return cardHTML({
     title, mark: markOf(card),
     status: waiting ? "waiting" : card.state === "allowed" || card.state === "always" ? "done" : "ready",
@@ -163,7 +164,7 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
   const line = questionAnswerText(question);
   // Answered, the card is its title and one row (the words in the quiet colour, a check at the right); closed unanswered it keeps a quiet pill.
   const left = question.result?.by === "message";
-  return cardHTML({ title: question.question, status: waiting ? "waiting" : question.state === "cancelled" ? "ready" : "done",
+  return cardHTML({ title: question.question, linkTitle: true, status: waiting ? "waiting" : question.state === "cancelled" ? "ready" : "done",
     statusText: waiting ? cardPromptText("question") : question.state === "cancelled" ? t(left ? "ownerQuestion.left" : "ownerQuestion.cancelled") : t("ownerQuestion.answered"),
     hideStatus: (waiting && cardPromptText("question") === undefined) || (!waiting && line !== null),
     body: waiting ? question.subtitle || (multiple ? t("ownerQuestion.many") : undefined) : undefined,

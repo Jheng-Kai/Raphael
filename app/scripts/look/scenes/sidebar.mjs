@@ -1,4 +1,4 @@
-import { scene, click, hover, check, page, room, settings, wait, waitGone, drag, rightClick, member, scroll, wide } from "./steps.mjs";
+import { scene, click, hover, check, page, room, settings, wait, waitGone, drag, rightClick, member, scroll, wide, type } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
@@ -6,6 +6,8 @@ const pinnedTiles = { sidebarMany: true, pinnedTiles: [0, 3, 1] };
 // The one light of a row: 1 and 6 only think, 2 has a message, 3 a task that ended, 4 work that failed, 5 a question that waits
 // (and a message too, which it outranks); the group chats have a message, a meeting that ended and a question.
 const lights = { sidebarMany: true, sidebarLights: { 1: "thinking", 2: "message", 3: "done", 4: "failed", 5: "waiting", 6: "thinking" }, sidebarLightRooms: true };
+// The longest name of a model that answers in the recorded OpenRouter list (core/tests/brain/fixtures/openrouter_catalog.json).
+const longRow = { model: { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super (free)", provider: "NVIDIA" } };
 const cropOpen = [...settings("general"), click('[data-owner-photo]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-frame:not([hidden])')];
 
 export default [
@@ -14,6 +16,10 @@ export default [
   scene("sidebar-folders", "Open member folders and group chats", [{ action: "member-column", collapsed: false }, check("sidebar-shell")]),
   scene("sidebar-folded", "A collapsed folder preserves its choice", [{ action: "member-column", collapsed: false }, wide(click('[data-group-fold="1"]')), check("sidebar-folded"), check("sidebar-shell")]),
   scene("sidebar-many", "Many colleagues retain a scrollable single list", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { sidebarMany: true }),
+  // R-SIDE-05: words written in a composer and not yet sent stand in that row's second line after 草稿：, and the row's last line comes back once the composer is empty.
+  scene("sidebar-draft", "Words typed and not yet sent stand in the member's row after 草稿：", [member(1), type(".page-agent:not([hidden]) .composer textarea", "還沒送出的想法，明天早上再整理成清單"), { action: "wait-text", selector: '.side .mb-row[data-member="1"] .mb-row-p.is-draft', text: "還沒送出的想法" }, check("sidebar-shell")]),
+  scene("sidebar-draft-cleared", "An emptied composer gives the member's row its last line back", [member(1), type(".page-agent:not([hidden]) .composer textarea", "先寫一半"), wait('.side .mb-row[data-member="1"] .mb-row-p.is-draft'), type(".page-agent:not([hidden]) .composer textarea", ""), waitGone('.side .mb-row[data-member="1"] .mb-row-p.is-draft'), check("sidebar-shell")]),
+  scene("sidebar-draft-room", "Words typed in a group and not yet sent stand in the group's row after 草稿：", [room(1), type(".au-room-pane .composer textarea", "這週的會議改到週四"), { action: "wait-text", selector: '.side .mb-row[data-room="1"] .mb-row-p.is-draft', text: "這週的會議改到週四" }, check("sidebar-shell")]),
   scene("sidebar-unread", "Unread member and group messages have previews and times", [{ action: "member-column", collapsed: false }, check("sidebar-room-summary"), check("sidebar-unread"), check("sidebar-shell")], { sidebarUnread: true }),
   // A member that only thinks has said nothing, so its row has no light: a light comes from something the member really sent.
   scene("sidebar-lights", "Each row wears one still dot: orange for a question that waits, red for work that failed, green for a task that ended, white for a new message, and none for a member that only thinks", [{ action: "member-column", collapsed: false }, check("sidebar-lights"), check("sidebar-shell")], lights),
@@ -54,10 +60,20 @@ export default [
   scene("sidebar-rail", "Dragged narrow by its edge (or on a window under 860px), the list is a rail of faces, with search and plus above the owner", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), check("sidebar-rail"), check("sidebar-selection")]),
   scene("sidebar-rail-dragged-open", "The rail dragged out by its edge opens the list again at the width it was let go", [{ action: "member-column", collapsed: false }, drag('.side-edge', -240, { wide: true }), drag('.side-edge', 300, { wide: true }), check("sidebar-width")]),
   scene("sidebar-dragged-wider", "The list's edge drags it wider: no handle and no button", [{ action: "member-column", collapsed: false }, drag('.side-edge', 90, { wide: true }), check("sidebar-width")]),
-  scene("panel-dragged-wider", "The details panel's left edge drags it wider and the conversation gives way", [{ action: "open-details" }, drag('.page-agent .det-edge', -140), check("panel-width")]),
-  scene("panel-drag-keeps-place", "Dragging the details panel wider leaves the conversation's reading place where it was", [member(1), wait('.page-agent .thread > li:nth-child(8)'), { action: "open-details" }, { action: "scroll", selector: '.page-agent .thread > li:nth-child(5)', block: "start" }, check("reading-place-before"), drag('.page-agent .det-edge', -140), check("reading-place-kept")], { longThread: true }),
-  scene("panel-widest", "The details panel dragged as wide as it goes leaves the conversation its 386px: the panel gives way first", [{ action: "open-details" }, wide(drag(".page-agent .det-edge", -900)), check("panel-widest")]),
-  scene("panel-drag-closes", "Dragged narrower than it can be, the details panel closes, and the header's name is how it opens again", [{ action: "open-details" }, drag('.page-agent .det-edge', 420), waitGone('.page-agent .mb-det:not([hidden])'), check("panel-closed")]),
+  scene("panel-dragged-wider", "The details panel's left edge drags it wider and the conversation gives way", [{ action: "open-details" }, drag('.page-agent .det-edge', -140), check("panel-width"), check("composer-row-fits")]),
+  scene("panel-drag-keeps-place", "Dragging the details panel wider leaves the conversation's reading place where it was", [member(1), wait('.page-agent .thread > li:nth-child(8)'), { action: "open-details" }, { action: "scroll", selector: '.page-agent .thread > li:nth-child(5)', block: "start" }, check("reading-place-before"), drag('.page-agent .det-edge', -140), check("reading-place-kept"), check("composer-row-fits")], { longThread: true }),
+  scene("panel-widest", "The details panel dragged as wide as it goes leaves the conversation its 386px: the panel gives way first", [{ action: "open-details" }, wide(drag(".page-agent .det-edge", -900)), check("panel-widest"), check("composer-row-fits")]),
+  scene("panel-drag-closes", "Dragged narrower than it can be, the details panel closes, and the header's name is how it opens again", [{ action: "open-details" }, drag('.page-agent .det-edge', 420), waitGone('.page-agent .mb-det:not([hidden])'), check("panel-closed"), check("composer-row-fits")]),
+  // The composer's row at its fullest beside the details panel (R-UI-160): 全部允許 and the longest name of a model that answers,
+  // with its depth; the emblem at the row's end is whole and as sharp as the screen's pixels allow (R-UI-161).
+  scene("composer-row-narrow", "With the details panel as wide as it goes, the composer's row gives way in order: the model's name shortens, then the permission's word goes; the emblem stays whole and sharp at its end", [{ action: "open-details" }, wide(drag(".page-agent .det-edge", -900)), wait('.composer .cmp-model .mp-trigger[aria-label*="Nemotron"]'), check("composer-row-fits"), { action: "emblem-picture" }, check("emblem-sharp")], { composerLongRow: longRow }),
+  // The language whose permission word is the widest in the button's own type (Vietnamese 「Cho phép tất cả」, measured by composer-row-fits).
+  scene("composer-row-language", "The same narrow composer in the language with the widest permission word: the word hides whole after the model's name has shortened", [{ action: "open-details" }, wide(drag(".page-agent .det-edge", -900)), wait('.composer .cmp-model .mp-trigger[aria-label*="Nemotron"]'), check("composer-row-fits")], { composerLongRow: { ...longRow, language: "vi" } }),
+  // The window moved to a screen at 150% keeps its device pixels (from 1120: a 720 window would be narrower than the app goes):
+  // the emblem is drawn again for the new pixel ratio. The move is emulated, which places pictures on whole CSS pixels only, so
+  // after it the bitmap is checked and not the screen's pixels.
+  scene("composer-emblem-ratio", "The composer's emblem moved to a screen at 150% is drawn again for it, as sharp as before", [{ action: "emblem-picture" }, check("emblem-sharp"), wide({ action: "viewport", scale: 1.5, physical: true }), check("emblem-sharp")]),
+  scene("composer-row-owner","A 1288 by 798 window with the list open and a 520px details panel: the composer's row stays inside it", [{ action: "viewport", width: 1288, height: 798 }, { action: "open-details" }, drag('.page-agent .det-edge', -211), wait('.composer .cmp-model .mp-trigger[aria-label*="Nemotron"]'), check("composer-row-fits"), { action: "emblem-picture" }, check("emblem-sharp")], { composerLongRow: longRow }),
   scene("sidebar-rail-folded", "A folder folded in the list shows none of its members in the rail", [{ action: "member-column", collapsed: false }, wide(click('[data-group-fold="1"]')), drag('.side-edge', -240, { wide: true }), check("sidebar-rail-folded"), check("sidebar-rail")]),
   scene("sidebar-plus", "The global plus shares member and group chat creation", [click('[data-col="add"]'), wait('#app-popover [data-pick="group-chat"]'), check("sidebar-shell")]),
   scene("sidebar-group-avatar", "Room identity shares bare faces and one header participant row", [room(1), check("sidebar-room-summary"), check("sidebar-room-avatar"), check("sidebar-shell")]),

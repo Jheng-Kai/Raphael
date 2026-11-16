@@ -1,4 +1,4 @@
-"""A command on the owner's PC (a quick question's alone, R-PC-01) is visible, bounded and quietly cancellable."""
+"""A command on the owner's PC, hidden and approved with the card (R-PC-02), is visible, bounded and quietly cancellable."""
 
 import asyncio
 import json
@@ -26,13 +26,44 @@ def rig_with_command(make_rig, conn):
     return rig, hub, host
 
 
-async def test_a_cli_native_command_request_is_refused_in_an_ordinary_turn(make_rig, conn, tmp_path):
+@pytest.mark.parametrize('native', [False, True])
+async def test_cli_local_question_contains_the_exact_command_even_at_t3(make_rig, conn, tmp_path, monkeypatch, native):
     from members.test_cli_brains import fake_mcp
     rig, hub, host = rig_with_command(make_rig, conn)
     rig.settings.set('agent_model', 'cli:claude')
-    fake_mcp(rig, tmp_path, [('approve', {'tool_name': 'Bash', 'input': {'command': COMMAND}, 'reason': 'Inspect synthetic processes'})], allowed=False)
-    result = await typed(rig, 'Inspect synthetic processes')
-    assert result['status'] == 'done'
+    if native:
+        calls = [('approve', {'tool_name': 'Bash', 'input': {'command': COMMAND}, 'reason': 'Inspect synthetic processes'})]
+    else:
+        original = rig.service._gate.tier
+        monkeypatch.setattr(rig.service._gate, 'tier', lambda name, args: Tier.T3 if name == 'mcp:local/local_exec' else original(name, args))
+        calls = [('local__local_exec', {'command': COMMAND})]
+    fake_mcp(rig, tmp_path, calls)
+    asked = await typed(rig, 'Inspect synthetic processes')
+    identifier = asked['confirm']['id']
+    card = rig.service._confirmation_cards.get(identifier)
+    assert card.view()['kind'] == 'local_command'
+    assert card.summary == COMMAND and not card.context_only
+    assert asked['confirm']['text'] == 'Local commands\n' + COMMAND
+    assert asked['confirm']['timeout_ms'] == 0
+    if native:
+        assert card.reason == 'Inspect synthetic processes'
+        assert rig.service._followups[identifier].loop.approval_wait_s == float('inf')
+        from raphael_core.protocol import RpcError
+        with pytest.raises(RpcError):
+            await rig.call('agent.confirm', {'id': identifier, 'approved': True, 'source': 'telegram'})
+    await rig.confirm(identifier)
+    assert host.execute.await_count == (0 if native else 1)
+
+
+async def test_a_cli_native_command_that_would_open_something_is_refused_in_an_ordinary_turn(make_rig, conn, tmp_path):
+    # R-PC-06: no card asks for it; the CLI is told no and the member is sent to its own computer.
+    from members.test_cli_brains import fake_mcp
+    rig, hub, host = rig_with_command(make_rig, conn)
+    rig.settings.set('agent_model', 'cli:claude')
+    rig.settings.set('action_mode', 'bypass')
+    fake_mcp(rig, tmp_path, [('approve', {'tool_name': 'Bash', 'input': {'command': 'start https://www.youtube.com'}, 'reason': 'Open YouTube'})], allowed=False)
+    result = await typed(rig, 'Open YouTube')
+    assert result['status'] == 'done' and 'confirm' not in result
     host.execute.assert_not_awaited()
 
 

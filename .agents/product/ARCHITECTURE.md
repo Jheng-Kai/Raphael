@@ -448,13 +448,17 @@ pagination completeness, native persistence or live model choices.
 
 ## Owner-PC command boundary
 
-The owner's PC is in reach of a quick question alone (R-PC-01). The one switch is
-`take_snapshot(owner_pc=...)`, set from `AgentService._owner_pc(ask)` (`ask.quick`, not nested): without it no
-snapshot lists, finds or refreshes into `local__local_exec`, `local__local_job`, the harness `computer` tool or a fixed
-command, so API turns, the CLI MCP server, rooms, exchanges, phone messages, tasks and routines have none in any permission
-mode. `LocalTools.call` refuses every other context, the fast router is asked for a quick question alone, and the prompt of
-every other turn carries no owner's-PC words (`persona._OWNER_PC_RULES`). A conversation's work that needs a computer
-is done on the member's own computer. What follows describes the adapter as built.
+The owner's screen is in reach of a quick question alone (R-PC-01). The one switch is
+`take_snapshot(owner_screen=...)`, set from `AgentService._owner_screen(ask)` (`permissions.owner_screen`: a quick question
+asked at this computer, not nested): without it no snapshot lists or finds the harness `computer` tool or a fixed command,
+so API turns, the CLI MCP server, rooms, exchanges, phone messages, tasks and routines have none in any permission mode, and
+the fast router is asked for a quick question alone. What those turns show on a screen they show on the member's own
+computer. `local__local_exec` and `local__local_job` run hidden on the owner's PC and are listed for every turn and task,
+with the card where one can be shown (R-PC-02); `LocalTools.call` refuses, outside a quick question and in every mode, a
+command that would show something on the owner's screen (`computer/on_screen.py`, R-PC-06), as `_cli_permission` and the
+background CLI loop do for a CLI's own command. A quick question's prompt adds `persona._OWNER_PC_RULES`: the owner's PC is
+its default for everything, and the member's own computer, offered beside it, is used when the owner's words name it; the
+model picks. What follows describes the adapter as built.
 
 `computer/local_tools.py` wraps the existing `VmTools` hub with two pinned tools:
 `local__local_exec` and `local__local_job`. Production API snapshots, authenticated

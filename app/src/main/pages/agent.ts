@@ -111,7 +111,6 @@ import {
   parseMediaPayload,
   requestRerun,
   requestStop,
-  safeHttpUrl,
   safeMediaSrc,
   stepsOpen,
   turnHTML,
@@ -122,7 +121,7 @@ import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
 import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
-import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
+import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
@@ -533,6 +532,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
+  bindComposerRow(composer);
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
@@ -2576,14 +2576,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (save && !save.disabled) save.click();
   });
 
-  el.addEventListener("auxclick", (e) => {
-    const link = (e.target as Element).closest<HTMLElement>('[data-act="open-url"]');
-    if (!link || e.button !== 1) return;
-    e.preventDefault();
-    const url = safeHttpUrl(link.dataset.url);
-    if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
-  });
-
   el.addEventListener("click", (e) => {
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
@@ -2622,12 +2614,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "detail":
         toggleDetail(act);
         break;
-      case "open-url": {
-        e.preventDefault();
-        const url = safeHttpUrl(act.dataset.url);
-        if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
-        break;
-      }
       case "peer-chat":
         peer?.close();
         // What this member sent colleagues, and what colleagues said to it (its exchange turns), are one conversation.

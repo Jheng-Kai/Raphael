@@ -316,7 +316,7 @@ def copying_asks_first(monkeypatch):
 
 @pytest.mark.usefixtures("copying_asks_first")
 async def test_a_question_waiting_in_one_kind_survives_a_request_of_the_other(make_rig, client, actions):
-    # A command for this PC is a quick question's alone (R-PC-01), so the question that waits is the quick one and a
+    # A fixed command for this PC is a quick question's alone (R-PC-01), so the question that waits is the quick one and a
     # formal request, typed in a thread, leaves it waiting.
     rig = make_rig()
     quick, formal = rig.service.conversations.quick(), rig.service.conversations.main()

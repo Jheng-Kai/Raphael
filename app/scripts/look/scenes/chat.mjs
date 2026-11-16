@@ -311,7 +311,7 @@ export default [
   scene("speaker-draft-profile", "The member settings page holds the draft preference as one switch row with the page's own words", [
     ...details, ...gear, ...msKind('tools'), wait('.ms-pane [data-ms="draft"][aria-checked="true"]'),
   ]),
-  scene("composer-model-small", "The composer's model menu opens as a small card: the model and its depth, nothing else", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .mc-range'), check("composer-model-small"), check("depth-fill-covers-thumb")]),
+  scene("composer-model-small", "The composer's model menu opens as a small card: the model and its depth, nothing else", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .mc-range'), check("composer-model-small"), check("depth-fill-covers-thumb"), check("emblem-sharp")]),
   scene("composer-model-favorites", "What the owner starred in Settings is right there when choosing a model", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-pick'), click('.cb-pick'), wait('.cb-menu [data-cb-source="favorites"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="favorites"]'), wait('.cb-menu .cb-list small'), check("composer-model-browse"), check("composer-favorites")]),
   scene("composer-model-sources", "One card on the composer: the model and its depth, then the sources on the left and a source's models on the right under a centred title", [member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), check("composer-model-small"), click('.cb-pick'), wait('.cb-menu .cb-source'), check("composer-model-browse"), click('.cb-menu [data-cb-source="cli:codex"]'), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-sonnet-5-5"]'), check("composer-model-browse"), click('.cb-menu .cb-back'), wait('.cb-now:not([hidden]) .cb-pick'), check("composer-model-small")]),
   scene("composer-model-same", "Whatever the source, the card is the same: the source, the model, one ruler of depth", [click('.composer .cmp-model .mp-trigger'), wait('.cb-now .mc-range'), check("composer-card-same"),
@@ -363,7 +363,7 @@ export default [
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),
   scene("search-target", "Navigate to a message search match", [search("研究"), click("[data-message-result]"), wait(".is-search-target")]),
   scene("tooltip", "A message action beside an answer names its icon in the one app tooltip", [hover('.ra .chat-message[data-reply] .message-actions [data-act="reply-message"]'), check("message-action-tooltip")]),
-  scene("room", "Room conversation", [room(1), wait(".au-room-thread .chat-message")]),
+  scene("room", "Room conversation", [room(1), wait(".au-room-thread .chat-message"), check("composer-row-fits")]),
   ...["member", "room"].flatMap(context => {
     const base = context === "member" ? [member(1)] : [room(1)];
     const form = context === "member" ? ".mb-chat:not(.au-room-pane) .composer" : ".au-room-pane .composer";

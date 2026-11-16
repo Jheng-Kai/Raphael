@@ -13,6 +13,14 @@ naming an argument that holds an object or one of several shapes is told those s
 `find_tools` result in `turn_tool_events`: a connected tool's `parameters` should list its arguments, not
 `{"type": "object", "additionalProperties": true}` (the tool list is read again on the next call or refresh).
 
+A connected tool whose service answered that the account's plan does not include it (kind `plan_excluded`) is not sent
+again for a day, or until the owner refreshes or signs in to that app again; one whose allowance is used up
+(`allowance_spent`) is held only until the time the service named, and not at all when it named none (R-TOOL-05;
+`tests/integrations/test_held_tools.py`). The member is told, whole, what the service said, until when, and the app's other
+tools not refused so; the step reads 「你在這項服務的方案不包含這個工具…」 or 「這項服務的這個工具額度暫時用完…」. A router
+that reaches many apps (`managed_by`) is never held. To check on a live install: after such a refusal the next call of the
+same tool has no `HTTP Request` line of its service in the log and a step with that reason.
+
 ## Connect apps, one view: read this first
 
 This section supersedes every later paragraph that speaks of the 已連結 and 商店 tabs, the tab counts, the pager of 18-card pages,

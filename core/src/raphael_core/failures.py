@@ -346,7 +346,8 @@ _ALIASES = {"auth": "auth_expired", "login": "auth_expired", "not_configured": "
             "bad_arguments": "tool_broken", "bad_response": "tool_broken", "vault": "tool_broken",
             "resume_failed": "tool_broken", "forbidden": "refused", "presence_required": "refused",
             "approval_required": "permission_denied", "secret_store": "permission_denied",
-            "url_not_seen": "refused", "memory_refused": "refused",
+            "url_not_seen": "refused", "memory_refused": "refused", "computer_fault": "tool_broken",
+            "plan_excluded": "permission_denied", "allowance_spent": "usage_limit",
             "context_length_exceeded": "context_overflow", "request_too_large": "payload_too_large",
             "content_filter": "content_policy", "content_policy_violation": "content_policy",
             "safety_violation": "content_policy"}
@@ -370,6 +371,35 @@ _SIGN_IN_WORDS = (r"(?:please )?run /login|not signed in|not authenticated|(?:lo
                   r"|invalid(?:ated)? (?:authentication|credentials|token|api key)|(?:please )?(?:log|sign) ?in (?:first|to continue)")
 # A CLI that was never signed in, or was signed out, says so; one whose sign-in ran out says it was refused or expired.
 _SIGNED_OUT = r"not (?:logged|signed) in|not authenticated|no (?:stored |saved )?(?:credentials|login session)|logged out|signed out"
+
+
+# A connected app's answer that this account's plan does not include a tool: the same answer whatever the arguments, until
+# the plan changes. Words that say to wait (a limit that lifts) are never this, whatever else they say.
+_PLAN_REFUSAL = (r"entitlement_required|not (?:included|available) (?:in|on|with) (?:your|this|the) (?:current )?(?:plan|subscription)"
+                 r"|upgrade (?:your|the) (?:plan|subscription|workspace)|requires? an? (?:paid|higher|upgraded|different) plan")
+_WAIT_WORDS = (r"try again|retry (?:in|after|later)|rate.?limit|usage.?limit|quota|too many requests"
+               r"|[\"']retryability[\"']\s*:\s*[\"'](?:later|soon|now)")
+_TRY_AGAIN_AFTER = re.compile(r"(?:try again|retry)\s+(?:in|after)\s+(?:about|around|approximately|roughly|~)?\s*(\d+(?:\.\d+)?)\s*"
+                              r"(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b", re.I)
+_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
+
+
+def plan_refusal(text) -> bool:
+    """Whether a connected app answered that this account's plan does not include the tool (see `_PLAN_REFUSAL`)."""
+    said = str(text or "")
+    return bool(re.search(_PLAN_REFUSAL, said, re.I)) and not re.search(_WAIT_WORDS, said, re.I)
+
+
+def allowance_wait(text) -> tuple[bool, float | None]:
+    """Whether a connected app answered that its allowance (an hourly limit, a quota, a rate) is used up for now, and the
+    seconds it said to wait before trying again: None when it named no time (then nobody can say when it passes)."""
+    said = str(text or "")
+    if not re.search(_QUOTA_WALL + "|" + _THROTTLE, said, re.I) or re.search(_CREDITS, said, re.I):
+        return False, None
+    match = _TRY_AGAIN_AFTER.search(said)
+    if match:
+        return True, float(match[1]) * _UNIT_SECONDS[match[2][0].lower()]
+    return True, reset_delay_from_message(said)
 
 
 def sign_in_cause(kind, *texts):

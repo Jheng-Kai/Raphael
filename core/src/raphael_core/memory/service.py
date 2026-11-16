@@ -796,6 +796,13 @@ class MemoryService(Growth):
         """The tidy of every file near or past its limit, each by itself; the next one is a day away
         once the model has answered for each."""
         total = Applied()
+        from ..bots.homes import JOURNAL_KEEP_S
+        try:
+            pruned = self.homes.prune_journals(self._now_ms() / 1000)
+            if pruned:
+                logger.info('Removed %d memory revisions older than %d days', pruned, JOURNAL_KEEP_S // 86_400)
+        except (OSError, ValueError) as error:
+            logger.warning('Memory revisions were not trimmed (%s)', type(error).__name__)
         for memory, member_id in self._filling():
             stale = memory.prune_stale(self._today(), self._settings.get('memory_max_unused_days'))
             if stale is not None:

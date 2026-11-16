@@ -1,5 +1,13 @@
 # Raphael feature map
 
+## Where the app's data lives
+
+See [Member computer](member-computer.md#where-the-apps-data-lives) for the inventory of every kind of data the app
+writes, with its folder, its size on the owner's PC and what bounds it, and for the layout: R-COMP-PLACE-01 (the
+members' computer folders in the machine-local folder, an earlier install's moved once by rename), R-CLI-12 (Claude Code's
+records of the members' runs swept once a day) and R-MEM-14 (the memory journal keeps thirty days). No scene changes;
+the move's real-engine proof is the computer acceptance's `folders move` step.
+
 ## Designed for everyone, pass 1
 
 R-COPY-01 to R-COPY-05 and R-DEFAULT-01 to R-DEFAULT-04 (RULES.md, "Designed for everyone"). Words and defaults that fit only the first user, changed
@@ -197,9 +205,10 @@ details-routines and automation-edit. Use both themes at
 
 ## Owner-PC commands
 
-Only a quick question has them (R-PC-01): see
-[member-computer.md](member-computer.md#the-owners-pc-is-for-a-quick-question-alone-r-pc-01), and
-[member-computer.md](member-computer.md#owner-pc-commands-now-a-quick-questions-alone-see-above) for the
+Every turn and task runs them hidden, with the card; only a quick question shows anything on the owner's screen
+(R-PC-01, R-PC-02, R-PC-06): see
+[member-computer.md](member-computer.md#the-owners-screen-is-a-quick-questions-hidden-commands-are-every-turns-r-pc-01-r-pc-02-r-pc-06), and
+[member-computer.md](member-computer.md#owner-pc-commands-hidden-every-turns-with-the-card-see-above) for the
 stored command mode, first consent, subsequent approvals and background job gate.
 Settings has no control for the mode.
 Selected scenes: local-command-consent, local-command-later,

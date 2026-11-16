@@ -49,11 +49,61 @@ and desktop, with no other new window on either seat. Its detail says whether th
 their launch's (the copy) and whether the second seat's second window is in the copy that holds the first seat's window. Not
 run yet (no Docker allowed while the owner's own shared computer is in use).
 
+## Where the app's data lives
+
+R-COMP-PLACE-01, R-CLI-12, R-MEM-14. Every kind of data the app writes, where it goes, and what bounds it. `<F>` is the
+identity's folder name: `Raphael` for the release, `Raphael Dev` for a development build (app/src-tauri/src/identity.rs
+`RELEASE`/`DEVELOPMENT`; the shell sets `RAPHAEL_DATA_DIR` for a development build, `data_env`). On macOS `%APPDATA%\<F>`
+and `%LOCALAPPDATA%\<F>` are both `~/Library/Application Support/<F>`, so `paths.machine_dir(base)` is the data folder
+itself and nothing moves. Sizes are the ones read on the owner's PC when the layout changed (folder listings only).
+
+| Data | Where | Chosen in code | Size then | How it grows | What bounds it |
+| --- | --- | --- | --- | --- | --- |
+| Database `raphael.db` (+ WAL) | `%APPDATA%\<F>` | core `paths.data_dir`/`db_path`; shell `device_settings::data_dir` | 155 MB + 37 MB WAL (dev); release about 3 MB | turns, messages, steps, tool events, room messages, tasks | turns, messages and room messages: nothing (recall, search and history read them all); dictation history 30 days; `tool_audit` 2,000 rows |
+| Small settings (`device.json`, `integrations.json`, `connectors.json`, `messaging.json`, `schedule-awake.json`, `.window-state.json`) | `%APPDATA%\<F>` | shell `device_settings.rs`, `schedule_awake.rs`; core `IntegrationsService`, `MessagingStore` (data folder) | under 1 MB | rewritten | fixed shape |
+| `connectors-catalog.json` (a downloaded catalogue) | `%APPDATA%\<F>` | `connectors/service.py` `CATALOG_FILE` | 3.8 MB | replaced | one file |
+| Attachments | `%APPDATA%\<F>\attachments` | `services/attachment_store.py` (`root / "attachments"`) | 988 MB, 262 files | each attached file | nothing |
+| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal 30 days (R-MEM-14) |
+| Conversation folding | database (`conversation_summaries`, `conversation_context_summaries`, `room_thread_summaries`) | `memory/conversation.py`, `members/room_summary.py` | in the database | one row per conversation or thread | `SUMMARY_MAX_TOKENS`; goes with its conversation |
+| Vault, keys, sign-ins | Windows Credential Manager, macOS Keychain (never a file) | `brain/secrets.py` `CredentialKeyStore`, `CredentialVault` | none on disk | per secret | none needed |
+| Logs | `%LOCALAPPDATA%\<F>\logs` | shell `lib.rs` `log_plugin`, `identity.rs` | 3.5 MB | per line | 1 MB files, three kept |
+| Speech models | `%LOCALAPPDATA%\Raphael\models` (both builds) | `paths.models_dir`; `identity.rs` `data_env` | 956 MB | per model fetched | a fixed set; deleted from Settings |
+| Webview data | `%LOCALAPPDATA%\<F>\WebView2` | shell `data_layout.rs` `WEBVIEW_DIR` | 211 MB dev, 82 MB release | the webview's cache | WebView2's own |
+| Members' computer homes `vm-homes/<key>` and the team folder `vm-shared` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`) |
+| The owner's desktop picture for the computers | `%APPDATA%\<F>\computer-wallpaper.jpg` | `vm.py` `OWN_WALLPAPER` | none (a `wallpaper-own-kept` folder of 0.2 MB that no code writes) | one file | 8 MB |
+| Pictures of members | `%LOCALAPPDATA%\<F>\avatars`, `avatar` | shell `avatar.rs`; `MembersService` | 7.2 MB | one per member | replaced |
+| Exported templates | `%LOCALAPPDATA%\<F>\template-exports` | `members/member_catalog.py` | 4 folders, under 1 MB | per export | nothing |
+| CLI workspaces | `~\.raphael\cli-workspaces\<member>\claude`, `<member>\<conversation>\codex` and `\gemini` (Gemini's private home inside) | `agent/cli/records.py` `workspace_root` | 140 MB, 38 member folders | a folder per conversation for Codex and Gemini | nothing |
+| Members' Codex homes (their own `CODEX_HOME`, with Codex's records) | `~\.raphael\codex-brains\<sha256 of the workspace>` | `agent/cli/drivers.py` `codex_home` | 1,945 MB, 192 homes | one per conversation workspace | nothing |
+| Claude Code's records of the members' runs | `~\.claude\projects\<folder named after the working folder>` | Claude Code; the names come from `workspace_root` and `process.PRIVATE_PREFIX` | 1,225 folders: 336 of member workspaces (1,000 sessions), 822 of the model listing's temporary folders (an empty `memory` each), the rest the owner's own; none older than 19 days | a folder per working folder, a file per session | R-CLI-12 |
+| The CLIs' own homes `~\.codex`, `~\.gemini` | the owner's | the CLIs | not measured | | not Raphael's |
+| Swap backups `backup-<time>` | `%APPDATA%\Raphael Dev` | the owner's swap script, outside the repository | 3 x 190 MB | per swap | three kept |
+| Look and judge output | `app\.look` in the checkout, never in a user's data | `app/scripts/look` | | per run | git-ignored |
+
+Layout. Roaming (`%APPDATA%\<F>`) keeps the database and the small settings. Everything large or belonging to this PC
+is in `%LOCALAPPDATA%\<F>`: the memory, the logs, the webview, the pictures, the exported templates and now the computer
+folders; the speech models stay in the release's local folder for both builds. Proposed next, each the owner's call:
+the attachments (988 MB) and the downloaded catalogue to `%LOCALAPPDATA%\<F>` (turns name an attachment by id, but the
+data floor and the shell know the folder, so both move together); the swap backups out of Roaming; and `~\.raphael` to
+`%LOCALAPPDATA%\<F>\cli`, one per build. Today the release and a development build run members of the same id in the
+same `~\.raphael\cli-workspaces\<id>` and Codex homes, so their native sessions share folders. Moving it is not free:
+Claude Code finds a session to `--resume` in the records folder named after the working folder (`drivers.py` passes
+`--resume`, `loop.py` the workspace as `cwd`), and a Codex home is named by a hash of the workspace's path
+(`codex_home`), so every conversation's native session would be lost once. The loop survives that (a session not found
+is forgotten and a fresh one starts with a bounded record of the turns, `loop.py` `missing_session`), but it costs each
+conversation its native context; it is left until the owner decides.
+
+Checks: `core/tests/computer/test_relocation.py`, `core/tests/test_paths.py`, `core/tests/agent/cli/test_records.py`,
+`core/tests/agent/test_cli_models.py`, `core/tests/members/test_bot_homes.py`. On a real engine, with Docker already
+running, from `core/`: `python -m raphael_core.evaluate.computer_acceptance --relocation-only` (a throwaway image, data
+folder and owner label; `ok folders move: ...` then the cleanup lines). No scene changes: look does not apply.
+
 ## Housekeeping: size, scratch, locale
 
 A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
 R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): the container's shape changed (the UTF-8
-locale), no file of the image did, so only the final `LABEL` step reruns on a PC that built v12. The owner's layer-12
+locale), no file of the image did, so only the final `LABEL` step should rerun on a PC that built v12 (on the owner's PC
+it did not: steps 12 to 21 ran again, see "A new image layer" below). The owner's layer-12
 computer is made again once, when idle; its workspace and sign-ins are kept; hand-installed packages and `/tmp` go.
 `vm.py`: `resources`, `sized`, `machine_size`, `fit_limits`, `run_args` (locale), `scratch_args`; `carry_runtime.py` (staging
 ownership).
@@ -74,6 +124,62 @@ cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m p
 
 Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
 Docker running is that check.
+
+## A new image layer: its cache source, the old images, the update line
+
+R-COMP-IMAGE-01, R-COMP-IMAGE-02, R-COMP-UPDATE-01. Measured on the owner's PC at the switch to layer 13: Docker Desktop
+started by the app (51 s), then the image built in 4 min 31 s, its package step (`[12/21]`, 186 s) and Chrome (37 s) run
+again although layer 13 changed only comments and the last `LABEL`; the steps before were CACHED. Inferred, not proved:
+the engine's build cache had dropped those records, and the build named no cache source. A restart pressed meanwhile
+answered `busy`, the panel said nothing, and the images of layers 9, 11 and 12 all stayed.
+
+What is true now (`vm.py`, `lifecycle.py`, `viewer.py`, `computer-state.ts`, `desktop-viewer.ts`):
+- The build (`build_args`) writes BuildKit's inline cache record into the image and names the newest earlier image of
+  ours as `--cache-from` (`cache_source`, from `owned_images`: tags of `raphael/cua-local-vm` that carry
+  `org.raphael.computer=1` and a lower layer). Relied on: Docker's documentation of the inline cache
+  (docs.docker.com/build/cache/backends/inline/: `BUILDKIT_INLINE_CACHE=1` instead of `--cache-to type=inline`, imported
+  with `--cache-from`) and of the `docker` driver (Docker Desktop's default builder), which exports the inline cache; and
+  that the daemon's BuildKit reads `--cache-from` from a local image before any registry (moby's local inline-cache
+  importer), which was not checked against this PC's Docker. Images built before carry no record: on the owner's PC the
+  first build to gain is layer 14 built from a layer 13 that this code built, so at the earliest the layer after next.
+- Once a computer is ready on the current image, `clean_soon` looks (first ready start of the core, then once a day per
+  engine) and `remove_old_images` removes the older tags of ours that no container references, under the build lock,
+  never forced. The acceptance's and the tests' injected runners never remove (`clean_images`). The acceptance's
+  previous-layer checks need those old images: once the app has removed them they are skipped.
+- A preparation that builds with an earlier image, or makes a computer of an earlier layer again, is marked `update`
+  (`LocalVm.updating`, `_progress`); `computer.viewer_status` passes it on and the Computer tab shows
+  `desktop.updateLine` in `.desktop-caption` under the bare screen (`data-desktop-update` on the panel). A restart,
+  update or repair pressed during any preparation (`preparing_now`) returns its state instead of `busy`; reset still
+  waits.
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_image_workflow.py tests/computer/test_lifecycle.py tests/computer/test_viewer.py tests/evaluate/test_computer_acceptance.py -q
+cd app; node node_modules/vitest/vitest.mjs run src/main/desktop-viewer.test.ts src/main/i18n/i18n.test.ts
+```
+
+The look scene of the update line (not yet run when it was added):
+
+```powershell
+npm run look -- desktop-updating desktop-building desktop-preparing computer-state-updating --theme both --width 1120,720,1920x1080
+```
+
+On a real engine, with Docker already running and the owner's say (it never starts Docker): `npm run verify -- --computer`
+runs `image update` after the previous-layer checks, with throwaway images of two files (`tiny_dockerfile`) in a repository
+of the run's own; the computer's own image is never built twice for it. Expected lines, in order:
+
+```text
+ok image update fixtures: Built layers 11, 12, 14 and an unlabelled tag in raphael-acceptance-<token>/cua-local-vm with the product's build command; a stopped container uses layer 11
+ok image update record: Layer 12, built by the product's command, carries BuildKit's inline cache record
+ok image update cache source: The product names raphael-acceptance-<token>/cua-local-vm:driver-0.37.0-v12 as the cache source, over the older, the newer and the unlabelled tags
+ok image update press during the build: A restart pressed while the engine built answered building with update; the panel said the same; the preparation ended ready
+ok image update cached steps: The unchanged step was CACHED and the changed one built; the log names the import from ... (the engine's own cache also held that step)
+ok image update old tags: Removed ...-v12; kept layer 11 (a stopped container uses it), the current, the newer and the unlabelled tags; every other image on the engine is as it was
+ok image update cleanup: Removed raphael-acceptance-<token>/cua-local-vm and its container
+```
+
+"as the build began" instead of "while the engine built", or "does not name the import", is still a pass and says what
+was seen. Not proved anywhere: that a cache source alone gives the unchanged heavy steps once the engine has lost its
+own cache (that would mean clearing the owner's build cache), and how much faster the next real layer builds.
 
 ## A member's files
 
@@ -99,7 +205,8 @@ id) or a task; what it read is the file's sha256. Paths are absolute or taken fr
 the team folder the guest opens each component without following a link. Searches skip `.git`, `.browser-profiles`,
 `.raphael-checkpoints` and `.raphael-jobs` and honour `.gitignore`; they search hidden files. Results pass the same login
 redaction as every computer tool. No card asks for any of these in the member's own computer; the CLI vendors' own Read,
-Write, Edit, Glob, Grep and shell stay off (R-PC-01): a CLI brain gets these through the `computer` MCP server.
+Write, Edit, Glob, Grep and shell stay off (they would act on the owner's PC outside Raphael's card, R-PC-02): a CLI brain
+gets these through the `computer` MCP server.
 
 Offline evidence (fake docker `Runtime`; the guest helper itself runs on a folder of the test; ripgrep's answers are scripted):
 `core/tests/computer/test_file_read.py`, `test_file_tools.py`, `test_file_search.py`, and `test_catalog_stays.py` (the
@@ -190,10 +297,12 @@ said into the overlay, opened the page on the owner's own PC with an empty reply
   is the answer at once. `ComputerWork.begin` revives a work item whose stop was only inferred from a cancelled first call.
   Offline: core/tests/computer/test_first_call.py (fakes for each transient kind, the bound, each real failure, the cut-short call
   and the owner's own stop).
-- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's goes to the member's turn
-  with the owner's PC out of reach; the owner's keeps the router and the shortcut; an unsure open request is asked once
-  (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py. The quick overlay's own look
-  scenes are unchanged (no UI change), so no look run.
+- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's skips the fast
+  router's shortcut (which can only use the owner's PC) and goes to the member's turn of the quick question, which holds both
+  computers: the model reads the owner's words and picks (R-PC-01); the owner's, and a request that names no one's computer
+  (the owner's PC is the default), keep the router and the shortcut, and nothing asks which computer; the shortcut says
+  `opened`. Offline: core/tests/agent/test_whose_computer.py.
+  The quick overlay's own look scenes are unchanged (no UI change), so no look run.
 
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole
 
@@ -1460,28 +1569,76 @@ desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.p
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
 native shell, live model quality and judge remain separately unverified.
 
-## The owner's PC is for a quick question alone (R-PC-01)
+## The owner's screen is a quick question's; hidden commands are every turn's (R-PC-01, R-PC-02, R-PC-06)
 
-The owner's PC is controlled only from a quick question (Alt+Space), never from an ordinary conversation.
-One switch decides it, `take_snapshot(owner_pc=...)` (`ask.quick`, never nested): without it a turn is offered, finds and
-refreshes into none of `mcp:local/local_exec`, `mcp:local/local_job`, the harness `computer` tool (the guarded run on the
-owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken
-conversation, Raphael's or a member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event
-runs, on API and CLI brains, in every permission mode. The fast router (Jev) is asked about a quick question alone, so a
-conversation never routes to a command or a desktop run. The prompt of such a turn carries no owner's-PC words
-(`persona._OWNER_PC_RULES` and the owner-context output-folder sentence are added to a quick question only); it says
-that anything needing a computer is done on the member's own computer and, when that is not available, to say so.
-`LocalTools.call` refuses a call whose context is not a quick question (`presence_required`, even under 全部允許), and
-the harness `computer`, command and CLI native-command paths repeat the check (`AgentService._owner_pc`). A quick
-question is unchanged, including that it can show no card, so a local command runs there only where nothing waits for a
-yes. The consent card, the Settings mode and the background approvals below are kept in the code, with no door
-until the owner decides whether a quick question asks at the overlay.
+What shows on the owner's screen is driven only from a quick question (Alt+Space). One switch decides it,
+`take_snapshot(owner_screen=...)` (`permissions.owner_screen`: a quick question asked at this computer, never nested):
+without it a turn is offered and finds none of the harness `computer` tool (the guarded run on the owner's desktop) or the
+fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken conversation, Raphael's or a
+member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event runs, on API and CLI brains, in
+every permission mode. The fast router (Jev) is asked about a quick question alone. What such a turn shows on a screen
+(a website, YouTube, a program, clicks, typing) it shows on the member's own computer; with none it says so.
 
-Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question, the member's
-own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
-members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
+The local commands (`mcp:local/local_exec`, `mcp:local/local_job`, its background jobs, and a CLI brain's own command)
+run hidden on the owner's PC from every turn and task again, through the approval machinery they always had: the
+first-consent card and the chat approvals without a timer in a private conversation at this computer, the 30-minute
+background approvals of a task or a routine, in the stored mode (ask, always, never; 全部允許 runs without a card).
+Settings has no control for the mode. Where no card can be shown (a phone, an exchange, a quick question) a command runs
+only under 全部允許; a room's speaking turn has its speaking tools alone, as before. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
+seen is done on the member's own computer (`agent/capabilities.py`, `persona._SHARED_CONTRACT`).
 
-## Owner-PC commands (now a quick question's alone, see above)
+The safety net (R-PC-06): outside a quick question a command whose purpose is to show something on the owner's screen
+(Start-Process, saps, start, cmd /c start, explorer, Invoke-Item, ii, rundll32 url.dll, Process.Start, a URL, a shortcut
+or a document typed as the command, a windowed program, `open` on a Mac) is refused in every mode without a card, and the
+member is told to open it on its own computer (`computer/on_screen.py`, checked in `LocalTools.tier_for_call` and `call`,
+`AgentService._cli_permission` and the background CLI loop). It stops a model that picked the wrong computer; it is no
+defence against someone set on getting round it.
+
+A quick question keeps the owner's PC as its default for everything, commands and what is seen alike, and also holds the
+member's own computer for a request whose words name it (`persona._OWNER_PC_RULES` says which is the default and how the
+owner names the other; the desktop `computer` stays beside the member's computer tools). The model picks; no word matched in
+code takes either computer away. A quick question can show no card, so a local command runs there only under 全部允許.
+
+Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question beside the
+member's own computer), computer/test_local_commands.py (contexts, the table of commands that show something and of those
+that do not, every mode), agent/test_local_commands.py and agent/test_local_command_flow.py (cards in a conversation, the
+CLI's own command), background/test_local_commands.py (30-minute approvals, a task's refused opener),
+members/test_local_commands.py, members/test_cli_brains.py, members/test_connection_floor.py, agent/test_computer_choice.py
+and agent/test_whose_computer.py. No look scene changes: nothing rendered changed (the cards are the existing ones).
+
+## The owner's files: read everywhere, write in the owner's folders (R-PC-04, R-PC-05)
+
+Members read every file of the owner's computer from every turn, task and source, and write only in folders the owner chose; its screen stays a quick question's. Modelled on Claude Code (its file tools read the whole computer; Write and Edit only the
+working and added directories). `computer/owner_files.py` adds five pinned plugin tools under the `owner_files` server,
+offered by `LocalTools.offered_for` beside the local commands but not keyed `mcp:local/`, so `take_snapshot` never drops them:
+every turn and task, every source and brain (API, and CLI through its MCP list) and every permission mode has them.
+
+- Reads (T0, kind read, no card): `read_file` (Claude Code's Read through `file_tools.Files` and the guest helper
+  `files_guest.handle` run on this computer: numbered lines, pictures as images, PDFs by pages), `glob` and `grep` (Python
+  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound).
+- Kept from every read and write, through links too (`owner_files.kept`): SSH, GPG and cloud keys, the keychain and
+  Windows' credential stores, browsers' profiles, password managers, `.env` files (not `.env.example`) and private keys.
+  Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
+  start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
+  Privacy & Security › Files and Folders or Full Disk Access.
+- Writes (T2, kind write): `write_file`, `edit_file`, only inside `owner_output_folder` and `owner_write_folders`
+  (Settings › General, 成員可以寫入的資料夾: picked, never typed, removed one by one; owner-only, never a management tool).
+  Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write that cannot happen.
+- The owner context names the output folder and the write folders for every turn (`brain/owner.py`).
+
+Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
+places and links, glob and grep, writes inside and outside, an unapproved write), brain/test_owner.py, and
+settings-view.test.ts. Look: `owner-write-folders` (adds with the picker, removes the first) beside the output folder
+scenes:
+
+```powershell
+npm run look -- owner-write-folders owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a
+real Windows disk (CI runs the offline suite there).
+
+## Owner-PC commands (hidden, every turn's, with the card; see above)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
@@ -1522,7 +1679,7 @@ Acceptance still requires the owner's real CPU question to a member on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
 tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
-journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
+journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03/06 and R-AG-13.
 
 The optional Docker desktop defaults to one shared computer on this PC (a seat per member, section
 "Shared computer seats" above; 6 GiB and four CPUs) and, on a remote host or when `computer_vm_mode=per-bot`

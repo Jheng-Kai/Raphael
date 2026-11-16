@@ -316,8 +316,8 @@ class EchoClient:
             return ChatTurn(json.dumps({"text": "\n\n".join(parts), "messages": parts}), [], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer
-        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen) or native_calendar(messages, offered, seen)
+        from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer, native_steering
+        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen) or native_calendar(messages, offered, seen) or native_steering(messages, offered, seen)
         if diagnosis is not None:
             name, value = diagnosis
             if name == "reply":
@@ -900,7 +900,7 @@ class App(Router):
 
         import os
         from .native_journeys import native_enabled
-        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn,
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn, machine_dir=paths.machine_dir(data_dir),
                           enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
@@ -1022,6 +1022,11 @@ class App(Router):
         if native_brain is not None:
             self.agent._cli_brains = native_brain
             self.memory._cli_brains = native_brain
+        # Claude Code's records of the members' runs, which nothing else removes (agent/cli/records.py). Never with the
+        # fake brain: a test's run must not reach the records of whoever runs it.
+        from .agent.cli.records import CliRecords
+        brains = self.agent._cli_brains
+        self.cli_records = None if fake_llm else CliRecords(self._conn, brains.home, data_dir, claude_folder=brains._claude_folder())
         def computer_scope_busy(scope):
             if scope[0] == "task":
                 task = self.background.task(scope[1])
@@ -1264,6 +1269,10 @@ class App(Router):
         async def close_database() -> None:
             self._conn.close()
 
+        async def close_records() -> None:
+            if self.cli_records is not None:
+                await self.cli_records.aclose()
+
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
             ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
@@ -1283,6 +1292,7 @@ class App(Router):
             ("close desktop viewers", self.desktop_viewer.aclose),
             ("stop the computer idle monitor", self.vm.aclose),
             ("end the memory's background pass", self.memory.aclose),
+            ("stop the sweep of the members' CLI records", close_records),
             ("close the services' HTTP client", self.services.aclose),
             ("close the HTTP client", self.client.aclose),
             ("wait for the start-up threads", join_threads),
@@ -1583,6 +1593,8 @@ class App(Router):
 
     async def _hello(self, params: dict) -> dict:
         if not self._closed:
+            # Before any member's work: a computer prepared from here on waits for the folders' move, never races it.
+            self.vm.relocate_soon()
             self.messaging.start()  # Receiving and persistent inbox recovery cannot wait.
             self.agent.start()
             self.background.start()  # What the last run left queued was put back before the loop ran, and starts here.
@@ -1596,7 +1608,10 @@ class App(Router):
         if self._closed or self._deferred_started:
             return
         self._deferred_started = True
-        for start in (self.vm.start_monitor, self.agent.prewarm, self.memory.start, self.members.start, self.rooms.start):
+        starts = [self.vm.start_monitor, self.agent.prewarm, self.memory.start, self.members.start, self.rooms.start]
+        if self.cli_records is not None:
+            starts.append(self.cli_records.start)
+        for start in starts:
             try:
                 start()
             except Exception:

@@ -536,7 +536,8 @@ export function checkRendered(name, context = {}) {
       // The whole screen is the one press: it opens the larger view while the computer runs and starts it in every other state but getting ready.
       require(!!visible(cover) === !preparing && (!asleep || phase === 'stopped'), 'the screen is the one press that opens or starts the computer, except while it is getting ready');
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
-      require(!visible(panel.querySelector('.desktop-caption')), 'no caption stands under the screen');
+      // R-COMP-UPDATE-01: the one line under the screen is an update of the computer's image, said while it lasts.
+      require(!visible(panel.querySelector('.desktop-caption')) || preparing && !!panel.querySelector('.desktop-panel[data-desktop-update]'), 'no caption stands under the screen but the line of an update');
       require(!!visible(panel.querySelector('.computer-lifecycle-state')) === runs, 'the header names the state only once the computer runs');
       if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
       if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
@@ -721,6 +722,19 @@ export function checkRendered(name, context = {}) {
     require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
     if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === 'desktop-updating') {
+    // R-COMP-UPDATE-01: an update of the computer's image says so in one line under the screen, with how long it may
+    // take; the screen stays bare (R-UI-93), cannot be pressed, and nothing is a notice or a toast.
+    const panel = document.querySelector('.desktop-panel'), screen = panel?.querySelector('.desktop-screen'), caption = panel?.querySelector('.desktop-caption');
+    require(panel?.hasAttribute('data-desktop-update') && ['starting', 'building', 'preparing'].includes(panel.dataset.desktopState), 'the panel is in an update');
+    require(visible(caption) && caption.textContent === '正在更新電腦。更新後第一次開啟可能需要幾分鐘。', `the update line is shown (${caption?.textContent})`);
+    require(caption.getBoundingClientRect().top >= screen.getBoundingClientRect().bottom - 1, 'the line stands under the screen, never over it');
+    require(caption.getBoundingClientRect().right <= screen.getBoundingClientRect().right + 1 && caption.getBoundingClientRect().left >= screen.getBoundingClientRect().left - 1, 'the line is no wider than the screen');
+    requireBareScreen(screen);
+    require(!visible(panel.querySelector('[data-desktop="enlarge"]')), 'a computer being updated is not pressable');
+    require(!visible(panel.querySelector('.desktop-error')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no notice and no header word');
     return {check:name};
   }
   if (name === "app-attachment-count") {
@@ -1053,6 +1067,20 @@ export function checkRendered(name, context = {}) {
       }
       const frame = panel.querySelector('iframe');
       if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+    }
+    return {check:name};
+  }
+  if (name === "owner-write-folders") {
+    const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
+    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "owner_write_folders").map(call => call.params.value);
+    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "R-PC-05: the picker adds a folder and its ⋯ removes one");
+    require(sets[0].length === 3 && sets[0][2] === sample && JSON.stringify(sets[1]) === JSON.stringify(sets[0].slice(1)), "the first folder is the one removed, the picked one kept");
+    const head = document.querySelector('[data-row="write-folders"]'), rows = [...document.querySelectorAll('[data-row="write-folder"]')];
+    require(visible(head) && !document.querySelector('[data-row^="write-folder"] input, [data-row^="write-folder"] textarea'), "folders are picked, never typed");
+    require(rows.length === 2 && rows.every(row => visible(row)), "each folder is a row of its own");
+    for (const row of rows) {
+      const path = row.querySelector('.output-path'), more = row.querySelector('[data-act="write-folder-menu"]');
+      require(visible(path) && visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
     }
     return {check:name};
   }
@@ -3344,6 +3372,105 @@ export function checkRendered(name, context = {}) {
       require(Math.abs(nav.width - Math.min(348, innerWidth - 604)) < 1, `the list gave way last, not first: ${JSON.stringify(widths)}`);
     }
     return { check: name, ...widths };
+  }
+  // The composer's row of controls stays inside the composer however narrow it is (R-UI-160): one row, no control past the
+  // composer's inner edge or over another, the voice or send button whole at the right end. Short of room, the model's name
+  // shortens first (its chevron stays), then the permission's word goes and its shield stays, named still for a screen reader.
+  if (name === "composer-row-fits") return (async () => {
+    const forms = [...document.querySelectorAll('.composer')].filter(visible);
+    require(forms.length > 0, "a composer is on screen");
+    const box = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    const round = rect => Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * 10) / 10]));
+    const rows = forms.map(form => {
+      const style = getComputedStyle(form), outer = box(form), bar = form.querySelector('.cmp-bar');
+      const inner = { left: outer.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft), right: outer.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+        top: outer.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop), bottom: outer.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) };
+      const controls = [...bar.children].filter(child => !child.matches('.cmp-bar-fill') && visible(child));
+      const slot = [...form.querySelectorAll('.cmp-pair > button')].find(visible);
+      const rects = controls.map(control => ({ control: control.className.split(' ').find(word => word.startsWith('cmp-')), ...box(control) }));
+      const shown = { inner: round(inner), controls: rects.map(round), slot: slot && round(box(slot)) };
+      for (const rect of rects) require(rect.left >= inner.left - 0.5 && rect.right <= inner.right + 0.5 && rect.top >= inner.top - 0.5 && rect.bottom <= inner.bottom + 0.5, `${rect.control} lies inside the composer: ${JSON.stringify(shown)}`);
+      for (let i = 1; i < rects.length; i++) require(rects[i].left >= rects[i - 1].right - 0.5, `${rects[i].control} stands beside ${rects[i - 1].control}, not over it: ${JSON.stringify(shown)}`);
+      const middles = rects.map(rect => (rect.top + rect.bottom) / 2);
+      require(Math.max(...middles) - Math.min(...middles) <= 2 && bar.scrollWidth <= bar.clientWidth + 1, `one row, nothing scrolled or wrapped: ${JSON.stringify(shown)}`);
+      require(slot, "the voice or send button is shown");
+      const end = box(slot);
+      require(end.width >= 31.5 && end.height >= 31.5 && end.left >= inner.left - 0.5 && end.right <= inner.right + 0.5, `the voice or send button is whole inside the composer: ${JSON.stringify(shown)}`);
+      require(Math.abs(end.right - box(bar).right) <= 1 && rects.at(-1).control === 'cmp-pair', `the voice or send button stands at the row's right end: ${JSON.stringify(shown)}`);
+      const attach = form.querySelector('.cmp-attach'), mode = form.querySelector('.cmp-mode'), shield = mode?.querySelector('svg.i'), word = mode?.querySelector('span');
+      require(box(attach).width >= 31.5 && box(attach).height >= 31.5, `the + keeps its 32px: ${JSON.stringify(round(box(attach)))}`);
+      const result = { composer: Math.round(outer.width), controls: rects.map(rect => [rect.control, Math.round(rect.width)]) };
+      if (mode) {
+        const own = box(mode), mark = box(shield), letters = word && box(word);
+        require(own.height >= 25.5 && mark.width >= 15.5 && mark.left >= own.left && mark.right <= own.right + 0.5 && visible(shield), `the permission keeps its shield whole: ${JSON.stringify(round(own))}`);
+        const wordShown = !!word && visible(word) && letters.left >= own.left - 0.5 && letters.right <= own.right + 0.5 && letters.top >= own.top - 0.5 && letters.bottom <= own.bottom + 0.5;
+        require((mode.getAttribute('aria-label') ?? '').includes(word.textContent.trim()), "the permission is named for a screen reader whether its word shows or not");
+        const model = form.querySelector('.cmp-model .mp-trigger'), modelName = model?.querySelector('.mp-tname'), chevron = model?.querySelector(':scope > svg.i');
+        if (model) {
+          const trigger = box(model), arrow = box(chevron);
+          require(trigger.height >= 31.5 && visible(chevron) && arrow.width >= 15.5 && arrow.left >= trigger.left - 0.5 && arrow.right <= trigger.right + 0.5, `the model keeps its chevron whole: ${JSON.stringify(round(trigger))}`);
+          // The word goes only when the row cannot hold it beside the model's first six letters (a shorter name whole), and
+          // stays whenever it can; a name shortened has all the room there is, with no gap left before it.
+          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+          const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
+          const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width);
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          const need = fixed + (rects.length - 1) * gap + modeWide + modelNeed, room = bar.clientWidth;
+          require(wordShown ? room + 1 >= need : room < need + 1.5, `the permission's word shows exactly while the row holds it beside the model's first letters: ${JSON.stringify({ room, need: Math.round(need * 10) / 10, wordShown })}`);
+          const before = rects[rects.findIndex(rect => rect.control === 'cmp-model') - 1];
+          require(!shortened || box(slot).left <= before.right + gap + 1, `a shortened name leaves no room unused before it: ${JSON.stringify(shown)}`);
+          Object.assign(result, { modelShortened: shortened, room, need: Math.round(need * 10) / 10 });
+        }
+        Object.assign(result, { modeWord: word.textContent.trim(), modeWordShown: wordShown });
+      }
+      return result;
+    });
+    // How wide each language's words for the four modes are in the permission's own type, widest first: which language the
+    // narrow scenes must prove.
+    const mode = forms[0].querySelector('.cmp-mode span');
+    let words = [];
+    if (mode) {
+      const { catalogs } = await import('/src/main/i18n/index.ts');
+      const context = document.createElement('canvas').getContext('2d');
+      context.font = getComputedStyle(mode).font;
+      words = Object.entries(catalogs).flatMap(([locale, messages]) => ['chat.modeDirect', 'chat.modeAsk', 'chat.modePlan', 'chat.modeBypass'].map(key => [locale, key.slice(9), messages[key], Math.round(context.measureText(messages[key]).width * 10) / 10]))
+        .sort((a, b) => b[3] - a[3]).slice(0, 6);
+    }
+    return { check: name, rows, widestWords: words };
+  })();
+  // The composer's idle emblem is a bitmap of exactly its shown size on the screen's pixels (R-UI-161): as many pixels as its
+  // CSS box times the device pixel ratio, an even number of them so that its centre is a corner of the pixel grid, and nothing
+  // between it and the screen that scales, turns, filters or moves it by a fraction of a device pixel. Where its layout box
+  // starts does not matter: at a real pixel ratio the browser starts a picture on a whole device pixel (measured at 100%, 125%
+  // and 150%; an emulated ratio does not, which is why `--scale` sets the browser's own).
+  if (name === "emblem-sharp") {
+    const ratio = devicePixelRatio, faces = [...document.querySelectorAll('.composer .cmp-voice .av > img')].filter(visible);
+    require(faces.length > 0, "the composer shows its idle emblem");
+    const whole = value => Math.abs(value - Math.round(value)) < 0.02;
+    const measured = faces.map(img => {
+      const rect = img.getBoundingClientRect(), w = rect.width * ratio, h = rect.height * ratio;
+      const resampling = [];
+      for (let element = img; element && element !== document.documentElement; element = element.parentElement) {
+        const style = getComputedStyle(element), at = element.className || element.tagName;
+        const move = /^matrix\(1, 0, 0, 1, ([-\d.e]+), ([-\d.e]+)\)$/.exec(style.transform);
+        if (style.transform !== 'none' && !(move && whole(Number(move[1]) * ratio) && whole(Number(move[2]) * ratio))) resampling.push(`${at}: transform ${style.transform}`);
+        if (style.translate !== 'none' && !style.translate.split(' ').every(part => whole(parseFloat(part) * ratio))) resampling.push(`${at}: translate ${style.translate}`);
+        if (style.scale !== 'none' || style.rotate !== 'none') resampling.push(`${at}: scale ${style.scale} rotate ${style.rotate}`);
+        if (style.filter !== 'none') resampling.push(`${at}: filter ${style.filter}`);
+        if (style.backdropFilter && style.backdropFilter !== 'none') resampling.push(`${at}: backdrop-filter ${style.backdropFilter}`);
+      }
+      return { ratio, source: img.currentSrc.startsWith('data:') ? 'drawn' : img.currentSrc.replace(/^.*\/brand\//, 'brand/'), bitmap: [img.naturalWidth, img.naturalHeight],
+        box: [rect.width, rect.height], device: [rect.left * ratio, rect.top * ratio, w, h].map(value => Math.round(value * 1000) / 1000), rendering: getComputedStyle(img).imageRendering, resampling };
+    });
+    for (const face of measured) {
+      const [, , w, h] = face.device;
+      require(face.source === 'drawn', `the emblem is drawn, not a stand-in picture: ${JSON.stringify(face)}`);
+      require(face.bitmap[0] === Math.round(w) && face.bitmap[1] === Math.round(h) && whole(w) && whole(h), `the emblem's bitmap is its box times the pixel ratio: ${JSON.stringify(face)}`);
+      require(face.bitmap.every(side => side % 2 === 0), `the emblem's centre is a corner of the pixel grid, not the middle of a pixel: ${JSON.stringify(face)}`);
+      require(face.resampling.length === 0, `nothing scales, turns, filters or moves the emblem by a fraction of a pixel: ${JSON.stringify(face)}`);
+    }
+    return { check: name, faces: measured };
   }
   if (name === "panel-width" || name === "panel-closed") {
     const page = document.querySelector('.page-agent'), panel = page.querySelector('.mb-det');
@@ -6059,6 +6186,31 @@ export function checkRendered(name, context = {}) {
     require([...document.querySelectorAll('.cal-chip.is-own b')].some(node => node.textContent === "拜訪客戶"), "the event is drawn at once");
     require(!document.querySelector('.au-pop-editor') && !document.querySelector('.au-draft'), "the form and its placeholder are gone");
     return { check: name };
+  }
+  // R-LINK-01: an address in words read whole (an event's notes, a card's words, a routine's instructions) is a link whose words
+  // are the address, ending where the punctuation or the Chinese words after it begin; every line of it stays inside its words
+  // and what holds them at this width; the scene's real press opened it once, in the browser, and pressed nothing around it.
+  if (name === "urls-are-links") {
+    const words = [...document.querySelectorAll(".au-pop-notes, .conversation-card .card-body, .rv-prompt")].filter(box => visible(box) && box.querySelector("a.message-link"));
+    require(words.length === 1, "one surface shows words with a link");
+    const box = words[0], link = box.querySelector("a.message-link"), holder = box.closest(".au-pop, .conversation-card, .mb-dialog");
+    require(visible(link) && visible(holder), "the link and what holds it are on screen");
+    require(new URL(link.textContent).href === link.dataset.url && link.getAttribute("href") === link.dataset.url, "its words are the address it opens");
+    require(!link.hasAttribute("title") && !link.hasAttribute("aria-label"), "no tooltip repeats it");
+    const after = link.nextSibling?.textContent ?? "";
+    require(!after || /^[^\x00-\x7f]/.test(after), `the address ends where the words after it begin (after it: ${after.slice(0, 4)})`);
+    const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+    const within = box.getBoundingClientRect(), held = holder.getBoundingClientRect();
+    for (const line of link.getClientRects()) require(inside(line, within) && inside(line, held), `every line of the link stays inside its words and what holds them at ${innerWidth}px`);
+    require(held.left >= 0 && held.right <= innerWidth && holder.scrollWidth <= holder.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, "nothing is widened or scrolls sideways");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--link)"; document.body.append(probe);
+    const blue = getComputedStyle(probe).color; probe.remove();
+    require(getComputedStyle(link).color === blue, "it wears the app's one link colour");
+    const opened = window.__look.calls.filter(call => call.command === "open_external_url");
+    require(opened.length === 1 && opened[0].url === link.dataset.url && window.__look.urls.at(-1) === link.dataset.url, "the press opened the address once, in the browser");
+    require(!window.__look.calls.some(call => call.command === "agent_question_answer" || ["calendar.update", "calendar.delete", "routines.update"].includes(call.method)), "nothing around the link was pressed");
+    return { check: name, url: link.dataset.url, lines: link.getClientRects().length };
   }
   if (name === "calendar-detail-own" || name === "calendar-detail-read") {
     const panel = document.querySelector('.au-pop-detail');

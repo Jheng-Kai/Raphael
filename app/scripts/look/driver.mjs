@@ -438,7 +438,15 @@ export async function perform(page, step, evidenceDirectory) {
       if (await value()!==`${step.total}/${step.total}`) throw new Error('newest word was not restored');
       break;
     }
-    case "viewport": await page.setViewport({width:step.width,height:step.height,deviceScaleFactor:1}); break;
+    case "viewport": {
+      // `scale` emulates another pixel ratio (0 keeps the browser's own); `physical`: the window moved to a screen of another scale
+      // keeps its device pixels, so its CSS size changes with the ratio.
+      const { width, height, deviceScaleFactor = 1 } = page.viewport(), ratio = await page.evaluate(() => devicePixelRatio);
+      const scale = step.scale ?? deviceScaleFactor, keep = step.physical && step.scale ? ratio / step.scale : 1;
+      await page.setViewport({ width: step.width ?? Math.round(width * keep), height: step.height ?? Math.round(height * keep), deviceScaleFactor: scale });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      break;
+    }
     case "window-control": {
       const selector = `[data-window-action="${step.control}"]`;
       if (step.restore) {
@@ -664,6 +672,59 @@ export async function perform(page, step, evidenceDirectory) {
       return await slimeSharp(page, undefined, evidenceDirectory && `${evidenceDirectory}/sharp-${revision ?? "current"}-${await page.evaluate(() => document.documentElement.dataset.theme)}-${page.viewport().width}`, revision);
     }
     case "slime-pointer": return await slimePointer(page, step.selector);
+    // The composer's idle emblem as the screen shows it, at the run's pixel ratio, kept beside the run, and compared pixel for
+    // pixel with its own bitmap laid on the composer's ground: any resampling on the way to the screen shows as a difference (R-UI-161).
+    case "emblem-picture": {
+      // The screen is read two device pixels wider on every side and the bitmap laid at each whole-pixel offset in it: a paint
+      // snapped to the pixel grid matches at one offset, a resampled one at none. The whole viewport is read: a clip is rounded
+      // to whole CSS pixels (puppeteer), which at 125% starts the capture a fraction of a device pixel in and resamples the
+      // capture itself.
+      const MARGIN = 2;
+      const place = await page.evaluate(margin => {
+        const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility()), rect = img.getBoundingClientRect(), ratio = devicePixelRatio;
+        // Under a panel's scrim (a window under 1120 px) the screen shows the emblem dimmed: nothing to compare.
+        const covered = !img.closest('.cmp-voice').contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+        return { covered, device: [rect.left * ratio, rect.top * ratio], from: [Math.round(rect.left * ratio) - margin, Math.round(rect.top * ratio) - margin], ground: getComputedStyle(img.closest('.composer')).backgroundColor };
+      }, MARGIN);
+      if (place.covered) return { check: "emblem-picture", covered: true };
+      const shot = Buffer.from(await page.screenshot({ type: "png", captureBeyondViewport: false })).toString("base64");
+      const comparison = await page.evaluate(async (shot, ground, margin, from) => {
+        const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility());
+        const read = async source => { const image = new Image(); image.src = source; await image.decode(); return image; };
+        const [screen, bitmap] = await Promise.all([read(`data:image/png;base64,${shot}`), read(img.currentSrc)]);
+        const pixels = (draw, width, height) => { const canvas = new OffscreenCanvas(width, height), context = canvas.getContext("2d", { willReadFrequently: true }); draw(context); return context.getImageData(0, 0, width, height).data; };
+        const width = bitmap.naturalWidth, height = bitmap.naturalHeight, outer = width + 2 * margin;
+        const seen = pixels(context => context.drawImage(screen, -from[0], -from[1]), outer, height + 2 * margin);
+        const own = pixels(context => { context.fillStyle = ground; context.fillRect(0, 0, width, height); context.drawImage(bitmap, 0, 0); }, width, height);
+        let best = null;
+        for (let dy = 0; dy <= 2 * margin; dy++) for (let dx = 0; dx <= 2 * margin; dx++) {
+          let worst = 0, off = 0, total = 0;
+          for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4, j = ((y + dy) * outer + x + dx) * 4;
+            const gap = Math.max(Math.abs(seen[j] - own[i]), Math.abs(seen[j + 1] - own[i + 1]), Math.abs(seen[j + 2] - own[i + 2]));
+            worst = Math.max(worst, gap); total += gap; if (gap > 16) off++;
+          }
+          if (!best || total < best.total) best = { offset: [dx - margin, dy - margin], worst, total, off };
+        }
+        return { bitmap: [width, height], offset: best.offset, worst: best.worst, mean: Math.round(best.total / (width * height) * 100) / 100, off: best.off };
+      }, shot, place.ground, MARGIN, place.from);
+      const { width } = page.viewport(), { theme, ratio } = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, ratio: devicePixelRatio }));
+      const file = `emblem-${theme}-${width}-x${ratio}.png`;
+      // The emblem's own pixels as the screen showed them, where they matched best: the picture to look at, enlarged, for sharpness.
+      if (evidenceDirectory) {
+        const crop = await page.evaluate(async (shot, offset, margin, size, from) => {
+          const image = new Image(); image.src = `data:image/png;base64,${shot}`; await image.decode();
+          const canvas = document.createElement("canvas"); canvas.width = size[0]; canvas.height = size[1];
+          canvas.getContext("2d").drawImage(image, -(from[0] + offset[0] + margin), -(from[1] + offset[1] + margin));
+          return canvas.toDataURL("image/png").split(",")[1];
+        }, shot, comparison.offset, MARGIN, comparison.bitmap, place.from);
+        await writeFile(`${evidenceDirectory}/${file}`, Buffer.from(crop, "base64"));
+      }
+      const result = { check: "emblem-picture", file, ratio, device: place.device.map(value => Math.round(value * 1000) / 1000), ...comparison };
+      // A resampled picture differs by about ten on average; one painted pixel for pixel by a hundredth.
+      if (comparison.mean > 1 || comparison.off > comparison.bitmap[0] * comparison.bitmap[1] / 100) throw Object.assign(new Error(`The emblem on the screen is not its own bitmap: something resampled it (R-UI-161): ${JSON.stringify(result)}`), { assertion: result });
+      return result;
+    }
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
     case "motion-cost": return await motionCost(page,step.revision);
     case "motion-details": return await motionDetails(page);

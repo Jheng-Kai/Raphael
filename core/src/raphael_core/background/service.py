@@ -114,7 +114,7 @@ from ..agent.persona import (
     worker_system_prompt,
 )
 from ..agent.plugins import preview
-from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
+from ..computer.local_tools import is_local, card_arguments, BACKGROUND_WAIT_S
 from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending, Tier
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
@@ -2312,7 +2312,7 @@ class BackgroundService:
                                        wait_s=BACKGROUND_WAIT_S if local else None)
         member_id = task.member_id
         prefix = PREFIXES[language].question
-        what = parenthesized(language, preview(waiting.arguments))
+        what = parenthesized(language, preview(card_arguments(ref.key, waiting.arguments)))
         asked = phrase(language, "confirm_plugin", server=ref.server, tool=ref.name, what=what)
         if ref.server == "computer" and ref.name == "fill_card":
             from ..computer.vault_entries import payment_question

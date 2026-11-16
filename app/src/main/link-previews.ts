@@ -130,6 +130,8 @@ export function createLinkPreviews(root: HTMLElement, fetch: (url: string) => Pr
   root.addEventListener("pointerout", leave);
   root.addEventListener("focusin", enter);
   root.addEventListener("focusout", leave);
+  // A press on a chip itself never reaches the thread (the link opener takes it first), so the preview goes as it starts.
+  root.addEventListener("pointerdown", hide);
   root.addEventListener("click", hide);
   root.addEventListener("scroll", () => { hide(); fallback(); }, { passive: true });
   document.addEventListener("keydown", escape);
