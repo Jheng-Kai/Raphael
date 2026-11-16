@@ -69,8 +69,8 @@ export function shortUrl(url: string): string {
 
 /** Letters of the scripts written without spaces between words. */
 const SPACELESS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
-/** What starts a part of an address (a path segment, a query value, a fragment): a page named in Chinese starts after one. */
-const PART_START = "/=?#&";
+/** What starts a part of an address (a path segment, a query value, a fragment, a handle): a page or a person named in Chinese starts after one. */
+const PART_START = "/=?#&@";
 
 /**
  * Where an address that starts at the beginning of `text` ends. It stops at a space, a quote, CJK punctuation and at

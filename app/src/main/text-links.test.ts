@@ -73,6 +73,7 @@ describe("linkedText", () => {
     expect(linked("https://example.com/aはこちら")).toEqual(["https://example.com/a"]);
     expect(linked("https://example.com/a여기")).toEqual(["https://example.com/a"]);
     expect(linked("頁面 https://zh.wikipedia.org/wiki/臺北 很長")).toEqual(["https://zh.wikipedia.org/wiki/臺北"]);
+    expect(linked("作者 https://medium.com/@小森/post。")).toEqual(["https://medium.com/@小森/post"]);
     expect(linked("搜尋 https://example.com/search?q=颱風&lang=zh看")).toEqual(["https://example.com/search?q=颱風&lang=zh"]);
     expect(bareUrl("https://example.com看這裡")).toBe("https://example.com");
   });
