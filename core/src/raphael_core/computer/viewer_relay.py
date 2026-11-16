@@ -6,6 +6,7 @@ leave this thread; the core retains opaque connection IDs for its session lifecy
 import asyncio
 import concurrent.futures
 import itertools
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -14,6 +15,21 @@ import httpx
 
 from .rfb_input import RfbInputGate, frame
 from .vm import VmError
+
+logger = logging.getLogger(__name__)
+
+
+def quiet_reset(loop, context):
+    """The relay loop's handler of what nothing awaited. When the other end of a viewer connection has already reset it
+    (the viewer page reloading, its noVNC server closing), the relay's own close of that socket makes Windows' proactor
+    shut it down once more, and that raises ConnectionResetError inside asyncio's own callback, which was written to the
+    log as an ERROR with a whole traceback (six in two days, each just before the viewer loaded its page again). The
+    connection was already over and nothing of it is lost: one line says so. Anything else goes to asyncio as before."""
+    error = context.get("exception")
+    if isinstance(error, (ConnectionResetError, ConnectionAbortedError)) and "_call_connection_lost" in repr(context.get("handle")):
+        logger.info("A viewer connection was reset by its other end and is closed (%s)", type(error).__name__)
+        return
+    loop.default_exception_handler(context)
 
 
 @dataclass(frozen=True)
@@ -94,6 +110,7 @@ class ViewerRelay:
 
     async def serve(self, ready):
         self.loop = asyncio.get_running_loop()
+        self.loop.set_exception_handler(quiet_reset)
         self.stop = asyncio.Event()
         async with httpx.AsyncClient(trust_env=False, timeout=10) as self.client:
             server = await asyncio.start_server(self.connection, "127.0.0.1", 0, limit=65536)
