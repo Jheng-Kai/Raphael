@@ -114,7 +114,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.memberSettings) {
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
-    // An app named as Claude's connectors name it, drawn with its own mark.
+    // An app named as its connector is named, drawn with its own mark.
     data.servers.push({ ...structuredClone(data.servers[0]), id: "mobbin", name: "Mobbin MCP" });
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
   }
