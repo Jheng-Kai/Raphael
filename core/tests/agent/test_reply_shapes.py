@@ -164,3 +164,36 @@ async def test_a_whole_turn_whose_last_words_are_a_progress_object_and_the_reply
     replies = [message["text"] for message in turn["messages"] if message["kind"] == "reply"]
     assert [reply.removeprefix("《Answer. ").removesuffix("》") for reply in replies] == [EARLY, REPORT] or replies == [f"《Answer. {BOTH}》"]
     assert result["status"] == "done" and not leaks(result["text"])
+
+
+@pytest.mark.parametrize("brain", ["codex", "claude"])
+@pytest.mark.parametrize("ends", ["whole", "cut"])
+async def test_a_reply_that_streams_in_is_never_stored_or_told_as_a_part_of_an_object(make_rig, monkeypatch, tmp_path, brain, ends):
+    """Nothing is drawn from a reply while it is received: only what the loop has made of a whole message is stored, and the
+    stored words never show a part of an object, at any point of the stream, on a CLI that writes the objects."""
+    from raphael_core.agent.cli.discovery import CliBrains
+    from raphael_core.agent.cli.drivers import Event
+    brains = CliBrains(home=tmp_path, environ={}, commands={brain: ["never-spawn"]})
+    monkeypatch.setattr(brains, "available", lambda *args, **kwargs: True)
+    full = PROGRESS + FINAL
+    pieces = [full[start:start + 23] for start in range(0, len(full), 23)]
+    seen, told = [], []
+
+    async def run(driver, **kwargs):
+        stored = lambda: [row[0] for row in rig.service._conn.execute("SELECT text FROM agent_messages WHERE kind IN ('progress','reply','thinking')")]
+        for piece in pieces if ends == "whole" else pieces[:-2]:
+            yield Event("text_delta", piece)
+            seen.extend(stored())
+        if ends == "whole":
+            yield Event("final", full)
+
+    monkeypatch.setattr("raphael_core.agent.cli.loop.Driver.run", run)
+    rig = make_rig(cli_brains=brains, notify=lambda method, data: told.append((method, data)))
+    rig.settings.set("agent_model", f"cli:{brain}:test")
+    await rig.call("agent.ask", {"session_id": "stream", "text": "Check the members", "ui_language": "en", "source": "app",
+                                 "member_id": 0})
+    final = [row[0] for row in rig.service._conn.execute("SELECT text FROM agent_messages WHERE kind IN ('progress','reply','thinking')")]
+    for text in [*seen, *final, *(data.get("text", "") for method, data in told if method == "agent.progress")]:
+        assert not leaks(text.replace("《Answer. ", "").removesuffix("》")), text
+    if ends == "whole":
+        assert any(REPORT in text for text in final)

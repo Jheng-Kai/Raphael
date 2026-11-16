@@ -1828,6 +1828,7 @@ class BackgroundService:
         run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
+        run.owner_language = self._owner_words(task, speaker)
         # Work in a member's private conversation tells the owner how it goes (agent/progress_updates.py); a meeting's
         # reply is its post, a routine's owner reads only its last message, and a consultation answers a colleague.
         run.updates = (ProgressUpdates(self._clock)
@@ -2728,6 +2729,21 @@ class BackgroundService:
         for line in lines:
             self._history.add_message(task.turn_id, "reply", compose(reply.prefix if task.member_id == 0 else "", line, None))
             self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
+
+    def _owner_words(self, task: Task, speaker) -> str | None:
+        """The language the owner writes in the conversation a private task belongs to, which what the member says while
+        it works is held to (R-LANG-05); None for work that is no part of one (a meeting, a routine) or when no words say it."""
+        if task.scope != "private" or task.routine_id is not None:
+            return None
+        from ..agent.service import owner_words_language
+        try:
+            turn = self._history.get(task.turn_id) if task.turn_id else None
+        except sqlite3.Error:
+            return None
+        if turn is None:
+            return None
+        return owner_words_language(self._history, member_id=task.member_id, conversation_id=turn.conversation_id,
+                                    profile=" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
 
     def _take_handback(self, task: Task, lines: Sequence[str]) -> list[str]:
         """Keep a work hand-off's <handback> block out of the owner's conversation and remember its words
