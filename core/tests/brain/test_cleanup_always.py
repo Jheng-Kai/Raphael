@@ -54,7 +54,7 @@ async def test_empty_reasoning_response_retries_and_records_actual_cleanup_model
         result = await router.call("brain.finalize_dictation", {
             "raw_text": "Hello world", "audio_seconds": 3, "stt_ms": 1,
         })
-        assert result["cleaned"] and result["text"] == "Hello world"
+        assert result["cleaned"] and result["text"] == "Hello world."
         assert result["fallback_reason"] is None
         assert len(seen) == 2
         assert seen[0][1]["reasoning_effort"] == "low"

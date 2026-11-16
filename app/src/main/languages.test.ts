@@ -126,7 +126,9 @@ describe("the language picker", () => {
     const chip = html.indexOf('data-variant-menu="zh"');
     expect(zh).toBeLessThan(chip);
     expect(chip).toBeLessThan(html.indexOf('data-language="en"'));
-    expect(html).toContain('data-variant-menu="zh" aria-haspopup="menu" aria-expanded="false" aria-label="中文的寫法: 繁體中文（香港）"');
+    // One translated name for the chip, and no tooltip repeating the form it shows.
+    expect(html).toContain('data-variant-menu="zh" aria-haspopup="menu" aria-expanded="false" aria-label="中文的寫法：繁體中文（香港）"><span>繁體中文（香港）</span>');
+    expect(html).not.toMatch(/class="btn lang-variant-chip"[^>]*title=/);
     expect(html).toContain('data-variant-menu="en"');
     // The variants themselves are not in the list: they open beside it, so the list never grows.
     expect(html).not.toContain("data-variant=");

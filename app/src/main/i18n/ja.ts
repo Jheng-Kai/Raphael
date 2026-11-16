@@ -1166,7 +1166,7 @@ export const ja = {
   "settings.searchingMicrophones": "検索中…",
   "mic.automaticShort": "自動（{p0}）",
   "languages.join": "、",
-  "languages.variantsOf": "{p0}の表記",
+  "languages.variantsOf": "{p0}の表記：{p1}",
   "settings.agentKeys": "ラファエルに質問",
   "settings.tidyKeys": "選択した文章を整える",
   "settings.quickModel": "ラファエルのクイック質問",

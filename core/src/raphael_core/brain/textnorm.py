@@ -787,27 +787,34 @@ def _dictation_prose(text: str, change: Callable[[str, set[int], int], str], *, 
     return "".join(result)
 
 
-# The full stops a dictation does not end with, in any script: the ideographic and full-width ones
-# and the Latin one. The owner pastes dictation into chats and fields where a closing full stop
-# reads stiff; the cleanup prompt says the same, and a dictation that skips the model or falls back
-# to what speech-to-text wrote gets the same ending here.
-_FULL_STOPS = "。．｡."
+# A dictation is pasted into chats and fields where a closing full stop reads stiff, so the whole
+# text's last one goes (R-DICT-STOP-01), in every language. What decides is the mark, never the
+# language: these are the full stops that only ever end a sentence (Unicode's Sentence_Break=STerm),
+# whatever script they belong to. The Latin dot and its full-width form (Sentence_Break=ATerm)
+# also close abbreviations and numbers ("3 p.m.", "etc.", "usw.", "v1.2."), and telling those
+# apart takes the words, so a closing one is the model's to leave out (the cleanup prompt says
+# so), never this code's.
+_SENTENCE_STOPS = "。｡︒।۔։።᠃"
+# A stop right after one of these ends an ellipsis or an abbreviation, not a sentence.
+_BEFORE_NO_STOP = _SENTENCE_STOPS + ".．…"
 
 
 def drop_final_full_stop(text: str) -> str:
-    """Omit only the whole dictation's final prose full stop, in any language, and keep the rest.
+    """Omit only the whole dictation's final prose full stop, if it is one that only ever ends a
+    sentence (`_SENTENCE_STOPS`), in any language, and keep the rest.
 
-    Sentences inside the text keep theirs. An ellipsis ("...", "。。", "…") is no full stop and
-    stays, and so do ？ ! and the like. Code fences and inline code stay byte for byte."""
+    Sentences inside the text keep theirs. A Latin dot stays ("3 p.m."), an ellipsis ("...",
+    "。。", "…。") is no full stop and stays, and so do ？ ! and the like. Code fences and inline
+    code stay byte for byte."""
     final = len(text.rstrip()) - 1
 
     def finish(line: str, protected: set[int], offset: int) -> str:
         index = final - offset
         if (
             0 <= index < len(line)
-            and line[index] in _FULL_STOPS
+            and line[index] in _SENTENCE_STOPS
             and index not in protected
-            and not (index and line[index - 1] in _FULL_STOPS + "…")
+            and not (index and line[index - 1] in _BEFORE_NO_STOP)
         ):
             return line[:index] + line[index + 1:]
         return line

@@ -1441,7 +1441,7 @@ export const tr = {
   "settings.groupListen": "Nasıl dinler",
   "settings.searchingMicrophones": "Aranıyor…",
   "mic.automaticShort": "Otomatik ({p0})",
-  "languages.variantsOf": "{p0} nasıl yazılır",
+  "languages.variantsOf": "{p0} nasıl yazılır: {p1}",
   "settings.agentKeys": "Raphael’e sor",
   "settings.tidyKeys": "Seçili metni düzenle",
   "home.askRaphael": "Raphael’e sor",

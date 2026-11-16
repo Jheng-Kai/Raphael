@@ -1441,7 +1441,7 @@ export const ru = {
   "settings.groupListen": "Как слушает",
   "settings.searchingMicrophones": "Поиск…",
   "mic.automaticShort": "Автоматически ({p0})",
-  "languages.variantsOf": "Как пишется {p0}",
+  "languages.variantsOf": "Как пишется {p0}: {p1}",
   "settings.agentKeys": "Спросить Raphael",
   "settings.tidyKeys": "Привести выделенный текст в порядок",
   "home.askRaphael": "Спросить Raphael",

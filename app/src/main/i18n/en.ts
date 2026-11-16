@@ -1166,7 +1166,7 @@ export const en = {
   "settings.searchingMicrophones": "Searching…",
   "mic.automaticShort": "Automatic ({p0})",
   "languages.join": ", ",
-  "languages.variantsOf": "How {p0} is written",
+  "languages.variantsOf": "How {p0} is written: {p1}",
   "settings.agentKeys": "Ask Raphael",
   "settings.tidyKeys": "Tidy selected text",
   "settings.quickModel": "Raphael's quick question",

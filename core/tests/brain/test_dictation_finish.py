@@ -35,17 +35,27 @@ from .test_service import clock, fake_client, finalize, keys, make_brain, router
     ("```\n未關閉。\n", "```\n未關閉。\n"),
     ("執行 `第一行。\n第二行。`。\n完成。", "執行 `第一行。\n第二行。`。\n完成"),
     ("~~~\n未配對 `。\n~~~\n後面。", "~~~\n未配對 `。\n~~~\n後面"),
-    # Every language ends the same way: only the closing full stop goes.
-    ("Please check the fan.", "Please check the fan"),
-    ("Done. Check it.\n", "Done. Check it\n"),
+    # R-DICT-STOP-01: every script ends the same way, by what its mark is, not by its language. A
+    # full stop that only ever ends a sentence goes; a dot that may close an abbreviation or a
+    # number stays, and the model, which reads the words, leaves out a closing one.
     ("明日の会議は10時からです。", "明日の会議は10時からです"),
-    ("Fertig．", "Fertig"),
+    ("完成｡", "完成"),
+    ("वह घर गया।", "वह घर गया"),
+    ("Please check the fan.", "Please check the fan."),
+    ("Done. Check it.\n", "Done. Check it.\n"),
+    ("Send it at 3 p.m.", "Send it at 3 p.m."),
+    ("We need milk, eggs, etc.", "We need milk, eggs, etc."),
+    ("She moved to the U.S.", "She moved to the U.S."),
+    ("Brot, Milch usw.", "Brot, Milch usw."),
+    ("Fertig．", "Fertig．"),
+    ("下午3點開會，帶 v1.2.", "下午3點開會，帶 v1.2."),
     ("Wait...", "Wait..."),
     ("等一下。。", "等一下。。"),
+    ("等一下…。", "等一下…。"),
     ("Really?", "Really?"),
     ("Visit example.org", "Visit example.org"),
 ])
-def test_only_the_final_full_stop_goes_in_any_language_outside_code(text, expected):
+def test_only_a_final_sentence_only_full_stop_goes_in_any_language_outside_code(text, expected):
     assert drop_final_full_stop(text) == expected
     assert drop_final_full_stop(expected) == expected
 
@@ -66,13 +76,15 @@ async def test_finalization_leaves_the_words_to_the_model_and_keeps_raw_history(
     assert history.text == reply["text"] and history.raw_text == raw
 
 
-async def test_english_dictation_is_finished_like_any_other_language(make_brain, monkeypatch):
+async def test_a_latin_full_stop_and_the_words_are_the_models_to_clean(make_brain, monkeypatch):
+    # The same in every language: nothing after the model removes a word, and a dot that may
+    # close an abbreviation ("3 p.m.") is left to the model, which reads the words.
     brain = make_brain()
     brain._settings.set("languages", ["en-US"])
-    raw = "uh, check the fan."
-    monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=CleanupResult(raw, True, None, None, 0, 0)))
-    reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
-    assert reply["text"] == "uh, check the fan"
+    for raw in ("uh, check the fan.", "Send it at 3 p.m."):
+        monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=CleanupResult(raw, True, None, None, 0, 0)))
+        reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
+        assert reply["text"] == raw
 
 
 @pytest.mark.parametrize("mode", ["cleaned", "pieces", "fallback"])

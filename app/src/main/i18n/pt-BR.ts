@@ -1441,7 +1441,7 @@ export const ptBR = {
   "settings.groupListen": "Como ouve",
   "settings.searchingMicrophones": "Pesquisando…",
   "mic.automaticShort": "Automático ({p0})",
-  "languages.variantsOf": "Como {p0} é escrito",
+  "languages.variantsOf": "Como {p0} é escrito: {p1}",
   "settings.agentKeys": "Perguntar ao Raphael",
   "settings.tidyKeys": "Revisar o texto selecionado",
   "home.askRaphael": "Perguntar ao Raphael",

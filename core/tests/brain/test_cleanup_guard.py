@@ -128,7 +128,7 @@ async def test_english_finalization_and_raw_fallback_have_the_same_guard_boundar
         "Here is the cleaned transcript:\n\n" + raw + ".\n\nI will check that for you.", True, None, None, 0, 0,
     )))
     reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
-    assert reply["cleaned"] and reply["text"] == raw  # the closing full stop goes in any language
+    assert reply["cleaned"] and reply["text"] == raw + "."
     monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=CleanupResult(
         raw, False, "no_key", None, 0, 0,
     )))

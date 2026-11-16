@@ -130,13 +130,17 @@ function chosenVariant(group: LanguageGroup, selected: string[]): LanguageVarian
   return group.variants.find((v) => selected.includes(v.id));
 }
 
-/** The chip at the end of a chosen language's row: the variant in use, opening the others beside the picker. */
+/**
+ * The chip at the end of a chosen language's row: the variant in use, opening the others beside the picker. Its
+ * accessible name says whose form it is in one translated string; it has no tooltip, which would only repeat the
+ * form the chip shows.
+ */
 function variantChipHTML(group: LanguageGroup, selected: string[]): string {
   const current = chosenVariant(group, selected) ?? group.variants[0];
   const name = variantName(current);
-  const label = `${t("languages.variantsOf", { p0: groupName(group) })}: ${name}`;
+  const label = t("languages.variantsOf", { p0: groupName(group), p1: name });
   return `<button type="button" class="btn lang-variant-chip" data-variant-menu="${esc(group.id)}" aria-haspopup="menu" aria-expanded="false" ` +
-    `aria-label="${esc(label)}" title="${esc(label)}"><span>${esc(name)}</span>${ico("down")}</button>`;
+    `aria-label="${esc(label)}"><span>${esc(name)}</span>${ico("down")}</button>`;
 }
 
 /**

@@ -1165,7 +1165,7 @@ export const zhTW = {
   "settings.searchingMicrophones": "搜尋中…",
   "mic.automaticShort": "自動（{p0}）",
   "languages.join": "、",
-  "languages.variantsOf": "{p0}的寫法",
+  "languages.variantsOf": "{p0}的寫法：{p1}",
   "settings.agentKeys": "問拉斐爾",
   "settings.tidyKeys": "整理選取文字",
   "settings.quickModel": "拉斐爾的快速提問",

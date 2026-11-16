@@ -371,8 +371,7 @@ async def test_long_heard_regions_keep_chunking_and_never_share_context_across_m
         })
     finally:
         await brain.aclose()
-    # Only the closing full stop of the whole dictation goes, in any language.
-    assert result["text"] == (before.upper() + "\n\n" + marker + "\n\n" + after.upper()).removesuffix(".")
+    assert result["text"] == before.upper() + "\n\n" + marker + "\n\n" + after.upper()
     assert not result["cleaned"] and result["fallback_reason"] == "incomplete_stt"
     assert len(client.calls) == 6
     for call in client.calls:
@@ -407,7 +406,7 @@ async def test_a_long_dictation_through_the_brain_is_cleaned_in_pieces_and_saved
     assert len(client.calls) == 5
     assert result["cleaned"] is False and result["fallback_reason"] == "error:server"
     # Keep the normalized recovery text in history, explicitly marked unsuccessful.
-    assert result["text"] == remove_stutters(raw).removesuffix(".")
+    assert result["text"] == remove_stutters(raw)
     assert result["raw_text"] == raw
     assert len(items) == 1 and items[0]["text"] == result["text"]
     assert items[0]["cost_usd"] == pytest.approx(0.004)
@@ -437,8 +436,8 @@ async def test_paragraphs_cut_apart_are_joined_with_their_break(conn, client):
     assert sorted(transcript_of(call["user"]) for call in client.calls[:2]) == sorted(
         [first, second]
     )
-    assert cleaned["text"] == (first.upper() + "\n\n" + second.upper()).removesuffix(".")
-    assert half["text"] == raw.removesuffix(".") and half["cleaned"] is False
+    assert cleaned["text"] == first.upper() + "\n\n" + second.upper()
+    assert half["text"] == raw and half["cleaned"] is False
     assert half["fallback_reason"] == "error:server"
 
 

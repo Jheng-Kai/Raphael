@@ -30,10 +30,24 @@ use (`data-variant-menu`); the chip, or Right on it, opens the forms in a submen
 `variantMenuHTML`), so the list never grows or jumps. A pick closes only the submenu (`closeSubmenus`) and keeps the picker open.
 The core rules are unchanged: one form per language, the order is the priority.
 
-The cleanup prompt (`prompts/cleanup_system.md`) names fillers, correction cues and particles by kind, in no one language; the
-semantic calls are the model's and only hard limits are rules. Each chosen language adds its own worked examples
-(`prompts/cleanup_examples.<subtag>.md`, one for every language of the settings; mainland Chinese gets them in Simplified,
-character by character). After the model only the whole text's final full stop is dropped (`drop_final_full_stop`).
+The chip's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it has
+no `title`: the form is on the chip already.
+
+Cleanup is in no one language (R-DICT-CLEAN-01). The cleanup prompt (`prompts/cleanup_system.md`) names fillers, correction
+cues and particles by kind; the semantic calls are the model's and only hard limits are rules (never add a word, particle,
+question or question mark; never reorder, merge or drop a sentence). Every dictation goes to the model, however short: no
+length or mark test can tell, in every language, that "Um I think so." holds a filler, so there is no shortcut past it. The
+first three chosen languages add their worked examples (`prompts/cleanup_examples.<subtag>.md`, one for every language of the
+settings; mainland Chinese gets the Chinese ones in Simplified, character by character, so they use words both regions write
+alike). A missing file of examples fails the tests and the bundle's audit (`core/packaging/build.py prompt_files`); the
+prompt before the dictionary stays under 5,000 characters for every choice of languages. After the model only the whole
+text's last full stop goes, and only one that ends nothing but a sentence (。 and the like, R-DICT-STOP-01,
+`drop_final_full_stop`); a Latin dot may close "3 p.m." or "etc.", so it is the model's to leave out. Nothing checks after
+the model that it invented no question: the prompt says so, and how well models follow the new prompt on real dictation is
+unmeasured (the paid comparison `cleanup_compare` has not been run on it).
+
+What proves it: `tests/brain/test_cleanup.py`, `test_dictation_finish.py`, `test_service.py`, `tests/test_dictation_latency.py`
+and `tests/test_packaging.py` from core/.
 
 ```powershell
 npm run look -- dictation-languages dictation-language-variants --theme both --width 1120,720,1920x1080
@@ -190,8 +204,12 @@ logs `focused_ancestry`; with the fix it reads the field (`field probe (sources:
 
 ## Cleanup v3 production decision and calibrated comparison
 
+The production prompt has since been rewritten in no one language, with worked examples per
+language (R-DICT-CLEAN-01, the section on spoken languages above); it has not been through this
+comparison. What follows records the v3 decision and how the comparison works.
+
 Follow-up 5 explicitly adopts v3 for the owner's short-prompt, clear-structure goal.
-`core/src/raphael_core/brain/prompts/cleanup_system.md` is now the exact 3026-character
+`core/src/raphael_core/brain/prompts/cleanup_system.md` was then the exact 3026-character
 v3 text, SHA-256 a67e50307492e25343ec7e0a8fe5670665e4f1a75ef92fcc8c726ea44947c82b
 on LF-normalized UTF-8 (3294 bytes), replacing the 6783-character/8119-byte prompt.
 `cleanup_candidate.md` equals production. V3 preserves final intent, scope, names,
@@ -377,19 +395,18 @@ in the history as `kind="ask"` with the recipient's name in `target_app` (Rust s
 `dictation.stop`, 0 for Raphael); the row says 「傳給 拉斐爾」 (`history-sent-to` in dictation-history).
 Paste-last, the lifetime totals and dictionary learning still use dictations only.
 
-## The owner's punctuation
+## The closing full stop and the guards after the model
 
-The owner dislikes 。: every Chinese result (cleaned, cleaned in pieces, the raw fallback) goes through
-`textnorm.finish_chinese_dictation` (a line-final 。 goes, one inside a line becomes ，; kana lines and
-code stay). A cleaned result also goes through `remove_unspoken_ma`: a 嗎 the transcript does not have
-around it is removed with its ？, so a request never becomes a question. Tests:
+Every result (cleaned, cleaned in pieces, the raw fallback) loses only the whole text's last full stop, and only one that
+ends nothing but a sentence (`textnorm.drop_final_full_stop`, R-DICT-STOP-01): 。 goes in Chinese and Japanese alike, a
+Latin dot stays for the model to judge, and full stops inside the text, code and inline code stay. No rule after the model
+edits a word in any one language: the remover of an unspoken 嗎 is gone with the other Chinese-only steps, and the prompt
+says in terms that the model adds no particle, question or question mark (unmeasured on real dictation). Tests:
 core/tests/brain/test_dictation_finish.py. Before that, `textnorm.guard_cleanup_text` drops a first or last
 paragraph (or outer line) the transcript mostly does not have (below half of its characters/words, dictionary
 words counting as present), so a model's note, answer or preface never reaches the paste; a result with nothing
 left falls back to the normalized raw text as `suspicious` (core/tests/brain/test_cleanup_guard.py). MAI-Transcribe
-is called with automatic language detection (no hint): a forced zh would bend English names. The prompt was the owner's version C (cleanup_system.md);
-a shorter candidate D lost paragraph breaks and a hedge and added two 嗎 on the owner's own 24 hours
-(gpt-6-luna, 30 cases), so it was not adopted.
+is called with automatic language detection (no hint): a forced zh would bend English names.
 
 ## How to get to it (user POV)
 
@@ -573,8 +590,8 @@ before returning to Dictionary; locale changes update both visible and reserve l
 ## Dictation intent cleanup
 
 Cleanup preserves every intended fact and qualification while removing abandoned drafting,
-resolving self-corrections and regrouping ideas. Short clear sentences retain the existing
-conservative normalization fast path. The dictionary, language variants and target-app inputs
+resolving self-corrections and regrouping ideas. A short clear sentence is cleaned like any other
+(R-DICT-CLEAN-01). The dictionary, language variants and target-app inputs
 still apply. Commands and questions stay the speaker's text, never instructions to the cleaner.
 
 Every long cleanup request is split at sentence boundaries (1500 characters, with clause/space

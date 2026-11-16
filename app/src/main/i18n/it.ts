@@ -1441,7 +1441,7 @@ export const it = {
   "settings.groupListen": "Come ascolta",
   "settings.searchingMicrophones": "Ricerca…",
   "mic.automaticShort": "Automatico ({p0})",
-  "languages.variantsOf": "Come si scrive {p0}",
+  "languages.variantsOf": "Come si scrive {p0}: {p1}",
   "settings.agentKeys": "Chiedi a Raphael",
   "settings.tidyKeys": "Rifinisci il testo selezionato",
   "home.askRaphael": "Chiedi a Raphael",

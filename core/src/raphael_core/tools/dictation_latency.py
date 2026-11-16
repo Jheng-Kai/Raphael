@@ -143,10 +143,11 @@ async def measure(*, legacy: bool, local: bool = False, scale: float = .02,
 async def run(trials: int, scale: float) -> None:
     print(f"Fake-provider wall times; scale={scale}. Cloud=4s, cleanup=2s, local=0.5s before scaling.")
     for name, options in (
+        # Every dictation is cleaned, a short clear sentence too (cleanup.py, above `timeout_for`).
         ("modeled legacy sequential", {"legacy": True}),
-        ("short clean, cloud only", {"legacy": False}),
-        ("short clean, local race", {"legacy": False, "local": True}),
-        ("needs cleanup, local race", {"legacy": False, "local": True, "text": "Hello world"}),
+        ("short sentence, cloud only", {"legacy": False}),
+        ("short sentence, local race", {"legacy": False, "local": True}),
+        ("unpunctuated, local race", {"legacy": False, "local": True, "text": "Hello world"}),
     ):
         values = [await measure(scale=scale, **options) for _ in range(trials)]
         walls = [v.wall_ms for v in values]

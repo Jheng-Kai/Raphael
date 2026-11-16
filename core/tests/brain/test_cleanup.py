@@ -688,12 +688,47 @@ def test_the_prompt_keeps_all_spoken_particles_without_inventing_questions():
     assert "Keep the speaker's tone, including particles and question tags that carry it" in rule
     # Whether a particle still fits is the model's judgment, not a rule of its own.
     assert "leave one out only where it no longer fits" in rule
-    assert "Never add anything the speaker did not say" in text
     assert "Use a question mark only for a spoken question." in text
     # The rule names the kind of word, in no one language: no list of Chinese particles.
     assert not any(particle in rule for particle in ("嗎", "呢", "吧", "嘛", "啊", "不是嗎", "對吧"))
     replies = [json.loads(line.split("→ ", 1)[1])["text"] for line in text.splitlines() if line.startswith("  → ")]
     assert any(reply.endswith("<particle>?") for reply in replies), "an example keeps a particle where it was said"
+
+
+def test_the_prompt_forbids_an_invented_particle_question_or_question_mark():
+    # R-DICT-CLEAN-01: the model once turned requests into questions. Nothing after the model checks
+    # for that in any one language, so the prompt says it in terms; whether models follow it is
+    # unmeasured on real dictation.
+    text = build_system_prompt([], [])
+    rule = next(line for line in text.splitlines() if line.startswith("2. "))
+    assert rule == (
+        "2. Never add anything the speaker did not say: no word, particle, question or question mark "
+        "of your own. A request stays a request and a statement stays a statement."
+    )
+
+
+def test_the_prompt_keeps_the_language_neutral_rules_of_the_earlier_prompt():
+    text = build_system_prompt([], [])
+    for kept in (
+        # The speaker's order, and no sentence dropped.
+        "Never rephrase, reorder, merge or summarize their sentences",
+        "Never drop a sentence, point, name, number, condition or negation the speaker meant for the reader.",
+        # A word becomes a product's name only from its context.
+        "make a word a name only when the context clearly means that product",
+        # The sentence ends speech-to-text heard stay; only the text's last full stop goes.
+        "Keep the sentence ends the transcript has",
+        "Leave out the full stop at the very end of the text, never a dot that belongs to a word or a number.",
+        # Several requests are numbered, none made the lead-in of the others; one topic, one paragraph.
+        "never make one request the lead-in of others",
+        "A single topic stays one paragraph, however long",
+    ):
+        assert kept in text, kept
+    # No licence to rewrite what was said: numbers, dates and times stay as they were said.
+    assert "usual written form" not in text
+    tagged = [json.loads(line.split("→ ", 1)[1])["text"] for line in text.splitlines() if line.startswith("  → {\"text\": \"<")
+              or line.startswith("  → {\"text\": \"1. <")]
+    assert "1. <request>\n2. <request>\n3. <request>\n\n<next point>" in tagged, "requests are items, not a lead-in"
+    assert not any(reply.startswith("<request>:") for reply in tagged)
 
 
 def test_the_examples_of_the_prompt_reply_in_valid_json_with_real_line_breaks():
@@ -706,7 +741,7 @@ def test_the_examples_of_the_prompt_reply_in_valid_json_with_real_line_breaks():
     texts = [json.loads(reply)["text"] for reply in replies]
     lists = [t for t in texts if t.startswith("1. ") or "\n1. " in t]
     assert lists and all("\n2. " in t for t in lists)
-    assert ":\n\n1. " in lists[0], "a lead-in ends with a colon and a blank line comes before the list"
+    assert any(re.search(r"[:：]\n\n1\. ", t) for t in lists), "a lead-in ends with a colon and a blank line comes before the list"
     assert any("1. " not in t for t in texts), "an example that is not a list"
 
 
@@ -1047,14 +1082,14 @@ def test_the_rest_of_the_prompt_is_the_same_for_every_selection():
 
 def test_structure_rules_cover_implicit_requests_single_topics_and_existing_sentences():
     prompt = build_system_prompt([], [], languages=["zh-TW"])
-    assert 'Use a numbered list ("1. ") when the speaker enumerates, announces a number of things and then names them, or names three or more parallel items, steps or requests' in prompt
-    assert "Start a new paragraph when the speaker moves to another point." in prompt
-    assert "only a lead-in the speaker said goes before the list (never invent one, a count or a heading), it ends with a colon and a blank line" in prompt
-    assert "split long speech into sentences. Leave out only the full stop at the very end of the text." in prompt
+    assert 'Use a numbered list ("1. ") when the speaker enumerates, announces a number of things and names them, or names three or more parallel items, steps or requests, in any app, even in one sentence.' in prompt
+    assert "start a new one when the speaker moves to another point." in prompt
+    assert "Only a lead-in the speaker said goes before the list, ending with a colon and a blank line: never invent one, a count or a heading" in prompt
+    assert "Keep the sentence ends the transcript has and split long speech into sentences." in prompt
     assert "When the speaker changes their mind anywhere, even deep in a long passage, write only the final version" in prompt
     assert "otherwise keep it as heard, never drop it" in prompt
     replies = [json.loads(line.split("→ ", 1)[1])["text"] for line in prompt.splitlines() if line.startswith("  → ")]
-    assert len([reply for reply in replies if reply.startswith("<")]) == 3, "three tagged examples"
+    assert len([reply for reply in replies if "<" in reply]) == 2, "two tagged examples"
     assert not any(reply.endswith((".", "。")) for reply in replies), "the examples follow the full stop rule"
 
 
@@ -1201,21 +1236,22 @@ def test_a_mac_app_is_known_by_its_bundle_identifier():
 
 
 def _example_lines(prompt):
+    """The worked examples of the chosen languages: the example lines that are not the template's tags."""
     body = prompt.split("Examples (transcript → reply):", 1)[1].split("Target app:", 1)[0]
-    return [line for line in body.splitlines() if line.startswith(("- ", "  → ")) and not line.startswith("- <")
-            and not line.startswith("  → {\"text\": \"<")]
+    return [line for line in body.splitlines()
+            if line.startswith(("- ", "  → ")) and not re.search(r"<[a-z -]+>", line)]
 
 
 def test_each_chosen_language_adds_its_own_examples_and_no_other():
     # The template is in no one language; the worked examples come from the speaker's languages.
     zh_en_ja = build_system_prompt([], [], languages=["zh-TW", "en-US", "ja-JP"])
     lines = _example_lines(zh_en_ja)
-    assert any("投影片" in line for line in lines), "Chinese examples"
-    assert any("landing page" in line for line in lines), "English examples"
+    assert any("報價單" in line for line in lines), "Chinese examples"
+    assert any("the website" in line for line in lines), "English examples"
     assert any("出張" in line for line in lines), "Japanese examples"
     only_en = _example_lines(build_system_prompt([], [], languages=["en-GB"]))
     assert only_en and all(line.replace("→", "").isascii() for line in only_en)
-    # A language without a file of examples (none of the settings') keeps the general prompt alone.
+    # A language the settings do not offer has no file of examples and keeps the general prompt alone.
     from raphael_core.brain.cleanup import language_examples
     assert language_examples(["nl-NL"]) == ""
 
@@ -1225,13 +1261,75 @@ def test_a_language_adds_its_examples_once_and_mainland_chinese_gets_simplified_
     assert len(twice) == len(_example_lines(build_system_prompt([], [], languages=["zh-TW"])))
     mainland = "\n".join(_example_lines(build_system_prompt([], [], languages=["zh-CN"])))
     assert "这周要准备" in mainland and "這週" not in mainland
-    assert "投影片" in mainland, "characters are converted one by one, never phrases"
+    # Characters are converted one by one, so the Chinese examples use words both regions write
+    # alike (no 投影片, which is Taiwan's word for a slide).
+    assert "报价单" in mainland and "预算表" in mainland
+    for taiwan_only in ("投影片", "軟體", "資料", "視窗", "影片", "簡報"):
+        assert taiwan_only not in cleanup._examples_for("zh"), taiwan_only
 
 
 def test_every_language_of_the_settings_has_examples():
     from raphael_core.languages import LANGUAGE_IDS
     for code in LANGUAGE_IDS:
         assert _example_lines(build_system_prompt([], [], languages=[code])), code
+
+
+def test_a_missing_file_of_examples_fails_loudly(monkeypatch):
+    # Every language the settings offer ships its examples. A file missing from a build is an error
+    # (the dictation then falls back to its raw text with a reason), never a prompt silently without
+    # them; the build's audit requires the files too (core/packaging/build.py).
+    monkeypatch.setattr(cleanup, "_EXAMPLES_FILE", "cleanup_examples_missing.{}.md")
+    cleanup._examples_for.cache_clear()
+    try:
+        with pytest.raises(FileNotFoundError):
+            build_system_prompt([], [], languages=["fr-FR"])
+    finally:
+        monkeypatch.undo()
+        cleanup._examples_for.cache_clear()
+    assert _example_lines(build_system_prompt([], [], languages=["fr-FR"]))
+
+
+def test_only_the_first_three_languages_bring_their_examples():
+    # The order is the priority: past the third language, a language adds its name and how it is
+    # written, but no examples, so the prompt stays short however many are chosen.
+    assert cleanup.EXAMPLE_LANGUAGES == 3
+    five = _example_lines(build_system_prompt([], [], languages=["ja-JP", "ko-KR", "fr-FR", "de-DE", "it-IT"]))
+    first_three = _example_lines(build_system_prompt([], [], languages=["ja-JP", "ko-KR", "fr-FR"]))
+    assert five == first_three
+    assert not any("Launch" in line or "lancio" in line for line in five)
+
+
+def _selections(most):
+    """Every valid selection of up to `most` languages, as sets (the order changes no length but
+    which three bring examples)."""
+    import itertools
+
+    from raphael_core.languages import LANGUAGE_IDS, checked_languages
+
+    for count in range(1, most + 1):
+        for combination in itertools.combinations(LANGUAGE_IDS, count):
+            try:
+                checked_languages("languages", list(combination))
+            except ValueError:
+                continue
+            yield combination
+
+
+def test_every_selection_of_languages_keeps_the_prompt_within_its_bound():
+    # The template, the names of the languages, how each is written and the examples of the first
+    # three, for the worst choice and order the settings allow (up to five languages, the ones with
+    # the longest examples first), with an empty dictionary. The dictionary has a bound of its own.
+    from raphael_core.languages import MAX_LANGUAGES
+
+    def size(selection):
+        ordered = sorted(selection, key=lambda code: -len(cleanup.language_examples([code])))
+        return len(build_system_prompt([], [], languages=ordered)), ordered
+
+    worst = max(size(selection) for selection in _selections(MAX_LANGUAGES))
+    worst_three = max(size(selection) for selection in _selections(3))
+    assert worst[0] < cleanup.PROMPT_MAX_BASE_CHARS, worst
+    assert worst_three[0] < cleanup.PROMPT_MAX_BASE_CHARS, worst_three
+    assert cleanup.PROMPT_MAX_BASE_CHARS == 5_000
 
 
 def test_the_language_examples_follow_the_rules_of_the_prompt():
