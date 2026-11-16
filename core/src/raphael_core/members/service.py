@@ -102,6 +102,7 @@ from ..clock import wall_clock_ms
 from ..home_digest import FAILED_TASKS, FAILED_TURNS
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router
+from ..slime_ids import current_avatar
 from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError, checked, sniff_ok
 from .capabilities import MemberCapabilities, download_skills
 from .schedule import Schedule, next_run
@@ -1666,7 +1667,7 @@ class MembersService:
                 group_val = arguments.get("group", current_group.name if current_group else "")
                 group_name = group_val.strip() if isinstance(group_val, str) else ""
                 wanted = arguments.get("avatar_preset", current.avatar if current else "")
-                avatar_preset = wanted if isinstance(wanted, str) and wanted.startswith(SLIME) else ""
+                avatar_preset = current_avatar(wanted) if isinstance(wanted, str) and wanted.startswith(SLIME) else ""
                 draft = MemberDraft(
                     id=f"draft-{len(drafts) + 1}",
                     name=str(arguments.get("name", current.name if current else "") or ""),

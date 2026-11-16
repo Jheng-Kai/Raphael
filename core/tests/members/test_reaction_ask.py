@@ -128,7 +128,7 @@ async def test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model
 async def test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches(setup, client, window, named):
     # A Japanese teacher asked what was wrong in Japanese because her conversation is full of it.
     rig, team_ = setup
-    one = member(team_, name='紫苑', role='日本語の先生', instructions='日本語を教える。例文と練習問題は日本語で。')
+    one = member(team_, name='小葵', role='日本語の先生', instructions='日本語を教える。例文と練習問題は日本語で。')
     client.chats.append(live_said('日本語の例文です。'))
     turn_id = (await rig.call('agent.ask', {'session_id': 's1', 'text': '例文をください', 'ui_language': window, 'source': 'app',
                                               'member_id': one.id}))['turn_id']

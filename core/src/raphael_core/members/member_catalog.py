@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from ..bots.homes import atomic
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
+from ..slime_ids import current_id
 from .templates import MAX_BYTES, checked, findings
 
 DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/raphael-catalog/main"
@@ -32,7 +33,7 @@ STALE_INDEX = with_ui_words({
     "ja": "テンプレートが取り消されていないことを確認するため、インターネットに接続してから追加してください",
 })
 CATEGORIES = ("engineering", "sales", "marketing", "design", "personal", "hr", "product", "operations")
-AVATARS = ("rimuru", "souei", "shuna", "diablo", "benimaru", "hakurou", "shion", "gobta")
+AVATARS = ("blue-plain", "horn-sash-blue", "small-horns-pink", "streaks-charcoal", "horns-red", "mustache-gray", "horn-lavender", "goggles-green")
 
 
 def schema(value):
@@ -54,6 +55,8 @@ def schema(value):
         for key, cap in (("name", 100), ("creator", 100), ("summary", 300), ("version", 40)):
             if not isinstance(entry[key], str) or not entry[key].strip() or len(entry[key]) > cap or "\n" in entry[key]:
                 raise ValueError("Invalid catalogue text")
+        # An index published before the faces were renamed still names them by the old ids.
+        entry["avatar"] = current_id(entry["avatar"]) if isinstance(entry["avatar"], str) else entry["avatar"]
         if entry["category"] not in CATEGORIES or entry["avatar"] not in AVATARS or type(entry["featured"]) is not bool:
             raise ValueError("Invalid catalogue category or avatar")
         if entry["package"] != f"packages/{entry['id']}/member.raphael-member" or not isinstance(entry["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"]):

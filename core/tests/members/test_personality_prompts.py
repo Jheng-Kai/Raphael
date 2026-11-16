@@ -65,14 +65,14 @@ async def test_voice_answer_keeps_raphael_persona_without_member_personalities(s
 @pytest.mark.parametrize("caller", ["raphael", "coach"])
 async def test_naming_another_members_lesson_queries_the_member_as_itself(setup, client, caller):
     rig, team = setup
-    teacher = member(team, name="紫苑", role="日文老師", personality="STRICT-ONLY", instructions="Teach N1.")
+    teacher = member(team, name="小葵", role="日文老師", personality="STRICT-ONLY", instructions="Teach N1.")
     coach = member(team, name="Coach", personality="WARM-ONLY")
     client.chats = [
-        chat("", ("ask_member", {"member": "紫苑", "request": "請回顧剛才教的日文句子。"})),
+        chat("", ("ask_member", {"member": "小葵", "request": "請回顧剛才教的日文句子。"})),
         live_said("雨が降りそうです。"),
-        live_said("紫苑教的是：雨が降りそうです。"),
+        live_said("小葵教的是：雨が降りそうです。"),
     ]
-    result = await typed(rig, "剛剛紫苑教了幾句日文，你可以看一下嗎？", 0 if caller == "raphael" else coach.id)
+    result = await typed(rig, "剛剛小葵教了幾句日文，你可以看一下嗎？", 0 if caller == "raphael" else coach.id)
     assert "雨が降りそうです。" in result["text"]
     assert "我無法讀取" not in result["text"]
     caller_system, caller_told = (message["content"] for message in client.chat_calls[0]["messages"][:2])
@@ -92,13 +92,13 @@ async def test_naming_another_members_lesson_queries_the_member_as_itself(setup,
 @pytest.mark.parametrize("source", ["app", "voice"])
 async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_speaker(setup, client, source):
     rig, team = setup
-    teacher = member(team, name="紫苑", role="日文老師")
+    teacher = member(team, name="小葵", role="日文老師")
     question = "先生、今日は何を勉強しますか？"
     client.chats = [live_said("今天練習自我介紹。\n先用中文說說你的興趣。")]
     await typed(rig, question, teacher.id)
-    request = "紫苑剛剛教了我什麼？我想聽日文的部分。"
+    request = "小葵剛剛教了我什麼？我想聽日文的部分。"
     answer = f"當時的日文原句只有你問的：『{question}』\n我當時用中文教了自我介紹。"
-    final = f"那句日文是你問紫苑的：『{question}』。紫苑當時用中文教自我介紹。"
+    final = f"那句日文是你問小葵的：『{question}』。小葵當時用中文教自我介紹。"
     arguments = {"member": teacher.name, "request": request}
     if source == "app":
         client.chats = [chat("", ("ask_member", arguments)), live_said(answer), live_said(final)]
@@ -117,7 +117,7 @@ async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_spea
     assert f"assistant (member {teacher.id}): 今天練習自我介紹。" in target_prompt
     assert f"assistant (member {teacher.id}): 先用中文說說你的興趣。" in target_prompt
     # The fake repeats the live model's unmarked quote; provenance comes from the real thread.
-    assert f"紫苑: {answer.splitlines()[0]}" in str(tool)
+    assert f"小葵: {answer.splitlines()[0]}" in str(tool)
     assert f"owner: {question}" in str(tool)
     scope = {"member_id": 0}
     if source == "voice":
@@ -133,7 +133,7 @@ async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_spea
 
 async def test_relay_keeps_all_messages_without_misidentifying_other_sources_as_the_owner(setup, client):
     rig, team = setup
-    teacher = member(team, name="紫苑")
+    teacher = member(team, name="小葵")
     other = member(team, name="Other")
     for route, source, question, member_id in (
         ("exchange", "member", "ASSISTANT-REQUEST", teacher.id),
@@ -148,9 +148,9 @@ async def test_relay_keeps_all_messages_without_misidentifying_other_sources_as_
         chat('{"text":"Second.","messages":["ASSISTANT-REQUEST\\nROUTINE-TITLE\\nOTHER-THREAD-QUESTION","Second."]}'),
         live_said("Relayed."),
     ]
-    await typed(rig, "問紫苑", 0)
+    await typed(rig, "問小葵", 0)
     tool = next(m["content"] for m in client.chat_calls[-1]["messages"] if m["role"] == "tool")
-    assert "紫苑: ASSISTANT-REQUEST" in tool and "紫苑: Second." in tool
+    assert "小葵: ASSISTANT-REQUEST" in tool and "小葵: Second." in tool
     for line in ("ASSISTANT-REQUEST", "ROUTINE-TITLE", "OTHER-THREAD-QUESTION"):
         assert f"owner: {line}" not in tool
     assert "PRIVATE-UNRELATED-QUESTION" not in tool

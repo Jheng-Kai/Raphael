@@ -540,7 +540,7 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
             "personality": "務實清晰",
             "instructions": "每週整理營運週報",
             "group": "核心團隊",
-            "avatar_preset": "slime:shion",
+            "avatar_preset": "slime:horn-lavender",
         },
         {
             **asked["confirm"]["drafts"][2],
@@ -554,7 +554,7 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
     roster = await rig.call("members.list", {})
     created = roster["members"][1:]
     assert [(m["name"], m["role"], m["blurb"], m["personality"], m["instructions"], m["avatar"]) for m in created] == [
-        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "slime:shion"),
+        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "slime:horn-lavender"),
         ("RD", "研發", "研發簡介", "", "", "slime:color:coral"),
     ]
     assert [g["name"] for g in roster["groups"]] == ["核心團隊"]

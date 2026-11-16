@@ -69,7 +69,7 @@ async def rig(conn, tmp_path):
     cards.messaging = messaging
     messaging.register(agent.rpc)
     agent.rpc.register("messaging.pairing.answer", messaging.cards.answer)
-    member = team.members.store.create_member(name="Editor", role="Writer", instructions="Make public guides clear", avatar="slime:shuna")
+    member = team.members.store.create_member(name="Editor", role="Writer", instructions="Make public guides clear", avatar="slime:small-horns-pink")
     async def ask(intent, *, member_id=member.id, text="Set up", session="panel"):
         return await agent.call("agent.ask", {"session_id": session, "member_id": member_id, "text": text, "source": "app", "ui_language": "en", "intent": intent})
     try:
@@ -259,7 +259,7 @@ async def test_template_card_is_snapshot_with_review_export_publish_and_descript
     result = await rig.ask("share-template")
     [view] = rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]]
     assert view["description"] == "I clarify public guides." and view["state"] == "draft"
-    assert view["counts"] == {"skills": 0, "routines": 0} and view["avatar"] == "slime:shuna"
+    assert view["counts"] == {"skills": 0, "routines": 0} and view["avatar"] == "slime:small-horns-pink"
     rig.team.members.store.update_member(rig.member.id, instructions="Changed after snapshot")
     review = await rig.agent.call("members.template_card", {"id": view["id"]})
     assert review["template"]["instructions"] == "Help anyone write clear public guides."

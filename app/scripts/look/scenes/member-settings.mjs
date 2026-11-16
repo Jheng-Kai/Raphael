@@ -28,7 +28,7 @@ const longJob = [
   '批改之後，把最常犯的三種錯誤另外寫成一段總結。', '如果我連續三天沒有練習，下一次開頭先問我發生了什麼事。', '不要假裝知道我沒有教過你的教材內容。',
   '任何時候都不要用英文解釋，除非我明說要用。', '最後一條：每個月底，幫我寫一段這個月的進步與下個月的目標。',
 ].join('\n');
-const persona = (personality, instructions) => ({ ...filled, persona: { name: '紫苑', role: '日文老師', personality, instructions } });
+const persona = (personality, instructions) => ({ ...filled, persona: { name: '小葵', role: '日文老師', personality, instructions } });
 const soul = [...page, ...kind('soul', '.ms-pane [data-k="ms-personality"]')];
 const edit = field => [click(`.ms-pane [data-ms="edit"][data-field="${field}"]`), wait(`.ms-pane #ms-${field}`)];
 const typed = '嚴厲但耐心，直接稱呼你。\n講日文時先說一遍，再用中文解釋。';
@@ -83,7 +83,7 @@ export default [
   scene('member-settings-back', 'Escape and the arrow return to the member\'s conversation, and the panel is as it was', [...page, key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer'), check('member-settings-back')], filled),
   // A member's colour is on the switches of its settings page too, light slimes keeping a knob that shows.
   scene('member-switch-tools', 'The tools kind: the switches that are on wear the member\'s colour, the drafts switch under them too', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
-  scene('member-switch-tools-yellow', 'A yellow slime\'s settings switches keep a knob that shows', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch-light')], { ...filled, members: withSlime(1, 'slime:ramiris') }),
+  scene('member-switch-tools-yellow', 'A yellow slime\'s settings switches keep a knob that shows', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch-light')], { ...filled, members: withSlime(1, 'slime:wings-yellow') }),
   scene('member-switch-skills', 'The skills kind: a skill that is on wears the member\'s colour', [...page, ...kind('skills', '.ms-pane [data-k="ms-skills"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
   scene('member-switch-notify', 'The notifications kind: its one switch, once on, wears the member\'s colour', [...page, ...kind('notify', '.ms-pane [data-k="ms-notify"]'), wait('.ms-pane [data-ms="notify"][aria-checked="true"]'), check('member-switch')], { ...filled, members: fixture.members.map(item => item.id === 1 ? { ...item, notify: true } : item) }),
   scene('member-switch-notify-off', 'A switch that is off keeps its look in the member\'s settings: no colour, the grey knob at the left', [...page, ...kind('notify', '.ms-pane [data-k="ms-notify"]'), wait('.ms-pane [data-ms="notify"][aria-checked="false"]'), check('member-switch-off')], { ...filled, members: fixture.members.map(item => item.id === 1 ? { ...item, notify: false } : item) }),

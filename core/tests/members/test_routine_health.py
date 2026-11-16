@@ -79,7 +79,7 @@ async def listed(rig, member):
 
 
 async def test_a_failed_run_leaves_its_reason_on_the_routine_and_says_the_last_run_failed(rig):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     routine, turn_id = started(rig, member)
     end(rig, turn_id, "error", "這次執行需要的一個步驟被拒絕了，沒有完成。\n\n沒有做出頁面。")
     view = await listed(rig, member)
@@ -89,7 +89,7 @@ async def test_a_failed_run_leaves_its_reason_on_the_routine_and_says_the_last_r
 
 
 async def test_a_good_run_after_it_clears_the_reason_and_the_failed_mark(rig):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     routine, turn_id = started(rig, member)
     end(rig, turn_id, "error", "沒有完成。")
     rig.wall.now += 3_600_000
@@ -101,7 +101,7 @@ async def test_a_good_run_after_it_clears_the_reason_and_the_failed_mark(rig):
 
 
 async def test_a_run_the_owner_stopped_is_no_failure_of_the_routine(rig):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     routine, turn_id = started(rig, member)
     end(rig, turn_id, "cancelled", "已停止。")
     view = await listed(rig, member)
@@ -127,7 +127,7 @@ def skill_with_files(rig, member):
 
 
 async def test_a_member_reads_the_page_template_of_its_skill_through_skill_read(rig):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     skill_with_files(rig, member)
     text = rig.service.skill_file(member.id, "daily-page", "templates/page.html")
     assert text.startswith("<h1>{{title}}</h1>") and "sk-or-v1-" not in text, "what looks like a key is not given"
@@ -141,15 +141,15 @@ async def test_a_member_reads_the_page_template_of_its_skill_through_skill_read(
     "templates/missing.html", "x\u0000.html",
 ])
 async def test_the_database_the_vault_keys_and_dot_env_stay_unreadable_through_skill_read(rig, reference):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     skill_with_files(rig, member)
     with pytest.raises(MemberError):
         rig.service.skill_file(member.id, "daily-page", reference)
 
 
 async def test_skill_read_gives_only_files_of_an_enabled_skill_of_that_member(rig):
-    one = rig.service.store.create_member(name="紫苑", role="新聞")
-    other = rig.service.store.create_member(name="迪亞布羅", role="檢查")
+    one = rig.service.store.create_member(name="小葵", role="新聞")
+    other = rig.service.store.create_member(name="小墨", role="檢查")
     skill_with_files(rig, one)
     with pytest.raises(MemberError):
         rig.service.skill_file(other.id, "daily-page", "notes.txt")
@@ -160,7 +160,7 @@ async def test_skill_read_gives_only_files_of_an_enabled_skill_of_that_member(ri
 
 
 async def test_a_link_out_of_the_skill_folder_is_not_followed(rig, tmp_path):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     folder = skill_with_files(rig, member)
     outside = tmp_path / "outside.txt"
     outside.write_text("outside", encoding="utf-8")
@@ -173,7 +173,7 @@ async def test_a_link_out_of_the_skill_folder_is_not_followed(rig, tmp_path):
 
 
 async def test_a_file_that_is_too_large_or_not_text_is_refused(rig):
-    member = rig.service.store.create_member(name="紫苑", role="新聞")
+    member = rig.service.store.create_member(name="小葵", role="新聞")
     folder = skill_with_files(rig, member)
     (folder / "big.html").write_text("x" * (256 * 1024 + 1), encoding="utf-8")
     (folder / "binary.html").write_bytes(b"\xff\xfe\x00\x01")

@@ -20,7 +20,7 @@ const report: Report = {
     { kind: "table", title: "總覽表", columns: ["成員", "負責"], rows: [
       { cells: ["小晴", "研究"], group: "專案工作", member_id: 1, status: "blocked" },
       { cells: ["小森", "進度"], group: "專案工作", member_id: 2, status: "running" },
-      { cells: ["紫苑", "日文"], group: "語言學習" }] },
+      { cells: ["小葵", "日文"], group: "語言學習" }] },
     { kind: "team", title: "分工與協作", nodes: [{ id: "o", owner: true }, { id: "r", member_id: 0, note: "分派" }, { id: "s", member_id: 2 }],
       edges: [{ from: "o", to: "r", label: "交辦" }, { from: "r", to: "s", label: "排進度" }, { from: "s", to: "o", label: "每週進度" }],
       notes: [{ label: "缺口", text: "客戶來信 <i>沒有人負責</i>" }] },

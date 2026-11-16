@@ -16,7 +16,7 @@ import type { AgentTurn, PairingCard, SecretCard, TemplateCard } from "./types";
 import { t } from "./i18n";
 
 const pairing = (over: Partial<PairingCard> = {}): PairingCard => ({ id: "pair-1", platform: "slack", member_id: 3, code: "SL7Q2K", who: "Sam", expires_at_ms: 0, state: "pending", ...over });
-const template = (over: Partial<TemplateCard> = {}): TemplateCard => ({ id: "tpl-1", state: "draft", name: "Editor", avatar: "slime:shion", description: "Checks sources.", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [], ...over });
+const template = (over: Partial<TemplateCard> = {}): TemplateCard => ({ id: "tpl-1", state: "draft", name: "Editor", avatar: "slime:horn-lavender", description: "Checks sources.", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [], ...over });
 const dom = (html: string): HTMLElement => { const host = document.createElement("div"); host.innerHTML = html; document.body.append(host); return host; };
 const turn = (over: Partial<AgentTurn>): AgentTurn => ({ id: 1, ...over }) as AgentTurn;
 

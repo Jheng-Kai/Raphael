@@ -30,7 +30,7 @@ from raphael_core.worker.loop import FAILURE_CHARS, OTHER_WAYS, Call, ToolOutcom
 
 from .test_service import NOW_MS
 
-FIELDS = dict(name="Shion", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
+FIELDS = dict(name="Ada", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
 RULE = "A failed call is information: read its cause, fix what you can, then take the next plausible way"
 CAPS = ("change approach once", "at most once", "Do not try another", "after one check",
         "Only open a browser when the owner asks", "answer with what you have; name the gap")

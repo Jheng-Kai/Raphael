@@ -8,7 +8,7 @@ import automationScenes from "./automations.mjs";
 const fixture=JSON.parse(readFileSync(join(import.meta.dirname, '../fixture.json'),'utf8'));
 const input='.page-agent .mb-chat:not([hidden]) .cmp-input';
 const marks={appsInventory:{state:'complete',count:3,apps:['GitHub','Notion','Slack'].map((name,i)=>({id:`sample-${i}`,name,connected:true,enabled:true,state:'ready',tools:1,last_used_at:3-i}))}};
-const faces=count=>({rooms:fixture.rooms.map(item=>({...item,member_ids:item.id===1?[0,1,2,3].slice(0,count):item.member_ids})),members:fixture.members.map(item=>({...item,avatar:{1:'slime:diablo',2:'slime:rigurd',3:'slime:shion'}[item.id]??item.avatar}))});
+const faces=count=>({rooms:fixture.rooms.map(item=>({...item,member_ids:item.id===1?[0,1,2,3].slice(0,count):item.member_ids})),members:fixture.members.map(item=>({...item,avatar:{1:'slime:streaks-charcoal',2:'slime:bowtie-green',3:'slime:horn-lavender'}[item.id]??item.avatar}))});
 
 export default [
   scene('daily-footer-hover','Connections pill has an outlined quiet hover and, in the list, no tooltip',[{action:'member-column',collapsed:false},hover('.sidebar-apps'),check('daily-footer-hover'),check('sidebar-shell')]),

@@ -99,7 +99,7 @@ def test_these_pairs_are_plausible_recognition_errors(word, form):
         ("後天", "明天幾"),
         # CJK of different lengths, or the same length with nothing in common.
         ("服務器", "電腦網"),
-        ("利姆路", "李慕璐"),
+        ("陳大文", "李慕璐"),
         ("拉斐爾", "拉菲爾老師"),
         # Another script, or no text at all.
         ("Claude", "電腦"),
@@ -304,6 +304,6 @@ def test_right_words_and_other_words_are_not_taken_for_a_mishearing(word, text):
 def test_a_known_form_counts_wherever_the_transcript_has_it_whole():
     assert spans("claude", "為什麼這邊顯示的是Cloud的用量", ["Cloud"]) == ["Cloud"]
     assert spans("claude", "上傳到 iCloud 就好", ["Cloud"]) == []
-    assert spans("拉米莉絲", "我跟奈米粒子聊過", ["奈米粒子"]) == ["奈米粒子"]
+    assert spans("拉米諾亞", "我跟奈米粒子聊過", ["奈米粒子"]) == ["奈米粒子"]
     # A CJK word is found only by its known forms: no Latin spelling to be near.
     assert spans("唯讀", "所以幫我把讀寫這個部分也改到完美") == []

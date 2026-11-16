@@ -123,7 +123,7 @@ test("a line with a gap is drawn in two stretches, its last point a dot and, alo
 });
 
 test("bars across give each name its total, their lengths following the totals", () => {
-  const box = drawn(chartHTML({ kind: "chart", type: "hbar", labels: ["拉斐爾", "紫苑"], series: [{ name: "完成", values: [18, 7] }, { name: "進行中", values: [3, 1] }] }, 0, people));
+  const box = drawn(chartHTML({ kind: "chart", type: "hbar", labels: ["拉斐爾", "小葵"], series: [{ name: "完成", values: [18, 7] }, { name: "進行中", values: [3, 1] }] }, 0, people));
   expect([...box.querySelectorAll(".rc-val")].map(value => value.textContent)).toEqual(["21", "8"]);
   const widths = [...box.querySelectorAll(".rc-track")].map(track => [...track.querySelectorAll<HTMLElement>(".rc-hb")].reduce((sum, bar) => sum + parseFloat(bar.style.width), 0));
   expect(widths[0]).toBeCloseTo(100, 0);

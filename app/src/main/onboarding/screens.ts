@@ -26,19 +26,19 @@ interface Floater { avatar: string; side: "left" | "right"; x: number; y: number
  */
 const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
   tools: [
-    { avatar: "slime:gobta", side: "left", x: 2, y: 2, px: 42 },
-    { avatar: "slime:shion", side: "right", x: 4, y: 40, px: 36 },
-    { avatar: "slime:ranga", side: "right", x: 18, y: -18, px: 28 },
+    { avatar: "slime:goggles-green", side: "left", x: 2, y: 2, px: 42 },
+    { avatar: "slime:horn-lavender", side: "right", x: 4, y: 40, px: 36 },
+    { avatar: "slime:wolf-star", side: "right", x: 18, y: -18, px: 28 },
   ],
   services: [
-    { avatar: "slime:shuna", side: "left", x: 9, y: 38, px: 36 },
-    { avatar: "slime:diablo", side: "right", x: 1, y: 6, px: 42 },
-    { avatar: "slime:benimaru", side: "left", x: 20, y: -16, px: 28 },
+    { avatar: "slime:small-horns-pink", side: "left", x: 9, y: 38, px: 36 },
+    { avatar: "slime:streaks-charcoal", side: "right", x: 1, y: 6, px: 42 },
+    { avatar: "slime:horns-red", side: "left", x: 20, y: -16, px: 28 },
   ],
   abilities: [
-    { avatar: "slime:milim", side: "left", x: 0, y: -8, px: 38 },
-    { avatar: "slime:souei", side: "right", x: 12, y: 42, px: 32 },
-    { avatar: "slime:rigurd", side: "right", x: 0, y: -14, px: 30 },
+    { avatar: "slime:tuft-pink", side: "left", x: 0, y: -8, px: 38 },
+    { avatar: "slime:horn-sash-blue", side: "right", x: 12, y: 42, px: 32 },
+    { avatar: "slime:bowtie-green", side: "right", x: 0, y: -14, px: 30 },
   ],
 };
 
