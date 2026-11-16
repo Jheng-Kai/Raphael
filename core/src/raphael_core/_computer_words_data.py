@@ -31,10 +31,10 @@ _ROWS = {
         "{who} đã đánh thức máy tính để sử dụng", "{who} ปลุกคอมพิวเตอร์เพื่อใช้งาน",
         "{who} membangunkan komputer untuk menggunakannya", "{who} bilgisayarı kullanmak için uyandırdı"),
     # A member answered after a change on its screen without reading the result back, once told to (R-COMP-PERF-09).
-    "The screen was not checked after the last change on it, so this does not count as done.": (
+    "The screen was not checked after the last change; this does not count as done.": (
         "最后一次操作画面后没有再确认结果，这次不算完成。", "화면을 마지막으로 조작한 뒤 결과를 확인하지 않아 완료로 처리할 수 없습니다.",
-        "No se comprobó la pantalla después del último cambio, así que esto no cuenta como terminado.",
-        "L’écran n’a pas été vérifié après la dernière modification ; ce n’est donc pas compté comme terminé.",
+        "No se comprobó la pantalla tras el último cambio; esto no cuenta como terminado.",
+        "Écran non vérifié après la dernière modification : cela ne compte pas comme terminé.",
         "Der Bildschirm wurde nach der letzten Änderung nicht geprüft; dies zählt daher nicht als erledigt.",
         "A tela não foi conferida depois da última alteração, então isto não conta como concluído.",
         "Lo schermo non è stato controllato dopo l’ultima modifica, quindi non conta come completato.",
