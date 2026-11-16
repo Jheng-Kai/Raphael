@@ -1444,6 +1444,7 @@ export const en = {
   "members.sourceBad": "That is not a GitHub repo or a Notion page",
   "members.waiting": "Waiting for you: {p0}",
   "members.waitingShort": "Waiting for you",
+  "members.draft": "Draft: {p0}",
   "reminder.waiting": "{p0} is waiting for you",
   "reminder.open": "Open",
   "members.unread": "New messages",

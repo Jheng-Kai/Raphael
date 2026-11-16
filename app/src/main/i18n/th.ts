@@ -1304,6 +1304,7 @@ export const th = {
   "agent.queued": "อยู่ในคิว",
   "agent.taskWaiting": "กำลังรอคุณ",
   "members.waitingShort": "กำลังรอคุณ",
+  "members.draft": "ฉบับร่าง: {p0}",
   "agent.openInSite": "เปิดบนเว็บไซต์",
   "agent.expandPdf": "ขยาย",
   "agent.collapsePdf": "ย่อ",

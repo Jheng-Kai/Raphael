@@ -226,6 +226,18 @@ drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`).
 face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
 pencil in its middle. Scenes: member-face-hover, slime-picker, slime-picker-tab.
 
+### Words not yet sent stand in the row (R-SIDE-05)
+
+A conversation's sidebar row shows what the owner is writing there before it is sent, as messaging apps do: the second line reads
+草稿：<the words> in place of the last line, for a member and a group chat alike, the open conversation's row too. The words come from the kept
+draft (`composer-drafts.ts` `writeDraftWords`, which the composer calls 300 ms after the last key and again when the draft is sent, emptied or
+given up) and every write tells its key (`DRAFT_EVENT`); the member column and the group rows redraw on it, and `patchHTML` touches only the line
+that changed. `unsentWords(scope, id)` reads a member's main conversation's draft first, else another of its conversations', or a group's
+(`room:<id>`); it parses the kept drafts again only when they changed, since every row of every draw asks. A quote alone or spaces are no words.
+A draft stands in place of a waiting question's gold line. `sidebar-draft` types in a member's composer and waits for the row's 草稿 line,
+`sidebar-draft-cleared` empties the composer and waits for the last line to come back, `sidebar-draft-room` does the same in a group chat.
+Gotcha: the line follows the kept draft, so it changes 300 ms after typing stops, not on each key.
+
 ## Driving it with look
 
 ```powershell

@@ -1304,6 +1304,7 @@ export const ptBR = {
   "agent.queued": "Na fila",
   "agent.taskWaiting": "Aguardando você",
   "members.waitingShort": "Aguardando você",
+  "members.draft": "Rascunho: {p0}",
   "agent.openInSite": "Abrir no site",
   "agent.expandPdf": "Expandir",
   "agent.collapsePdf": "Recolher",

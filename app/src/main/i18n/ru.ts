@@ -1304,6 +1304,7 @@ export const ru = {
   "agent.queued": "В очереди",
   "agent.taskWaiting": "Ожидает вас",
   "members.waitingShort": "Ожидает вас",
+  "members.draft": "Черновик: {p0}",
   "agent.openInSite": "Открыть на сайте",
   "agent.expandPdf": "Развернуть",
   "agent.collapsePdf": "Свернуть",

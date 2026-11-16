@@ -1304,6 +1304,7 @@ export const it = {
   "agent.queued": "In coda",
   "agent.taskWaiting": "In attesa di te",
   "members.waitingShort": "In attesa di te",
+  "members.draft": "Bozza: {p0}",
   "agent.openInSite": "Apri sul sito",
   "agent.expandPdf": "Espandi",
   "agent.collapsePdf": "Comprimi",

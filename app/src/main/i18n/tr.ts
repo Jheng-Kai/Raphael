@@ -1304,6 +1304,7 @@ export const tr = {
   "agent.queued": "Sırada",
   "agent.taskWaiting": "Sizi bekliyor",
   "members.waitingShort": "Sizi bekliyor",
+  "members.draft": "Taslak: {p0}",
   "agent.openInSite": "Sitede aç",
   "agent.expandPdf": "Genişlet",
   "agent.collapsePdf": "Daralt",

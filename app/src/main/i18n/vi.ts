@@ -1304,6 +1304,7 @@ export const vi = {
   "agent.queued": "Đang xếp hàng",
   "agent.taskWaiting": "Đang chờ bạn",
   "members.waitingShort": "Đang chờ bạn",
+  "members.draft": "Bản nháp: {p0}",
   "agent.openInSite": "Mở trên trang web",
   "agent.expandPdf": "Mở rộng",
   "agent.collapsePdf": "Thu gọn",

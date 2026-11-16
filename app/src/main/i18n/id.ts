@@ -1304,6 +1304,7 @@ export const id = {
   "agent.queued": "Dalam antrean",
   "agent.taskWaiting": "Menunggu Anda",
   "members.waitingShort": "Menunggu Anda",
+  "members.draft": "Draf: {p0}",
   "agent.openInSite": "Buka di situs",
   "agent.expandPdf": "Perluas",
   "agent.collapsePdf": "Ciutkan",

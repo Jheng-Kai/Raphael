@@ -1304,6 +1304,7 @@ export const fr = {
   "agent.queued": "En file d’attente",
   "agent.taskWaiting": "En attente de vous",
   "members.waitingShort": "En attente de vous",
+  "members.draft": "Brouillon : {p0}",
   "agent.openInSite": "Ouvrir sur le site",
   "agent.expandPdf": "Développer",
   "agent.collapsePdf": "Réduire",

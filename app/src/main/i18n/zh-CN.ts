@@ -1304,6 +1304,7 @@ export const zhCN = {
   "agent.queued": "排队中",
   "agent.taskWaiting": "等你处理",
   "members.waitingShort": "等你处理",
+  "members.draft": "草稿：{p0}",
   "agent.openInSite": "在网站打开",
   "agent.expandPdf": "展开",
   "agent.collapsePdf": "收合",

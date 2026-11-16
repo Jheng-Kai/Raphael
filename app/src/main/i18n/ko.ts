@@ -1304,6 +1304,7 @@ export const ko = {
   "agent.queued": "대기 중",
   "agent.taskWaiting": "응답 대기 중",
   "members.waitingShort": "응답 대기 중",
+  "members.draft": "임시 저장: {p0}",
   "agent.openInSite": "사이트에서 열기",
   "agent.expandPdf": "펼치기",
   "agent.collapsePdf": "접기",

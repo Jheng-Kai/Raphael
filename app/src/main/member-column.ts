@@ -8,11 +8,12 @@
 // `columnHTML` draws the list from a snapshot (pure, so its rules can be tested without a browser);
 // `createMemberColumn` keeps the search and the folded groups and hands the clicks over.
 
+import { DRAFT_EVENT, unsentWords } from "./composer-drafts";
 import { createRoomsSection, openNewGroupChat } from "./group-chats";
 import { t } from "./i18n";
 import { createMessageSearch } from "./message-search";
 import { lightHTML, lightOf } from "./sidebar-light";
-import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, previewOf, primaryIdOf, raphaelOf } from "./members";
+import { type MemberSection, faceHTML, memberMatches, memberSections, memberDisplayList, memberRole, pinReplacements, plainLine, previewOf, primaryIdOf, raphaelOf } from "./members";
 import type { Member, MembersList } from "./types";
 import { closeMenu, esc, ico, iconButton, openPopover } from "./ui";
 import { shortcutText } from "./keys";
@@ -53,14 +54,16 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
 /** A member's row: its picture, name, last line and dot, with no time (R-UI-77); then its protected member
  *  actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
-  const preview = previewOf(member, v.previews.get(member.id));
+  // Words written in its composer and not yet sent stand in its second line, as typed (R-SIDE-05).
+  const unsent = plainLine(unsentWords("member", member.id));
+  const preview = unsent ? { text: t("members.draft", { p0: unsent }), waiting: false } : previewOf(member, v.previews.get(member.id));
   const dot = memberDot(member, v);
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
     faceHTML(member, 40, { moving: true }) +
     `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b></span>` +
-    (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
+    (preview.text ? `<span class="mb-row-p${unsent ? " is-draft" : preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
     `</span>${dot}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
     `</div>`
@@ -241,6 +244,8 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     },
     open: (member, conversation, turn) => host.openMessage?.(member, conversation, turn),
   });
+  // A draft kept or let go redraws the rows; only the line that changed is touched (`patchHTML`).
+  window.addEventListener(DRAFT_EVENT, event => { if (/^member:/.test(String((event as CustomEvent).detail)) && el.isConnected) draw(); });
 
   function draw(): void {
     nav.setAttribute("aria-label", t("members.title"));

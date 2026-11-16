@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
-import { DRAFT_STORAGE_KEY, readDraftWords, writeDraftWords } from "./composer-drafts";
+import { DRAFT_EVENT, DRAFT_STORAGE_KEY, readDraftWords, unsentWords, writeDraftWords } from "./composer-drafts";
 
 beforeEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 
@@ -34,4 +34,21 @@ test("page provenance survives draft storage without retaining non-string page i
   expect(readDraftWords("room:1")).toEqual({ text: "Page text", pageId: "p1" });
   localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ "room:1": { text: "Draft", pageId: { unsafe: true } } }));
   expect(readDraftWords("room:1")).toEqual({ text: "Draft" });
+});
+
+test("each kept or dropped draft is told by its key, and a row reads its member's or its group's words", () => {
+  const told: string[] = [];
+  const listen = (event: Event) => told.push(String((event as CustomEvent).detail));
+  window.addEventListener(DRAFT_EVENT, listen);
+  try {
+    writeDraftWords('member:3:41', {text:'Other conversation'});
+    expect(unsentWords('member', 3)).toBe('Other conversation');
+    writeDraftWords('member:3:main', {text:'Main conversation'});
+    expect(unsentWords('member', 3)).toBe('Main conversation');
+    writeDraftWords('room:2', {text:'Group words'});
+    expect([unsentWords('room', 2), unsentWords('room', 3), unsentWords('member', 30)]).toEqual(['Group words', '', '']);
+    writeDraftWords('member:3:main');
+    expect(unsentWords('member', 3)).toBe('Other conversation');
+    expect(told).toEqual(['member:3:41', 'member:3:main', 'room:2', 'member:3:main']);
+  } finally { window.removeEventListener(DRAFT_EVENT, listen); }
 });

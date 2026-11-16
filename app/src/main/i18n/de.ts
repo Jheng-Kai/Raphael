@@ -1304,6 +1304,7 @@ export const de = {
   "agent.queued": "In der Warteschlange",
   "agent.taskWaiting": "Wartet auf Sie",
   "members.waitingShort": "Wartet auf Sie",
+  "members.draft": "Entwurf: {p0}",
   "agent.openInSite": "Auf Website öffnen",
   "agent.expandPdf": "Erweitern",
   "agent.collapsePdf": "Einklappen",

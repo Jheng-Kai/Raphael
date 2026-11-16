@@ -1443,6 +1443,7 @@ export const zhTW = {
   "members.sourceBad": "這不是 GitHub 儲存庫或 Notion 頁面",
   "members.waiting": "等你處理：{p0}",
   "members.waitingShort": "等你處理",
+  "members.draft": "草稿：{p0}",
   "reminder.waiting": "{p0} 等你回答",
   "reminder.open": "查看",
   "members.unread": "有新訊息",

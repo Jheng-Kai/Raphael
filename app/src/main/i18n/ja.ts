@@ -1444,6 +1444,7 @@ export const ja = {
   "members.sourceBad": "GitHub のリポジトリでも Notion のページでもありません",
   "members.waiting": "対応待ち：{p0}",
   "members.waitingShort": "対応待ち",
+  "members.draft": "下書き：{p0}",
   "reminder.waiting": "{p0} が返答を待っています",
   "reminder.open": "開く",
   "members.unread": "新着あり",
