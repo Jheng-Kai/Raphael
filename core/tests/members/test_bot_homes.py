@@ -148,3 +148,38 @@ def test_migration_conflict_preserves_every_source(tmp_path):
     with pytest.raises(HomeError):
         BotHomes(tmp_path).migrate()
     assert source.read_bytes() == b"Original\r\n" and target.read_bytes() == b"Newer"
+
+
+def test_old_revisions_leave_the_journal_but_each_skills_newest_and_every_recent_one_stay(tmp_path):
+    from datetime import datetime, timedelta
+    from raphael_core.bots.homes import BotHomes
+    now = datetime(2026, 11, 16, 12, 0)
+
+    def revision(owner, days, number, **entry):
+        folder = tmp_path / "bot-state" / owner / "journal"
+        folder.mkdir(parents=True, exist_ok=True)
+        name = (now - timedelta(days=days)).strftime("%Y%m%dT%H%M%S%f") + f"-{number:012x}"
+        (folder / f"{name}.json").write_text(json.dumps({"id": name, "applied": True, **entry}), encoding="utf-8")
+        return folder / f"{name}.json"
+    gone = [revision("1", 40, 1, path="MEMORY.md", before="old text"),
+            revision("1", 40, 2, path="memory/log/2026-10-07.md", before="a day's log"),
+            revision("1", 50, 3, path="skills/review/SKILL.md", before="first"),
+            revision("1", 40, 4, path="skills/notes/SKILL.md", before="half written", applied=False),
+            revision("shared", 40, 5, path="USER.md", before="old profile")]
+    kept = [revision("1", 40, 6, path="skills/review/SKILL.md", before="second"),
+            revision("1", 10, 7, path="MEMORY.md", before="recent text"),
+            revision("shared", 10, 8, path="USER.md", before="recent profile")]
+    unreadable = tmp_path / "bot-state/1/journal" / ((now - timedelta(days=60)).strftime("%Y%m%dT%H%M%S%f") + "-00000000000f.json")
+    unreadable.write_bytes(b"\x00 not json")
+    homes = BotHomes(tmp_path)
+
+    assert homes.prune_journals(now.timestamp()) == len(gone)
+
+    assert not any(path.exists() for path in gone)
+    assert all(path.exists() for path in kept) and unreadable.exists()
+    # A document written now journals as before, and a revision of today is never trimmed.
+    before = set((tmp_path / "bot-state/1/journal").glob("*.json"))
+    homes.write(1, "MEMORY.md", "today")
+    assert homes.prune_journals(datetime.now().timestamp()) == 0
+    written = set((tmp_path / "bot-state/1/journal").glob("*.json")) - before
+    assert [json.loads(path.read_text(encoding="utf-8"))["path"] for path in written] == ["MEMORY.md"]

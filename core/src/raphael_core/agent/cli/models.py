@@ -1,13 +1,15 @@
 """Public CLI model metadata. Discovery never starts a conversation."""
 
 import asyncio
+import contextlib
 import json
 import re
 import tempfile
 import tomllib
+from pathlib import Path
 
 from .claude_registry import claude_registry
-from .process import Child
+from .process import PRIVATE_PREFIX, Child
 
 # What is shown until the CLI has answered (`claude_cli_models`), and if it never does: the CLI's own words for the
 # newest model of each family, which name no version because this list knows none.
@@ -142,12 +144,16 @@ def claude_rows(rows, config, registry=()):
     return models
 
 
-async def claude_cli_models(command, environ, folder):
+async def claude_cli_models(command, environ, folder, *, cwd=None):
     """Asks the CLI what it offers over its control channel: no message is sent, so no turn runs and nothing is
     spent. No settings are loaded, so the owner's hooks do not run either; their default is read from the file.
     The older models it still runs come from its own program file (claude_registry.py); when that gives none, the
-    list is what the CLI said."""
-    with tempfile.TemporaryDirectory(prefix="raphael-cli-", ignore_cleanup_errors=True) as empty:
+    list is what the CLI said. It is asked in `cwd`, an empty folder kept for it: Claude Code keeps a records folder
+    for every folder it starts in, and a new temporary folder for each listing left one behind every time."""
+    if cwd is not None:
+        Path(cwd).mkdir(parents=True, exist_ok=True)
+    with (contextlib.nullcontext(str(cwd)) if cwd is not None
+          else tempfile.TemporaryDirectory(prefix=PRIVATE_PREFIX, ignore_cleanup_errors=True)) as empty:
         child = Child([*command, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                        "--no-session-persistence", "--strict-mcp-config", "--tools", "", "--setting-sources", ""],
                       environ=environ, cwd=empty)

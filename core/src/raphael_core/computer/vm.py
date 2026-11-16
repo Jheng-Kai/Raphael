@@ -16,6 +16,7 @@ import math
 import os
 import re
 import secrets
+import sqlite3
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -77,6 +78,10 @@ _MAY_START_ENGINE = ContextVar("computer_may_start_engine", default=False)
 # shutil.which walks PATH on the event loop, and one status poll asks many times.
 DOCKER_LOOKUP_S = 30.0
 _docker_cli = None
+# The folders of this PC the computers bind: each member's own home, and the team folder every computer shares.
+HOMES, TEAM = "vm-homes", "vm-shared"
+# The states `docker ps` gives a container that runs nothing: only such a computer may lose the folder it binds.
+STOPPED_STATES = ("created", "exited", "dead")
 
 
 def docker_cli():
@@ -419,9 +424,15 @@ def known_previous(raw, target, owner):
 
 
 class LocalVm:
-    def __init__(self, data_dir, *, settings=None, runner=None, clock=time.monotonic, enabled=True, conn=None):
+    def __init__(self, data_dir, *, settings=None, runner=None, clock=time.monotonic, enabled=True, conn=None, machine_dir=None):
         self.root = Path(data_dir).resolve()
         self.owner = hashlib.sha256(os.path.normcase(str(self.root)).encode()).hexdigest()[:16]
+        # The computers' folders belong in the machine-local folder that goes with the data directory
+        # (`paths.machine_dir`). The owner label stays the data directory's: moving the folders never makes a computer
+        # someone else's.
+        self.machine = self.root if machine_dir is None else Path(machine_dir).resolve()
+        self.homes, self.team = self.placed(HOMES), self.placed(TEAM)
+        self.relocation = None
         self.enabled = enabled
         self.settings, self.run, self.clock = settings, runner or Docker(), clock
         self.last_activity, self.active, self.held = {}, {}, set()
@@ -769,9 +780,148 @@ class LocalVm:
     def target_for(self, host, key):
         name = f"raphael-computer-{self.owner}-{key}"
         return Target(key, name,
-                      PurePosixPath(name + "-workspace") if host else self.root / "vm-homes" / key,
-                      PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.root / "vm-shared",
+                      PurePosixPath(name + "-workspace") if host else self.homes / key,
+                      PurePosixPath(f"raphael-computer-{self.owner}-team") if host else self.team,
                       host)
+
+    def placed(self, name):
+        """Where one of the computers' folders is: in the machine-local folder once it is there, and in the data
+        directory while an install made before still keeps it there (`relocate`). A folder of that name that something
+        made again in the data directory after the move is never used and never merged: the moved one is the members'."""
+        moved, earlier = self.machine / name, self.root / name
+        return moved if os.path.lexists(moved) or not os.path.lexists(earlier) else earlier
+
+    def relocate_soon(self):
+        """Start the move of the computers' folders (`relocate`) once for this core; every start of a computer waits for it."""
+        if self.relocation is None:
+            async def relocate():
+                try:
+                    return await self.relocate()
+                except Exception as error:
+                    logger.warning("The computers' folders stay where they are (%s)", type(error).__name__)
+                    return "failed"
+            self.relocation = asyncio.create_task(relocate())
+        return self.relocation
+
+    async def settled(self):
+        """Wait for a move of the computers' folders under way: a computer is never prepared on a folder being moved."""
+        if self.relocation is not None and not self.relocation.done():
+            await asyncio.shield(self.relocation)
+
+    async def relocate(self):
+        """Move the computers' folders of an install made before they lived in the machine-local folder, once.
+
+        Each folder is renamed on its own volume: nothing is copied and nothing is deleted. It happens only while no
+        computer of this app runs or is being prepared and no carry helper is there, and only when this PC's engine
+        answers, since only the engine can say so. Every stopped computer of this app that binds a folder being moved
+        is removed first, as an image upgrade removes it: its next start makes it again on the new place and its
+        workspace goes on in its folder, so no computer is ever left bound to a folder that is gone. A move that
+        cannot happen now is tried again at the next start. Returns what happened (`moved`, `nothing` or the reason it
+        waits)."""
+        if self.machine == self.root:
+            return "nothing"
+        for name in (HOMES, TEAM):
+            if os.path.lexists(self.machine / name) and os.path.lexists(self.root / name):
+                logger.warning("A computer folder of the earlier place was left where it was, beside the one in use")
+        moves = [(self.root / name, self.machine / name) for name in (HOMES, TEAM)
+                 if os.path.lexists(self.root / name) and not os.path.lexists(self.machine / name)]
+        if not moves:
+            return "nothing"
+        if not self.enabled:
+            return self._waits("disabled")
+        async with self.capacity_lock:
+            if (any(not task.done() for task in self.preparing.values()) or any(self.active.values()) or self.held
+                    or self.maintenance or any(not task.done() for task, _ in self.carry_tasks.values())):
+                return self._waits("busy")
+            probe = self.target_for("", "shared")
+            if not await self._answers(probe):
+                return self._waits("engine")
+            reason = await self._release_folders([earlier for earlier, _ in moves], probe)
+            if reason:
+                return self._waits(reason)
+            moved = 0
+            try:
+                for earlier, destination in moves:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    if os.stat(earlier).st_dev != os.stat(destination.parent).st_dev:
+                        return self._waits("volume")
+                    os.rename(earlier, destination)
+                    moved += 1
+                    self._repoint(earlier, destination)
+            except OSError:
+                return self._waits("rename")
+            finally:
+                # A folder that moved is used from its new place even when the other one could not follow.
+                self.homes, self.team = self.placed(HOMES), self.placed(TEAM)
+                if moved:
+                    self.targets.clear()
+                    self.running.clear()
+                    self.status_engines.clear()
+                    self.changes += 1
+            logger.info("Moved %d computer folders to the machine-local folder", moved)
+            return "moved"
+
+    def _repoint(self, earlier, destination):
+        """A task's receipts keep the folder of this PC that held each file it left (background.tasks: the artifact's
+        root, and the full path of a file it found before or could not read): one in a folder that moved names it at its
+        new place, or a finished task's file would no longer open and a task under way would miss its own work."""
+        conn = self.data.conn
+        if conn is None:
+            return
+
+        def moved(value):
+            try:
+                return str(destination / Path(value).relative_to(earlier)) if isinstance(value, str) and value else None
+            except ValueError:
+                return None
+        try:
+            rows = conn.execute("SELECT id, workspace, uri FROM task_evidence").fetchall()
+            changes = [(moved(row[1]) or row[1], moved(row[2]) or row[2], row[0]) for row in rows
+                       if moved(row[1]) or moved(row[2])]
+            if changes:
+                with conn:
+                    conn.executemany("UPDATE task_evidence SET workspace=?, uri=? WHERE id=?", changes)
+        except sqlite3.Error as error:
+            logger.warning("The receipts of tasks in a moved computer folder still name its old place (%s)", type(error).__name__)
+
+    async def _release_folders(self, folders, probe):
+        """Remove every computer of this app on this PC's engine that binds one of `folders`, all of them stopped:
+        None once none is left, else why the folders cannot move now."""
+        listed = await self.run_for(probe, ["ps", "-a", "--filter", f"label={LABEL}.owner={self.owner}",
+                                            "--format", "{{.Names}}\t{{.State}}"], limit=100_000)
+        from .carry import helper_prefix
+        helpers = await self.run_for(probe, ["ps", "-a", "--filter", "name=" + helper_prefix(self.owner),
+                                             "--format", "{{.Names}}"], limit=100_000)
+        if listed.code or listed.truncated or helpers.code or helpers.truncated:
+            return "engine"
+        if helpers.stdout.strip():
+            return "carry"
+        rows = [line.split("\t") for line in listed.stdout.splitlines() if line.strip()]
+        if any(len(row) != 2 or row[1].strip() not in STOPPED_STATES for row in rows):
+            return "running"
+        roots = [Path(folder).resolve() for folder in folders]
+        for name, _ in rows:
+            result = await self.run_for(probe, ["container", "inspect", name], limit=200_000)
+            try:
+                raw = json.loads(result.stdout)[0] if not result.code else None
+                labels = raw["Config"].get("Labels") or {}
+                running = raw.get("State", {}).get("Running") is not False
+                sources = [mount.get("Source") or "" for mount in (raw.get("HostConfig", {}).get("Mounts") or raw.get("Mounts") or [])]
+            except (ValueError, IndexError, KeyError, TypeError, AttributeError):
+                return "engine"
+            if labels.get(f"{LABEL}.owner") != self.owner:
+                return "engine"
+            if running:
+                return "running"
+            if any(source and Path(source).resolve().is_relative_to(root) for source in sources for root in roots):
+                if (await self.run_for(probe, ["rm", name], timeout=40)).code:
+                    return "remove"
+        return None
+
+    @staticmethod
+    def _waits(reason):
+        logger.info("The computers' folders stay in the data folder until a later start (%s)", reason)
+        return reason
 
     @property
     def mode(self):
@@ -796,6 +946,7 @@ class LocalVm:
                        container="shared", screen=screen, screens=6)
 
     async def seat(self, member_id=0):
+        await self.settled()
         target = self.target(member_id)
         if not target.container:
             return target
@@ -1126,6 +1277,7 @@ class LocalVm:
         self.image_tasks[host] = asyncio.create_task(self.remove_old_images(target))
 
     async def start(self, target):
+        await self.settled()
         self.validate_storage(target)
         if target.state_key in self.maintenance and self.maintenance[target.state_key] is not asyncio.current_task():
             raise VmError("busy")
@@ -1151,10 +1303,13 @@ class LocalVm:
         from ..paths import local_storage_root
         try:
             for path in (target.workspace, target.shared):
-                if path is not None and not local_storage_root(path).is_relative_to(self.root):
+                if path is not None and not any(local_storage_root(path).is_relative_to(root) for root in (self.root, self.machine)):
                     raise ValueError("outside_workspace")
         except (ValueError, OSError):
             raise VmError("outside_workspace") from None
+        # A target taken before the folders moved names a place that is gone: starting it would make an empty one there.
+        if Path(target.workspace).parent != self.homes or target.shared is not None and Path(target.shared) != self.team:
+            raise VmError("busy")
 
     def _start_signature(self):
         return self.changes, self.enabled, self.remote, self.timezone(), self.timezone_pending
@@ -1553,10 +1708,11 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         if target.container == "shared" or target.unit == "shared":
             raise VmError("shared")
         if not target.remote:
-            root_path = self.root / "vm-homes"
+            root_path = self.homes
             root = root_path.resolve()
             workspace = Path(target.workspace)
-            if root_path.is_symlink() or not root.is_relative_to(self.root) or workspace.is_symlink() or workspace.resolve() != root / key:
+            if (root_path.is_symlink() or not any(root.is_relative_to(base) for base in (self.root, self.machine))
+                    or workspace.is_symlink() or workspace.resolve() != root / key):
                 raise VmError("invalid_workspace")
         elif str(target.workspace) != target.name + "-workspace":
             raise VmError("invalid_workspace")
@@ -1776,6 +1932,8 @@ print(base64.b64encode(data).decode())
 
     async def _monitor(self):
         try:
+            self.relocate_soon()
+            await self.settled()
             await self.recover()
             while True:
                 await asyncio.sleep(30)
@@ -1788,6 +1946,10 @@ print(base64.b64encode(data).decode())
 
     async def aclose(self, *, stop=True):
         await self.data.aclose()
+        # A move under way can only be waiting for the engine: each rename is whole, and a folder is used wherever it is.
+        if self.relocation is not None and not self.relocation.done():
+            self.relocation.cancel()
+            await asyncio.gather(self.relocation, return_exceptions=True)
         # A carry still copying ends with the core. The copy in its container finishes by itself.
         for carrying, _ in self.carry_tasks.values():
             carrying.cancel()
