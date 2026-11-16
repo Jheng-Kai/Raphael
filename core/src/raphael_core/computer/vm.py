@@ -1452,9 +1452,11 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     async def checkpoint(self, target, action, **metadata):
         from . import checkpoints
         source = Path(checkpoints.__file__).read_text(encoding="utf-8")
-        result = await self.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "10", "/opt/venv/bin/python", "-c", source, action, json.dumps(metadata)]), timeout=12, limit=2_000_000)
+        limit = checkpoints.GUEST_SECONDS
+        result = await self.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", f"{limit:g}", "/opt/venv/bin/python", "-c", source, action, json.dumps(metadata)]), timeout=limit + 2, limit=2_000_000)
         if result.code or result.truncated:
-            raise VmError("checkpoint_unavailable")
+            # 124 is the guest's `timeout` ending it: the store took longer than it may, which is not a broken store.
+            raise VmError("checkpoint_timeout" if result.code == 124 else "checkpoint_unavailable")
         try:
             return json.loads(result.stdout)
         except ValueError:

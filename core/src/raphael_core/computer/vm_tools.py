@@ -30,6 +30,7 @@ from .takeover import TAKEOVER
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_view
 from . import file_tools
+from . import checkpoints as checkpoint_store
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
 from ..worker.computer_verification import meaningful_expectation
 
@@ -117,6 +118,8 @@ DISK_FILES_EN = ("The disk the computer's files are kept on ({p0}) is {p1}% full
 def _size_words(kib):
     return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
 
+
+CHECKPOINT_WAIT_S = checkpoint_store.GUEST_SECONDS + 3
 
 # A computer call that broke in the core itself, not in the computer or the page: what the member is told.
 COMPUTER_FAULT = "computer_fault"
@@ -721,15 +724,17 @@ class VmTools:
             if ticket in self.checkpointed:
                 return
             self.checkpointed.add(ticket)
-            failures = getattr(self.vm, "checkpoint_failures", None)
-            if failures is None:
-                self.vm.checkpoint_failures = failures = {}
+            began = time.monotonic()
             try:
-                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
-                failures.pop(target.state_key, None)
+                # The guest ends the store's script itself (`GUEST_SECONDS`); this waits a little longer, so that the
+                # store's own end, with its partial checkpoint written, is what comes back.
+                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), CHECKPOINT_WAIT_S)
             except Exception as error:
-                failures[target.state_key] = True
-                logger.warning("File checkpoint skipped: %s", type(error).__name__)
+                # Without it this run's changes have no record of their own and its undo covers nothing: which kind
+                # (the store took too long, or could not be read) and after how long is written down, never a path.
+                kind = str(error) if isinstance(error, VmError) else type(error).__name__
+                logger.warning("File checkpoint skipped: %s after %.1f s (%s)", kind, time.monotonic() - began,
+                               "a command" if command is not None else "a file tool")
 
     def _observe_page(self, target, page, *, remember=True):
         from urllib.parse import urlsplit
