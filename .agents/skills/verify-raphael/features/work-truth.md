@@ -71,10 +71,10 @@ The existing Guardian manifest now maps room_list and room_post to
 S21.meetings.list and S21.meetings.post. Those live cells remain unimplemented;
 the mapping guard is offline coverage metadata, never a live acceptance claim.
 
-## A member does what its owner asks, and says plainly what it did not (R-WORK-16 through R-WORK-20, 2026-11-14)
+## A member does what its owner asks, and says plainly what it did not (R-WORK-16 through R-WORK-20)
 
-Owner: a language-teaching member, asked for daily reading pages from real news for his own study in his own app, refused on copyright,
-delivered a headline, closed every reply with a disclaimer, and did not open a blocked page in its own computer though told to.
+A member that teaches a language, asked for daily reading pages from real news for the owner's own study in the owner's own app, must not refuse on copyright,
+deliver only a headline, close every reply with a disclaimer, or fail to open a blocked page in its own computer when told to.
 A core-only unit: prompt words and one card line, no page, RPC or schema change; every check is offline.
 
 - Prompt causes, found in `agent/persona.py`: no word of copyright anywhere (the refusals were the model's own, with nothing saying this
@@ -96,10 +96,10 @@ Offline: `core/tests/agent/test_member_behaviour.py`, `core/tests/agent/test_car
 and the default prompt budget (`npm run verify -- --contract`). Not covered offline, left to a live brain run: whether a given model, told
 all this, still refuses; that needs a paid run on the owner's own models.
 
-## A failure is information (R-PERSIST-01 through R-PERSIST-08, 2026-11-14)
+## A failure is information (R-PERSIST-01 through R-PERSIST-08)
 
-Owner: members give up too fast; like Hermes Agent, a member keeps trying the next plausible way and asks only for what only
-he can give. A core-only unit: harness words, the failure text, two notes, a reader fallback and a history projection. No
+A member does not give up fast: it keeps trying the next plausible way and asks only for what only
+the owner can give. A core-only unit: harness words, the failure text, two notes, a reader fallback and a history projection. No
 page, RPC, schema or stored member data (routines, skills, instructions, memory) changes; every check is offline.
 
 - The rule lives once, in `agent/self_check.DOCTRINE` (part of the shared contract every prompt reads). The caps it replaced
@@ -128,7 +128,7 @@ Offline: `core/tests/agent/test_persistence.py`, `core/tests/worker/test_persist
 owner's own models: whether a given model, told all this, now opens its browser or tries another source instead of
 stopping; a live read of a real consent page; a real reading service's fallback.
 
-## Work that was to leave a file is judged on a file that exists (R-WORK-FILE-01, R-WORK-FILE-02, 2026-11-15)
+## Work that was to leave a file is judged on a file that exists (R-WORK-FILE-01, R-WORK-FILE-02)
 
 - `background/service.py::_record_artifacts` records as evidence the files found in the member's folders (its own, then its team's):
   the paths the condition or the report names inside the computer (`outcomes.computer_files`: `/home/cua/workspace/...`,

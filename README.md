@@ -41,7 +41,7 @@ Download `Raphael-<version>-macos-arm64.dmg` from the [latest release](https://g
 - macOS 13 or later, Apple silicon.
 - On first use macOS asks for the **Microphone** (dictation), **Accessibility** (the dictation keys and pasting into other apps) and, when a member operates your desktop, **Input Monitoring**. Raphael keeps working without them; the features that need one start as soon as you allow it in System Settings › Privacy & Security.
 - The dictation key is **Right Option** (Right Alt on Windows): hold or tap it, as you choose in Settings.
-- A release built without the owner's Apple Developer ID is not notarized: the first time, open it from System Settings › Privacy & Security › Open Anyway.
+- A release built without an Apple Developer ID is not notarized: the first time, open it from System Settings › Privacy & Security › Open Anyway.
 - While Raphael records, it pauses Music, Spotify, TV and VLC. macOS 15.4 and later do not let apps pause other players (a video in a browser keeps playing).
 
 ## Build from source
@@ -116,6 +116,10 @@ core            Core (Python)          members, memory, speech, tools
 ```
 
 The UI talks to the shell through Tauri commands, and the shell talks to the core through JSON-RPC over stdio.
+
+## Disclaimer
+
+Raphael is an independent, fan-made project. It is not affiliated with, endorsed by or sponsored by the authors or rights holders of any work that inspired its name or its look, and it ships no official assets. All names and characters belong to their respective owners.
 
 ## License
 

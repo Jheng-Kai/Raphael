@@ -1,6 +1,6 @@
 # Desktop security and release path
 
-The 2026-11-05 review covers the Tauri command/window boundary, capabilities and
+The review covers the Tauri command/window boundary, capabilities and
 asset scope, Markdown/HTML/SVG rendering, openers, passive overlays and hotkeys,
 stdio and loopback IPC, signed updates, installer/release workflows and lockfiles.
 Treat model and external content as untrusted; owner-window identity does not make

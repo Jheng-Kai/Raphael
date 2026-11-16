@@ -95,10 +95,10 @@ After both cycles, six rapid minimize-and-return trips (dwell 0 to 2.5 s, racing
 pending suspension) must each leave a visible page that ticks within three seconds.
 hidden-window-refused repeats the journey while the debug-only
 RAPHAEL_TEST_NATIVE_POWER_REFUSE makes WebView2 refuse the normal-memory step with
-0x8007139F, the owner's frozen return of 2026-11-05: once one step was refused the
-old code never reached SetIsVisible, and Resume kept failing with the same error.
-The old code fails it at the first return; each step now runs on its own and both
-journeys pass (red run-F3lA4L, green run-VdelwA).
+0x8007139F: once one step was refused, code that stopped at the first refusal
+never reached SetIsVisible, and Resume kept failing with the same error.
+Such code fails it at the first return; each step now runs on its own and both
+journeys pass.
 
 The existing member-computer journey verifies the real stream, renewals, takeover,
 handback and reconnect, including click latency. It starts/stops Docker and needs

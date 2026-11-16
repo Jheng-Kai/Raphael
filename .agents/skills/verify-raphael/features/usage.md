@@ -2,13 +2,13 @@
 
 ## Sub-features
 
-Usage is as plain as Grok Bot's (R-UI-109). At the top, each signed-in
+Usage is plain (R-UI-109). At the top, each signed-in
 subscription brain (Claude, Codex, Antigravity) has one card: every window it reports
 (5 hours, weekly) as the share left with a bar and when it resets, whether the number is
 live or from the last run, and an honest line when the percentage is unknown or the
-allowance ran out. A window whose reported reset has passed says 已重置, with no number or bar. ChatGPT has its card with 管理用量, which opens its own usage page, and OpenRouter has its card with what OpenRouter itself reports for the key (this month's use, what is left of its limit; owner, 2026-11-14).
+allowance ran out. A window whose reported reset has passed says 已重置, with no number or bar. ChatGPT has its card with 管理用量, which opens its own usage page, and OpenRouter has its card with what OpenRouter itself reports for the key (this month's use, what is left of its limit).
 With nothing signed in or keyed the cards stand aside. The account menu's 用量 submenu lists the same
-providers, one block each (its tightest window and its number, with no reset time since 2026-11-14; 已重置; OpenRouter's spend; or 無法讀取 for one that cannot be read), from the same readings, decided once in `usage-blocks.ts`.
+providers, one block each (its tightest window and its number, with no reset time; 已重置; OpenRouter's spend; or 無法讀取 for one that cannot be read), from the same readings, decided once in `usage-blocks.ts`.
 
 Below them are rows: the OpenRouter key and what Raphael spent this month (the same
 ledger as everywhere else, across every paid call; the OpenRouter card's figure is OpenRouter's own for the key, so the two can differ).
@@ -18,7 +18,7 @@ CSV export or footnotes: the shell no longer allows `usage.analytics`, `usage.ru
 `usage.export`, and `save_usage_csv` is gone (app/src-tauri/src/commands.rs
 `usage_is_a_named_read_of_the_main_window_only`).
 
-A window with 10% or less left is said once (owner decision 5, 2026-11-09, R-QUOTA-01).
+A window with 10% or less left is said once (R-QUOTA-01).
 Whoever reads it (a CLI turn, a background task or this page), the core tells each provider,
 window and reset time once, `quota.warning` → `MainEvent::QuotaWarning`, and keeps what it told
 in the `quota_warned` setting: a restart says nothing again, the next window after a reset is
@@ -58,13 +58,13 @@ subscription's window reaches nine-tenths used.
 npm run look -- usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly usage-key-menu usage-key-removed --theme both --width 1120,720,1920x1080
 ```
 
-`usage-owner` is the owner's mix of 2026-11-14 (Codex live, Claude whose window has reset, the ChatGPT sign-in, OpenRouter) and checks `usage-owner-cards`: four cards in that order, Claude with no number or bar.
+`usage-owner` is the owner's own mix (Codex live, Claude whose window has reset, the ChatGPT sign-in, OpenRouter) and checks `usage-owner-cards`: four cards in that order, Claude with no number or bar.
 `usage-plain` asserts the cards stand above the rows, the bars keep their height, the
 rows are there, nothing of the old analytics is on the page and no refresh button or
 icon stands beside the tab's name or anywhere on it. `usage-empty` has no subscription and no spend.
 
 `usage-opens-quietly` first asserts the app read `usage.allowances` once after it started, before
-Settings was ever opened (`usage-open-launch`, owner 2026-11-15); it then opens Settings on 一般 and
+Settings was ever opened (`usage-open-launch`); it then opens Settings on 一般 and
 asserts the mock IPC saw exactly one more at the opening; on the usage tab the cards are already there and nothing more
 was asked. It closes Settings, moves the fixture clock 31 s and reopens (`usage-open-same`: one more
 reading, and a MutationObserver on the allowances saw no change at all because the numbers were equal),
