@@ -154,8 +154,11 @@ function fitComposerRow(bar: HTMLElement): void {
     const hidden = mode.hasAttribute("data-word-hidden");
     const modeWide = width(mode) + (hidden ? (parseFloat(getComputedStyle(mode).columnGap) || 0) + width(word) : 0);
     const trigger = model.querySelector<HTMLElement>(".mp-trigger"), name = trigger?.querySelector<HTMLElement>(".mp-tname");
-    const whole = name && (name.scrollWidth > name.clientWidth + 0.5 ? name.scrollWidth : width(name));
-    const modelNeed = trigger && name && whole !== undefined ? width(trigger) - width(name) + Math.min(whole, NAME_KEPT_EM * parseFloat(getComputedStyle(name).fontSize)) : 0;
+    let modelNeed = 0;
+    if (trigger && name) {
+      const whole = name.scrollWidth > name.clientWidth + 0.5 ? name.scrollWidth : width(name);
+      modelNeed = width(trigger) - width(name) + Math.min(whole, NAME_KEPT_EM * parseFloat(getComputedStyle(name).fontSize));
+    }
     const shown = [...bar.children].filter(child => width(child) > 0);
     const fixed = shown.filter(child => child !== mode && child !== model).reduce((sum, child) => sum + width(child), 0);
     const gaps = (shown.length - 1) * (parseFloat(getComputedStyle(bar).columnGap) || 0);
