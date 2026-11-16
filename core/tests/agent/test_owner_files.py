@@ -270,6 +270,24 @@ async def test_a_turn_from_anywhere_reads_the_owners_file(make_rig, client, conn
     assert any("ship the Mac build" in text for text in results)
 
 
+async def test_a_search_for_every_match_reaches_the_model_cut_to_its_result_limit(make_rig, client, conn, home):
+    # head_limit 0 asks for every match, and the tool gives them all; what the model reads of any tool's result is held to
+    # the harness's result limit, its head and its tail kept, and says it was cut.
+    from raphael_core.worker.guards import MAX_RESULT_CHARS
+    (home / "Documents" / "log.txt").write_text("".join(f"ship entry {index:05d} {'x' * 60}\n" for index in range(2000)),
+                                                encoding="utf-8")
+    rig = rig_with_files(make_rig, conn)
+    client.chats = [chat("Searching.", ("owner_files__grep", {"pattern": "ship entry", "path": "~/Documents",
+                                                               "output_mode": "content", "head_limit": 0})),
+                    chat('{"text":"There are many entries."}')]
+    result = await rig.call("agent.ask", {"session_id": "files-all", "text": "List every ship entry in my log",
+                                          "ui_language": "en", "member_id": 0, "source": "app"})
+    assert result["status"] == "done"
+    [text] = [message["content"] for message in client.chat_calls[-1]["messages"] if message["role"] == "tool"]
+    assert len(text) <= MAX_RESULT_CHARS + 500 and "cut_short=true" in text and "characters left out" in text
+    assert "ship entry 00000" in text and "ship entry 01999" in text
+
+
 async def test_a_cli_brain_has_the_owners_file_tools(make_rig, conn, home, monkeypatch):
     rig = rig_with_files(make_rig, conn)
     rig.settings.set("agent_model", "cli:claude")
