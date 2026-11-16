@@ -6,6 +6,13 @@ Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape
 connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind
 `bad_arguments`), as is a server's own refusal of arguments. A connected app's call that has failed twice with the same error is not made a third time: the model is told what it said, the shape and to try another way, and the run goes on (only its step budget ends it). No scene draws either; the refusal is a tool result inside the run.
 
+A tool whose schema is longer than the kept 16000 characters keeps its shape and loses only the words that explain it
+(R-TOOL-04; `tests/integrations/test_config.py`), so a model is never shown such a tool as "an object" while its shape could
+fit. A tool that itself takes `data`, `input` or `params` is never advised to send its arguments outside it, and a refusal
+naming an argument that holds an object or one of several shapes is told those shapes. To check on a live install, read a
+`find_tools` result in `turn_tool_events`: a connected tool's `parameters` should list its arguments, not
+`{"type": "object", "additionalProperties": true}` (the tool list is read again on the next call or refresh).
+
 ## Connect apps, one view: read this first
 
 This section supersedes every later paragraph that speaks of the 已連結 and 商店 tabs, the tab counts, the pager of 18-card pages,
