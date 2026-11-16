@@ -192,6 +192,14 @@ _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 # told the owner of a Claude error of unknown cause (2026-11-16, R-ROUTINE-05).
 _JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
                              "missing_terminal", "dangling_mention", "child_work_incomplete"))
+# Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
+# worker could not start or broke (`worker_` and the name of the error). A brain failure recorded for them says the model failed.
+_APP_ENDINGS = frozenset(("member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
+
+
+def _brainless(reason: str | None) -> bool:
+    """Whether an ending says nothing of the brain: the app judged the work, or the app itself stopped it."""
+    return reason in _JUDGED_ENDINGS or reason in _APP_ENDINGS or str(reason).startswith("worker_")
 # The most of a routine's last report that its next run is shown.
 LAST_REPORT_CHARS = 1500
 # Joins a reply's messages while its hand-back block is taken out; no model writes it.
@@ -2797,7 +2805,7 @@ class BackgroundService:
             if task.mode == 'work' and any(child['state']!='completed' for child in self._child_results(task.id)):
                 self._conclude(task,run,'failed','',phrase(language,'work_children_open') + '\n\n' + report.text,report.detail,'child_work_incomplete')
                 return
-            if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls)):
+            if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls, run.written)):
                 # A routine's run is done only when it did its work: it said so, but a step it needed was refused or what it was
                 # to make is not there. The owner reads what was not done, and what the member said.
                 said = report.text if report else ''
@@ -3032,7 +3040,7 @@ class BackgroundService:
                         model=run.ledger.model if run is not None else None,
                         failure=(failure or turn_failure(reason, run.model if run is not None else task.model_ref,
                                                          getattr(run, "model_failure", None)))
-                                if state == "failed" and (failure or reason not in _JUDGED_ENDINGS) else None,
+                                if state == "failed" and (failure or not _brainless(reason)) else None,
                         replies=pending_replies(
                             [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
                             [compose(prefix,line,None) for line in terminal_replies if line]))

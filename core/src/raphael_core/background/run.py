@@ -344,6 +344,8 @@ class TaskRun:
         # The tools of the run that went through, and the last call of a tool that was refused with nothing after it
         # that went through: how a routine's run is told to have ended well or not (`routine_outcome`).
         self.succeeded: set[str] = set()
+        # The tools of connected apps whose calls went through and changed something (a page written, a draft saved).
+        self.written: set[str] = set()
         # A connected app's call (tool, arguments) -> the digest of the error it last failed with and how many times in a row.
         self._failed_calls: dict[tuple[str, str], tuple[str, int]] = {}
         self._failures_told: dict[tuple[str, str], str] = {}
@@ -912,15 +914,18 @@ class TaskRun:
             return
         if not (self._gate.reads_only(ref.server, ref.name, arguments) if ref.kind == MCP else ref.tier == Tier.T0):
             self.acted = True
+            if ref.kind == MCP:
+                self.written.add(ref.name)
 
     def continuation_state(self):
         return {"declined": sorted(self._declined), "unanswered": sorted(self._unanswered), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
                 "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
                 "conversation_cost": getattr(self, "conversation_cost", 0.0),
-                "succeeded": sorted(self.succeeded), "last_refused": list(self.last_refused) if self.last_refused else None}
+                "succeeded": sorted(self.succeeded), "written": sorted(self.written), "last_refused": list(self.last_refused) if self.last_refused else None}
 
     def restore_continuation(self, state):
         self.succeeded.update(name for name in state.get("succeeded", []) if isinstance(name, str))
+        self.written.update(name for name in state.get("written", []) if isinstance(name, str))
         refused = state.get("last_refused")
         self.last_refused = (refused[0], refused[1]) if isinstance(refused, list) and len(refused) == 2 else None
         self._declined.update(state.get("declined", []))
