@@ -426,11 +426,12 @@ def _unfenced(text: str) -> str:
 
 def _read_envelope(text: str, *, edges: bool = True, strict: bool = False) -> dict | object | None:
     """A reply the protocol wrote as more than the one envelope: objects one after another (the last progress object, then
-    the reply), and with `edges` words before or after them and objects inside a code block. Live (2026-11-16, a ChatGPT
-    sign-in model): `{"thinking":…,"progress":…,"messages":[…]}{"text":…,"messages":[…],"memory":[],"need":{}}` was shown
-    whole, line breaks as `nn`. The reply as a dict whose `messages` hold everything meant for the owner, `_CUT` when the
-    protocol's own object stops before it is closed, None for anything else: words that only contain objects stay words.
-    Objects count only when they stand where a line begins and end the text or begin it (or, without `edges`, are all of it)."""
+    the reply), and with `edges` words before or after them and objects inside a code block. A ChatGPT sign-in model's
+    final answer was `{"thinking":…,"progress":…,"messages":[…]}{"text":…,"messages":[…],"memory":[],"need":{}}`, and the
+    conversation showed both objects whole, line breaks as `nn`. Returns the reply as a dict whose `messages` hold everything
+    meant for the owner, `_CUT` when an object of the protocol's own fields stops before it is closed, and None for anything
+    else: words that only contain objects stay words. Objects count only when they stand where a line begins and begin or end
+    the text (without `edges`, when they are all of it)."""
     text = _unfenced(text) if edges else text.strip()
     objects, end, cut = _object_run(text, 0)
     if cut:

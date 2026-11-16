@@ -10,6 +10,7 @@ import json
 import pytest
 
 from raphael_core.agent.answers import AgentFailure, parse_reply, public_reply
+from raphael_core.background.service import report_from
 from raphael_core.brain.textnorm import public_line
 from .conftest import decision
 from .test_narration import chat, typed
@@ -95,6 +96,9 @@ PATHS = {
     "reply, a member": (lambda raw: read(parsed(raw, plain=True)), 1),
     "speech, whole": (lambda raw: (reply.text if (reply := public_reply(raw, "en", plain=True)) else FAILS), 1),
     "CLI, written reply": (lambda raw: read(parsed(raw, plain=True, literal=True)), 2),
+    "background report": (lambda raw: (report.text if (report := report_from(raw, "en", plain=True, long=True)) else FAILS), 1),
+    "background report, a member's CLI": (
+        lambda raw: (report.text if (report := report_from(raw, "en", plain=True, long=True, literal=True)) else FAILS), 2),
 }
 
 
