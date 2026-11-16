@@ -45,6 +45,25 @@ function attachmentLinkHTML(target: string, label: string, files: KnownFiles | u
   if (!known) return words ? highlightHTML(label, query) : "";
   return fileChipHTML(highlightHTML(words || known.name, query), ` data-act="attachment-open" data-id="${esc(id!)}" data-attachment-link`);
 }
+/**
+ * A picture a model links by its stored id, `![words](attachment:<id>)`, is the same chip as a plain link to it (R-MSG-LINK-02):
+ * the picture itself is the message the member sent it in, so it is not drawn twice. One the conversation does not have says,
+ * in words, that it cannot be shown; a renderer that is not given the files (a group, search, copy) has only the words.
+ */
+function pictureLinkHTML(target: string, label: string, files: KnownFiles | undefined, query: string): string {
+  const id = attachmentTarget(target);
+  if (!files || (id && files.has(id))) return attachmentLinkHTML(target, label, files, query);
+  const words = label.trim();
+  return highlightHTML(words ? t("chat.pictureMissing", { p0: words }) : t("chat.pictureMissingBare"), query);
+}
+/** Where an image's markdown `![words](target)` starting at `at` ends, with its words and target; null when it is not whole. */
+function imageAt(text: string, at: number): { label: string; target: string; end: number } | null {
+  const middle = text.indexOf("](", at + 2);
+  if (middle < 0) return null;
+  let end = middle + 2, level = 1;
+  for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
+  return level ? null : { label: text.slice(at + 2, middle), target: text.slice(middle + 2, end - 1), end };
+}
 
 export function messageUrl(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > 8192 || /[\u0000-\u0020\u007f]/.test(raw)) return null;
@@ -125,6 +144,11 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     }
     // An unfinished image must never become an automatic link preview while streaming.
     if (markdown && text.startsWith("![", at)) {
+      const image = imageAt(text, at);
+      if (image && isAttachmentLink(image.target)) { flush(); out += pictureLinkHTML(image.target, image.label, files, query); at = image.end; continue; }
+      // One to a stored file still arriving shows its words, never the part of its target that has come.
+      const middle = text.indexOf("](", at + 2);
+      if (!image && middle >= 0 && /^attachments?[:/]/i.test(text.slice(middle + 2))) { plain += text.slice(at + 2, middle); at = text.length; continue; }
       const end = text.indexOf(")", at + 2);
       plain += text.slice(at, end < 0 ? text.length : end + 1); at = end < 0 ? text.length : end + 1; continue;
     }

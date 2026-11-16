@@ -828,6 +828,66 @@ test("pressing the preview, its title row, or Enter or Space on it opens the pag
   expect(frame.getAttribute("sandbox")).toBe("allow-scripts allow-forms");
 });
 
+// A page whose load waits on a style sheet or font from elsewhere that never comes once stood as an empty grey box under
+// 準備就緒 (R-PAGE-13).
+test("a page that speaks is ready though its load never comes, and a line drawn again while it is on its way stays loading", async () => {
+  const { thread, frame, pages } = mount();
+  await flush();
+  const state = (): string | undefined => thread.querySelector<HTMLElement>(".pg-body")!.dataset.state;
+  expect(state()).toBe("loading");
+  // Its address alone is not a page that drew: a redraw of its line keeps the placeholder.
+  thread.innerHTML = pageCardsHTML(turn([card]));
+  pages.sync();
+  expect(state()).toBe("loading");
+  expect(thread.querySelector(".pg-body iframe")).toBe(frame);
+  // The page's helper says how tall it is once the page is read: the preview stands, with no load event.
+  fromFrame(frame, { raphaelPage: 1, type: "height", height: 4681 });
+  expect(state()).toBe("ready");
+  expect(thread.querySelector<HTMLElement>(".pg-body")!.tabIndex).toBe(0);
+  thread.innerHTML = pageCardsHTML(turn([card]));
+  pages.sync();
+  expect(state()).toBe("ready");
+});
+
+test("a page that neither loads nor speaks says on its card that it could not be shown, and stands if it draws after all", async () => {
+  vi.useFakeTimers();
+  try {
+    const { thread, frame, pages } = mount([{ ...card, fallback: "" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    const body = thread.querySelector<HTMLElement>(".pg-body")!, failed = thread.querySelector<HTMLElement>(".pg-failed")!;
+    await vi.advanceTimersByTimeAsync(14000);
+    expect(body.dataset.state).toBe("loading");
+    await vi.advanceTimersByTimeAsync(1500);
+    // Words, not an empty box: what happened, then 再試一次, under a pill that no longer says ready.
+    expect(body.hidden).toBe(true);
+    expect(failed.hidden).toBe(false);
+    expect(failed.querySelector(".card-body")!.textContent).toBe(t("page.notDrawn"));
+    expect(thread.querySelector(".card-status.is-failed")).not.toBeNull();
+    expect(thread.querySelector('[data-page-act="retry"]')).not.toBeNull();
+    // A redraw of its line says it again.
+    thread.innerHTML = pageCardsHTML(turn([{ ...card, fallback: "" }]));
+    pages.sync();
+    expect(thread.querySelector(".pg-failed .card-body")!.textContent).toBe(t("page.notDrawn"));
+    expect(thread.querySelector<HTMLElement>(".pg-failed")!.hidden).toBe(false);
+    // It came after all: the preview stands and the words go.
+    fromFrame(frame, { raphaelPage: 1, type: "height", height: 900 });
+    expect(thread.querySelector<HTMLElement>(".pg-body")!.dataset.state).toBe("ready");
+    expect(thread.querySelector<HTMLElement>(".pg-failed")!.hidden).toBe(true);
+    expect(thread.querySelector(".card-status.is-failed")).toBeNull();
+    expect(api.pagesOpen).toHaveBeenCalledTimes(1);
+  } finally { vi.useRealTimers(); }
+});
+
+test("a page that cannot open keeps saying so when its frame loads something after all", async () => {
+  vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
+  const { thread, frame } = mount();
+  await flush();
+  loaded(frame);
+  fromFrame(frame, { raphaelPage: 1, type: "height", height: 300 });
+  expect(thread.querySelector(".pg-failed .card-body")!.textContent).toBe(t("page.failed"));
+  expect(thread.querySelector<HTMLElement>(".pg-body")!.hidden).toBe(true);
+});
+
 test("a failed page has no preview to press, and its card keeps 再試一次 and ×", async () => {
   vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
   const { thread } = mount();
