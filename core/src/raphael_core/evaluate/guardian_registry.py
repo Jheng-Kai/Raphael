@@ -129,7 +129,7 @@ async def inventory(servers=()):
                                                  capabilities=frozenset({"chief"}) if role == "chief" else frozenset()),
                                  team=TEAM_TOOLS,
                                  # The inventory is of every registered tool: a quick question reaches all of them (R-PC-01).
-                                 interactive=True, max_tier=Tier.T3, owner_pc=True)
+                                 interactive=True, max_tier=Tier.T3, owner_screen=True)
         # Inventory includes what find_tools returns and use_tool calls, not just the listed tools.
         reachable = list(snapshot.catalog().values())
         api = [*reachable, *computer_definitions()]

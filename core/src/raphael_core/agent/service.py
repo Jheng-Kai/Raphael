@@ -122,7 +122,8 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import copy
 from pathlib import Path
-from ..computer.local_tools import ask_context, command_context, command_of, is_local
+from ..computer.local_tools import ON_SCREEN, ask_context, command_context, command_of, is_local
+from ..computer.on_screen import launches_on_screen
 import hashlib
 import json
 import logging
@@ -211,8 +212,7 @@ from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS, TEAM_READS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
-from .whose_computer import MEMBER, UNSURE, answer_to_the_question, whose_computer
-from ..ui_languages import LANGUAGES
+from .whose_computer import MEMBER, whose_computer
 from .persona import (
     DEFAULT_LANGUAGE,
     PREFIXES,
@@ -256,7 +256,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
-from .permissions import AT_A_CHAT, message_preview, owner_pc as reaches_owner_pc, permission_identity, qualifies as permission_cards_for
+from .permissions import AT_A_CHAT, message_preview, owner_screen as reaches_owner_screen, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
@@ -576,8 +576,6 @@ class _Ask:
     floor_refusals: int = 0
     # A reaction's analysis whose member decided that no words are needed: nothing of its turn is left.
     silent: bool = False
-    # The owner answered "which computer?" with the member's own (`_which_computer`).
-    chose_own_computer: bool = False
 
     @property
     def nested(self) -> bool:
@@ -585,9 +583,10 @@ class _Ask:
 
     @property
     def own_computer(self) -> bool:
-        """A quick question that says the member's own computer is the one to use: it takes no shortcut to the owner's PC,
-        and the member's ordinary turn answers it with its own computer (`whose_computer`)."""
-        return self.quick and (self.chose_own_computer or whose_computer(self.text) == MEMBER)
+        """A quick question that may mean the member's own computer: it takes no fast-router shortcut, which can only open
+        things on the owner's PC, and goes to the member's turn (`whose_computer`). That turn holds both computers and the
+        model picks by the owner's words; nothing here takes a tool away."""
+        return self.quick and whose_computer(self.text) == MEMBER
 
 
 @dataclass(frozen=True)
@@ -1712,13 +1711,10 @@ class AgentService:
             return self._finish(ask, "chat", "negative", phrase(ask.language, off), ledger)
         settings = self._read_settings(ask.speaker, ask.conversation_id)
         blocked = self._blocked(settings)
-        if ask.quick and ask.source == VOICE and ask.speaker.is_raphael and not brain_ref(settings.model):
-            if (question := self._which_computer(ask)) is not None:
-                return self._finish(ask, "answer", "question", question, ledger)
         # Only a quick question is routed by the fast router, which can pick a command for this PC or a run on its
         # desktop; a conversation, spoken into or typed, goes to the narrated harness, which has no such tool (R-PC-01).
-        # A quick question that says the member's own computer is the one to use never takes that shortcut: it goes to
-        # the member's turn, which does the work on its own computer (R-COMP-OWN-01).
+        # A quick question that names the member's own computer never takes that shortcut, which can only use the owner's
+        # PC: it goes to the member's turn, where the model reads the owner's words and picks the computer (R-COMP-OWN-01).
         if (not ask.quick or brain_ref(settings.model) or ask.source != VOICE or not ask.speaker.is_raphael
                 or ask.own_computer):
             if blocked is not None:
@@ -1852,10 +1848,10 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, owner_pc=self._owner_pc(ask)),
+                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
-                viewing=viewing_text(ask.viewing), owner_pc=self._owner_pc(ask),
+                viewing=viewing_text(ask.viewing), owner_screen=self._owner_screen(ask),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -1985,7 +1981,7 @@ class AgentService:
         this computer: a message from a phone is a 否 reply, as is a shell that cannot be reached
         and a model that takes no tools. The reply is the run's first question or how it ended."""
         language = ask.language
-        if not self._owner_pc(ask):
+        if not self._owner_screen(ask):
             return self._finish(ask, "operate", "negative", phrase(language, "computer_away"), ledger)
         if self._computer is None:
             return self._finish(
@@ -2336,17 +2332,17 @@ class AgentService:
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
                     personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker,
-                    owner_pc=self._owner_pc(ask))
+                    owner_screen=self._owner_screen(ask))
             elif ask.speaker.is_raphael:
                 system = system_prompt("answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False,
-                                       owner_pc=self._owner_pc(ask))
+                                       owner_screen=self._owner_screen(ask))
             else:
                 system = member_system_prompt(
                     "answer", name=ask.speaker.name, role=ask.speaker.role,
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            system += owner_context(self._settings, owner_pc=self._owner_pc(ask))
+            system += owner_context(self._settings)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -2452,7 +2448,7 @@ class AgentService:
             snapshot = take_snapshot(
                 self._plugins, memory=self._memory is not None, speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
-                interactive=True, owner_management=self._management_chat(ask), owner_pc=self._owner_pc(ask),
+                interactive=True, owner_management=self._management_chat(ask), owner_screen=self._owner_screen(ask),
             )
             urls = SeenUrls([ask.text, context.summary, *[
                 "\n".join([turn.question, turn.text, turn.detail or "", *turn.messages])
@@ -2526,7 +2522,7 @@ class AgentService:
                         raise Stop("finished")
                 if name == "computer":
                     self._gate.check(Action(name, args), None)
-                    if not self._owner_pc(ask):
+                    if not self._owner_screen(ask):
                         return ToolOutcome(False, "presence_required")
                     if ask.declined:  # the owner said no in this request: not another way to the same end
                         return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
@@ -3094,9 +3090,10 @@ class AgentService:
             return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
         if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
-        if command_of(args) and not self._owner_pc(ask):
-            # A command of the CLI's own is a command on the owner's PC: only a quick question may ask for one (R-PC-01).
-            return ToolOutcome(False, "presence_required")
+        if (command := command_of(args)) and not self._owner_screen(ask) and launches_on_screen(command):
+            # A command of the CLI's own runs on the owner's PC, hidden and with the card, as the local commands do; one
+            # that would show something on its screen is refused outside a quick question, whatever the mode (R-PC-06).
+            return ToolOutcome(False, "shows_on_screen", instruction=ON_SCREEN)
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
             return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
         screening = await self._gate.screen(Proposed("cli_permission", "CLI native action", summarize(args)), language=ask.language, ledger=ledger)
@@ -3271,8 +3268,7 @@ class AgentService:
         if self._plugins is not None:
             try:
                 offered = getattr(self._plugins, "offered_for", lambda member: self._plugins.offered())
-                pc = ask is not None and self._owner_pc(ask)
-                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key) and (pc or not is_local(tool.key))]
+                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key)]
             except Exception as exc:  # a plugin that breaks must not break the answer
                 logger.warning("Could not list the plugins' tools: %s", type(exc).__name__)
         if ask is not None:
@@ -3280,11 +3276,12 @@ class AgentService:
         return make_offer(tools) if tools else None
 
     @staticmethod
-    def _owner_pc(ask: _Ask) -> bool:
-        """Whether the owner's own PC is in reach of this turn: only a quick question asked at this computer (the overlay's
-        Alt+Space) reaches it, never an ordinary conversation, a room, an exchange between members, a task or a phone, in any
-        permission mode (R-PC-01). Their computer work goes to the member's own computer."""
-        return reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested, own_computer=ask.own_computer)
+    def _owner_screen(ask: _Ask) -> bool:
+        """Whether this turn may show things on the owner's own screen and drive it: only a quick question asked at this
+        computer (the overlay's Alt+Space), never an ordinary conversation, a room, an exchange between members, a task or
+        a phone, in any permission mode (R-PC-01). What those show they show on the member's own computer; their hidden
+        commands on the owner's PC ask with the card (R-PC-02)."""
+        return reaches_owner_screen(source=ask.source, quick=ask.quick, nested=ask.nested)
 
     def _team_tools(self, ask: _Ask) -> list[str]:
         """The team tools the request `ask` is about. Never for a request one member handed another
@@ -3742,7 +3739,7 @@ class AgentService:
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
             elif name in COMMANDS:
-                if not self._owner_pc(ask):
+                if not self._owner_screen(ask):
                     raise HarnessToolError("presence_required")
                 values = dict(args)
                 if name == "open":
@@ -5018,30 +5015,6 @@ class AgentService:
 
     # --- commands -------------------------------------------------------------------------------
 
-    def _which_computer(self, ask: _Ask) -> str | None:
-        """The one question a quick request to open something "on the computer" is asked, or None when it needs none. A
-        request that names whose computer it means is never asked. Asked once: the reply to the question that says a side
-        settles it (`answer_to_the_question`: the member's own computer is `ask.chose_own_computer`, this PC is the
-        router's as ever), and an agreeing reply is the member's, which cannot touch the owner's PC."""
-        if (len(ask.text) <= 24 or whose_computer(ask.text) == UNSURE) and self._asked_which_computer(ask):
-            # Asked once: whatever the reply, it is not asked again. It names a side, or agrees, or says the request again
-            # with no side on it; only "this PC" keeps the router and the owner's PC.
-            if answer_to_the_question(ask.text) == MEMBER or whose_computer(ask.text) == UNSURE:
-                ask.chose_own_computer = True
-            return None
-        if whose_computer(ask.text) == UNSURE:
-            return self._the_question(ask.speaker, ask.language)
-        return None
-
-    @staticmethod
-    def _the_question(speaker: Speaker, language: str) -> str:
-        return phrase(language, "which_computer", who=speaker.name or RAPHAEL_NAMES.get(normalize_language(language), "Raphael"))
-
-    def _asked_which_computer(self, ask: _Ask) -> bool:
-        """Whether the last thing said in this conversation was the question (`which_computer`), in any language."""
-        last = next(iter(reversed(self._context(2, ask.speaker.id, ask.conversation_id))), None)
-        return last is not None and last.text in {self._the_question(ask.speaker, language) for language in LANGUAGES}
-
     async def _command(
         self, ask: _Ask, decision: RouteDecision, settings: _Settings, ledger: Ledger
     ) -> dict:
@@ -5049,7 +5022,7 @@ class AgentService:
         language = ask.language
         if command is None:  # none of the fixed commands covers it
             return self._finish(ask, "command", "negative", phrase(language, "cannot"), ledger)
-        if not self._owner_pc(ask):  # the router is only asked for a quick question, so this is a second lock
+        if not self._owner_screen(ask):  # the router is only asked for a quick question, so this is a second lock
             return self._finish(ask, "command", "negative", phrase(language, "computer_away"), ledger)
         args: dict[str, Any] = {}
         question = ""

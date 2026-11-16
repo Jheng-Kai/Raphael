@@ -12,20 +12,27 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from ..agent.plugins import PluginResult, PluginTool, tool_key
-from ..agent.permissions import owner_pc as reaches_owner_pc, qualifies
+from ..agent.permissions import owner_screen as reaches_owner_screen, qualifies
 from ..agent.policy import UNATTENDED_WAIT_S, Tier
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
+from .on_screen import launches_on_screen
+from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
 FOREGROUND_TIMEOUT_S = 120
+# Who runs the command, whether it read outside content, whether its chat can show a card, its session, and whether the
+# owner's screen is in reach (a quick question alone, `permissions.owner_screen`).
 _CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", False))
-OUT_OF_REACH = ("The owner's own PC is out of reach here: it is only for a quick question asked through the overlay. "
-                "Do the work on your own computer, or say plainly that it cannot be done.")
+ON_SCREEN = ("Nothing was run: this command would show something on the owner's screen, and only a quick question shows "
+             "anything there. Open pages, programs and files on your own computer with its tools. To run a program and "
+             "read what it prints, run it directly, without opening a window.")
+NO_CARD = ("Nothing was run: a local command needs the owner's yes on a card, and this conversation cannot show one. "
+           "Tell the owner plainly that it can be asked for in a private conversation in the app.")
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
 _SECRET_WINDOWS = r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\/]channels|\b(?:cmdkey|vaultcmd|mimikatz|Get-StoredCredential|CredEnumerate|CredRead)\b"
 # A Mac's secret store is the Keychain: its command-line reads and exports, and its files.
@@ -49,16 +56,19 @@ def safety_patterns(platform):
 
 _DANGEROUS, _SECRET, _OPAQUE = safety_patterns(sys.platform)
 
+# Held to 400 characters: it is listed in every turn and task.
 EXEC_DESCRIPTION = (
-    "Run one command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs. "
-    "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
-    "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+    "Run one hidden command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs; outside "
+    "a quick question one that opens a program, a page or a file on its screen is refused. For Raphael itself use "
+    "self_check first. Approval is enforced; foreground max 120 s. No interactive programs. Long claude -p or codex exec "
+    "work uses background; it spends the owner's subscription."
 )
 if sys.platform == "darwin":
     EXEC_DESCRIPTION = (
-        "Run one zsh command on the owner's Mac for CPU, memory, disk, processes, network, files and logs. "
-        "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
-        "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+        "Run one hidden zsh command on the owner's Mac for CPU, memory, disk, processes, network, files and logs; outside "
+        "a quick question one that opens an app, a page or a file on its screen is refused. For Raphael itself use "
+        "self_check first. Approval is enforced; foreground max 120 s. No interactive programs. Long claude -p or codex "
+        "exec work uses background; it spends the owner's subscription."
     )
 EXEC_SCHEMA = {"type": "object", "properties": {
     "command": {"type": "string", "minLength": 1, "maxLength": 16000},
@@ -71,6 +81,14 @@ JOB_SCHEMA = {"type": "object", "properties": {"job_id": {"type": "string"}, "st
 
 def is_local(key):
     return key.startswith(LOCAL_PREFIX)
+
+
+def owner_file_tool(key):
+    """The name of one of the owner's file tools (`owner_files`), or None. Like the local commands they are offered to
+    every turn and task (R-PC-04), but without a card: reading is the whole computer's, writing only the owner's folders'."""
+    prefix = tool_key(OWNER_FILES, "")
+    name = key[len(prefix):] if key.startswith(prefix) else None
+    return name if name in OWNER_FILE_DEFINITIONS else None
 
 
 def command_of(arguments):
@@ -103,14 +121,23 @@ def requires_command_approval(settings, command, *, external):
 def ask_context(ask, results=()):
     external = bool(ask.memory_untrusted or ask.attachments or ask.nested or any(getattr(r, "untrusted", False) for r in results)
                     or any(s.tool in ("web_search", "web_read", "read_attachment") or s.server not in (None, "Raphael", "local") for s in ask.steps))
-    # The last cell: only a quick question reaches the owner's own PC (R-PC-01); every other turn is refused in `call`.
+    # The last cell: only a quick question shows anything on the owner's screen (R-PC-01); every other turn's command that
+    # would is refused in `call` (R-PC-06).
     return (("chat", ask.speaker.id, ask.conversation_id), external,
             qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id,
-            reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested, own_computer=ask.own_computer))
+            reaches_owner_screen(source=ask.source, quick=ask.quick, nested=ask.nested))
 
 
 def run_context(run):
+    # A task asks through its waiting question (`present`), and never shows anything on the owner's screen.
     return (("task", run.task_id), bool(run._memory_untrusted or run.attachments), True, "", False)
+
+
+def shows_on_screen(key, arguments):
+    """Whether this call of a local command would show something on the owner's screen where only a quick question may
+    (R-PC-06): refused in `call` whatever the permission mode, so nothing asks for it."""
+    return (key == tool_key("local", "local_exec") and isinstance(arguments, dict) and isinstance(arguments.get("command"), str)
+            and not _CONTEXT.get()[4] and launches_on_screen(arguments["command"]))
 
 
 def command_context(select):
@@ -133,6 +160,7 @@ class LocalTools:
         self.data_floor = DataFloor(conn)
         self.host, self.enabled = host or LocalHost(), enabled
         self.jobs = {}
+        self.owner_files = OwnerFileTools(self.settings, self.data_floor)
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -141,12 +169,17 @@ class LocalTools:
         offered = getattr(self.delegate, "offered_for", lambda _: self.delegate.offered())(member_id)
         native = [PluginTool(tool_key("local", "local_exec"), "local", "local_exec", EXEC_DESCRIPTION, EXEC_SCHEMA, Tier.T2, pinned=True),
                   PluginTool(tool_key("local", "local_job"), "local", "local_job", "Read bounded output/state of your local command job, or stop its process tree. Jobs belong to this conversation or task.", JOB_SCHEMA, Tier.T0, pinned=True)]
-        return [*offered, *native]
+        files = [PluginTool(tool_key(OWNER_FILES, name), OWNER_FILES, name, item["description"], item["parameters"],
+                            Tier.T0 if name in OWNER_FILE_READS else Tier.T2, pinned=True, whole=True)
+                 for name, item in OWNER_FILE_DEFINITIONS.items()]
+        return [*offered, *native, *files]
 
     def offered(self):
         return self.offered_for(0)
 
     def tier_of(self, key):
+        if (name := owner_file_tool(key)) is not None:
+            return Tier.T0 if name in OWNER_FILE_READS else Tier.T2
         return Tier.T2 if key == tool_key("local", "local_exec") else Tier.T0 if is_local(key) else self.delegate.tier_of(key)
 
     def _full_permission(self):
@@ -157,46 +190,59 @@ class LocalTools:
                 or requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1]))
 
     def tier_for_call(self, key, arguments):
+        if (name := owner_file_tool(key)) is not None:
+            # A read asks nothing; a write outside the owner's folders is refused in `call`, so nothing asks for it.
+            schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
+            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments) or not self.owner_files.writable(arguments):
+                return Tier.T0
+            return Tier.T2
         if not is_local(key):
             return getattr(self.delegate, "tier_for_call", lambda k, a: self.delegate.tier_of(k))(key, arguments)
         schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
         if not Draft202012Validator(schema).is_valid(arguments):
             return Tier.T0
-        if key.endswith("/local_job") or self.settings.get("local_commands_mode") == "never" or _SECRET.search(str(arguments)) or not _CONTEXT.get()[2]:
+        if (key.endswith("/local_job") or self.settings.get("local_commands_mode") == "never" or _SECRET.search(str(arguments))
+                or not _CONTEXT.get()[2] or shows_on_screen(key, arguments)):
             return Tier.T0
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
 
     def kind_of(self, server, name):
+        if server == OWNER_FILES:
+            return "read" if name in OWNER_FILE_READS else "write"
         return "write" if server == "local" else self.delegate.kind_of(server, name)
 
     def kind_for_call(self, server, name, arguments):
-        return self.kind_of(server, name) if server == "local" else getattr(self.delegate, "kind_for_call", lambda s, n, a: self.delegate.kind_of(s, n))(server, name, arguments)
+        return self.kind_of(server, name) if server in ("local", OWNER_FILES) else getattr(self.delegate, "kind_for_call", lambda s, n, a: self.delegate.kind_of(s, n))(server, name, arguments)
 
     def record_unrun(self, key, *, outcome, task_id=None):
-        if is_local(key):
+        if (name := owner_file_tool(key)) is not None:
+            self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver="none", outcome=outcome, task_id=task_id)
+        elif is_local(key):
             self.audit.add(server="local", tool=key.split("/")[-1], tier="T2", approver="none", outcome=outcome, task_id=task_id)
         else:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
+        if (name := owner_file_tool(key)) is not None:
+            return await self._owner_file(key, name, arguments, approver=approver, task_id=task_id)
         if not is_local(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, **({"pool": pool} if pool is not None else {}))
         result = PluginResult(False, "approval_required", "This local command needs the owner's approval in the app. Wait for that approval before trying it again.")
         outcome = "blocked"
         background = False
         try:
-            owner, external, present, session, owner_pc = _CONTEXT.get()
+            owner, external, present, session, _screen = _CONTEXT.get()
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
-            if not owner_pc:
-                # Whatever the permission mode: 全部允許 never reopens the owner's PC to an ordinary conversation, a room, a task or a phone.
-                return PluginResult(False, "presence_required", OUT_OF_REACH)
+            if shows_on_screen(key, arguments):
+                # Whatever the permission mode, 全部允許 included: what is seen is shown on the member's own computer.
+                return PluginResult(False, "shows_on_screen", ON_SCREEN)
             access = self.data_floor.access(key, arguments)
             if access == "write":
                 return PluginResult(False, "protected_data", WRITE_REFUSAL)
             if (not present and not self._full_permission()) or owner is None:
-                return PluginResult(False, "presence_required", "A quick question cannot show the card a local command needs, so nothing was run. Tell the owner plainly that it cannot be done here.")
+                return PluginResult(False, "presence_required", NO_CARD)
             if key.endswith("/local_job"):
                 job = self.jobs.get(arguments["job_id"])
                 if job is None or job["owner"] != owner:
@@ -249,6 +295,16 @@ class LocalTools:
             if not background:
                 self.audit.add(server="local", tool=key.split("/")[-1], tier="T2", approver=approver,
                                outcome="ok" if result.ok and outcome == "blocked" else outcome, task_id=task_id)
+
+    async def _owner_file(self, key, name, arguments, *, approver, task_id):
+        if not Draft202012Validator(OWNER_FILE_DEFINITIONS[name]["parameters"]).is_valid(arguments):
+            return PluginResult(False, "bad_arguments")
+        owner = _CONTEXT.get()[0]
+        result = await self.owner_files.call(name, arguments, approver=approver, run=owner or ("task", task_id))
+        self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver=approver,
+                       outcome="ok" if result.ok else "blocked" if result.kind in ("kept", "not_writable", "approval_required",
+                                                                                     "protected_data") else "error", task_id=task_id)
+        return result
 
     async def _execute(self, command, *, audit=None, **params):
         outcome = "denied"

@@ -28,7 +28,7 @@ OWNER_ZH = "成員想用指令或檔案工具改 Raphael 的資料，不被允�
 
 def ask(rig, language="en", text="Please write the skill file for me"):
     rig.typed_count = getattr(rig, "typed_count", 0) + 1
-    # A quick question: the one turn that has a command for the owner's PC (R-PC-01).
+    # A quick question, which shows no card: the data floor's refusal is all the owner reads of the command.
     return rig.call("agent.ask", {"session_id": f"floor-{rig.typed_count}", "text": text, "ui_language": language, "source": "app", "member_id": 0,
                                   "destination": "quick", "conversation_id": rig.service.conversations.quick()})
 

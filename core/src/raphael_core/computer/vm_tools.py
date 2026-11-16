@@ -590,10 +590,9 @@ class VmTools:
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        # True once the member's own computer has a tool catalog. The snapshot then leaves out the owner's-desktop
-        # `computer` tool, so that two tools called computer never leave the choice of machine to the model. Without a
-        # catalog (computer tools off, no Docker on this PC) a member simply has no computer: only a quick question
-        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01).
+        # True once the member's own computer has a tool catalog. Without one (computer tools off, no Docker on this PC)
+        # a member simply has no computer: only a quick question shows anything on the owner's screen, and an ordinary
+        # turn never falls back to it (R-PC-01, R-PC-06).
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):

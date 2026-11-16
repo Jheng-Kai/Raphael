@@ -1070,6 +1070,20 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
+  if (name === "owner-write-folders") {
+    const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
+    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "owner_write_folders").map(call => call.params.value);
+    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "R-PC-05: the picker adds a folder and its ⋯ removes one");
+    require(sets[0].length === 3 && sets[0][2] === sample && JSON.stringify(sets[1]) === JSON.stringify(sets[0].slice(1)), "the first folder is the one removed, the picked one kept");
+    const head = document.querySelector('[data-row="write-folders"]'), rows = [...document.querySelectorAll('[data-row="write-folder"]')];
+    require(visible(head) && !document.querySelector('[data-row^="write-folder"] input, [data-row^="write-folder"] textarea'), "folders are picked, never typed");
+    require(rows.length === 2 && rows.every(row => visible(row)), "each folder is a row of its own");
+    for (const row of rows) {
+      const path = row.querySelector('.output-path'), more = row.querySelector('[data-act="write-folder-menu"]');
+      require(visible(path) && visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
+    }
+    return {check:name};
+  }
   if (name === "owner-output-folder") {
     const row = document.querySelector('[data-row="output-folder"]');
     require(visible(row) && !row.querySelector('input, textarea'), "R-COLLEAGUE-06: the output folder is a picker, with no typed field");

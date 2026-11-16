@@ -214,7 +214,7 @@ def test_every_command_for_this_computer_is_for_the_foreground_only():
 
 
 def test_allow_all_does_not_open_the_owners_pc_to_the_worker(conn):
-    # R-PC-01: no permission mode reopens the commands for this PC or the steps on its desktop to a task.
+    # R-PC-01: no permission mode reopens the fixed commands for this PC or the steps on its desktop to a task.
     from raphael_core.brain.settings import SettingsStore
     from raphael_core.computer.tools import GATE_TIERS
     SettingsStore(conn).set("action_mode", "bypass")

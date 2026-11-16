@@ -186,7 +186,7 @@ class ToolGate:
         for this computer (opening anything, the volume, the lock...) or a step of a run on the
         desktop when `worker` is true: those are for the user at the keyboard, never for a task
         that runs while they are away, whatever the permission mode (R-PC-01: 全部允許 does not reopen the
-        owner's PC). A tool the owner said Always to (`waived`) needs no yes."""
+        owner's screen). A tool the owner said Always to (`waived`) needs no yes."""
         if worker and (action.tool in COMMANDS or action.tool in COMPUTER_TIERS):
             raise NotApproved(action.tool)
         self._door(action, approval)
