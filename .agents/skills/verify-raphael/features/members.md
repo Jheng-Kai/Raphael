@@ -2,7 +2,7 @@
 
 ## A member's colour on its switches
 
-R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is his blue). The conversation
+R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is its blue). The conversation
 already wears it on the owner's bubble and on send, stop and the computer (`--member-bubble`, `--member-accent` on `.mb-chat`).
 `memberSwitch` (owner-bubble.ts) turns the same colour into the track of a switch that is on, its outline and its knob:
 `drawFaces` in pages/agent.ts sets `--member-switch`, `--member-accent` and `--member-knob` and the mark `data-member-switch`
@@ -214,7 +214,7 @@ complete flow for creation changes.
 
 A member's face is a slime (R-UI-116): its picker in
 the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
-model. It is one row of tabs, the groups in their order (角色, 動物, 職業, 自然, 季節與食物, 小物, 純色) as the app's small pill tabs in a
+model. It is one row of tabs, the groups in their order (角色, 奇幻, 動物, 自然, 生活, 純色; the slimes in 角色 are told apart by how they look) as the app's small pill tabs in a
 chip row (`slime-tabs.ts`), and under it only the open group's slimes with no heading. It opens on the group that holds
 the face now, with that face marked. The groups stand on one another in one cell, so the picker is one size and a press on
 a tab moves nothing; Left and Right move between tabs, Down goes into the group and Up back to the tab. Scenes:
@@ -370,15 +370,15 @@ core/tests/background/test_room_cli.py and core/tests/members/test_cli_brains.py
 
 The owner chooses which member is their primary contact, the Bot that new work is brought to and that hands it to the colleague it belongs to.
 Raphael is the primary until another is chosen, and exactly one is at a time. As R-UI-107 says, only the primary's own menu (the
-row's more button or a right click; Raphael's while he is the primary) hands it on: its last item, after a hairline, is 換成其他成員 (the arrows icon). It opens 「選擇主要成員」,
+row's more button or a right click; Raphael's while it is the primary) hands it on: its last item, after a hairline, is 換成其他成員 (the arrows icon). It opens 「選擇主要成員」,
 a list of real buttons (Raphael and the other visible members, not the primary now) with nothing chosen, 取消 and the primary 設為主要, which waits for a
 choice. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses the arrows icon instead of a star.
 
 A member's row menu is grouped, with hairlines between the groups: 釘選, 移到分組 ▸, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red, last).
 The primary sits in the top slot, so its menu has no 移到分組 and no 刪除: 釘選, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 換成其他成員. Raphael's row has 釘選 only,
-and 換成其他成員 while he is the primary. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
+and 換成其他成員 while it is the primary. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
 (one conversation per member, R-UI-103; fewer choices).
-The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps his emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
+The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps its emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
 A pinned tile (the large faces at the top; R-UI-122) has the same family of menu, each row with a Lucide icon: 取消釘選 (unpinned pin), 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red) | 換成其他成員, which is offered only while a member that is not pinned remains. There is no 移到分組 on a tile (its folder is where it returns to). 換成其他成員 opens the same window as the primary's, under its own title and without 設為主要: one press on a member (not Raphael, nobody hidden, not the primary) writes that member as pinned at the tile's `position` and then unpins the old one, so the new face stands exactly in the old tile's place and the old member is a row of its own folder again. `sidebar-tile-menu`, `sidebar-tile-picker` and `sidebar-tile-replaced` (fixture `pinnedTiles` over the long roster; the IPC double lists the pinned first and numbers positions again as the core does) assert the menu's shape, hairlines, icons and red 刪除, the picker's candidates and buttons, and the end state with exactly two writes. Not covered: the owner's real roster order and a live core. Unit proof: member-actions.test.ts, member-column.test.ts, primary-picker.test.ts.
 
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
@@ -387,7 +387,7 @@ Raphael's row has no destructive menu wherever it moves; an ordinary primary kee
 npm run look -- members-expanded sidebar-folders member-row-menu sidebar-tile-menu sidebar-tile-picker sidebar-tile-replaced primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
-`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while he is the primary and asserts 換成其他成員 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while she is the primary, excludes her while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
+`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while it is the primary and asserts 換成其他成員 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while it is the primary, excludes it while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
 
 The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_context.primary_id` says it, a hidden or deleted primary is Raphael again, and a hidden member cannot be chosen. Unit cases cover default/explicit Raphael, valid and absent primary IDs, grouped/pinned/ungrouped slots, source immutability, details drafts, picker identities and restricted mentions.
 
@@ -471,7 +471,7 @@ scenes are in [Connections and MCP](connections-mcp.md) and [Conversation](conve
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Deleting the selected member or resource (owner round 3)
+## Deleting the selected member or resource
 
 R-UI-47: deleting the open member selects Raphael before repainting. Missing roster
 entries also fall back to Raphael with the existing success notice. Deleting a
@@ -494,9 +494,9 @@ Pointer regression tests cover Raphael and another member in agent-members.test.
 Native voice-conversation proves local WAV transcription and persisted turns with
 a fake brain; it does not prove a physical microphone or live-provider behavior.
 
-## Owner round 6 contracts
+## Overlay scrim, inset and card cap in conversations
 
-Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain as approved.
+member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement stay as they are.
 
 
 ## Bot homes, phase 1
@@ -572,9 +572,9 @@ what it writes needs no mark.
 The owner's own correction is the exception to "outside claims never change confirmed entries" (R-MEM-12; an address typo had
 stayed in memory after five refused corrections): in a private turn that read outside
 content, a `replace` whose every written (and removed) span stands in the owner's message, with two characters of
-context, changes the confirmed entry and leaves it his; words he never said, a removal, a room, a colleague's work and a
+context, changes the confirmed entry and leaves it theirs; words they never said, a removal, a room, a colleague's work and a
 routine are refused as `unconfirmed_only`. Check it in a private turn after a web read: say the street was wrong and
-the right one; the entry changes and carries no 「（待確認）」. When he corrects a fact that a member's own
+the right one; the entry changes and carries no 「（待確認）」. When they correct a fact that a member's own
 instructions state, the doctrine has the member propose `member_update` on its own id (R-MEM-13); memory never edits
 the instructions, and the owner's card decides.
 
@@ -1092,11 +1092,11 @@ A new member's greeting is its own model's line with ONE question card (R-COLLEA
 
 One chain, one card at a time, no progress mark and no summary at the end:
 
-1. The greeting: one line in the member's own words and one question card (what to take on first: three or four options from what is known, else mail, schedule and reminders, research, documents; plus his own answer). `member-greeting-choices`, `member-maker-made`.
-2. His answer (or his own words) is the card's: it stands in the card, not as a bubble, and starts a turn of its own (`setup`). The member saves its job (`set_my_job`), says it in one sentence, and the thread shows one centred quiet line 「已設定職務：…」 (the skill-learned line; `job_set` event). There is no label place for the role in a sidebar row (R-UI-77), so none is added.
+1. The greeting: one line in the member's own words and one question card (what to take on first: three or four options from what is known, else mail, schedule and reminders, research, documents; plus their own answer). `member-greeting-choices`, `member-maker-made`.
+2. Their answer (or their own words) is the card's: it stands in the card, not as a bubble, and starts a turn of its own (`setup`). The member saves its job (`set_my_job`), says it in one sentence, and the thread shows one centred quiet line 「已設定職務：…」 (the skill-learned line; `job_set` event). There is no label place for the role in a sidebar row (R-UI-77), so none is added.
 3. If the job needs an app that is not connected: the existing connect card for that one app with one quiet line under it (「沒有你的同意，我不會寄出或更動任何東西。」). A connected app is never asked about. `member-setup-connect`.
-4. One more card: which first task (two or three concrete options plus his own answer). `member-greeting-goal` shows steps 2 and 4.
-5. The member starts the task he chooses. A clear job and task in the answer skip 3 and 4; a new name given in so many words is taken with `member_update` and shown as the first Bot's rename line. `member-setup-collapsed`.
+4. One more card: which first task (two or three concrete options plus their own answer). `member-greeting-goal` shows steps 2 and 4.
+5. The member starts the task they choose. A clear job and task in the answer skip 3 and 4; a new name given in so many words is taken with `member_update` and shown as the first Bot's rename line. `member-setup-collapsed`.
 
 Typing instead of answering closes the card and is an ordinary message; closing the card (×) ends the set-up quietly. Core: `core/tests/members/test_setup_chain.py` (fake API and CLI brains; a real model following the chain is unverified until tried on a Codex member and an API member).
 

@@ -1,6 +1,6 @@
 # Calendar and automations
 
-## Routine reliability found in real use
+## Routine places, sign-in refusal, precheck and calendar range
 
 Core behaviour only; no screen changed (verify with the pytest files named in each rule, not with `look`).
 R-ROUTINE-11: routine runs take two of the three places and wait in order, behind the owner's own tasks

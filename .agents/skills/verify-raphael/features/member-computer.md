@@ -157,7 +157,7 @@ nothing (`desktop-viewer.ts` streams only a computer that already runs; only a p
 `vm.launch`); but `web_read` (`agent/tools.py`) fell back to the member's browser whenever a page read under 600 characters, came
 back bad, or asked for scripts or cookies, and that fallback went through `rendered_read` and `VmTools.call`, which woke the
 computer for a page read; and nothing counted the owner's open stream as activity, so the idle bound (15 minutes,
-`vm.py::sweep`) could put a computer to sleep under his eyes.
+`vm.py::sweep`) could put a computer to sleep under their eyes.
 - `web_read` no longer wakes it. `VmTools.rendered_read` looks first (`_awake`: a status read, never a start); asleep it returns
   `computer_asleep`, and the page comes back as read with `READ_NEEDS_BROWSER` ("your computer is asleep and reading a page does
   not wake it; call browser_open with its address yourself"), or, for a page that did not read at all, the failure with that
@@ -169,7 +169,7 @@ computer for a page read; and nothing counted the owner's open stream as activit
   command (`vm_exec`) or using the computer (anything else): 「小晴為了開網頁喚醒了電腦」. No toast, no card. The same record
   (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs (the app does not read it; the line in
   the conversation is the one notice). It is dropped when
-  the computer sleeps or when the owner starts it (a press, maintenance), so his own start leaves no line. Routines and background tasks run through the same call, so they follow the same
+  the computer sleeps or when the owner starts it (a press, maintenance), so their own start leaves no line. Routines and background tasks run through the same call, so they follow the same
   rules (their line goes to their own conversation or progress). All fifteen interface languages: `_computer_words_data.py` for
   the core (the app keeps no copy).
 - The owner watching counts. `DesktopViewer._monitor` marks the computer active every second while a view of it has a connected
@@ -223,7 +223,7 @@ unexplained; the refusal it saw was the bare identifier `owner_holds_control`, s
 What the app does now.
 - A pill that reads 觀看中 always offers 接手控制 (the larger view is open, the computer runs, no recording). One press is
   `computer.viewer_control {held: true}`; the pill reads 正在接手… until the screen confirms (R-PANEL-09).
-- The core gives the lease to the owner's press (`viewer.py::_control`): another view of his own that holds it, or a hold no
+- The core gives the lease to the owner's press (`viewer.py::_control`): another view of their own that holds it, or a hold no
   view keeps and no sign-in request waits on, is replaced (the old view's policy revoked, its pressed keys released, its
   sockets closed). A recording in the old holder's view still refuses.
 - A press that lands while a member's action is under way (`vm.input_busy` / `native_busy`) used to be answered "desktop
@@ -235,13 +235,13 @@ What the app does now.
   the next renewal (`update()` in `desktop-viewer.ts`), the pill says 觀看中 and 接手控制 returns. 釋放 / 我完成了 is shown only
   while the view holds the lease or a request waits.
 - How long a lease lives: it ends at 釋放, when the view closes (released at once) or when the app is gone (15 s after the
-  last renewal, by the core's monitor); and `OWNER_IDLE_S` = 300 s after his last click or key (the relay's count of
-  forwarded input) while nothing waits on him. A sign-in or payment request waiting for him and a recording are held until
-  he says so.
+  last renewal, by the core's monitor); and `OWNER_IDLE_S` = 300 s after their last click or key (the relay's count of
+  forwarded input) while nothing waits on them. A sign-in or payment request waiting for them and a recording are held until
+  they say so.
 - A hold whose view fails to close is released anyway (`finally` in `viewer.py::_close`), and the monitor carries on past a
   view it cannot close.
 - A member turned away by the hold is told what is true in one sentence (`vm.py::owner_note`, in the 240 characters a
-  failure keeps): the owner has had the screen's mouse and keyboard for N seconds, nothing was done, it comes back at his press
+  failure keeps): the owner has had the screen's mouse and keyboard for N seconds, nothing was done, it comes back at their press
   or after 5 minutes without input, do not guess another cause; a waiting sign-in request says that instead. The CLI bridge
   says the same instead of the bare identifier.
 
@@ -263,11 +263,11 @@ Two causes, both in `desktop-viewer.ts`, none in the core (`viewer.py::_control`
 - The pill's 停止 (after 接手控制) called `handback()`, the path of a sign-in request's 我完成了: it asked the core to release,
   folded the larger view, closed the stream and, in a window under 1440 px or when the panel had been closed, closed the panel.
   Now `release()` asks the core to release and does nothing else: the view stays, the stream stays, the screen is view-only,
-  the pill reads 觀看中 and 接手控制 is offered. A refused stop leaves the pill on 你正在控制 and gives the screen his input
+  the pill reads 觀看中 and 接手控制 is offered. A refused stop leaves the pill on 你正在控制 and gives the screen the owner's input
   again. 我完成了 (a request a member waits on) still goes back to the conversation through `handback()` (R-COMP-3-03).
 - `handback()` also set `suspended` (so a returned request's card does not reopen its stream) and never cleared it for a
   panel that stays visible: in a wide window the panel stayed open on the third tab with a running computer, no stream and no
-  picture until he pressed the screen, which clears `suspended` (the press that enlarges it). A handback that leaves the panel
+  picture until the owner pressed the screen, which clears `suspended` (the press that enlarges it). A handback that leaves the panel
   visible now streams again at once (the discarded demonstration and the returned sign-in request take that path).
 Reproduced before the fix: `computer-release-keeps-watching` red at 1920 and 720 (the view left), `computer-preview-running`
 red at 1920 (no iframe in the tab after the handback), and the vitest cases listed in the rules.
@@ -1679,7 +1679,7 @@ The UI side is R-PANEL-06 (the computer is the third tab only; Details has no co
 ## The computer is the third tab only, and the quiet thread
 
 R-PANEL-06. Details once had a computer row (「拉斐爾的電腦 休眠中」 with a small screen) beside the routine, 對話 and 訊息平台;
-the computer is already a tab above, so it lives in the third tab (電腦) only. Details holds the routines, for Raphael his conversations, and the chat platforms, for every
+the computer is already a tab above, so it lives in the third tab (電腦) only. Details holds the routines, for Raphael its conversations, and the chat platforms, for every
 member and in every state of the computer; no row, heading, state word, small screen or press for the computer. What went with
 it: `computer-row.ts` (the model the viewer published and the row drew), `rowShown` (the stream the viewer opened unseen while
 Details was open, so the row had a live picture), the `member-computer-open` event and the row's 下載 / 啟動 words, the `woken`
@@ -1875,7 +1875,7 @@ runs `vm_exec` with `keys: [NAME]`: the core hands the values to that one proces
 the value in the docker process's own environment, never an argument) and replaces them in everything returned,
 including a background job's log read later. The Keys tab of the safety pane's saved-entries list (`vault.ts`) shows
 and removes them; it offers no way to add one. In the live view (`BOOTSTRAP` in `computer/viewer.py` and
-`desktop-viewer.ts`) the owner's Ctrl+V, while he holds the screen, puts his clipboard into the computer first
+`desktop-viewer.ts`) the owner's Ctrl+V, while they hold the screen, puts their clipboard into the computer first
 (`owner_clipboard_text`, `paste/clipboard.rs`) and then sends the keys; watching or a member's work never reads it.
 
 Selected matrix, from app/:

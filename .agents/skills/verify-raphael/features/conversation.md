@@ -17,8 +17,8 @@ follows; it is told after layout and before paint, so no frame is seen above the
 size. A picture drawn again takes the copy already loaded in the same task (`sync`), and a new one is decoded before it is shown (`decoded`),
 so a picture only grows. The owner's own scrolling up lets go of the bottom at once (`letGo`: a wheel up, also over the header, which passes
 its wheel to the thread; PageUp, ArrowUp, Home or Shift+Space outside a field; a touch drag down), before the scroll it starts has moved
-anything; from then on nothing moves the line he reads, however near the bottom, until a scroll of his ends at the very bottom (2 px, not
-while still going up) or he presses the latest button. A thread that cannot scroll up is not let go. Explicit navigation (search, quote,
+anything; from then on nothing moves the line they read, however near the bottom, until a scroll of theirs ends at the very bottom (2 px, not
+while still going up) or they press the latest button. A thread that cannot scroll up is not let go. Explicit navigation (search, quote,
 unread line, the settings page's way back) keeps its own place as before (`releaseRichScroll`). No timer and no smooth scrolling.
 
 ```powershell
@@ -497,7 +497,7 @@ npm run look -- typo-mention completion-filtered completion-mentions plugins-sto
 ## Share in the conversation header
 
 Share left the member panel for the conversation header: search at the left, share at the right, symmetric. It
-shows in every member's conversation once it is read, never in Raphael's (he is the app's own), and opens one
+shows in every member's conversation once it is read, never in Raphael's (it is the app's own), and opens one
 choice that asks the member, in its own conversation, to write its template (`askInChat(..., "share-template")`).
 The panel's left tool is the settings gear.
 
@@ -886,7 +886,7 @@ with `find_tools` and called with `use_tool`, and no search restarts a CLI brain
 every member are offered the same tools on the API and the CLI path:
 core/tests/members/test_plugins_everywhere.py.
 A step of the app's own tools (server "Raphael") reads 「讀取」, 「修改」 or 「詢問同事」 and
-never names Raphael, on a member's turn or his; a connected service keeps its name
+never names Raphael, on a member's turn or its; a connected service keeps its name
 (timeline.test.ts; the work itself is no longer shown, R-UI-120).
 
 Conversation and routing fallback controls are absent from the UI. Only the chosen
@@ -976,7 +976,7 @@ Core: tests/brain/test_one_conversation_migration.py and tests/agent/test_folded
 
 ## Sub-features
 
-One conversation per member (Raphael also keeps his quick questions; see One conversation per member below); public work/event chips; answers,
+One conversation per member (Raphael also keeps its quick questions; see One conversation per member below); public work/event chips; answers,
 attachments, reply quoting, message actions, search and composer menus; connector cards for an app a
 task needs, and the one resume of that task (see Connecting an app from the chat below); a secret card for a key a
 connection needs and a computer card for the owner's turn at a sign-in (see Handing a key or the computer to the owner below);
@@ -1021,7 +1021,7 @@ Offline fixtures do not prove native microphone, providers or transport.
 ## How to get to it (user POV)
 
 The app opens on Raphael's conversation; select another member in the rail or open a member report. Select Raphael or another member in the sidebar (compact width:
-member picker). Raphael stays first with his original large bare emblem and name. The column's top-left arrow toggles a remembered 56px face strip, including at compact width. Other expanded rows retain their 40px faces, time and preview. Click the stacked member/conversation title to toggle details. The title displays
+member picker). Raphael stays first with its original large bare emblem and name. The column's top-left arrow toggles a remembered 56px face strip, including at compact width. Other expanded rows retain their 40px faces, time and preview. Click the stacked member/conversation title to toggle details. The title displays
 the current session only; conversation creation, search, switching and row menus
 live in the details list. The header's only tool is the computer, for Raphael too. Use sidebar search, or
 the compact picker's search action, for messages.
@@ -1047,8 +1047,8 @@ quoted draft and highlighted search target. Inspect action-menu placement and
 composer clearance at 720. Slash commands use the slash's measured text rectangle, start-aligned above the line with a below-line fallback. The slash-commands scene checks its left edge within 24px of the character. The chat scene also checks 15px/24px message type,
 12px bubble radii, a borderless answer and the original Raphael emblem and other members' 40px faces. Owner
 messages use the bubble colors; assistant messages use a raised surface. Every thread reads plainly
-(R-UI-42): the core stores Raphael's replies and progress as his 《prefix。…》 line, split over messages when long,
-and the window shows, copies and quotes them without it; his in-app questions are plain too, while the overlay keeps
+(R-UI-42): the core stores Raphael's replies and progress as its 《prefix。…》 line, split over messages when long,
+and the window shows, copies and quotes them without it; its in-app questions are plain too, while the overlay keeps
 the persona. `chat`, `running` and `plain-bot-chat` reject a visible prefix or stray closing mark. Work is one muted
 line above the answer and the day is a plain centred word. `running-motion` runs with motion on and holds the live
 row's three dots at the top of their bounce (`motion: true`, `freeze-motion`): no box around them may cut them, and a
@@ -1107,7 +1107,7 @@ one member, while the voice slot owns microphone and overlay priority. A queued 
 YES/NO card opens in its conversation immediately; either the card or overlay can answer
 first, and the question follows foreground focus once voice releases the overlay.
 The existing `admin-approval` look scene now opens a second member question through the
-native event boundary, visits that member, then returns to Raphael and requires his original
+native event boundary, visits that member, then returns to Raphael and requires its original
 approval card. Window cards retain independent ids across members and conversations.
 
 Typed progress never goes to the overlay. Browser fixtures cannot prove native concurrency,
@@ -1276,7 +1276,7 @@ The scenes press the real card buttons and type a made-up key into the real mask
 cards' states as the core does and receives the key in `integrations.card_save` only (the rendered checks scan the page
 and every call for it). They cannot prove the vault, a sign-in or a desktop. Core tests (`core/tests/test_secret_cards.py`,
 `core/tests/computer/test_handback*.py`) and Guardian `S15.secret` run the production cards and a recorded
-MCP server that opens only to the saved key, on both brain paths. `S15.computer` (the owner's turn at a sign-in on his
+MCP server that opens only to the saved key, on both brain paths. `S15.computer` (the owner's turn at a sign-in on their
 desktop) is retired (R-PC-01): that desktop is a quick question's alone, which shows no card.
 `S15.permission` (below) is the other half of S15. A real key and a real sign-in stay owner-approved native
 smokes: type a test key into the card, read the connection's result, and sign in on an isolated test account.
@@ -1329,7 +1329,7 @@ npm run look -- local-permission-card draft-preference-ask-first email-draft-edi
 
 `local-permission-card` shows Raphael's chat with a pending card for a Gmail send (three answers, the primary last, the
 gold card away). `draft-preference-ask-first` first opens 小晴's profile to check the draft switch is a real switch and
-off, then shows the card her rule has asked for: it names the rule and has no 一律允許, and there is no draft card.
+off, then shows the card its rule has asked for: it names the rule and has no 一律允許, and there is no draft card.
 `email-draft-edit` types in the copy and the subject (two saves, the second on the digest the first came back with,
 the card at 第 3 版 holding the newest digest); `email-draft-discard` presses 捨棄 (one quiet line, nothing saved or
 sent); `email-draft-handed-off` answers 可以 on the choice card (one centred 已轉交給 小森 line in 小晴's chat), then
@@ -1723,7 +1723,7 @@ fills the slot in every state, Escape shows the Stop it arms, and `.cmp-voice` s
 A room keeps its browser recorder but uses the same recording/send slot: the next press transcribes and sends the spoken
 words together with the typed draft once. Escape discards recording or pending transcription; Stop represents sent work only.
 Room speech uses the shared dictation finalizer and dictionary learning (`chat-composer.test.ts`).
-See [Owner polish](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
+See [Polish of Settings, Data and conversations](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
 
 ```powershell
 npm run look -- composer-voice-recording composer-voice-sent composer-voice-attachment-quick composer-voice-attachment-member composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
@@ -1733,7 +1733,7 @@ npm run look -- composer-voice-recording composer-voice-sent composer-voice-atta
 
 ## The owner's bubble and link cards
 
-The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); Raphael is the first blue slime and his conversation wears that blue like any member's (R-UI-81), and group chats stay neutral. A reply's links are chips in its words (the site's mark, then its name; a bare
+The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); Raphael is the first blue slime and its conversation wears that blue like any member's (R-UI-81), and group chats stay neutral. A reply's links are chips in its words (the site's mark, then its name; a bare
 address says its site, then the page's title once read; an address of this machine says itself once), with no row of
 link cards under the reply, and the page's preview shows under the pointer (`link-previews.ts`).
 
@@ -2109,6 +2109,7 @@ The group summary chooses one state in every locale: waiting for the owner, othe
 
 ```powershell
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal centred-system-events --theme both --width 1120,720,1920x1080
+```
 
 ## Shared conversation card shell
 
@@ -2134,15 +2135,15 @@ Inspect every contact sheet and relevant full-size images. Fixture success does 
 network, cargo or real-provider acceptance.
 
 
-`````sh
+```sh
 npm run look -- card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-connect-expired card-connect-cancelled card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-sheet --theme both --width 1120,720,1920x1080
 ```
 
-`````sh
+```sh
 npm run look -- card-page-ready card-page-failed card-background --theme both --width 1120,720,1920x1080
 ```
 
-`````sh
+```sh
 npm run look -- card-task-no-file-card --theme both --width 1120,720,1920x1080
 ```
 
@@ -2720,7 +2721,7 @@ secret check, on two ordinary links (a weather forecast address and a press rele
   to styles.css) and may load chart libraries from the three CDNs; `connect-src` stays `'none'`.
 
 How to get to it: in Raphael's conversation, ask for a daily dashboard of the members' reports
-(or let the 07:00 routine send it); press the page card under his few words.
+(or let the 07:00 routine send it); press the page card under its few words.
 
 ```powershell
 npm run look -- page-dashboard-card page-dashboard page-dashboard-projects page-dashboard-lines page-dashboard-lower page-dashboard-file page-report page-report-team page-report-tab page-report-file page-report-share page-report-close --theme both --width 1120,720,1920x1080
@@ -2828,7 +2829,7 @@ This core-only change does not alter calm-thread presentation or require look/ju
 
 ## Voice flyer is the corner emblem
 
-When the owner speaks to Raphael from the composer and he has no picture of the owner's own, the flyer above the
+When the owner speaks to Raphael from the composer and it has no picture of the owner's own, the flyer above the
 composer is the overlay's own `Emblem` renderer on a canvas (voice-mode.ts `live`), set to listening and fed the
 same `VoiceLevel` the corner gets, so it looks and moves exactly like the emblem over the desktop when Alt is held.
 A picture of the owner's own keeps the ringed circle. The sidebar drag between rows shows one insertion line, no box.
@@ -2893,7 +2894,7 @@ chosen in settings.languages (zh-TW, zh-HK/yue-HK, zh-CN; `textnorm.authored_chi
 ui_language; kana, code and English stay unchanged. The configured voice language remains
 independent, including Japanese rendering on a Japanese interface.
 
-R-LANG-05: the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from his own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that every text it writes is in that language (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
+R-LANG-05: the notes a CLI brain writes between its tool calls (progress lines, thinking, and the update owed after two minutes) are shown only in the owner's language, read from their own words (`AgentService._words_language`, never the interface's); a note in another script is dropped and the step keeps its label, the answer is never held back. The CLI is told once that every text it writes is in that language (`language_rule`). Not a `look` matter (no screen changes); `core/tests/agent/test_interim_language.py`. Not proved: a real model obeying the sentence (the filter is the guarantee), and an API-brain turn (`NarratedLoop`), which this did not touch.
 
 Offline coverage: core/tests/test_pairing_language.py, test_chat_setup_share.py,
 brain/test_db.py, agent/test_persona.py, agent/test_answers.py,
@@ -2976,7 +2977,7 @@ stopped): the rules that made `.ans.progress` and the replies of a failed turn a
 The look check `message-text-colour` measures the real messages on screen and a message of each kind under a turn of each state drawn into
 the same thread, in both themes.
 
-A computer handoff the owner has settled folds to its title and one word naming what was done with the computer, 「已交回」 (or 「已略過」 when he skipped it
+A computer handoff the owner has settled folds to its title and one word naming what was done with the computer, 「已交回」 (or 「已略過」 when the owner skipped it
 and the work stopped), with no status pill, and its fold says 「電腦已交回給成員。」 (or that the computer work stopped); never 「完成」
 and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeover-done` checks it after `card-computer-handback`.
 

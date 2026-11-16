@@ -15,9 +15,8 @@ search field once there are more than eight).
 A welcome, then three steps that are each a choice, then entry into the usable app with first-run
 state saved. There are no practice lessons, no microphone step and no completion screen. Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
 the window, with no progress bar and no side: every
-step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
-others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
-Rigurd — owner 2026-11-08; gone below 640px wide), the choice, and under it two round buttons
+step is one calm centred column, a title (three of the team's slimes float by it, aria-hidden,
+others on every step and in other places; gone below 640px wide), the choice, and under it two round buttons
 together in the middle of the card: the way back at the left and the way on at the right, each a 48 px circle
 holding one filled triangle that points where it goes (the same drawing, turned round for the way back), 12 px
 apart. Neither has words: each is named for assistive tech and in its tooltip, 上一步 and 下一步 (開始使用, or 完成
@@ -35,11 +34,11 @@ Settings has no 導覽 entry any more;
 `settings-owner` checks that General has no way back into it.
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
-   canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
+   canvas renderer, appearing as on the desktop), its name as one wordmark for every language,
    「智慧之王ラファエル」 (`public/brand/wordmark.svg` through a CSS mask in the text colour; a reader
    hears `onboarding.welcomeTitle`), and under it what the team can do typed
    instead of a slogan: an ask appears a letter at a time with a caret, Raphael's
-   answer in his manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
+   answer in its manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
 1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): a store (every
