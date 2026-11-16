@@ -72,9 +72,56 @@ test("with nothing connected the pill shows Gmail, Notion and Google Calendar, t
   const logo = "https://logos.composio.dev/api/outlook";
   read.mockResolvedValue({ state: "complete", count: 3, apps: [{ name: "Slack", connected: true, last_used_at: 5 }, { name: "Outlook", connected: true, last_used_at: 4, logo }, { name: "Unknown sample", connected: true, last_used_at: 3 }] } as never);
   event({ type: 'ConnectionsChanged' });
-  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(2));
+  await vi.waitFor(() => expect(nav.querySelector('.sidebar-app-mark[data-mark="slack"]')).not.toBeNull());
+  expect(drawn()).toHaveLength(3);
   expect(drawn()[0]).toBe(mark('Slack'));
   expect(nav.querySelector<HTMLImageElement>('.sidebar-app-mark .logo-art img.logo')!.getAttribute('src')).toBe(logo);
+  // The third is the first starter: the one with no mark of its own leaves no hole.
+  expect(drawn()[2]).toBe(mark('Gmail'));
+  read.mockRestore();
+});
+
+test("the pill always shows three marks: the connected apps' own first, the starters not connected filling up the rest", async () => {
+  const app = (name: string, last: number, extra: object = {}) => ({ id: name, name, connected: true, enabled: true, state: "ready", tools: 1, last_used_at: last, ...extra });
+  const read = vi.spyOn(api, "integrationsInventory");
+  document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!;
+  const column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button data-col="add"></button></div>';
+  let event!: (value: MainEvent) => void;
+  read.mockResolvedValue({ state: "complete", count: 0, apps: [] } as never);
+  createSidebar(nav, column, { onEvent: handler => { event = handler; return () => {}; } } as AppContext);
+  const keys = (): string[] => [...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.dataset.mark!);
+  const reads = async (apps: object[]): Promise<string[]> => {
+    read.mockClear(); read.mockResolvedValue({ state: "complete", count: apps.length, apps } as never);
+    event({ type: "ConnectionsChanged" });
+    await vi.waitFor(() => expect(read).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return keys();
+  };
+  await vi.waitFor(() => expect(keys()).toEqual(["gmail", "notion", "googlecalendar"]));
+  expect(await reads([app("Slack", 1)])).toEqual(["slack", "gmail", "notion"]);
+  expect(await reads([app("Slack", 1), app("GitHub", 2)])).toEqual(["github", "slack", "gmail"]);
+  expect(await reads([app("Slack", 3), app("GitHub", 2), app("Linear", 1)])).toEqual(["slack", "github", "linear"]);
+  expect(await reads(["Slack", "GitHub", "Linear", "Figma", "Stripe"].map((name, at) => app(name, 9 - at)))).toEqual(["slack", "github", "linear"]);
+  // A connected app that is a starter stands once, first, and the other starters follow in their own order.
+  expect(await reads([app("Notion", 1)])).toEqual(["notion", "gmail", "googlecalendar"]);
+  expect(await reads([app("google calendar", 2), app("GMAIL", 1)])).toEqual(["googlecalendar", "gmail", "notion"]);
+  // A starter is told by its mark, not by how it is written; an app that is not connected counts for nothing.
+  expect(await reads([app("Gmail (work)", 1, { connected: false }), app("Slack", 1)])).toEqual(["slack", "gmail", "notion"]);
+  // An app with no mark of its own is left out, and the row is still filled to three.
+  expect(await reads([app("Unknown sample", 5), app("Slack", 4)])).toEqual(["slack", "gmail", "notion"]);
+  // The same reading again draws the same marks and touches nothing.
+  const mutations: MutationRecord[] = [];
+  const observer = new MutationObserver(records => mutations.push(...records));
+  observer.observe(nav.querySelector('.sidebar-apps')!, { attributes: true, childList: true, subtree: true });
+  expect(await reads([app("Unknown sample", 5), app("Slack", 4)])).toEqual(["slack", "gmail", "notion"]);
+  expect(mutations).toHaveLength(0);
+  observer.disconnect();
+  // A reading that failed shows no marks at all.
+  read.mockRejectedValue(new Error("unavailable"));
+  event({ type: "ConnectionsChanged" });
+  await vi.waitFor(() => expect(keys()).toEqual([]));
   read.mockRestore();
 });
 

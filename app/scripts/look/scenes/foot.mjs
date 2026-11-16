@@ -4,6 +4,8 @@ import { scene, click, hover, check, wait, waitGone, key, focus, accountMenu, dr
 // 連結應用程式 pill on one row. The face opens the account menu (用量 with its submenu, 聽寫, 行事曆, 設定); on the rail the pill is an icon
 // button and the face stands under it. Every scene runs at all three widths: the list at 1120 and 1920, the rail at 720.
 const marks = { appsInventory: { state: "complete", count: 3, apps: ["GitHub", "Notion", "Slack"].map((name, i) => ({ id: `sample-${i}`, name, connected: true, enabled: true, state: "ready", tools: 1, last_used_at: 3 - i })) } };
+/** The apps connected, the one named last the most recently used (the pill lists them in that order). */
+const pillApps = (...names) => ({ appsInventory: { state: "complete", count: names.length, apps: names.map((name, i) => ({ id: `sample-${i}`, name, connected: true, enabled: true, state: "ready", tools: 1, last_used_at: i + 1 })) } });
 const tight = { allowanceTight: true };
 /** The menu, once the subscription reading has given the 用量 row its chevron. */
 const menuWithNumber = [accountMenu(), wait('#app-popover.account-menu [data-account="usage"]')];
@@ -16,9 +18,17 @@ export default [
     [wait(".page-agent:not([hidden]) .conversation-trigger"), { action: "startup-order", firstView: ["members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),
   scene("foot-rest", "The foot is one row: the owner's round face and the Connections pill (36px, fully round, on its own surface), with no tooltip; on the rail the icon and the face in a column",
     [check("foot-rest"), check("sidebar-shell")], marks),
-  // With nothing connected yet the pill still shows the starter apps.
-  scene("foot-starter-apps", "With no app connected yet the pill still shows Gmail, Notion and Google Calendar beside its words",
-    [check("foot-starter-apps"), check("sidebar-shell")], { appsInventory: { state: "complete", count: 0, apps: [] } }),
+  // The pill always shows three marks: the connected apps' own first, the starters that are not connected filling up the rest.
+  scene("foot-starter-apps", "With no app connected yet the pill shows Gmail, Notion and Google Calendar beside its words",
+    [check("foot-pill-marks-gmail,notion,googlecalendar"), check("sidebar-shell")], pillApps()),
+  scene("foot-apps-one", "With Slack connected the first mark is Slack's own and the pill keeps Gmail and Notion after it",
+    [check("foot-pill-marks-slack,gmail,notion"), check("sidebar-shell")], pillApps("Slack")),
+  scene("foot-apps-one-starter", "With Notion, itself a starter, connected, its mark stands once at the front and Gmail and Google Calendar follow",
+    [check("foot-pill-marks-notion,gmail,googlecalendar"), check("sidebar-shell")], pillApps("Notion")),
+  scene("foot-apps-two", "With two apps connected the most recently used comes first and one starter fills the third",
+    [check("foot-pill-marks-github,slack,gmail"), check("sidebar-shell")], pillApps("Slack", "GitHub")),
+  scene("foot-apps-three", "With three apps connected all three marks are the owner's own, the most recently used first, and no starter stays",
+    [check("foot-pill-marks-linear,github,slack"), check("sidebar-shell")], pillApps("Slack", "GitHub", "Linear")),
   scene("foot-account-menu", "Pressing the face opens the account menu above it (to its right on the rail): 用量 with a chevron and no number, 聽寫, 行事曆, a hairline, 設定",
     [...menuWithNumber, check("foot-account-menu")], tight),
   scene("foot-usage-submenu", "用量 opens a submenu at its right edge: a block for each of the three subscriptions and OpenRouter (its window, its number, when it resets), a hairline and 管理用量",

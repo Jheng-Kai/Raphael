@@ -44,10 +44,14 @@ pill beside it is 連結應用程式.
 ## Driving it with look
 
 ```powershell
-npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- start-conversation start-startup-order foot-rest foot-starter-apps foot-apps-one foot-apps-one-starter foot-apps-two foot-apps-three foot-account-menu foot-usage-submenu foot-usage-two foot-usage-default foot-usage-owner foot-usage-none foot-usage-manage foot-account-keys foot-usage-keys foot-account-outside foot-account-dictation foot-account-calendar foot-account-settings foot-pill-hover foot-pill-reduced foot-pill-narrow daily-footer-away sidebar-air sidebar-air-foot sidebar-rail opener-toggle-settings opener-toggle-account-menu after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
-foot-starter-apps shows the Connections pill with no app connected: Gmail's, Notion's and Google Calendar's marks beside its words.
+The Connections pill always shows three marks beside its words, read by `foot-pill-marks-<ids>` in the order the scene's apps must give: the connected
+apps' own first (most recently used first), then the starters that are not connected (Gmail, Notion, Google Calendar) up to three. foot-starter-apps has no app
+connected (gmail, notion, googlecalendar), foot-apps-one has Slack (slack, gmail, notion), foot-apps-one-starter has Notion (notion, gmail, googlecalendar: the
+starter stands once), foot-apps-two has Slack and GitHub (github, slack, gmail) and foot-apps-three has three apps (linear, github, slack: no starter stays). On the rail
+there are no marks.
 start-conversation and foot-rest measure the foot at rest in both shapes (the list's one row: face 32px, pill 36px and round on
 `--surface-2`, 8px between, the pill to the foot's right edge, one row of two, words whole; the rail's column with the 36px icon button
 and the face) and fail on any Home, house, microphone or page button; foot-account-menu measures the menu (four rows with distinct Lucide
