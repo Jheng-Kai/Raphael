@@ -7,17 +7,20 @@ the turn with no words at all: the owner saw neither answer, only the generic fa
 reply said nothing. The packets below are a synthetic copy of what the CLI emitted, in the same shapes and order.
 """
 
+import json
 from types import SimpleNamespace
 
 import pytest
 
+from raphael_core.agent.answers import parse_reply
 from raphael_core.agent.cli import loop as cli
 from raphael_core.agent.cli.drivers import Driver, Event
+from raphael_core.agent.failure import AgentFailure
 from raphael_core.agent.persona import phrase
 from raphael_core.background.cli import RoomCliSessions
 from raphael_core.messaging.words import plain_replies
 from raphael_core.worker.computer_verification import NOTE
-from raphael_core.worker.loop import ToolOutcome
+from raphael_core.worker.loop import Stop, ToolOutcome
 from .test_service import make_rig  # noqa: F401
 
 FIRST = "Version two is ready.\n\nThe English and Chinese cuts are in the team folder, with the font sheet."
@@ -215,3 +218,52 @@ async def test_the_conversation_shows_the_answer_and_why_it_does_not_count_never
     assert "\n\n".join(said).count(SECOND) == 1 and said[-1] == unchecked
     assert status == "error" and text == unchecked
     assert phrase("zh-TW", "error") not in said
+
+
+# --- a turn that ends with no words says what it did receive --------------------------------------------------------
+
+
+async def test_the_log_counts_what_the_cli_sent_and_never_its_words(monkeypatch, tmp_path, caplog):
+    turn = rig(monkeypatch, tmp_path, "claude", claude_night(None))
+    with caplog.at_level("INFO", logger="raphael_core.agent.cli.loop"):
+        await turn.loop.run()
+    [line] = [record.getMessage() for record in caplog.records if "ends unchecked" in record.getMessage()]
+    runs = json.loads(line.split(": ", 2)[2])
+    assert [run["ended"] for run in runs] == ["tools_changed", None]
+    assert [run["resumed"] for run in runs] == [None, "native-1"] and runs[1]["session"] == "native-1"
+    assert runs[0]["final_chars"] == len(FIRST) and runs[0]["text_chars"] == len(FIRST)
+    assert runs[1]["events"]["tool_start"] == 2 and runs[1]["events"]["final"] == 1
+    assert "Version two" not in line and "team folder" not in line
+
+
+async def test_a_reply_with_no_words_logs_the_runs_that_led_to_it(monkeypatch, tmp_path, caplog):
+    async def stopped(identifier, name, arguments):
+        raise Stop("cancelled")
+
+    async def play(loop):
+        yield Event("session", "native-1")
+        yield Event("text_delta", "Looking at the folder first.")
+        await loop._tool("sh", "computer__vm_exec", {"command": "ls"})
+        yield Event("final", "never read")
+
+    turn = rig(monkeypatch, tmp_path, "codex", [play])
+    turn.loop.execute = stopped
+    outcome = await turn.loop.run()
+    with caplog.at_level("WARNING"), pytest.raises(AgentFailure):
+        turn.loop.reply(outcome)
+    said = " ".join(record.getMessage() for record in caplog.records)
+    assert "said nothing: text chars=0" in said
+    assert "no words to show: outcome=stopped kind=cancelled" in said and '"session": "native-1"' in said
+    assert '"text_chars": 28' in said and "Looking at the folder" not in said
+
+
+@pytest.mark.parametrize("value,shape", [
+    ("", "text chars=0 stripped=0"),
+    ("   ", "text chars=3 stripped=0"),
+    ({"messages": [], "text": "", "secret words": 1}, 'object fields={"messages": "list[0]", "text": "str[0]"} other_fields=1'),
+])
+def test_an_empty_reply_logs_its_shape_alone(caplog, value, shape):
+    with caplog.at_level("WARNING", logger="raphael_core.agent.answers"), pytest.raises(AgentFailure):
+        parse_reply(value, "en")
+    [line] = [record.getMessage() for record in caplog.records]
+    assert line.startswith("The model's reply said nothing: " + shape) and "secret words" not in line
