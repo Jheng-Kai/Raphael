@@ -226,7 +226,7 @@ def test_background_work_has_no_pending_state_and_later_changes_are_kept(tmp_pat
 
 
 def chrome_profile(base, files=12):
-    """What a Chrome user-data directory holds after a first run, as the owner's card showed it (2026-11-14)."""
+    """What a Chrome user-data directory holds after a first run, as the card showed it."""
     (base / "Default" / "Extensions" / "abc" / "1.0" / "_metadata").mkdir(parents=True)
     (base / "OptGuideOnDeviceModel" / "2025.1").mkdir(parents=True)
     (base / "Local State").write_text("{}")

@@ -58,7 +58,6 @@ const OWNER = new RegExp(
     `${START}[O]wner's (?:check|picture|words|message|own words)${END}`,
     `${START}Same (?:report|conversation|owner):`,
     `${START}[O]wner ${DATE}`,
-    `${START}[o]wner-approved${END}`,
     `${START}the [o]wner asked for (?:this|it)${END}`,
   ].join("|"),
   "u",
@@ -89,24 +88,119 @@ function suffixOf(path) {
   return dot > 0 && dot < name.length - 1 ? name.slice(dot).toLowerCase() : "";
 }
 
-/** Where the comment part of a line begins, or -1 when the line shows no comment. */
-function commentStart(line, suffix) {
-  if (HASH_COMMENT.has(suffix)) return line.indexOf("#");
-  if (SLASH_COMMENT.has(suffix)) {
-    const trimmed = line.trimStart();
-    if (trimmed.startsWith("*") || trimmed.startsWith("/*")) return line.length - trimmed.length;
-    const spots = [line.indexOf("//"), line.indexOf("/*")].filter((index) => index >= 0);
-    return spots.length ? Math.min(...spots) : -1;
-  }
-  if (MARKUP_COMMENT.has(suffix)) return line.indexOf("<!--");
-  return -1;
-}
-
 /** The lines of a text the way a text editor counts them; a final line break does not start another line. */
 function linesOf(text) {
   const lines = text.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/);
   if (lines.at(-1) === "") lines.pop();
   return lines;
+}
+
+/**
+ * The parts of one line that are comment, as [start, end) spans, found the way a reader would: a comment
+ * marker inside a string is text, not a comment. `state` carries what a line leaves open for the next one
+ * ({ block: inside a block comment, template: inside a template literal }) and is updated in place.
+ * `code` is the line with the data of Python's triple-quoted strings already blanked out.
+ */
+function commentSpans(code, suffix, state) {
+  const spans = [];
+  const slash = SLASH_COMMENT.has(suffix);
+  const markup = MARKUP_COMMENT.has(suffix);
+  const hash = HASH_COMMENT.has(suffix);
+  const [opener, closer] = markup ? ["<!--", "-->"] : ["/*", "*/"];
+  const blockWorks = slash || markup;
+  let at = 0;
+  if (state.block) {
+    const end = code.indexOf(closer);
+    if (end < 0) return [[0, code.length]];
+    spans.push([0, end + closer.length]);
+    state.block = false;
+    at = end + closer.length;
+  }
+  // A line that starts with a star is the body of a block comment (the lines of a JSDoc).
+  const lead = code.length - code.trimStart().length;
+  if (slash && !state.template && code[lead] === "*" && at === 0) return [[lead, code.length]];
+  let quote = state.template ? "`" : "";
+  for (let index = at; index < code.length; index++) {
+    const char = code[index];
+    if (quote) {
+      if (char === "\\") index++;
+      else if (char === quote) quote = "";
+      continue;
+    }
+    if (slash && code.startsWith("//", index)) {
+      spans.push([index, code.length]);
+      break;
+    }
+    if (blockWorks && code.startsWith(opener, index)) {
+      const end = code.indexOf(closer, index + opener.length);
+      if (end < 0) {
+        spans.push([index, code.length]);
+        state.block = true;
+        break;
+      }
+      spans.push([index, end + closer.length]);
+      index = end + closer.length - 1;
+      continue;
+    }
+    // In YAML, shell and the like a "#" opens a comment only after a space; in Python it does anywhere.
+    if (hash && char === "#" && (suffix === ".py" || index === 0 || /\s/u.test(code[index - 1]))) {
+      spans.push([index, code.length]);
+      break;
+    }
+    if (char === '"' || char === "`" || (char === "'" && !markup)) {
+      // In Rust a lone ' is a lifetime; only 'x' and '\n' are text.
+      if (char === "'" && suffix === ".rs") {
+        const literal = /^'(?:\\[^']*|[^\\'])'/u.exec(code.slice(index));
+        if (literal) index += literal[0].length - 1;
+        continue;
+      }
+      quote = char;
+    }
+  }
+  // Only a template literal runs over the end of a line; any other string that is still open there is a mistake
+  // of the reader's, not a reason to read the next line as text.
+  state.template = quote === "`";
+  return spans;
+}
+
+/**
+ * Python's triple-quoted strings. A docstring is one that starts a line and stands for the first statement of a
+ * block (the module, a def, a class): it is comment. A triple-quoted string that is assigned, passed or joined is
+ * data, a prompt for example, and so are its lines. Returns the line with every such string blanked out, and
+ * whether any part of the line is a docstring.
+ */
+function pythonLine(line, state) {
+  let masked = "";
+  let position = 0;
+  let doc = false;
+  let touched = false;
+  while (position <= line.length) {
+    const quote = line.indexOf('"""', position);
+    if (state.triple) {
+      touched = true;
+      doc ||= state.tripleDoc;
+      if (quote < 0) {
+        masked += " ".repeat(line.length - position);
+        break;
+      }
+      masked += " ".repeat(quote + 3 - position);
+      position = quote + 3;
+      state.triple = false;
+    } else {
+      if (quote < 0) {
+        masked += line.slice(position);
+        break;
+      }
+      masked += line.slice(position, quote);
+      const before = masked.trim();
+      state.tripleDoc = /^[rRuUbBfF]{0,2}$/u.test(before) && (state.previous === null || state.previous.endsWith(":"));
+      state.triple = true;
+      touched = true;
+      masked += "   ";
+      position = quote + 3;
+    }
+  }
+  return { masked, doc, touched };
 }
 
 /**
@@ -116,40 +210,39 @@ function linesOf(text) {
 export function hitsOf(path, text) {
   const suffix = suffixOf(path);
   const prose = PROSE_SUFFIXES.has(suffix);
+  const python = suffix === ".py";
   const hits = [];
-  let inDocstring = false;
-  let inBlock = false;
-  const markup = MARKUP_COMMENT.has(suffix);
-  const [opener, closer] = markup ? ["<!--", "-->"] : ["/*", "*/"];
+  const state = { block: false, template: false, triple: false, tripleDoc: false, previous: null };
   linesOf(text).forEach((line, index) => {
-    // A line inside a docstring or a block comment is comment text, however it begins.
-    let inDocLine = inDocstring;
-    if (suffix === ".py" && (line.split('"""').length - 1) % 2 === 1) {
-      inDocstring = !inDocstring;
-      inDocLine = true;
-    } else if (SLASH_COMMENT.has(suffix) || markup) {
-      inDocLine = inBlock;
-      const opened = line.lastIndexOf(opener);
-      const closed = line.lastIndexOf(closer);
-      if (opened > closed) inBlock = true;
-      else if (closed >= 0) inBlock = false;
-    }
     const found = [];
     if (OWNER.test(line)) found.push("owner");
     if (QUOTE.test(line)) found.push("quote");
     if (REF.test(line)) found.push("ref");
     const dates = [...line.matchAll(DATE_EVERYWHERE)];
+    // What is comment on this line: all of it in prose or a docstring, else the spans the markers open.
+    let code = line;
+    let wholeLine = prose;
+    let touched = false;
+    if (python) {
+      const split = pythonLine(line, state);
+      code = split.masked;
+      wholeLine ||= split.doc;
+      touched = split.touched;
+    }
+    const spans = prose ? [] : commentSpans(code, suffix, state);
     if (TITLE_DATE.test(line)) {
       found.push("dated");
     } else if (dates.length) {
-      if (prose || inDocLine) {
-        const ledger = LEDGER_ROW.exec(line);
-        const ledgerDate = ledger ? ledger.indices[1][0] : -1;
-        if (dates.some((date) => date.index !== ledgerDate)) found.push("dated");
-      } else {
-        const start = commentStart(line, suffix);
-        if (start >= 0 && dates.some((date) => date.index > start)) found.push("dated");
-      }
+      const ledger = prose ? LEDGER_ROW.exec(line) : null;
+      const ledgerDate = ledger ? ledger.indices[1][0] : -1;
+      const inComment = (date) => wholeLine || spans.some(([start, end]) => date.index >= start && date.index < end);
+      if (dates.some((date) => date.index !== ledgerDate && inComment(date))) found.push("dated");
+    }
+    if (python) {
+      // The statement a docstring may follow is the last line of code before it.
+      const statement = spans.length ? code.slice(0, Math.min(...spans.map(([start]) => start))).trim() : code.trim();
+      if (statement) state.previous = statement;
+      else if (touched) state.previous = '"""';
     }
     for (const rule of found) hits.push({ line: index + 1, rule, text: line.trim() });
   });

@@ -160,7 +160,7 @@ async def rig(conn, signing_key):
 
 
 def sse(output=(), *, event="response.completed", code=None, closing_output=False, input_tokens=10):
-    """The stream as the plan endpoint really sends it (seen live 2026-10-31): the items, then an empty `output`."""
+    """The stream as the plan endpoint really sends it (seen live): the items, then an empty `output`."""
     response = {"status": "completed", "model": "chosen-model", "output": list(output) if closing_output else [],
                 "usage": {"input_tokens": input_tokens, "output_tokens": 3}}
     if code:
