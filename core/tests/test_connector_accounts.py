@@ -2,6 +2,7 @@
 Every request stops at an HTTP double of Composio."""
 
 import asyncio
+import json
 from datetime import datetime, timezone
 
 import httpx
@@ -318,3 +319,125 @@ async def test_removing_another_account_while_a_sign_in_waits_leaves_that_sign_i
     assert [a["id"] for a in result["connector"]["accounts"]] == ["ca_main", "ca_test"]
     await router.call("integrations.connect_cancel")
     assert (await task)["error"] == "cancelled"
+
+
+async def sign_in_waiting_for(tmp_path, conn, *, stage="browser", accounts=()):
+    """A Gmail sign-in that waits (in the browser, or for Composio to say it is done), with GitHub connected beside it."""
+    entered = asyncio.Event()
+
+    async def browser(url):
+        if stage == "browser":
+            entered.set()
+            await asyncio.Event().wait()
+
+    class Waiting(Accounts):
+        def __call__(self, request):
+            if stage == "polling" and request.method == "GET" and request.url.path.endswith("/connected_accounts/ca_test"):
+                entered.set()
+            return super().__call__(request)
+
+    async def sleep(seconds):
+        await asyncio.sleep(0.01)
+
+    fake = Waiting(statuses=("INITIATED",))
+    router, service, hub, vault = setup_service(tmp_path, conn, fake, open_browser=browser, sleep=sleep, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    github = Connector("composio:github", "composio", status="ACTIVE", name="GitHub", accounts=[account("ca_gh", "ACTIVE", label="Me")])
+    github.enabled_tools = ["GITHUB_A"]
+    service.store.connectors[github.id] = github
+    if accounts:
+        service.store.connectors["composio:gmail"] = Connector("composio:gmail", "composio", status="ACTIVE", name="Gmail", accounts=list(accounts))
+    task = asyncio.create_task(router.call("connectors.connect", {"toolkit": "gmail"}))
+    await asyncio.wait_for(entered.wait(), 2)
+    return router, service, fake, task
+
+
+@pytest.mark.parametrize("stage", ["browser", "polling"])
+@pytest.mark.parametrize("method,params", [
+    ("connectors.disconnect", {"id": "composio:github"}),
+    ("connectors.label", {"id": "composio:github", "account_id": "ca_gh", "label": "Work"}),
+    ("connectors.set_tools", {"id": "composio:github", "enabled": False}),
+    ("connectors.tools", {"id": "composio:github"}),
+], ids=["disconnect", "rename", "switch", "tools"])
+async def test_nothing_else_of_the_connections_waits_behind_a_sign_in_that_waits(tmp_path, conn, stage, method, params):
+    """The owner works on the apps while a sign-in waits in the browser (up to ten minutes): what he presses is done, not queued
+    behind the lock until it runs out its 30 seconds and fails."""
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn, stage=stage)
+    try:
+        result = await asyncio.wait_for(router.call(method, params), 2)
+        assert not (isinstance(result, dict) and result.get("ok") is False), result
+        assert service.login_pending and not task.done()  # and the sign-in goes on
+    finally:
+        await router.call("integrations.connect_cancel")
+        assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+    expected = [("ca_gh", True), ("ca_test", False)] if method == "connectors.disconnect" else [("ca_test", False)]
+    assert sorted(fake.deleted) == sorted(expected)
+
+
+async def test_a_switch_pressed_while_a_sign_in_waits_is_not_undone_when_the_sign_in_ends(tmp_path, conn):
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn)
+    try:
+        result = await asyncio.wait_for(router.call("connectors.set_tools", {"id": "composio:github", "enabled": False}), 2)
+        assert result["connector"]["enabled"] is False
+    finally:
+        await router.call("integrations.connect_cancel")
+        await asyncio.wait_for(task, 2)
+    assert service.store.connectors["composio:github"].enabled is False
+    patched = [json.loads(r.content) for r in fake.requests if r.method == "PATCH" and "/tool_router/session/" in r.url.path]
+    assert patched and "github" not in patched[-1]["toolkits"]["enable"]  # the permission the sign-in gave back is the switched state, not the old one
+
+
+@pytest.mark.parametrize("stage", ["browser", "polling"])
+async def test_disconnecting_the_app_a_sign_in_waits_for_ends_that_sign_in_too(tmp_path, conn, stage):
+    """Jack is connected and a second account waits: disconnecting the app is the owner's last word on all of it."""
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn, stage=stage, accounts=[account("ca_jack", "ACTIVE", label="Jack")])
+    result = await asyncio.wait_for(router.call("connectors.disconnect", {"id": "composio:gmail"}), 2)
+    assert result == {"disconnected": True}
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"  # no failure shown for a wait that was ended on purpose
+    assert "composio:gmail" not in service.store.connectors and not service.login_pending and service._signing_in == set()
+    assert sorted(a for a, _ in fake.deleted) == ["ca_jack", "ca_test"]
+    assert "composio:gmail" not in ConnectorStore(tmp_path).connectors
+
+
+@pytest.mark.parametrize("stage", ["browser", "polling"])
+async def test_removing_the_waiting_account_works_in_every_stage_of_the_wait(tmp_path, conn, stage):
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn, stage=stage)
+    result = await asyncio.wait_for(router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_test"}), 2)
+    assert result["connector"]["accounts"] == [] and result["connector"]["status"] == "INACTIVE"
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+    assert fake.deleted == [("ca_test", False)] and not service.login_pending
+
+
+async def test_removing_the_waiting_account_twice_is_one_removal(tmp_path, conn):
+    """The owner presses 移除 again while the first press is still ending the sign-in."""
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn)
+    params = {"id": "composio:gmail", "account_id": "ca_test"}
+    first, second = await asyncio.wait_for(asyncio.gather(router.call("connectors.remove_account", params),
+                                                          router.call("connectors.remove_account", params), return_exceptions=True), 5)
+    assert not isinstance(first, Exception) and first["connector"]["accounts"] == []
+    assert not isinstance(second, Exception) or "No such connected account" in str(second)  # the account is already gone
+    assert fake.deleted == [("ca_test", False)]  # given back once
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+
+
+async def test_disconnecting_an_app_twice_at_once_is_one_disconnect_and_one_plain_refusal(tmp_path, conn):
+    router, service, hub, entry = make(tmp_path, conn, Accounts(), [account("ca_me", "ACTIVE")])
+    async with service._lock:  # both presses find the app, and both wait for the lock
+        presses = [asyncio.create_task(service.disconnect({"id": "composio:gmail"})) for _ in range(2)]
+        await asyncio.sleep(0.05)
+    first, second = await asyncio.gather(*presses, return_exceptions=True)
+    assert first == {"disconnected": True}
+    assert isinstance(second, RpcError) and "no such connector" in str(second).lower()  # not an internal error
+
+
+async def test_a_waiting_account_that_composio_will_not_give_back_stays_and_says_so(tmp_path, conn):
+    """Composio cannot be reached when the sign-in is ended: the row stays, the removal fails in the usual way, a later one works."""
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn)
+    fake.delete_status = 503
+    result = await asyncio.wait_for(router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_test"}), 5)
+    assert result["ok"] is False
+    assert [a["id"] for a in service.store.connectors["composio:gmail"].accounts] == ["ca_test"]
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+    fake.delete_status = 200
+    result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_test"})
+    assert result["connector"]["accounts"] == [] and fake.deleted == [("ca_test", False)]

@@ -2066,6 +2066,28 @@ describe("what the dialog does", () => {
       expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["Work", "Me", "帳號 3"]);
       c.reset();
     });
+
+    test("the account a sign-in waits for is removed while that sign-in is open, and the sign-in that ended says nothing (R-ACCT-03)", async () => {
+      const c = await openGmail(TWO);
+      let ends!: (answer: unknown) => void;
+      api.connectorsConnect.mockReturnValueOnce(new Promise((resolve) => { ends = resolve; }));
+      c.click(button("add-account", { id: "composio:gmail" }));
+      await settle();
+      expect(c.view().login).toMatchObject({ target: "composio:gmail" });
+      c.click(button("account-remove", { id: "composio:gmail", account: "a3" }));
+      await settle();
+      expect(confirmDelete).not.toHaveBeenCalled();
+      expect(api.connectorsRemoveAccount).toHaveBeenCalledWith("composio:gmail", "a3");
+      api.connectorsStatus.mockResolvedValue({ connectors: [gmail(TWO.slice(0, 2))], composio_configured: true, google_configured: false });
+      ends({ connected: false, error: "cancelled" });  // the core ended the wait it was removing the account of
+      await settle();
+      const view = c.view();
+      expect(view.login).toBeNull();
+      expect(view.loginError).toBeNull();
+      expect(view.dialogNotice).toBeNull();
+      expect(texts(dom(connectionsHTML(view)), ".cs-acct .nm")).toEqual(["Work", "Me"]);
+      c.reset();
+    });
   });
 
   test("switches a service on or off, a tool on or off, and reads its tools again", async () => {

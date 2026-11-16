@@ -6,7 +6,7 @@ vi.mock("./api",()=>api);
 import { occurrences } from "./automation-calendar";
 import { createAutomationsPage } from "./pages/automations";
 import { dateKey, localDay, monthGrid, shiftDay } from "./schedule-picker";
-import { setLocale } from "./i18n";
+import { catalogs, setLocale } from "./i18n";
 import { closeMenu } from "./ui";
 import { allDayBars, dayLayout, entryOfItem, fittedRange, type CalendarEntry } from "./calendar-view";
 import { besidePlacement, closePanel } from "./calendar-popover";
@@ -132,6 +132,45 @@ test("the keep-awake switch says what it does in a line on the page, not in a to
   expect(note.textContent).toBe("Keep this computer awake for scheduled routines");
   expect(page.el.querySelector('.au-awake-box > .au-awake > span')!.textContent).toBe("Stay awake");
   expect(page.el.querySelector('.au-awake-box')!.querySelector('[title]')).toBeNull();
+  page.hide();
+});
+
+test("the keep-awake line is in every interface language and says more than the switch's own name (R-COPY-05)",()=>{
+  expect(Object.keys(catalogs)).toHaveLength(15);
+  for(const [locale,catalog] of Object.entries(catalogs)){
+    const words=catalog as Record<string,string>;
+    const name=words["auto.awake"],line=words["auto.keepAwake"];
+    expect(name,`${locale} auto.awake`).toBeTruthy();
+    expect(line,`${locale} auto.keepAwake`).toBeTruthy();
+    expect(line,`${locale} the line repeats the switch's name`).not.toBe(name);
+    // It sits in a column of 248px at 11px: one sentence that wraps in a few lines, never a paragraph.
+    expect(line.length,`${locale} auto.keepAwake is one short line`).toBeLessThanOrEqual(80);
+    expect(line,`${locale} auto.keepAwake has no placeholder`).not.toMatch(/\{p\d\}/);
+  }
+});
+
+test("the keep-awake switch shows what the system holds, and a request the system refuses leaves it as it was (R-COPY-05)",async()=>{
+  api.keepAwakeGet.mockResolvedValue(true);
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+  const toggle=()=>page.el.querySelector<HTMLButtonElement>('[data-au="awake"]')!;
+  expect(toggle().getAttribute("aria-checked")).toBe("true");
+  api.keepAwakeSet.mockRejectedValueOnce(new Error("Windows could not change the scheduler awake request"));
+  toggle().click();await flush();
+  expect(api.keepAwakeSet).toHaveBeenCalledWith(false);
+  expect(toggle().getAttribute("aria-checked")).toBe("true");
+  expect(toggle().disabled).toBe(false);
+  // the system answers the next request with the state it holds, and that is what the switch shows
+  api.keepAwakeSet.mockResolvedValueOnce(false);
+  toggle().click();await flush();
+  expect(toggle().getAttribute("aria-checked")).toBe("false");
+  page.hide();
+});
+
+test("a switch whose state the system cannot tell is drawn off and still works (R-COPY-05)",async()=>{
+  api.keepAwakeGet.mockRejectedValue(new Error("could not read scheduler awake setting"));
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+  expect(page.el.querySelector('[data-au="awake"]')!.getAttribute("aria-checked")).toBe("false");
+  expect(page.el.querySelector('.au-awake-note')!.textContent).toBe("Keep this computer awake for scheduled routines");
   page.hide();
 });
 

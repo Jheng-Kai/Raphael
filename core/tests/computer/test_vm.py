@@ -268,6 +268,76 @@ async def test_without_a_usable_picture_the_guest_keeps_the_town(desktop, tmp_pa
     assert '--image' not in _watcher_script(runtime)
 
 
+@pytest.mark.parametrize('how', ['exactly-the-limit', 'a-byte-over', 'empty', 'two-bytes', 'a-folder', 'unreadable'])
+def test_the_owner_picture_is_taken_only_when_it_is_a_readable_jpeg_within_the_limit(tmp_path, monkeypatch, how):
+    from raphael_core.computer.vm import OWN_WALLPAPER_BYTES
+    vm = LocalVm(tmp_path, runner=Runtime())
+    picture = tmp_path / 'computer-wallpaper.jpg'
+    content = {'exactly-the-limit': b'\xff\xd8\xff' + b'0' * (OWN_WALLPAPER_BYTES - 3), 'a-byte-over': b'\xff\xd8\xff' + b'0' * (OWN_WALLPAPER_BYTES - 2),
+               'empty': b'', 'two-bytes': b'\xff\xd8', 'unreadable': b'\xff\xd8\xff sample'}.get(how)
+    if content is None:
+        picture.mkdir()
+    else:
+        picture.write_bytes(content)
+    if how == 'unreadable':
+        real = Path.open
+
+        def refuse(self, *args, **kwargs):
+            if self.name == 'computer-wallpaper.jpg':
+                raise PermissionError('Synthetic refusal')
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, 'open', refuse)
+    assert (vm.own_wallpaper() == picture) is (how == 'exactly-the-limit')
+
+
+async def test_a_picture_that_vanishes_while_the_start_looks_at_it_leaves_the_default(desktop, tmp_path, monkeypatch):
+    vm, target, runtime = desktop
+    monkeypatch.setattr(vm, 'own_wallpaper', lambda: tmp_path / 'computer-wallpaper.jpg')  # chosen, then gone before it is read
+    assert (await vm.start(target))['ready']
+    assert not [args for args, _ in runtime.calls if args[0] == 'cp' and args[-1].endswith('own.jpg')]
+    assert '--image' not in _watcher_script(runtime)
+
+
+async def test_the_members_of_a_shared_computer_share_its_one_picture_and_its_one_watcher(desktop, tmp_path):
+    vm, target, runtime = desktop
+    (tmp_path / 'computer-wallpaper.jpg').write_bytes(b'\xff\xd8\xff sample')
+    second = await vm.seat(2)
+    assert second.name == target.name and second.screen != target.screen
+    runtime.calls.clear()
+    for seat in (target, second, target):
+        vm.invalidate(seat)
+        assert (await vm.start(seat))['ready']
+    scripts = [args[-1] for args, _ in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args]
+    assert len(scripts) == 1 and '--watch --image /opt/raphael-desktop/wallpapers/own.jpg' in scripts[0]
+    assert len([args for args, _ in runtime.calls if args[0] == 'cp' and args[-1].endswith('own.jpg')]) == 1
+
+
+async def test_a_computer_that_woke_or_was_made_again_puts_the_picture_up_again(desktop, tmp_path):
+    vm, target, runtime = desktop
+    (tmp_path / 'computer-wallpaper.jpg').write_bytes(b'\xff\xd8\xff sample')
+
+    def scripts():
+        return [args[-1] for args, _ in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args]
+
+    assert (await vm.start(target))['ready'] and len(scripts()) == 1
+    runtime.raw['State']['Running'] = False  # asleep: the watcher went with the computer's processes
+    vm.invalidate(target)
+    assert (await vm.start(target))['ready'] and len(scripts()) == 2 and '--image' in scripts()[1]
+    original = vm.run
+
+    async def run(args, **kwargs):
+        result = await original(args, **kwargs)
+        if args[0] == 'run':
+            runtime.raw = container(vm, target, runtime)  # made again, as the engine would
+        return result
+
+    vm.run = run
+    runtime.raw = None  # removed: a rebuilt computer starts with the default until it is told
+    vm.invalidate(target)
+    assert (await vm.start(target))['ready'] and len(scripts()) == 3 and '--image' in scripts()[2]
+
+
 async def test_a_failed_picture_copy_still_starts_the_town(desktop, tmp_path):
     vm, target, runtime = desktop
     (tmp_path / 'computer-wallpaper.jpg').write_bytes(b'\xff\xd8\xff sample')
