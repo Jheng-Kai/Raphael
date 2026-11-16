@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Our own players (owner, 2026-11-15, R-MEDIA-01): what the browser never draws, and what our controls do.
+// Our own players (R-MEDIA-01): what the browser never draws, and what our controls do.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";

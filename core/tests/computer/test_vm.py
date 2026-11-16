@@ -694,7 +694,7 @@ class CatalogBridge(Bridge):
 
 
 async def test_first_screen_starts_docker_for_the_member_then_reuses_catalog(desktop, tmp_path):
-    # (owner, 2026-11-11: 「理論上就算我沒有開 Docker，它也會自動自己打開才對」) supersedes the owner-press-only start.
+    # supersedes the owner-press-only start.
     from unittest.mock import AsyncMock
     vm, target, runtime = desktop
     runtime.up = False

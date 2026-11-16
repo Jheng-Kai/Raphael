@@ -10,7 +10,7 @@ import { followProbe } from "./follow-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 /**
- * Opening a conversation as the owner does, by its row in the sidebar (owner, 2026-11-10: 「開啟對話…太慢」): the
+ * Opening a conversation as the owner does, by its row in the sidebar: the
  * time until its newest turn is drawn and painted, and the main thread's long tasks meanwhile, `rounds` times
  * (the first open is cold, the others come back to it). `limits` fails the step past `coldMs`, `warmMs` or
  * `longTaskMs`.
@@ -41,7 +41,7 @@ async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first
     if (result[key] > limit) throw Object.assign(new Error(`Opening a conversation: ${key} ${result[key]} ms is over ${limit} ms`), { assertion: result });
   }
   // The core answers in order: the thread is asked for first (its conversations on a first open), once, and nothing
-  // the open does not need is asked for at all (owner, 2026-11-10).
+  // the open does not need is asked for at all.
   for (const [round, sample] of samples.entries()) {
     const methods = sample.calls.map(call => call.split(" [")[0]);
     const problem = first.length && !first.includes(methods[0]) ? `the first request is ${methods[0]}, not ${first.join(" or ")}`
@@ -53,7 +53,7 @@ async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first
 }
 
 /**
- * Start-up asks for the first view before anything optional (owner, 2026-11-11: 「第一次開 app 的速度還是非常慢，就只有第一次而已」).
+ * Start-up asks for the first view before anything optional.
  * The core answers on one loop, so a model-catalog read that arrives with the Home overview slows the overview
  * several times over. Waits until every `heavy` read has been asked for (the window reads them ahead on its own), then
  * fails if one of them began before the `firstView` reads that began earlier were answered, if the heavy reads
@@ -376,7 +376,7 @@ export async function perform(page, step, evidenceDirectory) {
         if (!await page.$eval(selector, el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption is covered');
         await click(selector);
       }
-      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area (owner, 2026-11-08), which a modal dialog rightly covers.
+      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area, which a modal dialog rightly covers.
       if (!await page.$eval('.window-chrome [data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
       await click('.window-chrome [data-window-drag]');
       await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
@@ -1163,7 +1163,7 @@ export async function perform(page, step, evidenceDirectory) {
     case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
-    // A room's row draws no ⋯ (owner, 2026-11-06, R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
+    // A room's row draws no ⋯ (R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
     case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":

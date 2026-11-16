@@ -50,7 +50,7 @@
 .mc-item { position: relative; min-width: 0; }
 .mc-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 80px; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); color: var(--text); text-align: left; }
 .mc-row:hover:not(:disabled) { background: var(--hover); }
-/* The chosen model is the selected fill with the same hairline as every row, and its radio filled: no light edge round it (owner, 2026-11-13: 「不要再有這個亮亮的顏色」). */
+/* The chosen model is the selected fill with the same hairline as every row, and its radio filled: no light edge round it. */
 .mc-row[aria-checked="true"] { background: var(--float-hover); border-color: var(--line); }
 .mc-row:disabled { color: var(--text-3); cursor: default; }
 .mc-radio { width: 15px; height: 15px; border: 1px solid var(--text-3); border-radius: var(--r-pill); flex: none; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; }

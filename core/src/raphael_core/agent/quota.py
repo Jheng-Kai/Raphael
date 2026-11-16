@@ -10,7 +10,7 @@ from ..clock import wall_clock_ms
 
 _LIMIT = re.compile(r"quota|usage.?limit|limit.{0,24}(?:reached|exceeded)|resource_exhausted|out of.{0,10}(?:usage|credits)|hit your limit", re.I)
 
-# A subscription window with this share or less left is nine-tenths used: the owner hears it once (owner, 2026-11-09).
+# A subscription window with this share or less left is nine-tenths used: the owner hears it once.
 WARN_AT_REMAINING = 10
 # A told window read again with this share or more left was reset (a new window, a voucher): its next fall to the last
 # tenth is told again. The gap keeps two sources that round one window differently from telling it twice.

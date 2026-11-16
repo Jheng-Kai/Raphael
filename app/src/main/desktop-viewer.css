@@ -54,7 +54,7 @@
 .desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 /* Every state keeps the running screen's proportions, so the wallpaper is never squeezed. The clip,
    unlike hidden, leaves the box free to grow past its ratio when a narrow panel's words and buttons need the height.
-   Its line is drawn inside and takes no room (owner, 2026-11-15: 「我不希望它有那個邊框」): a border made the inside
+   Its line is drawn inside and takes no room: a border made the inside
    2 px off 1280:900, the seat's picture fitted one side and the other showed a dark sliver. The running screen covers it. */
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; overflow: clip; background: var(--content); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-lg); }
 .desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
@@ -76,7 +76,7 @@
 [data-card-desktop-screen] > .desktop-placeholder, [data-card-screen] > .desktop-placeholder { position: absolute; inset: 0; }
 /* R-PANEL-09: a card that hands the computer to the owner (a sign-in, a password, a payment) is as wide as the
    conversation, and its screen keeps the computer's own proportions, so the page to use is readable at a glance and no
-   dark bars stand beside it (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面，是要怎麼用」). Every other card stays
+   dark bars stand beside it. Every other card stays
    at most 480 px (R-CARD-01). */
 .page-agent .conversation-card.computer-card:is([data-work-state="waiting_control"], [data-card-state="control"]) { width: 100%; max-width: none; }
 .conversation-card .card-computer-screen:is([data-card-desktop-screen], [data-card-screen]) { aspect-ratio: 1280 / 900; background: var(--desktop-frame-bg); }
@@ -114,7 +114,7 @@
 /* The shell is the room the screen fits in at its own proportions, keeping --desktop-foot of its height for the foot
    (a line above the pill; a second line borrows the bottom padding). The screen, the skill review, the file changes and
    the foot share one width and are centred together, so every line and button under the screen stays inside its span
-   (owner, 2026-11-13). */
+. */
 .desktop-panel[data-expanded] .desktop-shell { --desktop-foot: 88px; flex: 1; min-height: 0; container-type: size; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: safe center; justify-items: center; row-gap: var(--sp-3); padding: var(--sp-3) var(--sp-6) var(--sp-4); }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review, .desktop-foot) { width: min(100cqw, (100cqh - var(--desktop-foot)) * 1280 / 900); min-width: 0; }
 .desktop-panel[data-expanded] :is(.desktop-screen, .desktop-review) { grid-area: 1 / 1; height: auto; min-height: 0; aspect-ratio: 1280 / 900; }

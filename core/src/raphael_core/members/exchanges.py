@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def bounded_transcript(transcript, *, chars=ROOM_CONTEXT_CHARS, byte_limit=ROOM_CONTEXT_CHARS, required=(), hard=float("inf")):
     """Fold older records out of the prompt; keep the source and the newest message whole. Length is never an error
-    (owner, 2026-11-09): whole messages, newest first. The older ones fill what `chars` and `byte_limit` leave; the
+: whole messages, newest first. The older ones fill what `chars` and `byte_limit` leave; the
     required ones (the message answered, the newest) are kept whole past them, up to `hard` bytes together, which is what
     the model's window leaves. A required message that alone does not fit even that (a colleague's report of 100,000
     characters) is left out and says so in its place, with its size; the log names it, and the others go on."""

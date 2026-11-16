@@ -2,7 +2,7 @@
 
 Reply language follows the speaker's own language instructions, otherwise the owner's words.
 The interface language selects fixed app notices and labels only, and never reaches a model: no prompt built here
-takes it (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」). The model names the kind
+takes it. The model names the kind
 of a reply with a fixed word (`REPLY_KINDS`); the app shows it as `《prefix。text》` in the interface language, the
 prefix naming the kind of thing said:
 
@@ -696,7 +696,7 @@ _OWNER_PC_RULES = for_this_system(_OWNER_PC_RULES)
 
 def _contract(owner_pc: bool = False) -> str:
     """The shared contract of a prompt, with the owner's-PC words only for a quick question. It names no interface
-    language: that is the window's and goes to no model (owner, 2026-11-14)."""
+    language: that is the window's and goes to no model."""
     return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
 
 _FACT_RULES = """\

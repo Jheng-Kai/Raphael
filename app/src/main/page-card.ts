@@ -217,7 +217,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
   /**
    * The page changed while it stands in the conversation's place (its member updated it): the new one loads beside the one
    * on screen, is put back where the owner was reading, and takes its place once it has drawn, so nothing closes, flashes or
-   * jumps (owner, 2026-11-11). A page that cannot be read again stays as it was.
+   * jumps. A page that cannot be read again stays as it was.
    */
   async function replaceInPlace(live: Live): Promise<void> {
     let opened: PageOpened;
@@ -420,7 +420,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     }
   }
 
-  /** The page opens in the whole area right of the sidebar (owner, 2026-11-14), the same frame moved there, so nothing the
+  /** The page opens in the whole area right of the sidebar, the same frame moved there, so nothing the
    *  owner did in it is lost. The area scrolls, not the page: the frame is as tall as the page says. It is the card's frame
    *  again, back at its top, when the owner goes back (`leave`). */
   function expand(live: Live, card: HTMLElement): void {

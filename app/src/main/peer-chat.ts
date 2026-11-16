@@ -22,7 +22,7 @@ export const peerKey = (task: HandoffView): string => String(task.task_id ?? `x$
 
 /**
  * Work a member handed to itself (the core's `own_work`), as a speaker in a group chat starts tool work: there is no
- * colleague on the other side, so it is never a conversation between two members (owner, 2026-11-09).
+ * colleague on the other side, so it is never a conversation between two members.
  */
 export const ownWork = (task: HandoffView): boolean => (task as HandoffView & { own_work?: boolean }).own_work === true;
 

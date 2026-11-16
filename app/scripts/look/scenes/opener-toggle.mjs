@@ -1,6 +1,6 @@
 import { scene, click, wait, check, focus, hover, key, member, rightClick, watchOpens, pressOpener, accountMenu } from "./steps.mjs";
 
-// R-UI-124 (owner, 2026-11-11): the control that opened a menu, popover, picker, card or dialog is its toggle. Each scene opens a
+// R-UI-124: the control that opened a menu, popover, picker, card or dialog is its toggle. Each scene opens a
 // thing once from its control, then presses that same control again with the real mouse; the check finds it closed, closed for good,
 // and opened exactly once (the page's own mutations are counted as they happen, so a close followed by an opening is seen).
 const column = { action: "member-column", collapsed: false };

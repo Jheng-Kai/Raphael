@@ -1,4 +1,4 @@
-// 連結應用程式, one view as Grok Bot's Connect Apps (owner, 2026-11-12): a search over the whole catalog, a row of category chips, then
+// 連結應用程式, one view as Grok Bot's Connect Apps: a search over the whole catalog, a row of category chips, then
 // 為你推薦 and a section for each category (or one list for a chosen chip or a search); the connected and the ones to connect stand together,
 // with no tabs and no count of the catalogue. A chip at the top right opens the list of the connected apps (managed toolkits, private Google and
 // custom MCP servers; connectors only, since a member's skills are managed in that member's own panel: the number is the core's, the one the
@@ -323,7 +323,6 @@ function lineOf(g: ConnectionGroup, v: ConnectionsView): string {
 }
 
 // ---------- the dialog's one view, as Grok Bot's Connect Apps ----------
-// (owner, 2026-11-12: 「它不會分已連結跟商店，他們都在一起…上面放你已連接的，下面放一些推薦的…分全部、溝通、生產力、開發之類的…也不會顯示它現在有幾個」)
 
 /** The chip at the top right: the marks of up to four connected apps, overlapped, then how many are connected. */
 const HAVE_MARKS = 4;

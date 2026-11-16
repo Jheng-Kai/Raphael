@@ -1,4 +1,4 @@
-"""What a routine's run may read: the team, its skill's own files, the app's recent failures (owner, 2026-11-11).
+"""What a routine's run may read: the team, its skill's own files, the app's recent failures.
 
 The data floor exists so that commands and file tools cannot WRITE the app's database, credentials, vault or core files; what a
 run needs of its own material it reads through the tools meant for it, and those never open the database, vault, keys or `.env`."""

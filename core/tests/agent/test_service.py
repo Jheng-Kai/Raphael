@@ -1046,7 +1046,7 @@ async def test_a_key_openrouter_refuses_is_still_auth_after_the_harness_attempt(
     client.decisions.append(OpenRouterError(401, "auth", "bad key"))
     client.chats.append(OpenRouterError(401, "auth", "bad key"))
     result = await rig.ask("你好")
-    # An API model's refused key is the provider's card to put right (開啟設定), never a sign-in to do (owner, 2026-11-11).
+    # An API model's refused key is the provider's card to put right (開啟設定), never a sign-in to do.
     assert result["text"] == Failure("auth_expired", "", missing=Missing("openrouter", "provider", "broken", "models")).sentence("openai/gpt-6-luna", "zh-TW") and client.json_calls == []
     assert "更新憑證" in result["text"] and "還沒登入" not in result["text"]
     (turn,) = await rig.turns()

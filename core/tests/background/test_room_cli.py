@@ -570,7 +570,7 @@ async def test_one_oversized_room_message_is_left_out_and_the_reply_still_goes_o
                                   (room["id"], "@Alice " + oversized)).lastrowid
     await rooms._exchanges.start(room, source, "en", ())
     await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
-    # Length is never an error (owner, 2026-11-09): a message that alone is more than the window is left out and says so in
+    # Length is never an error: a message that alone is more than the window is left out and says so in
     # its place, with its length; the reply is asked all the same and nothing fails.
     [first] = played
     assert "left out because it does not fit here" in first["user"] and "oversized oversized" not in first["user"]

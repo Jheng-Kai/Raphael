@@ -180,7 +180,7 @@ def build_user_message(
     tools) and that it is to answer now. `narrated` and `member` retain call compatibility; all authored speech follows the speaker,
     never the interface language. `standing` is what holds for the turn and may differ at the next: the team as it
     is now and the memory files. It comes after the conversation, so that the system prompt and the
-    conversation before it stay as the provider cached them (owner, 2026-11-09)."""
+    conversation before it stay as the provider cached them."""
     parts = []
     if summary:
         parts.append(f"{SUMMARY_HEADER}\n<summary>\n{summary}\n</summary>")

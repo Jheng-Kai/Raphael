@@ -145,7 +145,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // The sidebar's icons and the buttons on the window's edges are soft round buttons;
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
     // and so are the guide's foot's round buttons: a step's pair, the way back on a quiet grey and
-    // the way on a circle of the accent (owner, 2026-11-11).
+    // the way on a circle of the accent.
     const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
@@ -175,7 +175,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
     if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
     // An overlay scrollbar takes no width, so the height says it as well: a node that escaped a thread's clip
-    // once stretched the area under a long room and the wheel scrolled the whole conversation away (owner, 2026-11-09).
+    // once stretched the area under a long room and the wheel scrolled the whole conversation away.
     else if (element.matches('.main') && element.scrollHeight > element.clientHeight + 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', `A conversation scrolls inside itself, yet the main area around it scrolls ${element.scrollHeight - element.clientHeight}px`);
     if (element.matches('.mb-av-slime') && style.overflow !== 'visible') {
       const reserve = Number(style.overflowClipMargin?.match(/([\d.]+)px/)?.[1] ?? 0);

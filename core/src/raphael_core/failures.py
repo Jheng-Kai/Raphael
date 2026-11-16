@@ -21,7 +21,7 @@ KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server
                    "context_overflow", "payload_too_large", "content_policy"))
 # Why a subscription CLI could not take a turn when the fix is its own sign-in or install (`Failure.cause`): the sign-in it
 # had was refused, it never had one (or was disconnected), or it is not on this computer. Each is told apart from the
-# others and from an API brain's key, and each has its own button under a reply (owner, 2026-11-11).
+# others and from an API brain's key, and each has its own button under a reply.
 CAUSES = frozenset(("expired", "signed_out", "not_installed"))
 # What is worth asking again. A spent quota (`credits`, `usage_limit`) is not: waiting does not refill it.
 TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout", "cli_stopped"))
@@ -455,7 +455,7 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
-            # Docker Desktop is the member computer's engine (owner, 2026-11-11): still starting is a wait, not a defect.
+            # Docker Desktop is the member computer's engine: still starting is a wait, not a defect.
             ("timeout", r"docker_start_timeout"),
             ("tool_broken", r"docker_(?:stopped|start_failed|missing)"),
             ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),

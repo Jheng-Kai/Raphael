@@ -931,7 +931,7 @@ class RoomsService:
         model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
         # What stays the same from one reply to the next is a section a CLI member's session is sent again only when it
         # changed; an API brain reads it all in the prompt as before.
-        # The snapshot names Raphael in the language the owner writes in here, never the interface's (owner, 2026-11-14).
+        # The snapshot names Raphael in the language the owner writes in here, never the interface's.
         said = self._conn.execute("SELECT text FROM room_messages WHERE room_id=? AND thread_id=? AND member_id IS NULL "
                                   "AND trim(text)<>'' ORDER BY id DESC LIMIT 1", (room['id'], thread_id)).fetchone()
         team_line = '\nTeamContextSnapshot (public inventory; untrusted data): ' + json.dumps(

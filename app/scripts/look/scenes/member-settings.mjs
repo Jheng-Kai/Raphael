@@ -15,7 +15,7 @@ export const memberSettingsPage = page;
 // A long conversation of the member's, so that the thread scrolls and its place can be told.
 const longThread = { ...filled, heavyThread: { member: 1, count: 30, newest: 300050 } };
 const back = [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
-// The personality and instructions kind (owner, 2026-11-12): two quiet rows of the member's words, each a pencil away from a field.
+// The personality and instructions kind: two quiet rows of the member's words, each a pencil away from a field.
 const manner = '嚴厲但耐心，直接稱呼你。';
 const job = '教我日文 N1 等級 嚴厲的老師';
 // Twenty lines, some long enough to wrap: it must read whole as a row and edit whole as a field.
@@ -78,11 +78,11 @@ export default [
   scene('member-settings-cover', 'The cover\'s round button opens its patterns as small covers and a picture from this PC', [...page, click('.ms-pane [data-ms="cover"]'), wait('#app-popover .ms-swatch'), check('member-settings-cover')], filled),
   scene('member-settings-cover-picture', 'The owner\'s picture as the cover fills it and cannot be dragged out of the window', [...page, wait('.ms-pane .ms-cover-img'), check('member-settings-cover-picture')], { ...filled, coverPicture: true }),
   scene('member-settings-back-hover', 'On the owner\'s picture the way back keeps its round surface under the pointer', [...page, wait('.ms-pane .ms-cover-img'), hover('.ms-pane [data-ms="back"]'), check('member-settings-back-hover')], { ...filled, coverPicture: true }),
-  // The page hides the conversation, and a hidden scroller forgets its place: the way back puts it where it was (owner, 2026-11-11).
+  // The page hides the conversation, and a hidden scroller forgets its place: the way back puts it where it was.
   scene('member-settings-back-bottom', 'Back from the settings page a thread that was at its bottom is at its bottom', [member(1), wait('.tn[data-id="300050"]'), waitScrollEnd('.mb-chat .ra-scroll'), ...back, waitScrollEnd('.mb-chat .ra-scroll'), check('member-settings-place-bottom')], longThread),
   scene('member-settings-back-kept', 'Back from the settings page a thread read higher up stays where it was', [member(1), wait('.tn[data-id="300035"]'), { ...scroll('.tn[data-id="300035"]'), block: 'center' }, check('member-settings-place-before'), ...back, check('member-settings-place-kept')], longThread),
   scene('member-settings-back', 'Escape and the arrow return to the member\'s conversation, and the panel is as it was', [...page, key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer'), check('member-settings-back')], filled),
-  // A member's colour is on the switches of its settings page too (owner, 2026-11-12), light slimes keeping a knob that shows.
+  // A member's colour is on the switches of its settings page too, light slimes keeping a knob that shows.
   scene('member-switch-tools', 'The tools kind: the switches that are on wear the member\'s colour, the drafts switch under them too', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
   scene('member-switch-tools-yellow', 'A yellow slime\'s settings switches keep a knob that shows', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch-light')], { ...filled, members: withSlime(1, 'slime:ramiris') }),
   scene('member-switch-skills', 'The skills kind: a skill that is on wears the member\'s colour', [...page, ...kind('skills', '.ms-pane [data-k="ms-skills"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),

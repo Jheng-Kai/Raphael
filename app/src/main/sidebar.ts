@@ -39,12 +39,12 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
   const drawApps = (): void => {
     const label = entryLabel(inventory), name = t("nav.apps");
     if (apps.getAttribute("aria-label") !== label) apps.setAttribute("aria-label", label);
-    // Nothing shows under the pointer over this button, in the list or on the rail (owner, 2026-11-12): its name is for a screen reader.
+    // Nothing shows under the pointer over this button, in the list or on the rail: its name is for a screen reader.
     if (apps.querySelector(".nav-t")!.textContent !== name) apps.querySelector(".nav-t")!.textContent = name;
     if (typeof inventory === "object") rememberAppLogos(inventory.apps);
     const connected: { name: string; logo?: string }[] = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
       .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0)) : [];
-    // With nothing connected yet the pill still shows what it is for (owner, 2026-11-15: 「不然一開始很空」); a reading that failed shows none.
+    // With nothing connected yet the pill still shows what it is for; a reading that failed shows none.
     // Each mark is the app's own, from the one source every place draws it from (ours, else the catalogue's picture).
     const shown = typeof inventory === "object" && !connected.length ? STARTER_APPS.map(name => ({ name })) : connected;
     const marks = typeof inventory === "object" ? shown

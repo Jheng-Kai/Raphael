@@ -1,6 +1,6 @@
 # Quiet idle and visibility
 
-## Behavior (2026-11-04)
+## Behavior
 
 R-UI-99/100 and R-PERF-03 through R-PERF-08 cover this cross-feature change.
 Idle and sleeping slimes retain their resting vector and costume with no animation strips or breathing loop. Sleeping keeps closed eyes.

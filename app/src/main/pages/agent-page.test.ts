@@ -498,7 +498,7 @@ describe("a continuous typed turn", () => {
     mount();
     await flush();
 
-    // The work of a done turn stays closed, with no control that opens it (owner, 2026-11-10).
+    // The work of a done turn stays closed, with no control that opens it.
     expect(document.querySelector('[data-act="thinking"]')).toBeNull();
     expect(document.querySelector<HTMLElement>(".think-body")!.hidden).toBe(true);
 

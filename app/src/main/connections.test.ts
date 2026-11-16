@@ -553,7 +553,7 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    // The chevron and the title are one button (owner, 2026-11-14): its name is the title, its tooltip says where it goes.
+    // The chevron and the title are one button: its name is the title, its tooltip says where it goes.
     const back = d.querySelector(".cs-top-t > button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
     expect(back.getAttribute("title")).toBe("返回");
@@ -722,7 +722,7 @@ describe("a connected row and the back chevron", () => {
   });
 
   test("a row is one button: the pointer and one hover fill over the whole row, with 連結 or its switch on it, in the connected list and the main view alike", () => {
-    // One fill over the whole row (owner, 2026-11-14), 8 px of padding given back by the margin so the mark stays on the content's edge.
+    // One fill over the whole row, 8 px of padding given back by the margin so the mark stays on the content's edge.
     expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer;\s*padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*0;\s*border-radius:\s*var\(--r-md\)/);
     expect(rule(".cs-card:hover, .cs-linked:hover")).toMatch(/background:\s*var\(--float-hover\)/);
     expect(rule(".cs-card:has(> .btn.cs-main:active), .cs-linked:has(> .btn.cs-main:active)")).toMatch(/background:\s*var\(--pressed\)/);

@@ -428,7 +428,7 @@ mod tests {
     }
     #[test]
     fn the_window_is_there_only_while_a_notice_is_and_has_no_title() {
-        // R-LEARN-WIN-02 (owner, 2026-11-15): after Undo a pale bar with the English title stayed on the screen. The
+        // R-LEARN-WIN-02: after Undo a pale bar with the English title stayed on the screen. The
         // window is made hidden and without a title, shown once a notice is placed, and taken away after its fade.
         let source = include_str!("learned.rs").replace("\r\n", "\n");
         let production = source.split("#[cfg(test)]").next().unwrap();

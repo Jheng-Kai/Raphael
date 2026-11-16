@@ -1,4 +1,4 @@
-"""The interface language is the window's alone (owner, 2026-11-14): 「我不是說過系統的 UI 語言並不會影響到使用者內部聊天的語言
+"""The interface language is the window's alone: 「我不是說過系統的 UI 語言並不會影響到使用者內部聊天的語言
 嗎？它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」.
 
 No prompt, schema or message a model is sent takes the interface language; what must still be chosen per language for

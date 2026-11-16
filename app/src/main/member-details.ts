@@ -1,4 +1,4 @@
-// The landing view holds routines and conversations, its bots and its library; the computer is the third tab only (owner, 2026-11-14). Everything
+// The landing view holds routines and conversations, its bots and its library; the computer is the third tab only. Everything
 // the owner changes about a member lives on the member settings page (member-settings.ts), which the gear opens in the
 // main area where the conversation is.
 
@@ -153,7 +153,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function routinesHTML(): string {
-    // No plus: a routine is made by asking the member in the conversation, as the empty line says (owner, 2026-11-09).
+    // No plus: a routine is made by asking the member in the conversation, as the empty line says.
     const head = `<div class="mb-dh"><span>${esc(t("members.routines"))}</span></div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
     if (routines === "failed") return head + noticeHTML("routines");
@@ -294,7 +294,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       case "tab":
         if (['details', 'library', 'computer'].includes(act.dataset.tab!)) select(act.dataset.tab as DetailsTab);
         break;
-      // A routine is read here and changed by its member in the conversation (owner, 2026-11-09).
+      // A routine is read here and changed by its member in the conversation.
       case "routine-open": {
         const routine = Array.isArray(routines) ? routines.find(row => row.id === Number(act.dataset.id)) : undefined;
         if (routine) openRoutineView(routine, host.list()?.members ?? [member]);

@@ -1,4 +1,4 @@
-// A picture a member sends is a message of its own, as a text bubble is (owner, 2026-11-14, R-UI-156): the same actions
+// A picture a member sends is a message of its own, as a text bubble is (R-UI-156): the same actions
 // stand beside it, a reply quotes it and Copy puts the picture itself on the clipboard.
 import { fileKind, fileMime } from "./attachments";
 import type { TurnAttachment } from "./types";

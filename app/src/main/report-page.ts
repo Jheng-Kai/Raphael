@@ -644,7 +644,7 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
   }
 
   /**
-   * 存成檔案 (owner, 2026-11-10): the report on screen saved as a file, in the owner's output folder or else in
+   * 存成檔案: the report on screen saved as a file, in the owner's output folder or else in
    * Downloads, shown selected in its folder, and a word of where it went.
    */
   async function share(): Promise<void> {

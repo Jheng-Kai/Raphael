@@ -343,7 +343,7 @@ MAX_REQUEST_URLS = 2
 # How much of what a call is given a permission card says, in characters (the overlay's question keeps its short line).
 CARD_PREVIEW_CHARS = 240
 # What a request of only files asks, in the language of the conversation (`_chat_language`), never the interface's: it
-# is the owner's message the model reads (owner, 2026-11-14).
+# is the owner's message the model reads.
 _LOOK_AT_THIS = with_ui_words({"zh-TW": "看這個", "en": "Look at this", "ja": "これを見て"})
 # The routes that word a reply, which read the pages and the files of the request first.
 _READING_ROUTES = ("answer", "discuss", "chat")
@@ -523,7 +523,7 @@ class _Ask:
     admin_pending: list[PlannedCall] = field(default_factory=list)
     admin_screenings: list[Screening] = field(default_factory=list)
     # The administrative changes that need a yes (the ones that cannot be undone, and any other the mode or a rule has
-    # asked), proposed in this turn, held for one card at its end (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」);
+    # asked), proposed in this turn, held for one card at its end;
     # each is shown to the owner exactly, and none is made before their yes.
     management_pending: list[PlannedCall] = field(default_factory=list)
     management_screenings: list[Screening] = field(default_factory=list)
@@ -967,14 +967,14 @@ class AgentService:
     @property
     def language(self) -> str:
         """The interface language, for the fixed words of unattended and external conversations (a notice, a card).
-        Never a model's: what a member says follows the owner's words (owner, 2026-11-14)."""
+        Never a model's: what a member says follows the owner's words."""
         return normalize_language(self._owner_language() or DEFAULT_LANGUAGE)
 
     def _chat_language(self, ask: "_Ask") -> str:
         """The language the conversation of `ask` is in, read from its own words: the owner's message, else the owner's
         latest words in that conversation, else the speaker's own profile, else English. It picks what a model is given
         per language (Raphael's name in the roster, a place's name, the words of a request of only files); the interface
-        language never does (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」)."""
+        language never does."""
         if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text)):
             return language
         try:
@@ -2314,7 +2314,7 @@ class AgentService:
             # The system prompt says who the speaker is and how it works, and is the same turn after turn: a
             # change in it has the provider read the whole conversation again at full price. What holds for
             # this turn only (the team as it is now, the memory files, who is asking) goes with the turn's
-            # message (owner, 2026-11-09). The owner's permission mode stays here: it changes seldom, and
+            # message. The owner's permission mode stays here: it changes seldom, and
             # a rule the whole turn obeys belongs where the model reads its rules.
             if brain_ref(settings.model):
                 system = cli_system_prompt(
@@ -2347,7 +2347,7 @@ class AgentService:
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
             # The system prompt stays the same turn after turn, or the whole conversation is cached again: the
-            # management guidance a request needs goes with that turn's message (owner, 2026-11-09).
+            # management guidance a request needs goes with that turn's message.
             leadership = self._management_chat(ask) and bool(management_tools)
             if self._management_chat(ask):
                 system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed "
@@ -5230,7 +5230,7 @@ class AgentService:
             "no": phrase(language, "no"),
             "timeout_ms": 0 if untimed else CONFIRM_TIMEOUT_MS,
         }
-        # T3 questions (and the card of several changes) are answered in the window's own card, in one press (owner, 2026-11-11), not in a permission card of the thread, except for the explicit local-command and payment permission cards.
+        # T3 questions (and the card of several changes) are answered in the window's own card, in one press, not in a permission card of the thread, except for the explicit local-command and payment permission cards.
         if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or local or action.tool.endswith("/fill_card"))
                 and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)):
             self._permissions.show(

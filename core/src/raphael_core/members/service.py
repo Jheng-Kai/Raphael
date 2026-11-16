@@ -67,7 +67,7 @@ the owner at the overlay; every run counts toward the month's limit, as every ta
 
 Unread. A turn written or completed in a thread that is not on screen (`members.viewing`) marks it
 unread, unless it is Raphael's reply heard on the voice overlay. A turn that is still running marks it only
-once it has sent a message: a member that is thinking has said nothing (owner, 2026-11-14).
+once it has sent a message: a member that is thinking has said nothing.
 
 Waiting. A thread is waiting while a question for a yes waits in it: a turn with the status
 "confirm" (a question of the fast tier), or a question that a background task of that member waits
@@ -1468,7 +1468,7 @@ class MembersService:
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
         """The card of one change, in words: what it does, to what (by name), and the question. No ID and no JSON
-        (owner, 2026-11-11: 「不用這麼複雜」)."""
+."""
         from ..agent.team_admin import confirmation
         from ..management import resolve
         from ..management_words import effect, question as asked
@@ -2014,7 +2014,7 @@ class MembersService:
                 (self._now_ms(), turn.status, _line(turn.text or turn.detail or ""), turn.cost_usd, run["id"]),
             )
             if turn.status in ("error", "expired"):
-                # The routine says its last run did not work, and why in a sentence: its view shows it (owner, 2026-11-11).
+                # The routine says its last run did not work, and why in a sentence: its view shows it.
                 self._conn.execute("UPDATE routines SET last_error=? WHERE id=?",
                                    (_line((turn.text or turn.detail or "").strip().split("\n\n")[0]), run["routine_id"]))
         routine = self.store.routine(run["routine_id"])

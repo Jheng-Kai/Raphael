@@ -316,7 +316,7 @@ export interface TimelineState {
   nowMs: number;
   expandedMessages: Set<string>;
   /**
-   * The turn whose owner message the composer holds while it is edited (owner, 2026-11-15): that bubble is not drawn, and
+   * The turn whose owner message the composer holds while it is edited: that bubble is not drawn, and
    * comes back when the edit is given up. What the turn answered stays as it was.
    */
   editingTurnId: number | null;
@@ -692,7 +692,7 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  */
 export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
   // A message that waits its turn says so and offers 立即送出 in sight, as Claude Code does: it is the exception, not a menu item
-  // (owner, 2026-11-14: 「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣，因為它這個是例外」).
+  //.
   const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
   return `<div class="message-actions">${waiting}` + extra +
     (actionable ? reactionControlHTML() : "") +
@@ -941,7 +941,7 @@ export function latestProgress(turn: AgentTurn): string | undefined {
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: composioText(plainLine(m.text), composioAction(turn)) }));
-  // The work itself is never shown (owner, 2026-11-10: 「不用有查看過程」): what a step was missing stands in sight with its
+  // The work itself is never shown: what a step was missing stands in sight with its
   // repair, live or not, and the closed body stays only for a search that finds words in it.
   const prerequisites = prerequisitesHTML(turn);
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
@@ -1178,7 +1178,7 @@ export function presenceWant(turn: AgentTurn, look: Pick<TurnLook, "revealing" |
 }
 
 /**
- * The one turn whose line carries a member's working slime in a conversation (owner, 2026-11-14: 「理論上它不管怎麼樣都只會有一個史萊姆在運作才對」).
+ * The one turn whose line carries a member's working slime in a conversation.
  * Of the turns that want one, the newest that is at work stands (a background task's line with its progress words); a face
  * that only waits stands for nobody while another turn works. `turns` run from the oldest to the newest.
  */

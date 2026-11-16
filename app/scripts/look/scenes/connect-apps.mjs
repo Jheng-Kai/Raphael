@@ -13,7 +13,7 @@ const MARKS = ["notion", "github", "googledrive", "gmail", "googlecalendar", "li
   "sentry", "stripe", "n8n", "zapier", "paypal", "webflow", "wix", "netlify", "neon", "prisma", "airtable", "calendly", "posthog", "postman", "sanity", "bitly", "telegram",
   "openrouter", "brave", "searxng"];
 
-// A row of the connected list opens the app's page when it is pressed anywhere but on its switch (owner, 2026-11-14): the description, the
+// A row of the connected list opens the app's page when it is pressed anywhere but on its switch: the description, the
 // mark, the name, the empty part of the row and the keyboard each open it, the switch only turns the app on and off, and a row under the
 // pointer says it can be pressed. Every press is a real mouse press at a point of the row.
 const NOTION = '.cs-linked[data-id="composio:notion"]';
@@ -105,7 +105,7 @@ const connectedRowScenes = [
     ...linked, ...pressRows,
     click(`${NOTION} [role="switch"]`), click(`${NOTION} [role="switch"]`), hover(".cs-linked:nth-child(2) .cs-main"), check("connected-rows"),
   ]),
-  scene("connect-apps-back-title", "The connected list's chevron and title are one button under the pointer (owner, 2026-11-14)", [...linked, hover(".cs-back-title"), check("connected-back-title")]),
+  scene("connect-apps-back-title", "The connected list's chevron and title are one button under the pointer", [...linked, hover(".cs-back-title"), check("connected-back-title")]),
   scene("connect-apps-back-title-press", "A press on the connected list's title goes back to the one view", [...linked, pressAt(".cs-back-title span", 0.5, 0.5, ".cs-card")]),
   scene("connect-app-from-row", "The app's page opened from a row of the connected list is the page the main view's row opens, with the larger back chevron on the ✕'s line", [
     ...linked, pressAt(`${NOTION} .ds`, 0.5, 0.5, ".cs-page .cs-head"), check("connect-app-from-row"), check("connect-back"),
@@ -114,7 +114,7 @@ const connectedRowScenes = [
 
 export default [
   scene("connect-apps", "One view: the title and the chip of the connected apps, the search, the chips of the categories, then 為你推薦 and a section for each category of six apps", [...open, check("connect-apps-view"), check("float-surface")]),
-  scene("connect-apps-connected-hover", "A connected app's row under the pointer is one button: its hover fill runs under 「✓ 已連結」 (owner, 2026-11-14)", [...open, hover(".cs-card .cs-main:has(.cs-state)"), check("connect-apps-view")]),
+  scene("connect-apps-connected-hover", "A connected app's row under the pointer is one button: its hover fill runs under 「✓ 已連結」", [...open, hover(".cs-card .cs-main:has(.cs-state)"), check("connect-apps-view")]),
   scene("connect-apps-row-hover", "A row of the main view under the pointer has the pointer and the same hover fill as a connected row, clear of its mark, name and 連結", [...open, hover(".cs-card .cs-main"), check("app-row-hover")]),
   scene("connect-apps-connect-hover", "連結 under the pointer steps up a shade from the lit row's, so it is plain which button the press goes to", [...open, hover(".cs-card .cs-connect:not(.pri)"), check("app-connect-hover")]),
   scene("connect-apps-scrolled","The list scrolls under the title, the search and the chips, which stay put", [...open, scroll(".cs-sec:last-of-type .cs-card:last-child"), check("connect-apps-scrolled")]),

@@ -1,6 +1,6 @@
 """How much of a model's window a prompt may take: the one place that says it, for a fresh native session's first message
 (agent/cli/context.py), a room's transcript (members/rooms.py), a memory pass and a fold (memory/). Length is never an error
-(owner, 2026-11-09): what a prompt carries follows the model's window, whole items newest first.
+: what a prompt carries follows the model's window, whole items newest first.
 """
 
 DEFAULT_CONTEXT_TOKENS = 64000

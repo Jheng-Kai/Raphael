@@ -1,6 +1,6 @@
 # Dictation
 
-## macOS (2026-11-15)
+## macOS
 
 The same controller runs on a Mac (`dictation.rs` `app::spawn`, no longer Windows-only). The dictation key is Right
 Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalogs.ts`). What differs:
@@ -22,7 +22,7 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 - Verify on a Mac by hand in `npm run tauri -- dev` (the terminal is the app macOS asks permissions for); `npm run
   native` is Windows-only.
 
-## The tidy key: Right Alt+T tidies the text that is selected (2026-11-15)
+## The tidy key: Right Alt+T tidies the text that is selected
 
 Owner, 2026-11-15 (「把一個對話或文字框起來，然後按某個鍵它可以幫我做潤稿」): in any app, select text and press Right Alt+T; the
 dictation cleanup tidies it and it replaces the selection, the clipboard is what it was, and Ctrl+Z in that app undoes it as
@@ -65,7 +65,7 @@ a terminal: the selection is replaced, Ctrl+Z undoes it, what he had copied is s
 text once (the program's own copy is the one thing that cannot be kept out of clipboard history), nothing selected shows the
 short line, and no recording is left running behind Right Alt+T.
 
-## Automatic microphone picks the headset and stays on it (2026-11-14)
+## Automatic microphone picks the headset and stays on it
 
 Owner, 2026-11-14, with a picture of the microphone menu (自動偵測（目前：麥克風排列）, 麥克風 (3- HyperX Cloud II Core Wi…),
 立體聲混音, 麥克風排列): wearing a HyperX wireless headset, automatic kept jumping between it and the laptop's array.
@@ -88,7 +88,7 @@ No scene changes: the menu's words are the same. Not proved here: the owner's re
 test); he checks that automatic shows and stays on 麥克風 (… HyperX …) with the headset on, and moves to 麥克風排列 only
 when it is unplugged.
 
-## Raphael stays in front of an open page while he is heard (2026-11-14)
+## Raphael stays in front of an open page while he is heard
 
 Owner, 2026-11-14: with 每日總覽, an HTML page, open in Raphael's conversation, pressing the app's own voice button showed
 nothing (「那個拉菲爾大師會被 HTML 擋在後面，所以我們看不到我們到底有沒有在說話…他永遠是最前面的」). The indicator is the voice
@@ -112,7 +112,7 @@ page, and that the composer says recording, then ack; the last scene ends the di
 button its own again and the page still open. The page's own scrolling is `page-collapsed-press` and `page-inplace`'s.
 Not proved here: the real microphone, the real recognizer and the owner's page.
 
-## The dictionary on every dictation, and learning that fires (2026-11-14)
+## The dictionary on every dictation, and learning that fires
 
 Owner, 2026-11-14: 「像是 grokbot 他從來沒有根據我們的字典去做修正…自動儲存到字典的那個功能…好像一次都沒有」.
 Where the dictionary was lost, and what now carries it (R-DICT-STT-01, R-DICT-SPELL-01, R-DICT-PROMPT-01):
@@ -172,7 +172,7 @@ The learning watch in a Chromium window has no journey (no external window is dr
 profile) whose composer is 40 groups deep, brought to the front without a key press. With the old 32-level walk it
 logs `focused_ancestry`; with the fix it reads the field (`field probe (sources: 2)`, `fixture_found=true`).
 
-## Cleanup v3 production decision and calibrated comparison (2026-11-05)
+## Cleanup v3 production decision and calibrated comparison
 
 Follow-up 5 explicitly adopts v3 for the owner's short-prompt, clear-structure goal.
 `core/src/raphael_core/brain/prompts/cleanup_system.md` is now the exact 3026-character
@@ -361,7 +361,7 @@ in the history as `kind="ask"` with the recipient's name in `target_app` (Rust s
 `dictation.stop`, 0 for Raphael); the row says 「傳給 拉斐爾」 (`history-sent-to` in dictation-history).
 Paste-last, the lifetime totals and dictionary learning still use dictations only.
 
-## The owner's punctuation (2026-11-07)
+## The owner's punctuation
 
 The owner dislikes 。: every Chinese result (cleaned, cleaned in pieces, the raw fallback) goes through
 `textnorm.finish_chinese_dictation` (a line-final 。 goes, one inside a line becomes ，; kana lines and
@@ -377,8 +377,8 @@ a shorter candidate D lost paragraph breaks and a hedge and added two 嗎 on the
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen (owner, 2026-11-09: 「每一次回到聽寫的時候，它會 default 是在總覽」); nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey (owner, 2026-11-09: 「文字有點點細」). Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both (2026-11-07). At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
-pressing it does nothing, and no history opens from the grid (owner, 2026-11-07). Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both (2026-11-07). At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
+pressing it does nothing, and no history opens from the grid. Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
@@ -438,7 +438,7 @@ shortcut labels/keys at every matrix width. Short entries add columns as space a
 they are not the two-column long choices of R-UI-30. Keyboard navigation retains its selected
 button; focus rings remain reserved for Tab navigation.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
@@ -509,7 +509,7 @@ Owner round 6: dictation removes the spoken-languages helper while retaining the
 
 ## Owner round 9 regression coverage
 
-Ordinary listening/working orb states show no Stop button (owner, 2026-10-30).
+Ordinary listening/working orb states show no Stop button.
 Focused two-Escape cancellation uses the orb as its gesture target and still sends
 the existing cancellation IPC. Alt hotkeys remain in the existing Rust controller.
 Permission/question cards keep their current actions and expansion. This supersedes
@@ -554,7 +554,7 @@ History and Dictionary filter labels also reserve their selected weight through
 the shared segmented component. The same scene clicks every filter in both pages
 before returning to Dictionary; locale changes update both visible and reserve labels.
 
-## Dictation intent cleanup (2026-10-31)
+## Dictation intent cleanup
 
 Cleanup preserves every intended fact and qualification while removing abandoned drafting,
 resolving self-corrections and regrouping ideas. Short clear sentences retain the existing
@@ -568,7 +568,7 @@ keep item lines and numbering; explicit paragraph boundaries retain separate lis
 piece makes the whole dictation unsuccessful, with recovery text and its reason retained in
 history. The words are still pasted, so nothing is lost, and the NOT_CLEANED notice says so every time.
 
-## Passive control hit regions (2026-11-01)
+## Passive control hit regions
 
 R-UI-70: the desktop overlay and learned notice start click-through. The real pages
 report visible physical client rectangles over the shell-only floating_controls IPC,

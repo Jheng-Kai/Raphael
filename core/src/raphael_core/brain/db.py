@@ -2006,7 +2006,7 @@ PRAGMA user_version = 81;
 COMMIT;
 """
 
-# One reaction of the owner's per message (owner, 2026-11-14): a message that carried several keeps the newest, and
+# One reaction of the owner's per message: a message that carried several keeps the newest, and
 # the primary key says it, so no writer can store a second. `reaction_asks` remembers the messages whose reaction was
 # already answered with a question, so that a reaction taken back and given again asks nothing twice.
 _MIGRATIONS[82] = """
@@ -2049,7 +2049,7 @@ PRAGMA user_version = 82;
 COMMIT;
 """
 
-# Every reaction is analysed once per message and emoji (owner, 2026-11-14): the record of what was analysed names the
+# Every reaction is analysed once per message and emoji: the record of what was analysed names the
 # emoji too, so another emoji on the same message is a new reaction while the same one given again is not. A row of
 # the old rule (a negative emoji that was asked about) has no emoji of its own: it keeps the thumbs down, the one
 # the old rule asked about most. The triggers of 82 name the message only, so they come back as they were (a table

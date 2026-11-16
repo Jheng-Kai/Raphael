@@ -113,11 +113,11 @@ Keep header and sidebar geometry identical; never crop the composite as one circ
 Keep the existing room composer, mentions, roles, Stop, reply references, source
 events and durable handoffs. The same AgentService owns member work.
 
-A room message carries no speaker name (owner, 2026-11-09: 「開會的時候不用有名字…不用顯示拉菲爾」):
+A room message carries no speaker name:
 the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
 stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
-The face stands beside the message, never above it (owner, 2026-11-09), small (24 px) at its lower left, by its last
-bubble, as Grok Bot's group (owner, 2026-11-10: 「每一個 bots 都是比較小一個，然後是放在對話的左下角」). Whom a message answers is quoted at the top of its bubble
+The face stands beside the message, never above it, small (24 px) at its lower left, by its last
+bubble, as Grok Bot's group. Whom a message answers is quoted at the top of its bubble
 (owner, 2026-11-09: 「回覆 小晴」 above it did not show who answered whom): the shared conversation quote, the
 source's name over its first words (two lines at most, Markdown marks dropped), a press jumps to it; a source that
 is gone says so without a name. The side thread lays its replies out the same way. Checks: `room-discussion`,
@@ -200,16 +200,16 @@ npm run look -- sidebar-owner-upload sidebar-owner-crop sidebar-owner-crop-held 
 
 The picture crop dialog (owner photo and Raphael's picture share it) shows the whole picture under a
 square frame: the left button drags the picture or, on a corner, resizes the frame; the wheel zooms;
-the thirds show only while the button is held; there is no slider (owner, 2026-11-07).
+the thirds show only while the button is held; there is no slider.
 
 ## Gotchas
 
 Synthetic IPC does not establish native persistence, provider or design acceptance.
 
-## Folded room receipts (2026-11-02)
+## Folded room receipts
 
 R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open keeps the line node and the open conversation between members through WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Room workflow checks read the request, result, files and reason in that conversation (peer-chat.ts, 2026-11-07).
-## Send while rooms work (2026-11-03)
+## Send while rooms work
 
 R-QUEUE-06 uses the shared chat composer: clear the submitted draft immediately,
 preserve new typing and files, and serialize rooms.send per room without changing
@@ -218,7 +218,7 @@ room-send-while-working, both themes at 1120,720,1920x1080. Shared private
 consumers and the selected matrix are in conversation.md#durable-owner-inbox-2026-11-03.
 
 
-## Meetings and private work (2026-11-04)
+## Meetings and private work
 
 Owner follow-up (2026-11-08, meetings-and-delegation): an explicit meeting keeps
 meeting=1 and gives every participant a speech turn in order, even when earlier

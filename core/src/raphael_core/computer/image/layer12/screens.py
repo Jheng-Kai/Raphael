@@ -681,7 +681,7 @@ def serve(count, rectangles):
                             command(['xfce4-panel', '-r'])
                 except (subprocess.SubprocessError, OSError):
                     pass  # A watch that cannot look or restart must not end the screens' views.
-            # A window that leaves its screen shows on the screen beside it and is cut on its own (owner, 2026-11-14).
+            # A window that leaves its screen shows on the screen beside it and is cut on its own.
             if ticks % WINDOW_WATCH_TICKS == 0:
                 try:
                     keep_windows_inside(rectangles, looks)

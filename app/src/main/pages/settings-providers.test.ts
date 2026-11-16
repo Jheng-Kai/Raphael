@@ -295,7 +295,7 @@ test("the allowances are kept across tabs and Settings closing, refresh on compl
   expect(destroyed).not.toHaveBeenCalled();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
-  // Every opening starts afresh (owner, 2026-11-15): 模型與用量 is at 模型 again, not at the 用量 looked at last.
+  // Every opening starts afresh: 模型與用量 is at 模型 again, not at the 用量 looked at last.
   await page.show("general"); click('[data-pane="models"]'); await flush();
   expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
   await page.show("usage");

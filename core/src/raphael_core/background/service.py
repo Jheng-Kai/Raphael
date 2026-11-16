@@ -163,7 +163,7 @@ ROOM_PARALLEL = 2
 STALE_QUEUE_MS = 2 * 60 * 60 * 1000
 # How many routine runs work at once, of the MAX_PARALLEL places: the rest of what is due waits its turn, in the order it came, and
 # one place is always left for what the owner asked for. Five routines due at 07:00 used to start together on a PC that was
-# starting up (a weather check timed out); a routine's run is nobody's emergency (owner, 2026-11-14).
+# starting up (a weather check timed out); a routine's run is nobody's emergency.
 ROUTINE_PARALLEL = 2
 # Routine runs on one subscription CLI start at least this far apart (seconds): a refused sign-in shows in the first one's
 # first seconds, and the ones after it are not started into it.
@@ -1206,14 +1206,14 @@ class BackgroundService:
     def _chat_language(task, origin, context) -> str:
         """The language the owner writes in for this task, read from the owner's own words (the request it came from,
         else their latest message in the conversation), else from the task's text: never the interface language, which
-        goes to no model (owner, 2026-11-14). It picks the per-language pieces a model is given (Raphael's name)."""
+        goes to no model. It picks the per-language pieces a model is given (Raphael's name)."""
         asked = origin.question if origin is not None and origin.source in _OWNER_WORDS else ""
         latest = next((turn.question for turn in reversed(context or ())
                        if turn.source in _OWNER_WORDS and detect_language(turn.question)), "")
         return chat_language(asked, latest, task.text)
 
     def _work_brief(self, task):
-        """Who the work is from and who reads what (owner, 2026-11-09): the work and the owner-facing result
+        """Who the work is from and who reads what: the work and the owner-facing result
         stay in the member's own conversation; only the <handback> block goes back, written to the colleague
         who asked, or for its own background work to the place it came from, never to the owner."""
         owner = neutralize(self._settings.get("owner_name") or "") or "the owner"
@@ -1880,7 +1880,7 @@ class BackgroundService:
         from ..brain.owner import owner_context
         # The team as it is now goes with the task, not among the rules: a meeting's state changes from one
         # reply to the next, and in the system prompt each change had the provider read the member's whole
-        # prefix again at full price, where its replies would otherwise share it (owner, 2026-11-09).
+        # prefix again at full price, where its replies would otherwise share it.
         user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
         system += owner_context(self._settings)
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
@@ -2799,7 +2799,7 @@ class BackgroundService:
                 return
             if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls)):
                 # A routine's run is done only when it did its work: it said so, but a step it needed was refused or what it was
-                # to make is not there (owner, 2026-11-11). The owner reads what was not done, and what the member said.
+                # to make is not there. The owner reads what was not done, and what the member said.
                 said = report.text if report else ''
                 self._conclude(task, run, 'failed', '', phrase(language, why) + ('\n\n' + said if said else ''),
                                report.detail if report else None, why)
@@ -3165,7 +3165,7 @@ class BackgroundService:
             work_at = max(self._now_ms(),source.created_at_ms if source else 0) + 1
             history = AgentHistory(self._metrics_conn,lambda:work_at) if old.mode == 'work' else self._history
             # A routine's run started again is still the routine's run: its words are the routine's (the member's instructions
-            # written by whoever made it), never the owner's message in the member's conversation (owner, 2026-11-11).
+            # written by whoever made it), never the owner's message in the member's conversation.
             routine_run = old.routine_id is not None and earlier is not None and earlier.route == "routine"
             turn_id = history.add(
                 session_id=f'work:{new_id}' if old.mode == 'work' else old.session_id,

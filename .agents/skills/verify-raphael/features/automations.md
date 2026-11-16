@@ -1,6 +1,6 @@
 # Calendar and automations
 
-## Routine reliability found in real use (2026-11-14)
+## Routine reliability found in real use
 
 Core behaviour only; no screen changed (verify with the pytest files named in each rule, not with `look`).
 R-ROUTINE-11: routine runs take two of the three places and wait in order, behind the owner's own tasks
@@ -12,7 +12,7 @@ calls with no model; an unchanged result skips the run quietly, no turn, no mess
 it yet. R-CAL-09: `calendar_list` cuts a period over 62 days and says so. Update this map if the routine view starts to show
 a precheck or a skipped run.
 
-## Routines are read; their members change them (owner, 2026-11-09)
+## Routines are read; their members change them
 
 Owner: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」, and the calendar too. There is no routine editor:
 a routine opens to read (`routine-view.ts`: its name, when it runs, who runs it, its instructions, no field and no
@@ -31,7 +31,7 @@ the words and nothing was created; `routine-row-hover` that the switch stands in
 that describe the editor's rows, menus, test runs, webhook and tunnel cards are history: their scenes were retired with
 it, and the core contracts they cite stay.
 
-## Routine runs that tell the truth (owner, 2026-11-11)
+## Routine runs that tell the truth
 
 A run is done only when it did its work (R-ROUTINE-05): a refused step or a missing page makes it failed, with its reason on
 the routine (`last_error`, `last_failed`) and in the member's conversation. The read-only routine view says so as a status with
@@ -51,12 +51,12 @@ npm run look -- routine-view-failed routine-running routine-sentence details-rou
 `routine-view-failed` checks the failed state has words and a dot and the dialog still holds nothing to change;
 `routine-running` that the live working line is there and no `.owner-message` is drawn for the routine's instructions.
 
-## Calm conversations (owner, 2026-11-05)
+## Calm conversations
 
 See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
 
 
-## Routine guard reasons (2026-11-05)
+## Routine guard reasons
 
 R-ROUTINE-01/02 share admission across schedule, event and webhook execution.
 The existing member details row shows the localized rate/absence reason for
@@ -71,7 +71,7 @@ npm run look -- routine-guard-reason --theme both --width 1120,720,1920x1080
 Inspect the full-size paused reason in both themes/all sizes, comparing its
 existing row, icon and typography with ordinary routines and event error rows.
 
-## Calendar navigation review (2026-11-01)
+## Calendar navigation review
 
 The account menu's 行事曆 (Home's calendar icon before 2026-11-12) resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
 
@@ -82,7 +82,7 @@ npm run look -- calendar-remember calendar-view-reload calendar-week-fit calenda
 npm run look -- calendar-remember calendar-view-reload calendar-week-fit calendar-today-controls --theme both --width 900,480
 ```
 
-## Calendar rhythms and Composio readings (2026-11-01)
+## Calendar rhythms and Composio readings
 
 Google through Composio is drawn after its first successful background read.
 A readable connection starts connected. Pending/slow reads never hold the page up; failed reads keep old events and say
@@ -111,7 +111,7 @@ with details-routines. Checks assert no ordinary
 rhythm chip in the hours, error/confirm exceptions, daily chips, one month line,
 status icons, shared controls and saved window values.
 
-## Connected-app event routines (2026-11-01)
+## Connected-app event routines
 
 A routine has exactly one of schedule or when. In conversation, the existing
 routine_create/update tools accept a connection id, its observed read tool and
@@ -210,7 +210,7 @@ gone; Usage retains aggregate summaries and CSV only.
 The rendered audit rejects mismatched controls in one schedule column and selected
 mini-calendar dates with insufficient contrast, including while hovered.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
@@ -254,7 +254,7 @@ npm run look -- automations-day-empty automations-sparse automations-day-sparse 
 
 Title priority review: calendar-rhythm-week, calendar-rhythm-day and calendar-rhythm-month use a long routine title. Check its visible width at 1120/720 and require timing to be whole or hidden, never truncated. Run the same four scenes in both themes at 1120,720,1920x1080.
 
-## A busy day: every all-day item in reach (owner, 2026-11-12)
+## A busy day: every all-day item in reach
 
 R-CAL-07. The all-day band of the day and week view draws three rows and one button per day that has more, 「還有 N 個」,
 N being the items not drawn. Pressing it opens that day's column in place to every all-day item of that day (the hours move down by
@@ -279,7 +279,7 @@ calendar-more-fold (Thursday folded, Saturday open, focus on Thursday's count).
 npm run look -- automations-more-day automations-more-day-open automations-more-day-closed automations-more-week automations-more-many automations-more-sixty automations-more-month-cell automations-more-month automations-more-keyboard automations-more-week-one automations-more-week-two automations-more-week-cross automations-more-week-fold automations-month-busy automations-all-day automations-busy-day --theme both --width 1120,720,1920x1080
 ```
 
-## Moving routine triggers (2026-11-01)
+## Moving routine triggers
 
 Rules R-RT-01 through R-RT-05 extend the existing editor, with no new page. Monthly saves a date 1-31 and clamps per month. The ordinary interval menu includes 5/10/15/30 minutes with the same window; minute rhythms stay in the all-day row. A scheduled slot is consumed while that same routine's preceding task is queued/running/waiting. Migration 55 leaves saved routines intact and snapshots each new run's trigger for its transcript button.
 
@@ -302,7 +302,7 @@ npm run look -- routine-sentence routine-sentence-event routine-sentence-webhook
 ```
 
 
-## Review fixes (2026-11-02)
+## Review fixes
 
 The event-pick scene now selects, reads, creates once, and reopens the saved condition; it no longer pins an empty catalogue. event-undetectable retries without saving. Repository/channel scenes exercise the shared plain-input row. webhook-address-changed explains the working replacement port. The existing no-connected, manual filter, masked/revealed secret and transcript scenes remain representative consumers.
 
@@ -310,7 +310,7 @@ The event-pick scene now selects, reads, creates once, and reopens the saved con
 npm run look -- routine-sentence-event --theme both --width 1120,720,1920x1080
 ```
 
-## Real-account review fixes (2026-11-02)
+## Real-account review fixes
 
 R-RT-04/05: Gmail requests twenty items with payload and verbose output off. Calendar discovery samples ten existing items without updatedMin; its saved event carries optional since={arg:updatedMin,format:iso} and polls fifty items from the previous check minus five minutes in UTC. Empty windows succeed quietly. Other catalogue entries use the supplied small arguments and newest-first options where available. Core tests cover fixture sizes against the 50,000-character result limit, real Calendar field order, text/structured numeric envelope paths, first-poll baseline, new-id-only dispatch, unchanged legacy arguments and truncation refusal. These are synthetic fixtures, not real-account acceptance.
 
@@ -318,14 +318,14 @@ The new automation-event-calendar scene uses the same event form as Gmail: pick,
 
 (Its scenes were retired with the routine editor on 2026-11-09.)
 
-## Cold Calendar catalogue review (2026-11-02)
+## Cold Calendar catalogue review
 
 R-RT-06: event discovery and polling ensure the connected Composio toolkit's cached catalogue before classifying its read. The fake HTTP integration uses GOOGLECALENDAR_EVENTS_LIST with readOnlyHint from a cold cache and after clearing process caches to model restart. Startup catalogue failures back off without disabling or adding error turns, then recover. Loaded createHint and missing tools still stop with the existing localized message. A shared deadline includes catalogue loading and reading; other connection kinds never fetch a toolkit catalogue. The separate fixed Calendar reader's exception remains limited to its own slug and async context.
 
 Rerun the six automation-event-* scenes in the Real-account review fixes matrix above. These UI fixtures prove the shared pick/create/reopen and retry presentation; only the production-gate core tests prove cold-catalogue ordering.
 
 
-## Manual tests, saved zones and trigger recipes (2026-11-05)
+## Manual tests, saved zones and trigger recipes
 
 The shared routine editor and both existing member row menus offer Test once.
 `routines.run` sends the saved instruction through the existing worker and history
@@ -373,7 +373,7 @@ member-details.test.ts, routine-sentence.test.ts,
 settings-view.test.ts, agent-members.test.ts and look audit/app tests.
 
 
-## Owner-provided external webhook tunnels (2026-11-05)
+## Owner-provided external webhook tunnels
 
 R-COLLEAGUE-05: Edit a saved webhook routine > External URL. Choose Tailscale Funnel, Cloudflare Tunnel or ngrok, copy the exact command and run the already-installed tool yourself. Paste its HTTPS URL and Test external URL. The PC-on reminder stays beside auth choices. Explicit key generation rotates the key; copy uses the displayed value and closing clears it. HMAC and Bearer share the existing receiver.
 

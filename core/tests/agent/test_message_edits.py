@@ -80,7 +80,7 @@ async def test_retraction_detaches_old_worker_history_before_sqlite_reuses_an_id
     assert tasks.for_turns([new]) == {}
 
 
-# --- an edited message stands where it stood (owner, 2026-11-14) ----------------------------------------------------------
+# --- an edited message stands where it stood ----------------------------------------------------------
 
 @pytest.fixture
 async def team_rig(make_rig, conn, tmp_path):

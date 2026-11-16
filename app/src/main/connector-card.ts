@@ -67,7 +67,7 @@ const retryOf = (card: ConnectorCard): boolean => card.retry ?? true;
 
 /**
  * The form's place in the card. A server of the owner's own (n8n) carries its fields in the card itself, as there is no
- * catalog to read them from; the member explains each in the conversation (owner, 2026-11-09).
+ * catalog to read them from; the member explains each in the conversation.
  */
 const setupSlotHTML = (card: ConnectorCard): string =>
   `<div data-inline-setup="${esc(card.id)}" data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"` +

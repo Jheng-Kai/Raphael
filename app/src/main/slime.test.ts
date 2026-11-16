@@ -20,7 +20,7 @@ const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
 });
 
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
-// Motion tests draw the moving kind of slime; the still kind is tested on its own (owner, 2026-11-11).
+// Motion tests draw the moving kind of slime; the still kind is tested on its own.
 const plain = { now: new Date(2026, 5, 1), moving: true }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
 
@@ -39,7 +39,7 @@ test("every character belongs to one labeled group, in the owner's order without
   const groups = [...catalogPicker.querySelectorAll<HTMLElement>("[data-slime-group]")];
   expect(groups.map(group => group.dataset.slimeGroup)).toEqual(groupIds);
   expect(groups.map(group => group.querySelectorAll('[role="menuitem"]').length)).toEqual([24, 26, 12, 14, 12, colorIds.length]);
-  // 角色 is the story's characters and no one else; the archetypes, the red oni first, have their own tab (owner, 2026-11-11).
+  // 角色 is the story's characters and no one else; the archetypes, the red oni first, have their own tab.
   const inGroup = (group: string): string[] => [...catalogPicker.querySelectorAll<HTMLElement>(`[data-slime-group="${group}"] [data-slime-character]`)].map(button => button.dataset.slimeCharacter!);
   expect(inGroup("characters")).toEqual(originalIds);
   expect(inGroup("fantasy")[0]).toBe("oni-red");
@@ -49,7 +49,7 @@ test("every character belongs to one labeled group, in the owner's order without
   expect(catalogIds).toEqual([...ungrouped.querySelectorAll<HTMLElement>("[data-slime-character]")].map(button => button.dataset.slimeCharacter));
   expect(catalogButtons.every(button => groupIds.slice(0, -1).includes(button.closest<HTMLElement>("[data-slime-group]")!.dataset.slimeGroup as typeof groupIds[number]))).toBe(true);
   for (const [index, group] of groups.entries()) {
-    // A tab names it (owner, 2026-11-11), so there is no heading inside.
+    // A tab names it, so there is no heading inside.
     expect(group.getAttribute("role")).toBe("tabpanel");
     expect(group.getAttribute("aria-labelledby")).toBe(`slime-tab-${groupIds[index]!}`);
     expect(group.querySelector("h1, h2, h3, h4")).toBeNull();
@@ -659,7 +659,7 @@ test("a heavy state's strips go in a slice a frame, out of sight, and show toget
 });
 
 
-// ---------- a slime moves in two places only (owner, 2026-11-11) ----------
+// ---------- a slime moves in two places only ----------
 
 test("a slime is a picture unless it moves: whatever its member does, it keeps its resting pose and no clock", () => {
   followSlimeRoster([{ id: 301, activity: "working" }]);
@@ -734,7 +734,7 @@ test("a roster read hands a face on screen over before the redraw, so the redraw
 test("the core takes every slime the picker offers: its rule for a slime's name fits each character and each colour", () => {
   // Chosen in the picker, a slime is saved by the core, which checks its name by a rule of its own (members/store.py). The
   // rule took letters alone, so every slime with a hyphen in its name, the red oni and nearly all after it, was refused
-  // when chosen (owner, 2026-11-11: 「赤鬼以後的所有角色都沒辦法使用」). Read here, the rule is held to every name the app has.
+  // when chosen. Read here, the rule is held to every name the app has.
   const store = readFileSync(resolve(__dirname, "../../../core/src/raphael_core/members/store.py"), "utf8");
   const name = /^_SLIME_NAME = r"([^"]+)"$/m.exec(store)?.[1];
   const avatar = /^_AVATAR = re\.compile\(rf"([^"]+)"\)$/m.exec(store)?.[1];

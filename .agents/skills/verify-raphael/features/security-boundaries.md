@@ -1,4 +1,4 @@
-# Agent and external-input security boundaries (2026-11-05)
+# Agent and external-input security boundaries
 
 This map covers the offline core security review in `u-sec2`. It adds no UI,
 navigation, RPC, credential store or parallel execution engine. See the handoff

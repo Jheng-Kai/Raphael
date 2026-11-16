@@ -1,6 +1,6 @@
 # Connections and MCP
 
-## A connector's argument shape, and a failure repeated (2026-11-14)
+## A connector's argument shape, and a failure repeated
 
 Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a
 connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind
@@ -114,7 +114,7 @@ Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他
 npm run look -- accounts-card accounts-menu accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
 ```
 
-## Setup in the conversation (owner, 2026-11-09)
+## Setup in the conversation
 
 Owner: 「這種設定不管是 composio 還是甚麼的 一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」. In the
 store, a sign-in or one key is still done at once; 加入 on anything more (a server of the owner's own such as n8n, a
@@ -127,7 +127,7 @@ the member explains each field in its reply. Scenes: store-n8n and plugins-setup
 ```powershell
 npm run look -- store-n8n plugins-setup-own-app plugins-store-needs --theme both --width 1120,720,1920x1080
 ```
-## The store is only what is not added yet; n8n is a preset (owner, 2026-11-08)
+## The store is only what is not added yet; n8n is a preset
 
 The store is one list, 「全部」 (or the chosen chip's name), of the apps not added yet: no 已連結 and no 常用
 sections. Popular apps still lead it while browsing, in bounded 18-card pages. n8n is offered as the owner's
@@ -213,7 +213,7 @@ CARGO_TARGET_DIR apply.
 ## Sub-features
 
 Settings > Connections contains one connected view (the tab 已連結) for Composio
-toolkits, private Google and custom MCP servers: connectors only (owner, 2026-11-07).
+toolkits, private Google and custom MCP servers: connectors only.
 A member's skills, their sharing and their import are managed in that member's own
 panel, never here; the dialog has no skills section, no import button and no skill
 rows. Every row has a bare service mark (or a generic plug),
@@ -322,7 +322,7 @@ gives the members skills) requires no skills section, import button, skill row, 
 The scenes `connected-apps-skills`, `skill-private-detail` and the `skills-*` import, grant, source and plugin scenes were
 retired on 2026-11-07 with the dialog's skills section; the member panel's skills are covered by `details-skills` and the members map.
 
-All switches in Connections are binary (owner, 2026-10-28). The app switch reflects
+All switches in Connections are binary. The app switch reflects
 only its enabled flag; turning it off or on preserves every tool exclusion. A
 loaded app dialog exposes two permission rows, Write and Read, each with its own
 enabled/total count and switch, above the folded per-tool list. A kind switch is
@@ -464,7 +464,7 @@ states. connector-many-tools runs the same footer check. Happy-dom
 tests cover refusal/denial/timeout/network copy, retry/success/close, stale replies
 after reopening and the footer check's covered-button failure.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
@@ -477,7 +477,7 @@ capability lists outside Settings retain their own reading cap.
 ## Owner round 7 contracts
 
 Settings retains the connected-app inventory count; the sidebar has no app entry or count. `apps-count` and `apps-unreadable` check the installed tab against the shared inventory.
-## Search-first catalog and chat discovery (2026-10-29)
+## Search-first catalog and chat discovery
 
 Built-in and managed apps share the vocabulary in connectors/finder-data.json:
 name, slug, descriptions and aliases. Connected apps lead, then available popular
@@ -524,7 +524,7 @@ and store/card marks use the same renderer and HTTPS Composio allowlist. Slack's
 public catalog SVG has an exact offline snapshot declared in fixture.json, so
 pending and authorizing scenes exercise the real image element without network.
 
-## Accepted store and connector judge findings (2026-10-29)
+## Accepted store and connector judge findings
 
 The store's search, tabs and single-row group chips stay above a separate results
 scrollport. `plugins-store-all` scrolls to pagination both before and after a page
@@ -584,7 +584,7 @@ Fixture/browser results do not establish native,
 live-provider or design-judge acceptance.
 
 
-## Store merge geometry (2026-10-29)
+## Store merge geometry
 
 Search, tabs, category chips and results share the settings content measure at
 720, 1120 and 1920x1080. Store grids use two tracks when the pane is wider than
@@ -610,7 +610,7 @@ changed metadata or categories still redraw. The controller regression in
 `app/src/main/connections.test.ts` covers both outcomes, while the existing measured
 Store scenes enforce the unchanged 250ms paint and 50ms long-task budgets.
 
-## Acceptance fixes (2026-10-30)
+## Acceptance fixes
 
 Connect apps categories uses the existing single scrolling row of broad group
 buttons, replacing the retired provider dropdown journey. The scene focuses every
@@ -634,7 +634,7 @@ before selection, reserving the existing right fade padding. The focus helper is
 shared with selected-category repaint, and a unit regression checks both scroll
 directions without changing the selected group or redrawing Settings.
 
-## Store long-task diagnostics (2026-10-30)
+## Store long-task diagnostics
 
 Tab switching also retains the original toolbar, tab buttons and search input.
 Only the result body is replaced, so a clicked tab keeps native focus without a
@@ -674,7 +674,7 @@ machine timing; see the shared look README. Neither kind proves native/provider
 timing, or the cause of a historical failure without its CPU samples.
 
 
-## Composio request compatibility (2026-10-30)
+## Composio request compatibility
 
 The v3.1 session PATCH accepts the session configuration, without
 expected_config_version. Keep the local session lock and fail closed on provider
@@ -693,7 +693,7 @@ Raphael and a new member. It stops before consent and never reads account data.
 The browser's provider page still needs separate visual inspection; pending alone
 is not proof of an external page. No CLI brain or OpenRouter is used.
 
-## Apps that ask for the owner's own key or developer app (2026-10-31)
+## Apps that ask for the owner's own key or developer app
 
 Owner report: most of the store could not be added. Measured on the real catalog (1,714 toolkits): about 9% had a
 shared sign-in; 1,407 take only an API key or token, 88 are OAuth-only without Composio's shared login (X/Twitter
@@ -778,7 +778,7 @@ both read/write group switches in both directions, retaining the control and
 layout above it within one pixel. automations-day visits day/week/day to cover
 both calendar period controls with the same generic stable-click contract.
 
-## Connections from a conversation (2026-11-01)
+## Connections from a conversation
 
 The shared private/room MCP proposal card edits the name, command or URL, arguments and secret names. Secret values use SecretCards and the vault. Test initializes and discovers tools while disabled, groups read/write tools, then enables the tested revision and continues the original request. Stdio uses the existing local-command decisions. Edits invalidate discovery; cancellation settles secret cards too. Saving public fields has the shared stable-click check and the card has no inner scroll panel or JSON editor.
 
@@ -795,7 +795,7 @@ npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-p
 Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks.
 
 
-## Named connected accounts (2026-11-05)
+## Named connected accounts
 
 R-COLLEAGUE-04: Connections > an app shows each public account label; Account label edits that exact account. Add another account reuses existing sign-in and asks for a label afterward. A returned email is the default; provider refresh retains owner labels by account ID. Members and connections_list receive public labels and the shared instruction to ask which account unless specified.
 
@@ -805,7 +805,7 @@ npm run look -- account-labels account-label-edit output-folder-picker output-fo
 
 Core fakes prove persistence and projection. IPC fixtures never prove OAuth or provider metadata. Custom MCP services without multiple managed account identities retain their service identity.
 
-## Primary management intent regression (2026-11-05)
+## Primary management intent regression
 
 Connection management is offered only to the current primary in an interactive
 owner private chat. Connect, enable/disable and turn on/off requests select the

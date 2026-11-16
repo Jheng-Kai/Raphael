@@ -1,5 +1,5 @@
 """Owner reactions are bounded message metadata, never instructions or approvals. A message carries at most one of the
-owner's: choosing another replaces it, choosing the same again takes it back (owner, 2026-11-14)."""
+owner's: choosing another replaces it, choosing the same again takes it back."""
 from ..protocol import invalid_params
 from .emoji import single_emoji
 

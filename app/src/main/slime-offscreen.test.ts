@@ -89,7 +89,7 @@ test("an offscreen state defers its cells and visibility restores them without t
   } finally { styles.mockRestore(); }
 });
 
-test("a picture of a slime is never watched, so it costs the page nothing (owner, 2026-11-11)", async () => {
+test("a picture of a slime is never watched, so it costs the page nothing", async () => {
   const line = document.createElement("li");
   line.innerHTML = slimeSVG({ color: "sky" }, { member: 3 }) + slimeSVG({ color: "sky" }, { member: 4, moving: true });
   document.body.append(line);

@@ -1,4 +1,4 @@
-"""A routine or a task is told nothing of the interface language (owner, 2026-11-14): 「它的 UI 語言就是單純 UI 語言而已，
+"""A routine or a task is told nothing of the interface language: 「它的 UI 語言就是單純 UI 語言而已，
 它也不會去到 system prompt，什麼事都不會發生」. It writes in the language the owner writes in, which its own words show;
 the notices the app draws of it keep the interface language. Fake models only."""
 

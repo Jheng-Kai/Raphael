@@ -488,7 +488,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
-    // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last (owner, 2026-11-15).
+    // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last.
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     else if (canonicalPane(next) === "models" && canonicalPane(next) !== pane) modelsTab = "models";
@@ -1281,7 +1281,7 @@ export function createSettings(app: AppContext): SettingsPage {
         // After the first view, and one read at a time with the other optional reads (startup-reads.ts).
         const warm = (): void => {
           if (!(visible && pane === "connections")) void optionalRead(() => connections.load());
-          // The models' usage too, once after launch (owner, 2026-11-15: 「在打開 app 的時候就跑一次，之後才是每次設定的時候再跑一次」).
+          // The models' usage too, once after launch.
           if (!visible) void optionalRead(() => refreshInBackground());
         };
         if (typeof requestIdleCallback === "function") requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 1500);

@@ -576,7 +576,7 @@ test("a failed typed send restores the exact draft and clears the failure on suc
  expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();
 });
 
-// One member shows at most one working slime in its conversation (owner, 2026-11-14, R-SLIME-03).
+// One member shows at most one working slime in its conversation (R-SLIME-03).
 const presences = () => [...document.querySelectorAll<HTMLElement>(".thread .live-presence")];
 const at = (id: number, more: Partial<AgentTurn> = {}) => live({ id, session_id: `slime-${id}`, created_at_ms: 1_000_000 + id * 1000, question: `Request ${id}`, ...more });
 const task = (id: number, more: Partial<NonNullable<AgentTurn["task"]>> = {}) => ({ id, state: "running", started_at_ms: 1, finished_at_ms: null, ...more }) as AgentTurn["task"];

@@ -3,7 +3,7 @@ import { t } from "./i18n";
 import { esc, iconButton } from "./ui";
 
 export const reactionControlHTML = (): string => iconButton("smile", t("chat.react"), ' data-act="react-message" aria-haspopup="menu"').replace(" title=", " data-tooltip=");
-/** The one reaction a message carries, any emoji (owner, 2026-11-14): the newest, though an older database may list more. */
+/** The one reaction a message carries, any emoji: the newest, though an older database may list more. */
 export const ownReaction = (reactions: readonly string[] | undefined): readonly string[] => (reactions ?? []).slice(-1);
 /** The reaction a message has, any emoji, as a chip that takes it back. */
 export function reactionRowHTML(reactions: readonly string[] = []): string {

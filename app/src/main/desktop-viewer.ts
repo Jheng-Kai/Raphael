@@ -57,7 +57,7 @@ export function preparationHTML(state: DesktopState, face = ""): string {
   for (const node of character.content.querySelectorAll<HTMLElement>('.av')) node.style.removeProperty('--av');
   for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
   // The computer's boot face is a picture of the slime like every face outside the member list and the thinking line
-  // (owner, 2026-11-11); it no longer works while the computer starts.
+  //; it no longer works while the computer starts.
   const label = esc(t(STATUS_KEY[stages[Math.max(0, at)]]));
   return `<div class="desktop-preparation" role="status"><div class="desktop-boot-face" data-k="desktop-face-${esc(identity)}" aria-hidden="true">${character.innerHTML}</div>` +
     `<p class="desktop-stage">${esc(computerStateText(state))}</p>` +
@@ -74,7 +74,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // The preview is one button that opens the larger view; the larger view fills the window and folds back
   // from beside the window buttons. Everything about the computer sits in one foot directly under the screen and
   // as wide as it: one quiet line of state above the pill, and a demonstration's actions beside the pill. The
-  // skill review and the file changes take the screen's own place, so the foot never moves (owner, 2026-11-13).
+  // skill review and the file changes take the screen's own place, so the foot never moves.
   panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
@@ -589,7 +589,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     draw(); return true;
   }
   /** 停止 hands the computer back and nothing else: the larger view stays open on the same stream, watching, with Take
-   *  control offered again (owner, 2026-11-14: 「結束控制不代表我要結束觀看，所以不要跳掉」). Only 我完成了, which answers a
+   *  control offered again. Only 我完成了, which answers a
    *  sign-in request, goes back to the conversation (handback). */
   async function release(): Promise<void> {
     if (changing || !session) return;
@@ -605,7 +605,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options.timeline.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;
-    // A sign-in is no work for a small picture (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面」): the
+    // A sign-in is no work for a small picture: the
     // card's screen and its 接手 open the same stream in the larger view and take control there; 我完成了 in its pill
     // gives the request back.
     if (button.dataset.cardDesktop === 'take') { visible = true; acquire(); }

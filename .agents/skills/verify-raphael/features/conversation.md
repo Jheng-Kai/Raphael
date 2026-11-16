@@ -1,6 +1,6 @@
 # Conversation
 
-## A conversation read at its bottom stays at its bottom (owner, 2026-11-14, R-FOLLOW-01)
+## A conversation read at its bottom stays at its bottom (R-FOLLOW-01)
 
 Owner: 「成員回覆的時候，有時候畫面會從最底部往上跳一點…完全不要有任何移動」. Following the bottom was a correction queued by the
 thread's own draws (`preserveRichScroll`), with an 80 px band read by the end marker's IntersectionObserver. Two things moved the thread
@@ -40,7 +40,7 @@ picture) shorter for a frame; `follow-reply-near` moved the read line 108 to 431
 drawn again), `scripts/look/follow-probe.test.mjs` (the reading of the frames). Not covered offline: WebView2 at the owner's display scale
 and a real touchpad's momentum.
 
-## Our own media players, and media that load once (owner, 2026-11-15, R-MEDIA-01, R-MEDIA-02, R-MEDIA-03)
+## Our own media players, and media that load once (R-MEDIA-01, R-MEDIA-02, R-MEDIA-03)
 
 Owner: 「我看到你影片好像是用系統 default 的嗎？因為它旁邊是可以下載的。那我覺得不要用系統 default 的比較好…能夠 cache 的東西就
 cache」. Every video and sound plays in our own player (`media-player.ts`: `videoPlayerHTML`, `audioPlayerHTML`, bound by
@@ -79,7 +79,7 @@ presses the picture and lets it play: playing, the scrubber part-way with its lo
 presses Space: paused part-way with the focus on the video and the bar kept. `video-full-screen` presses full screen: the lightbox with the same
 video and our controls, edge to edge under the caption strip at every size with its controls a size up, left by its bar's button (no second ×), the thread's video waiting. `video-lightbox-playing` presses F while it plays: the lightbox
 plays on from where it was. `video-message-reply` presses Reply: the composer's quote is the play mark, 小晴 and 影片. `audio-message` is the
-owner's sound: our row, its time 0:00 / 0:05, every control inside the row. `video-full-screen-speed` opens the speed in the app's full screen: the menu stands above the bar with every speed on screen (owner, 2026-11-15). `audio-speed-menu` opens the speed: six speeds, 1× checked, the menu below the row, clear of its time.
+owner's sound: our row, its time 0:00 / 0:05, every control inside the row. `video-full-screen-speed` opens the speed in the app's full screen: the menu stands above the bar with every speed on screen. `audio-speed-menu` opens the speed: six speeds, 1× checked, the menu below the row, clear of its time.
 `file-cards`: a PDF, a ZIP and an HTML file wear the document, archive and page marks. `media-reopen` (two pictures with a photograph's
 grain, about 1.7 MB each, the browser cache on as in a real window) opens the conversation, opens 小森's, and opens it again; the second open
 makes no `attachments.get`, no `attachment_source` and no request on the media protocol (the runner serves `http://raphael-media.localhost/<id>`
@@ -89,7 +89,7 @@ Vitest: `media-player.test.ts`, `media-cache.test.ts`, `attachment-media.test.ts
 tests. Core: `test_attachment_upload.py`. Not covered offline: whether WebView2 keeps the protocol's answers in its disk cache from one run to
 the next (the headers allow it; look's browser serves them by interception), native playback and seeking of large files, audio output.
 
-## A picture a member sends is a message (owner, 2026-11-14, R-UI-156)
+## A picture a member sends is a message (R-UI-156)
 
 Owner: 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」. A member's pictures (a media message whose
 `{attachment}` is a stored image, `mediaPicture` in `picture-message.ts`; two drawn pictures before the words of a reply, say) stood above its
@@ -122,7 +122,7 @@ react, thread and reply beside it, the words keeping their own row. Vitest: `pag
 `group-picture-message.test.ts` (the room), `picture-message.test.ts` (quote, clipboard). Core: `tests/agent/test_emoji_reactions.py`,
 `tests/members/test_reaction_ask.py`. Not covered offline: the native clipboard of WebView2 (that a pasted picture arrives in another program).
 
-## Words meant for the model stay out of what the owner reads (owner, 2026-11-14)
+## Words meant for the model stay out of what the owner reads
 
 - **A page shown is no question (R-PAGE-09).** A task that shows an HTML page (`show_page`) goes on: the page is already a card in
   the thread, and the core no longer makes an owner question (`kind` show_page, the 「我完成了」 card) of it. Before, the model's
@@ -142,7 +142,7 @@ react, thread and reply beside it, the words keeping their own row. Vitest: `pag
   look scene `computer-wake-line` asserts one such line and no reply of the member's.
 - **A data-floor refusal does not end the turn (R-FLOOR-04).** The model is told up to three times, and answers with what it can.
 
-## A file the owner attaches reaches the model as it is (owner, 2026-11-14, R-ATTACH-RAW-01, R-ATTACH-RAW-02, R-ATTACH-RAW-03)
+## A file the owner attaches reaches the model as it is (R-ATTACH-RAW-01, R-ATTACH-RAW-02, R-ATTACH-RAW-03)
 
 Owner: 「傳送檔案不是會傳送原始檔嗎? 應該要是 raw data 才對」. A member (a Japanese teacher) was given an `.html` file to copy
 its design and received only the page's visible text: `services/file_reader.py` (`read_text`) ran `.html` through a text
@@ -184,10 +184,10 @@ native attach in the running app (no app file was changed).
 node scripts\verify.mjs --contract
 ```
 
-## No card of changed files; the member undoes in chat (owner, 2026-11-15, R-CARD-15, R-CARD-17, R-COMP-UNDO-01)
+## No card of changed files; the member undoes in chat (R-CARD-15, R-CARD-17, R-COMP-UNDO-01)
 
 The card under a finished turn (「改了 N 個檔案」 with 開啟檔案變更 and 復原這些變更; owner, 2026-11-14, with a picture of 「工作結果」, a green 「● 完成」 and
-「53 個檔案變更 +0 −0」) and the 檔案變更 entry of the member computer panel's ⋯ menu are removed (owner, 2026-11-15): Claude Code and Grok Bot show nothing like them.
+「53 個檔案變更 +0 −0」) and the 檔案變更 entry of the member computer panel's ⋯ menu are removed: Claude Code and Grok Bot show nothing like them.
 `task-result.ts`, `checkpoint-view.ts`, the `.task-result` and `.desktop-checkpoints` styles, the `data-task-result-slot` in `timeline.ts` and the owner RPC
 `computer.checkpoints` are gone. What is true now:
 
@@ -217,7 +217,7 @@ the core (`signinRetry` in `cli-signin.ts`) in place of asking the routine's tit
 `chat-cli-expired` and `chat-cli-signin-flow` still stand for the button; the retry choice is covered by
 `cli-signin.test.ts`, and the native sign-in console and a real routine are unverified offline.
 
-## What a program writes by itself is not the member's work (owner, 2026-11-14, R-CARD-18, R-CARD-19)
+## What a program writes by itself is not the member's work (R-CARD-18, R-CARD-19)
 
 Owner, with a picture of the card 「Added 110 files」 under a member that was asked to read email (`verified_contents.json`,
 `summarizer_gemma4_*_solution_config.binarypb`, under 「Workspace / member-b17ef6d19…」, with 「Undo these changes」):
@@ -239,7 +239,7 @@ python -m pytest tests/computer/test_checkpoints.py tests/computer/test_checkpoi
 npm run verify -- --contract                                                                      # from app/
 ```
 
-## A model's link to a file it delivered is that file's chip (owner, 2026-11-14, R-MSG-LINK-01)
+## A model's link to a file it delivered is that file's chip (R-MSG-LINK-01)
 
 Owner, with a picture of a routine's message (專案經理, 「Notion 專案進度同步與排期（07:00 完整盤點）」) that ended with
 `[已查核的部分紀錄](attachment:4e43d6d3fd9d47fab8b552f849c3c48b.md)` as written: a model links the file it delivered by its stored id
@@ -256,7 +256,7 @@ file card above, and one `open_attachment` call with that id. Not covered: the n
 npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
 ```
 
-## One member, one working slime (owner, 2026-11-14, R-SLIME-03)
+## One member, one working slime (R-SLIME-03)
 
 Owner, with a picture of a reply that queued research in the background (an empty slime under the reply, a task line with the
 slime and its progress words under that): 「這邊為什麼會有兩個史萊姆？理論上它不管怎麼樣都只會有一個史萊姆在運作才對，你可能確定一下」.
@@ -315,7 +315,7 @@ edit as the core does: `message-edit-pending` (the edit stands first, above the 
 place with the member answering) and `message-edit-answered`. `message-edit-picture` is `message-edit-open` for a message with a picture (the chip shows its thumbnail), after
 `owner-picture-actions` on the sent message.
 
-## A message with a picture keeps the bubble's own width (owner, 2026-11-14, R-UI-149)
+## A message with a picture keeps the bubble's own width (R-UI-149)
 
 Owner, with a picture of a message that carried one screenshot: 「傳送圖片的時候，下面的 message bubble 不用跟它一樣的寬度了。它就是 Message Bubble，就是有 Message Bubble 自己的寬度」.
 The picture stood on top and the blue bubble under it was stretched to the picture's width (`.owner-message:has(.me-files) { width: min(420px, 78%) }`), so its
@@ -333,7 +333,7 @@ message's bubble not to equal the picture's width, a long one to be wider than t
 `owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
 Enter, the call held), `message-edit-picture` the message taken into the composer by 編輯 (R-UI-158).
 
-**The actions stand beside the bubble, not the pictures (owner, 2026-11-15, R-UI-159).** Owner, with his message that had a picture above its purple bubble: 「那個三個點點，還有一些回覆的 icon，不要放在圖片跟 message bubble 的中間。理論上它都會預附在 message bubble 旁邊，不要因為圖片而改變它的位置」.
+**The actions stand beside the bubble, not the pictures (R-UI-159).** Owner, with his message that had a picture above its purple bubble: 「那個三個點點，還有一些回覆的 icon，不要放在圖片跟 message bubble 的中間。理論上它都會預附在 message bubble 旁邊，不要因為圖片而改變它的位置」.
 Cause: the actions were the message's first column, centred on the whole of picture and bubble (a private conversation, `.owner-content` one grid item) or in row 1, at the pictures (a room's message,
 `filesHTML` and the bubble its own children). Now the message keeps its own layout (R-UI-149) and the actions are anchored to the bubble
 (`agent.css`: `anchor-name` on the bubble, `position-anchor` on `.message-actions`, `right: anchor(left)` plus the usual gap, centred on it, `anchor-scope` per message),
@@ -343,7 +343,7 @@ A message of pictures only keeps them beside the pictures. `owner-picture-action
 and the room's `room-files-words-sent`) draws the same words and actions without a picture in the same column and requires the actions to end where the bubble begins at the same gap, to be within the
 bubble's height and centred on it as without a picture, and not at the pictures' height. `room-files-words-sent` was written without a run (see the PR).
 
-## Several pictures: a scrolling row in the composer, small squares once sent (owner, 2026-11-15, R-ATTACH-01, R-ATTACH-02)
+## Several pictures: a scrolling row in the composer, small squares once sent (R-ATTACH-01, R-ATTACH-02)
 
 Owner, with two pictures: twelve pictures in the composer ran past its right edge where the mouse could not reach them
 (「理論上要可以用滑鼠，就是可以讓它滾動，向右向左滾動」), and once sent they stood as a two-column grid of tiles about 230 px wide,
@@ -379,7 +379,7 @@ bubble's right edge and the bubble under them; and `owner-picture-bubble` (the b
 the third thumbnail and finds that picture in the viewer. Vitest: `attachment-layout.test.ts` (1, 2, 3, 4 and 12 pictures, mixed),
 `chat-composer.test.ts` (the row and its wheel), `chip-scroll.test.ts` (ends after a change).
 
-## The delete dialog is Grok Bot's (owner, 2026-11-12)
+## The delete dialog is Grok Bot's
 
 Owner: 「刪除的 UI，跟我跟你說的那個好像不太一樣，這邊你可能要改一下」. The question before a deletion or a history
 clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a conversation's history) is one dialog
@@ -399,14 +399,14 @@ clearing (`confirmDelete` in member-dialogs.ts: a member, a group, a room, a con
 `delete-confirmation` asserts the shape (box 320, two buttons of one width filling it, 刪除 at the right in the
 red, no ×, no rule line, the focus on 取消, a sentence of two lines whose longest line takes at least three quarters of
 the box) and returns these numbers. The sentence wraps as ordinary text (`text-wrap: pretty`): `balance` cut it into two
-half-width lines with the right of the box empty (owner, 2026-11-12: 「為什麼字會卡在左邊」). The restore and reset confirmations and
+half-width lines with the right of the box empty. The restore and reset confirmations and
 新增成員 keep the 440 px shell with hairlines (`member-maker`, `member-maker-taken`).
 
 ```powershell
 npm run look -- member-delete-ask member-delete-ask-computer member-delete press-through-delete-dialog room-delete polish-caption-confirm quick-clear-confirm quick-cleared member-maker member-maker-taken --theme both --width 1120,720,1920x1080
 ```
 
-## Card buttons at the right; confirmations as Grok Bot's (owner, 2026-11-10)
+## Card buttons at the right; confirmations as Grok Bot's
 
 Owner: 「那個卡片的按鈕盡量放在右側 然後你可以看一下刪除的 dialog 可以參考 grok bot 的 UI」. A conversation card's
 `.card-actions` stands at its right (`row-reverse`): the primary rightmost, the others and the quiet exit to its left,
@@ -437,7 +437,7 @@ npm run look -- admin-approval admin-approval-batch admin-approval-long admin-de
 npm run look -- room-delete quick-clear-confirm computer-maintenance-reset card-question-waiting card-permission-waiting card-mail-ready card-connect-waiting card-key-waiting card-send-failed card-page-failed card-mcp-draft connector-key email-draft-handed-off chat-secret-masked card-send-retry card-mail-failed card-key-failed --theme both --width 1120,720,1920x1080
 ```
 
-## Opening a conversation fast (owner, 2026-11-10)
+## Opening a conversation fast
 
 Owner: 「開啟對話的也是（太慢），想辦法幫我最佳化」. The core answers requests in order on one loop, so what is asked
 first is answered first. A press on a member in the sidebar switches the thread before the page shows, and the page
@@ -454,7 +454,7 @@ read twice, or if `members.list` is read. Repeated identical reads at start-up s
 npm run look -- conversation-open-cost --theme both --width 1120,720,1920x1080
 ```
 
-## No 查看過程 (owner, 2026-11-10)
+## No 查看過程
 
 Owner: 「查看過程那個可以拿掉 不用有查看過程」. A reply offers no way to view how it was worked out: no work control,
 and no 查看過程 in its ⋯ menu. What a member said while working is progress, folded out of sight (dev/u-reply);
@@ -464,7 +464,7 @@ is only the 開啟設定 button, after the reply (the judge flagged the sentence
 words keeps the note's sentence, its button following the sentence.
 Scenes: missing-search, missing-provider, missing-pdf, generated-image-missing.
 
-## One column with the composer (2026-11-10)
+## One column with the composer
 
 R-UI-45 (the judge on 2d5e3cf8: at 720 the messages began at 20 px and the composer at 32): a conversation's column
 starts and ends where its composer does, as [Content width](README.md#content-width) says. The thread, the search field
@@ -487,7 +487,7 @@ The question card in page-room-draft is the other half of the same judge run (R-
 beside a 30 px field. A card's text buttons, the answer's included, stand at the field height (`--h-field`) and the answer
 field and its button share one height; `card-shell` asserts both.
 
-## Finding by name forgives typos (owner, 2026-11-08, R-FIND-01)
+## Finding by name forgives typos (R-FIND-01)
 
 Every place that finds a thing by its name uses `app/src/main/find-match.ts`: the @ and / menus, the store and the
 connected apps, members, models, languages, time zones, commands and the bot market. Plain matches come first, then a
@@ -498,7 +498,7 @@ Gmail and 「@notoin」 Notion. Numbers and short words are typed right; a space
 npm run look -- typo-mention completion-filtered completion-mentions plugins-store-search --theme both --width 1120,720,1920x1080
 ```
 
-## Share in the conversation header (owner, 2026-11-08)
+## Share in the conversation header
 
 Share left the member panel for the conversation header: search at the left, share at the right, symmetric. It
 shows in every member's conversation once it is read, never in Raphael's (he is the app's own), and opens one
@@ -518,7 +518,7 @@ audio card. Migrations keep their voice columns and voice_calls tables, and save
 are, unread (core/tests/test_no_voice.py, R-BATCH-03). The Tools list and the onboarding abilities step show search,
 reading, vision and PDF only.
 
-## Message metadata and side threads (2026-11-05)
+## Message metadata and side threads
 
 Reactions are owner-authored message metadata: one hover control opens 👍, ❤, ✓ and ?;
 selected reactions stand on their message's bubble, on its top-right corner (the owner's own
@@ -587,7 +587,7 @@ persistence/playback, live Slack/provider behavior and design judge remain separ
 
 Attribution: Interaction reference: Grok Bot, Message and collaborate, local research snapshot 2026-11-05; no external code or assets copied.
 
-## Member panel destinations (2026-11-05)
+## Member panel destinations
 
 The owner request of 2026-11-05 introduces R-PANEL-01/02/03/04. The conversation title opens Details first; its Computer tab shows the computer (the header has no computer button since 2026-11-06; a dot beside the name says it is working), and new active computer work selects Computer. One member identity line precedes the shared Details / Library / Computer tabs, with arrow-key navigation. Work results and pages navigate through the existing conversation result path; identity/resources remain behind the gear. Routines and conversation creation/search remain in Details. This supersedes the older screen/routines/conversations landing arrangement. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected matrix, state-layout assertions, external references and deferred native acceptance.
 
@@ -658,7 +658,7 @@ and finish it to see the question go again.
 npm run look -- chat-cli-expired chat-cli-signed-out chat-cli-not-installed chat-cli-signin-waiting chat-cli-signin-stopped chat-cli-signin-done chat-cli-signin-flow chat-usage-limit calm-thread --theme both --width 1120,720,1920x1080
 ```
 
-## Streaming composer files (2026-11-05)
+## Streaming composer files
 
 Private and room composers share twenty-file admission, 250 MiB document limits and
 1 GiB video limits. Exact maxima are admitted and the next byte retains the existing
@@ -696,7 +696,7 @@ the note now stands over the composer's top edge, and `toast-clearance` asks it)
 Escape (1.5 s of real time) was gone before the 1920 capture of a passing check (`esc-*-armed`,
 `composer-stop-armed-with-words`; the check now holds the window open for the picture).
 
-## Commands and conversation shortcuts (2026-11-05)
+## Commands and conversation shortcuts
 
 R-NAV-01 reuses the shared popover, cross-conversation search and the existing
 chief/member/room finders. The Ctrl shortcuts (K, F, Shift+F, B, N, 1..9) work
@@ -714,7 +714,7 @@ Compare palette rows with the existing cross-conversation search popover at
 matching theme/width. Inspect all contact sheets and full-size new scenes,
 including compact focus, filtering, long names and the room finder.
 
-## Pending conversation questions and readable results (2026-11-04)
+## Pending conversation questions and readable results
 
 R-OWNER-03, R-CARD-09 and R-CARD-10 extend the shared conversation cards.
 The existing Other/free-answer field remains in ownerQuestionHTML. A shared
@@ -771,7 +771,7 @@ acceptance remain deferred. DOM/Vitest and offline core checks alone
 do not establish visual/native/provider/design acceptance.
 
 
-## Visible work sentences (2026-11-02)
+## Visible work sentences
 
 R-UI-75 and R-WORK-01/02 use one 28px avatar and one muted action line in private
 threads and below each working group member. The current tool wins over public
@@ -834,7 +834,7 @@ MCP, and legacy quick-voice computer runs before a conversation turn exists,
 cannot supply argument-aware sentences through these boundaries; their existing
 activity labels remain the fallback.
 
-## Member media (2026-11-01)
+## Member media
 
 The shared image_generate/video_generate tools use only the owner's explicit image_model
 and video_model settings. Both default unset: discovery is not consent. These separate
@@ -1072,7 +1072,7 @@ localized notice clear of the composer, and the unchanged single gold-emblem / b
 Only dictation seeds learning; ordinary typing and clipboard paste do not. Native microphone,
 external-editor correction tracking and persistence still require isolated native acceptance.
 
-## Stopping a private reply (2026-10-28)
+## Stopping a private reply
 
 The one composer slot is Stop while a typed request awaits its first turn, a persisted turn is
 running/confirming, its background task is queued/running/waiting, or the native voice controller
@@ -1371,7 +1371,7 @@ A right click anywhere on one of Raphael's answers opens the menu of its ⋯ (th
 npm run look -- context-menu-message context-menu-conversation --theme both --width 1120,720,1920x1080
 ```
 
-## Conversation ownership and composer voice (2026-10-28)
+## Conversation ownership and composer voice
 
 The composer fixes the member and the selected conversation before recording. Its voice
 question, waiting line, pending turn and answer remain there through navigation, including
@@ -1400,7 +1400,7 @@ Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
 `core/tests/agent/test_conversation_cleanup.py`. These synthetic boundaries do not prove
 native microphone/STT/global hotkeys/provider transport or an actual owner database upgrade.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
@@ -1470,7 +1470,7 @@ compact identity at 720x900. It reuses the shared rendered assertions and retain
 per-check failures and actual viewport sizes. No page module or DOM geometry is
 substituted; fake brain remains enabled and no provider request is needed.
 
-## Task endings (2026-11-04)
+## Task endings
 
 R-BATCH-07/08 use an explicit handoff requires_artifact boolean, default false.
 Read-only reviews and file references do not create a file requirement. A required
@@ -1499,7 +1499,7 @@ fixture evidence; network and judge calls require the task's authorization.
 
 (Its scenes were retired with 「查看過程」 on 2026-11-10.)
 
-## Failure diagnosis and continuation (2026-10-29)
+## Failure diagnosis and continuation
 
 API and subscription CLI brains share the failure taxonomy in `failures.py`, which also
 tells a context that does not fit (`context_overflow`, `is_context_overflow`), a request too
@@ -1562,7 +1562,7 @@ provider; offline results never establish live or design acceptance.
 Owner round 6: details/details-closed/raphael-details/details-routines assert a visible, hit-testable conversation scrim whenever the panel overlays, and close it with a real pointer click. Inline panels have no scrim. The details scroll container owns the only row inset; routine cards stay within 384px. Keyboard focus remains tested separately before pointer-state capture. no-naming decodes its avatar source and compares source resolution with rendered device pixels; the fixture uses an existing 1024px source, matching avatar_get image data.
 
 
-## Growing memory context, phase 2 (2026-10-29)
+## Growing memory context, phase 2
 
 Quick and ordinary private routes retain the full answered conversation until
 roughly half the selected model's context window. Folding summarizes the middle
@@ -1581,7 +1581,7 @@ selected look scenes and the `memory-growth` native journey. Conversation
 context contracts live in `core/tests/memory/test_conversation.py`; shared harness
 wiring and recall order in `core/tests/agent/test_memory_turns.py`.
 
-## A long job's context, inside one run (2026-10-31)
+## A long job's context, inside one run
 
 API brains only: a turn and a background task keep every tool result while the
 provider's real usage stays under the trigger (75% of the window, 50% from 512K;
@@ -1606,7 +1606,7 @@ icon), and excluded from public work narration. member-text
 asserts the notice and absence of internal event data. Native skill-growth verifies the
 notice after production background review, then reads that skill in the next task.
 
-## Acceptance fixes (2026-10-30)
+## Acceptance fixes
 
 Conversation approval cards use the shared 640px reading cap, independently of the
 896px composer/thread. The selected matrix covers admin-approval,
@@ -1668,7 +1668,7 @@ Composer learning retains bounded consecutive input snapshots, replayed through 
 same Rust Tracker as external editors. Two corrections separated by unchanged
 words remain two terms in one batch; the final core acceptance stays authoritative.
 
-## Mentions as chips, and the input method (2026-10-31)
+## Mentions as chips, and the input method
 
 An address in the owner's words (`@Raphael`, a member, `@everyone`, a group in a private chat, a connected app) is drawn as a
 chip: the mark where the @ is (the member's slime, the service's own logo, the team grid), then the name, in a quiet pill, apart
@@ -1698,7 +1698,7 @@ method: the Bopomofo editor itself, its candidate window and TSF are not driven,
 check. The consumers of the shared composer are covered by `composer-learn`, `slash-commands`, `member-mentions-bots-apps`,
 `mentions-bots-apps`, `room-mentions` and `chat`.
 
-## Up and down arrows bring back what was typed (2026-10-31)
+## Up and down arrows bring back what was typed
 
 In a composer (a private chat's and a room's) the up arrow brings back what the owner typed, newest first, and the down arrow
 walks forward and ends on the draft that was in the field before the first up arrow, so nothing typed is lost. The history
@@ -1720,7 +1720,7 @@ npm run look -- composer-history-recall composer-history-send composer-history-m
 The fixture states the history (`typedHistory`) or derives it from its typed turns as the core does. These scenes do not prove
 a restart or a real database; the core tests do.
 
-## The composer's one button: send while speaking, Stop once sent (2026-10-31)
+## The composer's one button: send while speaking, Stop once sent
 
 The composer's right-hand slot is one real button (`.cmp-voice`, 32px, the same in every state, so a press never moves it): the
 voice emblem at rest; while the owner speaks into the composer (`data-task-state="recording"`) the send glyph, labelled with the send
@@ -1740,7 +1740,7 @@ npm run look -- composer-voice-recording composer-voice-sent composer-voice-atta
 
 `composer-send-while-working` sends three messages during running work and checks the slot never moves, each message shows in order and nothing stops.
 
-## The owner's bubble and link cards (2026-11-02)
+## The owner's bubble and link cards
 
 The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); since 2026-11-07 Raphael is the first blue slime and his conversation wears that blue like any member's (R-UI-81), and group chats stay neutral. Since 2026-11-08 a reply's links are chips in its words (the site's mark, then its name; a bare
 address says its site, then the page's title once read; an address of this machine says itself once), with no row of
@@ -1764,7 +1764,7 @@ npm run look -- dialog-caption-confirm --theme both --width 1120,720,1920x1080
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,
 no second control); `composer-voice-sent` presses it and checks the same button is Stop once the recording is sent, with one
-question key down and up and no cancellation. `composer-voice-attachment-quick` and `composer-voice-attachment-member` paste a picture, type words, record and press the same button (owner, 2026-11-14, R-UI-106): the words and the picture cross to the recording once (`agent_voice_composed`) before the key ends it, no typed message is sent and the composer is empty. The native side holds them for the question being recorded and sends them with the words said (`dictation.rs`), so the turn is one voice message with its files and quote; the fixture proves the page's half, the Rust tests the controller's. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
+question key down and up and no cancellation. `composer-voice-attachment-quick` and `composer-voice-attachment-member` paste a picture, type words, record and press the same button (R-UI-106): the words and the picture cross to the recording once (`agent_voice_composed`) before the key ends it, no typed message is sent and the composer is empty. The native side holds them for the question being recorded and sends them with the words said (`dictation.rs`), so the turn is one voice message with its files and quote; the fixture proves the page's half, the Rust tests the controller's. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
 `agent-members.test.ts` and `chat-composer.test.ts` (`drawTaskSlot`). The fixture cannot prove a microphone or the native key.
 
 ## Rich replies
@@ -1775,7 +1775,7 @@ See the feature map. Selected acceptance:
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
-## Small core regressions (2026-10-31)
+## Small core regressions
 
 The mention menu, chips, mirror and room recipients accept both ASCII `@` and full-width
 `＠` (U+FF20). Both sides retain the same whole-name, longest-match and quotation rules.
@@ -1796,7 +1796,7 @@ their own answers, and Stop still cancels it. The card lifetime and non-CLI expi
 unchanged. Offline contracts are `core/tests/agent/test_cli_confirmation.py` and the
 fake-child expiry/Stop regressions in `core/tests/members/test_cli_brains.py`.
 
-## Missing prerequisites (2026-11-01)
+## Missing prerequisites
 
 `failures.Missing` extends the existing diagnostics and connection-card flow with
 resource, requirement, state and repair. `agent.steps.step_view` serves both
@@ -1818,7 +1818,7 @@ Inspect all contact sheets and relevant full-size images. Offline tests cover
 dictation prerequisite routing; Rust/native acceptance,
 real microphone/audio, provider/login and judge are separate checks.
 
-## Durable owner questions and background cards (2026-11-01)
+## Durable owner questions and background cards
 
 The shared permission-card component renders ask_owner with at most four real
 choice buttons, optional text, submit and cancel. Its settled state is persisted
@@ -1844,13 +1844,13 @@ card and compare its spacing and controls with the existing permission card.
 npm run look -- owner-question-order-asked owner-question-order-answered owner-question-asked owner-question-answered owner-question-cancelled owner-question-background owner-question-text owner-question-room owner-card-room-connect owner-card-room-secret owner-card-room-mail owner-card-room-page local-permission-card page-product chat-connect-gmail chat-secret-masked email-draft-edit member-text room-text --theme both --width 1120,720,1920x1080
 ```
 
-Where a question card stands (owner, 2026-11-11): a question card is the last part of its turn only while it waits for the owner. Answered, cancelled or expired it is part of the conversation and stands among the replies (permission-card.ts `settledQuestions`, used by timeline.ts `turnMessagesHTML`), by the time it was asked when the turn's data carries one (`OwnerQuestion.created_at_ms`) and before the replies it led to when it does not: the core keeps `owner_questions.created_at_ms` but `agent/owner_questions.py` `view` does not send it yet. `owner-question-order-asked` and `owner-question-order-answered` hold the order against two replies and the computer's card.
+Where a question card stands: a question card is the last part of its turn only while it waits for the owner. Answered, cancelled or expired it is part of the conversation and stands among the replies (permission-card.ts `settledQuestions`, used by timeline.ts `turnMessagesHTML`), by the time it was asked when the turn's data carries one (`OwnerQuestion.created_at_ms`) and before the replies it led to when it does not: the core keeps `owner_questions.created_at_ms` but `agent/owner_questions.py` `view` does not send it yet. `owner-question-order-asked` and `owner-question-order-answered` hold the order against two replies and the computer's card.
 
 Core contracts: core/tests/background/test_owner_cards.py and
 core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
 allowlist test include owner_questions.answer.
 
-## The question card's shape (2026-11-11)
+## The question card's shape
 
 Owner request of 2026-11-11: Raphael's flows work as Grok Bot's do, one form of choices for set-up and for everyday work
 (R-CARD-02, R-CARD-08, R-CARD-12, R-CARD-13, R-CARD-14). The reference is Grok Bot's card (the frames in
@@ -1883,7 +1883,7 @@ npm run look -- question-card-described question-card-skipped question-card-mult
 Unverified by definition: a real model choosing the new fields, and a real Telegram chat answering a card.
 
 
-## Owner input (2026-11-01)
+## Owner input
 
 ```powershell
 npm run look -- owner-addition owner-addition-answered composer-send-while-working --theme both --width 1120,720,1920x1080
@@ -1931,7 +1931,7 @@ Selected real-entry scenes: owner-addition, owner-addition-answered and composer
 Fake Telegram and fake CLI are not live or native acceptance.
 
 
-## CLI recovery after recorded work (2026-11-01)
+## CLI recovery after recorded work
 
 Conversation members and background tasks share CliLoop's bounded transient
 recovery. A new request resumes the latest native session or starts with the
@@ -1955,7 +1955,7 @@ Existing room cancellation and card-expiry tests remain affected consumers.
 Core-only change: no new visual scene or frontend change. Run the selected core
 agent/background/members/worker/integrations suites.
 
-### Acting, stalls and failure kinds (2026-11-11)
+### Acting, stalls and failure kinds
 
 R-CLI-08: a turn has acted when a call succeeded and was not a read (the plugin server's read hint, Raphael's tier T0;
 `ask.made` in a conversation, `TaskRun.acted` in a task) or its CLI ran a command or file change of its own. Reads alone
@@ -1980,7 +1980,7 @@ R-CLI-11: a subscription CLI waits for one call to our MCP tools as long as the 
 Claude Code `MCP_TOOL_TIMEOUT`, Codex `tool_timeout_sec`), not the vendors' 60 s, and each MCP call is recorded under the
 server's, endpoint's and request's ids so `/mcp` and `/computer` never overwrite each other's tool events. Covered offline
 by `core/tests/agent/test_cli_brains.py` and `core/tests/agent/test_cli_mcp.py`. Core-only change: no visual scene.
-## Background app discovery (2026-11-01)
+## Background app discovery
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract
 as conversation turns. Discovery opens no owner question and exposes no account
@@ -2003,10 +2003,10 @@ npm run look -- empty-conversation-recording empty-conversation-hearing composer
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
-Links (owner, 2026-11-07): a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
+Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
 
 
-## Answer forms (2026-11-01)
+## Answer forms
 
 Closed forecast, board and chart fences carry strict JSON. The shared rich reply
 path draws them for Raphael, members and rooms with its existing copy-source button.
@@ -2036,7 +2036,7 @@ Inspect every contact sheet and relevant full-size form in both themes, compare
 the shared header/copy button with rich-code.
 Offline evidence never establishes judge, native, cargo, network or real-provider
 acceptance.
-## Still conversations during team work (2026-11-01)
+## Still conversations during team work
 
 R-UI-71: unchanged refreshes retain DOM identity and scroll position. Private threads and rooms share the keyed line diff; private carry hooks retain typed, mail and page card state. Live labels paint synchronously through updateLiveTimes and tick independently of HTML identity. Cached previews paint before a frame. Member rows, heading faces, details, Home and Calendar patch or skip unchanged data. Loaded tasks and handoffs refresh promptly; unrelated workers poll at most once per second. Slow private reads coalesce without starving their result. MemberActivity and AgentTurn retain roster state and unread updates.
 
@@ -2069,11 +2069,11 @@ Review follow-up (2026-11-02): unchanged roster loads still restore viewing and 
 npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room sidebar-unread conversation-midnight --theme both --width 1120,720,1920x1080
 ```
 
-## Folded colleague exchanges (2026-11-02)
+## Folded colleague exchanges
 
 R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups, and so does a different pair of members (2026-11-09, below). Shared thread-diff.ts keeps every handoff line node, and the open state of received-message lines. What was said opens in the conversation between members (see below, 2026-11-07).
 
-Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail (owner, 2026-11-05).
+Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail.
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
 
 
@@ -2081,7 +2081,7 @@ Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names a
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room --theme both --width 1120,720,1920x1080
 ```
 
-## Conversation between members (2026-11-07)
+## Conversation between members
 
 Since 2026-11-07 (owner, after Grok Bot's 「2 messages with Savio」) the line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, the exchanges between the same members at the same time in the loaded thread (or room) oldest first (one begun more than 30 minutes after the last one moved is another conversation with its own line, `PEER_SESSION_GAP_MS`, owner 2026-11-15) under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason, and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
 
@@ -2091,7 +2091,7 @@ For member-to-member exchanges, `receivedLineHTML` appears in the respondent's o
 npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080
 ```
 
-### Who each message speaks to (2026-11-09)
+### Who each message speaks to
 
 The owner saw 「Jack，…」 in the view between two members: 「他是在跟我說話 但是這邊是兩個史萊姆在溝通才對」. As Grok Bot's
 hand-off shows (bots/research/grokbot/handoff-2026-11-08), what one member says to the other mentions the owner only in the
@@ -2114,14 +2114,14 @@ third person, and what the owner reads stays in the worker's own conversation:
 handoff-group-room checks three pair lines (Raphael and Ada twice in a row as one line) and Ben's own-work line waiting
 for the owner; group-chats.test.ts, peer-chat.test.ts and core tests/background/test_handback.py cover the rest.
 
-## Review: one group state and scroll intent (2026-11-02)
+## Review: one group state and scroll intent
 
 The group summary chooses one state in every locale: waiting for the owner, otherwise unfinished, otherwise running; completed work has no state label. Latin names have a CSS gap before Chinese list joins; localized text remains unchanged. Menu scroll intent is handled by the shared ui.ts layer. Outside wheel, touchmove and page-scrolling keys dismiss every level; scrolling inside either menu preserves its own scrolling. Resize dismisses the frozen menus; programmatic/layout scrolling preserves them. Live text completions alone follow their caret anchor. The work-event storm, redraw and unchanged-DOM guarantees remain covered.
 
 ```powershell
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal centred-system-events --theme both --width 1120,720,1920x1080
 
-## Shared conversation card shell (2026-11-02)
+## Shared conversation card shell
 
 Rules R-CARD-01 through R-CARD-04 map to `app/src/main/card.ts` and `card.css`.
 Consumers: mail/offer, durable owner question, main/background approval,
@@ -2172,7 +2172,7 @@ npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
 | One-card settled local command | `npm run look -- local-command-once --theme both --width 1120,720,1920x1080` | One answer settles the original card and removes decision/settings controls. |
 | Connected message draft rows | `npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080` | Exact delivery fields and body survive settlement/failure; retry answers only the original approval. |
 
-### Owner card review follow-up (2026-11-02)
+### Owner card review follow-up
 
 R-CARD-06: known approval action with localized member name; new visible disclosure content; one state per card; shared per-kind prompt table; one-line inline credential hints with folded guides. Regression tests: card.test.ts, card-behavior.test.ts, inline-connection.test.ts, timeline.test.ts, pages/agent-cards.test.ts, scripts/look/audit.test.mjs. Selected visual consumers: card-sheet, card-approval, admin-approval*, card-mail-ready, email-draft-handed-off, card-mail-discarded/failed, card-task-no-file-card, card-key-waiting/guide-retry, card-login, card-secret/failed, connector-app/key-form/key-sent, chat-secret-saved-not-resumed, card-question-waiting/key, owner-question-background/room, card-permission-waiting/once, local-command-background, card-message-waiting, card-computer-waiting/handback, mcp-proposal-stdio, card-mcp-done, card-team-done.
 ```sh
@@ -2183,7 +2183,7 @@ npm run look -- card-message-waiting card-message-once card-message-deny card-me
 npm run look -- card-sheet card-approval admin-approval admin-approval-batch admin-approval-long card-mail-ready email-draft-handed-off card-mail-discarded card-mail-failed card-task-no-file-card card-key-waiting card-key-guide-retry card-login card-secret card-secret-failed connector-app connector-key-form connector-key-sent chat-secret-saved-not-resumed card-question-waiting card-question-key owner-question-background owner-question-room card-permission-waiting card-permission-once local-command-background card-message-waiting card-computer-waiting card-computer-handback mcp-proposal-stdio card-mcp-done card-team-done --theme both --width 1120,720,1920x1080
 ```
 
-### Real Composio approval and question-head review (2026-11-02)
+### Real Composio approval and question-head review
 
 R-CARD-07 and R-CARD-08: the real COMPOSIO_MULTI_EXECUTE_TOOL envelope is projected by the core before drawing the existing permission card. The member is the subject; the app identity and mark come from the inner slug and connector name. The router action, digest, and all execution arguments stay intact. Unknown actions use the localized member/app title without filler body text. Multiple calls keep the general form. An unanswered owner question has no waiting pill (the explicit shared-shell exception); Close is last in its head. Empty and typed answer controls remain visible, and the enabled primary is white on hover. Settled questions retain their decision status.
 
@@ -2201,7 +2201,7 @@ After fixes, rerun the affected question states, both desktop-card paths and the
 npm run look -- owner-question-room owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-background owner-question-text card-question-waiting card-question-answered card-question-cancelled card-question-text card-question-typed card-computer-done card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-sheet chat-computer-takeover chat-human-control chat-handback --theme both --width 1120,720,1920x1080
 ```
 
-## Presence and quiet private transcripts (2026-11-02)
+## Presence and quiet private transcripts
 
 R-UI-74/75/76/77 use the existing real entry, shared tooltip, timeline renderer,
 event-line.ts and thread-diff. New scenes: presence-states-sidebar,
@@ -2238,8 +2238,8 @@ Owner 2026-11-05 supersedes the notes-1 32px between-message event gaps: receipt
 npm run look -- event-routine-spacing --theme both --width 1120,720,1920x1080
 ```
 
-centred-system-events retains handoff receipt states; historical and meeting receipts now live in reply detail (owner, 2026-11-05).
-Private ordered event containers live inside collapsed reply detail (owner, 2026-11-05)
+centred-system-events retains handoff receipt states; historical and meeting receipts now live in reply detail.
+Private ordered event containers live inside collapsed reply detail
 while reply bubbles retain their reading-width limit.
 
 
@@ -2248,7 +2248,7 @@ RPCs, repaired historical indexes, model context, voice and Telegram delivery;
 test_home.py covers the calendar projection (home.overview) and sidebar readers. presence-transcript.test.ts covers
 find, highlight, copy and rendered thread selection for all four receipt kinds;
 message-search.test.ts covers event-only result snippets; receipts add no gap between
-bubbles (owner, 2026-11-05). Run event-routine-line, event-routine-spacing, event-calendar-line,
+bubbles. Run event-routine-line, event-routine-spacing, event-calendar-line,
 centred-system-events, transcript-clean and the existing search scenes.
 
 ```powershell
@@ -2262,7 +2262,7 @@ to the selected match, retaining that open group through an unchanged refresh.
 npm run look -- event-routine-find-group --theme both --width 1120,720,1920x1080
 ```
 
-## Daily delegation polish (2026-11-03)
+## Daily delegation polish
 
 R-UI-85..91: fixed sidebar actions, newest window entry, group heading press, copy feedback, isolated drafts, long paste files and bare overlapping room identities. See README daily section for affected existing sidebar consumers and performance assertions.
 
@@ -2273,7 +2273,7 @@ npm run look -- daily-footer-hover daily-footer-marks daily-footer-away daily-pr
 Local unit authorization excludes judge, native, network and providers. Browser fixture evidence remains separate from native and design acceptance.
 
 
-## First unseen private turn (2026-11-03)
+## First unseen private turn
 
 R-UI-96: migration 57 adds nullable unread_from beside member_unread's member key. The first unseen private turn sets it once; read/viewing clears the row. Existing unread rows upgrade with no invented boundary; heard Raphael voice turns remain read. Members list samples boundaries once for all members. No RPC or Rust allowlist change is needed.
 
@@ -2289,7 +2289,7 @@ The long fixture covers more than one history page. The short fixture follows a 
 
 Opening places the thread once (owner, 2026-11-11: Raphael's conversation opened and then jumped up). A page shown again takes the boundary from the roster already loaded (agent.ts `beginOpening`); when none is loaded the thread is drawn but held back (`.ra-scroll.is-opening`, at most 1.5 s) until the roster and any history pages it needs are in, so the first place seen is the place it stays at. A first unseen turn inside the newest 25 leaves the newest window alone (`unreadInTail`), so a run of up to 25 turns never cuts the newest turn off or shows the latest button at the bottom. Raphael's thread is told read with `members.read` as every member's is. The member settings page hides the conversation, so the place is remembered as it opens and put back as it closes. The scroller keeps its bottom when what stands under it grows or shrinks (the composer with typed or placed text, a question card, a notice, a chip: the thread's one stick to the bottom, R-FOLLOW-01, `readingAnchor` in message-rich.ts); a thread read higher up stays where it is. Look: `thread-new-divider-raphael-short`, `-medium` and `-long` record every place the thread was seen (`scrollTimeline`) with a late roster (`rosterDelay`, the `late-roster` step), `member-settings-back-bottom` and `member-settings-back-kept` the way back from the settings page, and `page-buy`, `page-expand-place`, `page-send` and `page-composer-grows` the last card whole above a grown composer (R-UI-21, R-CARD-11).
 
-## Durable owner inbox (2026-11-03)
+## Durable owner inbox
 
 R-QUEUE-01 through R-QUEUE-06 refine R-BATCH-01 and R-UI-08. Typed private input
 uses migration 58's agent_inbox and existing agent_turns bubbles. No navigation,
@@ -2338,7 +2338,7 @@ messages with files or behind another queued one show 「排隊中」 and offer 
 npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
 
-### Request ID reuse after settlement (2026-11-03)
+### Request ID reuse after settlement
 
 R-QUEUE-07 narrows migration 58's request uniqueness to nonterminal inbox rows.
 Queued, steering and started duplicates return queued with the existing turn ID;
@@ -2366,7 +2366,7 @@ also preserves the colleague bypass and verifies that an owner CLI turn waits
 for the held conversation lock, then answers after release. It must not wait
 for that owner turn while still holding the lock or expect the removed busy reply.
 
-## Long busy conversations and bounded mounting (2026-11-05)
+## Long busy conversations and bounded mounting
 
 R-PERF-14 through R-PERF-21 separate native latency budgets from deterministic
 rendering and reading contracts. `transcript-window.ts` owns the private/room
@@ -2709,7 +2709,7 @@ diagram layout invariants, open/close/refresh; the file, its style, the theme's 
 drawing only; a real member turn on a real model, the core writing the file and File Explorer
 selecting it are the native boundary.
 
-## Daily overview: figures and charts on a report (owner, 2026-11-14)
+## Daily overview: figures and charts on a report
 
 R-PAGE-04, R-PAGE-05. The owner replaced the old home (removed 2026-11-12; the app opens on
 Raphael's conversation) with a daily overview a 07:00 routine of Raphael's sends there: weather,
@@ -2767,7 +2767,7 @@ keys); `page-theme.test.ts`; `report-page.test.ts` (the file's elements and attr
 Native boundary: a real Raphael turn on a real model building the page and the routine is proven
 in an isolated core (`RpcDriver`, Codex CLI); the owner's own build and data are not touched.
 
-## Only credentials and payment secrets are secret (owner, 2026-11-14)
+## Only credentials and payment secrets are secret
 
 R-SECRET-01, R-PAGE-05, R-REACT-01. The member 紫苑 (a Japanese teacher) built N1 study pages three times and `show_page`
 refused each, because `find_secret` read an NHK news address (`news.web.nhk/newsweb/na/nd-20261114de75840`) as a token; the
@@ -2789,7 +2789,7 @@ owner then said the lock was far too tight: only passwords, keys, tokens, card n
   persona; `test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches` reads the system prompt of a
   Japanese-teaching member. Not proved: a real model choosing the language.
 
-## Pages that read as documents, as Grok Bot's do (owner, 2026-11-14)
+## Pages that read as documents, as Grok Bot's do
 
 R-PAGE-06, R-PAGE-07. The owner put Grok Bot's page beside ours (a Tokyo list: a 32 px title, one line of summary, an
 「On this page」 box, a blue note with an icon, a dropdown 「區域」 and category tabs over a wide table with figures at the right
@@ -2839,7 +2839,7 @@ notes, figures, links, dropdown, file) and `page-theme.test.ts` (the base style 
 real member turn on a real model writing such a page is not proven here (no model call was made); the fixture draws the pages the
 checker keeps.
 
-## Diagnostic credential security (2026-11-05)
+## Diagnostic credential security
 
 R-SEC-LOG-01: core/tests/test_security_redaction.py covers complete quoted passwords,
 escaped quotes/backslashes, Basic auth, JSON-escaped known secrets and overlapping
@@ -2848,7 +2848,7 @@ test_failure.py and test_failure_kinds.py consumers. native_diagnostics shares
 failures.scrub, retaining bounded readable causes without copying private fragments.
 This core-only change does not alter calm-thread presentation or require look/judge.
 
-## Voice flyer is the corner emblem (owner, 2026-11-07)
+## Voice flyer is the corner emblem
 
 When the owner speaks to Raphael from the composer and he has no picture of the owner's own, the flyer above the
 composer is the overlay's own `Emblem` renderer on a canvas (voice-mode.ts `live`), set to listening and fed the
@@ -2859,7 +2859,7 @@ A picture of the owner's own keeps the ringed circle. The sidebar drag between r
 npm run look -- voice-flyer-emblem --theme both --width 1120,720,1920x1080
 ```
 
-## Setup and sharing cards in the conversation (owner, 2026-11-07)
+## Setup and sharing cards in the conversation
 
 The panel's 設定 and share send an intent into the member's conversation (chat-ask.ts). The member answers with
 cards there: a bot token card (secret-card.ts `platform`: where to make the bot through a fixed link, Slack's scopes
@@ -2871,7 +2871,7 @@ Save file and View contents on the core's snapshot, then Open GitHub page once t
 npm run look -- chat-setup-cards chat-pairing-allowed chat-pairing-bottom --theme both --width 1120,720,1920x1080
 ```
 
-## Complete replies and envelope boundaries (2026-11-07)
+## Complete replies and envelope boundaries
 
 R-UI-50 wins over the old R-AG-PARITY-03 report length: every authored message and paragraph
 reaches the owner, parent, task storage, follow-up, platform chat and voice transcript.
@@ -2893,7 +2893,7 @@ Window integration must verify full reply bubbles and the selected reply-split-b
 handoff-group-done and bot-exchange-expanded scenes in both themes at 1120,720,1920x1080,
 then judge that same run. No visual/native acceptance is claimed by the core-only brief.
 
-## Conversation-following pairing and authored language (2026-11-07)
+## Conversation-following pairing and authored language
 
 R-PAIR-01: Telegram, Slack and Discord pairing belongs to the owning member's private conversation,
 including identity 0. A late code creates a done assistant turn with source messaging and route pairing.
@@ -2994,7 +2994,7 @@ ends the scenes in `TOP_ROW_SCENES` (scenes/top-row.mjs), and the narrow case is
 npm run look -- top-row-find top-row-details top-row-room top-row-room-find top-row-scrolled top-row-wheel chat conversation-share details raphael-details room calm-thread page-inplace page-inplace-back page-inplace-room page-report page-report-share room-thread-open --theme both --width 1120,720,1920x1080
 ```
 
-## Message text colour and the settled handoff card (2026-11-15)
+## Message text colour and the settled handoff card
 
 A message's text is `--text` whatever its kind (reply, timed progress) or its turn's state (done, running, failed, denied, expired,
 stopped): the rules that made `.ans.progress` and the replies of a failed turn a step paler are gone, and

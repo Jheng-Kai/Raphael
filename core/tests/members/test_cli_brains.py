@@ -780,7 +780,7 @@ async def test_paused_cli_cancels_on_stop_but_finishes_after_expiry_and_closes_m
 @pytest.mark.parametrize("stop", [False, True])
 async def test_expiry_cannot_answer_the_next_card_and_an_immediate_stop_still_stops(setup, tmp_path, stop):
     from agent.test_cli_brains import alive
-    # The CLI model is told the fixed words, never the interface's phrase (owner, 2026-11-14).
+    # The CLI model is told the fixed words, never the interface's phrase.
     from raphael_core.agent.policy import EXPIRED_NOTE
 
     rig, team = setup

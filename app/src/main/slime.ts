@@ -276,7 +276,7 @@ function strips(state: SlimeState, drawing: {back: string; worn: string}): [stri
 }
 
 /**
- * `moving` is the one switch of motion (owner, 2026-11-11: 「只有左邊成員列表工作中、對話框思考那一行要有動畫，其他地方放史萊姆的樣子就可以了」).
+ * `moving` is the one switch of motion.
  * A slime drawn without it is a picture: the resting pose of its drawing (idle, or sleeping for a member that has been
  * silent for a day) with no strips, no clock, no motion variables and no state a handover could change, so it costs the
  * page nothing: nothing observes it and no event reaches it. Only the member list's rows and the conversation's thinking
@@ -489,7 +489,7 @@ function enter(svg: SVGElement, state: SlimeState, visible = true): void {
 
 /**
  * A strip is some thousands of nodes (a slime that thinks or searches: about 4,000), and styling them in one go held the
- * window for 100 ms and more at every change of state (owner, 2026-11-11: 「更新…畫面就會閃現」). They go in a slice
+ * window for 100 ms and more at every change of state. They go in a slice
  * of about this many nodes a frame, out of sight (`data-slime-loading`), and show together when the last one is in.
  */
 const SLICE_NODES = 200;
@@ -714,7 +714,7 @@ const tempoOf = (seed: number): number => Number((0.94 + (Math.abs(seed * 37) % 
 
 /**
  * The slime a member shows: its own choice, or a colour from its id. A picture unless `moving` (the member list's rows and
- * the conversation's thinking line): then it follows what the member is doing (owner, 2026-11-11).
+ * the conversation's thinking line): then it follows what the member is doing.
  */
 export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, size: number, cls = "", moving = false): string {
   const slime = parseSlime(member.avatar) ?? { color: defaultColor(member.id) };

@@ -10,7 +10,7 @@
 //
 // Six tabs sit flat on the left: 一般 (account, appearance, the bot's timezone and folder, messaging),
 // 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No group names, no search, no line under a tab's name. No tab shows
-// memory (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了…」); the core keeps it.
+// memory; the core keeps it.
 
 
 import { LOCALES, t } from "../i18n";
@@ -77,7 +77,7 @@ export const PANES: { id: SettingsPane; icon: IconName; title: () => string }[] 
   { id: "tools", icon: "steps", title: () => t("settings.paneTools") },
   { id: "safety", icon: "lock", title: () => t("settings.paneSafety") },
   { id: "models", icon: "bot", title: () => t("settings.paneUsage") },
-  // Dictation and its keys are not what most people come here for: under the models (owner, 2026-11-10).
+  // Dictation and its keys are not what most people come here for: under the models.
   { id: "dictation", icon: "mic", title: () => t("settings.paneDictation") },
   { id: "about", icon: "info", title: () => t("common.about") },
   // Not a tab: the sidebar's 連結應用程式 opens it as a dialog of its own, its only way in (R-UI-111).
@@ -444,7 +444,7 @@ function generalHTML(v: SettingsView): string {
     // Nothing of them is set here.
     // The emblem's size, its subtitles and starting with Windows are fixed (device-fixed.ts), and the
     // weather city is the member's to ask when it needs it: none of them is a setting any more.
-    // The guide is the first run's only: Settings has no way to open it again (owner, 2026-11-14).
+    // The guide is the first run's only: Settings has no way to open it again.
   );
 }
 

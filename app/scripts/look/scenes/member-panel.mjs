@@ -12,7 +12,7 @@ const state = (value, extra = {}) => ({desktop:{state:value,ready:value==='runni
 export default [
   scene('member-panel-details', 'Details opens first with the routines and no list of past work', [...details,wait('.mb-rts .mb-rt'),check('member-panel-details')]),
   scene('member-panel-details-empty', 'Details keeps one-line empty sections', [...details,check('member-panel-details-empty')], {routineEmpty:true}),
-  // The computer lives in the third tab only, for every member, Raphael included (owner, 2026-11-14: 「詳細資料裡面不用有電腦…我們就固定在第三個 tab 裡面」):
+  // The computer lives in the third tab only, for every member, Raphael included:
   // whatever the computer's state, Details carries no row, heading or screen for it.
   ...[
     ['running', state('running')], ['asleep', state('stopped')], ['docker-stopped', state('unavailable', {error:'docker_stopped'})],
@@ -20,7 +20,7 @@ export default [
   scene('member-panel-details-no-computer-raphael', 'Raphael\'s Details carries no computer either: routines, conversations and his chat platforms', [{action:'open-details'}, wait('.mb-det[data-details-tab="details"] .mb-panel-routines'), wait('[data-slot="conversations"]'), check('member-panel-details-no-computer-raphael')], state('running')),
   scene('member-panel-library', 'Arrow navigation reaches Library, as Grok Bot\'s: the four chips always, groups by recency, each one card of one-line rows; everything the member delivered, no links', [...details,click('.mb-tabs [data-tab="details"]'),key('ArrowRight'),wait('.mb-det[data-details-tab="library"] [data-panel-file]'),wait('.lib-thumb img[src]'),check('member-panel-library')], {memberPanelFiles:true}),
   ...[['pages', '頁面'], ['media', '媒體'], ['files', '檔案']].map(([chip, word]) => scene(`member-panel-library-${chip}`, `The ${word} chip narrows the Library to its kind, in the same cards`, [...details,click('.mb-tabs [data-tab="library"]'),wait('.mb-det[data-details-tab="library"] [data-panel-file]'),wait('.lib-thumb img[src]'),click(`[data-lib-filter="${chip}"]`),wait(`[data-lib-filter="${chip}"][aria-pressed="true"]`),check(`member-panel-library-${chip}`)], {memberPanelFiles:true})),
-  // A member whose deliverables are all one kind still has the four chips (owner, 2026-11-13); the chip of a kind it has not
+  // A member whose deliverables are all one kind still has the four chips; the chip of a kind it has not
   // delivered opens to one quiet line.
   // The core's own Library (R-PANEL-10): a video the member attached at the end of its background work is under 媒體; a colleague's hand-off is not.
   scene('member-panel-library-background-video', 'A video the member handed over from its background work is in the Library\'s 媒體 chip, as the core lists it', [...details,click('.mb-tabs [data-tab="library"]'),wait('.mb-det[data-details-tab="library"] [data-panel-file]'),click('[data-lib-filter="media"]'),wait('[data-lib-filter="media"][aria-pressed="true"]'),check('member-panel-library-background-video')], {memberPanelFiles:'core',coreFixtures:true}),
@@ -43,7 +43,7 @@ export default [
   scene('member-panel-docker-start', 'Only an owner press on the screen starts this PC and the ready result stays contextual', [...computer('unavailable'),click('[data-desktop="enlarge"]'),wait('.desktop-error:not([hidden])'),check('member-panel-docker-start')], state('unavailable',{error:'docker_stopped'})),
   scene('member-panel-location-hover', 'The computer location is words and a chevron with no frame or fill, even under the pointer', [...computer('unavailable'),hover('.desktop-location-header [data-computer-location]'),check('member-panel-location-hover')], {...state('unavailable',{error:'remote_unavailable',host:'mac-mini'}),computerHost:'mac-mini'}),
   scene('member-panel-remote-location', 'An unavailable computer keeps the header location control, which opens the existing popover', [...computer('unavailable'),click('.desktop-location-header [data-computer-location]'),wait('.computer-location-popover'),check('member-panel-remote-location')], state('unavailable',{error:'docker_stopped'})),
-  // A member's colour is on its switches too (owner, 2026-11-12): a routine that is on in the member's panel, the panel of a yellow
+  // A member's colour is on its switches too: a routine that is on in the member's panel, the panel of a yellow
   // and of a white-ish slime (a knob that still shows), and Raphael's own in his blue.
   scene('member-switch', 'In the member\'s panel a routine that is on has a switch in the member\'s colour, and the off ones are as they were', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
   scene('member-switch-yellow', 'A yellow slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:ramiris')}),

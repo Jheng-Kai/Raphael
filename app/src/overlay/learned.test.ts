@@ -56,7 +56,7 @@ test("a late Undo result cannot close the next learned batch", async () => {
 });
 
 test("the learned page names no phrase of any language as its title", () => {
-  // R-LEARN-WIN-02 (owner, 2026-11-15): the native window's title is empty, and nothing the page names itself shows a phrase of one
+  // R-LEARN-WIN-02: the native window's title is empty, and nothing the page names itself shows a phrase of one
   // language under an interface in another.
   const title = /<title>([^<]*)<\/title>/.exec(readFileSync("learned.html", "utf8"))?.[1] ?? "";
   expect(title).toBe("Raphael");

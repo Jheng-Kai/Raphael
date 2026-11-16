@@ -208,7 +208,7 @@ def test_the_unused_grant_table_survives_an_upgrade_untouched(tmp_path):
     conn.close()
 
 
-# --- the computer is not a connection (owner, 2026-11-14) ----------------------------------------------------------
+# --- the computer is not a connection ----------------------------------------------------------
 # A member whose owner chose four tools and a connection (members.tools is a list) said it would use its own computer and
 # could not: the list of connections names no computer, and the gate read a computer's key as a connection left out.
 

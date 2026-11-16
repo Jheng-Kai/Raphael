@@ -1,4 +1,4 @@
-"""What a routine's last message is (owner, 2026-11-14): the report of a daily reading page was one line, and the owner could not tell
+"""What a routine's last message is: the report of a daily reading page was one line, and the owner could not tell
 what the run had made; every such report also ended with what it had not checked. The run is told to name what it made."""
 
 from raphael_core.background.service import ROUTINE_REPORT

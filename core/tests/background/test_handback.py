@@ -1,4 +1,4 @@
-"""Who a work hand-off speaks to (owner, 2026-11-09: 「他是在跟我說話 但是這邊是兩個史萊姆在溝通才對」).
+"""Who a work hand-off speaks to.
 
 The worker speaks to the owner in its own conversation; only its <handback> block, written to the member who
 asked, reaches the asker's side, the member-to-member view and a parent task. A member's own background work

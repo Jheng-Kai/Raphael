@@ -39,7 +39,7 @@ export default [
   { ...scene("slime-states", "Each member's slime moves with what that member is doing", [{ action: "member-column", collapsed: false }, doing(1, "thinking"), doing(2, "working"), doing(3, "computer"),
     { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: { name: "roster-motion", enforce: false }, limits: { replacedFaces: 0, allReads: 24, longTaskMs: 600 } },
     check("slime-states"), { action: "freeze-motion", at: 450 }]), motion: true },
-  // R-SLIME-01 (owner, 2026-11-11): a working member moves in the list and in the thinking line, and is a picture everywhere else.
+  // R-SLIME-01: a working member moves in the list and in the thinking line, and is a picture everywhere else.
   { ...scene("slime-places", "A member works: its slime moves in the member list and the thinking line only, and is a still picture in the header, the panel and every other place", [{ action: "member-column", collapsed: false }, member(1), wait('.tn[data-id="651"] .live-presence'), { action: "open-details" }, wait(".mb-det:not([hidden])"),
     { action: "slime-places", expect: { list: true, line: true } }], { presence: "working" }), motion: true },
   { ...scene("slime-places-settings", "On the member settings page a working member still moves in the list only", [{ action: "member-column", collapsed: false }, member(1), { action: "open-details" }, click('.mb-det [data-det="gear"]'), wait(".ms-pane:not([hidden]) .ms-name"),

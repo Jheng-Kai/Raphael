@@ -1,4 +1,4 @@
-"""A member's conversation is told nothing of the interface language (owner, 2026-11-14): 「我不是說過系統的 UI 語言並不會影響到
+"""A member's conversation is told nothing of the interface language: 「我不是說過系統的 UI 語言並不會影響到
 使用者內部聊天的語言嗎？它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」.
 
 The interface is Japanese and the owner writes Traditional Chinese: what the model is sent is the same as on any other

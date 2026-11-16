@@ -37,7 +37,7 @@ export default [
   scene("page-expand", "Pressing the card opens the page in the conversation's place, the same frame, with no dialog", [...shown, ...larger, check("page-expanded")], { pageTurn: true }),
   scene("page-expand-place", "An open page places text in the composer under it and stays open", [...shown, ...larger, { action: "frame-click", selector: "#buy" }, wait(".page-agent .cmp-page-note"), check("page-placed")], { pageTurn: true }),
   scene("page-room-draft", "Room page text preserves the owner's draft and shows the same provenance note", [...roomShown, type('.au-room-pane .cmp-input', "我原本的草稿"), ...larger, { action: "frame-click", selector: "#buy" }, check("page-appended")], { pageTurn: true, roomOwnerCard: "page" }),
-  // A page far taller than its card (owner, 2026-11-11): the card shows only its top, in a conversation and in a room, two of them in one thread, and a press opens it whole.
+  // A page far taller than its card: the card shows only its top, in a conversation and in a room, two of them in one thread, and a press opens it whole.
   scene("page-collapsed", "A page much taller than its card shows only its top under the title, faded at the cut, and the thread stays short", [...news, check("page-collapsed")], newsFixture),
   scene("page-collapsed-room", "The same card in a room: the same height, the same fade", [room(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#hide" }, check("page-collapsed")], { ...newsFixture, roomOwnerCard: "result" }),
   scene("page-collapsed-two", "Two pages in one thread are two cards of the same height, and the thread still reads as a conversation", [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }, check("page-collapsed-two")], { pageTurn: true, pageNews: "both" }),
@@ -99,7 +99,7 @@ export default [
   scene("page-dashboard-projects", "Projects by status and owner as stacked columns with their totals; pointing at one shows who has how many", [...dashboard, { ...scroll('[data-report-chart="5"]'), block: "center" }, hover('[data-report-chart="5"] .rc-band[data-i="2"]'), wait(".rc-tip"), check("page-dashboard-projects")], dashboardFixture),
   scene("page-dashboard-lines", "Investments as lines from one start, with a gap on a closed day; pointing shows each line's value on that day", [...dashboard, { ...scroll('[data-report-chart="6"]'), block: "center" }, hover('[data-report-chart="6"] .rc-plot'), wait(".rc-tip"), check("page-dashboard-lines")], dashboardFixture),
   scene("page-dashboard-lower", "The lower half: a ring of parts beside its names and shares, bars across, and the members' routines", [...dashboard, { ...scroll('[data-report-chart="8"]'), block: "center" }, check("page-dashboard-lower")], dashboardFixture),
-  // A document, as Grok Bot's pages are (owner, 2026-11-14: 「你也可以看到 grokBots 跟我們實質性的差距…他們內部的 page，我覺得他們做得非常的好」): a large
+  // A document, as Grok Bot's pages are: a large
   // title and one line of summary, a box that lists the sections, a note with an icon, a dropdown and tabs over a wide table with figures
   // at the right and a column of links.
   scene("page-document", "A document-style report: a large title, a one-line summary, a boxed list of its sections, a note, then a table with a dropdown, tabs, figures at the right and links", [...document_, check("page-document")], documentFixture),

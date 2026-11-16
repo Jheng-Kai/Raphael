@@ -1,6 +1,6 @@
 import {scene,click,type,wait,member,settings,check} from "./steps.mjs";
 
-// A routine is read in the panel and made or changed by its member in the conversation (owner, 2026-11-09): what stays
+// A routine is read in the panel and made or changed by its member in the conversation: what stays
 // here is how its schedule reads and the zone new routines use.
 const details = [member(1),{action:"open-details"},wait('[data-routine="91"]')];
 export default [

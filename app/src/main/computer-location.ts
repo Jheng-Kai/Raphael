@@ -7,7 +7,7 @@ import { btn, closeMenu, copyButton, esc, fieldHTML, ico, note, openMenu, openMe
 
 export const validComputerAlias = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(value);
 
-// What each failed check says. The core names the class and the one command that fixes it (owner, 2026-11-11), so the
+// What each failed check says. The core names the class and the one command that fixes it, so the
 // panel never invents a command: a command is shown only when the core sent one, and it is pasted as it stands.
 const HEALTH_WORDS = {
   ssh: 'desktop.health.ssh', docker: 'desktop.health.docker', ssh_unreachable: 'desktop.health.ssh_unreachable', ssh_key: 'desktop.health.ssh_key',

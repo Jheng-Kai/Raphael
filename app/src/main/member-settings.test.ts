@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The member settings page (member-settings.ts): a cover, the face across it, the name and role in place, and one tinted
 // list per section. Every member has the same kinds, Raphael too: tools, skills and commands, personality and
-// instructions, notifications (owner, 2026-11-09). Long texts are one line until pressed, and every change is a call the
+// instructions, notifications. Long texts are one line until pressed, and every change is a call the
 // panel and the old dialog already made.
 import { type Mock, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, MemberPatch, MembersList } from "./types";
@@ -101,7 +101,7 @@ describe("the page of a member", () => {
     expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
     expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
     expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
-    // The kinds stand in a column on the left, in the owner's order (owner, 2026-11-09); the first is shown, and only it.
+    // The kinds stand in a column on the left, in the owner's order; the first is shown, and only it.
     expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
     expect($('[data-cat="tools"]').getAttribute("aria-current")).toBe("page");
     await cat("soul");
@@ -201,7 +201,7 @@ describe("the page of a member", () => {
     await open();
     await cat("soul");
     expect($('[data-ms="edit"][data-field="personality"]').textContent).toContain("嚴厲但耐心");
-    // The row says every line of the words, as they are (owner, 2026-11-12), and the two are the same kind of row.
+    // The row says every line of the words, as they are, and the two are the same kind of row.
     const instructions = $('[data-ms="edit"][data-field="instructions"]');
     expect(instructions.querySelector(".ms-label")!.textContent).toBe("每天出 10 題\n第二行");
     expect([...page.el.querySelectorAll('[data-ms="edit"]')].map(row => row.className)).toEqual(["btn ms-open ms-value", "btn ms-open ms-value"]);

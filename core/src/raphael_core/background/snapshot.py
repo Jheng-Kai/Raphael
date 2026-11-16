@@ -460,7 +460,7 @@ def take_snapshot(
     cycle guards (`agent.team`: asking another member, adding one), T1 like the plugins' tools that are
     on. `turned_off` are the tools of Raphael's own that the owner switched off (`Tools.turned_off`):
     they are not offered, whatever the task or the speaker. `owner_pc` is true for a quick question and only for it
-    (owner, 2026-11-13: 「正常對話的時候，不會有操控我電腦的邏輯…只會在快速問答的部分」): the commands for this
+: the commands for this
     computer, the run on the owner's desktop (`computer`) and the local command tools (`computer.local_tools`)
     are offered to no other turn, task or routine, and the member's own computer is what serves them."""
     snapshot = Snapshot({}, [], max_tier=max_tier, tool_allowed=speaker.uses_plugin, owner_pc=owner_pc)

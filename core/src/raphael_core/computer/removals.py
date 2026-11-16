@@ -1,6 +1,5 @@
 """The computers the app made, and what a deleted member's leaves behind.
 
-(owner, 2026-11-11: 「理論上不會問這個問題，應該是知道他可能有這個東西，會自動刪掉；如果還沒開起就不用顯示」)
 Deleting a member never asks about its computer and never waits for it. The member goes first; if it had a computer,
 that is written down as owed, and removed afterwards in the background, as soon as its engine can be reached and no
 sooner: an engine is never started to delete data, and a failure is neither shown nor allowed to touch the deletion.

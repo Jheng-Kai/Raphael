@@ -27,7 +27,7 @@ const report: Report = {
     { kind: "text", text: "沒有其他紀錄。" },
   ],
 };
-// A daily overview (owner, 2026-11-14): tiles, then every kind of chart, none of them given a span.
+// A daily overview: tiles, then every kind of chart, none of them given a span.
 const dashboard: Report = {
   as_of: "2026-11-14T00:00:00Z",
   sections: [
@@ -514,7 +514,7 @@ test("share saves the report on screen as a file, once a press, says where it we
   const buttons = [...tools.querySelectorAll<HTMLButtonElement>(":scope > button.btn.icon[data-page-act]")];
   expect(buttons.map(button => [button.getAttribute("aria-label"), button.textContent])).toEqual([["存成檔案", ""]]);
   expect(tools.firstElementChild).toBe(buttons[0]);
-  // It saves a file, so it is drawn as one with an arrow into it, never as the arrow out of a box that shares a member (owner, 2026-11-11).
+  // It saves a file, so it is drawn as one with an arrow into it, never as the arrow out of a box that shares a member.
   const drawn = (html: string): string[] => [...html.matchAll(/ d="([^"]+)"/g)].map(found => found[1]!);
   expect(drawn(buttons[0]!.innerHTML)).toEqual(drawn(ico("fileDown")));
   expect(drawn(ico("fileDown"))).not.toEqual(drawn(ico("share")));

@@ -96,7 +96,7 @@ export const FLOAT_CARD_SCENES = new Set(['profile', 'appearance', 'models', 'di
   'template-preview', 'template-review-pages', 'template-export-review', 'details-routine-view', 'room-rename', 'sidebar-owner-crop', 'connections-command', 'connections-edit', 'automations-detail-routine', 'automations-create-button', 'member-template-gallery', 'missing-provider-repair', 'missing-search-repair']);
 for (const scene of scenes) if (FLOAT_CARD_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-cards" });
 for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-surface" });
-// Three layers (owner, 2026-11-14): outside the dialog the window under the scrim, the dialog and its nav, then the cards on it, each lighter than the one outside it.
+// Three layers: outside the dialog the window under the scrim, the dialog and its nav, then the cards on it, each lighter than the one outside it.
 // Settings (a pane with its groups) and 連結應用程式 (its list, its connected list and an app's page with its boxes) read the computed colours of the three layers.
 export const DIALOG_LAYER_SCENES = new Set(['profile', 'appearance', 'models', 'usage', 'safety', 'connect-apps', 'connect-apps-connected', 'connect-app-oauth', 'connect-app-connected']);
 for (const scene of scenes) if (DIALOG_LAYER_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "dialog-layers" });

@@ -1,4 +1,4 @@
-"""What a member writes into a routine, what it reads of its own material, and how a run's end reaches the routine (owner, 2026-11-11).
+"""What a member writes into a routine, what it reads of its own material, and how a run's end reaches the routine.
 
 The owner's health-check routines named tools a run does not have; a daily page routine was refused the read of its own
 template; failed runs left `routines.last_error` empty and the routine view looked as good as ever."""

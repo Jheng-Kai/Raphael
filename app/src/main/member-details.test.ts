@@ -271,7 +271,7 @@ test("a member's face picker offers the slimes alone, in tabs of their kinds, wi
   expect(picker.classList.contains("mb-avpop")).toBe(true);
   expect(picker.querySelectorAll("[data-slime-character], [data-slime-color]").length).toBeGreaterThan(0);
   expect(picker.querySelector("[data-avp-tab], [data-avp-pane], textarea, input")).toBeNull();
-  // The tabs are the kinds of slime (owner, 2026-11-11), one chosen, and none of them draws a picture.
+  // The tabs are the kinds of slime, one chosen, and none of them draws a picture.
   const tabs = [...picker.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs.map(tab => tab.dataset.slimeTab)).toEqual(["characters", "fantasy", "animals", "nature", "everyday", "colors"]);
   expect(tabs.filter(tab => tab.getAttribute("aria-selected") === "true")).toHaveLength(1);

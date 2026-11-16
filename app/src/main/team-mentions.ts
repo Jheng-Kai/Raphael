@@ -55,7 +55,7 @@ export interface MentionMenuOptions {
 const waiting = (app: RosterEntry): boolean => app.state === "needs_sign_in" || app.state === "needs_secret";
 
 /**
- * The @ menu is Grok Bot's (owner, 2026-11-13, R-MENU-01): the other members, then the apps the member can use, each row a mark,
+ * The @ menu is Grok Bot's (R-MENU-01): the other members, then the apps the member can use, each row a mark,
  * the name and, quietly at the right, what it is. No groups, no one for everyone, nothing else: an address that is none of these
  * is still a chip when it is typed. Completion always keeps the focus in the field, including during input-method composition.
  */

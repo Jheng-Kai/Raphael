@@ -634,7 +634,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // A pending file is not kept: leaving the conversation ends its reading (`attachmentEpoch`).
     const draft: ComposerDraft = { text: input.value, files: files.filter(file => !file.pending), missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
     // A message taken back to be edited is not a draft: leaving its conversation gives the edit up, and its message is as it was
-    // (owner, 2026-11-15). Nothing of it is kept, so it never comes back as a second copy of the words.
+    //. Nothing of it is kept, so it never comes back as a second copy of the words.
     if (draft.replacing === undefined && (draft.text || draft.files.length || draft.missing.length || draft.quote)) restored.set(composerKey, draft);
     else restored.delete(composerKey);
     writeDraftWords(`member:${composerKey}`, draft.replacing === undefined ? { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId } : undefined);
@@ -943,7 +943,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     commandBox.hidden = !command;
     const disclosure = askCard.querySelector<HTMLElement>(".card-disclosure")!;
     // What cannot be undone is read before it is agreed to: its lines (what is deleted, by name, one line for each change on
-    // a card of several) stand open under the heading instead of behind 顯示 (owner, 2026-11-11: 「不要分這麼多卡片」).
+    // a card of several) stand open under the heading instead of behind 顯示.
     const readable = q.text.split("\n").slice(1).join("\n").trim();
     const reads = q.tier === "T3" && !command;
     if (reads && copy.body === lead.trim() && readable !== "") askText.textContent = readable;
@@ -1389,7 +1389,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The members asked this session to open their own conversation: once each; the core decides the rest. */
   const greetAsked = new Set<number>();
   /**
-   * A member's conversation is never an empty page (owner, 2026-11-10: 「理論上我們不應該會看到這個畫面」): a member made
+   * A member's conversation is never an empty page: a member made
    * without its greeting (by a way of making members that did not greet yet) is asked once to write it. The core starts
    * it only while the owner has written nothing there and no greeting runs (members.greet); it refuses otherwise.
    */
@@ -1590,7 +1590,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   async function attachAll(list: readonly File[]): Promise<void> {
     const epoch = attachmentEpoch;
-    // Every chip stands at once, as Claude's do (owner, 2026-11-15: 「才剛點下去他就在畫面裡了」); the bytes are read and
+    // Every chip stands at once, as Claude's do; the bytes are read and
     // stored after, one file after the other, and send is offered only once they are in (R-ATTACH-03, R-ATTACH-04).
     const placed: { file: File; id: number; mime: string; name: string }[] = [];
     for (const file of list) {
@@ -2120,7 +2120,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const items: Parameters<typeof openActions>[1][number][] = [];
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     if (!source?.video) items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
-    // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
+    // No 「查看過程」: how a reply was worked out is not shown.
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
@@ -2238,7 +2238,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /**
-   * 編輯 takes the owner's message back into the composer (owner, 2026-11-15): its words, its files (by their stored copies, as chips) and its
+   * 編輯 takes the owner's message back into the composer: its words, its files (by their stored copies, as chips) and its
    * quote, the composer marked as replacing that turn. The message's bubble is not drawn while the composer holds it (`render`), and sending
    * replaces the turn (`send`). Giving the edit up (`abandonEdit`) draws the message again, as it was.
    */
@@ -2544,7 +2544,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "open-routine":
         void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
           const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
-          // To read: its member changes it in the conversation (owner, 2026-11-09).
+          // To read: its member changes it in the conversation.
           if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
@@ -3084,7 +3084,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
-      // The thread is asked for before anything else on the page: the core answers in order (owner, 2026-11-10).
+      // The thread is asked for before anything else on the page: the core answers in order.
       const draft = draftText(arg);
       const refocus = (): void => {
         if (!members.settings.isOpen() && (!wasVisible || draft !== null)) focusComposer();

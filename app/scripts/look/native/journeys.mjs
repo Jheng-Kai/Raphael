@@ -1340,7 +1340,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
     await click(page, '.mb-det [data-det="gear"]');
-    // The page holds no memory (owner, 2026-11-11: 「都不要讓我們看到記憶」); the core keeps it.
+    // The page holds no memory; the core keeps it.
     await page.waitForSelector('.ms-pane .ms-nav [data-cat="tools"]');
     result.memoryShown = await page.$$eval('.ms-pane [data-cat="memory"], .ms-pane [data-mem-space]', elements => elements.length);
     await capture("member-page");

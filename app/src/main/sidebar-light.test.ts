@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The one light of a sidebar row (sidebar-light.ts): which dot a member, a group chat or a pinned face wears, and nothing
-// for a member that is only thinking (owner, 2026-11-14).
+// for a member that is only thinking.
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { type Light, type LightSource, LIGHTS, lightClass, lightHTML, lightName, lightOf, strongest } from "./sidebar-light";
 import { columnHTML } from "./member-column";

@@ -28,7 +28,7 @@ async def test_narrated_prompt_contains_only_its_own_persona_and_thread(setup, c
         if who is None or person.id != who.id:
             assert person.name in team_now and person.role in team_now
     if who:
-        # Raphael is named in the language of the owner's words here (English), not the interface's (owner, 2026-11-14).
+        # Raphael is named in the language of the owner's words here (English), not the interface's.
         assert '"name": "Raphael"' in team_now and "拉斐爾" not in team_now and '"coordination_duty": "primary_contact"' in team_now
     assert "ask_member" in system and "another member's thread" in system
     assert "The interface language never selects" in system
@@ -123,7 +123,7 @@ async def test_relaying_a_lesson_preserves_the_owner_as_the_japanese_quotes_spea
     if source == "voice":
         scope["conversation_id"] = rig.service.conversations.quick()
     assert not any(t["route"] == "exchange" for t in (await rig.call("agent.history.list", scope))["turns"])
-    # Both sides keep the exchange (owner, 2026-11-14): the asked member's chat holds the question it was asked.
+    # Both sides keep the exchange: the asked member's chat holds the question it was asked.
     taught = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert [t["question"] for t in taught if t["route"] == "exchange"] == [request]
     [exchange] = [AgentHistory(rig.conn).get(r[0]) for r in rig.conn.execute("SELECT id FROM agent_turns WHERE scope='exchange'")]

@@ -32,7 +32,7 @@
      words (「上下高度會剛好貼齊文字」), every button and every menu row takes its height from these and nowhere else
      (「全部一致…共用同一個」), and a menu row is short so a menu reads at a glance. A field keeps a little more room to type. */
   --h-ctl: 26px; --h-ctl-sm: 22px; --h-menu: 28px; --h-field: 30px; --h-row: 48px; --h-tab: 26px;
-  /* A page in a conversation shows only its top, this tall, under its title row; the page opens whole when it is pressed (owner, 2026-11-11). */
+  /* A page in a conversation shows only its top, this tall, under its title row; the page opens whole when it is pressed. */
   --h-page-peek: 160px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
@@ -74,8 +74,8 @@
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
   --track: #e5e5e5; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.3);
   /* One rule for everything that floats (a dialog, a menu and its submenu, a popover, a floating card), after Grok Bot's: the surface, its edge,
-     the fill of a control standing on it (a chip, a button), what a hovered or pressed row takes, and the chosen chip (owner, 2026-11-12). */
-  /* Three layers in a dialog (owner, 2026-11-14): the window dimmed by --scrim is the outermost and darkest, the dialog itself (--dialog, its nav included) the
+     the fill of a control standing on it (a chip, a button), what a hovered or pressed row takes, and the chosen chip. */
+  /* Three layers in a dialog: the window dimmed by --scrim is the outermost and darkest, the dialog itself (--dialog, its nav included) the
      middle, and the cards and groups inside it (--float) the lightest. The light theme keeps the order of lightness: the outside is dimmed, the dialog a quiet
      off-white, the cards white with a hairline. A menu, a popover and a tooltip are on --float too, told from a card by their edge and shadow. */
   --dialog: #f5f5f5;
@@ -320,7 +320,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .tg[aria-checked="mixed"] { background: var(--accent-soft); border-color: var(--accent-text); }
 .tg[aria-checked="mixed"]::after { transform: translateX(8px); background: var(--accent-text); }
 /* A member's own places (its panel and its settings page: pages/agent.ts drawFaces sets the custom properties and the mark) show a
-   switch that is on in the member's colour, as the owner's bubble in its conversation (owner, 2026-11-12): the bubble's colour on the
+   switch that is on in the member's colour, as the owner's bubble in its conversation: the bubble's colour on the
    white theme, a lighter one on the black, outlined by the colour that stands off the panel. The knob is white, or dark on a light
    colour, as the bubble's words; the off state is as everywhere. Raphael's panel wears Raphael's. */
 [data-member-switch] .tg[aria-checked="true"] { background: var(--member-switch); border-color: var(--member-accent); }
@@ -591,8 +591,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .slist { --slist-pad: 14px; }
 }
 
-/* ---------- everything that floats: one rule (owner, 2026-11-12: 「我感覺可以把 dialog 都設計成這個顏色，他們感覺是有一套規則的」) ----------
-   Three layers in a dialog (owner, 2026-11-14: 「它應該是三層顏色，最外層最深 ( dialog 外 )，再來是內層，再來是內容」): outside it the window under --scrim, the
+/* ---------- everything that floats: one rule ----------
+   Three layers in a dialog: outside it the window under --scrim, the
    darkest; the dialog itself and its nav, `--dialog`, the middle; and the cards and groups on it, `--float` with a 1 px --float-edge hairline, the lightest.
    A menu and its submenu, a popover, a floating card and a tooltip are on --float too (the card layer), lifted from what is under them by their edge and shadow.
    What is on a surface (a chip, a button, a field) is filled --float-ctl, and a hovered row takes --float-hover. So `--panel`, which cards stand on, is --float
@@ -959,7 +959,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the
    pointer. Small actions beside a message or inside a bar stay bare icons; the sidebar's search and plus
    are the same buttons (sidebar.css). So are the member page's way back and its cover's change icon, which stand on a
-   picture and need the solid surface in every state (owner, 2026-11-11). */
+   picture and need the solid surface in every state. */
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 .page-agent .cmp-bar .btn.cmp-attach { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon:is(:hover, [aria-expanded="true"]):not(:disabled), .btn.icon.modal-x:hover:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:is(:hover, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: var(--hover); color: var(--text); }

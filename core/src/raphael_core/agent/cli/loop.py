@@ -198,7 +198,7 @@ class Sessions:
 
 def language_rule(language) -> str:
     """What a CLI is told about the language of everything it writes. A CLI brain says things of its own between its tool
-    calls, which no persona sentence about "progress" reaches (owner, 2026-11-16: 「工程師又開始說英文了」)."""
+    calls, which no persona sentence about "progress" reaches."""
     name = LANGUAGE_NAMES.get(language) if isinstance(language, str) else None
     whose = f"{name}, the owner's language" if name else "the language of the owner's own words"
     return f"Every text you write, including each note between tool calls, is in {whose}. Code and quotations stay as they are."

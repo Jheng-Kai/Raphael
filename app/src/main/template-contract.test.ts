@@ -101,7 +101,7 @@ describe("the review shows everything a shared member holds", () => {
 });
 
 describe("the words say what sharing does", () => {
-  // Sharing saves a file, or prepares a publish request on GitHub; it never makes a link (owner, 2026-11-11).
+  // Sharing saves a file, or prepares a publish request on GitHub; it never makes a link.
   const keys = ["template.copyHint", "template.export", "cards.templateSave", "cards.templatePublish", "cards.templatePublished", "cards.templateOpen", "cards.templatePrepared", "cards.templateWhere", "cards.templateFolder", "store.publish", "store.notOpen", "store.unavailable"] as const;
   const link = /link|連結|链接|リンク|링크|enlace|\blien\b|tautan|collegamento|ссылк|ลิงก์|bağlant|liên kết/i;
   const locales = { de, en, es, fr, id, it: itLocale, ja, ko, ptBR, ru, th, tr, vi, zhCN, zhTW } as Record<string, Record<string, string>>;

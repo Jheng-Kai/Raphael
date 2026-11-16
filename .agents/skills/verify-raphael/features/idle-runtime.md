@@ -1,6 +1,6 @@
 # Idle native runtime
 
-## Behavior and checks (2026-11-04)
+## Behavior and checks
 
 R-PERF-09 extends the member-computer boundary. Status reads use a three-second
 per-target cache and lock, validated against vm.changes. Preparation is read live;

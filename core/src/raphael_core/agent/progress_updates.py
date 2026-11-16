@@ -1,4 +1,4 @@
-"""When a member at work owes the owner a word on how it goes (owner, 2026-11-14).
+"""When a member at work owes the owner a word on how it goes.
 
 Owner: 「他現在又開始不講任何進度了…不然我其實不太知道它目前的進度，我可能會覺得它是不是當機了」. A task of 37 minutes
 and 71 calls wrote 142 steps and not one message: whatever a member says while it works is progress in the folded work,

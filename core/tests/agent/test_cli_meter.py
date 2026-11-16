@@ -1,4 +1,4 @@
-"""A CLI turn's spend counts every call once, cached input included (owner, 2026-11-09).
+"""A CLI turn's spend counts every call once, cached input included.
 
 Claude Code's `modelUsage` adds up every run of a resumed session, and a Codex thread's token total adds up every
 turn it ever had; before this the ledger wrote only the last run's uncached input (3,706 tokens for 519 calls).

@@ -294,7 +294,7 @@ async def test_each_message_of_the_member_is_analysed_on_its_own(setup, client):
 
 
 async def test_a_reaction_to_a_picture_the_member_sent_is_read_as_that_picture(setup, client):
-    # A picture a member sends is a message of its own (owner, 2026-11-14, R-UI-156): the member is told the owner reacted to
+    # A picture a member sends is a message of its own (R-UI-156): the member is told the owner reacted to
     # the file it sent, by its name and type, never to the words of its reply.
     rig, team_ = setup
     one = member(team_)

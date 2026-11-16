@@ -38,7 +38,7 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
   expect(account.getAttribute('aria-haspopup')).toBe('menu');
   expect(account.querySelector('.owner-face')).not.toBeNull();
   expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
-  // The pill says its own words: nothing more shows under the pointer (owner, 2026-11-12).
+  // The pill says its own words: nothing more shows under the pointer.
   expect(nav.querySelector('.sidebar-apps')?.hasAttribute('data-tooltip') || nav.querySelector('.sidebar-apps')?.hasAttribute('title')).toBe(false);
   // Each mark knows its place against the middle one, for the pill's hover: -1, 0 and +1 of the 3 px spread.
   expect([...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.style.getPropertyValue('--spread'))).toEqual(['-1', '0', '1']);

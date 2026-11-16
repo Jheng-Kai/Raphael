@@ -1,4 +1,4 @@
-"""A failure is information: a member keeps going until no plausible way is left (owner, 2026-11-14).
+"""A failure is information: a member keeps going until no plausible way is left.
 
 Facts behind it: a language-teaching member, told to use its own computer for a news page, ran a search, read the lead of the
 page, had its page refused twice, and ended with 「我不會再換方式繞過這個攔截」 without opening its browser. Every word of the

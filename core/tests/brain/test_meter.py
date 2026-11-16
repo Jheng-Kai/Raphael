@@ -1,4 +1,4 @@
-"""Every model call's exact usage, in one shape for every provider (owner, 2026-11-09)."""
+"""Every model call's exact usage, in one shape for every provider."""
 
 from raphael_core.brain import meter
 from raphael_core.brain.meter import Usage

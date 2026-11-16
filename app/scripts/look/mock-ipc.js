@@ -114,7 +114,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.memberSettings) {
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
-    // An app named as Claude's connectors name it, drawn with its own mark (owner, 2026-11-10).
+    // An app named as Claude's connectors name it, drawn with its own mark.
     data.servers.push({ ...structuredClone(data.servers[0]), id: "mobbin", name: "Mobbin MCP" });
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
   }
@@ -499,7 +499,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.emblem) data.avatar = null;
   if (variant.peerChat) {
     // Raphael asked 小晴 twenty minutes ago and now, and 小森 once in between: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
-    // Yesterday's exchange with 小晴 is another conversation with its own line, so it is not in this one (owner, 2026-11-15).
+    // Yesterday's exchange with 小晴 is another conversation with its own line, so it is not in this one.
     const turn = data.turns.find(turn => turn.id === 1), sample = data.peerChatSample, DAY = 86_400_000, EARLIER = 20 * 60_000;
     const exchange = (id, member, name, created, request, result) => ({ ...structuredClone(data.roomHandoff), task_id: id, work_turn_id: id + 100,
       member_id: member, member_name: name, mode: "consult", state: "done", created_at_ms: created, started_at_ms: created, finished_at_ms: created + 40_000,
@@ -525,7 +525,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns = [{ ...turn, question: sample.request, text: sample.answer, messages: [], steps: [], handoffs: tasks }];
     if (variant.handoffGroup === "room") {
       // A room takes nobody's side: one line per pair of members in a row (Raphael and Ada twice), and work a member
-      // handed itself (Ben, waiting for the owner) is a line of its own that opens Ben's conversation (owner, 2026-11-09).
+      // handed itself (Ben, waiting for the owner) is a line of its own that opens Ben's conversation.
       tasks.forEach((task, i) => Object.assign(task, i === 2 ? { member_id: 2, member_name: people[1], from_member_id: 2, own_work: true, mode: "work" }
         : { member_id: i < 2 ? 1 : i < 5 ? 3 : 4, member_name: people[i < 2 ? 0 : i < 5 ? 2 : 3] }));
       data.roomHandoffs = tasks;
@@ -586,7 +586,7 @@ export function installMock(fixture, config = {}, target = window) {
     if (variant.latePairing) data.turns.push(turn(143, "", "", { route: "pairing", source: "messaging", session_id: "pairing-late", created_at_ms: data.now + 1000,
       pairings: [{ id: "pair-late", platform: "slack", member_id: 1, code: "SL9X4M", who: "Sam", expires_at_ms: data.now + 600000, state: "pending" }] }));
   }
-  // A turn with two replies, the computer's card and one question (owner, 2026-11-11): it stands at the end only while it waits
+  // A turn with two replies, the computer's card and one question: it stands at the end only while it waits
   // ("asked"); "answered" it stands where it was asked, before the replies it led to. The core does not send its time yet.
   if (variant.ownerQuestionOrder) {
     const question = structuredClone(data.ownerQuestionCard), waiting = variant.ownerQuestionOrder === "asked";
@@ -599,7 +599,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
-    // The shapes of the card the member may ask for (owner, 2026-11-11): a grey line, a grey line under some rows, several choices, a skip row.
+    // The shapes of the card the member may ask for: a grey line, a grey line under some rows, several choices, a skip row.
     Object.assign(question, {
       described: { subtitle: "選最重要的一個。", descriptions: ["", "今天與本週的行程", "", "會議與待辦的紀錄"], skip: true },
       multiple: { multiple: true }, skip: { skip: true },
@@ -1030,7 +1030,7 @@ export function installMock(fixture, config = {}, target = window) {
     Object.assign(data.members.find(member => member.id === 1), {role: sample.role, name:sample.name, unread:false, activity:"idle", waiting:false});
     data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:"answer",source:"app",text:sample.handoff,detail:null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
   }
-  // A new member's set-up by cards (owner, 2026-11-11): the greeting with its question card ("card"), the card answered, the job saved
+  // A new member's set-up by cards: the greeting with its question card ("card"), the card answered, the job saved
   // and the first-task card ("job"), the one app the job needs ("connect"), or a clear answer that skips the cards ("collapsed").
   // "flow" starts as "card" and moves to "job" when the card is answered. The core sends each question's time (created_at_ms).
   const setupStage = stage => {

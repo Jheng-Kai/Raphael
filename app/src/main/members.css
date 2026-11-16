@@ -238,7 +238,7 @@
 .mb-offer-t { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .mb-offer-t b { font-size: var(--pa-dfs); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .mb-offer-t > .routine-sentence { font-size: var(--pa-rt-s); overflow-wrap: anywhere; }
-/* A confirmation, as Grok Bot's dialogs (owner, 2026-11-10: 「刪除的 dialog 可以參考 grok bot 的 UI」): a 440 px panel, its
+/* A confirmation, as Grok Bot's dialogs: a 440 px panel, its
    question in a compact semibold head over a hairline, what it does in secondary words, and a footer over a hairline with
    Cancel then the action at the right. With a Cancel there is no × as well: Escape and the scrim still close it. */
 .mb-dialog.mb-confirm { width: min(440px, 100%); gap: 0; padding: 0; border: 1px solid var(--edge); border-radius: var(--r-lg); }
@@ -252,7 +252,7 @@
 /* With nothing to say under the question, one hairline parts it from the buttons, not two. */
 .mb-confirm:has(.mb-dlg-body:empty) .mb-dlg-act { border-top: 0; }
 .mb-confirm .mb-dlg-act .btn { padding-inline: var(--sp-4); }
-/* The delete question, the app's one (owner, 2026-11-12: 「刪除的 UI，跟我跟你說的那個好像不太一樣」), measured on Grok Bot's at 1068 px: a 320 px
+/* The delete question, the app's one, measured on Grok Bot's at 1068 px: a 320 px
    box with 16 px at the sides and 12 px over and under, no × and no line inside; the title over one sentence in the ordinary text
    colour (6 px between them, 8 here), then, 24 px lower, one row of two buttons of the same width filling the box, Cancel in the
    quiet button colour and Delete in red with white words, fully rounded (Grok Bot's are 32 px tall, 140 px wide and 10 px apart). */
@@ -266,7 +266,7 @@
 .mb-confirm.mb-delete .mb-dlg-act .btn { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-3); border-radius: var(--r-pill); font-size: var(--fs-sm); }
 .mb-confirm.mb-delete .mb-dlg-act .btn.pri { border-color: var(--close); background: var(--close); color: var(--on-close); }
 .mb-confirm.mb-delete .mb-dlg-act .btn.pri:hover:not(:disabled), .mb-confirm.mb-delete .mb-dlg-act .btn.pri:active:not(:disabled) { border-color: var(--close); background: var(--close); filter: brightness(0.9); }
-/* A dialog's footer buttons are the field height, as a card's are (owner, 2026-11-10: 「上下寬度可以再胖一點」). */
+/* A dialog's footer buttons are the field height, as a card's are. */
 .mb-dlg-act .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 .mb-addrow { display: flex; gap: var(--sp-2); }
 .mb-addrow .mb-fin { flex: 1; }

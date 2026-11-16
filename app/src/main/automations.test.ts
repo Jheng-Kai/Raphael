@@ -212,7 +212,7 @@ test("calendar chips keep complete compact times and full task details when edit
   expect(chip.querySelector('time')?.textContent).toBe("09:00");
   expect(chip.title).toContain("Review");expect(chip.title).toContain("09:00");
   expect(chip.getAttribute("aria-label")).toContain("Alice");
-  // A routine opens to read: its member changes it in the conversation (owner, 2026-11-09).
+  // A routine opens to read: its member changes it in the conversation.
   chip.click();click('[data-pop="open-routine"]');
   const view=document.querySelector<HTMLElement>(".mb-dialog.rv-dialog")!;
   expect(view.querySelector("h2")!.textContent).toBe("Review");expect(view.querySelector(".rv-prompt")!.textContent).toBe("Check progress");

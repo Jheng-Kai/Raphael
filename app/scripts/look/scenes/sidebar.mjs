@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
 const pinnedTiles = { sidebarMany: true, pinnedTiles: [0, 3, 1] };
-// The one light of a row (owner, 2026-11-14): 1 and 6 only think, 2 has a message, 3 a task that ended, 4 work that failed, 5 a question that waits
+// The one light of a row: 1 and 6 only think, 2 has a message, 3 a task that ended, 4 work that failed, 5 a question that waits
 // (and a message too, which it outranks); the group chats have a message, a meeting that ended and a question.
 const lights = { sidebarMany: true, sidebarLights: { 1: "thinking", 2: "message", 3: "done", 4: "failed", 5: "waiting", 6: "thinking" }, sidebarLightRooms: true };
 const cropOpen = [...settings("general"), click('[data-owner-photo]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-frame:not([hidden])')];
@@ -26,13 +26,13 @@ export default [
   scene("sidebar-lights-hover-pinned", "A pinned face's dot stays where every face's stands under the pointer", [{ action: "member-column", collapsed: false }, wide(hover('#nav .mb-tile[data-member="3"]')), check("sidebar-light-steady"), check("sidebar-lights")], { ...lights, sidebarLights: { ...lights.sidebarLights, 0: "message", 1: "failed" }, pinnedTiles: [0, 3, 1] }),
   scene("sidebar-lights-open", "Opening a conversation reads its white and green dot, and an orange question stays while it waits", [{ action: "member-column", collapsed: false }, member(2), member(3), member(5), wait('.mb-col [data-member="5"][aria-current="true"]'), check("sidebar-lights-open"), check("sidebar-shell")], { sidebarMany: true, sidebarLights: lights.sidebarLights }),
   scene("sidebar-metrics", "The sidebar's geometry is recorded: width, row pitch, the highlight, the type, the foot and how many rows fit", [{ action: "member-column", collapsed: false }, check("sidebar-metrics")], { sidebarMany: true }),
-  // Grok Bot's air (owner, 2026-11-12): rows 58px apart, the foot on its two rows, and under 860px a rail of faces. Every width runs the same steps:
+  // Grok Bot's air: rows 58px apart, the foot on its two rows, and under 860px a rail of faces. Every width runs the same steps:
   // a face opens its conversation, the + opens its menu from the rail as from the list, and a right click opens the row menu.
   scene("sidebar-air", "The list has Grok Bot's air (rows 58px apart, highlight 54px, the foot on its two rows) and, on a narrow window, is a rail of faces; a face opens its conversation and the plus its menu", [{ action: "member-column", collapsed: false }, check("sidebar-air"), member(2), wait('.mb-col [data-member="2"][aria-current="true"]'), check("sidebar-selection"), click('[data-col="add"]'), wait('#app-popover [data-pick="member"]'), check("sidebar-add-menu")], { sidebarMany: true }),
   scene("sidebar-air-foot", "A list dragged narrow keeps its foot: the face and the pill whole on one row, the pill's words never wrapped or cut", [{ action: "member-column", collapsed: false }, drag('.side-edge', -100, { wide: true }), check("sidebar-air")], { sidebarMany: true }),
-  // A row dragged over another: it is dimmed in its place, and one line shows where it will land, between two 54px rows (owner, 2026-11-12).
+  // A row dragged over another: it is dimmed in its place, and one line shows where it will land, between two 54px rows.
   scene("sidebar-drag-row", "A dragged row dims in its place and one line shows where it lands, between two rows", [{ action: "member-column", collapsed: false }, wide({ action: "drag-start", selector: '.side [data-member-item="2"]' }), wide({ action: "drag-over", selector: '.side [data-member-item="4"]', edge: "top" }), wide(check("sidebar-drag-line"))], { sidebarMany: true }),
-  // Reordering as the owner does it (owner, 2026-11-14, R-SIDE-03): a real pointer carries a row or a folder over fifteen members in three folders,
+  // Reordering as the owner does it (R-SIDE-03): a real pointer carries a row or a folder over fifteen members in three folders,
   // against a core that takes 16 ms for each save (what members.update costs it, measured on a fresh database with fifteen members).
   ...[
     ["members", "A member row dragged down its folder stands where it is let go, is saved once, and no other row or face is drawn again", { kind: "member", item: 6, over: 10, moved: ["item:6"], expect: [{ selector: '.mb-col .mb-sec[data-group="2"] [data-member-item]', attribute: "data-member-item", ids: [7, 8, 9, 6, 10] }] }],

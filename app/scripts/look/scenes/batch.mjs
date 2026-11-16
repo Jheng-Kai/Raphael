@@ -10,7 +10,7 @@ const turn = (member_id, extra = {}) => ({ id: 801 + member_id, member_id, conve
   prefix: "", text: "好的。", status: "done", cost_usd: 0, steps: [], attachments: [],
   messages: [{seq: 1, kind: "reply", text: "好的。", at_ms: 1792807160000}], ...extra });
 // A picture asked for, a message sent while the member worked on it (the core's owner_input row), and the work going on
-// after it: the picture it made and the reply that answers that message (owner, 2026-11-14).
+// after it: the picture it made and the reply that answers that message.
 const drawn = { id: `${"c".repeat(32)}.png`, name: "chart.png", mime: "image/png", size: 1727 };
 const steered = [
   turn(1, { question: "請把開放日的公告做成一張海報。", text: "海報做好了，照你說的改用生成圖片。", messages: [
@@ -32,7 +32,7 @@ export default [
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-sendnow", "「立即送出」 on a queued bubble ends the running work as Stop does and starts that message, with nothing withdrawn", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="send-now"]'), waitGone('.tn[data-id="901"] .queued-mark'), check("composer-queued-sendnow")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
-  scene("composer-queued-sendnow-menu", "A queued bubble shows 立即送出 in sight beside 排隊中, and its ⋯ menu does not repeat it (owner, 2026-11-14)", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="more-message"]'), wait('#app-popover [data-pick="cancel"]'), check("composer-queued-sendnow-menu")],
+  scene("composer-queued-sendnow-menu", "A queued bubble shows 立即送出 in sight beside 排隊中, and its ⋯ menu does not repeat it", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="more-message"]'), wait('#app-popover [data-pick="cancel"]'), check("composer-queued-sendnow-menu")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-stop", "Stop cancels the running turn and returns queued words after the existing draft", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-mark'), type('.cmp-input', "目前草稿"), key("Escape"), key("Escape"), waitGone('.queued-mark'), check("composer-queued-stop")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),

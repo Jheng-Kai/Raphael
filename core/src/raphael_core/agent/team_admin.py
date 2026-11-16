@@ -156,7 +156,7 @@ def title_of(name: str, language: str) -> str:
 
 def confirmation(name: str, arguments: dict, language: str, target: str = "", *, question: bool = True) -> str:
     """Complete owner-facing details; never truncate fields that the owner is approving. No ID line: the card names
-    its target (owner, 2026-11-11: 「不用這麼複雜」)."""
+    its target."""
     from ..ui_languages import fixed_language
     language = fixed_language(language)
     fields = ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset", "source", "description", "template", "title", "prompt", "schedule", "enabled")

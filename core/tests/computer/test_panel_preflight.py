@@ -43,7 +43,6 @@ async def test_reading_status_or_opening_the_viewer_never_starts_the_host_engine
 
 
 async def test_member_use_starts_the_installed_host_engine_and_waits_for_it(tmp_path, monkeypatch):
-    # (owner, 2026-11-11: 「理論上就算我沒有開 Docker，它也會自動自己打開才對」)
     monkeypatch.setattr('raphael_core.computer.vm.ENGINE_POLL_S', 0)
     noticed, up = [], []
     async def launch():

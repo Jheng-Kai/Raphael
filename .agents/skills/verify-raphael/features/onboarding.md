@@ -15,7 +15,7 @@ search field once there are more than eight; owner, 2026-11-08).
 A welcome, then three steps that are each a choice, then entry into the usable app with first-run
 state saved. There are no practice lessons, no microphone step and no completion screen (owner,
 2026-11-07). Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
-the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
+the window, with no progress bar and no side, as Grok Bot's first run: every
 step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
 others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
 Rigurd — owner 2026-11-08; gone below 640px wide), the choice, and under it two round buttons
@@ -42,7 +42,7 @@ Settings has no 導覽 entry any more (owner, 2026-11-14, once he had checked th
    canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
    「智慧之王ラファエル」 (`public/brand/wordmark.svg` through a CSS mask in the text colour; a reader
    hears `onboarding.welcomeTitle`; owner, 2026-11-08), and under it what the team can do typed
-   instead of a slogan (owner, 2026-11-08): an ask appears a letter at a time with a caret, Raphael's
+   instead of a slogan: an ask appears a letter at a time with a caret, Raphael's
    answer in his manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
@@ -73,7 +73,7 @@ Settings has no 導覽 entry any more (owner, 2026-11-14, once he had checked th
    an app that wants its own key or developer app has 加入, which opens the store's own form
    (connection-setup.ts); n8n, which runs on the owner's own server (connections.ts `ownServerApps`),
    has 加入, which opens its address and access token across its tile with 取消 and 連接, and Enter
-   adds it through `integrations.add` with the store's header (owner, 2026-11-09: 「搜尋 n8n 也找不到」).
+   adds it through `integrations.add` with the store's header.
    A tile that only signs in is one whole button with 登入 on its right; a connected one has the check.
    A waiting tile keeps its words inside it in every language and its 取消 stops the wait at once, even
    when the login never answers; lists the core does not answer within 15 s turn into 重試 (owner,

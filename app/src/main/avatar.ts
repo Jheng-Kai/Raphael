@@ -207,7 +207,7 @@ export interface AvatarOptions {
   cls?: string;
   /** The picture of the person's own, if any (by default the one in force now). */
   avatar?: CustomAvatar | null;
-  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line (owner, 2026-11-11). */
+  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line. */
   still?: boolean;
 }
 

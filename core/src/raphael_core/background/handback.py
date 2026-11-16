@@ -1,4 +1,4 @@
-"""A work hand-off's words to whoever handed it over (owner, 2026-11-09: 「這邊是兩個史萊姆在溝通才對」).
+"""A work hand-off's words to whoever handed it over.
 
 The member who takes on work does it in its own conversation and speaks to the owner there. It ends its
 final reply with `<handback>…</handback>`, written to the colleague who asked, or, for its own background

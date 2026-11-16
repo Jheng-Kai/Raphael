@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-Usage is as plain as Grok Bot's (owner, 2026-11-06, R-UI-109). At the top, each signed-in
+Usage is as plain as Grok Bot's (R-UI-109). At the top, each signed-in
 subscription brain (Claude, Codex, Antigravity) has one card: every window it reports
 (5 hours, weekly) as the share left with a bar and when it resets, whether the number is
 live or from the last run, and an honest line when the percentage is unknown or the
@@ -30,13 +30,13 @@ and no model, member or setting moves.
 
 ## How to get to it (user POV)
 
-Open Settings > 模型與用量 > 用量. The page has no refresh button (owner, 2026-11-11): each
+Open Settings > 模型與用量 > 用量. The page has no refresh button: each
 opening of Settings, on whatever tab, reads Models and usage again at once and unseen
 (`refreshInBackground` in settings.ts: the catalogue, the speech models, `usage.allowances` and
 `chatgpt.status`), so the numbers are current by the time the tab is reached. The page shows what it last
 knew immediately; a new value replaces the old in place, a reading that finds the same numbers
 touches nothing, one that fails leaves what is shown, an opening while a reading is under way
-joins it. Every opening asks again, however soon after the last (owner, 2026-11-12); only the catalogue and the speech models are reused for 30 seconds. In the core, readings that overlap (Settings opened twice, Settings and another reader) share one read and one `codex app-server`; a live reading replaces the stored windows, drops a window the provider no longer reports, and tells the other readers (`quota.changed`) only when something really changed; a reading that fails or finds no window keeps the last known numbers and says nothing. A told warning is told again when its window is later read with 20% or more left and falls to the last tenth again. Activity while the page is open
+joins it. Every opening asks again, however soon after the last; only the catalogue and the speech models are reused for 30 seconds. In the core, readings that overlap (Settings opened twice, Settings and another reader) share one read and one `codex app-server`; a live reading replaces the stored windows, drops a window the provider no longer reports, and tells the other readers (`quota.changed`) only when something really changed; a reading that fails or finds no window keeps the last known numbers and says nothing. A told warning is told again when its window is later read with 20% or more left and falls to the last tenth again. Activity while the page is open
 (a turn, a provider change) refreshes the allowances quietly as before.
 
 What a reading really asks for, per subscription (no model turn is ever spent):
@@ -93,6 +93,6 @@ core/tests/agent/test_quota.py; passing only known identifiers is commands.rs
 `a_quota_warning_carries_only_its_window_and_numbers`. A real subscription crossing 90% is
 native acceptance. The own-harness ChatGPT sign-in records no windows, so it has no warning.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

@@ -129,7 +129,7 @@ test("a face never becomes another member's: Raphael's face where Testarossa's s
 });
 
 
-test('a picture of a slime is kept as it is by a redraw, and another member takes a fresh one (owner, 2026-11-11)', () => {
+test('a picture of a slime is kept as it is by a redraw, and another member takes a fresh one', () => {
   const root = document.createElement('div');
   const picture = (id: number, color: 'sky' | 'coral' = 'sky'): string => `<button data-k="${id}">${slimeSVG({ color }, { member: id })}</button>`;
   patchHTML(root, picture(1) + picture(2, 'coral'));

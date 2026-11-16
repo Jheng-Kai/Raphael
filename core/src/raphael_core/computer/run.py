@@ -301,7 +301,7 @@ class _Finished(Exception):
 
 def system_prompt() -> str:
     """What the model is told about a run: the same for every run, whatever the interface language, which goes to no
-    model (owner, 2026-11-14)."""
+    model."""
     return for_this_system(
         "You operate apps on the owner's own Windows computer with the tools you "
         "are given, to carry out the request inside <task> tags. The owner is at the computer and "

@@ -86,7 +86,7 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
   // One place keeps a following thread at its bottom, whatever changed its height or its scroller's: words drawn, a picture
   // or a card that loads late, the work line or the slime going, the composer growing or shrinking under it. A ResizeObserver is
   // told after layout and before paint, so the correction lands in the frame of the change and no frame is seen above the
-  // bottom (owner, 2026-11-14: 「成員回覆的時候，有時候畫面會從最底部往上跳一點」). A clamped write, no geometry read.
+  // bottom. A clamped write, no geometry read.
   if (typeof ResizeObserver === "function") {
     const stick = new ResizeObserver(() => {
       if (state.follows && !Number(root.dataset.windowLater) && root.isConnected && !root.closest("[hidden]")) root.scrollTop = 1e9;

@@ -87,7 +87,7 @@ TaskRun, CLI member loop, connections changing mid-task). Live (Codex subscripti
 Guardian cells members, approval-yes, approval-no (find_tools then use_tool), open and
 routine-create pass on cli:codex:gpt-6-luna?effort=low.
 
-## Settings panel intent (2026-11-07)
+## Settings panel intent
 
 The window may send setup-telegram, setup-slack, setup-discord, share-template or settings.
 Settings is valid for member 0; share-template still requires a nonzero member. The trusted
@@ -96,7 +96,7 @@ core/tests/members/test_chat_settings.py cover API/CLI self scope, peer refusal,
 profile/command/skill/voice/memory writes and exact-action deletion approval.
 The window-owned settings button and visual/native acceptance remain an integration handoff.
 
-## One card, words and one press (2026-11-11)
+## One card, words and one press
 
 The administrative changes (and readings) that the model asks for in one turn and that need a yes - the ones that cannot be
 undone, and any other that the mode that asks first or a rule asks about - are held until its turn is in and asked on one

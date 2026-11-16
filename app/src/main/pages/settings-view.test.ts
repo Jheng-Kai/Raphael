@@ -334,7 +334,7 @@ describe("一般", () => {
     expect(html).not.toContain("data-msg-section");
     expect(groups(html)).toEqual(["關於你", t("skin.title"), t("agent.title")]);
     expect(names(html).slice(0, 4)).toEqual([t("settings.067"), t("settings.059"), "時區", "輸出資料夾"]);
-    // The guide is the first run's only (owner, 2026-11-14: 「把設定裡面的導覽拿掉」).
+    // The guide is the first run's only.
     expect(html).not.toContain("導覽");
   });
 
@@ -709,7 +709,7 @@ describe("while the core does not answer", () => {
 });
 
 describe("電腦", () => {
-  test("the safety tab has no 電腦操作 section and no per-app menu (owner, 2026-11-14)", () => {
+  test("the safety tab has no 電腦操作 section and no per-app menu", () => {
     const html = tab("safety", { device: { ...device, computer_apps: [{ exe: "excel.exe", name: "Microsoft Excel" }] } });
     expect(html).not.toContain("電腦操作");
     expect(html).not.toContain("computer-menu");

@@ -258,7 +258,7 @@ class ToolGate:
 
     def check_management_batch(self, action: Action, approval: Approval | None) -> None:
         """One single-use approval covers exactly the listed administrative changes, as the owner read them on one card
-        (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」). A list that holds anything else is refused, and so is a
+. A list that holds anything else is refused, and so is a
         team proposal (members and folders, `BATCH_TOOLS`) unless it cannot be undone: those keep their editable card."""
         from .team_admin import BATCH_TOOLS, STAGED_TOOLS
 

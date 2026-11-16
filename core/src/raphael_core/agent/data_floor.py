@@ -199,7 +199,7 @@ class DataFloor:
         if not hits:
             return None
         # The files the owner attached in a conversation are the owner's own, read by the member the owner gave them to
-        # (owner, 2026-11-14: 「機密資訊鎖得太死了」); credentials and every other file of Raphael's folders stay closed.
+        #; credentials and every other file of Raphael's folders stay closed.
         # (An unquoted match stops at the space of a folder name such as "Raphael Dev": it is that path's own front.)
         named = [self.expand(candidate) for candidate in hits if self.attachment(candidate, cwd)]
         attached = all(self.attachment(candidate, cwd) or any(path.startswith(self.expand(candidate) + " ") for path in named)

@@ -1,4 +1,4 @@
-"""A member's tasks begin with the same rules, so the provider reads them from its cache (owner, 2026-11-09)."""
+"""A member's tasks begin with the same rules, so the provider reads them from its cache."""
 
 import json
 from datetime import timezone

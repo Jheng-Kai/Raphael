@@ -26,7 +26,7 @@ export interface PageViewOpen {
   /**
    * The one thing this page can be passed on by (Share: a report or an HTML page is saved as a file). It stands at the
    * header's top right, where the thread's own share stands, as the round button every header tool is: one place for what is
-   * on screen, as Grok Bot's share (owner, 2026-11-12: 「位置要特別設計過 外觀也是」). A page with none (a plugin's) leaves that
+   * on screen, as Grok Bot's share. A page with none (a plugin's) leaves that
    * place empty.
    */
   action?: { icon: IconName; label: string; run(): void };

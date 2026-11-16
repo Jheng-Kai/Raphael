@@ -40,7 +40,7 @@ LIBRARIES_TIMEOUT_S = 60.0
 def import_speech_libraries() -> None:
     """Import what `app._import_kit` imports (numpy, sherpa-onnx, PortAudio). Start-up runs it while
     the application module is imported: on a cold disk each of the two takes seconds, and one after
-    the other they were most of the wait for the first `core.hello` (owner, 2026-11-11)."""
+    the other they were most of the wait for the first `core.hello`."""
     from raphael_core.device import audio, dictation, stt, vad  # noqa: F401
 
 

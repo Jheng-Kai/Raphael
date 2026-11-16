@@ -7,9 +7,9 @@
 .ms-pane:focus { outline: 0; }
 
 /* The way back stays in sight at the page's top left, on the cover's picture and over a view's heading, under the window's
-   own strip (owner, 2026-11-11: 「放回圖片裡面…要有背景。Hover 上去的時候不要消失」). It and the cover's change icon are
+   own strip. It and the cover's change icon are
    Grok Bot's soft round edge buttons (styles.css): a solid surface at rest, under the pointer and pressed, so no picture
-   swallows them (owner, 2026-11-09: 「那個 Icon 要記得都要有背景 不然根本看不到」). The window's own buttons get a surface
+   swallows them. The window's own buttons get a surface
    on a picture too. Escape goes back from anywhere. */
 .ms-bar { position: absolute; z-index: 2; inset: 0 0 auto 0; display: flex; box-sizing: border-box; padding: calc(var(--window-controls-height) + var(--sp-1)) var(--sp-4) var(--sp-1); pointer-events: none; }
 .ms-bar > .btn { pointer-events: auto; }
@@ -104,7 +104,7 @@
 .ms-cover-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: calc(100% - 2 * var(--sp-4)); padding: var(--sp-1) var(--sp-3); border-radius: var(--r-pill); background: color-mix(in srgb, var(--content) 72%, transparent); color: var(--text); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .ms-cover > .ms-cover-actions { position: absolute; right: var(--sp-4); bottom: var(--sp-3); }
 
-/* The personality and the instructions (owner, 2026-11-12): one kind of thing, so one kind of row. Its words as they are, in as
+/* The personality and the instructions: one kind of thing, so one kind of row. Its words as they are, in as
    many lines as they take (a line break of the owner's stays, a long word wraps, nothing is cut), no wider than a page of
    text reads, with the pencil at the first line's height. Nothing written: one quiet line of what could stand there. */
 .btn.ms-open.ms-value { align-items: flex-start; height: auto; padding-block: calc((44px - 1lh) / 2); line-height: 1.6; text-wrap: pretty; }

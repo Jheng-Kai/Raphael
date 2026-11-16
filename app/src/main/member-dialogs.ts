@@ -144,7 +144,7 @@ export function openDialog(o: DialogOptions): Dialog {
 }
 
 /**
- * Confirms deletion or history clearing with the app's one delete dialog, Grok Bot's (owner, 2026-11-12): a small box with the
+ * Confirms deletion or history clearing with the app's one delete dialog, Grok Bot's: a small box with the
  * title, one sentence and one row of two equal buttons, Cancel then a red Delete, no × and no lines (members.css `.mb-delete`).
  * A member's own says that the member and its conversation go for good. Nothing is asked about what the deletion also clears
  * (a member's computer is the app's to remove, without a word to the owner). The focus starts on Cancel, so Enter never deletes.
@@ -362,7 +362,7 @@ export interface AvatarPickerOptions {
 
 /**
  * The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. A member's face is a slime:
- * there is no picture drawn by an image model (owner, 2026-11-09: 「生成拿掉…把史萊姆的種類與造型大幅擴增」).
+ * there is no picture drawn by an image model.
  */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
   const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
