@@ -1,5 +1,54 @@
 # Member computer (Phases A and B)
 
+## A launch opens on its member's screen
+
+R-COMP-SEAT-02. Seen on the owner's shared computer: a member at seat 5 launched `xfce4-terminal --title=PR-progress ...`
+with `launch_app`; the driver answered with a pid, the member's own `list_windows` and `get_desktop_state` showed only its
+panel, `bring_to_front` by pid was refused, and the terminal stood on seat 1's screen. The window manager (xfwm4) opens a
+new window on the monitor the pointer is on, which is any member's. The core moved a new window only when its pid was the
+launch's (or the one other new window) and looked once: xfce4-terminal opens a later launch's window in the copy already
+running (another pid), and a window often maps after that one look.
+
+Now (`computer/seat_launch.py`, `VmTools._seat_launch`, `LocalVm.command_path` and `launch_marks`):
+- Each launch at a seat is tagged as a desktop launcher tags one (freedesktop startup notification): the driver gets
+  `launch_path = env DESKTOP_STARTUP_ID=<tag> RAPHAEL_LAUNCH=<tag> sh -c '<the member's command and arguments>'`. A `name` the
+  computer's shell finds as a program (`command -v`) is launched by its path the same way; a desktop-entry name or `urls` stay
+  the driver's own and are untagged. The reply shows the member's own command, never the tag.
+- The windows are waited for up to `launch_window_wait_s` (10 s, under the unit native lock; it ends at the first tied
+  window). Each new window is judged once by one `docker exec` (`seat_launch.MARKS`: xprop of `_NET_STARTUP_ID` on the window
+  and on its `WM_CLIENT_LEADER`, and `RAPHAEL_LAUNCH` in `/proc/<pid>/environ`): the window's own startup id, else its
+  leader's, decides (another launch's id is never this launch's, whatever the process); without one, the launch's tag in its
+  process's environment or the launch's pid ties it. Tied windows are moved to the seat; the reply names them
+  (`This launch's window on your screen:` and the window rows). An untied window is left where it opened, and when it stands
+  outside the seat the reply says so and how to start a separate copy (`xfce4-terminal --disable-server`, `browser_open` for pages);
+  a launch with no window says so after the wait.
+- What this relies on (from the programs' own sources, not measured here): GTK writes `DESKTOP_STARTUP_ID` as
+  `_NET_STARTUP_ID` on its client leader window at display open, and `gtk_window_set_startup_id` writes it on the window;
+  xfce4-terminal's client passes its `DESKTOP_STARTUP_ID` to the running copy as `--startup-id`, which sets it on the new window.
+  The acceptance check below measures it on the image.
+- `browser_window_missing` (a member's `browser_open` at seat 1, three times, in the same evening) is not this defect: a seat's
+  browser window is found by `raphael-seat-browser`'s per-launch title marker, never by the launch's pid or a lone new
+  window. The code is one for both of its waits (60 s for the window, 30 s to settle); `LocalVm.seat_browser` now logs the
+  launcher's own line, which tells them apart next time.
+
+Offline (`core/tests/computer/test_seat_tools.py`): `test_launch_moves_only_the_windows_tied_to_it`,
+`test_a_launch_brings_its_window_that_another_process_opens_late_to_the_members_screen`,
+`test_two_members_launching_at_once_each_get_their_own_window`,
+`test_a_window_nothing_ties_to_the_launch_stays_where_it_opened_and_the_reply_says_so`,
+`test_a_launch_with_no_window_says_so_after_its_bounded_wait`, `test_a_launch_is_tagged_so_that_its_windows_can_be_told_from_every_other_launchs`,
+`test_a_window_is_a_launchs_by_its_startup_id_first_then_its_process`, `test_the_marks_command_reads_the_window_its_leader_and_its_process`
+(runs the shipped script with an `xprop` double; needs a POSIX `sh`), `test_the_computer_answers_where_a_name_is_a_program_and_what_ties_windows_in_one_command`;
+`tests/evaluate/test_computer_acceptance.py::test_shared_acceptance_drives_real_tools_through_every_numbered_check` (a world
+where one terminal copy opens every launch's window late; the `launch_failure` case shows the check fails when nothing ties).
+
+Real computer: "shared launches land on their own screens" in `npm run verify -- --computer` (Docker already running; it
+never starts Docker). The pointer is put on screen 6 (nobody's); seats 1 and 2 launch `xfce4-terminal --title=lands-<member>-<hex>`
+together through `launch_app`, then seat 2 launches a second one; each launch's reply must name its window, the window must be
+wholly inside its seat in that member's `list_windows`, on its seat's screen on the canvas, absent from the other member's list
+and desktop, with no other new window on either seat. Its detail says whether the windows were opened by another process than
+their launch's (the copy) and whether the second seat's second window is in the copy that holds the first seat's window. Not
+run yet (no Docker allowed while the owner's own shared computer is in use).
+
 ## Housekeeping: size, scratch, locale
 
 A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
@@ -513,7 +562,8 @@ placements back. Driver tree/element_token prose stays intact; page replies appe
 one JSON line. Pointer prose and move summary use seat coordinates; click canvas
 trailers are removed. Desktop pictures still use authenticated clipped screen-N
 RFB, 1280x900 RGB PNG. AX/screenshot nodes remain window-local. launch_app moves
-new windows matching reply pid/launcher_pid; only when no such window appeared and exactly one other new window appeared does it use that helper fallback. Multiple unmatched windows stay put. A lone concurrent peer window or same-process peer window remains a possible attribution error. windows[] is filtered/projected after movement.
+only the new windows tied to the launch by its startup id, its tag in a process's environment or its pid (R-COMP-SEAT-02,
+"A launch opens on its member's screen" above); the old single-unmatched-window fallback is gone. windows[] is filtered/projected after movement.
 
 The browser belongs to the computer. Layer 7 adds the existing-profile grant and
 installs raphael-seat-browser. The launcher uses now-minus-before plus a unique
