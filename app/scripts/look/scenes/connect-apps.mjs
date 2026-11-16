@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { scene, click, wait, check, type, scroll, settings, hover, focus, key, pressAt, pressThrough } from "./steps.mjs";
 
-// 連結應用程式 as Grok Bot's Connect Apps (R-APPS-01, R-APPS-02): one view, a chip of the connected apps, a search, a row of chips, the apps
+// 連結應用程式 (R-APPS-01, R-APPS-02): one view, a chip of the connected apps, a search, a row of chips, the apps
 // in sections; an app's page in the dialog's place. The colour rule for everything that floats (R-FLOAT-01) is checked in the pictures of
 // its consumers (`float-surface`, appended in index.mjs) and here on the dialog and its menu.
 const open = [...settings("connections"), wait(".cs-card")];
@@ -29,9 +29,9 @@ const pressRows = [
   focus(`${NOTION} .cs-main`), key("Enter"), wait(".cs-page .cs-head"), check("connect-app-from-row"), ...backToList,
 ];
 
-// The owner's own list (his picture, 2026-11-14): Composio's Gmail, Google Calendar and Google Drive, a server of his own named Mobbin MCP,
+// A typical list: Composio's Gmail, Google Calendar and Google Drive, a custom server that has a logo of its own,
 // Notion, Hugging Face and GitHub from the built-in catalog, every one on and under no heading. Every part of every row is pressed, with a real
-// mouse press, on the way he goes: the sidebar's 連結應用程式, the chip, the list (R-APPS-01).
+// mouse press, on the way an owner goes: the sidebar's 連結應用程式, the chip, the list (R-APPS-01).
 const base = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
 const composio = (slug, name, description, tools) => ({ id: `composio:${slug}`, kind: "composio", name, description, logo: "", status: "ACTIVE", enabled: true,
   enabled_tools: tools.map((tool) => tool.slug), disabled_tools: [], accounts: [{ id: `ca_${slug}`, status: "ACTIVE" }] });

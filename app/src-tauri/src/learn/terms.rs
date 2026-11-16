@@ -269,7 +269,7 @@ pub fn term_corrections(before: &str, after: &str) -> Vec<Correction> {
                 .flatten()
                 .any(|word| common(word) && word.chars().all(|c| !c.is_uppercase()));
         let cjk = right.chars().any(is_cjk);
-        // A name in lower case ("grokbot", "herdr") is one Latin word that is no common word and
+        // A name in lower case ("pinebot", "herdr") is one Latin word that is no common word and
         // that speech-to-text could have written as what it wrote, so that rewording ("meeting"
         // for "workshop") is never learned. The core checks the pair again (`learning.accepted`).
         let lower_case_name =
@@ -332,7 +332,7 @@ pub fn term_corrections(before: &str, after: &str) -> Vec<Correction> {
 
 /// Whether `right`, a word in lower case, may be what speech-to-text misheard as `wrong`: written
 /// in another script (偷看 for token), or spelled almost alike, with the same first letter and at
-/// most two edits in five between the letters ("Grok Bus" and "Grokbox" for grokbot, "Herder" for
+/// most two edits in five between the letters ("Pine Bus" and "Pinebox" for pinebot, "Herder" for
 /// herdr). "foo" for "bar" is neither.
 fn misheard_alike(wrong: &str, right: &str) -> bool {
     if wrong.chars().any(is_cjk) {
@@ -628,7 +628,7 @@ mod tests {
             ("please use FOO2", "please use foo2", &[("FOO2", "foo2")]),
             ("foo", "bar", &[]),
             ("join the meeting", "join the workshop", &[]),
-            ("用Grokbox做", "用grokbot做", &[("Grokbox", "grokbot")]),
+            ("用Pinebox做", "用pinebot做", &[("Pinebox", "pinebot")]),
             ("用 Herder 開", "用 herdr 開", &[("Herder", "herdr")]),
             ("記得偷看用量", "記得token用量", &[("偷看", "token")]),
             ("明天下午三點開會", "後天早上十點開會", &[]),

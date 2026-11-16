@@ -254,7 +254,7 @@ fn reveal(window: &tauri::WebviewWindow) {
 }
 
 /// Take the window away once the page has faded its pill, unless a new notice came meanwhile. A window with nothing
-/// to say is not on the screen at all: no bar, no title, nothing to click through (owner, 2026-11-15: after Undo, a
+/// to say is not on the screen at all: no bar, no title, nothing to click through (after Undo, a
 /// pale bar with the English title stayed).
 fn leave(app: &AppHandle) {
     let app = app.clone();

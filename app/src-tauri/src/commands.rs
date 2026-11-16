@@ -2078,7 +2078,7 @@ pub async fn open_library_file(
 /// The largest file a report is saved as (`FILE_BYTES` of the core's agent/report_page.py).
 const REPORT_FILE_MAX: usize = 2 * 1024 * 1024;
 
-/// Saves a report the owner shares as one HTML file (owner, 2026-11-10: 存成檔案) and shows it selected in its folder.
+/// Saves a report the owner shares as one HTML file and shows it selected in its folder.
 /// The window gives the page's id and the document it drew of it; the core checks both, names the file after the page
 /// and writes it in the owner's output folder, or in Downloads (`pages.export`), so no path comes from the window.
 /// The file is saved even where its folder cannot be shown.
@@ -2325,7 +2325,7 @@ fn layout_has_altgr(hkl: windows::Win32::UI::Input::KeyboardAndMouse::HKL) -> bo
 /// Reads `device.json` and puts its store in the app state. Called from `setup` before the main
 /// window is made: the window's first read of the device settings must find them. A release
 /// build's page once asked before the store existed, read nothing, and a first run opened on the
-/// pages instead of the guide (2026-11-15). Returns the settings as read.
+/// pages instead of the guide. Returns the settings as read.
 pub fn load_device_settings(app: &AppHandle) -> DeviceSettings {
     let path = device_settings::settings_path().unwrap_or_else(|err| {
         log::error!("{err}");

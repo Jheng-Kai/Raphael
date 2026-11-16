@@ -131,7 +131,7 @@ export default [
     ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
     type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"),
   ], { composioConfigured: false }),
-  scene("plugins-store-needs", "A row stays as plain as Grok Bot's (the mark, the name, 連結) and says nothing of what the app asks for: its page does", [
+  scene("plugins-store-needs", "A row stays plain (the mark, the name, 連結) and says nothing of what the app asks for: its page does", [
     ...store, click('[data-conn="store-group"][data-id="productivity"]'), wait('[data-conn="join"][data-id="acme-ledger"]'), check("plugins-store-needs"), check("plugins-store-rows"),
   ]),
   scene("plugins-store-needs-page", "The page of an app that asks for a key says so beside its 加入, which is never dead", [

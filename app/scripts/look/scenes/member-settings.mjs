@@ -42,8 +42,7 @@ const personaScenes = [
   scene('member-persona-saved', 'Enter on one line saves it: the row is back with the new words, the pencil is back and nothing is said', [...soul, ...edit('personality'), type('.ms-pane #ms-personality', manner), key('Enter'), wait('.ms-pane [data-ms="edit"][data-field="personality"]:not([aria-busy])'), check('member-settings-persona-saved')], persona('', job)),
   scene('member-persona-escape', 'Escape puts the old words back, saves nothing and says nothing', [...soul, ...edit('instructions'), type('.ms-pane #ms-instructions', '全部改掉'), key('Escape'), wait('.ms-pane [data-ms="edit"][data-field="instructions"]'), check('member-settings-persona-escape')], persona(manner, job)),
 ];
-// The mouse's side buttons walk back through every view the owner went into, however small (owner, 2026-11-14: 「從工具到個性與指示
-// 要可以倒退 進到記憶畫面倒退會回到技能與指令的頁面」), and forward again: R-NAV-03.
+// The mouse's side buttons walk back through every view the owner went into, however small, and forward again: R-NAV-03.
 const intoSkill = [...page, ...kind('soul', '.ms-pane [data-k="ms-personality"]'), ...kind('skills', '.ms-pane [data-ms="skill-open"]'), click('.ms-pane [data-ms="skill-open"]'), wait('.ms-pane #ms-skill-text')];
 const stepScenes = [
   scene('nav-steps-member-settings', 'Back from a skill\'s page is its tab; back again walks the tabs the owner opened, then the conversation; forward goes in again', [

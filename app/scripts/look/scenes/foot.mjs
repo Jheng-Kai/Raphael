@@ -1,6 +1,6 @@
 import { scene, click, hover, check, wait, waitGone, key, focus, accountMenu, drag, wide } from "./steps.mjs";
 
-// The app opens on Raphael's conversation, and the sidebar's foot is Grok Bot's (owner, 2026-11-12 evening, R-SIDE-01): the owner's face and the
+// The app opens on Raphael's conversation, and the sidebar's foot is one row (R-SIDE-01): the owner's face and the
 // 連結應用程式 pill on one row. The face opens the account menu (用量 with its submenu, 聽寫, 行事曆, 設定); on the rail the pill is an icon
 // button and the face stands under it. Every scene runs at all three widths: the list at 1120 and 1920, the rail at 720.
 const marks = { appsInventory: { state: "complete", count: 3, apps: ["GitHub", "Notion", "Slack"].map((name, i) => ({ id: `sample-${i}`, name, connected: true, enabled: true, state: "ready", tools: 1, last_used_at: 3 - i })) } };
@@ -14,9 +14,9 @@ export default [
   // At start-up the first view (the roster and the rooms) is answered before the model, app and settings reads start, and those never overlap (R-START-02).
   scene("start-startup-order", "At start-up the roster and the rooms are answered before the model, app and settings reads start, and those never overlap",
     [wait(".page-agent:not([hidden]) .conversation-trigger"), { action: "startup-order", firstView: ["members.list", "rooms.list"], heavy: ["models.catalog", "brains.cli"] }], { coreLatencyMs: 60 }),
-  scene("foot-rest", "The foot is one row as Grok Bot's: the owner's round face and the Connections pill (36px, fully round, on its own surface), with no tooltip; on the rail the icon and the face in a column",
+  scene("foot-rest", "The foot is one row: the owner's round face and the Connections pill (36px, fully round, on its own surface), with no tooltip; on the rail the icon and the face in a column",
     [check("foot-rest"), check("sidebar-shell")], marks),
-  // Owner, 2026-11-15: 「如果剛進來甚麼都還沒 connect 這邊還是要顯示 default 顯示的 我覺得就顯示 gmail Notion 跟 calendar」.
+  // With nothing connected yet the pill still shows the starter apps.
   scene("foot-starter-apps", "With no app connected yet the pill still shows Gmail, Notion and Google Calendar beside its words",
     [check("foot-starter-apps"), check("sidebar-shell")], { appsInventory: { state: "complete", count: 0, apps: [] } }),
   scene("foot-account-menu", "Pressing the face opens the account menu above it (to its right on the rail): 用量 with a chevron and no number, 聽寫, 行事曆, a hairline, 設定",

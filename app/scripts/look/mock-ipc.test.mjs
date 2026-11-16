@@ -330,7 +330,7 @@ describe("shared look IPC boundary", () => {
     expect(home.today.some(item => home.reports.some(report => report.id === item.id))).toBe(false);
     expect(home.counts.today).toBe(home.today.length);
     expect(home.today.map(item => item.at_ms)).toEqual([...home.today.map(item => item.at_ms)].sort((a, b) => a - b));
-    // What only Home read is not sent any more (2026-11-12).
+    // What only Home read is not sent any more.
     expect(Object.keys(home).filter(key => ["usage", "dictation", "report", "today_plan", "health", "activity"].includes(key))).toEqual([]);
   });
   it("keeps an empty overview empty and the sidebar status consistent", async () => {

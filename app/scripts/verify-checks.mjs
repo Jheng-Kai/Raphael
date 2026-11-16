@@ -18,7 +18,7 @@ export function verifyChecks({ args, directory, judge, environment = process.env
   if (!args.includes("--quick")) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
   // --core is the whole suite, which CI runs on every push in a quarter of an hour over eight machines; here it takes
   // far longer. --contract is the part a core change runs before it is handed back: the scenario drivers and the default
-  // prompt's size budget, where the work of two units that each passed alone has broken together (2026-11-11).
+  // prompt's size budget, where the work of two units that each passed alone has broken together.
   const whole = args.includes("--core"), contract = args.includes("--contract") && !whole;
   if (whole || contract) {
     const core = join(root, "core"), python = environment.RAPHAEL_CORE_PYTHON || join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");

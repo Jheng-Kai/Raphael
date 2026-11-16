@@ -22,7 +22,7 @@ const signIn = { mentionSignIn: true };
 const menuOpen = [wait("#app-popover[data-team-mentions]")];
 
 export default [
-  // The @ menu as Grok Bot's: the other members, then the apps, nothing else.
+  // The @ menu: the other members, then the apps, nothing else.
   scene("mention-menu-open", "An @ lists the other members and the connected apps, each saying at the right what it is", [type(field, "@"), ...menuOpen, check("mention-menu-open")], apps),
   scene("mention-menu-filter", "What follows the @ narrows the rows by the app's one matcher", [type(field, "@no"), ...menuOpen, check("mention-menu-filter")], apps),
   scene("mention-menu-signin", "An app whose sign-in ran out says 需要登入 after its name", [type(field, "@"), ...menuOpen, check("mention-menu-signin")], signIn),
@@ -32,7 +32,7 @@ export default [
   scene("completion-mentions", "Every member and thirty-two services on one list in a fixed-height menu, no show-all row", [before, type(field, "@"), wait("#app-popover"), check("completion-mentions")], discovery),
   scene("completion-filtered", "Alias search ranks services and caps visible results", [before, type(field, "@notes"), wait("#app-popover"), check("completion-filtered")], discovery),
   scene("typo-mention", "A typo or swapped letters after the @ still find the app, first", [type(field, "@notoin"), wait("#app-popover[data-team-mentions]"), check("typo-mention")], apps),
-  // Owner, 2026-11-14: no 「顯示全部」 row; the one list scrolls with the mouse wheel as Grok Bot's does.
+  // No 「顯示全部」 row: the one list scrolls with the mouse wheel.
   scene("completion-scrolled", "The mouse wheel takes the one list of thirty-two apps to its end, sign-in and key states included", [before, type(field, "@"), wait("#app-popover[data-team-mentions]"), { action: "wheel", selector: "#app-popover", deltaY: 9000 }, check("completion-scrolled")], discovery),
   scene("completion-arrows", "The up arrow from the first row wraps to the last, which scrolls into view", [before, type(field, "@"), wait("#app-popover[data-team-mentions]"), key("ArrowUp"), check("completion-arrows")], discovery),
   scene("completion-group", "Group mentions limit members while retaining connected services", [room(1), before, type("#room-message", "@"), wait("#app-popover"), check("completion-group")], discovery),

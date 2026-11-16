@@ -275,7 +275,7 @@ export function checkRendered(name, context = {}) {
     const inside = (node, box) => { const a = node.getBoundingClientRect(), b = box.getBoundingClientRect(); return a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5; };
     if (name === "accounts-card") {
       require(visible(card) && rows.length === 2, `the card lists the connected account and the young sign-in, not the old one (${rows.length} rows)`);
-      require(rows.map(row => row.querySelector(".nm").textContent).join("|") === "Jack|帳號 2", "the rows are named Jack and 帳號 2");
+      require(rows.map(row => row.querySelector(".nm").textContent).join("|") === "Alex|帳號 2", "the rows are named Alex and 帳號 2");
       require(rows.map(row => row.querySelector(".st").textContent).join("|") === "已連結|等待登入", "the rows say 已連結 and 等待登入");
       require(rows.every(row => row.querySelector(".i") && row.querySelector('[data-conn="account-menu"]')), "each row is a person, a name, a status and a ⋯");
       require(!card.querySelector('[data-conn="account-label"]') && !card.textContent.includes("帳號名稱"), "the 帳號名稱 button is gone");
@@ -305,7 +305,7 @@ export function checkRendered(name, context = {}) {
     if (name === "accounts-removed") {
       const call = made("connectors.remove_account");
       require(call.length === 1 && call[0].params.id === "composio:gmail" && call[0].params.account_id === "ca_me", "the core was asked to remove that one account");
-      require(rows.map(row => row.querySelector(".nm").textContent).join("|") === "Jack" && !document.querySelector(".mb-delete"), "only Jack is left and the question is closed");
+      require(rows.map(row => row.querySelector(".nm").textContent).join("|") === "Alex" && !document.querySelector(".mb-delete"), "only Alex is left and the question is closed");
     }
     if (name === "accounts-removed-waiting") {
       const call = made("connectors.remove_account");

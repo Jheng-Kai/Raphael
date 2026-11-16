@@ -909,7 +909,7 @@ describe("rendered look checks", () => {
     // Two circles of one size, side by side in the middle: a primary as wide as its drawing is right here, since only the
     // welcome's pill fills its row.
     expect(audit().productRules).toEqual([]);
-    // One at each end of the row is the foot of 2026-11-11 afternoon that the owner sent back.
+    // One at each end of the row is the foot layout the rule rejects.
     back.getBoundingClientRect = () => ({ left: 50, top: 12, right: 98, bottom: 60, width: 48, height: 48 });
     primary.getBoundingClientRect = () => ({ left: 902, top: 12, right: 950, bottom: 60, width: 48, height: 48 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-37']);

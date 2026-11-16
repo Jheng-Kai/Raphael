@@ -505,16 +505,16 @@ mod tests {
 
     #[test]
     fn a_name_in_lower_case_typed_over_a_mishearing_is_a_candidate() {
-        // What speech-to-text wrote for the owner's 「grokbot」 (dictation history, 2026-11-13/14).
-        let pasted = "你可以看一下Grokbox是怎麼做的，他們是直接可以開啟來";
+        // What speech-to-text wrote for the name 「pinebot」.
+        let pasted = "你可以看一下Pinebox是怎麼做的，他們是直接可以開啟來";
         assert_eq!(
-            learned_after(pasted, &[("Grokbox", "grokbot")]),
-            pairs(&[("Grokbox", "grokbot")])
+            learned_after(pasted, &[("Pinebox", "pinebot")]),
+            pairs(&[("Pinebox", "pinebot")])
         );
-        let pasted = "你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下這樣子";
+        let pasted = "你這邊的話就是跟Pine Bus一樣，設計是滑鼠滾輪往下這樣子";
         assert_eq!(
-            learned_after(pasted, &[("Grok Bus", "grokbot")]),
-            pairs(&[("Grok Bus", "grokbot")])
+            learned_after(pasted, &[("Pine Bus", "pinebot")]),
+            pairs(&[("Pine Bus", "pinebot")])
         );
         let pasted = "幫我用 Herder 開兩個分頁";
         assert_eq!(

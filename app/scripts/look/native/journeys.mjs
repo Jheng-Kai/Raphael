@@ -847,7 +847,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const inFrame = (frame, id) => frame.$eval(id, el => el.textContent);
     const asked = async question => (await snapshot()).agent_turns.filter(row => row.question === question);
     // A page in its card is only a preview (inert, R-PAGE-02): the owner presses the card, and the page opens in the conversation's place
-    // (R-PAGE-01, 2026-11-11), where it takes a press and speaks; the header's arrow goes back.
+    // (R-PAGE-01), where it takes a press and speaks; the header's arrow goes back.
     const larger = async () => {
       if (await page.$(".pgv-frame-box iframe")) return;
       await click(page, ".pg-card .pg-body");
@@ -1282,7 +1282,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     if (targets.size !== 2) throw new Error("Both members report the same seat target");
     // A member asks its owner to sign in at its seat, which is how an owner gives every member his own account: the
     // owner opens that screen larger, takes it and types. An owner was shown "you are in control" there with nothing
-    // getting in (2026-11-13). A computer per member has had this journey since it was built; a seat had not.
+    // getting in. A computer per member has had this journey since it was built; a seat had not.
     const third = people.find(row => row.name === "NativeSeatC");
     if (!third) throw new Error("The journey's third member is missing");
     await context.computerSignin(third.id);
@@ -1943,7 +1943,7 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
 
     // 1. A word the owner's dictionary holds comes out as the dictionary spells it.
     result.first = await dictate("dictated-first");
-    if (!result.first.pasted.includes("grokbot")) throw new Error(`grokbot did not come out as the dictionary spells it: ${JSON.stringify(result.first)}`);
+    if (!result.first.pasted.includes("pinebot")) throw new Error(`pinebot did not come out as the dictionary spells it: ${JSON.stringify(result.first)}`);
 
     // 2. He corrects the name speech-to-text got wrong, in the composer, and sends.
     const misheard = result.first.pasted.match(/[Hh]er+d\w*/)?.[0];
@@ -1980,7 +1980,7 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     // 4. The next dictation spells it.
     await newConversation(context);
     result.second = await dictate("dictated-second");
-    if (!result.second.pasted.includes("herdr") || !result.second.pasted.includes("grokbot")) throw new Error(`The next dictation did not use what was learned: ${JSON.stringify(result.second)}`);
+    if (!result.second.pasted.includes("herdr") || !result.second.pasted.includes("pinebot")) throw new Error(`The next dictation did not use what was learned: ${JSON.stringify(result.second)}`);
   } else if (name === "delete-conversation") {
     await deletionAudit(context, { click, wait, type, pause, details, typed, newConversation, remaining });
     await perform(page, { action: "member", id: 0 });
