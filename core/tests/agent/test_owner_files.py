@@ -108,6 +108,51 @@ async def test_a_link_to_a_kept_place_is_kept_too(home, files):
     assert not result.ok and result.kind == "kept"
 
 
+def _link_folder(link, target):
+    """A folder link as a person makes one without special rights: a junction on Windows, a symbolic link elsewhere."""
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+async def test_a_search_judges_a_linked_folder_where_it_leads(home, files):
+    # The walk descends into a Windows junction, so a folder link inside a searched folder is judged by its target. The
+    # file in the kept place has an ordinary name, so only where it stands keeps it.
+    (home / ".ssh" / "config").write_text("Host PRIVATE\n", encoding="utf-8")
+    _link_folder(home / "Documents" / "shortcut", home / ".ssh")
+    matched = await call(files, "grep", {"pattern": "PRIVATE", "path": "~/Documents", "output_mode": "content"})
+    assert "PRIVATE" not in matched.text
+    listed = await call(files, "glob", {"pattern": "**/*", "path": "~/Documents"})
+    assert "config" not in listed.text and "plan.md" in listed.text
+
+
+async def test_a_search_judges_a_linked_file_where_it_leads(home, files):
+    try:
+        (home / "Documents" / "readme.txt").symlink_to(home / ".ssh" / "id_ed25519")
+    except OSError:
+        pytest.skip("this account may not make file links")
+    matched = await call(files, "grep", {"pattern": "PRIVATE", "path": "~/Documents", "output_mode": "content"})
+    assert "PRIVATE" not in matched.text
+    listed = await call(files, "glob", {"pattern": "*.txt", "path": "~/Documents"})
+    assert "readme.txt" not in listed.text
+
+
+def test_a_walk_keeps_raphaels_own_data_behind_a_link(home, tmp_path):
+    data = tmp_path / "raphael-data"
+    data.mkdir()
+    (data / "raphael.db").write_text("ship\n", encoding="utf-8")
+    try:
+        (home / "Documents" / "copy.db").symlink_to(data / "raphael.db")
+    except OSError:
+        pytest.skip("this account may not make file links")
+    # As the data floor does, the guard answers for the path it is given: the walk must give it the place a link leads to.
+    protected = lambda path: owner_files._under(path, os.path.realpath(data))  # noqa: E731
+    walked = list(owner_files.Walk(os.path.realpath(home / "Documents"), protected, home=home).files())
+    assert walked and not [path for path in walked if path.endswith("copy.db")]
+
+
 async def test_an_example_env_file_is_no_secret(home, files):
     result = await call(files, "read_file", {"path": "~/project/.env.example"})
     assert result.ok and "TOKEN=" in result.text

@@ -274,13 +274,23 @@ class Walk:
         self.deadline = time.monotonic() + WALK_SECONDS
         self.cut = self.denied = False
 
+    def _refused(self, full, folder=False):
+        """Whether an entry of the walk is kept from it, judged where it leads: a link or a junction inside a walked folder
+        may point into a kept place or Raphael's own data, and `os.walk` descends into a Windows junction. Only links are
+        resolved; a plain file stands in a folder that was judged on the way down."""
+        linked = os.path.islink(full) or getattr(os.path, "isjunction", lambda path: False)(full)
+        if not linked:
+            return kept(full, self.home) or (folder and self.protected(full))
+        real = os.path.realpath(full)
+        return kept(full, self.home) or kept(real, self.home) or self.protected(real)
+
     def _skipped(self, folder, name):
         full = os.path.join(folder, name)
         if name in _HEAVY_NAMES and not _under(self.base, full):
             return True
-        if kept(full, self.home) or self.protected(full):
+        if self._refused(full, folder=True):
             return True
-        heavy = [self.home / place for place in _HEAVY_IN_HOME] + [Path(place) for place in _HEAVY_SYSTEM]
+        heavy =[self.home / place for place in _HEAVY_IN_HOME] + [Path(place) for place in _HEAVY_SYSTEM]
         return any(_under(full, place) and not _under(self.base, place) for place in heavy)
 
     def files(self):
@@ -299,7 +309,7 @@ class Walk:
                     self.cut = True
                     return
                 full = os.path.join(folder, name)
-                if not kept(full, self.home):
+                if not self._refused(full):
                     yield full
 
     def note(self):
