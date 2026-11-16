@@ -6088,6 +6088,31 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.au-pop-editor') && !document.querySelector('.au-draft'), "the form and its placeholder are gone");
     return { check: name };
   }
+  // R-LINK-01: an address in words read whole (an event's notes, a card's words, a routine's instructions) is a link whose words
+  // are the address, ending where the punctuation or the Chinese words after it begin; every line of it stays inside its words
+  // and what holds them at this width; the scene's real press opened it once, in the browser, and pressed nothing around it.
+  if (name === "urls-are-links") {
+    const words = [...document.querySelectorAll(".au-pop-notes, .conversation-card .card-body, .rv-prompt")].filter(box => visible(box) && box.querySelector("a.message-link"));
+    require(words.length === 1, "one surface shows words with a link");
+    const box = words[0], link = box.querySelector("a.message-link"), holder = box.closest(".au-pop, .conversation-card, .mb-dialog");
+    require(visible(link) && visible(holder), "the link and what holds it are on screen");
+    require(new URL(link.textContent).href === link.dataset.url && link.getAttribute("href") === link.dataset.url, "its words are the address it opens");
+    require(!link.hasAttribute("title") && !link.hasAttribute("aria-label"), "no tooltip repeats it");
+    const after = link.nextSibling?.textContent ?? "";
+    require(!after || /^[^\x00-\x7f]/.test(after), `the address ends where the words after it begin (after it: ${after.slice(0, 4)})`);
+    const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+    const within = box.getBoundingClientRect(), held = holder.getBoundingClientRect();
+    for (const line of link.getClientRects()) require(inside(line, within) && inside(line, held), `every line of the link stays inside its words and what holds them at ${innerWidth}px`);
+    require(held.left >= 0 && held.right <= innerWidth && holder.scrollWidth <= holder.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, "nothing is widened or scrolls sideways");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--link)"; document.body.append(probe);
+    const blue = getComputedStyle(probe).color; probe.remove();
+    require(getComputedStyle(link).color === blue, "it wears the app's one link colour");
+    const opened = window.__look.calls.filter(call => call.command === "open_external_url");
+    require(opened.length === 1 && opened[0].url === link.dataset.url && window.__look.urls.at(-1) === link.dataset.url, "the press opened the address once, in the browser");
+    require(!window.__look.calls.some(call => call.command === "agent_question_answer" || ["calendar.update", "calendar.delete", "routines.update"].includes(call.method)), "nothing around the link was pressed");
+    return { check: name, url: link.dataset.url, lines: link.getClientRects().length };
+  }
   if (name === "calendar-detail-own" || name === "calendar-detail-read") {
     const panel = document.querySelector('.au-pop-detail');
     require(visible(panel), "the small detail is open");

@@ -16,6 +16,7 @@ import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
+import { linkedText } from "./message-content";
 import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNameRank, storeNear } from "./store-finder";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
@@ -780,7 +781,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
       : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
   const head = `<div class="cs-head">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
-  const about = `<p class="cs-desc">${esc(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
+  const about = `<p class="cs-desc">${linkedText(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
   // What signing in asks of the owner, said once, in a line, where the old page said it twice.
   const lead = !g && s?.needs === "key" && !inChat(s) ? `<p class="cs-needs">${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";

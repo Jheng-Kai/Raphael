@@ -48,5 +48,8 @@ export default [
   scene('member-switch', 'In the member\'s panel a routine that is on has a switch in the member\'s colour, and the off ones are as they were', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
   scene('member-switch-yellow', 'A yellow slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:wings-yellow')}),
   scene('member-switch-white', 'A white-ish slime\'s switch keeps a knob that shows', [...details, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch-light')], {members: withSlime(1, 'slime:bowtie-pearl')}),
+  // R-LINK-01: a routine read from the member's panel shows the address in its instructions as a link, which opens in the browser and leaves the routine open.
+  scene('urls-member-routine', 'From the member panel, the address in the instructions of a routine is a link that opens in the browser', [...details, wait('.mb-det [data-det="routine-open"]'), click('.mb-det [data-det="routine-open"]'), wait('.rv-dialog .rv-prompt .message-link'), click('.rv-dialog .rv-prompt .message-link'), check('urls-are-links')],
+    {routines: [{id: 2, member_id: 1, title: '每週專案週報', prompt: fixture.linkSample.prompt, schedule: {kind: 'weekly', days: [1], time: '08:00'}, enabled: true, last_run: 1792803600000, next_run: 1792890000000}]}),
   scene('member-switch-raphael', 'Raphael\'s own panel wears Raphael\'s blue on a routine that is on', [{action:'open-details'}, wait('.mb-routine-row .tg[aria-checked="true"]'), check('member-switch')]),
 ];

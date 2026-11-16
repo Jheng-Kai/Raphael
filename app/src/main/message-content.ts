@@ -67,13 +67,55 @@ export function shortUrl(url: string): string {
   return label.length > 32 ? label.slice(0, 31) + "…" : label;
 }
 
+/** Letters of the scripts written without spaces between words. */
+const SPACELESS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
+/** What starts a part of an address (a path segment, a query value, a fragment, a handle): a page or a person named in Chinese starts after one. */
+const PART_START = "/=?#&@";
+
+/**
+ * Where an address that starts at the beginning of `text` ends. It stops at a space, a quote, CJK punctuation and at
+ * Chinese, Japanese or Korean words that follow it directly (`https://example.com看這裡`), unless those words start a part of
+ * the address of their own (`https://zh.wikipedia.org/wiki/臺北`). A full stop, comma or closing bracket that ends the
+ * sentence around it is not part of it; a bracket the address opened itself is.
+ */
 export function bareUrl(text: string): string {
-  let raw = /^https?:\/\/[^\s<>"'`《》「」『』【】（）。，、！？；：…]+/i.exec(text)?.[0] ?? "";
-  raw = raw.replace(/[.,;:!?*_]+$/, "");
-  for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
-    while (raw.endsWith(close) && raw.split(close).length > raw.split(open).length) raw = raw.slice(0, -1);
+  let raw = /^https?:\/\/[^\s<>"'`\u2018-\u201f\u2026\u3000-\u303f\uff00-\uffef]+/i.exec(text)?.[0] ?? "";
+  let at = 0, previous = "", inPart = false;
+  for (const char of raw) {
+    if (SPACELESS.test(char)) {
+      if (!inPart && !PART_START.includes(previous)) { raw = raw.slice(0, at); break; }
+      inPart = true;
+    } else if (PART_START.includes(char)) inPart = false;
+    previous = char; at += char.length;
+  }
+  for (let before = ""; before !== raw;) {
+    before = raw;
+    raw = raw.replace(/[.,;:!?*_]+$/, "");
+    for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
+      while (raw.endsWith(close) && raw.split(close).length > raw.split(open).length) raw = raw.slice(0, -1);
+    }
   }
   return raw;
+}
+
+/**
+ * Plain words as HTML for the places that show text which is not a message (an event's notes, a card's words, a
+ * routine's instructions): every character escaped, and each http or https address a link whose words are the address
+ * itself, as it was written, never other words, so no text can show one address and open another. It opens in the
+ * owner's browser through the window's one link opener (`link-opener.ts`); it has no tooltip, which would only repeat it.
+ */
+export function linkedText(text: string): string {
+  const start = /https?:\/\//gi;
+  let out = "", from = 0;
+  for (let found = start.exec(text); found; found = start.exec(text)) {
+    const raw = bareUrl(text.slice(found.index));
+    const url = raw ? messageUrl(raw) : null;
+    if (!url) continue;
+    out += esc(text.slice(from, found.index)) +
+      `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${esc(raw)}</a>`;
+    from = start.lastIndex = found.index + raw.length;
+  }
+  return out + esc(text.slice(from));
 }
 
 /** An address only this machine or its network can open: no public page, so no title to read and no preview. */

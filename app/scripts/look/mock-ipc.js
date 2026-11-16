@@ -648,6 +648,8 @@ export function installMock(fixture, config = {}, target = window) {
       Object.assign(made.turn, { question: "幫我填入出差住宿的付款資料。", text: "", messages: [] });
     }
     if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
+    // The member's reason in the card's words holds a long address in brackets, with Chinese words right after it (R-LINK-01).
+    if (variant.linkedReason) made.turn.permissions[0].reason = data.linkSample.reason;
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
   }
@@ -818,6 +820,8 @@ export function installMock(fixture, config = {}, target = window) {
     own(2, "供應商會議", octoberAt(23, 13), octoberAt(23, 14, 30), { ...addedBy(1), notes: "從今天的信件整理：對方想確認交期。" }),
     own(3, "交付截止日", octoberAt(22, 0), octoberAt(23, 0), { all_day: true }),
   ];
+  // An all-day item a member synced from another app, its notes a Chinese sentence holding the page's address with a full stop right after it (R-LINK-01).
+  if (variant.linkedNotes) data.home.calendar_events.push(own(4, "專案週報", octoberAt(24, 0), octoberAt(25, 0), { all_day: true, ...addedBy(1), notes: data.linkSample.notes }));
   if (variant.presence === "calendar") data.home.calendar_events.find(item => item.id === "own:1").title = data.presenceSample.calendar;
   if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
   if (variant.calendarBusy) data.home.calendar_events.push(
