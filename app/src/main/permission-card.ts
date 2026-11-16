@@ -176,8 +176,7 @@ export function ownerQuestionHTML(question: OwnerQuestion): string {
 }
 
 /**
- * A question card stands at the end of the thread only while it waits for the owner (owner, 2026-11-11: 「它那個回答的卡片
- * 不是永遠都會在最下面，它會跑到下面的情況就只有我還沒有回答的時候。如果已回答的話，就會跟正常的對話一模一樣」). Once answered,
+ * A question card stands at the end of the thread only while it waits for the owner. Once answered,
  * cancelled or expired it is part of the conversation and stands where it was asked (settledQuestions).
  * `settled` picks the cards that no longer wait (true), the ones that wait (false) or all of them (undefined).
  */

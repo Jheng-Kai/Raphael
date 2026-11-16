@@ -5,8 +5,6 @@ what came before: while the answer has not begun, the connection may stay quiet 
 all, a keep-alive comment included, starts that wait again); once the answer flows, a gap of `STREAM_STALL_S` is a
 connection that is gone. A stream that goes quiet raises `httpx.ReadTimeout`, one that ends before its answer was
 complete `httpx.RemoteProtocolError`: the errors the callers already turn into a timeout and a network failure.
-
-Adapted from NousResearch/hermes-agent and opencode (MIT); see core/packaging/licenses.
 """
 
 import asyncio

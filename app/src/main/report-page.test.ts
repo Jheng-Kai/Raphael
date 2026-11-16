@@ -20,14 +20,14 @@ const report: Report = {
     { kind: "table", title: "總覽表", columns: ["成員", "負責"], rows: [
       { cells: ["小晴", "研究"], group: "專案工作", member_id: 1, status: "blocked" },
       { cells: ["小森", "進度"], group: "專案工作", member_id: 2, status: "running" },
-      { cells: ["紫苑", "日文"], group: "語言學習" }] },
+      { cells: ["小葵", "日文"], group: "語言學習" }] },
     { kind: "team", title: "分工與協作", nodes: [{ id: "o", owner: true }, { id: "r", member_id: 0, note: "分派" }, { id: "s", member_id: 2 }],
       edges: [{ from: "o", to: "r", label: "交辦" }, { from: "r", to: "s", label: "排進度" }, { from: "s", to: "o", label: "每週進度" }],
       notes: [{ label: "缺口", text: "客戶來信 <i>沒有人負責</i>" }] },
     { kind: "text", text: "沒有其他紀錄。" },
   ],
 };
-// A daily overview (owner, 2026-11-14): tiles, then every kind of chart, none of them given a span.
+// A daily overview: tiles, then every kind of chart, none of them given a span.
 const dashboard: Report = {
   as_of: "2026-11-14T00:00:00Z",
   sections: [
@@ -42,7 +42,7 @@ const dashboard: Report = {
     { kind: "chart", title: "比例", type: "pie", labels: ["是", "否"], series: [{ values: [1, 3] }] },
   ],
 };
-// A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list): a summary line, a note, a table with a dropdown, a column of
+// A document-style report: a summary line, a note, a table with a dropdown, a column of
 // figures and a column of links.
 const document_: Report = {
   as_of: "2026-11-14T00:00:00Z",
@@ -289,7 +289,7 @@ test("each box stands under those it works with, and the arrows of a small team 
     const layout = layoutTeam(team, flows, width, measure);
     expect(crossings(layout), `${width}`).toEqual([]);
     const at = (id: string) => layout.nodes.find(node => node.box.id === id)!.box;
-    // 小晴 has one colleague above it, 拉斐爾: it stands right under him.
+    // 小晴 has one colleague above it, 拉斐爾: it stands right under that colleague.
     expect(at("q").x).toBe(at("r").x);
   }
 });
@@ -507,14 +507,14 @@ test("share saves the report on screen as a file, once a press, says where it we
   thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
   const view = stage.querySelector<HTMLElement>(".rp-view")!;
-  // Nothing floats over the report (owner, 2026-11-12: its place as Grok Bot's share): its one button stands first in the header's
+  // Nothing floats over the report: its one button stands first in the header's
   // tools at the top right, where the thread's share stands; its name is its only word, so its tooltip repeats nothing on screen.
   expect(view.querySelector("button.btn.icon, .rp-top, [data-report-act]")).toBeNull();
   const tools = document.querySelector<HTMLElement>(".mb-head > .ra-tools")!;
   const buttons = [...tools.querySelectorAll<HTMLButtonElement>(":scope > button.btn.icon[data-page-act]")];
   expect(buttons.map(button => [button.getAttribute("aria-label"), button.textContent])).toEqual([["存成檔案", ""]]);
   expect(tools.firstElementChild).toBe(buttons[0]);
-  // It saves a file, so it is drawn as one with an arrow into it, never as the arrow out of a box that shares a member (owner, 2026-11-11).
+  // It saves a file, so it is drawn as one with an arrow into it, never as the arrow out of a box that shares a member.
   const drawn = (html: string): string[] => [...html.matchAll(/ d="([^"]+)"/g)].map(found => found[1]!);
   expect(drawn(buttons[0]!.innerHTML)).toEqual(drawn(ico("fileDown")));
   expect(drawn(ico("fileDown"))).not.toEqual(drawn(ico("share")));

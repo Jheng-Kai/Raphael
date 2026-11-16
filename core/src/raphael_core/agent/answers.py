@@ -108,7 +108,7 @@ _NEED = {
 
 def reply_schema(memory: bool = False, *, plain: bool = False) -> dict:
     """The JSON the model must return: the kind of the reply is one of `REPLY_KINDS`, the same words whatever the
-    interface language (owner, 2026-11-14: it goes to no model; `parse_reply` turns the kind into the prefix the app
+    interface language (it goes to no model; `parse_reply` turns the kind into the prefix the app
     shows). With a `memory`, the fields `memory` and `need` too. A `plain` reply (a member's) has no prefix."""
     properties: dict[str, Any] = {
         "prefix": {"type": "string", "enum": list(REPLY_KINDS)},
@@ -175,12 +175,12 @@ def build_user_message(
     """What the model is shown: the summary of the earlier conversation, the latest turns
     (oldest first), the date and time, the results of the tools, the question in tags, which mark it
     as the user's words, and last the rule of the language to reply in, which names no language: the owner's words
-    say which (owner, 2026-11-14: the interface language goes to no model). What changes least comes first.
+    say which (the interface language goes to no model). What changes least comes first.
     `looked_up` says that the lookups the model asked for were made (their results are among the
     tools) and that it is to answer now. `narrated` and `member` retain call compatibility; all authored speech follows the speaker,
     never the interface language. `standing` is what holds for the turn and may differ at the next: the team as it
     is now and the memory files. It comes after the conversation, so that the system prompt and the
-    conversation before it stay as the provider cached them (owner, 2026-11-09)."""
+    conversation before it stay as the provider cached them."""
     parts = []
     if summary:
         parts.append(f"{SUMMARY_HEADER}\n<summary>\n{summary}\n</summary>")
@@ -355,34 +355,159 @@ def _unpointed(text: str) -> tuple[str, bool]:
     return (re.sub(r"\n{3,}", "\n\n", text).strip(), True) if pointed else (text, False)
 
 
-def _joined_reply(text: str) -> dict | None:
-    """A reply written as objects one after another, nothing but space between them, the last one the reply object.
-    Live (2026-11-16, a ChatGPT sign-in model): the final answer was its last progress object followed by the reply,
-    `{"thinking":…,"progress":…,"messages":[…]}{"text":…,"messages":[…],"memory":[],"need":{}}`, and the conversation
-    showed both objects whole, line breaks as `nn`. The messages an earlier object wrote for the owner come first."""
-    decoder, objects, at = json.JSONDecoder(), [], 0
-    while at < len(text):
-        if text[at].isspace():
-            at += 1
-            continue
+_PROTOCOL_KEYS = frozenset({"prefix", "text", "messages", "detail", "memory", "need"})
+# What a model writes as its progress object before a tool call: its own fields beside the reply's.
+_KNOWN_KEYS = _PROTOCOL_KEYS | {"thinking", "progress"}
+# Fields only the protocol has: an object that carries one of them is the protocol, never an example a member authored.
+_STRONG_KEYS = frozenset({"thinking", "progress", "memory", "need"})
+_TAIL_START = re.compile(r'"\s*,\s*"(?:' + "|".join(sorted(_PROTOCOL_KEYS)) + r')"\s*:')
+_OBJECT_OPEN = re.compile(r'\{\s*"(?:' + "|".join(sorted(_KNOWN_KEYS)) + r')"\s*:')
+_FENCE = re.compile(r"```(?:json)?[ \t]*\n(.*?)\n?```", re.S)
+_LINE_OBJECT = re.compile(r"(?m)^[ \t]*\{")
+_CUT = object()  # an object of the protocol's own fields that stops before it is closed
+# A model often types a real line break inside a string of its object: the words are good, so they are read (`strict`
+# would make that a failed turn).
+_LENIENT = json.JSONDecoder(strict=False)
+
+
+def _object_run(text: str, at: int) -> tuple[list[dict], int, bool]:
+    """The objects written one after another from `at`, with nothing but space between them: the objects, where the last
+    one ends, and whether the next thing is an object of the protocol's fields that is cut off."""
+    objects, end = [], at
+    while True:
+        start = end
+        while start < len(text) and text[start].isspace():
+            start += 1
+        if start >= len(text) or text[start] != "{":
+            return objects, end, False
         try:
-            value, at = decoder.raw_decode(text, at)
+            value, stop = _LENIENT.raw_decode(text, start)
         except ValueError:
-            return None
+            return objects, end, bool(_OBJECT_OPEN.match(text, start))
         objects.append(value)
-    if len(objects) < 2 or not all(isinstance(item, dict) for item in objects):
+        end = stop
+
+
+def _spoken(item: dict, *, final: bool) -> list[str]:
+    """What an object of the protocol says to the owner: its messages, and for the reply object its text when it has none."""
+    messages = item.get("messages")
+    if isinstance(messages, list):
+        return [message for message in messages if isinstance(message, str) and message.strip()]
+    return [item["text"]] if final and isinstance(item.get("text"), str) and item["text"].strip() else []
+
+
+def _protocol_objects(objects: list[dict], *, strict: bool = False) -> bool:
+    """Whether objects written one after another are the protocol: one of them has a field that only the protocol has, each
+    but the last has no other field than its fields, and the last has at least one of them (an object of fields of its own,
+    such as `{"metadata": …}`, is the member's content and stays). `strict` asks the last for its fields only."""
+    final, earlier = objects[-1], objects[:-1]
+    return (any(item.keys() & _STRONG_KEYS for item in objects) and all(item.keys() <= _KNOWN_KEYS for item in earlier)
+            and bool(final.keys() & _KNOWN_KEYS) and not (strict and not final.keys() <= _KNOWN_KEYS))
+
+
+def _compose(lead: list[dict], words: str, trailing: list[dict], after: str = "") -> dict:
+    """The reply of protocol objects with the words among them, in the order they were written: what the leading objects
+    said for the owner, the words, what the objects that end the text said (the last of them is the reply), the words
+    after. `_objects` is what the objects said, which is all that speech while a turn works counts."""
+    objects = [*lead, *trailing]
+    said = [[message for message in _spoken(item, final=item is objects[-1])] for item in objects]
+    reply = dict(objects[-1])
+    parts = [*(m for group in said[:len(lead)] for m in group), words, *(m for group in said[len(lead):] for m in group), after]
+    reply["messages"] = [part for part in parts if part.strip()]
+    reply["_objects"] = [m for group in said for m in group]
+    return reply
+
+
+def _unfenced(text: str) -> str:
+    """The text with each code block that holds only the protocol's objects taken out of its fence."""
+    def swap(match: re.Match) -> str:
+        body = match[1].strip()
+        objects, end, cut = _object_run(body, 0)
+        if objects and not cut and not body[end:].strip() and any(item.keys() & _STRONG_KEYS for item in objects):
+            return "\n" + body + "\n"
+        return match[0]
+    return _FENCE.sub(swap, text).strip()
+
+
+def _read_envelope(text: str, *, edges: bool = True, strict: bool = False) -> dict | object | None:
+    """A reply the protocol wrote as more than the one envelope: objects one after another (the last progress object, then
+    the reply), and with `edges` words before or after them and objects inside a code block. A ChatGPT sign-in model's
+    final answer was `{"thinking":…,"progress":…,"messages":[…]}{"text":…,"messages":[…],"memory":[],"need":{}}`, and the
+    conversation showed both objects whole, line breaks as `nn`. Returns the reply as a dict whose `messages` hold everything
+    meant for the owner, `_CUT` when an object of the protocol's own fields stops before it is closed, and None for anything
+    else: words that only contain objects stay words. Objects count only when they stand where a line begins and begin or end
+    the text (without `edges`, when they are all of it)."""
+    text = _unfenced(text) if edges else text.strip()
+    lead, end, cut = _object_run(text, 0)
+    if cut and not edges:
+        return None  # authored words, for a path that reads whole objects only
+    if cut:
+        # An object cut off straight after objects, with no words between: the objects were progress and the answer is
+        # missing, whatever they said. Only words written outside any object forgive a cut object (below).
+        return None if lead and not all(item.keys() <= _KNOWN_KEYS for item in lead) else _CUT
+    if not edges:
+        return _single_or_run(lead, strict) if lead and not text[end:].strip() else None
+    if lead and not (_protocol_objects(lead) or all(item.keys() <= _KNOWN_KEYS for item in lead)):
+        return None  # objects of the member's own at the start: the member's content
+    fences, counted = 0, 0
+    for match in _LINE_OBJECT.finditer(text):
+        start = match.end() - 1
+        if start < end:
+            continue
+        fences, counted = fences + text.count("```", counted, start), start
+        if fences % 2:
+            continue  # inside a block of code, which is a member's example
+        trailing, stop, cut = _object_run(text, start)
+        words = text[end:start].strip()
+        if cut:
+            # Words, then an object that stops before it is closed: the words are the answer with a broken tail. With no
+            # words before it, the answer is missing.
+            return _compose(lead, words, []) if words and lead else (
+                {"messages": [words], "_objects": []} if words else _CUT)
+        if trailing and not text[stop:].strip() and _protocol_objects([*lead, *trailing]):
+            return _compose(lead, words, trailing)
+    if lead and _protocol_objects(lead):
+        return _compose(lead, "", [], text[end:].strip())
+    return None
+
+
+def _single_or_run(objects: list[dict], strict: bool) -> dict | None:
+    """The reply of objects that are all of a text, None for one object alone (the ordinary envelope) or for any other."""
+    if len(objects) == 1 or not _protocol_objects(objects, strict=strict):
         return None
-    final = dict(objects[-1])
-    if not ("text" in final or "messages" in final):
+    return _compose(objects[:-1], "", objects[-1:])
+
+
+def _exact_envelope(obj: Any) -> bool:
+    """Whether `obj` is the reply object and nothing else: its fields only, each of the kind the protocol gives it."""
+    if not (isinstance(obj, dict) and ("text" in obj or "messages" in obj) and obj.keys() <= _KNOWN_KEYS):
+        return False
+    return all(
+        isinstance(item, list) and all(isinstance(part, str) for part in item) if key == "messages" else
+        isinstance(item, list) if key == "memory" else
+        isinstance(item, (dict, str)) if key == "need" else isinstance(item, str)
+        for key, item in obj.items())
+
+
+def _inner_envelope(value: str) -> dict | None:
+    """The reply object that a model wrote as a JSON string (its envelope encoded twice)."""
+    try:
+        inner = _LENIENT.decode(value)
+    except ValueError:
         return None
-    earlier = [message for item in objects[:-1] if isinstance(item.get("messages"), list)
-               for message in item["messages"] if isinstance(message, str) and message.strip()]
-    if earlier:
-        own = final.get("messages") if isinstance(final.get("messages"), list) else None
-        if own is None:
-            own = [final["text"]] if isinstance(final.get("text"), str) and final["text"].strip() else []
-        final["messages"] = [*earlier, *own]
-    return final
+    return inner if isinstance(inner, dict) and ("text" in inner or "messages" in inner) else None
+
+
+def _nested_envelope(body: str) -> dict | None:
+    """The reply a model's words hold whole: one object, objects one after another, or an object written as a string."""
+    try:
+        value = _LENIENT.decode(body)
+    except ValueError:
+        read = _read_envelope(body, edges=False)
+        return read if isinstance(read, dict) else None
+    if isinstance(value, str):
+        return _inner_envelope(value)
+    return value if isinstance(value, dict) and ("text" in value or "messages" in value) else None
 
 
 def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool = False) -> dict:
@@ -395,21 +520,25 @@ def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool
     if fenced:
         envelope = fenced[1].strip()
     try:
-        obj = json.loads(envelope)
+        obj = _LENIENT.decode(envelope)
     except ValueError:
         obj = None
     if literal:
-        # Written CLI replies admit only the protocol's exact outer shape; all other JSON is authored content.
-        if (isinstance(obj, dict) and ("text" in obj or "messages" in obj)
-                and obj.keys() <= {"text", "detail", "prefix", "messages"}
-                and all(isinstance(item, list) and all(isinstance(part, str) for part in item)
-                        if key == "messages" else isinstance(item, str) for key, item in obj.items())):
-            return obj
+        # Written CLI replies admit only the protocol's exact outer shape, or objects of its fields one after another; all
+        # other JSON is authored content. A CLI is never offered memory or a lookup, so what it wrote of them is dropped.
+        if _exact_envelope(obj):
+            return {key: item for key, item in obj.items() if key not in ("memory", "need")}
+        if isinstance(read := _read_envelope(envelope, edges=False, strict=True), dict):
+            return {key: item for key, item in read.items() if key not in ("memory", "need")}
         return {"text": value, "prefix": default_prefix}
     if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
         return obj
-    if obj is None and (joined := _joined_reply(envelope)) is not None:
-        return joined
+    if isinstance(obj, str) and (inner := _inner_envelope(obj)) is not None:
+        return inner
+    if obj is None and (read := _read_envelope(text)) is not None:
+        if read is _CUT:
+            raise AgentFailure("error")
+        return read
     if loose := loose_reply(text):
         return loose
     if isinstance(obj, (dict, list)) or (fenced and envelope.startswith(("{", "["))):
@@ -425,13 +554,8 @@ def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool
     return {"prefix": default_prefix, "text": text, "messages": parts}
 
 
-_PROTOCOL_KEYS = frozenset({"prefix", "text", "messages", "detail", "memory", "need"})
-_TAIL_START = re.compile(r'"\s*,\s*"(?:' + "|".join(sorted(_PROTOCOL_KEYS)) + r')"\s*:')
-_OBJECT_OPEN = re.compile(r'\{\s*"(?:' + "|".join(sorted(_PROTOCOL_KEYS)) + r')"\s*:')
-
-
 def _without_protocol_tail(text: str) -> str:
-    """Words without the rest of the reply object that a model wrote into them. Live (2026-11-14, a ChatGPT sign-in model):
+    """Words without the rest of the reply object that a model wrote into them. Seen live with a ChatGPT sign-in model:
     a valid reply whose `text` ended `…畫面？","messages":["…"],"memory":[],"need":""}`, and the conversation showed the
     fields, its escaped line breaks as `nn`. Only a tail that is itself the rest of a reply object, of the reply's own
     fields and nothing after it, whose opening brace is not in the words, is taken off: an object written whole in the
@@ -452,11 +576,7 @@ def _reply_words(value: Any) -> str:
     """Unwrap a mistakenly nested envelope without consuming ordinary authored JSON or code."""
     body = _without_protocol_tail(_one_line_text(value))
     for _ in range(4):
-        try:
-            nested = json.loads(body)
-        except ValueError:
-            return body
-        if not isinstance(nested, dict) or not ("text" in nested or "messages" in nested):
+        if (nested := _nested_envelope(body)) is None:
             return body
         messages = nested.get("messages")
         words = [item for item in messages if isinstance(item, str) and item.strip()] if isinstance(messages, list) else []
@@ -464,10 +584,24 @@ def _reply_words(value: Any) -> str:
     return ""
 
 
-def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None, literal: bool = False) -> Reply:
+def _shape(data: Any) -> str:
+    """What a reply was, for the log, without a word of it: text and its length, or the reply fields an object had."""
+    if isinstance(data, str):
+        return f"text chars={len(data)} stripped={len(data.strip())}"
+    if isinstance(data, Mapping):
+        fields = {key: (f"list[{len(value)}]" if isinstance(value, list) else f"str[{len(value)}]" if isinstance(value, str)
+                        else type(value).__name__) for key, value in data.items() if key in _PROTOCOL_KEYS}
+        return f"object fields={json.dumps(fields)} other_fields={sum(key not in _PROTOCOL_KEYS for key in data)}"
+    return type(data).__name__
+
+
+def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None,
+                literal: bool = False, quiet: bool = False) -> Reply:
     """Keep every authored message and the full durable text; normalize persona frames only
-    on the corresponding display path. Empty answers require memory edits or a lookup.
+    on the corresponding display path. Empty answers require memory edits or a lookup. A `quiet` caller only asks whether
+    there is a reply (`public_reply`): an empty one is no failure of its, and is not logged as one.
     """
+    received = data
     if isinstance(data, str):
         data = _reply_input(data, default_prefix, literal=literal)
     if not isinstance(data, Mapping):
@@ -494,8 +628,8 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         prefix = prefix or match[1]
         full = match[2].strip()
     detail = _one_line_text(data.get("detail")).strip()
-    # The conversation folds `detail` away: a reply that sends the owner to it points at nothing he can open. What it
-    # pointed at is said where he reads, and the pointing sentence goes.
+    # The conversation folds `detail` away: a reply that sends the owner to it points at nothing they can open. What it
+    # pointed at is said where they read, and the pointing sentence goes.
     pointed = False
     if messages:
         cleaned = [_unpointed(text) for text in messages]
@@ -512,7 +646,9 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     if messages:
         full = "\n\n".join(messages)
     if not full and not (memory or search):
-        logger.warning("The model's reply said nothing")
+        if not quiet:
+            # What came, never its words: an empty text, or an object whose fields the rules above emptied.
+            logger.warning("The model's reply said nothing: %s literal=%s", _shape(received), literal)
         raise AgentFailure("error")
     if plain:
         return Reply(
@@ -541,25 +677,33 @@ def public_reply(content: str, language: str, *, plain: bool = False, explicit: 
     text = content.strip()
     if not text:
         return None
-    envelope = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.S)
-    candidate = envelope[1].strip() if envelope else text
-    try:
-        value = json.loads(candidate)
-    except ValueError:
-        if candidate.startswith(("{", "[")) or text.startswith("```json"):
-            return None
-        value = text
+    read = _read_envelope(text)
+    if read is _CUT:
+        return None
+    if isinstance(read, dict):
+        value: Any = read
+    else:
+        envelope = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n?```", text, re.S)
+        candidate = envelope[1].strip() if envelope else text
+        try:
+            value = _LENIENT.decode(candidate)
+        except ValueError:
+            if candidate.startswith(("{", "[")) or text.startswith("```json"):
+                return None
+            value = text
     if isinstance(value, dict) and not ("text" in value or "messages" in value):
         return None
     if explicit:
         if isinstance(value, dict):
-            if not isinstance(value.get("messages"), list):
+            # Speech beside a tool call counts what the objects said, never the words that stood among them.
+            said = value["_objects"] if "_objects" in value else value.get("messages")
+            if not isinstance(said, list) or not said:
                 return None
-            value = {"messages": value["messages"], "prefix": value.get("prefix")}
+            value = {"messages": said, "prefix": value.get("prefix")}
         elif not isinstance(value, str) or len(message_parts(value)) < 2:
             return None
     try:
-        reply = parse_reply(value, language, plain=plain, long=True)
+        reply = parse_reply(value, language, plain=plain, long=True, quiet=True)
     except AgentFailure:
         return None
     return reply if reply.text else None

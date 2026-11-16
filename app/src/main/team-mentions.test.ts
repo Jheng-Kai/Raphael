@@ -81,7 +81,7 @@ test("a typo or swapped letters still find the app or member, the plain matches 
 });
 
 test("an app in the @ menu wears the mark the connected list draws for it: its own logo, never a plug", () => {
-  // Owner, 2026-11-14: Outlook had its logo in the connected list and a plug in the @ menu. One source draws both.
+  // Outlook's logo in the connected list is the one the @ menu draws, never a plug: one source draws both.
   const roster = { ...list, team_context: { apps: [{ id: "composio:outlook", name: "Outlook", state: "ready", logo: "https://logos.composio.dev/api/outlook" }] } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: roster }));
   input.value = "@outl"; input.setSelectionRange(5, 5); input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -132,7 +132,6 @@ test.each(['disabled', 'duplicate', 'no_tools', 'error', 'unchecked', 'unknown']
   expect(rows()).toEqual(['拉斐爾', '小森', '小晴', 'Gmail']);
 });
 
-// Owner, 2026-11-13, with Grok Bot's picture: 「就是看一下 grokbot 它會顯示什麼。像這種分組的話，就不知道可以幹嘛。應該理論上是可以放其他的 bot 還有 plugins 而已」
 test("the menu lists the other members, then the apps, each with what it is at the right, and no group, no everyone", () => {
   const roster = { ...list, team_context: { apps: [{ name: 'Gmail', state: 'ready' }, { name: 'Notion', state: 'needs_sign_in' }] } } as unknown as MembersList;
   bindTeamMentions(input, () => ({ list: roster, self: 1 }));
@@ -165,7 +164,6 @@ test("an app that is not signed in opens the place to sign it in instead of beco
   expect(input.value).toBe('請用 @Gmail ');
 });
 
-// Owner, 2026-11-14: 「這邊不要用顯示全部 7 個，因為你點下去之後就剩下原本的那 7 個，感覺蠻奇怪的。你這邊就是跟 Grok bot 一樣，設計是滑鼠滾輪往下這樣子」
 test("every other member and every offered app are one list that scrolls, with no show-all row and no pages", () => {
   const apps = Array.from({ length: 30 }, (_, index) => ({ id: `service-${index}`, name: `Service ${index}`, state: index === 0 ? 'needs_sign_in' : 'ready', last_used_at: index }));
   const many = { ...list, team_context: { apps } } as unknown as MembersList;

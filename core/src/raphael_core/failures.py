@@ -1,7 +1,4 @@
-"""Shared, bounded failure diagnostics. Raw packets and credentials never leave ingress.
-
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
-"""
+"""Shared, bounded failure diagnostics. Raw packets and credentials never leave ingress."""
 
 from raphael_core.ui_words import ui_word, with_ui_words
 import json
@@ -21,12 +18,12 @@ KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server
                    "context_overflow", "payload_too_large", "content_policy"))
 # Why a subscription CLI could not take a turn when the fix is its own sign-in or install (`Failure.cause`): the sign-in it
 # had was refused, it never had one (or was disconnected), or it is not on this computer. Each is told apart from the
-# others and from an API brain's key, and each has its own button under a reply (owner, 2026-11-11).
+# others and from an API brain's key, and each has its own button under a reply.
 CAUSES = frozenset(("expired", "signed_out", "not_installed"))
 # What is worth asking again. A spent quota (`credits`, `usage_limit`) is not: waiting does not refill it.
 TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout", "cli_stopped"))
 # A failed model call is made again after these waits, which are all a question gets before the owner is told: nothing
-# was done yet, and he learns in seconds. After something was done it goes on at the patient pace until he stops it.
+# was done yet, and they learn in seconds. After something was done it goes on at the patient pace until they stop it.
 RETRY_WAITS = (1.0, 3.0, 8.0)
 PATIENT_WAITS = (30.0, 60.0, 120.0, 300.0)
 # How a CLI says a tool server it needs did not start.
@@ -455,12 +452,12 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
     if kind not in KINDS or kind in ("unknown", "tool_broken", "server"):
         fallback = kind if kind in KINDS else "unknown"
         patterns = (
-            # Docker Desktop is the member computer's engine (owner, 2026-11-11): still starting is a wait, not a defect.
+            # Docker Desktop is the member computer's engine: still starting is a wait, not a defect.
             ("timeout", r"docker_start_timeout"),
             ("tool_broken", r"docker_(?:stopped|start_failed|missing)"),
             ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),
             # A server that cannot start does not start on a second try: a setting is wrong, and the owner is told
-            # which server rather than kept waiting through retries (design, 2026-11-09).
+            # which server rather than kept waiting through retries.
             ("tool_broken", _MCP_START),
             ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer"),
             ("credits", _CREDITS),
@@ -504,9 +501,9 @@ def tool_failure(kind, content="", *, record=True):
     return classify({"kind": kind, "message": content or kind or "unknown"}, record=record)
 
 
-# What a turn about to end right after a failed call is told before it may (R-PERSIST-03, owner, 2026-11-14: members gave up
+# What a turn about to end right after a failed call is told before it may (R-PERSIST-03: members gave up
 # after one failure). A list of facts, never a count of how many ways to try: what failed, which of the tools it was
-# offered it has not called, and to take the next plausible way. Hermes keeps a model on its tools the same way.
+# offered it has not called, and to take the next plausible way.
 CORRECTIVE_NOTE = "<harness_note>A call failed in this turn. Before you finish, take the next plausible way, or say why none fits."
 LEDGER_FAILED = 6
 LEDGER_UNTRIED = 40

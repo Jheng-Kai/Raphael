@@ -640,7 +640,7 @@ class Acceptance:
     async def quiet(self, target):
         rectangles, _ = vm.screen_grid(target.screens)
         # A panel is 12 px wide until its launchers are loaded, and was once seen so for twenty seconds and more (seat 2 of
-        # six, 2026-11-13): give a booting computer a minute, say how long, and name what each panel holds when it fails.
+        # six): give a booting computer a minute, say how long, and name what each panel holds when it fails.
         began = time.monotonic()
         while True:
             panels, bad = [], []
@@ -693,7 +693,7 @@ class Acceptance:
     async def browser_mark(self, target):
         """The desktop says which browser it opens, and each of its own ways to a browser opens that one.
 
-        An owner, of the panel of his members' computer (2026-11-13): 「但看起來底下不是顯示 Chrome ㄟ?」. Measured then: the
+        The panel of the members' computer did not show Chrome. Measured then: the
         launcher wore a globe named "Browser" over Google Chrome; XFCE's "Web Browser" named a helper that does not
         exist and asked which application to prefer; the menu's own Chrome entry and x-www-browser could not start
         (they make a sandbox, and nothing in a computer can); the menu's Chromium and Firefox were second browsers."""
@@ -1318,8 +1318,8 @@ class Acceptance:
             await self.text(target, ["python3", "-c", FORM_STOP, self.machine.owner])
 
     async def seat_windows(self, tool, target, member):
-        """A seat is a desktop a person can use (owner, 2026-11-14, watching a member's screen: the members never open tabs,
-        a page he minimized could not be found again, the window showed data:text/html,<title>raphael-seat-...</title>, and
+        """A seat is a desktop a person can use (the members never open tabs,
+        a page that was minimized could not be found again, the window showed data:text/html,<title>raphael-seat-...</title>, and
         the window stood larger than the screen with the panel over its page). The seat's window fills its screen above the
         panel and shows no marker; a member's tool opens a site in a new tab and brings a tab back to the front; the
         window, minimized, comes back from the panel's button for it with its page; the Browser icon gives that window a new
@@ -1873,8 +1873,8 @@ class Acceptance:
 
             async def persons_browser():
                 """The members' browser is one a person signs in with: Google's own Chrome where there is one, a page
-                is not told it is automated, and nothing warns over the window. An owner signing in to Google for his
-                members met "This browser or app may not be secure", a yellow bar and "Restore pages?" (2026-11-13)."""
+                is not told it is automated, and nothing warns over the window. An owner signing in to Google for their
+                members met "This browser or app may not be secure", a yellow bar and "Restore pages?"."""
                 target = targets[members[0]]
                 profile = "/home/cua/workspace/.browser-profiles/driver/main"
                 line = (await self.text(target, ["pgrep", "-af", f"^[^ ]+ --remote-debugging-port=0 --user-data-dir={profile}"])).splitlines()[0]
@@ -1935,7 +1935,7 @@ class Acceptance:
                           "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
                 require(managed == wanted, f"Expected the members' browser policy {wanted}, observed {managed}")
                 # The panel of every screen names this browser under its own mark: an owner looked at a globe named
-                # "Browser" (2026-11-13).
+                # "Browser".
                 named, _ = await self.browser_named(target)
                 version = (await self.text(target, [binary, "--version"])).strip()
                 return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
@@ -2033,8 +2033,8 @@ class Acceptance:
             async def owner_input():
                 """The owner's own mouse and keys, sent as the app's page sends them (the session's relay path, on the
                 connection it made while watching), reach the seat the owner holds; before the hold and after the
-                handback they reach nothing. An owner was told "you are in control" with nothing getting in
-                (2026-11-13): until then every check of a hold looked only at what the members were refused."""
+                handback they reach nothing. An owner was told "you are in control" with nothing getting in:
+                until then every check of a hold looked only at what the members were refused."""
                 second = members[1]
                 target = targets[second]
                 rect = vm.screen_grid(target.screens)[0][target.screen - 1]
@@ -2097,7 +2097,7 @@ class Acceptance:
                     while not await made(mark):
                         require(time.monotonic() < until, "Expected the holding owner's typed line to run in the seat's terminal")
                         await asyncio.sleep(.2)
-                    # What needs Shift, typed as a person types it (2026-11-14: a script's bare "@" never reached a seat).
+                    # What needs Shift, typed as a person types it (a script's bare "@" never reached a seat).
                     await asyncio.to_thread(type_line, f"echo 'Aa@?#%&(<' > {mark}-shift")
                     until = time.monotonic() + 5
                     while not await made(mark + "-shift"):
@@ -2154,7 +2154,7 @@ class Acceptance:
                         picture = base64.b64decode(event['images'][0]['data'])
                         require(struct.unpack('>II', picture[16:24]) == (1280, 900), 'Expected seat-size teaching PNG')
                     require(not wide_calls and recording.relay is None, f'Expected zero canvas observations, observed {wide_calls}')
-                    # Measured 2026-11-12 on a Windows host: per-bot's relay capture 0.23 s; this path 1.03 s with the
+                    # Measured on a Windows host: per-bot's relay capture 0.23 s; this path 1.03 s with the
                     # per-pixel picture and 0.22 s with Rfb.frame(). A second per press is a recorder nobody can type in.
                     require(warm < .7, f'Expected an owner press observed within 0.7 s, observed {warm:.3f} s')
                     return ('Seat 2 recording: no seat 1 window ids, 1280x900 PNG, zero canvas-wide driver calls, core input/tick; '

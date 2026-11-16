@@ -66,7 +66,7 @@ def test_a_daily_routine_is_next_due_today_or_tomorrow_at_its_time():
 
 
 def test_a_weekly_routine_counts_the_days_from_sunday_as_the_app_does():
-    # 2026-10-23 is a Friday (5); 0 is Sunday and 1 Monday, as Date.getDay counts them.
+    # 23 October 2026 is a Friday (5); 0 is Sunday and 1 Monday, as Date.getDay counts them.
     monday_and_friday = Schedule("weekly", time="18:30", days=(1, 5))
     assert next_run(monday_and_friday, ms(2026, 10, 23, 10, 0), tz=TZ) == ms(2026, 10, 23, 18, 30)
     assert next_run(monday_and_friday, ms(2026, 10, 23, 19, 0), tz=TZ) == ms(2026, 10, 26, 18, 30)

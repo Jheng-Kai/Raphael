@@ -1,6 +1,6 @@
 """Bounded meeting rounds: members choose to speak on one shared snapshot.
 
-No one is asked beforehand whether they will speak (Hermes, gateway/hosted_room_discussion.py): an address is answered by
+No one is asked beforehand whether they will speak: an address is answered by
 whoever it names, a message that names no one goes to the room's default responder first, and everyone else then reads
 that answer in a speech turn of their own and speaks or passes. A member the owner addresses may not pass.
 Speech uses the shared worker with a separate admission pool. Durable private work returns through report cards; no
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def bounded_transcript(transcript, *, chars=ROOM_CONTEXT_CHARS, byte_limit=ROOM_CONTEXT_CHARS, required=(), hard=float("inf")):
     """Fold older records out of the prompt; keep the source and the newest message whole. Length is never an error
-    (owner, 2026-11-09): whole messages, newest first. The older ones fill what `chars` and `byte_limit` leave; the
+: whole messages, newest first. The older ones fill what `chars` and `byte_limit` leave; the
     required ones (the message answered, the newest) are kept whole past them, up to `hard` bytes together, which is what
     the model's window leaves. A required message that alone does not fit even that (a colleague's report of 100,000
     characters) is left out and says so in its place, with its size; the log names it, and the others go on."""
@@ -259,7 +259,13 @@ class RoomExchanges:
     def schedule(self, room_id):
         if self.closed:
             return
-        task = asyncio.create_task(self.drive(room_id))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Start-up delivers what the last run left (`BackgroundService.use_team`) before the loop runs: a drive asked for
+            # then broke that delivery off and was never run. `RoomsService.start` drives every queued exchange once the loop runs.
+            return
+        task = loop.create_task(self.drive(room_id))
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
 

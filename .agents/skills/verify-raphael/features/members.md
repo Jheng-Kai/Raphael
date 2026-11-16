@@ -1,9 +1,8 @@
 # Members and sidebar
 
-## A member's colour on its switches (owner, 2026-11-12)
+## A member's colour on its switches
 
-Owner: 「它這個主題，不只是 Message Bubble，還有這些 Toggle 的 Buttons 也都會變成主題色，就是可能會變紫色」
-(R-UI-147). A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is his blue). The conversation
+R-UI-147: a member's theme is not only its message bubble; the toggle buttons take its colour too. A member's colour is its slime's (`owner-bubble.ts` `memberColor`; Raphael's is its blue). The conversation
 already wears it on the owner's bubble and on send, stop and the computer (`--member-bubble`, `--member-accent` on `.mb-chat`).
 `memberSwitch` (owner-bubble.ts) turns the same colour into the track of a switch that is on, its outline and its knob:
 `drawFaces` in pages/agent.ts sets `--member-switch`, `--member-accent` and `--member-knob` and the mark `data-member-switch`
@@ -26,33 +25,32 @@ is send's colour, the knob stands 3:1 off the track and follows the white-or-dar
 npm run look -- member-switch member-switch-yellow member-switch-white member-switch-raphael member-switch-tools member-switch-tools-yellow member-switch-skills member-switch-notify member-switch-notify-off settings-switch-neutral member-panel-details details raphael-details member-settings-tools member-settings-notify --theme both --width 1120,720,1920x1080
 ```
 
-## Member settings page (2026-11-08)
+## Member settings page
 
-Owner request: a member's settings are a page of their own, where the conversation is (R-PANEL-05).
+A member's settings are a page of their own, where the conversation is (R-PANEL-05).
 The panel keeps Details / Library / Computer and its bots; its head is the gear on the left and the
 close on the right, apart. The gear opens `member-settings.ts` over the conversation (the panel folds
-away at every width while the page is open, owner 2026-11-09, and comes back as it was when the page is left
+away at every width while the page is open, and comes back as it was when the page is left
 for the conversation; member-settings and member-settings-back check both); the arrow just left of the
 member's name (a view's title in a skill or a command), a bare icon as the page's others and never on the
-cover's picture (owner, 2026-11-10; the member-settings checks place it), and Escape go back to the conversation
+cover's picture (the member-settings checks place it), and Escape go back to the conversation
 (a skill or a command first back to the page), and
 the page is a place of the navigation history (`Place.member`, `member-settings:<id>`). It supersedes
 every older paragraph below that puts memory, skills, commands, voice, the edit dialog, hide or share
 inside the panel: share belongs to the conversation's header, hide to the sidebar's menu.
 
-The page, top to bottom: a cover the owner can change (owner, 2026-11-08: 「上方那個背景也是可以讓使用者自己做更換的」):
+The page, top to bottom: a cover the owner can change:
 a pattern in the member's own slime colour (dots by default, grid, lines, glow, plain; tokens only) or
 the owner's picture (`members.set_cover`, `members.update {cover}`), changed from one soft round image
 icon at the cover's lower right whose menu shows the patterns as small covers and 從電腦選…; the picture
-stays put under the pointer and cannot be dragged out of the window, as no picture in the app can (R-UI-119,
-owner 2026-11-09: 「這個圖片放進去不要可以拖拉出來」); then the
+stays put under the pointer and cannot be dragged out of the window, as no picture in the app can (R-UI-119); then the
 face large across the cover's lower edge with the panel's dim-and-pencil edit (the same picker), the
 name and the role typed in place (Raphael's name is not typed). Under them the settings are kinds in a
 column on the left, as Settings' own, each an icon and a name, and only the chosen kind is shown beside
-it (owner, 2026-11-08: 「左側會有一些分區…不要就這樣子長長一條」); a page narrower than 680 px puts the
+it; a page narrower than 680 px puts the
 kinds in a row of small pills that wrap above it. What the panel beside the page shows (routines,
 messaging) is not here. The kinds are the same for every member and for Raphael, in the owner's order
-(owner, 2026-11-09, memory out of them since 2026-11-11, see [No memory on screen](#no-memory-on-screen-owner-decision-2026-11-11)): 工具 (each
+(memory is not among them, see [No memory on screen](#no-memory-on-screen)): 工具 (each
 connected app with its own mark and a switch over the member's `tools` list, then the drafts switch under them),
 技能與指令 (skills as names with switches, a press opens the skill's own view, a plus adds one from a link, delete
 waits in a ⋯ behind a second press; commands), 個性與指示 (personality and instructions, R-PANEL-07: two quiet rows of
@@ -60,7 +58,7 @@ their words, whole, each with a pencil; a press opens a field in the row's place
 one line, Ctrl+Enter or leaving it saves without a word (a spinner for the pencil meanwhile), Escape restores; nothing written is one quiet line of
 what could stand there; Raphael's too), 通知 (one switch). The model is chosen at the composer
 alone, members have no voice (the release has none), and the group is the sidebar's. A cover picture moves up and
-down as Notion's Reposition: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
+down: 調整位置 in the cover's menu, then the picture follows the pointer and 取消 / 儲存位置
 stand where the change icon was (`members.update {cover_position}`, 0 to 100, 50 by default). Raphael's name and
 role are not typed. A kind with one section has no name over its list. There is no 編輯 button anywhere: edits are
 pencils, adds are pluses.
@@ -76,21 +74,21 @@ speaker-draft-chief, member-draft-switch and primary-contact-set.
 npm run look -- member-settings-skill-row-hover member-settings-switch-hover member-settings member-settings-raphael member-settings-skills member-settings-tools member-settings-notify member-settings-field member-persona-empty member-persona-filled member-persona-mixed member-persona-long member-persona-editing member-persona-editing-long member-persona-saved member-persona-escape member-settings-skill member-settings-command member-settings-cover member-settings-cover-picture member-settings-back-hover member-settings-back member-settings-back-bottom member-settings-back-kept details member-panel-library member-face-hover --theme both --width 1120,720,1920x1080
 ```
 
-R-UI-157 (2026-11-14): a skill's row, and every member settings row that opens something, is lit as one under the pointer with its
+R-UI-157: a skill's row, and every member settings row that opens something, is lit as one under the pointer with its
 switch on the fill; the details panel's routine rows too. The look audit fails a row whose button lights alone beside its switch.
 
-## No member voices (owner decision, 2026-11-10)
+## No member voices
 
-Members have no voice and there are no voice calls: see [Conversation](conversation.md#no-voice-owner-decision-2026-11-10).
-The voice-memo and read-aloud switches, the reply Play/Pause control and the transcript went on 2026-11-07; a member's
+Members have no voice and there are no voice calls: see [Conversation](conversation.md#no-voice).
+The voice-memo and read-aloud switches, the reply Play/Pause control and the transcript are gone; a member's
 notifications are the settings page's 通知 switch. Selected scene: details-notify; unit coverage asserts no memo control
 or toggle.
 
-## Member panel tabs (2026-11-05)
+## Member panel tabs
 
-The owner's 2026-11-05 request supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the complete selected matrix and deferred native acceptance.
+This supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for the complete selected matrix and deferred native acceptance.
 
-## Quiet resting poses (2026-11-04)
+## Quiet resting poses
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.
 Idle and sleeping use one still original vector at every size, without animation
@@ -101,7 +99,7 @@ Working retains its 900ms body loop with twelve cels; other body timing is uncha
 Hidden documents pause animations in phase; offscreen surfaces and descendants
 retain `animation: none !important` to avoid long-thread freezes.
 
-Owner decision 2026-10-30: MembersShell's column is global, with a same-sized chief
+MembersShell's column is global, with a same-sized chief
 conversation row, folders and group chats. No face strip or separate Team page.
 Folders support add/rename/delete, persistent collapse, member drag/drop and folder
 drag reorder using existing groups/members position fields. Member brain selection
@@ -122,26 +120,26 @@ The owner's primary contact (P15b-1, the last section) takes the top display slo
 
 ## How to get to it (user POV)
 
-The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the list is not hidden behind a menu button or a drawer: it is the 88px rail of faces (see Grok Bot's air below). No separate Team page remains.
+The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the list is not hidden behind a menu button or a drawer: it is the 88px rail of faces (see Rows, width, rail and foot below). No separate Team page remains.
 
-Both sides are resized by dragging, as Grok Bot's (owner, 2026-11-06, R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
+Both sides are resized by dragging (R-UI-110): there is no fold button and no handle is drawn, only the cursor changes over the edge and a thin line shows while it moves. The list's right edge drags it from 240 to 400 px; narrower than 176 px it folds to the 88 px rail, and the rail dragged out opens it at the width it was let go. The details panel's left edge drags it from 300 to 720 px; narrower than 240 px it closes, and the header's name opens it again at its kept width. Widths and the fold are kept in the browser's storage. Each edge is a keyboard separator (arrows; Enter folds the list or closes the panel); Ctrl+B still folds the list.
 
 ```powershell
 npm run look -- sidebar-rail sidebar-rail-dragged-open sidebar-dragged-wider panel-dragged-wider panel-drag-keeps-place panel-drag-closes --theme both --width 1120,720,1920x1080
 ```
 
-### Grok Bot's air: rows, width, rail and foot (owner, 2026-11-12, R-SIDE-01)
+### Rows, width, rail and foot (R-SIDE-01)
 
-Measured beside Grok Bot at 1120 x 900 (`bots/research/grokbot/clean-ui-measured-2026-11-12.md`): a row is a 54 px highlight with 12 px
+Measured at 1120 x 900: a row is a 54 px highlight with 12 px
 corners, 12 px in from the list's edges and 58 px from the next (before: 48 px, inset 8, 50 px apart), the 40 px face centred on it,
-the name 14 px over a 13 px line (ink 14 and 12 on a Chinese line, Grok Bot's 14 and 13), a folder's label 13 px with 26 px over it and 18 px
+the name 14 px over a 13 px line (ink 14 and 12 on a Chinese line), a folder's label 13 px with 26 px over it and 18 px
 under it to its first row. The list is 348 px wide from 952 px of window up, `min(348px, 100vw - 604px)` below that, so the conversation never
 gets narrower than at 900 px with the old list; a dragged width (240 to 400 px) keeps winning. Under 860 px the list is the rail of faces,
 88 px wide, with no menu button, drawer or scrim: each face 36 px on a 54 px square (lit for the open conversation) 58 px apart, a faint line
 under Raphael's row and between folders, the unread dot on the face's corner, the name as the face's tooltip, a right click opens the row menu,
-and at its foot the plus alone (the plus opens the list's own menu; the rail has no search, owner 2026-11-12 23:25), the Connections icon
+and at its foot the plus alone (the plus opens the list's own menu; the rail has no search), the Connections icon
 and the owner's face (the account menu). Folders folded in the list stay folded in the rail, and a folder's heading and the hidden folder are not reachable there
-(widen the window). The wide list's foot is one row (owner, 2026-11-12 evening, R-SIDE-01): the owner's 32 px face and the 36 px Connections pill, with no tooltip,
+(widen the window). The wide list's foot is one row (R-SIDE-01): the owner's 32 px face and the 36 px Connections pill, with no tooltip,
 at every width of the list.
 `sidebar-metrics` records the numbers (width, pitch, highlight, type, foot, rows that fit), `sidebar-air` asserts them (and the rail's),
 `sidebar-air-foot` the same foot on a list dragged narrow, `panel-widest` (the details panel dragged as wide as it goes beside the conversation: at 1120 the panel stops at 388 px so the conversation keeps 386 px), `sidebar-rail-menu` the right click, `sidebar-drag-row` a dragged row at the new height.
@@ -150,9 +148,9 @@ at every width of the list.
 npm run look -- sidebar-metrics sidebar-air sidebar-air-foot sidebar-rail-menu sidebar-drag-row panel-widest sidebar-rail sidebar-drawer sidebar sidebar-many sidebar-unread --theme both --width 1120,720,1920x1080
 ```
 
-### Reordering the sidebar follows the pointer (owner, 2026-11-14, R-SIDE-03)
+### Reordering the sidebar follows the pointer (R-SIDE-03)
 
-「為什麼它只是調順序而已也會卡」: a drop used to send one `members.update` for each member of the folder (or one `groups.update` for each folder), wait for
+Reordering used to lag: a drop used to send one `members.update` for each member of the folder (or one `groups.update` for each folder), wait for
 each, and draw the panel, the settings page and the conversation again for every change the core announced. Now `dropMember` and `reorderGroup` in
 `members-shell.ts` work out the list the core will answer (`member-order.ts`: `movedMember`, `movedGroup`, the numbering of `store.py _move`), draw it
 at once (`place`: only the column is patched), and save with one request through `reorder`. While a save is out no roster read is drawn (`saving`; a read
@@ -178,10 +176,9 @@ Read the report's `assertions` for `dragPhase`, `dropPhase` (script, layout, sty
 npm run look -- sidebar-reorder-members sidebar-reorder-across sidebar-reorder-folder sidebar-drag-row --theme both --width 1120,720,1920x1080
 ```
 
-### The sidebar's lights: one dot, one meaning (owner, 2026-11-14, R-SIDE-04)
+### The sidebar's lights: one dot, one meaning (R-SIDE-04)
 
-「他們如果在思考的情況下，不要有提示他們有新的動作，因為我這樣點過去，他們其實是沒有任何內容。只有他們真正傳出訊息的時候，我左邊才會有提示」, and
-「有可能會有不同顏色的，像是白色 maybe 是它傳了一個新的 message，然後綠色可能是他完成任務之類的。可能要有一套邏輯」. Why a thinking member had a dot: `MembersService.turn_arrived`
+A member that is only thinking has nothing to show, so it must not light the list; only a message it really sent does, and the colour tells what kind of news it is. Why a thinking member had a dot: `MembersService.turn_arrived`
 marked a thread unread at every `agent.turn` event of a private turn that is written, whatever its status, and a running turn is written when it starts and again at each
 step (a routine's turn the moment the routine starts), so a member that only thought had a dot and an empty thread behind it. Now a turn that is still running marks its thread
 only once it has sent a reply (`_has_reply`; a progress line is not one).
@@ -197,7 +194,7 @@ a thinking member, a message, a task that ended, a failure, a question that wait
 colour of its token; `sidebar-lights-rail` the same on the rail, `sidebar-lights-pinned` on pinned tiles, `sidebar-lights-thinking` four members that only think (no dot at all), `sidebar-lights-open` opening the
 white, the green and the orange row (white and green go, orange stays). `sidebar-lights-hover`, `-hover-room` and `-hover-pinned` put the pointer on a
 member's row, a group chat's row and a pinned face: `sidebar-light-steady` holds the light and the end of the words as far from the row's edge as every other
-row's (a face's light where the other faces' stand) and no 「more」 drawn: rows have none, so nothing makes room (owner, 2026-11-15). The palette check holds the four colours at 3:1 on every row surface in both themes. Gotchas: a fixture gives `unread_kind` per member
+row's (a face's light where the other faces' stand) and no 「more」 drawn: rows have none, so nothing makes room. The palette check holds the four colours at 3:1 on every row surface in both themes. Gotchas: a fixture gives `unread_kind` per member
 (`sidebarLights` in `mock-ipc.js`, which also says what each row must earn in `data.expectedLights`), and the real core's `members.read` clears it, not the app alone.
 
 ```powershell
@@ -207,19 +204,17 @@ npm run look -- sidebar-lights sidebar-lights-rail sidebar-lights-pinned sidebar
 Select a member, then click the stacked header title for details.
 At compact width press a member's face in the rail to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details holds the face (a press shows
-every picture and colour at once; since 2026-11-08 under the pointer the face dims along its own outline with a white pencil in its middle, as on the owner's photo in Settings), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
-Discord bot not set up is one row with 設定; a connected one is its card with pairing) and, since 2026-11-08 (owner:
-「skill 為什麼不見了…不是說會在右邊的 sidebar 嗎」), 成員設定: rows for 技能 and 記憶 with their counts and 成員設定 for the rest
+every picture and colour at once; under the pointer the face dims along its own outline with a white pencil in its middle, as on the owner's photo in Settings), the routines, Raphael's conversations, 訊息平台 (each Telegram, Slack and
+Discord bot not set up is one row with 設定; a connected one is its card with pairing) and 成員設定: rows for 技能 and 記憶 with their counts and 成員設定 for the rest
 (commands, voice, personality, instructions, group, hiding), each opening its page in the panel with a way back. A bot's
 設定 and the header's share send the owner's words into that member's conversation with an `intent` (chat-ask.ts): the
 member sets it up there, with a card for a token, and share answers with a template card. Settings holds no bot. Scenes: details, raphael-details,
 member-avatar, slime-picker, slime-picker-tab, work-messaging-setup, work-messaging-pairing, messaging-paired-aligned. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
-A member's face is a slime (R-UI-116, owner 2026-11-09: 「生成拿掉 我們改成把史萊姆的種類與造型大幅擴增」): its picker in
+A member's face is a slime (R-UI-116): its picker in
 the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
-model. Since 2026-11-11 (owner: 「這個不要這樣放，這個要跟…Grokbot 他們的 UI 類似，就是上面會有一些 tab、button 之類的，然後可以選擇」)
-it is one row of tabs, the groups in their order (角色, 動物, 職業, 自然, 季節與食物, 小物, 純色) as the app's small pill tabs in a
+model. It is one row of tabs, the groups in their order (角色, 奇幻, 動物, 自然, 生活, 純色; the slimes in 角色 are told apart by how they look) as the app's small pill tabs in a
 chip row (`slime-tabs.ts`), and under it only the open group's slimes with no heading. It opens on the group that holds
 the face now, with that face marked. The groups stand on one another in one cell, so the picker is one size and a press on
 a tab moves nothing; Left and Right move between tabs, Down goes into the group and Up back to the tab. Scenes:
@@ -227,7 +222,7 @@ a tab moves nothing; Left and Right move between tabs, Down goes into the group 
 another tab and compares the picker's, the place's and every tab's box before and after), `member-avatar`. A picture
 drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
 face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
-pencil in its middle (owner, 2026-11-08). Scenes: member-face-hover, slime-picker, slime-picker-tab.
+pencil in its middle. Scenes: member-face-hover, slime-picker, slime-picker-tab.
 
 ## Driving it with look
 
@@ -243,15 +238,12 @@ npm run look -- slime-places slime-places-settings busy-team-calm --theme both -
 ```
 
 These walk the owner's flows to their end: `member-delete`
-deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost 刪除 on
-10/24; since 2026-11-11 the question is a name, one sentence about the member and its conversation, Cancel and
+deletes 小森 from the row's ⋯ menu after the confirmation (the menu had once lost 刪除; the question is a name, one sentence about the member and its conversation, Cancel and
 Delete, and the call carries only the id: `member-delete-ask` checks it, the computer is the core's to remove,
-see [Member computer](member-computer.md#deleting-a-member-removes-its-computer-2026-11-11)); `member-conversation-sections` checks that a member's details have no
-conversation list and nothing that makes one (owner, 2026-11-06: one conversation per
-member, like Grok Bot, R-UI-103);
-`member-maker*` is 新增成員 as one small dialog (R-MAKER-01; owner, 2026-11-11, after Grok Bot's Create
-New Bot, 440 x 582 px, at `bots/research/grokbot/hands-on-2026-11-11/NOTES.md` "Create New Bot" and
-"Picture picker"), slimes only (owner, 10/31: no pictures, for copyright; other people's bots come from the
+see [Member computer](member-computer.md#deleting-a-member-removes-its-computer)); `member-conversation-sections` checks that a member's details have no
+conversation list and nothing that makes one (one conversation per
+member, R-UI-103);
+`member-maker*` is 新增成員 as one small dialog (R-MAKER-01), slimes only (no pictures, for copyright; other people's bots come from the
 store). It is centred over the dimmed window, as wide as its slime picker needs (about 350 px in Chinese)
 and about 560 px high at most 600, nothing scrolling inside. Top to bottom: the title and ×, the large slime
 (96 px), the name (centred placeholder 名字, the only field), the same tabbed picker as a member's face popover
@@ -263,12 +255,12 @@ content-area page with every slime in eight columns, and the store and 範本 ro
 templates are reached from the sidebar's + › 商店, R-STORE-08). `member-maker-box` and `member-maker-tab`
 measure it before and after a tab press, `member-maker-enter`, `-escape`, `-x`, `-cancel` and
 `opener-toggle-member-maker` (the + pressed again) are the ways it ends, `member-maker-taken` the refusal of a
-name another member has. The member opens and speaks first, typing while its own model writes the greeting (since
-2026-11-11, R-COLLEAGUE-02: its own line and ONE question card, the only tool it may call; a
+name another member has. The member opens and speaks first, typing while its own model writes the greeting
+(R-COLLEAGUE-02: its own line and ONE question card, the only tool it may call; a
 failed one is an ordinary failure line whose 重新產生 calls `members.greet`), and the
 owner's answer to the card starts the set-up (R-COLLEAGUE-08, below) that saves its job through
 `set_my_job`, offered only while it has none. Whoever makes a
-member greets the same way (owner, 2026-11-10: 「不管是誰創建的，應該都會自己傳訊息給我們」): the
+member greets the same way: the
 `member_create` tool Raphael or a member uses starts the greeting (core tests
 members/test_model_greeting.py, test_management.py; look admin-approved), and a member's conversation that is
 still empty when it opens (one made before) asks `members.greet` once (agent.ts `greetIfSilent`;
@@ -296,11 +288,11 @@ provider behavior need native evidence. A dialog screenshot does not prove savin
 
 ## Where a slime moves (R-SLIME-01, R-SLIME-02)
 
-A slime moves in two places only (owner, 2026-11-11: 「只有左邊成員列表工作中、對話框思考那一行要有動畫，其他地方放史萊姆的樣子就可以了」): a member's row or tile in the left list while that member works, and the thinking or waiting line of the open conversation. Every other slime is a picture (`data-slime-still`: its resting pose with its colour, hat, crown and accessories; no strips, no animation, no transition, no clock). `faceHTML` and `slimeFaceHTML` take `moving` for the two places; the default is a picture. `slime-places` opens a working member's conversation with the panel and fails on any slime outside those two places that is not a picture or has anything running on it (`slime-places.mjs`); it asks for a moving slime in the list only while the list is on screen (`listShown`), so at 720 px, where the list is a closed drawer once a conversation is open, the list is not demanded (an off-screen face pauses by design); `slime-places-settings` does the same on the member settings page. `busy-team-calm` is the event storm for the owner's "the screen flashes when it updates": a member's steps and words arrive for five seconds while a MutationObserver over the list, header, thread and panel fails on any replaced element, any text emptied or blank at a frame, any scroller that moved and any slime moving outside the two places. Judge the contact sheets at both themes and three sizes: the header, panel and cards show the slime at rest, and the list row and the thinking line show it moving.
+A slime moves in two places only: a member's row or tile in the left list while that member works, and the thinking or waiting line of the open conversation. Every other slime is a picture (`data-slime-still`: its resting pose with its colour, hat, crown and accessories; no strips, no animation, no transition, no clock). `faceHTML` and `slimeFaceHTML` take `moving` for the two places; the default is a picture. `slime-places` opens a working member's conversation with the panel and fails on any slime outside those two places that is not a picture or has anything running on it (`slime-places.mjs`); it asks for a moving slime in the list only while the list is on screen (`listShown`), so at 720 px, where the list is a closed drawer once a conversation is open, the list is not demanded (an off-screen face pauses by design); `slime-places-settings` does the same on the member settings page. `busy-team-calm` is the event storm for a screen that flashes when it updates: a member's steps and words arrive for five seconds while a MutationObserver over the list, header, thread and panel fails on any replaced element, any text emptied or blank at a frame, any scroller that moved and any slime moving outside the two places. Judge the contact sheets at both themes and three sizes: the header, panel and cards show the slime at rest, and the list row and the thinking line show it moving.
 
 ## How a slime moves, and why it stays sharp
 
-The owner (2026-10-31): the slimes looked blurred, and the motion should be finer and cuter, 「那個是我們 App 的核心精隨」. Judge them on the owner's screen: 1920x1080 at 100%.
+The slimes are the app's core: they must be sharp and their motion fine and cute. Judge them on a 1920x1080 screen at 100%.
 
 Sharpness (R-UI-63). At DPR 1 in software Edge, the original SVG-group `transform` animation broadened the antialiased fringe compared with the same pose drawn without animation. Pausing retained that blur too. The compositor/resampling explanation is an inference from pixels, not a successful layer trace; GPU and WebView2 remain separate acceptance.
 
@@ -317,8 +309,7 @@ The selected consumer matrix is sidebar, sidebar-many, sidebar-rail, sidebar-gro
 ## Sidebar administration
 
 Raphael and every member can administer the sidebar from their own conversation: overview, member creation
-and editing, groups, any member's routines, skill imports and command templates (owner decision 2026-10-31:
-everyone's abilities are the same; Raphael is the default member and the chief role only decides who the owner brings work to
+and editing, groups, any member's routines, skill imports and command templates (everyone's abilities are the same; Raphael is the default member and the chief role only decides who the owner brings work to
 without authority over who speaks in a group). The owner still confirms every change at the end of the turn.
 Management tools, including the legacy create_member alias, are offered to every speaker, never to one that another member asked. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
 presets, then the neutral silhouette, and the create dialog defaults.
@@ -378,16 +369,16 @@ core/tests/background/test_room_cli.py and core/tests/members/test_cli_brains.py
 ## The primary contact (P15b-1)
 
 The owner chooses which member is their primary contact, the Bot that new work is brought to and that hands it to the colleague it belongs to.
-Raphael is the primary until another is chosen, and exactly one is at a time. As in Grok Bot (owner, 2026-11-06, R-UI-107), only the primary's own menu (the
-row's more button or a right click; Raphael's while he is the primary) hands it on: its last item, after a hairline, is 換成其他成員 (the arrows icon). It opens 「選擇主要成員」,
+Raphael is the primary until another is chosen, and exactly one is at a time. As R-UI-107 says, only the primary's own menu (the
+row's more button or a right click; Raphael's while it is the primary) hands it on: its last item, after a hairline, is 換成其他成員 (the arrows icon). It opens 「選擇主要成員」,
 a list of real buttons (Raphael and the other visible members, not the primary now) with nothing chosen, 取消 and the primary 設為主要, which waits for a
 choice. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses the arrows icon instead of a star.
 
-A member's row menu is grouped as Grok Bot's, with hairlines between the groups: 釘選, 移到分組 ▸, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red, last).
+A member's row menu is grouped, with hairlines between the groups: 釘選, 移到分組 ▸, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red, last).
 The primary sits in the top slot, so its menu has no 移到分組 and no 刪除: 釘選, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 換成其他成員. Raphael's row has 釘選 only,
-and 換成其他成員 while he is the primary. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
-(one conversation per member, R-UI-103; fewer choices, as Grok's).
-The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps his emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
+and 換成其他成員 while it is the primary. Clearing a member's conversation, duplicating a member and marking every member read are not in the menu
+(one conversation per member, R-UI-103; fewer choices).
+The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps its emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
 A pinned tile (the large faces at the top; R-UI-122) has the same family of menu, each row with a Lucide icon: 取消釘選 (unpinned pin), 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 (red) | 換成其他成員, which is offered only while a member that is not pinned remains. There is no 移到分組 on a tile (its folder is where it returns to). 換成其他成員 opens the same window as the primary's, under its own title and without 設為主要: one press on a member (not Raphael, nobody hidden, not the primary) writes that member as pinned at the tile's `position` and then unpins the old one, so the new face stands exactly in the old tile's place and the old member is a row of its own folder again. `sidebar-tile-menu`, `sidebar-tile-picker` and `sidebar-tile-replaced` (fixture `pinnedTiles` over the long roster; the IPC double lists the pinned first and numbers positions again as the core does) assert the menu's shape, hairlines, icons and red 刪除, the picker's candidates and buttons, and the end state with exactly two writes. Not covered: the owner's real roster order and a live core. Unit proof: member-actions.test.ts, member-column.test.ts, primary-picker.test.ts.
 
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
@@ -396,7 +387,7 @@ Raphael's row has no destructive menu wherever it moves; an ordinary primary kee
 npm run look -- members-expanded sidebar-folders member-row-menu sidebar-tile-menu sidebar-tile-picker sidebar-tile-replaced primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
-`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while he is the primary and asserts 換成其他成員 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while she is the primary, excludes her while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
+`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `member-row-menu` asserts the grouped row menu, its hairlines and the red 刪除 last. `primary-contact-menu` opens Raphael's menu while it is the primary and asserts 換成其他成員 last, after a hairline; `primary-contact-picker` opens it from 小晴's menu while it is the primary, excludes it while offering Raphael, and after 小森 is clicked has one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
 
 The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_context.primary_id` says it, a hidden or deleted primary is Raphael again, and a hidden member cannot be chosen. Unit cases cover default/explicit Raphael, valid and absent primary IDs, grouped/pinned/ungrouped slots, source immutability, details drafts, picker identities and restricted mentions.
 
@@ -440,8 +431,7 @@ prove rendered interactions only; live brains and native persistence remain sepa
 
 ## Right click is the ⋯ (R-UI-44)
 
-Every row, card or item that has a ⋯ opens that button's menu when it is right-clicked anywhere on it, at the pointer (the owner, 2026-10-27, about every
-overflow menu and the conversation list of a member's details): member rows and group headers in the column, conversations and routines in a member's details,
+Every row, card or item that has a ⋯ opens that button's menu when it is right-clicked anywhere on it, at the pointer: member rows and group headers in the column, conversations and routines in a member's details,
 the notes, routines, skills and commands of a member's profile, rooms (the sidebar's rows and the room's header), the sidebar board's group headers, a custom
 server's header and a subscription account's card in Settings, safety rules, computer apps, History rows, dictionary words and Raphael's answers.
 The menu is the very one the ⋯ opens, because the button is pressed and its own handler runs, so a menu that replaces the first from the same button
@@ -458,7 +448,7 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 
 ## What destroys waits in the ⋯ (R-UI-56)
 
-Clear, clear all, delete and remove never stand open on a page (the owner, 2026-10-31, about the memory tab). They wait in the ⋯ of the row or section title they
+Clear, clear all, delete and remove never stand open on a page. They wait in the ⋯ of the row or section title they
 act on, and its right click: the clears of Settings › 資料 in their rows (所有聽寫紀錄,
 所有對話紀錄), 移除金鑰 in the key's row of Settings › 模型 › 用量, a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
 `openConfirmMenu` (app/src/main/ui.ts) keeps the second press the buttons had: the first press asks in the item's place for five seconds, and closing the menu forgets
@@ -477,11 +467,11 @@ at the pointer, does not cover it, and has the same items as the menu a click on
 shows it. `context-menu-key` presses Shift+F10 (`key` with `shift`) on the focused member row and asserts that the menu stands under its ⋯. The connection and message
 scenes are in [Connections and MCP](connections-mcp.md) and [Conversation](conversation.md).
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Deleting the selected member or resource (owner round 3)
+## Deleting the selected member or resource
 
 R-UI-47: deleting the open member selects Raphael before repainting. Missing roster
 entries also fall back to Raphael with the existing success notice. Deleting a
@@ -493,10 +483,10 @@ whose conversation is open, not an unrelated roster row.
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
 ```
 
-## Recording Stop regression (2026-10-29)
+## Recording Stop regression
 
 While recording, the composer's one button shows the send glyph (not Stop, see
-[Conversation](conversation.md#the-composers-one-button-send-while-speaking-stop-once-sent-2026-10-31)); clicking it releases recording through the
+[Conversation](conversation.md#the-composers-one-button-send-while-speaking-stop-once-sent)); clicking it releases recording through the
 native question-key path, transcribes and sends. It never calls cancelSession.
 Only Escape uses the two-press cancellation gesture. The recording flyer/is-voice
 state survives task redraws; pending/member/background tasks still use Stop.
@@ -504,12 +494,12 @@ Pointer regression tests cover Raphael and another member in agent-members.test.
 Native voice-conversation proves local WAV transcription and persisted turns with
 a fake brain; it does not prove a physical microphone or live-provider behavior.
 
-## Owner round 6 contracts
+## Overlay scrim, inset and card cap in conversations
 
-Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain owner-approved.
+member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement stay as they are.
 
 
-## Bot homes, phase 1 (owner decision 2026-10-29)
+## Bot homes, phase 1
 
 Every member, including Raphael, owns `bots/<id>/SOUL.md`, `MEMORY.md`, `memory/log/`
 and `skills/<skill>/SKILL.md`. SOUL.md is written by the core from the member's details;
@@ -544,11 +534,11 @@ no provider calls. Fixture/native/real-provider/judge evidence remain separate.
 Phase 2 adds automatic capture, recall/folding and owner pending review below. Learned skills remain phase 3.
 
 
-## Memory as living files (owner decision 2026-10-31, supersedes phase 2's notes; not shown anywhere since 2026-11-11)
+## Memory as living files (supersedes phase 2's notes; not shown anywhere)
 
-The owner, about rows of 待確認 notes that could repeat each other: memory is a file that keeps being edited,
-as in Hermes. Each member has `bots/<id>/MEMORY.md` (the pane's 「<name> 的記憶」), which no other member
-reads, and all read the one `shared/USER.md` (共同記憶). Limits are Hermes's: 2,200 and 1,375 characters.
+Rows of 待確認 notes could repeat each other, so memory is a file that keeps being edited.
+Each member has `bots/<id>/MEMORY.md` (the pane's 「<name> 的記憶」), which no other member
+reads, and all read the one `shared/USER.md` (共同記憶). The limits are 2,200 and 1,375 characters.
 
 Every API/CLI brain edits them through one tool, `memory_update {target: memory|user, operations: [{action:
 add|replace|remove, content?, old_text?}]}` (and an API brain's reply field `memory`, the same edits). Useful
@@ -579,12 +569,12 @@ editor confirm a claim; model rewrites, remove/add batches and moves between fil
 The reflection pass reads only the owner's words of a turn that read outside content, so
 what it writes needs no mark.
 
-The owner's own correction is the exception to "outside claims never change confirmed entries" (R-MEM-12; owner,
-2026-11-14: his address typo stayed in memory after five refused corrections): in a private turn that read outside
+The owner's own correction is the exception to "outside claims never change confirmed entries" (R-MEM-12; an address typo had
+stayed in memory after five refused corrections): in a private turn that read outside
 content, a `replace` whose every written (and removed) span stands in the owner's message, with two characters of
-context, changes the confirmed entry and leaves it his; words he never said, a removal, a room, a colleague's work and a
+context, changes the confirmed entry and leaves it theirs; words they never said, a removal, a room, a colleague's work and a
 routine are refused as `unconfirmed_only`. Check it in a private turn after a web read: say the street was wrong and
-the right one; the entry changes and carries no 「（待確認）」. When he corrects a fact that a member's own
+the right one; the entry changes and carries no 「（待確認）」. When they correct a fact that a member's own
 instructions state, the doctrine has the member propose `member_update` on its own id (R-MEM-13); memory never edits
 the instructions, and the owner's card decides.
 
@@ -616,16 +606,15 @@ At every start `memory/legacy.py` moves what the old store left (note files, the
 into the files, merging exact and near duplicates, after copying everything to `bot-state/<id>/notes-backup/`. What
 waited in the queue enters marked; a note past its date keeps it in its words; a file over its limit stays whole.
 
-Since 2026-11-11 the app shows none of these files (see [No memory on screen](#no-memory-on-screen-owner-decision-2026-11-11) below).
+The app shows none of these files (see [No memory on screen](#no-memory-on-screen) below).
 `core/tests/memory/test_files.py` covers every contract above, `test_reflection.py` the pass, `test_growth.py` silent
 reads and bounded recall, `members/test_cli_brains.py` a resumed session and MCP edits. The native fake-brain journey
 sends 25 real app turns and checks the member-written file and zero spend. It proves host plumbing, not real-provider
 inference or design-judge acceptance. Learned skills remain phase 3.
 
-## No memory on screen (owner decision, 2026-11-11)
+## No memory on screen
 
-The owner, after looking at the member page's 記憶 kind (cards, some marked 待確認) and Settings' 記憶 tab:
-「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」.
+Memory is managed behind the scenes: the member page's 記憶 kind (cards, some marked 待確認) and Settings' 記憶 tab are gone.
 No page, tab, card or count shows a member's memory or the shared memory (R-MEM-10). The core keeps both files, the
 memory tools and the `MemoryChanged` event as before; the app neither reads nor draws them. When a memory is wrong the
 owner tells the member in the conversation and the member corrects its own file with its memory tool. The member page's
@@ -643,7 +632,7 @@ refuses a 記憶 tab and any memory element in Settings. `member-settings.test.t
 `pages/agent-members.test.ts` (a `MemoryChanged` event reads nothing and draws nothing) hold the same in vitest.
 
 
-## Skills that grow, phase 3 (2026-10-29)
+## Skills that grow, phase 3
 
 Every member, including Raphael, receives skills_list, skill_read and skill_manage through
 one shared team-tool definition and the production API/CLI paths. Skill indexes contain
@@ -654,7 +643,7 @@ Verification sections, name/description frontmatter, <=128 KiB and <=8 reference
 change enable switches or another member's skills.
 
 The existing memory background scheduler serializes tool-less review with capture/tidy.
-Skill review follows Hermes Agent's nudge (owner, 2026-11-11, R-SKILL-09..11). Each member has one
+Skill review works by a nudge (R-SKILL-09..11). Each member has one
 count and a persisted failure count. Steps of real work (not reads of skills, memory, the time or
 the team) since the last review or `skill_manage` reach `NUDGE_INTERVAL` = 10, decided at the end of
 a normally finished owner turn (never a routine's, an exchange's, a stopped or failed one); then the
@@ -668,10 +657,9 @@ used for review. `skill_manage` is offered for a request about skills and on the
 workers' fixed tool set, not merely because a skill is enabled.
 
 The existing member Skills pane shows provenance and learning date, opens an editable
-document and deletes through existing RPCs. Nothing restores a skill: since 2026-11-14 there is no
+document and deletes through existing RPCs. Nothing restores a skill: there is no
 "復原上次變更" button, no `undo` field in `members.skills.list`, no `undo` parameter of
-`members.skills.update` and no `member_skill_undo` tool, so a delete (asked twice) is final
-(owner: 「復原上次變更這個都可以拿掉啊，這個沒有什麼意義，就直接拿掉就好了 所有地方的」).
+`members.skills.update` and no `member_skill_undo` tool, so a delete (asked twice) is final.
 The owner editor supplies its read revision to prevent overwriting a background update.
 The host journal/mirror records revisions outside bot-writable homes; read/list/index
 discovery never mutates or notifies. A learned skill adds one localized conversation
@@ -695,7 +683,7 @@ S21.skills.manage are explicitly mapped; live coverage remains unverified until 
 When changing the learning notice, also capture member-text and centred-system-events
 at the same themes/widths to compare the shared eventLineHTML treatment.
 
-## Group prompt truth (2026-11-01)
+## Group prompt truth
 
 R-AG-02 applies with or without room roles. Every participant reads every message
 and decides whether to speak. The meeting tool selects the current chief from the
@@ -705,7 +693,7 @@ stay room-only; assigned work uses handoff and reports its actual result.
 Offline evidence: core/tests/members/test_room_listening.py, test_room_intents.py,
 test_primary.py and core/tests/evaluate/test_p02_scenarios.py. No UI changed.
 
-## Menus beside their rows (2026-11-02)
+## Menus beside their rows
 
 R-UI-73 keeps the member Move to group menu beside its own action row using the shared ui.ts submenu behavior. openActions passes that actual row to member-actions.ts. Hover waits 120 ms, click/Right opens, Left/Escape closes only the child, the safe triangle protects diagonal travel, direct sibling travel switches immediately, and leaving both waits 250 ms. Opening rectangles survive background redraw; live caret completions retain their explicit anchorRect. No setting or toggle is added. Hide keeps its eye-off action icon without a navigation chevron.
 
@@ -724,7 +712,7 @@ menu-pointer-return protects a fresh real mouse press on a drawn ⋯ (a message'
 npm run look -- menu-pointer-return --theme both --width 1120,720,1920x1080
 ```
 
-## Review: shared menu scroll intent (2026-11-02)
+## Review: shared menu scroll intent
 
 Outside wheel/touch scrolling and page-scrolling keys close all open menu levels. Inside input retains menu scrolling and navigation. Resize closes all levels; work-event storms and programmatic/layout scrolling preserve frozen placement. Live completion anchors continue following their caret. See conversation.md for the full selected review matrix.
 
@@ -732,7 +720,7 @@ Outside wheel/touch scrolling and page-scrolling keys close all open menu levels
 npm run look -- menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal --theme both --width 1120,720,1920x1080
 ```
 
-## Shared presence and sidebar previews (2026-11-02)
+## Shared presence and sidebar previews
 
 R-UI-74/77: slime-states, slime-gallery, slime-motion-idle/busy/moments/change,
 slime-sharp and slime-cost accompany presence-states-sidebar, presence-hover-action,
@@ -740,7 +728,7 @@ presence-blocked-stays and presence-waiting-colleague. The same SVG parts serve 
 sidebar, header and 28px live thread. Reduced motion keeps the thinking dots,
 attention mark, lidded waiting eyes and static working ribbons recognizable.
 
-sidebar-row-time checks that rows carry no time or role pill, sit 58 px apart as Grok Bot's, and show overflow under the pointer;
+sidebar-row-time checks that rows carry no time or role pill, sit 58 px apart, and show overflow under the pointer;
 sidebar-group-author checks the latest public author prefix, while owner waiting
 keeps its existing preview. Names stay on pinned tiles and roles remain in the
 header/details panel. Run both themes at 1120,720,1920x1080. See conversation.md's
@@ -779,7 +767,7 @@ npm run look -- slime-parts slime-characters-at-rest sidebar-characters-at-rest 
 ```
 
 
-## Our liquid body language (2026-11-02)
+## Our liquid body language
 
 This supersedes the symbol-based presence poses and the sleeping Zs above, under
 R-UI-74, R-UI-78 and R-UI-SLIME-01. The body and costume remain in every state;
@@ -817,7 +805,7 @@ are retained unchanged. No timeline or work-detail implementation is changed.
 npm run look -- slime-liquid-sheet slime-liquid-still slime-states slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-gallery slime-parts slime-sharp slime-cost presence-states-sidebar presence-blocked-stays presence-waiting-colleague transcript-working sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
 
-## Motion cost (2026-11-03)
+## Motion cost
 
 R-PERF-01 extends R-UI-63/71/74/84 and R-UI-SLIME-01. The keyframes in
 slime.css remain the vector source; `node scripts/slime-cels.mjs` regenerates
@@ -834,8 +822,8 @@ under a synthetic eight-working/two-sleeping load. Every sample must stay below
 busy-team-thread, busy-team-room and running. The separate
 motion-cost-details scene isolates the unchanged animated emblem against its still
 and measures one 96px working vector. It is measurement, not native acceptance.
-motion-idle-cost repeats twelve resting members against starting revision
-e2143ec7 twice each. slime-motion-recovery protects error/blocked handovers.
+motion-idle-cost repeats twelve resting members against the starting revision
+twice each. slime-motion-recovery protects error/blocked handovers.
 
 Selected matrix: those six scenes plus slime-gallery, slime-liquid-sheet,
 slime-liquid-still, slime-parts, slime-sharp, slime-motion-change,
@@ -881,7 +869,7 @@ painted element. Home's
 four-second event storm is bounded to 27 total reads. After the 33-scene matrix,
 the local shimmer/limit corrections are rechecked in composer-stop-voice,
 composer-stop-pending and running at both themes and all three sizes.
-## Sending a prompt (2026-11-03)
+## Sending a prompt
 
 R-PERF-02 times what the owner feels when they press Enter, in `app/scripts/look/send-probe.mjs`: the frame after the key, the longest task and the main-thread share over a whole turn, on a sixty-turn thread, at normal speed and at a quarter of it. Core reads for a computer nobody watches are remembered in `DesktopViewer.unwatched_status`, and a closed details panel neither reads nor draws.
 
@@ -890,7 +878,7 @@ npm run look -- send-prompt send-prompt-slow --theme both --width 1120,720,1920x
 ```
 
 
-## Shared installed skills (2026-11-04)
+## Shared installed skills
 
 Settings > Connections lists each shared library package once and every member's
 private skills. Member details retain shared skills, including Raphael (id 0).
@@ -947,7 +935,7 @@ room and background paths retain their shared production engines.
 Offline tests: core/tests/members/test_skill_library.py,
 core/tests/agent/test_cli_skill_packages.py,
 core/tests/agent/test_local_commands.py::test_an_imported_skill_script_is_not_run_by_an_ordinary_turn,
-app/src/main/connections.test.ts (connectors only since 2026-11-07), member-profile-resources.test.ts and member-details.test.ts.
+app/src/main/connections.test.ts (connectors only), member-profile-resources.test.ts and member-details.test.ts.
 The existing app/scripts/look/mock-ipc boundary also models shared scope, local
 source selection/import and individual grants; mock-ipc.test.mjs covers that contract.
 All package/credential fixtures use temporary synthetic homes. Installed CLIs are
@@ -960,12 +948,12 @@ details-commands, completion-slash, completion-plugin, completion-clash,
 slash-commands, local-command-consent and local-command-background. Capture both
 themes at 1120,720,1920x1080, then judge the same run. Shared rows/buttons/dialogs
 must be compared with the ordinary Connections rows and member resource controls.
-Follow-up 3 authorizes the selected offline look matrix below. Native, network and
-paid API acceptance remain outside this unit's authorization.
+The selected offline look matrix is below. Native, network and
+paid API acceptance remain outside it.
 
 ### Shared skill import and member choices (review follow-up 3)
 
-> Retired on 2026-11-07 (owner): Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
+> Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
 Connections has one Skills section in its existing position after apps. Its
 data-heading uses the same layout as Settings > Data, with an icon plus short
@@ -994,7 +982,7 @@ app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
 
 ### One shared package row and readable sources (review follow-up 4)
 
-> Retired on 2026-11-07 (owner): Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
+> Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
 Connections keeps one library row per shared skill regardless of member count.
 Its existing document dialog lists every member, Raphael first, with the same tg
@@ -1026,14 +1014,14 @@ the real dialog/grant refresh and preserved private rows. member-profile-resourc
 covers Raphael's existing shared switch with readable source copy. Run those files
 plus i18n/i18n.test.ts, the mapped look command and one final npm run verify.
 
-## Shared abilities and movable coordination (2026-11-04)
+## Shared abilities and movable coordination
 
 [Speaker parity](speaker-parity.md) refines R-AG-01: the primary contact coordinates,
 while every speaker retains the same executable abilities with its own model and grants.
 The details settings pane exposes the shared default-on draft preference for Raphael
 and members; no naming/job setup is introduced for identity 0 after a primary change.
 
-The selected matrix below is deferred in this unit: its brief prohibits look and native.
+The selected matrix below is deferred: no look or native run covers it yet.
 Compare the shared draft switch in both details panes with the existing profile Soul row.
 
 ```powershell
@@ -1041,9 +1029,9 @@ npm run look -- speaker-draft-chief speaker-draft-member speaker-draft-profile -
 ```
 
 
-## Plugin sets and GitHub marketplaces (2026-11-04)
+## Plugin sets and GitHub marketplaces
 
-> Retired on 2026-11-07 (owner): Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
+> Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
 R-SKILL-06/07 extend the shared library without another settings page. In the existing
 import dialog a local plugin shows one name/version/count row and one import; its
@@ -1079,9 +1067,9 @@ missing references reported as blocked and no unapproved network requests.
 Run core/tests/members/test_skill_plugins.py, test_skill_library.py,
 core/tests/brain/test_db.py and core/tests/agent/test_cli_skill_packages.py plus the
 changed frontend files: connections.test.ts, mcp-proposal.test.ts, i18n/i18n.test.ts and look/mock-ipc.test.mjs.
-Follow-up 5 additionally requires one frontend verify and one final complete core
-suite, each after wait-heavy.ps1. R-SKILL-05 named evidence above remains in force.
-## Localized skill origins (2026-11-05)
+It additionally requires one frontend verify and one final complete core
+suite. R-SKILL-05 named evidence above remains in force.
+## Localized skill origins
 
 R-SKILL-08 shares skillOriginLabel across member details and the shared member resource editor. Learned rows have exactly one
 localized origin/date line. No origin text or title exposes learned/owner/imported,
@@ -1094,21 +1082,21 @@ is the three localized learned-origin cases in
 member-profile-resources.test.ts. This presentation change adds no migration or RPC.
 
 
-## Colleague recipes and goal-first greeting (2026-11-05)
+## Colleague recipes and goal-first greeting
 
 R-COLLEAGUE-01..03: New member > Start from a template opens eight shipped slime roles; Open template file uses the system file picker and previews profile, skill names, paused routines and one disabled connect card per app. Import creates the colleague without grants; only subsequent per-app Connect requests sign-in and member access. The member row menu exports one .raphael-member file without memory, pictures, credentials or model choices.
 
-Since 2026-11-11 a new member's greeting is its own model's line with ONE question card (R-COLLEAGUE-02, owner: 「他會直接給你一個選擇的表單，然後一件事慢慢設定完成」); the card is the ordinary `ask_owner` card, and the idle clone of 2026-11-06 (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
+A new member's greeting is its own model's line with ONE question card (R-COLLEAGUE-02: a choice form, one thing set up at a time); the card is the ordinary `ask_owner` card, and the earlier idle clone (`member-greeting.ts`) is gone. Greetings stored earlier with locally computed suggestions read as the plain line they were. The shared API/CLI prompt puts the one outcome question rule beside owner input before set_my_job saves the goal. Fake-brain tests prove routing and persistence, not a real model's judgment.
 
-### A new member sets itself up by cards (2026-11-11, R-COLLEAGUE-08)
+### A new member sets itself up by cards (R-COLLEAGUE-08)
 
 One chain, one card at a time, no progress mark and no summary at the end:
 
-1. The greeting: one line in the member's own words and one question card (what to take on first: three or four options from what is known, else mail, schedule and reminders, research, documents; plus his own answer). `member-greeting-choices`, `member-maker-made`.
-2. His answer (or his own words) is the card's: it stands in the card, not as a bubble, and starts a turn of its own (`setup`). The member saves its job (`set_my_job`), says it in one sentence, and the thread shows one centred quiet line 「已設定職務：…」 (the skill-learned line; `job_set` event). There is no label place for the role in a sidebar row (R-UI-77), so none is added.
+1. The greeting: one line in the member's own words and one question card (what to take on first: three or four options from what is known, else mail, schedule and reminders, research, documents; plus their own answer). `member-greeting-choices`, `member-maker-made`.
+2. Their answer (or their own words) is the card's: it stands in the card, not as a bubble, and starts a turn of its own (`setup`). The member saves its job (`set_my_job`), says it in one sentence, and the thread shows one centred quiet line 「已設定職務：…」 (the skill-learned line; `job_set` event). There is no label place for the role in a sidebar row (R-UI-77), so none is added.
 3. If the job needs an app that is not connected: the existing connect card for that one app with one quiet line under it (「沒有你的同意，我不會寄出或更動任何東西。」). A connected app is never asked about. `member-setup-connect`.
-4. One more card: which first task (two or three concrete options plus his own answer). `member-greeting-goal` shows steps 2 and 4.
-5. The member starts the task he chooses. A clear job and task in the answer skip 3 and 4; a new name given in so many words is taken with `member_update` and shown as the first Bot's rename line. `member-setup-collapsed`.
+4. One more card: which first task (two or three concrete options plus their own answer). `member-greeting-goal` shows steps 2 and 4.
+5. The member starts the task they choose. A clear job and task in the answer skip 3 and 4; a new name given in so many words is taken with `member_update` and shown as the first Bot's rename line. `member-setup-collapsed`.
 
 Typing instead of answering closes the card and is an ordinary message; closing the card (×) ends the set-up quietly. Core: `core/tests/members/test_setup_chain.py` (fake API and CLI brains; a real model following the chain is unverified until tried on a Codex member and an API member).
 
@@ -1120,9 +1108,9 @@ npm run look -- member-template-gallery member-template-preview member-template-
 
 Core fakes cover export/import, no-side-effect preview, no grants, disabled routines, local suggestions, goal question/save and first-use directories. Native save/open dialogs, real VM/SSH mounts and real model behavior need separate authorized acceptance.
 
-Follow-up 1 (2026-11-05): Template previews keep one quiet no-grants/privacy notice immediately above the Close/Import actions in the fixed footer. Skills and paused routines use the shared compact list rows with names and muted detail. Templates have no status pill; a connection gains its own signed-in status only after a successful explicit connection. The member-template-preview scene asserts these contracts; compare it with member-panel-details and calm-thread after merging.
+Template previews keep one quiet no-grants/privacy notice immediately above the Close/Import actions in the fixed footer. Skills and paused routines use the shared compact list rows with names and muted detail. Templates have no status pill; a connection gains its own signed-in status only after a successful explicit connection. The member-template-preview scene asserts these contracts; compare it with member-panel-details and calm-thread after merging.
 
-## Member store (2026-11-05)
+## Member store
 
 R-STORE-01 through R-STORE-04 extend the existing raphael-member v1 recipe, not a
 second package format. The sidebar's + › 商店 opens the store, a page of its own where the conversation
@@ -1131,8 +1119,8 @@ catalogue; 從範本開始, the eight starter templates and 開啟檔案, is one
 characters and shared buttons. Preview shows full instructions, personality, skill
 documents/dependencies, routine schedules and individual disabled app connect cards.
 Adding installs skills and routines off and grants no apps; only subsequent per-app
-Connect can request login. Export now opens Review contents before Export file or
-Prepare publish request (2026-11-11; it was "Publish to store"). A secret finding disables both. Publishing prepares only a local
+Connect can request login. Export opens Review contents before Export file or
+Prepare publish request. A secret finding disables both. Publishing prepares only a local
 package folder and opens GitHub's prefilled PR page; the owner submits through GitHub.
 
 The catalogue uses Ed25519 over exact index bytes, two compiled trust roots for
@@ -1144,13 +1132,13 @@ No production key or account is needed by fake HTTP or the signed synthetic fixt
 
 npm run look -- store-home store-category store-search store-empty store-offline template-preview template-preview-warning template-export-review template-review-pages member-template-gallery member-template-preview member-template-imported member-template-export sidebar-plus --theme both --width 1120,720,1920x1080
 
-A template card's 查看內容 and the export review read as Grok Bot's review (template-review.ts, owner 2026-11-08): a
+A template card's 查看內容 and the export review share one review (template-review.ts): a
 first page of the face, the name and what it is for, then one
 tinted card of rows 內容 (role, instructions, personality, reply style, skills), 例行工作 and 整合, each opening a page with a
 back arrow and its title in the head; a skill page is its description and text (no front matter) and its files, a routine page
 its content and its trigger in words with "starts paused". The dialog's foot is the card's next step (準備發布請求 while it
 is a draft, else none). The import preview keeps its own layout.
-Since 2026-11-11 (R-COLLEAGUE-01, R-STORE-04) the review shows every field of a raphael-member and no other: a template
+R-COLLEAGUE-01 and R-STORE-04: the review shows every field of a raphael-member and no other: a template
 carries no memory (so there is no 記憶 row), no 最後更新, and a routine holds only its title, prompt and trigger (no
 description, fires_on or ask: an importer is asked nothing). `template-contract.test.ts` reads
 `core/tests/fixtures/member-template/full.raphael-member`, the one recipe the core and the catalogue schema also accept.
@@ -1167,7 +1155,7 @@ Native file picker, OS browser/folder opening, persistence across desktop restar
 public catalogue hosting, production trust-root provisioning and GitHub CI remain
 separate acceptance. No live provider calls, public repository creation or tokens.
 
-## Recipe preview polish (2026-11-05)
+## Recipe preview polish
 
 R-COLLEAGUE-01 and R-STORE-03: local recipes, store previews and export review share
 one renderer. Known connection ids use the existing SERVICE_ICONS catalogue's
@@ -1194,7 +1182,7 @@ Run the selected tests and frontend verify once at the end. Judge uses the same
 selected run; missing external reference images are blocked, never design PASS.
 No core, Rust, native, OS vault or live-provider acceptance is implied.
 
-## The member's own model writes its template (owner, 2026-11-08, brief 27)
+## The member's own model writes its template
 
 Share (the conversation header's share, or the member's own share_template) waits inside the original turn while the
 member's own model writes the public version: a short introduction, general instructions, self-contained skills and a
@@ -1206,7 +1194,7 @@ refused. There is no copy of the raw settings as a fallback. The card stays an i
 charged to the turn's ledger. Tests: core/tests/members/test_template_author.py and tests/test_chat_setup_share.py;
 Guardian S21 checks the public snapshot.
 
-## Conversation setup and sharing: backend contract (2026-11-07)
+## Conversation setup and sharing: backend contract
 
 The panel sends one owner message with optional agent.ask intent: setup-telegram,
 setup-slack, setup-discord or share-template. The trusted panel step sits beside
@@ -1235,7 +1223,7 @@ Offline acceptance: core/tests/test_chat_setup_share.py, messaging member-accoun
 and background owner-card/snapshot tests, the full core suite, Rust library tests
 and warning-free Clippy. Core/Rust-only ownership leaves frontend scenes, real
 app journeys, look/judge and live provider verification to the window integration.
-The window landed the same day: chat-setup-cards, chat-pairing-allowed, member-template-export and
+In the window, chat-setup-cards, chat-pairing-allowed, member-template-export and
 template-export-review drive the cards (see conversation.md and the panel notes above).
 
 Guardian maps connect_messaging to S14.messaging.telegram/slack/discord and
@@ -1243,7 +1231,7 @@ share_template to S21.templates.share. These production-loop contracts check
 panel intents, owner text, secure-card metadata and immutable snapshot read-back;
 they do not save platform credentials or prove a real platform connection.
 
-## Subscription memory recovery (2026-11-07)
+## Subscription memory recovery
 
 MemoryBrain checks Outcome.status, not its optional failure kind. Tool-less CLI reflection,
 consolidation and skill review retain the structured schema and never cross providers.
@@ -1253,18 +1241,17 @@ Persisted memory failures and skill-review failures appear in self_check.memory;
 begins at three consecutive failures. Skill review pauses for six hours rather than stopping
 forever; pre-existing counters without a retry timestamp can recover immediately.
 Offline tests: core/tests/memory/test_subscription_passes.py, tests/members/test_skill_growth.py
-and tests/agent/test_self_diagnosis.py. Live evidence is recorded separately in the brief report;
-only that documented route is live-verified. Memory provenance and owner-only permissions remain.
+and tests/agent/test_self_diagnosis.py. Live evidence is recorded separately;
+only the documented route is live-verified. Memory provenance and owner-only permissions remain.
 
-## One press closes what is open and acts (2026-11-11)
+## One press closes what is open and acts
 
-R-UI-121 (owner, 2026-11-11, after a report from real use): a press outside an open menu, picker, popover or dialog closes it
+R-UI-121: a press outside an open menu, picker, popover or dialog closes it
 and is delivered to what was pressed in the same press, so a member in the sidebar opens at once even while the avatar
 picker, a row menu, the composer's model menu or a dialog is open. One shared policy does it (`app/src/main/dismissals.ts`):
 a press on a control closes the panel without being stopped; a drawer's scrim closes the panel and the element under the
 pointer receives the focus and one click; a dialog's scrim (Connect apps, Settings, the member creator, the model chooser, the
-delete question) only closes it and the press is spent (owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好 不用可以直接點到
-後面的東西」): nothing behind it is pressed, focused or right-clicked; a menu open over a dialog is closed first and the dialog by the
+delete question) only closes it and the press is spent: nothing behind it is pressed, focused or right-clicked; a menu open over a dialog is closed first and the dialog by the
 next press. Unit proof: `app/src/main/dismissals.test.ts` and `app/src/main/dialog-outside-close.test.ts`.
 
 Each scene presses once with the real mouse on a control that is not part of what is open and fails if either half is missing;
@@ -1279,9 +1266,9 @@ sidebar's +, a tab of Settings) and fail if anything behind it moved: no member 
 made, and the dialog closed (the chooser closes alone and leaves Settings on its tab). `opener-toggle-*` still prove that the opener is
 the toggle.
 
-## The control that opened a thing is its toggle (2026-11-11)
+## The control that opened a thing is its toggle
 
-R-UI-124 (owner, 2026-11-11, after R-UI-121): with 「連接應用程式」 open, a press that lands on 「連接應用程式」 itself (it lies under the
+R-UI-124 (after R-UI-121): with 「連接應用程式」 open, a press that lands on 「連接應用程式」 itself (it lies under the
 scrim) closed the dialog and was then handed down to the button, which opened it again, forever. The press on the opener now closes
 and does nothing else, for every opener. `app/src/main/dismissals.ts` keeps it: a panel records, when it registers, the control the
 last click activated (a menu item that has closed stands for the menu's own opener; a list drawn again is matched by its key; a field
@@ -1307,10 +1294,10 @@ sidebar's 「連接應用程式」 is an icon in the rail's foot and is pressed 
 npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-member-maker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
 ```
 
-## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens (2026-11-11)
+## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens
 
-R-STORE-05, R-STORE-06, R-STORE-07, R-COLLEAGUE-07. The owner asked that everything about sharing be finished, remote computers included.
-What changed, and how to see it:
+R-STORE-05, R-STORE-06, R-STORE-07, R-COLLEAGUE-07. Sharing is finished end to end, remote computers included.
+What it does, and how to see it:
 
 - A save dialog the owner cancels leaves the template card a draft (member-template-save-cancelled): the core's `members.template_card_export`
   gives the text only, and the page sends `saved: true` after the dialog wrote a file.

@@ -3,11 +3,11 @@ import { dayNumber } from "./format";
 import { t } from "./i18n";
 import { esc, ico, tabs, type IconName } from "./ui";
 
-// The member panel's Library, as Grok Bot's: only what the member delivered, never the screenshots and scratch files of
-// its work. Four chips (全部 / 頁面 / 媒體 / 檔案) always stand at the top, as Grok Bot's four tabs do, then the items grouped
+// The member panel's Library: only what the member delivered, never the screenshots and scratch files of
+// its work. Four chips (全部 / 頁面 / 媒體 / 檔案) always stand at the top, then the items grouped
 // by recency, each group one rounded card of one-line rows: a 20 px mark (a picture's own thumbnail, else its kind's icon)
 // and the title. A chip whose kind has nothing shows one quiet line in the cards' place.
-// A press opens it (`members.library`, brief 10).
+// A press opens it (`members.library`).
 export type LibraryKind = "document" | "page" | "image" | "video" | "audio" | "archive" | "file" | "link";
 export interface LibraryItem {
   id: string;

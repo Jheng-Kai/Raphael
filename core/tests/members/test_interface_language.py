@@ -1,4 +1,4 @@
-"""A member's conversation is told nothing of the interface language (owner, 2026-11-14): 「我不是說過系統的 UI 語言並不會影響到
+"""A member's conversation is told nothing of the interface language: 「我不是說過系統的 UI 語言並不會影響到
 使用者內部聊天的語言嗎？它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」.
 
 The interface is Japanese and the owner writes Traditional Chinese: what the model is sent is the same as on any other
@@ -59,7 +59,7 @@ async def test_a_member_is_told_nothing_of_a_japanese_interface_when_the_owner_w
 async def test_a_japanese_teachers_own_instructions_still_decide_her_language(setup, client):
     rig, team = setup
     rule = "You are a Japanese teacher. Always answer in Japanese, whatever language the owner writes in."
-    teacher = member(team, name="Shion", role="日本語の先生", instructions=rule)
+    teacher = member(team, name="Ada", role="日本語の先生", instructions=rule)
     english = await asked(rig, client, "今天教我一個 N2 文法", teacher.id, "en", session="a")
     chinese = await asked(rig, client, "今天教我一個 N2 文法", teacher.id, "zh-TW", session="b")
     system, user, _ = english

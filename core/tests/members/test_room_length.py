@@ -1,4 +1,4 @@
-"""Length is never an error in a room (owner, 2026-11-09 to 11-11: 97 replies of one meeting failed for it). What a reply
+"""Length is never an error in a room (97 replies of one meeting once failed for it). What a reply
 is given follows the model's window: whole messages, newest first; a message that must be there and alone does not fit
 is left out and says so, and the reply goes on."""
 import json

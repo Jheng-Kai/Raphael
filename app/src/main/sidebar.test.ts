@@ -29,7 +29,7 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
   await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
   // 連結應用程式 opens its own dialog, not a page of Settings (R-UI-111).
   expect(nav.querySelector('.side-foot .sidebar-apps')?.hasAttribute('data-connect-apps')).toBe(true);
-  // One row, as Grok Bot's (R-SIDE-01): the face (a button named by the owner's name, opening the account menu), then the pill; no page buttons.
+  // One row (R-SIDE-01): the face (a button named by the owner's name, opening the account menu), then the pill; no page buttons.
   expect([...nav.querySelector('.sidebar-foot-row')!.children].map(el => el.className.split(' ').filter(name => name.startsWith('sidebar-'))[0])).toEqual(['sidebar-account', 'sidebar-apps']);
   expect(nav.querySelectorAll('.side-foot [data-go], .sidebar-dictation, .sidebar-home')).toHaveLength(0);
   const account = nav.querySelector<HTMLElement>('.sidebar-account')!;
@@ -38,7 +38,7 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
   expect(account.getAttribute('aria-haspopup')).toBe('menu');
   expect(account.querySelector('.owner-face')).not.toBeNull();
   expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
-  // The pill says its own words: nothing more shows under the pointer (owner, 2026-11-12).
+  // The pill says its own words: nothing more shows under the pointer.
   expect(nav.querySelector('.sidebar-apps')?.hasAttribute('data-tooltip') || nav.querySelector('.sidebar-apps')?.hasAttribute('title')).toBe(false);
   // Each mark knows its place against the middle one, for the pill's hover: -1, 0 and +1 of the 3 px spread.
   expect([...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.style.getPropertyValue('--spread'))).toEqual(['-1', '0', '1']);
@@ -56,7 +56,6 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
 });
 
 test("with nothing connected the pill shows Gmail, Notion and Google Calendar, then the owner's own apps once one is connected", async () => {
-  // Owner, 2026-11-15: 「如果剛進來甚麼都還沒 connect 這邊還是要顯示 default…有連結了再慢慢換成現在這樣」.
   const empty = { state: "complete", count: 0, apps: [{ name: "Slack", connected: false, last_used_at: null }] };
   const read = vi.spyOn(api, "integrationsInventory").mockResolvedValue(empty as never);
   let event!: (value: MainEvent) => void;
@@ -130,7 +129,7 @@ test("the sidebar has no brand and no fold button, names its face by the owner i
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
   expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
   expect(add.parentElement!.className).toBe("side-foot");
-  // The rail has no search (owner, 2026-11-12 23:25): only the plus stands in its foot.
+  // The rail has no search: only the plus stands in its foot.
   expect(pair()).toEqual(["add"]);
   expect(localStorage.getItem("raphael.sidebar.collapsed")).toBe("true");
   drag(72, 110);

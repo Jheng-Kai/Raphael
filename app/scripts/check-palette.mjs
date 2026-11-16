@@ -50,7 +50,7 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
     const channels = palette[token].slice(1).match(/../g).map(value => parseInt(value, 16));
     if (Math.max(...channels) - Math.min(...channels) > 12) throw new Error(`Non-neutral interaction token: ${theme}/${token}`);
   }
-  // The three layers of a dialog (owner, 2026-11-14) rise in lightness in both themes: the window under the scrim, then the dialog, then the cards on it.
+  // The three layers of a dialog rise in lightness in both themes: the window under the scrim, then the dialog, then the cards on it.
   const alpha = Number(palette.scrim.match(/rgba\(0, 0, 0, ([\d.]+)\)/)[1]);
   const dim = (hex) => "#" + hex.slice(1).match(/../g).map((x) => Math.round(parseInt(x, 16) * (1 - alpha)).toString(16).padStart(2, "0")).join("");
   contrast.layers = { outside: dim(palette.content), dialog: palette.dialog, card: palette.float };

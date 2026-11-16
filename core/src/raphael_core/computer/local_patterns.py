@@ -1,4 +1,3 @@
-# Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 # Best-effort detection only; the owner approval card remains the execution gate.
 
 DANGEROUS_PATTERNS = [

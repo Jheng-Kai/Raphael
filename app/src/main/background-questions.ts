@@ -38,7 +38,7 @@ export interface BackgroundQuestion {
 export type AnswerStatus = "approved" | "denied" | "expired" | "cancelled" | "unknown" | string;
 
 /**
- * Who asks in a thread: `name` is null for Raphael (his bare emblem), and a
+ * Who asks in a thread: `name` is null for Raphael (its bare emblem), and a
  * member's name otherwise, with `face` that member's face (members.ts `faceHTML`, 22 px).
  */
 export interface Asker {
@@ -46,7 +46,7 @@ export interface Asker {
   name: string | null;
 }
 
-/** Raphael's own: his face (the first blue slime, or the owner's picture), bare, and no name. */
+/** Raphael's own: its face (the first blue slime, or the owner's picture), bare, and no name. */
 const RAPHAEL: Asker = {
   get face() {
     return faceHTML({ id: RAPHAEL_ID, name: "" }, 22, { cls: "bgq-face" });

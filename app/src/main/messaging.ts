@@ -209,7 +209,7 @@ export function createMessaging(host: MessagingHost): Messaging {
 }
 
 type ConnectReply = Awaited<ReturnType<typeof api.telegramConnect>>;
-/** What a channel asks the core: Raphael's Telegram, his Slack or Discord, or one member's own Telegram bot. */
+/** What a channel asks the core: Raphael's Telegram, its Slack or Discord, or one member's own Telegram bot. */
 interface ChannelOps {
   status(): Promise<TelegramStatus>;
   connect(token: string): Promise<ConnectReply>;
@@ -250,7 +250,7 @@ export function createMemberChannel(host: MessagingHost, memberId: () => number,
 }
 export const createMemberTelegram = (host: MessagingHost, memberId: () => number): Messaging => createMemberChannel(host, memberId, "telegram");
 
-/** Raphael's own bot on one platform, in his panel (Settings no longer holds it). */
+/** Raphael's own bot on one platform, in its panel (Settings no longer holds it). */
 export const createRaphaelChannel = (host: MessagingHost, kind: MessagingKind): Messaging => createChannelMessaging(host, kind);
 
 function createChannelMessaging(host: MessagingHost, kind: MessagingKind, ops: ChannelOps = raphaelOps(kind), ownTokenId?: string): Messaging {

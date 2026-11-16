@@ -326,7 +326,7 @@ conversations, work/replies/attachments, team/rooms, schedules/runs, usage/CLI a
 MCP servers, providers/models and dictation data. Browser dates are fixed to the fixture's
 `now`, in Asia/Taipei. Change data in that file, not in a second mock.
 
-The normal entry opens Raphael's conversation (Home was removed on 2026-11-12) and waits for its header. Every other page is reached
+The normal entry opens Raphael's conversation and waits for its header. Every other page is reached
 through the real account menu at the sidebar's foot (`accountMenu` / `page()` in scenes/steps.mjs, the driver's `account-menu` action),
 and the foot scenes (scenes/foot.mjs) cover the face, the pill, the menu, its usage submenu, the rail and the hover.
 
@@ -335,7 +335,7 @@ export it from `scenes/index.mjs`. Steps include click, type, hover, key (`shift
 member/room selection and drag/drop. Use real UI selectors and wait for the resulting
 state; do not replace app modules or inject a separate preview page. Fixture overrides
 can replace collections; `running`, `problem`, `onlyRaphael`, `usageEmpty` (nothing connected, no key either)
-and `onboarding` select boundary variants; `usageOwner` is the owner's own mix of 2026-11-14 (Codex live at 65% used, Claude whose reported window has reset, the ChatGPT sign-in, an OpenRouter key with its own usage); `permissionCard`, `memberDraftFirst`, `mailDraft` and `mailOffer` seed the permission and email cards of a chat (the Conversation feature map, P08c). `overlayEvents` replays the native overlay
+and `onboarding` select boundary variants; `usageOwner` is a mix of every source (Codex live at 65% used, Claude whose reported window has reset, the ChatGPT sign-in, an OpenRouter key with its own usage); `permissionCard`, `memberDraftFirst`, `mailDraft` and `mailOffer` seed the permission and email cards of a chat (the Conversation feature map, P08c). `overlayEvents` replays the native overlay
 channel contract; `advance-time` advances the shared fixed clock for production timers. Scenes run with reduced motion,
 so nothing moves in a still frame; a scene about something that moves sets `motion: true` and holds every animation at
 one time with `freeze-motion` (`at` in ms), the same frame each run. A scene starts once Raphael's conversation (or the overlay's
@@ -449,10 +449,10 @@ The learned notification uses the real `learned.html` entry with only IPC mocked
 ## Native round 10 regression journey
 
 ```powershell
-npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conversation
+npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sweep delete-conversation
 ```
 
-`owner-round10` uses the bundled debug shell, real Rust correction Tracker, core
+`conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
 two Escape presses for a pending fake answer, a complete learned batch, five-second
 hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection

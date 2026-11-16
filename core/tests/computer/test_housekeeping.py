@@ -1,4 +1,4 @@
-"""The computer's housekeeping (owner, 2026-11-15): a size from the engine, old scratch cleared, a UTF-8 locale. No Docker: the existing fakes, and the shell scripts run for real where one is there."""
+"""The computer's housekeeping: a size from the engine, old scratch cleared, a UTF-8 locale. No Docker: the existing fakes, and the shell scripts run for real where one is there."""
 
 import logging
 import os

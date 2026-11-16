@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// One member shows at most one working slime in its conversation (owner, 2026-11-14, R-SLIME-03).
+// One member shows at most one working slime in its conversation (R-SLIME-03).
 import { expect, test } from "vitest";
 import { emptyTimelineState, presenceWant, standingPresence, turnHTML, type TurnLook } from "./timeline";
 import type { AgentTask, AgentTurn } from "./types";

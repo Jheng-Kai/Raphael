@@ -1,4 +1,4 @@
-"""How a member treats what its owner asks for (owner, 2026-11-14, a conversation with a language-teaching member).
+"""How a member treats what its owner asks for.
 
 Facts: the owner asked for daily reading pages from real news, for the owner's own study in the owner's own private app.
 The member answered with lessons on copyright, again and again, then delivered a headline and one sentence; it ended nearly every
@@ -23,7 +23,7 @@ from raphael_core.memory.conversation import Conversation, turn_text
 from .test_card_context import insert, turn
 from .test_service import NOW_MS
 
-FIELDS = dict(name="Shion", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
+FIELDS = dict(name="Ada", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
 
 # What each prompt had that taught the behaviour, and no longer has.
 REMOVED = (

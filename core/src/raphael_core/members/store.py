@@ -14,7 +14,7 @@
   runs next. Raphael has routines too, as member 0.
 - `member_unread`: the threads (Raphael's as 0) with news the owner has not seen.
 
-Raphael himself is not a row: he is member 0 everywhere, cannot be renamed or deleted, and has
+Raphael itself is not a row: it is member 0 everywhere, cannot be renamed or deleted, and has
 every tool. The primary contact is the member whose `primary_contact` is 1 (at most one, by the table's
 own index), or Raphael while none is. It also owns the unique chief capability
 and a member that is hidden or deleted hands that role back to Raphael. A name, a role, a personality,
@@ -35,6 +35,7 @@ from typing import Any
 
 from ..agent.speaker import Speaker, is_raphael_name
 from ..clock import wall_clock_ms
+from ..slime_ids import current_avatar
 from .schedule import Schedule, ScheduleError, parse_schedule
 
 # Shared read projection for routine_runs r and its agent_turns t. Waiting for children alone is not an owner question.
@@ -85,8 +86,8 @@ _GITHUB_URL = re.compile(r"https://(?:www\.)?github\.com/([^/?#]+/[^/?#]+?)(?:\.
 _NOTION_ID = re.compile(r"[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 _NOTION_URL = re.compile(r"https://(?:www\.)?(?:notion\.so|[a-z0-9-]+\.notion\.site)/\S*")
 # A slime is named as the app names it (slime.ts `CHARACTERS` and `COLORS`): lower-case words joined by hyphens, as
-# "oni-red" and "cat-ears" are. The rule took letters alone until 2026-11-11, so every slime with a hyphen in its name
-# (most of those added on 2026-11-09) was refused when chosen; the app's own test now holds every name it has to this rule.
+# "oni-red" and "cat-ears" are. The rule once took letters alone, so every slime with a hyphen in its name
+# was refused when chosen; the app's own test now holds every name it has to this rule.
 _SLIME_NAME = r"[a-z][a-z0-9]{0,31}(?:-[a-z0-9]{1,31}){0,3}"
 _AVATAR = re.compile(rf"(?:preset|file):[A-Za-z0-9._ -]{{1,120}}|slime:{_SLIME_NAME}(?::{_SLIME_NAME})?")
 
@@ -249,7 +250,7 @@ def clean_avatar(value: Any) -> str:
         return ""
     if not isinstance(value, str) or not _AVATAR.fullmatch(value) or ".." in value:
         raise MemberError("avatar", 'avatar must be "", "preset:<name>", "file:<name>" or "slime:<name>"')
-    return value
+    return current_avatar(value)
 
 
 def clean_tools(value: Any) -> tuple[str, ...] | None:

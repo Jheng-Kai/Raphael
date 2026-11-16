@@ -1,5 +1,5 @@
 // Stored attachments are immutable: an opaque id names its bytes for good, so the window asks for each id once a session and
-// keeps what it has shown across conversations (owner, 2026-11-15: 「能夠 cache 的東西就 cache」). The shell serves an id under one
+// keeps what it has shown across conversations. The shell serves an id under one
 // stable URL with a year-long immutable lifetime (media_protocol.rs), so the browser's own caches hold the bytes; this module
 // keeps the URL of each id, so a conversation opened again sets its pictures at once without asking the shell, and the last
 // pictures shown, so the browser keeps them decoded. Nothing that changes (a page being edited, a computer's frame) comes here.

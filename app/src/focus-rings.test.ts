@@ -104,7 +104,7 @@ describe("focus rings follow the keyboard only", () => {
     expect(bad).toEqual([]);
   });
 
-  // Owner, 2026-11-09: 「跳轉的時候現在好像會有亮光 那個全部拿掉」. Opening a conversation focuses its
+  // Opening a conversation focuses its
   // composer and a search opens a turn; neither may light anything up.
   test("a jump lights nothing: the composer looks the same focused, and the opened turn has no tint", () => {
     const composerFocus = rules.filter((rule) => rule.selectors.some((one) => /\.composer:focus(-within|-visible)?\b/.test(one)));

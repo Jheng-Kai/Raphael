@@ -2,8 +2,8 @@
 
 A quick question (Alt+Space) is the one place the owner's own PC is in reach (R-PC-01), and the fast router can answer
 a request to open something with a fixed command that opens it there. The owner also says 「用你的電腦開…」 to mean
-Raphael's own computer, the member's seat; read as "open", that sentence opened the page on his own PC and left him an
-empty reply (2026-11-13 and -14). So a request that names the member's computer never takes the owner-PC shortcut: it
+Raphael's own computer, the member's seat; read as "open", that sentence opened the page on their own PC and left them an
+empty reply. So a request that names the member's computer never takes the owner-PC shortcut: it
 goes to the member's ordinary turn, which uses its own computer. The owner's PC is only ever *kept* from such a request;
 nothing here reaches it.
 
@@ -70,7 +70,7 @@ def whose_computer(text: str) -> str | None:
     open something on "the computer" with no one's name on it, and None when it is about neither."""
     spoken = _plain(text)
     if _MEMBER.search(spoken):
-        return MEMBER  # also when it names the owner's too: the member's computer is the one that can do no harm to his PC
+        return MEMBER  # also when it names the owner's too: the member's computer is the one that can do no harm to the owner's PC
     if _OWNER.search(spoken):
         return OWNER
     if _BARE.search(spoken) and _OPENS.search(spoken):

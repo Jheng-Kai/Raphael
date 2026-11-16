@@ -70,7 +70,7 @@ export function createMemberActions(host: MemberActionHost) {
   }
 
   /**
-   * 換成其他成員 on a pinned tile (owner, 2026-11-11, after Grok Bot's 「Replace with different Bot」): the member chosen takes
+   * 換成其他成員 on a pinned tile: the member chosen takes
    * exactly this tile's place and this member goes back to its folder or list, where it stood before it was pinned. One press
    * on a member, no question; doing it the other way round puts everything back. The tile's place is a place in the roster's
    * order, so the member chosen is set at the old one's position before the old one is unpinned: the old member keeps its own

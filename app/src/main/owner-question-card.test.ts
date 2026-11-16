@@ -11,7 +11,7 @@ vi.mock("./api", () => ({ ownerQuestionAnswer: vi.fn(async () => ({ status: "ans
 const question: OwnerQuestion = { id: "q1", task_id: 7, turn_id: 2, member_id: 1, kind: "ask_owner", card_id: "",
   question: "想先處理哪一塊？", options: ["郵件", "行事曆", "筆記"], free_text: true, state: "asked", result: null };
 
-// The owner, 2026-11-11: one form of choices for set-up and for everyday work, as Grok Bot's question card.
+// One form of choices for set-up and for everyday work.
 describe("the question card's shape", () => {
   beforeEach(() => { vi.clearAllMocks(); document.body.innerHTML = ""; });
 

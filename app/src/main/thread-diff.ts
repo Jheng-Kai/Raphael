@@ -8,7 +8,7 @@ const FACE_TAG = /<\/?span\b[^>]*>/g;
  * `setSlimeState` hands every live face over), so its state, strips and clock, which change with every step a member
  * takes, are left out. Its drawing and member stay: another slime or another member is another line. Without this a step
  * from thinking to working made the line unequal to what is on screen and the whole turn was replaced, its words and
- * cards with it (owner, 2026-11-11: 「它有時候更新字幕…就會閃現，就會亂跳一通，可能文字會突然看不到」).
+ * cards with it.
  */
 function withoutMovingFaces(html: string): string {
   let out = "", from = 0, at: number;

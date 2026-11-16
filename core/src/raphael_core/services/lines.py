@@ -1,4 +1,4 @@
-"""Text read in lines, as Claude Code's Read gives a file: numbered like `cat -n`, 2000 lines a call from a line the
+"""Text read in lines: numbered like `cat -n`, 2000 lines a call from a line the
 caller names, a line over 2000 characters cut with a note, and the line to go on from when there is more.
 
 Shared by every tool that reads a text file to a model (a member's computer's `read_file`; an owner's attachment reads

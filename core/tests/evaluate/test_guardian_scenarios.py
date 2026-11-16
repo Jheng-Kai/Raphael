@@ -172,7 +172,7 @@ async def test_a_primary_contact_that_does_not_dispatch_what_it_is_given_fails_s
 
 
 async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
-    # Live, Raphael read the mail himself and the cell waited out its whole timeout before failing.
+    # Live, Raphael read the mail itself and the cell waited out its whole timeout before failing.
     from raphael_core.background.host import WorkerHost
     from background.conftest import Links
     class Client(FakeClient):

@@ -170,7 +170,7 @@ SHIFT = 0xffe1
 
 @pytest.mark.parametrize("character", list('~!@#$%^&*()_+{}|:"<>?') + list("ABZ"))
 def test_a_character_that_needs_shift_is_sent_with_shift_held_as_a_person_types_it(character):
-    # Measured on a real six-screen computer (2026-11-14): a seat's view server dropped `!@#$%^&*_+{}|:>?~` sent as bare
+    # Measured on a real six-screen computer: a seat's view server dropped `!@#$%^&*_+{}|:>?~` sent as bare
     # keysyms, and delivered every one with Shift_L held around it. A person's browser holds Shift; a script now does too.
     key = ord(character)
     assert events(character) == [(SHIFT, 1), (key, 1), (key, 0), (SHIFT, 0)]

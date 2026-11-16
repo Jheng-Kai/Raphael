@@ -1,6 +1,5 @@
 """Configured media capabilities, bounded delivery and cancellable provider jobs.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import asyncio

@@ -61,7 +61,7 @@ async def test_exactly_one_member_is_the_primary_and_choosing_another_moves_it(r
     assert rig.service.team_context(0, "en")["revision"] != before["revision"]
     await rig.call("members.set_primary", {"id": bob})
     assert flagged(rig) == [bob] and primary(rig) == bob
-    # Raphael can be chosen again: nobody is flagged then, and he is the primary
+    # Raphael can be chosen again: nobody is flagged then, and it is the primary
     await rig.call("members.set_primary", {"id": 0})
     assert flagged(rig) == [] and primary(rig) == 0
     # the chief of staff is Raphael through every one of those changes
@@ -195,11 +195,11 @@ async def test_new_room_membership_requires_the_current_chief(rig, exchange):
     listed = (await rig.call("rooms.list"))["rooms"]
     assert [sorted(r["member_ids"]) for r in listed] == [[0, *ids]] and listed[0]["membership_state"] == "ready"
     await rig.call("rooms.update", {"room_id": room["id"], "member_ids": ids})
-    # a room made by the primary's own choice, or by a meeting, has him as well
+    # a room made by the primary's own choice, or by a meeting, has it as well
     with pytest.raises(RpcError):
         await rig.call("rooms.create", {"name": "No chief", "member_ids": [0, ids[1]]})
     assert (await exchange.meeting({"member_ids": [0, *ids], "agenda": "Plan"}, "en", meeting_source(rig, 7)))["member_ids"] == [0, *ids]
-    # and he is still there once the primary has been deleted
+    # and it is still there once the primary has been deleted
     await rig.call("members.delete", {"id": ids[0]})
     assert rig.service.primary_id() == 0
     rooms = (await rig.call("rooms.list"))["rooms"]
@@ -280,7 +280,7 @@ async def test_the_roster_names_the_primary_to_each_kind_of_speaker(rig):
     assert "That is you" in for_alice and "handoff" in for_alice and "do only your own work yourself" in for_alice
     # another member forwards work to the colleague it belongs to, and what it cannot place to the primary
     assert "That is you" not in for_bob and "hand it to the primary contact" in for_bob and "ask_member" in for_bob
-    # Raphael, when he is not the primary, is told what every member is
+    # Raphael, when it is not the primary, is told what every member is
     assert "That is you" not in for_raphael and "hand it to the primary contact" in for_raphael
     # administration is nobody's alone: every speaker has the same tools
     assert not any("administer" in text for text in (for_alice, for_bob, for_raphael))

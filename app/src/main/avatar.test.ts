@@ -43,7 +43,7 @@ describe("Raphael's face", () => {
     expect(small).toContain('<img class="em-d" src="/brand/app-emblem-dark-64.webp"');
     expect(small).toContain('aria-hidden="true"');
     expect(avatarHTML({ size: 132 })).toContain("app-emblem-light-128.webp");
-    // while he thinks or listens, and on the empty page, the turning loop
+    // while it thinks or listens, and on the empty page, the turning loop
     expect(avatarHTML({ size: 26, loop: true })).toContain('src="/brand/app-emblem-dark-loop.webp"');
   });
 

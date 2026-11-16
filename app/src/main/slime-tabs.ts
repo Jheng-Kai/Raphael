@@ -1,6 +1,5 @@
 // The tabs of the slime picker (member-dialogs.ts `openAvatarPicker`): one row of the groups across the top, as the app's
-// small pill tabs, and under it only the open group's slimes (owner, 2026-11-11: 「這個不要這樣放，這個要跟…Grokbot 他們的 UI
-// 類似，就是上面會有一些 tab、button 之類的，然後可以選擇」). The panels stand on one another in one place (slime.ts
+// small pill tabs, and under it only the open group's slimes. The panels stand on one another in one place (slime.ts
 // `slimePickerHTML`), so a press on a tab changes what shows and nothing about the size or the place of the picker.
 
 import { chipSteps } from "./chip-scroll";

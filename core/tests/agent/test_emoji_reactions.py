@@ -77,7 +77,7 @@ def test_unicode_17_additions_are_emoji_but_unassigned_neighbors_are_not(conn, m
 
 
 def test_a_picture_the_member_sent_takes_a_reaction_as_its_replies_do_and_a_work_line_does_not(conn):
-    # A picture a member sends is a message of its own (owner, 2026-11-14, R-UI-156): its media message takes the owner's
+    # A picture a member sends is a message of its own (R-UI-156): its media message takes the owner's
     # reaction by its number, as a reply does; a line of work (progress, an event) is still no message to react to.
     history = AgentHistory(conn)
     turn_id = history.add(session_id='picture', question='Draw two offices', route='answer', prefix='', text='Here they are.', status='done')

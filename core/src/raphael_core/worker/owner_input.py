@@ -1,6 +1,5 @@
 """A loop-owned inbox; admission and its final drain share one event-loop boundary.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 

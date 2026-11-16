@@ -1,8 +1,8 @@
 /* 拉斐爾: one conversation. The head (the title, search and Raphael's settings), then the
    stage: the thread, which scrolls, and the composer under it; or, with no turn at all, Raphael in
-   the middle with the composer under him. The person's words are bubbles on the right, Raphael's
-   are on the left beside his face. Colours are the app's tokens (styles.css); Raphael's own gold
-   (--rg-*) is only on the card of his YES/NO question. Every movement stops with
+   the middle with the composer under it. The person's words are bubbles on the right, Raphael's
+   are on the left beside its face. Colours are the app's tokens (styles.css); Raphael's own gold
+   (--rg-*) is only on the card of its YES/NO question. Every movement stops with
    prefers-reduced-motion (the rule at the end of styles.css, and the last block here). */
 
 /* ---------- the size of the page ---------- */
@@ -50,8 +50,7 @@
   --pa-pic: calc(4 * var(--sp-5));
   --pa-ctl: calc(30px + 4 * var(--pa-u));
   /* The top row: the conversation's header, the details panel's and a side thread's are the window's own top row, with the buttons of
-     the window at their right. The pill and the round buttons are centred in it, 30 px from the window's top, as Grok Bot's
-     (measured 2026-11-12); the thread passes under it. */
+     the window at their right. The pill and the round buttons are centred in it, 30 px from the window's top; the thread passes under it. */
   --pa-top: 60px;
   /* What the window's buttons take from the top row's right end. The left end takes nothing: under 860 px the list is the rail of
      faces beside the pane, with no menu button at the window's top left. */
@@ -66,8 +65,7 @@
   --pa-lh-b: 22px;
   --pa-fs-a: var(--fs-md);
   --pa-lh-a: 22px;
-  /* Bubbles as slim as Grok Bot's: a one-line message is a 38 px pill, and longer ones keep its corners
-     (owner, 2026-11-09: 「我們的太胖了」 beside Grok Bot's 36 px pill; ours was 46 px). */
+  /* Bubbles are slim: a one-line message is a 38 px pill, and longer ones keep its corners. */
   --pa-bpy: var(--sp-2);
   --pa-bpx: var(--sp-3);
   --pa-br: calc(var(--pa-lh-b) / 2 + var(--pa-bpy));
@@ -143,8 +141,7 @@
 .ra-stage { grid-row: 3; position: relative; display: flex; flex-direction: column; min-height: 0; }
 /* The thread is the box of what it scrolls: without `position` an absolutely placed node in it (a room
    author's screen-reader name) took the stage as its box, escaped the clip and stretched the main area. Its sides are the
-   composer's (`.ra-dock`), so the messages start and end where the composer does at every size (R-UI-45; the judge on
-   2d5e3cf8: at 720 the thread began at 20 px and the composer at 32). */
+   composer's (`.ra-dock`), so the messages start and end where the composer does at every size (R-UI-45: at 720 the thread began at 20 px and the composer at 32). */
 .ra-scroll { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overflow-anchor: none; padding: var(--sp-1) var(--pa-dock-x) var(--sp-4); }
 /* A thread whose unread boundary is still on its way is drawn but not shown, so it is placed once, where it will stay (agent.ts holdOpening). */
 .ra-scroll.is-opening { visibility: hidden; }
@@ -272,7 +269,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 :root[data-theme="dark"] .link-chip .link-mark.logo-art .lg-l:has(+ .lg-d) { display: none; }
 /* The page's preview, under the pointer only, drawn as a menu is: it never takes a row of the conversation. It lives on
    <body>, outside the page that sets --pa-u, so its width must not lean on it: without a width the card stretched across
-   the window to fit a whole description (owner, 2026-11-09: 「可以就用 .. 就好」). Each line ends in an ellipsis. */
+   the window to fit a whole description. Each line ends in an ellipsis. */
 .link-hover { position: fixed; z-index: 130; display: flex; align-items: center; gap: var(--sp-3); width: min(400px, calc(100vw - 16px)); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); pointer-events: none; }
 .preview-image { flex: none; width: 64px; height: 64px; object-fit: cover; border-radius: var(--r-sm); }
 .preview-meta { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: 1; }
@@ -490,7 +487,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent [data-question-turn] .ask-card { width: min(calc(400px + 100 * var(--pa-u)), 100%); margin-inline: 0 auto; }
 .composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: var(--composer-shadow); transition: border-color 0.16s ease; }
 /* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
-   lights no halo around it in the dark theme (owner, 2026-11-09: 「跳轉的時候…不用有亮光」). */
+   lights no halo around it in the dark theme. */
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .composer .cmp-page-note { display: block; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the words: what to add and how it acts on the left, which model and send on the right. */
@@ -535,8 +532,8 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    without changing the words' metrics. The box is the mark's own width, so that a narrower @ does not make it overflow sideways. */
 .mention-ico { position: absolute; inset-block: 0; inset-inline-start: 0; width: 16px; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
-/* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
-   into a bare send icon (a level paper plane, no background), as Telegram does. */
+/* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send it turns
+   into a bare send icon (a level paper plane, no background). */
 .composer .cmp-pair:has(.cmp-send:disabled) .cmp-send, .composer .cmp-pair:has(.cmp-send:not(:disabled)) .cmp-voice { display: none; }
 .composer .cmp-pair .btn.cmp-send, .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { background: transparent; color: var(--accent-icon); animation: cmp-turn 140ms ease-out; }
 .composer .cmp-pair .btn.cmp-send:hover:not(:disabled), .composer .cmp-pair .btn.cmp-send:active:not(:disabled), .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice:is(:hover, :active):not(:disabled) { background: transparent; color: var(--accent-text); }
@@ -583,11 +580,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* Media stand on their own; only the owner's words receive a text bubble. */
 .owner-content { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); min-width: 0; max-width: min(var(--pa-bw), 78%); }
 /* The pictures have their own size (420 px, or the column when it is narrower) and the bubble under them has its own, as it has in a
-   message without a picture, up to the usual bubble width (owner, 2026-11-14: 「Message Bubble 自己的寬度」). The message is as wide as the
+   message without a picture, up to the usual bubble width. The message is as wide as the
    wider of the two, both at its right edge, so no room stays empty beyond the actions at its side (R-UI-104). */
 .owner-message > .owner-content { max-width: 100%; }
 .owner-content > .bubble { max-width: 100%; }
-/* R-UI-159 (owner, 2026-11-15): with pictures above the words, the actions stand against the bubble as on a message without a picture,
+/* R-UI-159: with pictures above the words, the actions stand against the bubble as on a message without a picture,
    never against the wider pictures. The message keeps its own layout (R-UI-149: the bubble as wide as the same words alone); the actions
    are anchored to the bubble, out of the grid, so the pictures' width never moves them and the message is no wider (R-UI-104). */
 .owner-message:has(.me-files + .bubble) { anchor-scope: --owner-bubble; column-gap: 0; }
@@ -609,7 +606,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* Its reaction stands on the picture's top-right corner, over its edge: the frame lets it out (the picture's button keeps the corners). */
 .chat-message[data-picture] .attachment-image { overflow: visible; }
 .attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); cursor: pointer; }
-/* Our own players (owner, 2026-11-15, R-MEDIA-01): the browser draws no control of its own. The controls over a video are marks
+/* Our own players (R-MEDIA-01): the browser draws no control of its own. The controls over a video are marks
    on the photo scrim, one set for both themes, as the picture under them is the same; a sound's row takes the theme's own. */
 .mp { position: relative; --mp-played: 0%; --mp-loaded: 0%; }
 .attachment-video { --mp-fill: var(--photo-mark); --mp-buffer: var(--photo-grid); --mp-rail: var(--photo-rail); }
@@ -663,11 +660,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .media-lightbox .lb-video .mp-bar .btn.icon.mp-btn { width: 32px; min-height: 32px; }
 .media-lightbox .lb-video .mp-bar .btn.icon.mp-btn > .i { width: 20px; height: 20px; }
 /* Its bar's own button leaves it (with Escape), as a player's full screen does: no second × over a picture whose edges move with its
-   shape (judge, 2026-11-15: a × straddling a pillarboxed video's edge). */
+   shape (a × would straddle a pillarboxed video's edge). */
 .media-lightbox .lb-card.lb-video > .btn.icon.lb-close { display: none; }
 .attachment-grid.is-multiple .attachment-picture img, .attachment-grid.is-multiple video { aspect-ratio: 4 / 3; object-fit: cover; }
-/* Several pictures sent together are small squares side by side, in as many rows as they need and right-aligned with the bubble,
-   as Claude, ChatGPT and Grok show them (owner, 2026-11-15, R-ATTACH-02); each still opens large. One picture keeps its size (R-UI-149). */
+/* Several pictures sent together are small squares side by side, in as many rows as they need and right-aligned with the bubble (R-ATTACH-02); each still opens large. One picture keeps its size (R-UI-149). */
 .me-files:has(> .attachment-thumbs) { width: auto; }
 .attachment-thumbs { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); max-width: 100%; }
 .attachment-thumbs > .attachment-image { flex: none; width: var(--pa-pic); height: var(--pa-pic); background: var(--surface-2); }
@@ -686,7 +682,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .btn.attachment-file { display: flex; justify-content: flex-start; gap: var(--sp-2); width: 320px; min-height: 56px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); text-align: start; background: var(--surface-2); }
 .attachment-file .attachment-name { flex: 1; gap: var(--sp-1); }
 
-/* ---------- Raphael asks: his gold, a soft breathing glow, his face, 否 outlined and 是 gold ---------- */
+/* ---------- Raphael asks: its gold, a soft breathing glow, its face, 否 outlined and 是 gold ---------- */
 .ask-card { display: grid; grid-template-columns: var(--pa-ask-face) minmax(0, 1fr); align-items: center; gap: calc(12px + 4 * var(--pa-u)); padding: calc(12px + 4 * var(--pa-u)) calc(14px + 6 * var(--pa-u)) calc(12px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border: 1px solid var(--rg-edge); background: var(--rg-bg); border-radius: var(--pa-ask-r); box-shadow: 0 0 0 3px var(--rg-glow), 0 10px 30px var(--rg-glow); }
 .ask-face { display: block; width: var(--pa-ask-face); height: var(--pa-ask-face); }
 .ask-face .av { --av: var(--pa-ask-face) !important; }
@@ -700,7 +696,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.ask-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 .ask-yes-t { position: relative; z-index: 1; }
 
-/* ---------- nothing yet: Raphael in the middle, his line, the composer under him ---------- */
+/* ---------- nothing yet: Raphael in the middle, its line, the composer under it ---------- */
 .ra-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); min-height: 0; padding: var(--sp-4) var(--sp-4) 48px; text-align: center; }
 /* Raphael's picture is 132 px at every size: the voice mode's flyer lands on it and is the same box (voice-mode.ts) */
 .ra-hero { width: 132px; height: 132px; }
@@ -850,10 +846,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .ra-find-count { flex: 0 0 max(13ch, 8em); text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ra-find .btn { flex: none; }
 .thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
-/* The match being shown is the words in reverse, no frame and no underline (owner, 2026-11-14: 「不用有現在這個外框 有反色就好」). */
+/* The match being shown is the words in reverse, no frame and no underline. */
 .thread mark.is-current { outline: none; text-decoration: none; background: var(--text); color: var(--content); }
 .chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }
-/* Reactions stand on the first bubble's top-right corner, as Grok Bot's (the owner's, on the left), over its top edge. They are drawn inside the bubble (withReactions), so cards, a sign-in button or a failure row under it never
+/* Reactions stand on the first bubble's top-right corner (the owner's, on the left), over its top edge. They are drawn inside the bubble (withReactions), so cards, a sign-in button or a failure row under it never
    take them from it. Their outer edge is the bubble's own, so they reach neither the hover actions nor past the bubble's scroll width.
    A ring of the page's own colour parts them from the bubble. */
 :is(.ans, .bubble) { position: relative; }

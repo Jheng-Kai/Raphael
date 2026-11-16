@@ -7,7 +7,7 @@ const checks = {
   "raphael-details": "details-pointer-focus",
   "plugins-installed": "settings-alignment", "plugins-store": "settings-alignment",
 };
-export function withOwnerRound4(scenes) {
+export function withStandingChecks(scenes) {
   return scenes.map(original => ({...original, steps: [
     ...original.steps.flatMap(step => original.name === "details" && step.action === "icon-interactions"
       ? [check("details-pointer-focus"), step] : [step]),

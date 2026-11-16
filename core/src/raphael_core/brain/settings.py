@@ -54,7 +54,7 @@ DEFAULTS: dict[str, Any] = {
     "monthly_limit_usd": 10.0,
     "memory_threshold_tokens_cap": 24000,
     "memory_max_unused_days": 90,
-    # Chosen from the cleanup eval of 2026-10-18 for its cost and its speed (~1.25 s on average).
+    # Chosen from the cleanup eval for its cost and its speed (~1.25 s on average).
     # The cases and the prompt have changed since, so no pass rate is claimed for it: compare the
     # models again with `python -m raphael_core.evaluate.cleanup`.
     "cleanup_model": "openai/gpt-6-luna",
@@ -68,7 +68,7 @@ DEFAULTS: dict[str, Any] = {
     # Which of the catalogue's models (device/models.py) the local engine is. The one Raphael has
     # always used, so that nobody who runs locally needs a new download.
     "stt_local_model": "qwen3-asr",
-    # The most accurate on the samples tried live on 2026-10-18 (gpt-transcribe returned nothing
+    # The most accurate on the samples tried live (gpt-transcribe returned nothing
     # for an English clip and garbled Chinese).
     "stt_cloud_model": "elevenlabs/scribe-v2",
     # The voice assistant (raphael_core.agent). The model that words its answers, and that decides
@@ -97,7 +97,7 @@ DEFAULTS: dict[str, Any] = {
     "agent_city": "",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
-    # One computer for every member, a screen each, signed in once (owner, 2026-11-07 and 2026-11-12). "per-bot"
+    # One computer for every member, a screen each, signed in once. "per-bot"
     # stays a stored choice: nothing in the app sets it. On a remote host see LocalVm.mode.
     "computer_vm_mode": "shared",
     "computer_ssh_alias": "",

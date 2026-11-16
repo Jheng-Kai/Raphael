@@ -15,7 +15,7 @@ const at = (ms: number): number => ms / 1000;
 const key = (patch: Partial<Status["openrouter"]> = {}): Status => ({ openrouter: { state: "ok", latency_ms: 90, checked_at_ms: NOW, error: null, key: null,
   usage: { daily: 0.1, weekly: 1, monthly: 3.21, total: 9, limit: null, limit_remaining: null }, ...patch }, spend: { month_usd: 1.24, today_usd: 0, limit_usd: 20, forecast_usd: 2, daily: [] }, last: null });
 
-/** The owner's mix on 2026-11-14: Codex read live at 65% used, Claude's last report a window that has since reset, the ChatGPT sign-in, an OpenRouter key. */
+/** The owner's mix: Codex read live at 65% used, Claude's last report a window that has since reset, the ChatGPT sign-in, an OpenRouter key. */
 const owner = (): Parameters<typeof usageBlocks>[0] => ({
   allowances: { brains: [
     { id: "codex", name: "Codex", source: "live", windows: [{ period: "weekly", remaining_percent: 35, resets_at: at(NOW + 5 * DAY) }] },

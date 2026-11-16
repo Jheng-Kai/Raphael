@@ -1,4 +1,4 @@
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """The plugins as RPC methods (`integrations.*`), and the hub the assistant calls tools through.
 
 The window manages the plugins with:

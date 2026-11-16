@@ -3,7 +3,7 @@ import { scene, click, type, wait, waitGone, key, member, room, settings, check 
 const palette = [click('.mb-chat:not([hidden]) .cmp-input'), { ...key("k"), ctrl: true }, wait('[data-command-palette] input')];
 const composer = click('.mb-chat:not([hidden]) .cmp-input');
 export default [
-  // The composer has the focus as soon as a conversation opens: Ctrl+N, Ctrl+B and Ctrl+1..9 work from there (R-NAV-01, 2026-11-11).
+  // The composer has the focus as soon as a conversation opens: Ctrl+N, Ctrl+B and Ctrl+1..9 work from there (R-NAV-01).
   scene("shortcut-new-in-composer", "Ctrl+N opens the new member maker while the composer has the focus", [composer, { ...key("n"), ctrl: true }, wait(".cr-dialog")]),
   scene("shortcut-sidebar-in-composer", "Ctrl+B folds or opens the sidebar while the composer has the focus", [composer, { ...key("b"), ctrl: true }, wait("html[data-sidebar-collapsed], html[data-sidebar-open]")]),
   scene("shortcut-member-in-composer", "Ctrl+2 opens the second person's conversation (the chief is the first) while the composer has the focus", [composer, { ...key("2"), ctrl: true }, wait('body:has([data-member="1"][aria-current="true"]) .mb-pill-t')]),

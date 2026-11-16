@@ -1,6 +1,6 @@
 import { scene, click, wait, member, room, check } from "./steps.mjs";
 
-// One row at the top of a conversation (owner, 2026-11-12, after Grok Bot): the header is the window's top row and the thread passes under it.
+// One row at the top of a conversation: the header is the window's top row and the thread passes under it.
 // `conversation-top-row` measures that row; these scenes put it in the states that move something in it. Every scene runs at 1120, 720 (where
 // the sidebar is the rail of faces) and 1920, so the narrow and the wide layouts are measured by the same ones.
 const reply = '.ra .chat-message[data-reply]';

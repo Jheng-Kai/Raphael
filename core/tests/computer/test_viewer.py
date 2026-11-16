@@ -194,7 +194,7 @@ def test_the_page_holds_back_the_owners_paste_only_while_he_holds_control_and_ne
     assert "if (!rfb || rfb.viewOnly) return;" in script
     assert "navigator.clipboard" not in script and "readText" not in script
     # The paste is a client cut text, a message of the owner's input: the relay carries one of the largest size the page sends
-    # while he holds control, and drops it when he does not.
+    # while they hold control, and drops it when they do not.
     import struct
     from raphael_core.computer.rfb_input import frame
     from .test_rfb_input import payload, ready
@@ -401,6 +401,22 @@ async def test_the_panel_reads_the_owner_picture_only_when_it_exists(viewer, tmp
     assert (await bridge.wallpaper({}))['image'].startswith('data:image/jpeg;base64,/9j/')
 
 
+async def test_the_panel_shows_the_default_when_the_owner_picture_goes_away_or_cannot_be_read(viewer, tmp_path, monkeypatch):
+    bridge, _, _ = viewer
+    picture = tmp_path / 'computer-wallpaper.jpg'
+    with monkeypatch.context() as patch:
+        patch.setattr(bridge.vm, 'own_wallpaper', lambda: picture)  # looked at and chosen, then replaced or removed before the read
+        assert await bridge.wallpaper({}) == {}
+        picture.mkdir()
+        assert await bridge.wallpaper({}) == {}
+    assert await bridge.wallpaper({}) == {}  # a folder is no picture
+    picture.rmdir()
+    picture.write_bytes(b'\xff\xd8\xff first')
+    first = (await bridge.wallpaper({}))['image']
+    picture.write_bytes(b'\xff\xd8\xff another one')
+    assert (await bridge.wallpaper({}))['image'] != first  # the panel reads the file as it is now, not as it was
+
+
 async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
     bridge, _, _ = viewer
     public = await bridge.status({"member_id": 1})
@@ -438,7 +454,7 @@ async def test_take_control_refuses_active_tools_and_handback_releases_only_its_
 
 
 async def test_the_owner_takes_over_from_a_hold_another_view_of_his_left_behind(viewer):
-    """Owner, 2026-11-14: 「理論上不管甚麼時候我都應該要可以接手」. Two views of one computer are the owner's own."""
+    """The owner can take over at any time. Two views of one computer are the owner's own."""
     bridge, _, _ = viewer
     one, two = await bridge.open({}), await bridge.open({})
     target = bridge.vm.target()
@@ -455,7 +471,7 @@ async def test_the_owner_takes_over_from_a_hold_another_view_of_his_left_behind(
 
 
 async def test_a_press_between_a_working_members_actions_takes_the_computer_once_the_action_ends(viewer):
-    """Owner, 2026-11-14: take over while a member works. The press holds the screen at once (the member's next action
+    """Taking over while a member works: the press holds the screen at once (the member's next action
     is refused), waits for the action under way, and takes."""
     bridge, _, _ = viewer
     opened = await bridge.open({})
@@ -560,7 +576,7 @@ async def test_one_view_that_cannot_close_does_not_end_the_watch_over_the_others
 
 
 async def test_a_lease_the_owner_stopped_using_is_released_but_a_touched_or_waited_for_one_is_not(viewer):
-    """How long a lease lives: while his input arrives, a sign-in request waits or a recording runs; else OWNER_IDLE_S."""
+    """How long a lease lives: while their input arrives, a sign-in request waits or a recording runs; else OWNER_IDLE_S."""
     from raphael_core.computer.vm import OWNER_IDLE_S
     bridge, _, clock = viewer
     opened = await bridge.open({})
@@ -575,7 +591,7 @@ async def test_a_lease_the_owner_stopped_using_is_released_but_a_touched_or_wait
         await asyncio.sleep(1.2)
     await pass_time(OWNER_IDLE_S - 20)
     assert target.key in bridge.vm.held
-    bridge.relay.sequences[token] = bridge.relay.sequence(token) + 1  # the relay forwarded one of his clicks
+    bridge.relay.sequences[token] = bridge.relay.sequence(token) + 1  # the relay forwarded one of their clicks
     await pass_time(OWNER_IDLE_S - 20)
     assert target.key in bridge.vm.held, "a touched screen restarts the wait"
     bridge.vm.work.pending = lambda t: SimpleNamespace(request_id="nonce", member_id=0, conversation_id=None)

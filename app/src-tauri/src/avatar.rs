@@ -10,7 +10,7 @@
 //!   by it), with the crop the person chose ([`Crop`]); the file may move or go afterwards, and
 //!   Raphael's picture stays. The bytes are kept as they are, so a moving GIF or WebP keeps moving.
 //! - `avatar_get` gives the picture and its crop as a data URL, to the main window and to the
-//!   overlay; `avatar_clear` deletes it, and Raphael is his emblem again.
+//!   overlay; `avatar_clear` deletes it, and Raphael is its emblem again.
 //!
 //! The overlay is told when the picture changes ([`crate::overlay::Overlay::avatar_changed`]) and
 //! asks for it again. Nothing here logs a path, a file name or the bytes: only sizes and kinds.
@@ -210,7 +210,7 @@ impl AvatarStore {
         Ok(())
     }
 
-    /// The picture and its crop, or `None` while Raphael is his emblem (or what is kept cannot be
+    /// The picture and its crop, or `None` while Raphael is its emblem (or what is kept cannot be
     /// read, or is not a picture of the four kinds any more).
     pub fn load(&self) -> Option<Picture> {
         let meta: Meta = serde_json::from_slice(&fs::read(self.dir.join(META)).ok()?).ok()?;
@@ -226,7 +226,7 @@ impl AvatarStore {
         })
     }
 
-    /// Deletes the picture: Raphael is his emblem again. Nothing to delete is no failure.
+    /// Deletes the picture: Raphael is its emblem again. Nothing to delete is no failure.
     pub fn clear(&self) -> Result<(), String> {
         *lock(&self.picked) = None;
         for name in [META, PICTURE] {
@@ -292,7 +292,7 @@ pub fn avatar_save(app: AppHandle, webview: Webview, crop: Crop) -> Result<(), S
     Ok(())
 }
 
-/// The picture and its crop, or `None` while Raphael is his emblem. The main window and the
+/// The picture and its crop, or `None` while Raphael is its emblem. The main window and the
 /// overlay may ask for it.
 #[tauri::command]
 pub fn avatar_get(app: AppHandle, webview: Webview) -> Result<Option<Picture>, String> {
@@ -302,7 +302,7 @@ pub fn avatar_get(app: AppHandle, webview: Webview) -> Result<Option<Picture>, S
     Ok(store(&app)?.load())
 }
 
-/// Deletes the picture, and tells the overlay: Raphael is his emblem again.
+/// Deletes the picture, and tells the overlay: Raphael is its emblem again.
 #[tauri::command]
 pub fn avatar_clear(app: AppHandle, webview: Webview) -> Result<(), String> {
     crate::commands::ensure_caller(webview.label(), crate::MAIN_WINDOW)?;

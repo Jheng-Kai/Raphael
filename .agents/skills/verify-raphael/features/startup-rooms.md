@@ -1,4 +1,4 @@
-# Startup rooms (2026-11-04)
+# Startup rooms
 
 R-PERF-13: the sidebar's first room snapshot cannot depend on a readiness event.
 `createRoomsSection` retries the real room and roster reads after 100, 250, 500,

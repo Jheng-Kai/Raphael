@@ -190,7 +190,7 @@ test("a delayed initial roster still opens at news before the newest history pag
 });
 
 test("a thread whose boundary is still on its way is drawn but not shown, then shown at its place once", async () => {
-  // The first place is the last (owner, 2026-11-11): a thread seen at the bottom and then moved to the line jumped up.
+  // The first place is the last: a thread seen at the bottom and then moved to the line jumped up.
   let deliver!: (list: MembersList) => void;
   const roster = structuredClone(LIST);
   Object.assign(roster.members[0], { unread: true, unread_from: 2 });
@@ -442,7 +442,7 @@ test("a closed details panel reads nothing while work runs, and the settings pag
   await openDetails();
   expect(read()).not.toContain("memory.get"); expect(api.membersSkillsList).not.toHaveBeenCalled();
   agent.showNavView("m:3>s:tools"); await flush();
-  // The page holds no memory to read (owner, 2026-11-11), only what the member has.
+  // The page holds no memory to read, only what the member has.
   expect(read()).not.toContain("memory.get");
   expect(api.membersSkillsList).toHaveBeenCalledWith(3); expect(api.membersCommandsList).toHaveBeenCalledWith(3);
   agent.hide();
@@ -668,7 +668,7 @@ const press = (target: HTMLElement, key: string, more: KeyboardEventInit = {}): 
 };
 const typeInto = (field: HTMLTextAreaElement, words: string): void => { field.value = words; field.dispatchEvent(new Event("input", { bubbles: true })); };
 
-describe("a sent message is taken back into the composer to be edited (owner, 2026-11-15)", () => {
+describe("a sent message is taken back into the composer to be edited", () => {
   const SHOT = `${"c".repeat(32)}.png`, QUOTE = { text: "Saved passage", author: "You" };
   /** A member's thread whose newest message carries a picture and a quote, as stored (the core hands its bytes back by id). */
   const withPicture = (): AgentTurn => {
@@ -1905,7 +1905,7 @@ const routineTurn = (id: number, question: string): AgentTurn => turn(id, { memb
 const lineIds = (): string[] => [...document.querySelectorAll<HTMLElement>(".thread > .tn")].map(line => line.classList.contains("is-pending") ? "pending" : line.dataset.id ?? "?");
 const settle = async (): Promise<void> => { await new Promise(resolve => setTimeout(resolve, 600)); await flush(); };
 
-describe("an edited message stands where its message stood (owner, 2026-11-14)", () => {
+describe("an edited message stands where its message stood", () => {
   test.each(["in place", "at the end"] as const)("a message with routine turns after it, edited against a core that writes %s: it never leaves its place before the edit is written, and never shows twice", async where => {
     const core = editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" }), routineTurn(32, "7am"), routineTurn(33, "8am")], where);
     const agent = mount(); await flush(); await pick(3);

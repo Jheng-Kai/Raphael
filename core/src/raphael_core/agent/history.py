@@ -113,7 +113,7 @@ def is_unfinished(turn: Turn) -> bool:
     )
 
 
-# What a reply says when it could not do what was asked (R-PERSIST-05, owner, 2026-11-14: a member's 「我無法讀到」 of one
+# What a reply says when it could not do what was asked (R-PERSIST-05: a member's 「我無法讀到」 of one
 # day was read back every later day as a fact, and it stopped trying). Only a short reply counts, and only with the turn's
 # last call failed (`with_work`): a delivered answer that mentions a limit is an answer.
 _COULD_NOT = re.compile(
@@ -792,10 +792,15 @@ class AgentHistory:
         return cursor.rowcount
 
     def expire_pending(self) -> int:
-        """Mark the turns that still wait for a yes or a no as expired: the confirmation lived in
-        a process that is gone. Returns how many there were."""
+        """Mark the turns that still wait for a yes or a no, or still run, as expired: the confirmation lived in
+        a process that is gone. Returns how many there were. A turn that background work the restart kept still holds (a
+        hand-off still queued, a task that waits for its colleagues or for the owner's answer, and the colleague's brief it
+        answers) is that work's to end: expired, the brief never took its hand-back, and the member read its own queued work
+        as a request that did not finish (R-PUMP-01)."""
         with self._conn:
             cursor = self._conn.execute(
                 "UPDATE agent_turns SET status = 'expired' WHERE status IN ('confirm', 'running')"
+                " AND NOT EXISTS (SELECT 1 FROM worker_tasks w WHERE w.state IN ('queued', 'running', 'waiting')"
+                " AND (w.turn_id = agent_turns.id OR agent_turns.session_id = 'handoff:' || w.turn_id))"
             )
         return cursor.rowcount

@@ -161,7 +161,7 @@ test("Raphael's blue slime shares the public action hover and moves with his wor
   const root = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28, {moving: true}));
   expect(root.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
   expect(root.querySelector(".slime")?.getAttribute("data-state")).toBe("thinking");
-  // Elsewhere his slime is a picture that keeps the hover (owner, 2026-11-11).
+  // Elsewhere its slime is a picture that keeps the hover.
   const picture = dom(faceHTML({id: RAPHAEL_ID, name: "Raphael"}, 28));
   expect(picture.querySelector(`[data-presence-member="${RAPHAEL_ID}"]`)?.getAttribute("data-tooltip")).toBe("Checking a sample");
   expect(picture.querySelector(".slime")?.getAttribute("data-state")).toBe("idle");

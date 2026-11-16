@@ -1,6 +1,6 @@
-// Raphael's face in the main window. By default it is his emblem, the still pictures of the
+// Raphael's face in the main window. By default it is its emblem, the still pictures of the
 // bottom-right corner (app/public/brand/app-emblem-{light,dark}-{64,128}.webp, one for each theme,
-// and the turning loop app-emblem-{light,dark}-loop.webp while he thinks or listens). The person may
+// and the turning loop app-emblem-{light,dark}-loop.webp while it thinks or listens). The person may
 // choose a picture of their own instead (Settings › 拉斐爾 › 頭像): the app keeps a copy in its local
 // folder and hands the page its bytes as a data URL (`avatar_get`), never a path. The picture is
 // shown in a circle, cut as the person chose in the crop dialog (`AvatarCrop`).
@@ -112,7 +112,7 @@ const notify = (): void => {
 // Under `prefers-reduced-motion: reduce` nothing of Raphael moves: the turning loop is the still
 // of the same size, and a picture of the person's own that may move (a GIF or a WebP, which CSS
 // cannot stop) is shown as its first frame, drawn once onto a canvas. The preference is followed
-// while the window is open: every place that shows him draws again when it changes.
+// while the window is open: every place that shows it draws again when it changes.
 
 const motionQuery = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 let reduced = motionQuery?.matches ?? false;
@@ -171,7 +171,7 @@ function shownUrl(url: string, picture = false): string | null {
   return null;
 }
 
-/** The person's picture, or null while Raphael is his emblem. */
+/** The person's picture, or null while Raphael is its emblem. */
 export const currentAvatar = (): CustomAvatar | null => custom;
 
 /** Changes the picture everywhere: every listener draws again. */
@@ -186,7 +186,7 @@ export function onAvatarChange(listener: () => void): () => void {
   return () => void listeners.delete(listener);
 }
 
-/** Reads the picture from the app; without one, or when it cannot be read, Raphael is his emblem. */
+/** Reads the picture from the app; without one, or when it cannot be read, Raphael is its emblem. */
 export async function loadAvatar(get: () => Promise<unknown>): Promise<void> {
   try {
     setAvatar(readAvatar(await get()));
@@ -207,7 +207,7 @@ export interface AvatarOptions {
   cls?: string;
   /** The picture of the person's own, if any (by default the one in force now). */
   avatar?: CustomAvatar | null;
-  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line (owner, 2026-11-11). */
+  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line. */
   still?: boolean;
 }
 
@@ -228,7 +228,7 @@ export function avatarHTML(o: AvatarOptions): string {
   }
   const drawn = emblemStill(o.size);
   if (drawn) {
-    // While he thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
+    // While it thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
     const turn = o.loop && !reduced ? " em-turn" : "";
     return `<span class="${cls}" ${box} aria-hidden="true"><img class="em${turn}" src="${drawn}" alt="" draggable="false"></span>`;
   }

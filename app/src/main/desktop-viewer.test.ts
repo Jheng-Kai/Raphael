@@ -258,7 +258,7 @@ test('enlarging an owner-held screen disables viewer input without changing the 
   expect(api.desktopControl.mock.calls).toHaveLength(before);
 });
 
-test('watching always offers Take control, whoever the core says holds the lease: one press takes it again (owner, 2026-11-14)', async () => {
+test('watching always offers Take control, whoever the core says holds the lease: one press takes it again', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   enlarge().click(); await flush();
   const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
@@ -276,7 +276,7 @@ test('watching always offers Take control, whoever the core says holds the lease
   expect(label()).toBe(t('desktop.operating')); expect(take().hidden).toBe(true);
 });
 
-test('a take the core is still deciding reads 正在接手…, and one it refuses leaves Take control to press again (owner, 2026-11-14)', async () => {
+test('a take the core is still deciding reads 正在接手…, and one it refuses leaves Take control to press again', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   enlarge().click(); await flush();
   const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
@@ -294,7 +294,7 @@ test('a take the core is still deciding reads 正在接手…, and one it refuse
   expect(api.desktopControl).toHaveBeenLastCalledWith('one', true); expect(label()).toBe(t('desktop.taking'));
 });
 
-test('a lease the core gave back is not kept on screen: the pill watches, input stops and Take control returns (owner, 2026-11-14)', async () => {
+test('a lease the core gave back is not kept on screen: the pill watches, input stops and Take control returns', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
   await takeOver(); message('interactive', { held:true }); await flush();
@@ -448,12 +448,12 @@ test('a screen click changes input in place without replacing the frame, URL or 
   expect(api.desktopControl).toHaveBeenCalledWith('one',true);expect(frame()).toBe(same);expect(frame().src).toBe(url);
   expect(frame().style.pointerEvents).toBe('auto');expect(panel().dataset.interactive).toBe('true');expect(handback().textContent).toBe('停止');
   api.desktopControl.mockResolvedValue(running);handback().click();handback().click();await flush();
-  // Stop hands the computer back once and nothing else: the stream is neither closed nor reopened (owner, 2026-11-14).
+  // Stop hands the computer back once and nothing else: the stream is neither closed nor reopened.
   expect(api.desktopControl.mock.calls.filter(call=>call[1]===false)).toHaveLength(1);expect(api.desktopClose).not.toHaveBeenCalled();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(frame()).toBe(same);expect(frame().src).toBe(url);
 });
-test('ending control keeps watching: the larger view, the stream and the live frame stay, the pill reads 觀看中 and 接手控制 is offered again (owner, 2026-11-14)',async()=>{
+test('ending control keeps watching: the larger view, the stream and the live frame stay, the pill reads 觀看中 and 接手控制 is offered again',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   api.desktopControl.mockResolvedValue({...running,control:'owner'});await takeOver();message('interactive',{held:true});
   expect(panel().querySelector('.desktop-mode-label')!.textContent).toBe('你正在控制');expect(handback().textContent).toBe('停止');
@@ -818,7 +818,7 @@ test('Stop can be followed by a fresh takeover on the same stream, with no recon
  expect(api.desktopControl).toHaveBeenCalledTimes(3);
 });
 
-test("a running computer's panel streams again after a handback that leaves it open, never a black frame with only 開啟 (owner, 2026-11-14)",async()=>{
+test("a running computer's panel streams again after a handback that leaves it open, never a black frame with only 開啟",async()=>{
  const width = window.innerWidth; Object.defineProperty(window,'innerWidth',{value:1920,configurable:true});
  try {
   panelOpen=true; api.desktopStatus.mockResolvedValue({...running,works:[work]}); mounted.show(); await flush(); message('connected');
@@ -960,7 +960,7 @@ test('a stream that ends before it ever showed the screen, or says it cannot rea
 });
 
 test('a running computer is not streamed while its Computer tab is closed: Details carries no computer', async () => {
-  // Owner, 2026-11-14: the computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
+  // The computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
   api.desktopStatus.mockResolvedValue(running); mounted.show(); await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(api.desktopOpen).not.toHaveBeenCalled(); expect(host.querySelector('iframe')).toBeNull();
 });
@@ -990,7 +990,7 @@ test('the pill reads watching with Take control, then you are in control with St
 });
 
 test("a seat's frame draws its line inside and takes no room, so the 1280:900 picture fills it", () => {
-  // R-COMP-FRAME-01 (owner, 2026-11-15): a 1 px border put the inside 2 px off the ratio and a dark sliver showed.
+  // R-COMP-FRAME-01: a 1 px border put the inside 2 px off the ratio and a dark sliver showed.
   const css = (name: string): string => readFileSync(resolve(__dirname, name), "utf8");
   const screen = /\.desktop-screen \{([^}]*)\}/.exec(css("desktop-viewer.css"))![1]!;
   expect(screen).toContain("aspect-ratio: 1280 / 900");
@@ -1001,7 +1001,7 @@ test("a seat's frame draws its line inside and takes no room, so the 1280:900 pi
 });
 
 test("another member opened while the page was away never shows the previous member's screen", async () => {
-  // owner, 2026-11-15: 「我明明打開不同的角色，結果它顯示前一個角色的畫面」. The sidebar switches the member before the page is
+  // The sidebar switches the member before the page is
   // shown (refresh() runs only for a page on screen), and the first member's stream was still lingering.
   panelOpen = true; mounted.show(); await flush(); message('connected');
   expect(frame().getAttribute('src')).toContain('/one/');

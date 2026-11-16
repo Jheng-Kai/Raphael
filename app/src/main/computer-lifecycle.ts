@@ -52,7 +52,7 @@ export function mountComputerLifecycle(_host: HTMLElement, panel: HTMLElement, m
     const state = read();
     // R-UI-71: an unchanged renewal writes nothing here either.
     const set = <T extends object, K extends keyof T>(target: T, key: K, value: T[K]): void => { if (target[key] !== value) target[key] = value; };
-    // A connection that repaired itself is not news to the owner: nothing is said of it (owner, 2026-11-12, R-UI-93).
+    // A connection that repaired itself is not news to the owner: nothing is said of it (R-UI-93).
     const available = !!state && state.state !== 'absent';
     // No words over a computer that is not running: its state shows once its screen is up.
     set(label, 'hidden', !state || state.state !== 'running'); set(button, 'hidden', !available);

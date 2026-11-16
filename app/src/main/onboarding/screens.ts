@@ -26,19 +26,19 @@ interface Floater { avatar: string; side: "left" | "right"; x: number; y: number
  */
 const FLOATERS: Record<Exclude<GuideStep, "welcome">, readonly Floater[]> = {
   tools: [
-    { avatar: "slime:gobta", side: "left", x: 2, y: 2, px: 42 },
-    { avatar: "slime:shion", side: "right", x: 4, y: 40, px: 36 },
-    { avatar: "slime:ranga", side: "right", x: 18, y: -18, px: 28 },
+    { avatar: "slime:goggles-green", side: "left", x: 2, y: 2, px: 42 },
+    { avatar: "slime:horn-lavender", side: "right", x: 4, y: 40, px: 36 },
+    { avatar: "slime:wolf-star", side: "right", x: 18, y: -18, px: 28 },
   ],
   services: [
-    { avatar: "slime:shuna", side: "left", x: 9, y: 38, px: 36 },
-    { avatar: "slime:diablo", side: "right", x: 1, y: 6, px: 42 },
-    { avatar: "slime:benimaru", side: "left", x: 20, y: -16, px: 28 },
+    { avatar: "slime:small-horns-pink", side: "left", x: 9, y: 38, px: 36 },
+    { avatar: "slime:streaks-charcoal", side: "right", x: 1, y: 6, px: 42 },
+    { avatar: "slime:horns-red", side: "left", x: 20, y: -16, px: 28 },
   ],
   abilities: [
-    { avatar: "slime:milim", side: "left", x: 0, y: -8, px: 38 },
-    { avatar: "slime:souei", side: "right", x: 12, y: 42, px: 32 },
-    { avatar: "slime:rigurd", side: "right", x: 0, y: -14, px: 30 },
+    { avatar: "slime:tuft-pink", side: "left", x: 0, y: -8, px: 38 },
+    { avatar: "slime:horn-sash-blue", side: "right", x: 12, y: 42, px: 32 },
+    { avatar: "slime:bowtie-green", side: "right", x: 0, y: -14, px: 30 },
   ],
 };
 
@@ -76,8 +76,8 @@ const alert = (html: string): string => `<div class="ob-alert" role="alert">${ht
 
 // ---------- welcome ----------
 
-/** What the welcome types: something the owner might ask, and Raphael's answer in his own manner,
- * 告。, 解。 or 否。 — what the team can do, said by him rather than a slogan. */
+/** What the welcome types: something the owner might ask, and Raphael's answer in its own manner,
+ * 告。, 解。 or 否。 — what the team can do, said by it rather than a slogan. */
 export const DEMOS = [
   ["onboarding.demo1Ask", "onboarding.demo1Reply"], ["onboarding.demo2Ask", "onboarding.demo2Reply"],
   ["onboarding.demo3Ask", "onboarding.demo3Reply"], ["onboarding.demo4Ask", "onboarding.demo4Reply"],
@@ -87,12 +87,12 @@ export const demoAsk = (demo: (typeof DEMOS)[number]): string => t(demo[0]);
 export const demoReply = (demo: (typeof DEMOS)[number]): string => t(demo[1]);
 
 /**
- * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), his name, and under it
- * an ask being typed with his answer: mount.ts types, deletes and moves on; with reduced motion the first pair stands.
+ * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), its name, and under it
+ * an ask being typed with its answer: mount.ts types, deletes and moves on; with reduced motion the first pair stands.
  * A reader hears one sentence of what the team does instead. The language is chosen at the window's top left.
  */
 export function welcomeHTML(): string {
-  // His name is one wordmark for every language, 「智慧之王ラファエル」,
+  // Its name is one wordmark for every language, 「智慧之王ラファエル」,
   // inked in the theme's colour through a mask; a reader hears the name in the window's language.
   return (
     `<div class="ob-emblem" aria-hidden="true"><canvas class="ob-emb"></canvas></div>` +

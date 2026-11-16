@@ -57,7 +57,7 @@ export function preparationHTML(state: DesktopState, face = ""): string {
   for (const node of character.content.querySelectorAll<HTMLElement>('.av')) node.style.removeProperty('--av');
   for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
   // The computer's boot face is a picture of the slime like every face outside the member list and the thinking line
-  // (owner, 2026-11-11); it no longer works while the computer starts.
+  //; it no longer works while the computer starts.
   const label = esc(t(STATUS_KEY[stages[Math.max(0, at)]]));
   return `<div class="desktop-preparation" role="status"><div class="desktop-boot-face" data-k="desktop-face-${esc(identity)}" aria-hidden="true">${character.innerHTML}</div>` +
     `<p class="desktop-stage">${esc(computerStateText(state))}</p>` +
@@ -74,7 +74,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // The preview is one button that opens the larger view; the larger view fills the window and folds back
   // from beside the window buttons. Everything about the computer sits in one foot directly under the screen and
   // as wide as it: one quiet line of state above the pill, and a demonstration's actions beside the pill. The
-  // skill review and the file changes take the screen's own place, so the foot never moves (owner, 2026-11-13).
+  // skill review and the file changes take the screen's own place, so the foot never moves.
   panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
@@ -241,15 +241,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.dataset, "desktopState", label);
     paint(panel.dataset, "interactive", String(interactive));
     // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
-    // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手 (owner, 2026-11-13:
-    // 「明明顯示我正在控制，但我根本就沒辦法控制」). Watching is view-only whoever holds the lease.
+    // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手. Watching is view-only whoever holds the lease.
     // A press the core is still deciding (`changing`) is a take too: until it answers the pill says so, and if the core
     // refuses it the pill watches again with the button, however the press began.
     const mode = !watching && (owner || changing) ? interactive ? "operating" : "taking" : "watching";
     paint(modeLabel.querySelector('span')!, "textContent", t(mode === "operating" ? "desktop.operating" : mode === "taking" ? "desktop.taking" : "desktop.watching"));
     paint(modeLabel.dataset, "mode", mode);
-    // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease (owner, 2026-11-14:
-    // 「理論上不管甚麼時候我都應該要可以接手」): a pill that watches always offers the way out of it.
+    // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease: a pill that watches always offers the way out of it.
     paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
@@ -310,8 +308,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     clearTimeout(lingering);
     lingering = setTimeout(closeStream, LINGER_MS);
   }
-  /** The owner's own Ctrl+V in the live screen: his clipboard text goes to the screen's page, which pastes it into the computer.
-   *  Only while he holds this screen; a member at work, or the owner only watching, reads nothing of his clipboard. */
+  /** The owner's own Ctrl+V in the live screen: their clipboard text goes to the screen's page, which pastes it into the computer.
+   *  Only while they hold this screen; a member at work, or the owner only watching, reads nothing of their clipboard. */
   async function answerPaste(id: unknown): Promise<void> {
     if (typeof id !== 'number' || !session || !interactive || state?.control !== 'owner') return;
     const target = frame.contentWindow, origin = new URL(session.url).origin, held = session;
@@ -583,13 +581,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     expand(false); review.hidden = true; closeStream();
     if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.();
     // The panel that stays open is a preview of a computer that runs: it streams again at once. `suspended` only keeps a
-    // returned request's card from reopening its stream, and a visible panel is not that card (owner, 2026-11-14: a black
-    // frame with only 開啟 after he ended control).
+    // returned request's card from reopening its stream, and a visible panel is not that card (otherwise a black
+    // frame with only 開啟 would show after control ended).
     if (options.panelVisible()) { suspended = false; if (state?.state === 'running') void openStream(); }
     draw(); return true;
   }
   /** 停止 hands the computer back and nothing else: the larger view stays open on the same stream, watching, with Take
-   *  control offered again (owner, 2026-11-14: 「結束控制不代表我要結束觀看，所以不要跳掉」). Only 我完成了, which answers a
+   *  control offered again. Only 我完成了, which answers a
    *  sign-in request, goes back to the conversation (handback). */
   async function release(): Promise<void> {
     if (changing || !session) return;
@@ -597,7 +595,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     watching = true; document.documentElement.setAttribute('data-desktop-watch', '');
     await control(false);
     if (session !== opened) return;
-    // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes his input again.
+    // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes their input again.
     if (state?.control === 'owner') { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); send(true); }
     draw();
   }
@@ -605,7 +603,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options.timeline.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
     if (!button || button.disabled) return;
-    // A sign-in is no work for a small picture (owner, 2026-11-13: 「你這個畫面這麼小，我根本看不到登入的畫面」): the
+    // A sign-in is no work for a small picture: the
     // card's screen and its 接手 open the same stream in the larger view and take control there; 我完成了 in its pill
     // gives the request back.
     if (button.dataset.cardDesktop === 'take') { visible = true; acquire(); }

@@ -909,7 +909,7 @@ describe("rendered look checks", () => {
     // Two circles of one size, side by side in the middle: a primary as wide as its drawing is right here, since only the
     // welcome's pill fills its row.
     expect(audit().productRules).toEqual([]);
-    // One at each end of the row is the foot of 2026-11-11 afternoon that the owner sent back.
+    // One at each end of the row is the foot layout the rule rejects.
     back.getBoundingClientRect = () => ({ left: 50, top: 12, right: 98, bottom: 60, width: 48, height: 48 });
     primary.getBoundingClientRect = () => ({ left: 902, top: 12, right: 950, bottom: 60, width: 48, height: 48 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-37']);
@@ -955,7 +955,7 @@ describe("rendered look checks", () => {
       '<div class="cs-dialog" role="dialog"><button class="btn danger">移除</button></div>',
       '<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>',
       '<div class="composer"><button class="chip-x" aria-label="移除檔案"></button></div>',
-      '<section class="draft-panel"><button class="btn icon" aria-label="移除 紫苑"></button></section>',
+      '<section class="draft-panel"><button class="btn icon" aria-label="移除 小葵"></button></section>',
       '<button class="mp-star" aria-label="Remove from favourites: Luna"></button>',
       '<div class="row"><button class="btn">從最愛移除</button></div>',
       '<div class="row"><button class="btn">Clearly a longer label</button></div>',
@@ -1092,7 +1092,7 @@ describe("rendered look checks", () => {
   });
   it("rejects interface copy left in English in a Chinese window, allowing data and product names", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<textarea placeholder="Message 紫苑"></textarea><button aria-label="問拉斐爾">Google Calendar</button><p>Finance 已建立</p><a href="#">研究訪談摘要.pdf</a>';
+    window.document.body.innerHTML = '<textarea placeholder="Message 小葵"></textarea><button aria-label="問拉斐爾">Google Calendar</button><p>Finance 已建立</p><a href="#">研究訪談摘要.pdf</a>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     const result = { ...auditDocument(window.document, { width: 1120, height: 900 }, [], ["google", "calendar", "finance"]), runtimeErrors: [] };
     expect(result.mixedLanguage.map(item => item.word)).toEqual(["Message"]);

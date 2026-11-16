@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from ..slime_ids import current_avatar
 from .mishearing import may_become_rule
 from .room_scope import migrate as _migrate_room_scope
 from .textnorm import replacement_key
@@ -2006,7 +2007,7 @@ PRAGMA user_version = 81;
 COMMIT;
 """
 
-# One reaction of the owner's per message (owner, 2026-11-14): a message that carried several keeps the newest, and
+# One reaction of the owner's per message: a message that carried several keeps the newest, and
 # the primary key says it, so no writer can store a second. `reaction_asks` remembers the messages whose reaction was
 # already answered with a question, so that a reaction taken back and given again asks nothing twice.
 _MIGRATIONS[82] = """
@@ -2049,7 +2050,7 @@ PRAGMA user_version = 82;
 COMMIT;
 """
 
-# Every reaction is analysed once per message and emoji (owner, 2026-11-14): the record of what was analysed names the
+# Every reaction is analysed once per message and emoji: the record of what was analysed names the
 # emoji too, so another emoji on the same message is a new reaction while the same one given again is not. A row of
 # the old rule (a negative emoji that was asked about) has no emoji of its own: it keeps the thumbs down, the one
 # the old rule asked about most. The triggers of 82 name the message only, so they come back as they were (a table
@@ -2137,6 +2138,22 @@ DROP TABLE vault_entries_previous;
 PRAGMA user_version = 85;
 COMMIT;
 """
+
+
+# Twenty-four slime faces were renamed to say what they look like (`slime_ids.py`). The face a member wears is stored
+# in `members.avatar`, and the one a shared recipe's card was drawn with in `member_template_cards.avatar`: both are
+# rewritten to the new id, and a database that has none of the old ids is left as it was, so running it again changes nothing.
+def _rename_slimes(conn):
+    with conn:
+        for table in ("members", "member_template_cards"):
+            for row in conn.execute(f"SELECT rowid, avatar FROM {table} WHERE avatar LIKE 'slime:%'").fetchall():
+                renamed = current_avatar(row[1])
+                if renamed != row[1]:
+                    conn.execute(f"UPDATE {table} SET avatar=? WHERE rowid=?", (renamed, row[0]))
+        conn.execute("PRAGMA user_version = 86")
+
+
+_MIGRATIONS[86] = _rename_slimes
 
 LATEST_VERSION = max(_MIGRATIONS)
 

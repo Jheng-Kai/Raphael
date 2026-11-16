@@ -1,4 +1,4 @@
-// 新增成員, as Grok Bot's Create New Bot (owner, 2026-11-11: 「為什麼這麼寬呢？…要盡量減少顯示在前端的事情」): one small dialog over the
+// 新增成員: one small dialog over the
 // dimmed window. The slime as it will be, large; the name directly under it, the only thing asked; the same tabbed slime picker the
 // face popover uses (slime-tabs.ts), then 取消 and 建立. The member then opens and asks what it is for (the core's greeting), and the
 // owner's answer becomes its job: nothing else is asked here. The store and the templates have their own entry (member-store.ts).

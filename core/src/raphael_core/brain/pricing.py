@@ -7,7 +7,7 @@ The list is kept for 24 hours, in memory and in the `settings` table under a key
 setting (so it survives a restart and is not offered by `settings.get`). It is fetched only when
 `models.catalog` is called, never during a dictation, with a 5 second deadline. If that fails, the
 answer is the latest list kept, however old, else the builtin table below: the models Raphael
-calls when nobody chose another, at their prices of 2026-10-18, so the page always has something to
+calls when nobody chose another, at the prices they had when this table was written, so the page always has something to
 show. `source` says which of the
 three it was: "live" (just fetched), "cached" or "builtin". Choosing a model reads what is kept
 (`known`), and never fetches.
@@ -41,7 +41,7 @@ FETCH_TIMEOUT_S = 5.0
 CACHE_KEY = "cache.pricing"
 # How the cached list was read. A cache of another reading is no cache: raise this whenever
 # `parse_catalog` reads a model differently, or the cache holds something else (2: the MAI models
-# per hour, not unknown; 3: every model Raphael could use, not only the prices of his own; 4: the
+# per hour, not unknown; 3: every model Raphael could use, not only the prices of its own; 4: the
 # batch variants left out; 5: whether a language model takes tools, as a capability; 6: the kind
 # of a model whose modalities are not listed, from its `modality`; 7: whether a language model
 # reads images and files, as capabilities).
@@ -49,7 +49,7 @@ CACHE_READING = 7
 
 # The models Raphael calls when nobody chose another: the default of each role (the settings'
 # DEFAULTS) and the fallbacks of the language models (openrouter.CLEANUP_FALLBACKS), at their
-# prices in OpenRouter's model list of 2026-10-18, read the way `parse_catalog` reads it (a test
+# prices in a snapshot of OpenRouter's model list, read the way `parse_catalog` reads it (a test
 # keeps the two alike, with tests/brain/fixtures/openrouter_models.json, a trimmed copy of that
 # list). It is no offering of models: every model the settings page offers comes from OpenRouter's
 # list. It is what the page shows, and what may be chosen, before that list could ever be read, and

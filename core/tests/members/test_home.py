@@ -27,7 +27,7 @@ async def test_empty_overview_has_no_connector_and_asks_no_other_service(home, r
     before = rig.conn.total_changes
     value = await rig.call("home.overview")
     assert value["today"] == value["reports"] == value["calendar"] == []
-    # What only Home read is gone (2026-11-12): no usage, dictation, report, health, activity or model-written line.
+    # What only Home read is gone: no usage, dictation, report, health, activity or model-written line.
     assert not {"usage", "dictation", "report", "today_plan", "health", "activity"} & value.keys()
     assert rig.conn.total_changes == before
 

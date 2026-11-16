@@ -398,7 +398,7 @@ async def native_think(messages=None) -> None:
 
 async def wait_for_native_cancel(messages):
     """Only the isolated fake brain can hold an answer for the native Escape journey."""
-    if native_enabled(True) and any(message.get("role") == "user" and "[native-round10:wait]" in str(message.get("content")) for message in messages):
+    if native_enabled(True) and any(message.get("role") == "user" and "[native-hold:wait]" in str(message.get("content")) for message in messages):
         import asyncio
         await asyncio.Event().wait()
 

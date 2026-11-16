@@ -67,7 +67,7 @@ export function patchHTML(root: Element, html: string): void {
       } else {
         if (node !== at) live.insertBefore(node, at);
         // A face never turns into someone else's: its clock remembers the drawing it was made with, so morphing
-        // Testarossa's into Raphael's drew her bow on him while he moved. Another member takes the
+        // the pearl bow tie's into Raphael's drew its bow on Raphael while Raphael moved. Another member takes the
         // fresh face whole.
         if (node instanceof Element && fresh instanceof Element && node.matches(".slime-surface") && fresh.matches(".slime-surface") && faceIdentity(node) !== faceIdentity(fresh)) {
           live.replaceChild(fresh, node);
@@ -974,7 +974,7 @@ class Toaster implements Notifier {
 
   /**
    * A conversation's composer grows with its attachments, its quote and its draft, and a note that stands a fixed height above the
-   * window's foot then lay over its attachments (2026-11-11, the twenty-first file). The note stands over the composer's top edge,
+   * window's foot then lay over its attachments. The note stands over the composer's top edge,
    * wherever that is; styles.css keeps its usual height as the least.
    */
   private lift(host: HTMLElement): void {
@@ -991,7 +991,7 @@ class Toaster implements Notifier {
    */
   show(message: string, undo?: () => void): void {
     // The same note again takes the place of the one on screen and starts its time over: six failures in a row are one
-    // note, not a pile of six (owner's screen, 2026-11-11).
+    // note, not a pile of six.
     for (const shown of [...this.messages.keys()]) {
       if (shown !== this.undoToast && shown.querySelector("span")?.textContent === message) { shown.remove(); this.messages.delete(shown); }
     }

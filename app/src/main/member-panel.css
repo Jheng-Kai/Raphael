@@ -28,8 +28,8 @@
 .mb-rt-state { display: flex; color: var(--text-3); flex: none; }
 .mb-rt-state.is-on { color: var(--ok); }
 .mb-rt-main { flex: 1; }
-/* The row is one surface with its switch inside it (Grok Bot's Upcoming rows): under the pointer the whole row lights,
-   never the words alone with the switch left outside (owner, 2026-11-09). */
+/* The row is one surface with its switch inside it: under the pointer the whole row lights,
+   never the words alone with the switch left outside. */
 .mb-routine-row { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; padding-right: var(--sp-2); border-radius: var(--r-md); }
 /* Lit wherever the pointer is on the row, its switch included: one control to the eye (R-UI-157). */
 .mb-routine-row:hover { background: var(--hover); }
@@ -98,9 +98,9 @@
 .mb-det .mb-who:has(.mb-panel-identity) { display: block; }
 /* The routine list: one quiet tinted list, no frame around each row. */
 .mb-rts { display: grid; grid-template-columns: minmax(0, 1fr); padding: var(--sp-1); border-radius: var(--r-lg); background: color-mix(in srgb, var(--text) 5%, transparent); }
-/* The Library, as Grok Bot does it (owner, 2026-11-12): four chips always, then a soft label per recency group, with the
+/* The Library: four chips always, then a soft label per recency group, with the
    items of each group in one rounded card of one-line rows: a 20 px mark and the title, nothing else on the row. A chip
-   with nothing in it (owner, 2026-11-13) shows a single soft line where the cards would be, inset like the labels. */
+   with nothing in it shows a single soft line where the cards would be, inset like the labels. */
 /* The chips, the labels and the cards sit close: one tighter rhythm than the Details sections. */
 .mb-tab-body:has(> .lib-filters) { gap: var(--sp-3); }
 .lib-filters { display: flex; min-width: 0; margin-bottom: var(--sp-2); }

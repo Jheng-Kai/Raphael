@@ -157,7 +157,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress, sessions=No
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch, acted=lambda: run.acted,
         # The task's own clock of the last word to the owner: its updates are messages through `run._reply`, as an API
         # task's are (agent/progress_updates.py); a meeting's reply and a routine have none.
-        updates=getattr(run, "updates", None))
+        updates=getattr(run, "updates", None), owner_language=getattr(run, "owner_language", None))
     def listed():
         extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
         loop.tools[:] = [*run.snapshot.definitions, *extra]

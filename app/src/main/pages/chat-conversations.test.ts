@@ -89,7 +89,7 @@ test("quick questions scope history, quote the entire answer, send their ID, and
   page.el.querySelector<HTMLButtonElement>('.ra [data-act="more-message"]')!.click(); await flush();
   document.querySelector<HTMLButtonElement>('#app-popover [data-lead="+"]')!.click();
   expect(document.querySelector("#app-popover.emoji-picker")).not.toBeNull();
-  // The picker reads its emoji on first use: that takes more than the default second on a busy machine (failed twice, 2026-11-12).
+  // The picker reads its emoji on first use: that takes more than the default second on a busy machine.
   await vi.waitFor(() => expect(document.querySelector('#app-popover .emoji-cell[data-emoji="🚀"]')).not.toBeNull(), { timeout: 10_000 });
   document.querySelector<HTMLButtonElement>('#app-popover .emoji-cell[data-emoji="🚀"]')!.click(); await flush();
   expect(api.core).toHaveBeenCalledWith("agent.react", { member_id: 0, conversation_id: 2, turn_id: 2, message_key: "reply", emoji: "🚀", active: true });

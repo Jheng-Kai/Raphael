@@ -299,7 +299,7 @@ async def test_member_exchange_returns_to_the_main_conversation_that_asked(setup
     assert AgentHistory(conn).list(member_id=one.id) == []
     [theirs] = [AgentHistory(conn).get(r[0]) for r in conn.execute("SELECT id FROM agent_turns WHERE member_id=? AND scope='exchange'", (one.id,))]
     assert theirs.conversation_id == rig.service.conversations.main(one.id)
-    # Both sides keep the exchange (owner, 2026-11-14): the asked member's page holds the question it was asked.
+    # Both sides keep the exchange: the asked member's page holds the question it was asked.
     [listed] = (await rig.call("agent.history.list", {"member_id": one.id, "conversation_id": theirs.conversation_id}))["turns"]
     assert (listed["id"], listed["scope"], listed["peer_id"]) == (theirs.id, "exchange", 0)
     assert theirs.source_turn_id == selected[0]['id']
@@ -453,7 +453,7 @@ async def test_a_consultation_is_kept_on_the_respondents_page_and_in_its_search(
     client.chats.append(live_said("上季營收兩百萬。"))
     client.chats.append(live_said("小研究說上季營收兩百萬。"))
     await typed(rig, "問小研究上季的數字", a.id)
-    # B's page holds what the owner said to B and, newest first, the colleague's question it answered (owner, 2026-11-14).
+    # B's page holds what the owner said to B and, newest first, the colleague's question it answered.
     received, own = (await rig.call("agent.history.list", {"member_id": b.id}))["turns"]
     assert own["scope"] == "private" and own["question"] == "記一下：上季營收兩百萬"
     assert received["scope"] == "exchange" and received["peer_id"] == a.id and received["question"] == "上季的數字是多少？"

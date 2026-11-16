@@ -15,7 +15,7 @@ fi
 # The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same, and:
 # - AutomationControlled off. A browser started with --remote-debugging-port=0 tells every page it is automated
 #   (navigator.webdriver), and Google then refuses the owner's own sign-in ("This browser or app may not be
-#   secure", owner, 2026-11-13). The owner signs in here by hand; the members use what he signed in to.
+#   secure"). The owner signs in here by hand; the members use what the owner signed in to.
 # - --test-type: without it the two flags above it each put a yellow warning bar over every window.
 # - no crash bubble: a computer is stopped by ending its processes, and the next start offered "Restore pages?".
 flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox --disable-blink-features=AutomationControlled --test-type --hide-crash-restore-bubble"
@@ -64,7 +64,7 @@ else
 fi
 new=
 attempt=0
-# A browser's first window took 13 to 41 s on a loaded PC (2026-11-13): the wait is a time, not a count of looks (each look
+# A browser's first window took 13 to 41 s on a loaded PC: the wait is a time, not a count of looks (each look
 # is several processes, slow when the PC is), and a minute is what it is given.
 deadline=$(( $(date +%s) + 60 ))
 while :; do
@@ -88,7 +88,7 @@ done
 # The browser opens a new window where its last one was (often another screen), maximized if that one was. Placed and
 # maximized by the window manager while the browser was still maximizing it, the window kept its frame's shadow inside a
 # maximized state: 1312x893, 16 px left of and 10 px above its screen, cut on three sides with the panel over its page
-# (8 launches of 8 on one screen, 2026-11-14; the owner's picture of that day), and the window manager would not
+# (8 launches of 8 on one screen), and the window manager would not
 # unmaximize it again. The browser itself is asked to put it on this screen and maximize it; the window manager is
 # asked only when the browser cannot be.
 if ! raphael-browser-tabs fit "$new" "$x" "$y" "$width" "$height" >/dev/null; then
@@ -130,7 +130,7 @@ done
 [ -n "$settled" ] || { echo "browser window geometry did not settle on the screen within 30 seconds" >&2; exit 1; }
 # The window's own pid is the browser's main process: the one the driver binds a window by.
 main=$(wmctrl -lp | awk -v id="$new" '$1 == id {print $3}')
-# The window is found: its marker is no one's to see (owner, 2026-11-14: an empty page whose tab and address read
+# The window is found: its marker is no one's to see (otherwise an empty page whose tab and address read
 # data:text/html,<title>raphael-seat-...</title>). The tab shows the new tab page and Back does not lead to the marker.
 # A window that keeps it still works, so this says so and goes on.
 raphael-browser-tabs settle "$new" "$marker" "$shows" >/dev/null || echo "raphael-seat-browser: the window kept its marker page" >&2

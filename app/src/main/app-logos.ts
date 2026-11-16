@@ -1,6 +1,6 @@
 // The catalogue's picture of each app the owner connected, by its name: what the core says every time it lists them
 // (`integrations.inventory`, a member's tool choices, the roster's team context). A card or a step that only knows an
-// app's name draws the same mark as the lists do (owner, 2026-11-15: 「不是說統一來源嗎? 為甚麼這邊還是沒有 outlook 的 icon」).
+// app's name draws the same mark as the lists do.
 
 const logos = new Map<string, string>();
 const key = (name: string): string => name.trim().toLowerCase();

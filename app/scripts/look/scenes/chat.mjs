@@ -3,9 +3,9 @@ import { scene, click, hover, type, wait, waitGone, member, room, search, check,
 const LONG_LINK = "https://x.com/someone/status/2000000000000000001?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed%7Ctwterm%5E2000000000000000001&ref_url=https%3A%2F%2Fexample.com%2Fsample-project-status-notes";
 const linked = selector => paste(selector, { text: `${LONG_LINK}\n這是用來測試的範例` });
 const twoPictures = [room(1), paste("#room-message", { image: "clipboard.png" }), wait(".au-room-pane .composer .cmp-chip img.cmp-thumb"), dropFile(".au-room-pane .ra-stage", "dropped.png"), wait('.au-room-pane .composer .cmp-chip + .cmp-chip')];
-// 新增成員, opened from the sidebar's + menu; 哥布達 lives in the 角色 tab, the colours' tab being where a new dialog opens.
+// 新增成員, opened from the sidebar's + menu; 小綠 lives in the 角色 tab, the colours' tab being where a new dialog opens.
 const makerOpen = [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog")];
-const makerGobta = [click('.cr-dialog [data-slime-tab="characters"]'), click('.cr-dialog [data-slime-character="gobta"]'), type("#mb-new-name", "哥布達")];
+const makerGoggles = [click('.cr-dialog [data-slime-tab="characters"]'), click('.cr-dialog [data-slime-character="goggles-green"]'), type("#mb-new-name", "小綠")];
 
 export const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
 export const sharedSourceSkill = { id: 32, member_id: -1, name: "來源核對", description: "核對引用資料與發布日期", enabled: true, source: "local:C:/Synthetic/.codex/skills/source-check" };
@@ -124,7 +124,7 @@ export default [
       wait('[data-connector="card-gmail"][data-card-state="failed"]')],
     { connectorCard: "gmail", connectorMember: 1, cardSignIn: "fail", cardFailureKind: "invalid_request",
       cardFailureText: "Gmail 無法接受連線請求的格式，需要更新連線功能。" }),
-  // R-CONNECT-01 (owner, 2026-10-25 and 2026-11-11): a card that did not connect says why in its own sentence, with a retry only where
+  // R-CONNECT-01: a card that did not connect says why in its own sentence, with a retry only where
   // pressing again can help. The first is the cause that used to show only 「沒有連上」: nothing had been sent.
   scene("connector-cause-busy", "A sign-in that never left the PC says so, and offers 再試一次",
     [member(1), wait('[data-connector="card-gmail"][data-card-state="failed"]'), check("connector-cause-busy")],
@@ -136,7 +136,7 @@ export default [
     [wait('[data-connector="card-gmail"][data-card-state="failed"]'), check("connector-cause-unknown"), click('[data-connector="card-gmail"] [data-card-disclosure]'),
       scroll('[data-connector="card-gmail"]'), check("connector-cause-unknown-open")],
     { connectorCard: "gmail", connectorFailure: { error: "unknown", retry: true, detail: "protocol · HTTP 502" } }),
-  // R-CONNECT-02 (owner, 2026-10-25): the owner's own Google in the conversation, at each step.
+  // R-CONNECT-02: the owner's own Google in the conversation, at each step.
   scene("connector-google-steps", "The owner's own Google: the card walks the Google Cloud steps and asks for the Client ID and Client secret",
     [wait('[data-connector="card-google"]'), wait('[data-connector="card-google"] [data-setup-field]'), scroll('[data-connector="card-google"]'), check("connector-google-steps")], { connectorCard: "google" }),
   scene("connector-google-filled", "The Client ID is plain and the Client secret masked; nothing is sent before 連接 Google",
@@ -273,9 +273,9 @@ export default [
   scene("admin-approval-batch", "One approval lists eight members and the new group", [wait('.ask-card-host:not([hidden])'), check("admin-approval-batch")], { adminApproval: "batch" }),
   scene("admin-approval-long", "Complete long instructions remain readable in the approval card", [wait('.ask-card-host:not([hidden])'), check("admin-approval-long")], { adminApproval: "long" }),
   scene("admin-delete-approval", "Deleting a member requires explicit approval, in words with no JSON", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), check("admin-approval")], { adminApproval: "delete" }),
-  // One press of 是 answers it (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」): the scene presses once and the card settles.
+  // One press of 是 answers it: the scene presses once and the card settles.
   scene("admin-delete-approved", "One press of the yes settles the card of a change that cannot be undone", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), click('.ask-yes'), wait('.composer:not([hidden])'), check("admin-answered-once")], { adminApproval: "delete" }),
-  // Several changes in one turn are one card with a line each and one yes (owner, 2026-11-11: 「理論上是要一張卡片顯示出來就好」).
+  // Several changes in one turn are one card with a line each and one yes.
   scene("admin-delete-many", "Three changes that cannot be undone are one card, a line each, in the owner's language", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), check("admin-delete-many")], { adminApproval: "deleteMany" }),
   scene("admin-delete-many-approved", "One press of the yes answers all three changes once, and the card settles", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), click('.ask-yes'), wait('.composer:not([hidden])'), check("admin-answered-once")], { adminApproval: "deleteMany" }),
   scene("admin-approved", "Approve creation and select the live member", [wait('.ask-card-host:not([hidden])'), click('.ask-yes'), member(8), { action: "open-details" }, wait('.mb-det:not([hidden])'), check("admin-created")], { adminApproval: "create" }),
@@ -284,16 +284,16 @@ export default [
   scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
   scene("member-draft-done", "Confirmed drafts settle into a summary and add members to the column", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="confirm"]'), check('member-draft-submitted'), wait('.draft-done'), click('[data-act="draft-done"]'), wait('.draft-done.is-open'), check("member-draft-done")], { adminApproval: "draft" }),
   scene("empty", "Conversation without turns", [], { turns: [] }),
-  // 新增成員 is one small dialog over the dimmed window (owner, 2026-11-11, after Grok Bot's Create New Bot): the slime, the name, the shared picker, 取消 and 建立.
+  // 新增成員 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
   scene("member-maker", "新增成員 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
-  scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="characters"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="shion"]'), type("#mb-new-name", "紫苑"), check("member-maker-chosen")]),
-  scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [...makerOpen, ...makerGobta, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "哥布達" }, check("member-maker-made")]),
-  scene("member-maker-enter", "Enter in the name makes the member as 建立 does", [...makerOpen, ...makerGobta, key("Enter"), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "哥布達" }, check("member-maker-made")]),
-  scene("member-maker-greeting", "While its own model writes the greeting, the new member is typing and nothing is put in the owner's mouth", [...makerOpen, ...makerGobta, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), check("member-maker-greeting")], { greetingPending: true }),
+  scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="characters"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="horn-lavender"]'), type("#mb-new-name", "小葵"), check("member-maker-chosen")]),
+  scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),
+  scene("member-maker-enter", "Enter in the name makes the member as 建立 does", [...makerOpen, ...makerGoggles, key("Enter"), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "小綠" }, check("member-maker-made")]),
+  scene("member-maker-greeting", "While its own model writes the greeting, the new member is typing and nothing is put in the owner's mouth", [...makerOpen, ...makerGoggles, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), check("member-maker-greeting")], { greetingPending: true }),
   scene("member-maker-taken", "A name another member has is refused in the dialog: it stays open with the name kept and nothing is made", [...makerOpen, type("#mb-new-name", "小森"), click('.cr-dialog [data-dlg="create"]'), wait('.cr-dialog #mb-new-name[aria-invalid="true"]'), check("member-maker-taken")]),
-  scene("member-maker-escape", "Escape closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "哥布達"), key("Escape"), waitGone(".cr-dialog"), check("member-maker-closed")]),
-  scene("member-maker-x", "The × closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "哥布達"), click('.cr-dialog .mb-dlg-head [data-dlg="close"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
-  scene("member-maker-cancel", "取消 closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "哥布達"), click('.cr-dialog [data-dlg="cancel"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
+  scene("member-maker-escape", "Escape closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), key("Escape"), waitGone(".cr-dialog"), check("member-maker-closed")]),
+  scene("member-maker-x", "The × closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), click('.cr-dialog .mb-dlg-head [data-dlg="close"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
+  scene("member-maker-cancel", "取消 closes 新增成員 and nothing is made", [...makerOpen, type("#mb-new-name", "小綠"), click('.cr-dialog [data-dlg="cancel"]'), waitGone(".cr-dialog"), check("member-maker-closed")]),
   // Complete workflows exercised through the real page.
   scene("member-delete-ask", "A member without a computer is asked about the same way: its name, one sentence, Cancel and Delete", [
     member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog.mb-confirm"),
@@ -332,7 +332,7 @@ export default [
   scene("question-reminder", "A question that opens elsewhere is said once, with a way there", [member(1), { action: "main-event", event: { type: "WorkerChanged", task_id: 950, state: "waiting", running: true } }, wait('.toast [data-question-room]'), check("question-reminder"), click('.toast [data-question-room]'), wait('.au-room-pane .ra-bgq .permission-card')], { roomQuestion: true, roomQuestionLate: true }),
   scene("member-brain-saved", "In a member's conversation the composer chooses that member's model and finds it there again, moving no one else", [member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("member-brain-saved"), click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'), click('.composer .cmp-model .mp-trigger'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), wait('.cb-menu [data-model="cli:codex:gpt-6.1"][aria-checked="true"]'), check("member-brain-saved")]),
   scene("raphael-skills", "Raphael uses the same skills as every member: a name with a switch, and a view of its own with the text, and a delete that asks twice, which is final", [{ action: "open-details" }, ...gear, click('.ms-pane .ms-nav [data-cat="skills"]'), wait('.ms-pane .ms-nav [data-cat="skills"][aria-current="page"]'), wait('.ms-pane [data-ms="skill-open"][data-id="31"]'), click('.ms-pane [data-ms="skill-open"][data-id="32"]'), wait('.ms-pane #ms-skill-text'), check("member-shared-source"), click('.ms-pane [data-ms="back"]'), click('.ms-pane [data-ms="skill-open"][data-id="31"]'), wait('.ms-pane #ms-skill-text'), check("growing-skills"), click('.ms-pane [data-ms="skill-more"]'), click('#app-popover [data-confirm-item]'), click('#app-popover [data-confirm-item]'), waitGone('.ms-pane [data-ms="skill-open"][data-id="31"]'), wait('.ms-pane [data-ms="skill-open"][data-id="32"]'), check("skill-deleted-final")], { skills: [learnedSkill(0), sharedSourceSkill], memberSettings: true }),
-  // A routine is read, not filled in; its member changes it in the conversation (owner, 2026-11-09).
+  // A routine is read, not filled in; its member changes it in the conversation.
   scene("details-routine-view", "A routine opens to read: when it runs, who runs it and its instructions, with nothing to type, save or delete", [...details, wait('.mb-det [data-det="routine-open"]'), click('.mb-det [data-det="routine-open"]'), wait('.mb-dialog.rv-dialog'), check("routine-view")]),
   scene("details-routine-hover", "Under the pointer the whole routine row lights, its switch inside it", [...details, wait('.mb-det [data-det="routine-open"]'), hover('.mb-det [data-det="routine-open"]'), check("routine-row-hover")]),
   scene("details-closed", "Scrim or title closes details after expanding the member column", [{ action: "member-column", collapsed: false }, ...details, { action: "close-details" }, wait('.conversation-trigger[aria-expanded="false"]')]),
@@ -344,7 +344,7 @@ export default [
   scene("chat-setup-cards", "In the member's conversation: the Slack bot token card with where to make the bot, a pairing to allow, and the template card", [member(1), wait('[data-template-card-id="tpl-1"]'), scroll('[data-secret-card="card-slack"]'), check("chat-setup-cards")], { chatCards: true }),
   scene("chat-pairing-bottom", "A pairing code that came later is the last thing in the conversation, and the field asks about the setup that waits", [member(1), wait('[data-pairing-card="pair-late"]'), check("chat-pairing-bottom")], { chatCards: true, latePairing: true }),
   scene("chat-pairing-allowed", "Allowing a pairing answers in the card", [member(1), wait('[data-pairing-card="pair-1"]'), scroll('[data-pairing-card="pair-1"]'), click('[data-pairing-card="pair-1"] [data-act="pairing-allow"]'), wait('[data-pairing-card="pair-1"][data-card-state="approved"]')], { chatCards: true }),
-  scene("member-avatar", "A press on the member's face in its panel opens the picker: a row of tabs and the open group's slimes (owner, 2026-11-11)", [...details, click('.mb-panel-identity [data-det="avatar"]'), wait("#app-popover"), check("slime-picker-shape")]),
+  scene("member-avatar", "A press on the member's face in its panel opens the picker: a row of tabs and the open group's slimes", [...details, click('.mb-panel-identity [data-det="avatar"]'), wait("#app-popover"), check("slime-picker-shape")]),
   scene("member-edit", "The member settings page: the face, the name and the role in place, the kinds on the left and the first one beside them", [...details, ...gear, wait('.ms-pane [data-k="ms-tools"]')], { memberSettings: true }),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-mode]"), check("permission-menu")]),
@@ -356,7 +356,7 @@ export default [
     key("Escape"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), { ...click('#app-popover [data-quick="+"]'), measure: { name: "emoji-picker-reopen", budgetMs: 120, maxLongTaskMs: 50, readySelector: "#app-popover.emoji-picker .emoji-cell" } }, wait("#app-popover.emoji-picker .emoji-cell")]),
   scene("emoji-search","Search filters the grid in place to emoji whose names match, with no section labels", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), type("#app-popover.emoji-picker input", "愛心"), check("emoji-search")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
-  // Opening a long conversation from the sidebar, cold and coming back (owner, 2026-11-10: 開啟對話太慢).
+  // Opening a long conversation from the sidebar, cold and coming back.
   scene("conversation-open-cost", "Opening a long conversation from the sidebar draws its newest turn within the budget, cold and coming back", [member(2), { action: "open-cost", from: 2, to: 1, newest: 300050, rounds: 3,
     limits: { coldMs: 1500, warmMs: 1000 }, first: ["conversations.list", "agent.history.list"], once: ["agent.history.list"], never: ["members.list"] }],
     { heavyThread: { member: 1, count: 50, newest: 300050 } }),
@@ -370,7 +370,7 @@ export default [
     return [scene(`${context}-composer-learn`, `${context} dictated name correction reaches the dictionary`, [...base,
       { action: "dictation-paste", selector: `${form} textarea`, text: dictationText.before },
       type(`${form} textarea`, dictationText.after), check("composer-pair"), click(`${form} .cmp-send`), check("composer-learn"), check("composer-pair")], { dictationText }),
-      // A member's conversation is never empty: the fewest it holds is its own greeting (owner, 2026-11-10).
+      // A member's conversation is never empty: the fewest it holds is its own greeting.
       scene(`${context}-composer-empty`, context === "member" ? "member empty composer under its greeting alone" : "room empty composer", [...base, check("composer-pair")], context === "room" ? { messages: [], turns: [] } : { turns: [{ id: 502, member_id: 1, conversation_id: 11, session_id: "greeting-1", created_at_ms: 1792807154000, question: "", route: "greeting", source: "greeting", prefix: "", text: "嗨，我是小晴 👋 想讓我先幫你分擔哪件事？", status: "done", cost_usd: 0, messages: [], steps: [], attachments: [] }] }),
       scene(`${context}-text`, `${context} composer draft`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), check("composer-pair"), ...(context === "member" ? [check("skill-learned-notice")] : [])], context === "member" ? { turns: [{ id: 501, member_id: 1, conversation_id: 11, session_id: "look-skill", created_at_ms: 1792807154000, question: "整理研究摘要", route: "answer", source: "app", prefix: "", text: "研究摘要已整理完成。", status: "done", cost_usd: 0, messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: 1792807155000 }], steps: [], attachments: [] }] } : {}),
       scene(`${context}-composer-hover`, `${context} composer send hover`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), hover(`${form} .cmp-send`), wait('.message-tooltip:not([hidden])'), check("composer-pair")])];

@@ -86,7 +86,7 @@ be taken fails the request as a bad request, with its kind in the error's data):
 the vision model together, with the question, and each PDF is read by the PDF service chosen; what
 they hold is data for the call that words the answer. A request of only files (no words) asks
 「看這個」 in the language of the conversation (`ui_language` is the window's: it picks the words the app draws
-and reaches no model, owner, 2026-11-14). The files are kept in memory for the turn, and for the
+and reaches no model). The files are kept in memory for the turn, and for the
 task when the request is handed to the background worker: never in the database, on disk or in a
 log. The history keeps their names and types (`attachments: [{name, mime}]` of a turn), for the
 conversation view. A request routed to `operate` or to a command makes nothing of them.
@@ -324,6 +324,22 @@ _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
 # What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
 _OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
+
+
+def owner_words_language(history, *, member_id: int, conversation_id: int | None, profile: str = "") -> str | None:
+    """The language of the owner's latest words in a conversation with a member, as the words say it firmly (a message of
+    one English word says nothing of it), else of the member's own profile; None when no words say it. What a member says
+    while it works is held to this (R-LANG-05), in a turn and in the task a turn handed on."""
+    try:
+        earlier = history.list(limit=12, member_id=member_id, conversation_id=conversation_id)
+    except sqlite3.Error:
+        earlier = []
+    for turn in earlier:
+        if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
+            return language
+    return detect_language(profile, firm=True)
+
+
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -343,7 +359,7 @@ MAX_REQUEST_URLS = 2
 # How much of what a call is given a permission card says, in characters (the overlay's question keeps its short line).
 CARD_PREVIEW_CHARS = 240
 # What a request of only files asks, in the language of the conversation (`_chat_language`), never the interface's: it
-# is the owner's message the model reads (owner, 2026-11-14).
+# is the owner's message the model reads.
 _LOOK_AT_THIS = with_ui_words({"zh-TW": "看這個", "en": "Look at this", "ja": "これを見て"})
 # The routes that word a reply, which read the pages and the files of the request first.
 _READING_ROUTES = ("answer", "discuss", "chat")
@@ -523,7 +539,7 @@ class _Ask:
     admin_pending: list[PlannedCall] = field(default_factory=list)
     admin_screenings: list[Screening] = field(default_factory=list)
     # The administrative changes that need a yes (the ones that cannot be undone, and any other the mode or a rule has
-    # asked), proposed in this turn, held for one card at its end (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」);
+    # asked), proposed in this turn, held for one card at its end;
     # each is shown to the owner exactly, and none is made before their yes.
     management_pending: list[PlannedCall] = field(default_factory=list)
     management_screenings: list[Screening] = field(default_factory=list)
@@ -662,7 +678,7 @@ DECLINED_NOTE = (
 )
 # What a new member's first turn is asked, with no word of the owner's yet. `language` there is the interface's, for the
 # turn's notices only: the greeting's language is the member's own, or the owner's as what it knows of them shows it
-# (owner, 2026-11-14: the interface language goes to no model).
+# (the interface language goes to no model).
 GREETING_NOW = ("Write your greeting now, in the language your own instructions set; when they set none, in the language "
                 "the owner's profile and your memory of them are written in, else the language of your name, role and "
                 "instructions.")
@@ -967,14 +983,14 @@ class AgentService:
     @property
     def language(self) -> str:
         """The interface language, for the fixed words of unattended and external conversations (a notice, a card).
-        Never a model's: what a member says follows the owner's words (owner, 2026-11-14)."""
+        Never a model's: what a member says follows the owner's words."""
         return normalize_language(self._owner_language() or DEFAULT_LANGUAGE)
 
     def _chat_language(self, ask: "_Ask") -> str:
         """The language the conversation of `ask` is in, read from its own words: the owner's message, else the owner's
         latest words in that conversation, else the speaker's own profile, else English. It picks what a model is given
         per language (Raphael's name in the roster, a place's name, the words of a request of only files); the interface
-        language never does (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」)."""
+        language never does."""
         if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text)):
             return language
         try:
@@ -993,15 +1009,9 @@ class AgentService:
         never decides it."""
         if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text, firm=True)):
             return language
-        try:
-            earlier = self._history.list(limit=12, member_id=ask.speaker.id, conversation_id=ask.conversation_id)
-        except sqlite3.Error:
-            earlier = []
-        for turn in earlier:
-            if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
-                return language
         speaker = ask.speaker
-        return detect_language(" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)), firm=True)
+        return owner_words_language(self._history, member_id=speaker.id, conversation_id=ask.conversation_id,
+                                    profile=" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
 
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
@@ -2314,7 +2324,7 @@ class AgentService:
             # The system prompt says who the speaker is and how it works, and is the same turn after turn: a
             # change in it has the provider read the whole conversation again at full price. What holds for
             # this turn only (the team as it is now, the memory files, who is asking) goes with the turn's
-            # message (owner, 2026-11-09). The owner's permission mode stays here: it changes seldom, and
+            # message. The owner's permission mode stays here: it changes seldom, and
             # a rule the whole turn obeys belongs where the model reads its rules.
             if brain_ref(settings.model):
                 system = cli_system_prompt(
@@ -2347,7 +2357,7 @@ class AgentService:
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
             # The system prompt stays the same turn after turn, or the whole conversation is cached again: the
-            # management guidance a request needs goes with that turn's message (owner, 2026-11-09).
+            # management guidance a request needs goes with that turn's message.
             leadership = self._management_chat(ask) and bool(management_tools)
             if self._management_chat(ask):
                 system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed "
@@ -2433,7 +2443,7 @@ class AgentService:
                             user += "\n" + wrap_untrusted("read_attachment", json.dumps(
                                 result.data if result.ok else {"error": result.error}, ensure_ascii=False,
                             ), ok=result.ok)
-            # The same tools every turn of the conversation, whatever it asks (owner, 2026-11-09, decision 2).
+            # The same tools every turn of the conversation, whatever it asks.
             snapshot = take_snapshot(
                 self._plugins, memory=self._memory is not None, speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
@@ -2740,10 +2750,10 @@ class AgentService:
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
-                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
+                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), owner_language=self._words_language(ask),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
                 # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
-                # cached for an hour (owner, 2026-11-09, decisions 1 and 4).
+                # cached for an hour.
                 loop.cache_session = f"raphael-{ask.speaker.id}-{ask.conversation_id}"
                 loop.cache_ttl = "1h"
             def listed():
@@ -2809,9 +2819,11 @@ class AgentService:
                 return self._finish(ask, "greeting", "", said, ledger)
             return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
-        if isinstance(loop, CliLoop) and loop.failure:
+        # A CLI that failed, or any loop whose answer the completion check did not count (R-COMP-PERF-09): the turn ends
+        # failed on the reason its loop gave, after whatever the loop already showed.
+        if getattr(loop, "failure", None):
             return self._finish(ask, "answer", "negative", reply.text, ledger, status="error", detail=outcome.detail,
-                                failure=turn_failure(loop.failure, settings.model, loop.failure_reason))
+                                failure=turn_failure(loop.failure, settings.model, getattr(loop, "failure_reason", None)))
         if ask.source in _NO_OWNER_WORDS:
             if not reply.text.strip():
                 raise AgentFailure("error")
@@ -5230,7 +5242,7 @@ class AgentService:
             "no": phrase(language, "no"),
             "timeout_ms": 0 if untimed else CONFIRM_TIMEOUT_MS,
         }
-        # T3 questions (and the card of several changes) are answered in the window's own card, in one press (owner, 2026-11-11), not in a permission card of the thread, except for the explicit local-command and payment permission cards.
+        # T3 questions (and the card of several changes) are answered in the window's own card, in one press, not in a permission card of the thread, except for the explicit local-command and payment permission cards.
         if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or local or action.tool.endswith("/fill_card"))
                 and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)):
             self._permissions.show(

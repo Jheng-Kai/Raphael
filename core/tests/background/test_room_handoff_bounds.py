@@ -1,5 +1,5 @@
-"""Work handed off from a room is bounded, and a refused hand-off is not mended by a new code (owner, 2026-11-11: in a
-meeting one member ran about 87 background tasks, and eight refused hand-offs were sent again under new stage codes)."""
+"""Work handed off from a room is bounded, and a refused hand-off is not mended by a new code (in a
+meeting one member once ran about 87 background tasks, and eight refused hand-offs were sent again under new stage codes)."""
 import pytest
 
 from raphael_core.agent.history import AgentHistory

@@ -196,7 +196,7 @@ def test_native_computer_scripts_only_the_real_takeover_sequence_when_explicitly
 async def test_cancel_wait_is_inert_outside_native_and_cancellable_inside(monkeypatch):
     import asyncio
     from raphael_core.native_journeys import wait_for_native_cancel
-    messages = [{"role": "user", "content": "[native-round10:wait]"}]
+    messages = [{"role": "user", "content": "[native-hold:wait]"}]
     monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
     await asyncio.wait_for(wait_for_native_cancel(messages), 0.1)
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")

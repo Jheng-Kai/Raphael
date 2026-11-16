@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-// The slime picker of a member's face (owner, 2026-11-11: 「這個不要這樣放，這個要跟…Grokbot 他們的 UI 類似，就是上面會有一些
-// tab、button 之類的，然後可以選擇」): a row of tabs for the groups, and only the open group's slimes under it, in a place whose
+// The slime picker of a member's face: a row of tabs for the groups, and only the open group's slimes under it, in a place whose
 // size a press on a tab does not change.
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -60,7 +59,7 @@ test("the groups are tabs in one row, in their order, in the app's pill tabs and
 
 test.each([
   ["slime:color:sky", "colors"],
-  ["slime:diablo", "characters"],
+  ["slime:streaks-charcoal", "characters"],
   ["slime:oni-red", "fantasy"],
   ["slime:phoenix-feather", "fantasy"],
   ["slime:cherry-blossom", "nature"],

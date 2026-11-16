@@ -47,7 +47,7 @@ MAC_PATH = "/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/R
 
 def repair_command(kind, alias, *, os_name="", user="", hostname=""):
     """The one line (or config snippet) that fixes a failed check, or "" when only the owner at the host can (Docker
-    Desktop on a Mac cannot be installed over ssh). (owner, 2026-11-11) Every line is pasted into a terminal on this
+    Desktop on a Mac cannot be installed over ssh). Every line is pasted into a terminal on this
     computer and reaches the host through `ssh <alias>`: nothing is built from this app's sources, and no `$` or double
     quote inside a quoted part keeps one meaning in PowerShell, cmd and sh."""
     from .vm import IMAGE

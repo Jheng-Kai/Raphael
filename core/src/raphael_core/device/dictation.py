@@ -8,8 +8,7 @@ The audio of a stretch is let go once it has been transcribed, so an hour of dic
 more of it than a minute does.
 
 There is no limit on how long a recording may last or how much may be said in it, and silence
-never ends one: only the key (`dictation.stop`) or Esc (`dictation.cancel`) does (owner,
-2026-10-23). The one exception is a session that can hear nothing more (below).
+never ends one: only the key (`dictation.stop`) or Esc (`dictation.cancel`) does. The one exception is a session that can hear nothing more (below).
 
 A session has a purpose, given to `dictation.start`: "dictation" (the default) or "agent", the voice
 assistant's question. It records and transcribes in the same way, but what its stop returns is not

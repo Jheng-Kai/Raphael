@@ -2,7 +2,7 @@
 
 A CLI reads its tool list once, when it starts. What find_tools returns is the name, description and
 schema of each tool that fits, and the CLI calls one by use_tool: its list never changes, so it never
-starts again for a search (owner, 2026-11-09, decision 2). Its native session is kept in memory for
+starts again for a search. Its native session is kept in memory for
 the loop alone: a room turn never resumes a conversation of the owner's."""
 
 from types import SimpleNamespace

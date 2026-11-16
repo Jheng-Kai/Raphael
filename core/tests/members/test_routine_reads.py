@@ -1,4 +1,4 @@
-"""What a routine's run may read: the team, its skill's own files, the app's recent failures (owner, 2026-11-11).
+"""What a routine's run may read: the team, its skill's own files, the app's recent failures.
 
 The data floor exists so that commands and file tools cannot WRITE the app's database, credentials, vault or core files; what a
 run needs of its own material it reads through the tools meant for it, and those never open the database, vault, keys or `.env`."""
@@ -62,7 +62,7 @@ async def read(rig, speaker, arguments):
 
 async def test_skill_read_gives_a_file_of_the_skill_and_never_the_database_the_vault_or_dot_env(setup):
     rig, team = setup
-    page = member(team, name="紫苑")
+    page = member(team, name="小葵")
     skill = team.members.capabilities.keep_skill(page.id, "local-test", DOCUMENT)
     folder = team.members.capabilities._path(page.id, skill["id"]).parent
     (folder / "templates").mkdir()
@@ -134,7 +134,7 @@ WRITE_ACTIONS = ({"action": "member_routine_update", "arguments": {"id": 1, "mem
 
 
 async def test_a_routines_run_reads_any_member_with_no_card_and_a_change_still_asks(setup):
-    """Owner, 2026-11-14: a team health check raised a card for each member it read (16, two timed out) and was cancelled."""
+    """A team health check once raised a card for each member it read (16, two timed out) and was cancelled."""
     from raphael_core.management import background_management, background_requires_approval
 
     rig, team = setup

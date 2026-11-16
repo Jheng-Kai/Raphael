@@ -1,7 +1,6 @@
 import { scene, member, wait } from "./steps.mjs";
 
-// The owner reads a member's conversation at its bottom while the member answers (owner, 2026-11-14: 「成員回覆的時候，有時候
-// 畫面會從最底部往上跳一點…完全不要有任何移動」, R-FOLLOW-01). `follow-probe` samples every painted frame (follow-probe.mjs).
+// The owner reads a member's conversation at its bottom while the member answers (R-FOLLOW-01). `follow-probe` samples every painted frame (follow-probe.mjs).
 const now = 1792807200000;
 const topics = ["產品時程", "首頁版面", "客服流程", "行銷活動", "測試名單", "會議紀錄", "預算分配", "招募進度", "合作夥伴", "使用者訪談", "季度目標", "文件整理", "上線檢查", "回饋整理"];
 const turn = (topic, index, extra = {}) => {

@@ -208,7 +208,7 @@ def test_the_unused_grant_table_survives_an_upgrade_untouched(tmp_path):
     conn.close()
 
 
-# --- the computer is not a connection (owner, 2026-11-14) ----------------------------------------------------------
+# --- the computer is not a connection ----------------------------------------------------------
 # A member whose owner chose four tools and a connection (members.tools is a list) said it would use its own computer and
 # could not: the list of connections names no computer, and the gate read a computer's key as a connection left out.
 
@@ -223,7 +223,7 @@ async def test_a_member_with_a_list_of_chosen_tools_keeps_its_own_computer(tmp_p
     offered = hub.offered_for(7)
     assert any(tool.name == "vm_exec" for tool in offered)
     for chosen in (CHOSEN, frozenset(), None):
-        member = Speaker(id=7, name="紫苑", tools=chosen)
+        member = Speaker(id=7, name="小葵", tools=chosen)
         assert all(member.uses_plugin(tool.key) for tool in offered)
     # Still a list of connections for connections: one that is not chosen is not offered.
     assert not Speaker(id=7, tools=CHOSEN).uses_plugin("mcp:connectors_other/send")
@@ -237,7 +237,7 @@ async def test_the_tools_a_member_with_a_list_sees_are_the_tools_it_can_call(tmp
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
     await hub.prepare(7)
     for chosen in (CHOSEN, None):
-        member = Speaker(id=7, name="紫苑", tools=chosen)
+        member = Speaker(id=7, name="小葵", tools=chosen)
         snapshot = take_snapshot(hub, speaker=member, interactive=True, max_tier=Tier.T3)
         listed = {item["function"]["name"] for item in snapshot.definitions}
         assert {"computer__vm_exec", "computer__get_desktop_state"} <= listed

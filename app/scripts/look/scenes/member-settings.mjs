@@ -15,7 +15,7 @@ export const memberSettingsPage = page;
 // A long conversation of the member's, so that the thread scrolls and its place can be told.
 const longThread = { ...filled, heavyThread: { member: 1, count: 30, newest: 300050 } };
 const back = [{ action: 'open-details' }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
-// The personality and instructions kind (owner, 2026-11-12): two quiet rows of the member's words, each a pencil away from a field.
+// The personality and instructions kind: two quiet rows of the member's words, each a pencil away from a field.
 const manner = '嚴厲但耐心，直接稱呼你。';
 const job = '教我日文 N1 等級 嚴厲的老師';
 // Twenty lines, some long enough to wrap: it must read whole as a row and edit whole as a field.
@@ -28,7 +28,7 @@ const longJob = [
   '批改之後，把最常犯的三種錯誤另外寫成一段總結。', '如果我連續三天沒有練習，下一次開頭先問我發生了什麼事。', '不要假裝知道我沒有教過你的教材內容。',
   '任何時候都不要用英文解釋，除非我明說要用。', '最後一條：每個月底，幫我寫一段這個月的進步與下個月的目標。',
 ].join('\n');
-const persona = (personality, instructions) => ({ ...filled, persona: { name: '紫苑', role: '日文老師', personality, instructions } });
+const persona = (personality, instructions) => ({ ...filled, persona: { name: '小葵', role: '日文老師', personality, instructions } });
 const soul = [...page, ...kind('soul', '.ms-pane [data-k="ms-personality"]')];
 const edit = field => [click(`.ms-pane [data-ms="edit"][data-field="${field}"]`), wait(`.ms-pane #ms-${field}`)];
 const typed = '嚴厲但耐心，直接稱呼你。\n講日文時先說一遍，再用中文解釋。';
@@ -42,8 +42,7 @@ const personaScenes = [
   scene('member-persona-saved', 'Enter on one line saves it: the row is back with the new words, the pencil is back and nothing is said', [...soul, ...edit('personality'), type('.ms-pane #ms-personality', manner), key('Enter'), wait('.ms-pane [data-ms="edit"][data-field="personality"]:not([aria-busy])'), check('member-settings-persona-saved')], persona('', job)),
   scene('member-persona-escape', 'Escape puts the old words back, saves nothing and says nothing', [...soul, ...edit('instructions'), type('.ms-pane #ms-instructions', '全部改掉'), key('Escape'), wait('.ms-pane [data-ms="edit"][data-field="instructions"]'), check('member-settings-persona-escape')], persona(manner, job)),
 ];
-// The mouse's side buttons walk back through every view the owner went into, however small (owner, 2026-11-14: 「從工具到個性與指示
-// 要可以倒退 進到記憶畫面倒退會回到技能與指令的頁面」), and forward again: R-NAV-03.
+// The mouse's side buttons walk back through every view the owner went into, however small, and forward again: R-NAV-03.
 const intoSkill = [...page, ...kind('soul', '.ms-pane [data-k="ms-personality"]'), ...kind('skills', '.ms-pane [data-ms="skill-open"]'), click('.ms-pane [data-ms="skill-open"]'), wait('.ms-pane #ms-skill-text')];
 const stepScenes = [
   scene('nav-steps-member-settings', 'Back from a skill\'s page is its tab; back again walks the tabs the owner opened, then the conversation; forward goes in again', [
@@ -78,13 +77,13 @@ export default [
   scene('member-settings-cover', 'The cover\'s round button opens its patterns as small covers and a picture from this PC', [...page, click('.ms-pane [data-ms="cover"]'), wait('#app-popover .ms-swatch'), check('member-settings-cover')], filled),
   scene('member-settings-cover-picture', 'The owner\'s picture as the cover fills it and cannot be dragged out of the window', [...page, wait('.ms-pane .ms-cover-img'), check('member-settings-cover-picture')], { ...filled, coverPicture: true }),
   scene('member-settings-back-hover', 'On the owner\'s picture the way back keeps its round surface under the pointer', [...page, wait('.ms-pane .ms-cover-img'), hover('.ms-pane [data-ms="back"]'), check('member-settings-back-hover')], { ...filled, coverPicture: true }),
-  // The page hides the conversation, and a hidden scroller forgets its place: the way back puts it where it was (owner, 2026-11-11).
+  // The page hides the conversation, and a hidden scroller forgets its place: the way back puts it where it was.
   scene('member-settings-back-bottom', 'Back from the settings page a thread that was at its bottom is at its bottom', [member(1), wait('.tn[data-id="300050"]'), waitScrollEnd('.mb-chat .ra-scroll'), ...back, waitScrollEnd('.mb-chat .ra-scroll'), check('member-settings-place-bottom')], longThread),
   scene('member-settings-back-kept', 'Back from the settings page a thread read higher up stays where it was', [member(1), wait('.tn[data-id="300035"]'), { ...scroll('.tn[data-id="300035"]'), block: 'center' }, check('member-settings-place-before'), ...back, check('member-settings-place-kept')], longThread),
   scene('member-settings-back', 'Escape and the arrow return to the member\'s conversation, and the panel is as it was', [...page, key('Escape'), wait('.page-agent:not([hidden]) .mb-chat .composer'), check('member-settings-back')], filled),
-  // A member's colour is on the switches of its settings page too (owner, 2026-11-12), light slimes keeping a knob that shows.
+  // A member's colour is on the switches of its settings page too, light slimes keeping a knob that shows.
   scene('member-switch-tools', 'The tools kind: the switches that are on wear the member\'s colour, the drafts switch under them too', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
-  scene('member-switch-tools-yellow', 'A yellow slime\'s settings switches keep a knob that shows', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch-light')], { ...filled, members: withSlime(1, 'slime:ramiris') }),
+  scene('member-switch-tools-yellow', 'A yellow slime\'s settings switches keep a knob that shows', [...page, ...kind('tools', '.ms-pane [data-k="ms-tools"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch-light')], { ...filled, members: withSlime(1, 'slime:wings-yellow') }),
   scene('member-switch-skills', 'The skills kind: a skill that is on wears the member\'s colour', [...page, ...kind('skills', '.ms-pane [data-k="ms-skills"]'), wait('.ms-pane .tg[aria-checked="true"]'), check('member-switch')], filled),
   scene('member-switch-notify', 'The notifications kind: its one switch, once on, wears the member\'s colour', [...page, ...kind('notify', '.ms-pane [data-k="ms-notify"]'), wait('.ms-pane [data-ms="notify"][aria-checked="true"]'), check('member-switch')], { ...filled, members: fixture.members.map(item => item.id === 1 ? { ...item, notify: true } : item) }),
   scene('member-switch-notify-off', 'A switch that is off keeps its look in the member\'s settings: no colour, the grey knob at the left', [...page, ...kind('notify', '.ms-pane [data-k="ms-notify"]'), wait('.ms-pane [data-ms="notify"][aria-checked="false"]'), check('member-switch-off')], { ...filled, members: fixture.members.map(item => item.id === 1 ? { ...item, notify: false } : item) }),

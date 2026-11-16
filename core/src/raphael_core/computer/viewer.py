@@ -25,7 +25,7 @@ from ..paths import local_storage_root
 LEASE_SECONDS = 15
 # The owner's press on Take control gives an action a member already has under way this long to end (the member's
 # next action is refused from the moment the press lands): a press that fell between two of a working member's
-# actions used to be answered "desktop busy" and leave him with no way to try again (2026-11-14).
+# actions used to be answered "desktop busy" and leave them with no way to try again.
 TAKE_WAIT_S = 10
 # An open page polls every two seconds and each answer starts several Docker processes.
 UNWATCHED_STATUS_S = 10
@@ -105,9 +105,9 @@ addEventListener('message', event => {
     }
   }).catch(() => {});
 });
-// Paste from the owner's PC. While he holds control (rfb.viewOnly is false) Ctrl+V and Ctrl+Shift+V are held back here, because
-// the computer would paste its own clipboard; on a Mac his paste is Command+V, and the computer is told Ctrl+V with its Super
-// (his Command, which noVNC sends as one) let go first. The app, which alone reads his clipboard, is asked for its text; it goes
+// Paste from the owner's PC. While they hold control (rfb.viewOnly is false) Ctrl+V and Ctrl+Shift+V are held back here, because
+// the computer would paste its own clipboard; on a Mac their paste is Command+V, and the computer is told Ctrl+V with its Super
+// (their Command, which noVNC sends as one) let go first. The app, which alone reads their clipboard, is asked for its text; it goes
 // to the computer's clipboard and only then are the keys of the paste sent. Watching, or a member at work, never asks.
 const PASTE_WAIT_MS = 1500, PASTE_MAX = 1000000, mods = {ctrl:false, shift:false, meta:false};
 let pasteAsks = 0, pasting = null;
@@ -192,7 +192,7 @@ class Session:
     connection_changes: int = -1
     connection_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     error: str | None = None
-    # The last time his input reached the screen while this view held it, read from the relay's count of forwarded input.
+    # The last time their input reached the screen while this view held it, read from the relay's count of forwarded input.
     input_at: float = 0.0
     seen_input: int = 0
 
@@ -508,8 +508,8 @@ class DesktopViewer:
         if pending and (pending.member_id != session.member_id or pending.conversation_id != session.conversation_id):
             raise invalid_params("private conversation required")
         if held:
-            # The owner can take over whenever he asks (2026-11-14): another view of his own that still holds the
-            # computer, or a hold nobody keeps and nobody waits on, is his to take. Only a recording in the old
+            # The owner can take over whenever they ask: another view of their own that still holds the
+            # computer, or a hold nobody keeps and nobody waits on, is theirs to take. Only a recording in the old
             # holder's view, which a take-over would cut, refuses.
             if owner not in (None, token) and self.teaching and self.teaching.active(owner):
                 raise invalid_params("desktop already held")
@@ -633,7 +633,7 @@ class DesktopViewer:
                         await self.close({"session": token})
                     else:
                         if session.sockets:
-                            # The owner is looking at the screen: a computer he watches is not idle, however quiet its members are.
+                            # The owner is looking at the screen: a computer they watch is not idle, however quiet its members are.
                             self.vm.last_activity[session.target.state_key] = self.vm.clock()
                         if self.teaching:
                             await self.teaching.tick(token)
@@ -644,8 +644,8 @@ class DesktopViewer:
                     logging.getLogger(__name__).warning("Desktop viewer upkeep failed (%s)", type(error).__name__)
 
     async def release_if_idle(self, token, session):
-        """The owner's hold ends by itself after OWNER_IDLE_S without his input; a sign-in request waiting for him and a
-        recording are his until he says so."""
+        """The owner's hold ends by itself after OWNER_IDLE_S without their input; a sign-in request waiting for them and a
+        recording are theirs until they say so."""
         target = session.target
         if session.preview or self.owners.get(target.key) != token:
             return

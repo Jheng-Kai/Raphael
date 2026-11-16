@@ -42,7 +42,7 @@ def test_claude_config_resolves_alias_default(tmp_path):
     assert all(m["reasoning_efforts"] == ["low", "medium", "high", "xhigh", "max"] for m in models)
 
 
-# The shape the installed CLI (2.1.316) answers `initialize` with, seen live on 2026-10-31.
+# The shape the installed CLI (2.1.316) answers `initialize` with, as seen live.
 CLAUDE_INITIALIZE = [
     {"value": "default", "resolvedModel": "claude-opus-5-5", "displayName": "Default (recommended)", "supportedEffortLevels": ["low", "max"]},
     {"value": "opus", "resolvedModel": "claude-opus-5-5", "displayName": "Opus 5.5", "description": "For complex work", "supportsEffort": True,

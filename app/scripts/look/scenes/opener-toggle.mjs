@@ -1,6 +1,6 @@
 import { scene, click, wait, check, focus, hover, key, member, rightClick, watchOpens, pressOpener, accountMenu } from "./steps.mjs";
 
-// R-UI-124 (owner, 2026-11-11): the control that opened a menu, popover, picker, card or dialog is its toggle. Each scene opens a
+// R-UI-124: the control that opened a menu, popover, picker, card or dialog is its toggle. Each scene opens a
 // thing once from its control, then presses that same control again with the real mouse; the check finds it closed, closed for good,
 // and opened exactly once (the page's own mutations are counted as they happen, so a close followed by an opening is seen).
 const column = { action: "member-column", collapsed: false };
@@ -32,7 +32,7 @@ export default [
   // 新增成員 is a dialog over the dimmed window: the press lands on the scrim over the + and closes it (the dialog registers with the shared dismissal).
   scene("opener-toggle-member-maker", "With 新增成員 open, a press on the sidebar's + behind the scrim closes it and does not open the menu or the dialog again",
     [column, watchOpens(".cr-dialog", { gone: ".cr-dialog", over: "scrim" }), click('#nav [data-col="add"]'), click('#app-popover [data-pick="member"]'), wait(".cr-dialog"), pressOpener('#nav [data-col="add"]'), check("opener-toggle-member-maker")]),
-  // The search button is in the list's top row only: the rail has none (owner, 2026-11-12 23:25), so its steps run on the wide list.
+  // The search button is in the list's top row only: the rail has none, so its steps run on the wide list.
   (scene => ({ ...scene, steps: scene.steps.map(step => ({ ...step, wide: true })) }))(toggle("search-card", "The sidebar's search button opens the search card and a second press closes it", [column],
     '#nav [data-col="search"]', ".side-search", ".side-search")),
   toggle("model-menu", "The composer's model button opens its card and a second press closes it", [member(1)],

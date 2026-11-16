@@ -14,7 +14,7 @@ from ..services.attachment_store import ID
 LINK = re.compile(r'!?\[([^\]\n]{0,320})\]\((?:<([^>\n]+)>|([^\s)]+))(?:\s+"[^"\n]*")?\)')
 SCAN_LIMIT = 1000
 # The turns that speak to the owner in the member's own conversation: the owner's requests, and the member's own background work,
-# whose turn names the member itself in `peer_id` (owner, 2026-11-14: two videos a member attached from its background work were
+# whose turn names the member itself in `peer_id` (two videos a member attached from its background work were
 # missing). A colleague's hand-off names another member (agent/attribution.py `from_colleague`) and hands its files to that colleague.
 TO_OWNER = "t.scope='private' AND (t.peer_id IS NULL OR t.peer_id=t.member_id)"
 

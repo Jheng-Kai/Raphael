@@ -1,4 +1,5 @@
 """A small fake team completes an exchange through the real background worker."""
+import asyncio
 from datetime import timezone
 
 import pytest
@@ -8,7 +9,7 @@ from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.members.rooms import RoomsService
 from raphael_core.members.service import MembersService
 from raphael_core.memory.service import MemoryService
-from .conftest import report, until
+from .conftest import Rig, report, until
 
 
 async def test_api_room_team_talks_through_shared_worker_and_ends_by_itself(make_rig, conn, tmp_path):
@@ -114,3 +115,31 @@ async def test_room_roles_keep_shared_notes_and_normal_tools_without_rounds(make
         await rooms.aclose()
         await members.aclose()
         await memory.aclose()
+
+
+def test_a_room_drive_asked_for_before_the_loop_runs_waits_for_the_start(conn, plugins, tmp_path):
+    """Start-up delivers what the last run left before the loop runs (`BackgroundService.use_team`), and a room's result asks
+    for the room to be driven: that used to raise (no running loop) and break the delivery off. The room is driven by the start."""
+    rig = Rig(conn, plugins)
+    memory = MemoryService(conn, tmp_path / "memory", QuietModel(), MemoryKeyStore(), quiet_s=3600, start_delay_s=3600)
+    members = MembersService(conn, tmp_path, background=rig.service, memory=memory, now_ms=rig.wall, tz=timezone.utc)
+    rooms = RoomsService(conn, members=members, background=rig.service)
+    with conn:
+        room_id = conn.execute("INSERT INTO rooms(name,created) VALUES ('Work',1)").lastrowid
+        conn.execute("INSERT INTO room_members VALUES (?,0)", (room_id,))
+        thread = conn.execute("SELECT id FROM room_threads WHERE room_id=?", (room_id,)).fetchone()[0]
+        origin = conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created) VALUES (?,?,NULL,'Go on.',1)",
+                              (room_id, thread)).lastrowid
+        conn.execute("INSERT INTO room_exchanges(origin_message_id,room_id,state,language) VALUES (?,?,'queued','en')", (origin, room_id))
+    rooms._exchanges.schedule(room_id)
+    assert not rooms._exchanges.tasks
+
+    async def go():
+        rooms.start()
+        await until(lambda: conn.execute("SELECT state FROM room_exchanges WHERE origin_message_id=?", (origin,)).fetchone()[0] != "queued")
+        await rooms.aclose()
+        await members.aclose()
+        await memory.aclose()
+        await rig.close()
+
+    asyncio.run(go())

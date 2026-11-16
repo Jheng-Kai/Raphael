@@ -7,11 +7,11 @@
 :root {
   --card-primary: #ffffff; --card-primary-ink: #171717; --card-primary-edge: #d6d6d6;
   --desktop-frame-bg: #171717; --desktop-frame-text: #f0f0f0;
-  /* The list is as wide as Grok Bot's (348 px) from 952 px of window up, and gives way to the conversation below that so
+  /* The list is 348 px wide from 952 px of window up, and gives way to the conversation below that so
      that it never gets narrower than it is on a 900 px window (604 px); under 860 px it is a rail of faces (sidebar.css). */
   --sidebar-width: min(348px, calc(100vw - 604px)); --window-controls-height: 32px;
   /* The window's three caption buttons are 46 px cells (.window-button). What stands at the top right of a pane that reaches the
-     window's edge ends this far short of them: the gap Grok Bot leaves, measured at 14 px (2026-11-12). */
+     window's edge ends this far short of them: a gap of 14 px. */
   --window-controls-width: calc(3 * 46px); --window-controls-gap: 14px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
@@ -32,7 +32,7 @@
      words (「上下高度會剛好貼齊文字」), every button and every menu row takes its height from these and nowhere else
      (「全部一致…共用同一個」), and a menu row is short so a menu reads at a glance. A field keeps a little more room to type. */
   --h-ctl: 26px; --h-ctl-sm: 22px; --h-menu: 28px; --h-field: 30px; --h-row: 48px; --h-tab: 26px;
-  /* A page in a conversation shows only its top, this tall, under its title row; the page opens whole when it is pressed (owner, 2026-11-11). */
+  /* A page in a conversation shows only its top, this tall, under its title row; the page opens whole when it is pressed. */
   --h-page-peek: 160px;
   /* official brand colours of service logos: the only colours outside the app palette */
   --brand-telegram: #26a5e4;
@@ -67,21 +67,21 @@
   /* The sidebar dot of a question that waits for the owner: orange, told from the red of a failure (3:1 on every row surface, check-palette.mjs). */
   --wait: #d05f00;
   --computer-active: #7138bd;
-  /* Raphael's blue: his own colour, and the usage bars'. */
+  /* Raphael's blue: its own colour, and the usage bars'. */
   --raphael-color: #1f9fe8;
   --meter: var(--raphael-color);
   --ans-edge: #ececec;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
   --track: #e5e5e5; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.3);
-  /* One rule for everything that floats (a dialog, a menu and its submenu, a popover, a floating card), after Grok Bot's: the surface, its edge,
-     the fill of a control standing on it (a chip, a button), what a hovered or pressed row takes, and the chosen chip (owner, 2026-11-12). */
-  /* Three layers in a dialog (owner, 2026-11-14): the window dimmed by --scrim is the outermost and darkest, the dialog itself (--dialog, its nav included) the
+  /* One rule for everything that floats (a dialog, a menu and its submenu, a popover, a floating card): the surface, its edge,
+     the fill of a control standing on it (a chip, a button), what a hovered or pressed row takes, and the chosen chip. */
+  /* Three layers in a dialog: the window dimmed by --scrim is the outermost and darkest, the dialog itself (--dialog, its nav included) the
      middle, and the cards and groups inside it (--float) the lightest. The light theme keeps the order of lightness: the outside is dimmed, the dialog a quiet
      off-white, the cards white with a hairline. A menu, a popover and a tooltip are on --float too, told from a card by their edge and shadow. */
   --dialog: #f5f5f5;
   --float: #ffffff; --float-edge: #e5e5e5; --float-ctl: #ececec; --float-ctl-hover: #e3e3e3; --float-ctl-raised: #d6d6d6; --float-ctl-raised-hover: #c8c8c8; --float-ctl-raised-press: #bcbcbc; --float-hover: #eaeaea; --float-pressed: #e3e3e3;
   --float-ctl-edge: #e0e0e0; --float-sel: #0a0a0a; --float-on-sel: #ffffff;
-  /* The white rounded tile an app's mark stands on in 連結應用程式 (Grok Bot's), the same in both themes: the marks are drawn for a white ground. */
+  /* The white rounded tile an app's mark stands on in 連結應用程式, the same in both themes: the marks are drawn for a white ground. */
   --tile: #ffffff; --on-tile: #0a0a0a; --tile-edge: rgba(0, 0, 0, 0.08);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.07);
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -131,7 +131,7 @@
   --ans-edge: #161616;
   --btn: #1f1f1f; --btn-edge: #2e2e2e; --key: #1f1f1f; --key-edge: #2e2e2e;
   --track: #333333; --menu: var(--float); --scrim: rgba(0, 0, 0, 0.65);
-  /* Measured from Grok Bot's dark theme (Settings, 2026-11-14): the window under the scrim is #050505, the dialog and its nav #121212, the cards in it #1f1f1f with a
+  /* The dark theme's floating greys: the window under the scrim is #050505, the dialog and its nav #121212, the cards in it #1f1f1f with a
      #2b2b2b edge; a menu is #1f1f1f with a #292929 edge, a control on a card #282828, a hovered row #292929, the chosen chip a light fill with dark words. */
   --dialog: #121212;
   --float: #1f1f1f; --float-edge: #2b2b2b; --float-ctl: #282828; --float-ctl-hover: #303030; --float-ctl-raised: #3d3d3d; --float-ctl-raised-hover: #4a4a4a; --float-ctl-raised-press: #575757; --float-hover: #292929; --float-pressed: #303030;
@@ -260,7 +260,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .nav[aria-current="page"] { background: var(--selected); color: var(--text); }
 .nav[aria-current="page"]:active { background: var(--pressed); }
 .nav[aria-current="page"] .i { color: var(--accent-text); }
-/* 拉斐爾 is Raphael's face, and a gold dot while he waits for a YES or a NO */
+/* 拉斐爾 is Raphael's face, and a gold dot while it waits for a YES or a NO */
 .nav .nav-face { margin: -1px; }
 .nav-dot { position: absolute; right: 12px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: var(--r-pill); background: var(--rg-btn); }
 @media (prefers-reduced-motion: no-preference) {
@@ -310,8 +310,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--r-pill); background: var(--text-2); transition: transform 0.16s ease, background 0.16s; }
 .tg[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
 .tg[aria-checked="true"]::after { transform: translateX(16px); background: var(--on-accent); }
-/* A switch answers the pointer on its own, also where it stands on a lit row (owner, 2026-11-14: 「hover 時還是有一些特效…
-   不然現在根本不知道有沒有按到按鈕」): off, its rim and knob brighten; on, its colour does. */
+/* A switch answers the pointer on its own, also where it stands on a lit row: off, its rim and knob brighten; on, its colour does. */
 .tg:hover:not(:disabled):not([aria-checked="true"]) { border-color: var(--text-2); }
 .tg:hover:not(:disabled):not([aria-checked="true"])::after { background: var(--text); }
 .tg[aria-checked="true"]:hover:not(:disabled) { filter: brightness(0.9); }
@@ -320,7 +319,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .tg[aria-checked="mixed"] { background: var(--accent-soft); border-color: var(--accent-text); }
 .tg[aria-checked="mixed"]::after { transform: translateX(8px); background: var(--accent-text); }
 /* A member's own places (its panel and its settings page: pages/agent.ts drawFaces sets the custom properties and the mark) show a
-   switch that is on in the member's colour, as the owner's bubble in its conversation (owner, 2026-11-12): the bubble's colour on the
+   switch that is on in the member's colour, as the owner's bubble in its conversation: the bubble's colour on the
    white theme, a lighter one on the black, outlined by the colour that stands off the panel. The knob is white, or dark on a light
    colour, as the bubble's words; the off state is as everywhere. Raphael's panel wears Raphael's. */
 [data-member-switch] .tg[aria-checked="true"] { background: var(--member-switch); border-color: var(--member-accent); }
@@ -507,10 +506,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* 連結應用程式 opens alone: one column, no list of Settings (R-UI-111). */
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
 .modal-scrim[data-standalone] .modal-nav { display: none; }
-/* Its title, chip and search stand at the top of the dialog as Grok Bot's do, with the apps scrolling under them to its lower edge. */
+/* Its title, chip and search stand at the top of the dialog, with the apps scrolling under them to its lower edge. */
 .modal-scrim[data-standalone] .modal-body { padding: var(--sp-5) var(--sp-6) 0; }
 .modal-scrim[data-standalone] .modal-x { top: var(--sp-5); right: var(--sp-5); }
-/* Its ✕ is bare, as Grok Bot's is: no fill and no ring, only its colour changes. */
+/* Its ✕ is bare: no fill and no ring, only its colour changes. */
 .modal-scrim[data-standalone] .btn.icon.modal-x { background: transparent; box-shadow: none; }
 .modal-scrim[data-standalone] .btn.icon.modal-x:hover:not(:disabled), .modal-scrim[data-standalone] .btn.icon.modal-x:active:not(:disabled) { background: transparent; color: var(--text); }
 .modal-nav .nav { min-height: 34px; padding: var(--sp-1) var(--sp-2); }
@@ -591,8 +590,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   .slist { --slist-pad: 14px; }
 }
 
-/* ---------- everything that floats: one rule (owner, 2026-11-12: 「我感覺可以把 dialog 都設計成這個顏色，他們感覺是有一套規則的」) ----------
-   Three layers in a dialog (owner, 2026-11-14: 「它應該是三層顏色，最外層最深 ( dialog 外 )，再來是內層，再來是內容」): outside it the window under --scrim, the
+/* ---------- everything that floats: one rule ----------
+   Three layers in a dialog: outside it the window under --scrim, the
    darkest; the dialog itself and its nav, `--dialog`, the middle; and the cards and groups on it, `--float` with a 1 px --float-edge hairline, the lightest.
    A menu and its submenu, a popover, a floating card and a tooltip are on --float too (the card layer), lifted from what is under them by their edge and shadow.
    What is on a surface (a chip, a button, a field) is filled --float-ctl, and a hovered row takes --float-hover. So `--panel`, which cards stand on, is --float
@@ -631,7 +630,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .mlead .mono { width: 20px; height: 20px; margin: 0; color: var(--text-2); }
 .menu .mlead .logo-mono[style] { color: var(--brand); }
 .menu .mlead ~ .mtag { flex: none; margin-left: var(--sp-3); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
-/* The @ menu (owner, 2026-11-13, after Grok Bot's): 360 px, rows of the menu's own height, a 16 px face or logo, the name with what is wrong with it
+/* The @ menu: 360 px, rows of the menu's own height, a 16 px face or logo, the name with what is wrong with it
    (「需要登入」) right after it, and what the row is, quietly, at the right edge. */
 .menu .mtrail { flex: none; margin-left: auto; padding-left: var(--sp-3); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
 .menu.team-mentions-menu { width: 360px; }
@@ -663,7 +662,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu-sep { height: 1px; margin: var(--sp-1) var(--sp-1); background: var(--line); }
 .menu .menu-action { color: var(--text); }
 .menu .menu-action[aria-disabled="true"] { color: var(--text-3); cursor: default; }
-/* The share card (owner, 2026-11-12, after Grok Bot's 「Create a copy」): what the header's share opens is one row whose mark is drawn for
+/* The share card: what the header's share opens is one row whose mark is drawn for
    it alone, the member's own face twice, the copy standing behind the one that is. Any menu item may carry such a mark (ui.ts `mark`). */
 .menu .mmark { display: inline-flex; flex: none; align-items: center; justify-content: center; }
 .menu.share-card { min-width: 248px; }
@@ -727,7 +726,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob[data-step="abilities"] .ob-col { width: min(100%, 560px); }
 /* The two stores are wide enough for three tiles of one row each. */
 .ob:is([data-step="tools"], [data-step="services"]) .ob-col { width: min(100%, 900px); }
-/* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask he answers. */
+/* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask it answers. */
 .ob[data-step="welcome"] .ob-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: var(--sp-4); }
 .ob[data-step="welcome"] .ob-col { justify-items: center; width: min(100%, 440px); text-align: center; }
 .ob[data-step="welcome"] .ob-col > h2 { margin-top: var(--sp-3); font-size: 40px; }
@@ -737,7 +736,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-wordmark > .ob-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ob-emblem { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 125px; }
 .ob-emblem canvas { display: block; }
-/* What the team can do, typed: an ask appears a letter at a time with a caret, his answer (告。…)
+/* What the team can do, typed: an ask appears a letter at a time with a caret, its answer (告。…)
    fades in under it in a quieter grey, then the ask is deleted and the next one typed. Both lines keep their height, so
    nothing under them moves. A reader hears one sentence instead (.ob-sr). */
 .ob-demo { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); width: 100%; margin-top: var(--sp-4); }
@@ -763,9 +762,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 :where(:root[data-keys]) .lang-search:focus-within { box-shadow: inset 0 0 0 2px var(--focus); }
 .lang-none { margin: 0; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); color: var(--text-3); }
 /* Under a step: two round buttons together in the middle, the way back at the left and the way on at the right, each a
-   filled triangle that points where it goes (owner, 2026-11-11 evening, of two worded pills at the row's ends: 「改成集中
-   在中間這邊好不好？然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」; a left and a right button
-   since 「我要的是左右 button」, one row since 「上下堆疊會造成我們畫面有些空間比較緊…感覺左右放，或者左右放那個箭頭之類的」).
+   filled triangle that points where it goes (one row, not two worded pills at the row's ends).
    The pair stands in the same place on every step. The welcome keeps its one wide pill in the middle, and a rerun's
    welcome a round × before it. The grid fades out over the foot. */
 .ob-foot { --ob-pill: 44px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-3) var(--sp-6) var(--sp-5); }
@@ -803,7 +800,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); gap: var(--sp-2); }
 .ob-tile { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; column-gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); color: var(--text); font: inherit; text-align: left; }
 .ob-tile.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-/* No light edge in the dark theme (owner rule): a chosen tile there is a lifted fill with its tick. */
+/* No light edge in the dark theme: a chosen tile there is a lifted fill with its tick. */
 :root[data-theme="dark"] .ob-tile.on { border-color: transparent; box-shadow: none; background: var(--surface-2); }
 button.ob-tile { cursor: pointer; }
 button.ob-tile:hover:not(:disabled) { background: var(--hover); }
@@ -959,7 +956,7 @@ button.ob-tile:hover:not(:disabled) .ob-get { background: var(--pressed); }
    header, a dialog's close and the composer's attach are an icon in a soft round button, a little lighter under the
    pointer. Small actions beside a message or inside a bar stay bare icons; the sidebar's search and plus
    are the same buttons (sidebar.css). So are the member page's way back and its cover's change icon, which stand on a
-   picture and need the solid surface in every state (owner, 2026-11-11). */
+   picture and need the solid surface in every state. */
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon, .btn.icon.modal-x, .page-agent .cmp-bar .btn.cmp-attach { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-color: transparent; border-radius: var(--r-pill); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--edge-rim); color: var(--text-2); }
 .page-agent .cmp-bar .btn.cmp-attach { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
 :is(.page-agent .mb-det-head, .page-agent .mb-head .ra-tools, .page-agent .mb-head .mb-head-l, .page-agent .mb-head .room-picker, .mb-dlg-head, .cs-dlg-head, .lb-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock, .ms-bar, .ms-cover) .btn.icon:is(:hover, [aria-expanded="true"]):not(:disabled), .btn.icon.modal-x:hover:not(:disabled), .page-agent .cmp-bar .btn.cmp-attach:is(:hover, [aria-expanded="true"]):not(:disabled) { border-color: transparent; background: var(--hover); color: var(--text); }

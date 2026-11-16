@@ -3,8 +3,8 @@ import { scene, click, wait, check, member, rightClick, settings, wide } from ".
 // A page open in the conversation's place runs in a frame of another origin: a press inside it never reaches the app's own document.
 const pageOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#hide" }, click(".pg-card .pg-body"), wait(".pgv-frame-box iframe")];
 
-// R-UI-121 (owner, 2026-11-11): a press outside a menu or popover closes it and is delivered to what was pressed, in the same press; a press outside a dialog
-// with a scrim only closes it and is spent (owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好，不用可以直接點到後面的東西」).
+// R-UI-121: a press outside a menu or popover closes it and is delivered to what was pressed, in the same press; a press outside a dialog
+// with a scrim only closes it and is spent.
 // Each scene presses once, with the real mouse, on a control that is not part of what is open; the check then finds what the press did.
 const column = { action: "member-column", collapsed: false };
 const details = [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])")];

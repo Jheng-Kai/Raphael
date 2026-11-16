@@ -1,7 +1,6 @@
 """Finding a city for the weather: Open-Meteo's geocoder, and the names it does not know.
 
-Open-Meteo looks a place up by name, and it is poor at Chinese and Japanese ones: checked live on
-2026-10-20, "台北" finds nothing (in any language it is asked in), "台北市" finds Taipei only when
+Open-Meteo looks a place up by name, and it is poor at Chinese and Japanese ones: checked live, "台北" finds nothing (in any language it is asked in), "台北市" finds Taipei only when
 asked in Chinese or Japanese, "高雄" finds a place in China and "東京" finds nothing in Japanese
 (only "東京都" does), while "Taipei" and "Kaohsiung" are found in every language. So the cities a
 user is likely to have in the settings are mapped to the English name the geocoder knows, and any

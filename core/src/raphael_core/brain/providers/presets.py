@@ -2,7 +2,7 @@
 
 Confidence describes the remembered documented endpoint, not live availability or account
 entitlement. The kinds in VERIFIED had their default root checked against the provider's own
-current documentation on 2026-10-23; the others are still to be checked.
+current documentation; the others are still to be checked.
 """
 
 import importlib.util
@@ -93,7 +93,7 @@ LOCAL = [
 ]
 KINDS.extend(preset(kind, name, "local", url, docs, fields=("base_url", "key"), auth="optional-bearer")
              for kind, name, url, docs in LOCAL)
-# Checked against the provider's own documentation (2026-10-23).
+# Checked against the provider's own documentation.
 VERIFIED = {"arcee", "lambda", "nebius", "novita", "ollama_cloud", "opencode_zen", "siliconflow", "siliconflow_cn"}
 for item in KINDS:
     item["verified"] = item["kind"] in VERIFIED

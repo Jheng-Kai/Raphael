@@ -1,7 +1,7 @@
 """One production App with a brain whose every turn is watched, for the cells of apps and skills (P15a): what the
 brain was offered, what it was told, and a moment in the middle of a turn at which the owner can do something.
 
-`A` is the API loop; `C` is a Codex-like CLI whose child speaks MCP to Raphael's one authenticated server. Both
+`A` is the API loop; `C` is a CLI whose child speaks MCP to Raphael's one authenticated server. Both
 are driven by the same `act(user, tools, results)`: it sees the owner's words, the names of the tools it was
 offered and what the tools returned so far, and answers with a final text and the calls it makes. A call is made
 whether or not the name was offered (a brain remembers a tool from earlier in the conversation), and a call that

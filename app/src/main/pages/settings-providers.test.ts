@@ -295,7 +295,7 @@ test("the allowances are kept across tabs and Settings closing, refresh on compl
   expect(destroyed).not.toHaveBeenCalled();
   expect(mountAnalytics).toHaveBeenCalledTimes(1);
   expect(api.usageAllowances).toHaveBeenCalledTimes(calls + 3);
-  // Every opening starts afresh (owner, 2026-11-15): 模型與用量 is at 模型 again, not at the 用量 looked at last.
+  // Every opening starts afresh: 模型與用量 is at 模型 again, not at the 用量 looked at last.
   await page.show("general"); click('[data-pane="models"]'); await flush();
   expect(page.el.querySelector('[data-models-tab="models"][aria-selected="true"]')).not.toBeNull();
   await page.show("usage");
@@ -305,7 +305,6 @@ test("the allowances are kept across tabs and Settings closing, refresh on compl
 });
 
 test("the models' usage is read once after the app starts, before Settings is ever opened, and again at the opening", async () => {
-  // Owner, 2026-11-15: 「在打開 app 的時候就跑一次，之後才是每次設定的時候再跑一次」.
   vi.useFakeTimers();
   try {
     const mountAnalytics = vi.spyOn(analytics, "mountUsageAnalytics");
@@ -342,7 +341,7 @@ test("every opening of Settings reads the allowances again at once, on any tab, 
     expect(document.querySelector(".usage-analytics")!.getAttribute("aria-busy")).toBe("false");
     expect(api.usageAllowances).toHaveBeenCalledTimes(1);
 
-    // Opened again at once after a good reading: the allowances are asked again all the same (owner, 2026-11-12: a reset
+    // Opened again at once after a good reading: the allowances are asked again all the same (a reset
     // must show at the very next opening), however soon, and the same numbers touch nothing.
     page.hide(); await page.show("safety"); await flush();
     expect(api.usageAllowances).toHaveBeenCalledTimes(2);

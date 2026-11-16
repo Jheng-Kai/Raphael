@@ -1,6 +1,5 @@
 """A CLI member in a room goes on in its own native session for each room thread, sent only what is new, and a renewed
-session is given the thread's summary and its newest messages (owner, 2026-11-11, harness plan of 2026-11-09, section A:
-each reply used to be a fresh session that saw only the messages after the member's cursor)."""
+session is given the thread's summary and its newest messages (each reply used to be a fresh session that saw only the messages after the member's cursor)."""
 import json
 
 import pytest

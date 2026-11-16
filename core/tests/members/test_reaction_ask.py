@@ -1,5 +1,5 @@
 """Every reaction of the owner's to a member's reply is analysed at once by that member, on its own model, and the member
-decides whether to say something or nothing (owner, 2026-11-14, after Grok Bot). The analysis is a turn of the member's
+decides whether to say something or nothing. The analysis is a turn of the member's
 own: never approval, never the owner's words, and nothing of it is left when no words are needed."""
 import asyncio
 import json
@@ -126,9 +126,9 @@ async def test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model
 
 @pytest.mark.parametrize('window,named', [('zh-TW', 'Traditional Chinese as written in Taiwan'), ('en', 'English'), ('ja', 'Japanese')])
 async def test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches(setup, client, window, named):
-    # Owner, 2026-11-14: 紫苑, a Japanese teacher, asked what was wrong in Japanese because her conversation is full of it.
+    # A Japanese teacher asked what was wrong in Japanese because her conversation is full of it.
     rig, team_ = setup
-    one = member(team_, name='紫苑', role='日本語の先生', instructions='日本語を教える。例文と練習問題は日本語で。')
+    one = member(team_, name='小葵', role='日本語の先生', instructions='日本語を教える。例文と練習問題は日本語で。')
     client.chats.append(live_said('日本語の例文です。'))
     turn_id = (await rig.call('agent.ask', {'session_id': 's1', 'text': '例文をください', 'ui_language': window, 'source': 'app',
                                               'member_id': one.id}))['turn_id']
@@ -294,7 +294,7 @@ async def test_each_message_of_the_member_is_analysed_on_its_own(setup, client):
 
 
 async def test_a_reaction_to_a_picture_the_member_sent_is_read_as_that_picture(setup, client):
-    # A picture a member sends is a message of its own (owner, 2026-11-14, R-UI-156): the member is told the owner reacted to
+    # A picture a member sends is a message of its own (R-UI-156): the member is told the owner reacted to
     # the file it sent, by its name and type, never to the words of its reply.
     rig, team_ = setup
     one = member(team_)

@@ -55,6 +55,7 @@ import sqlite3
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
+import dataclasses
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Protocol, TypeVar
@@ -80,7 +81,7 @@ from ..brain.openrouter import OpenRouterError, TextCompletion
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..brain.textnorm import public_line
-from ..conversation_language import chat_language
+from ..conversation_language import chat_language, in_language
 from ..brain.pricing import builtin_catalog
 from ..computer.vm_catalog import NOTICES
 from ..brain.spend import SpendTracker
@@ -344,6 +345,8 @@ class TaskRun:
         # The tools of the run that went through, and the last call of a tool that was refused with nothing after it
         # that went through: how a routine's run is told to have ended well or not (`routine_outcome`).
         self.succeeded: set[str] = set()
+        # The tools of connected apps whose calls went through and changed something (a page written, a draft saved).
+        self.written: set[str] = set()
         # A connected app's call (tool, arguments) -> the digest of the error it last failed with and how many times in a row.
         self._failed_calls: dict[tuple[str, str], tuple[str, int]] = {}
         self._failures_told: dict[tuple[str, str], str] = {}
@@ -384,6 +387,8 @@ class TaskRun:
         # A reply in a room: each of its model attempts has the whole stall time, and one that hears nothing for all of
         # it has stalled and ends the reply rather than being tried again. A reply is no work to ride an outage out for.
         self.room_speech = False
+        # The language the owner writes in, which what the model says while it works is held to (R-LANG-05); None holds nothing back.
+        self.owner_language: str | None = None
         # How long one tool call may be out before the task counts as stalled, where that is longer than the
         # window of the model's silence (`limits.seconds`); None: the same.
         self.tool_seconds: float | None = None
@@ -635,7 +640,7 @@ class TaskRun:
                     failure = classify(error)
                     wait = outage.wait(failure.retry_after) if failure.transient else None
                     # A room reply's attempt that heard nothing for its whole stall time has stalled, and ends the
-                    # reply; any other failure is tried again with all of its own time (Hermes's delegate heartbeat).
+                    # reply; any other failure is tried again with all of its own time.
                     if wait is None or (failure.kind == "timeout" if self.room_speech else wait >= self._remaining_s()):
                         raise
                     if failure.kind == "timeout":
@@ -701,13 +706,17 @@ class TaskRun:
             update = authored is None and self._reply is not None and self.updates is not None and self.updates.due()
             if update:
                 authored = public_reply(turn.content, self.language, plain=True)
+            if authored is not None:
+                # Said while working, so shown only in the owner's language: the step it came with keeps its label.
+                lines = [line for line in (authored.messages or [authored.text]) if in_language(line, self.owner_language)]
+                authored = dataclasses.replace(authored, messages=lines, text="\n\n".join(lines)) if lines else None
             if authored is not None and self._reply is not None:
                 self._reply(authored)
                 if self.updates is not None:
                     self.updates.shown()
             text = " ".join(turn.content.split())[:200]
             text = public_line(text, "auto")
-            if text and not (update and authored is not None):
+            if text and in_language(text, self.owner_language) and not (update and authored is not None):
                 self._progress(text)
         return {
             "content": turn.content,
@@ -754,7 +763,7 @@ class TaskRun:
             raise invalid_params("name must be a string and arguments an object")
         call_id = params.get("call_id")
         async with self._turn:
-            # A tool in flight is no stall (owner, 2026-11-09): the window watches the model's silence. A reply in
+            # A tool in flight is no stall: the window watches the model's silence. A reply in
             # a group has a short one, and asking a colleague (ask_member) takes that colleague's whole turn: the
             # call has as long as any task's step (`tool_seconds`), and the window starts again when it returns.
             # A task already out of time stays so: its call is refused below, as before.
@@ -912,15 +921,18 @@ class TaskRun:
             return
         if not (self._gate.reads_only(ref.server, ref.name, arguments) if ref.kind == MCP else ref.tier == Tier.T0):
             self.acted = True
+            if ref.kind == MCP:
+                self.written.add(ref.name)
 
     def continuation_state(self):
         return {"declined": sorted(self._declined), "unanswered": sorted(self._unanswered), "seen_urls": self.seen_urls.snapshot(), "acted": self.acted,
                 "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
                 "conversation_cost": getattr(self, "conversation_cost", 0.0),
-                "succeeded": sorted(self.succeeded), "last_refused": list(self.last_refused) if self.last_refused else None}
+                "succeeded": sorted(self.succeeded), "written": sorted(self.written), "last_refused": list(self.last_refused) if self.last_refused else None}
 
     def restore_continuation(self, state):
         self.succeeded.update(name for name in state.get("succeeded", []) if isinstance(name, str))
+        self.written.update(name for name in state.get("written", []) if isinstance(name, str))
         refused = state.get("last_refused")
         self.last_refused = (refused[0], refused[1]) if isinstance(refused, list) and len(refused) == 2 else None
         self._declined.update(state.get("declined", []))

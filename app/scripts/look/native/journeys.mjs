@@ -14,7 +14,7 @@ export const journeys = [
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
   { name: "sidebar-foot", description: "Inspect the resizable sidebar, in-place search, the foot (the face and the Connections pill) and the account menu in the real WebView" },
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
-  { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
+  { name: "conversation-and-learned-pill", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
   { name: "hidden-window-refused", description: "The same returns while WebView2 refuses the normal-memory step (0x8007139F): the page still shows and runs" },
   { name: "startup-rooms", description: "Ten normal and ten slow-core owner-path launches keep seeded group chats in the sidebar, without a page reload" },
@@ -789,14 +789,14 @@ export async function drive(name, context) {
     await wait(page, ".cr-dialog");
     await capture("maker");
     await click(page, '.cr-dialog [data-slime-tab="characters"]');
-    await click(page, '.cr-dialog [data-slime-character="gobta"]');
+    await click(page, '.cr-dialog [data-slime-character="goggles-green"]');
     await type(page, "#mb-new-name", "NativeJob");
     await click(page, '.cr-dialog [data-dlg="create"]');
     await page.waitForSelector(".cr-dialog", { hidden: true });
     await wait(page, ".page-agent .ra-body");
     const member = (await context.rpc("members.list", {})).members.find(row => row.name === "NativeJob");
     if (!member) throw new Error("The member was not made");
-    if (member.avatar !== "slime:gobta") throw new Error(`The member lost its slime: ${member.avatar}`);
+    if (member.avatar !== "slime:goggles-green") throw new Error(`The member lost its slime: ${member.avatar}`);
     const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
     if (!conversation) throw new Error("The member has no conversation");
     // The member's own model writes its first words (R-COLLEAGUE-02), so the greeting is a hidden turn to wait for.
@@ -847,7 +847,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     const inFrame = (frame, id) => frame.$eval(id, el => el.textContent);
     const asked = async question => (await snapshot()).agent_turns.filter(row => row.question === question);
     // A page in its card is only a preview (inert, R-PAGE-02): the owner presses the card, and the page opens in the conversation's place
-    // (R-PAGE-01, 2026-11-11), where it takes a press and speaks; the header's arrow goes back.
+    // (R-PAGE-01), where it takes a press and speaks; the header's arrow goes back.
     const larger = async () => {
       if (await page.$(".pgv-frame-box iframe")) return;
       await click(page, ".pg-card .pg-body");
@@ -1280,9 +1280,9 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       if (close && await close.isVisible()) await close.click();
     }
     if (targets.size !== 2) throw new Error("Both members report the same seat target");
-    // A member asks its owner to sign in at its seat, which is how an owner gives every member his own account: the
+    // A member asks its owner to sign in at its seat, which is how an owner gives every member their own account: the
     // owner opens that screen larger, takes it and types. An owner was shown "you are in control" there with nothing
-    // getting in (2026-11-13). A computer per member has had this journey since it was built; a seat had not.
+    // getting in. A computer per member has had this journey since it was built; a seat had not.
     const third = people.find(row => row.name === "NativeSeatC");
     if (!third) throw new Error("The journey's third member is missing");
     await context.computerSignin(third.id);
@@ -1340,7 +1340,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
     await click(page, '.mb-det [data-det="gear"]');
-    // The page holds no memory (owner, 2026-11-11: 「都不要讓我們看到記憶」); the core keeps it.
+    // The page holds no memory; the core keeps it.
     await page.waitForSelector('.ms-pane .ms-nav [data-cat="tools"]');
     result.memoryShown = await page.$$eval('.ms-pane [data-cat="memory"], .ms-pane [data-mem-space]', elements => elements.length);
     await capture("member-page");
@@ -1786,7 +1786,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     }
     const wrong = result.visits.filter(visit => visit.issues.length);
     if (wrong.length) result.failures.push(`Wrong-language UI in ${wrong.length} visits; exact elements in visits[].issues`);
-  } else if (name === "owner-round10") {
+  } else if (name === "conversation-and-learned-pill") {
     const conversation = await newConversation(context);
     await typed(context, Array.from({length: 55}, (_, i) => `Review step ${i + 1}: retain this complete owner instruction.`).join("\n"), conversation);
     await capture("long-owner");
@@ -1800,13 +1800,13 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await pause(700);
     await page.evaluate(checkRendered,"conversation-bottom");
     await capture("at-bottom");
-    await type(page,".composer .cmp-input","[native-round10:wait] Hold this synthetic answer until I stop it.");
+    await type(page,".composer .cmp-input","[native-hold:wait] Hold this synthetic answer until I stop it.");
     await click(page,".composer .cmp-send");
     await page.waitForSelector('.composer [data-task-state], .composer[data-task-state="running"], .composer[data-task-state="ack"]');
     await pause(500);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[data-cancel-armed="true"]');
-    result.firstEscape = (await snapshot()).agent_turns.find(turn => turn.question.includes("[native-round10:wait]"));
+    result.firstEscape = (await snapshot()).agent_turns.find(turn => turn.question.includes("[native-hold:wait]"));
     if (result.firstEscape?.status !== "running") throw new Error("The first Escape stopped the native answer");
     await page.evaluate(checkRendered, "cancel-armed");
     await capture("answer-first-escape");
@@ -1943,9 +1943,9 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
 
     // 1. A word the owner's dictionary holds comes out as the dictionary spells it.
     result.first = await dictate("dictated-first");
-    if (!result.first.pasted.includes("grokbot")) throw new Error(`grokbot did not come out as the dictionary spells it: ${JSON.stringify(result.first)}`);
+    if (!result.first.pasted.includes("pinebot")) throw new Error(`pinebot did not come out as the dictionary spells it: ${JSON.stringify(result.first)}`);
 
-    // 2. He corrects the name speech-to-text got wrong, in the composer, and sends.
+    // 2. The owner corrects the name speech-to-text got wrong, in the composer, and sends.
     const misheard = result.first.pasted.match(/[Hh]er+d\w*/)?.[0];
     result.misheard = misheard ?? null;
     if (!misheard || misheard === "herdr") throw new Error(`No misheard 「herdr」 to correct: ${result.first.pasted}`);
@@ -1980,7 +1980,7 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     // 4. The next dictation spells it.
     await newConversation(context);
     result.second = await dictate("dictated-second");
-    if (!result.second.pasted.includes("herdr") || !result.second.pasted.includes("grokbot")) throw new Error(`The next dictation did not use what was learned: ${JSON.stringify(result.second)}`);
+    if (!result.second.pasted.includes("herdr") || !result.second.pasted.includes("pinebot")) throw new Error(`The next dictation did not use what was learned: ${JSON.stringify(result.second)}`);
   } else if (name === "delete-conversation") {
     await deletionAudit(context, { click, wait, type, pause, details, typed, newConversation, remaining });
     await perform(page, { action: "member", id: 0 });

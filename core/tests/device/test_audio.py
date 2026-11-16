@@ -989,7 +989,7 @@ def recorded_on(fake, rec, milliseconds, amplitude):
 
 
 def test_automatic_stays_on_a_quiet_headset_at_every_start_and_never_opens_another(fake_sd):
-    # Owner, 2026-11-14: a quiet first moment sent automatic from his HyperX to the laptop's array at every start, and back.
+    # A quiet first moment once sent automatic from a headset to the laptop's array at every start, and back.
     fake_sd.devices = owner_devices()
     fake_sd.default_input = 0
     rec = MicRecorder(lambda frames: None)

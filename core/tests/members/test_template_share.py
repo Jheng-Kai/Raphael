@@ -31,7 +31,7 @@ async def test_a_member_exported_to_a_file_and_imported_again_is_a_copy_of_the_r
     service = rig.service
     original = (await rig.call("members.create", {
         "name": "Editor", "role": "Copy editor", "personality": "Calm and exact", "instructions": "Check every claim twice.",
-        "avatar": "slime:shuna", "tools": ["srv-1"], "reply_style": "conversational"}))["member"]
+        "avatar": "slime:small-horns-pink", "tools": ["srv-1"], "reply_style": "conversational"}))["member"]
     identifier = original["id"]
     service.capabilities.keep_recipe(identifier, "---\nname: editing\ndescription: Check clarity\n---\nVerify claims.",
                                      {"references/check.md": "Check the source"})

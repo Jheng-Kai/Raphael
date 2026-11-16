@@ -1,6 +1,6 @@
 # Raphael architecture and checked boundaries
 
-## Shared computer seats, stages B2 and C (2026-11-12)
+## Shared computer seats, stages B2 and C
 
 R-COMP-SEAT-01 supersedes the old single-screen shared rotation model. The default
 remains per-bot. Target.key is key_for(host, member) for both kinds. Target.container
@@ -80,7 +80,7 @@ includes two real members through LocalVm, VmTools and CuaBridge after the per-c
 blocks; --no-shared skips it. Offline fakes prove contracts, while final image,
 geometry, native timing, browser lifetime and remote hosts need real acceptance.
 
-## A report shared as a file (2026-11-10)
+## A report shared as a file
 
 The window draws the file (report-page.ts `reportFile`: the same escaping drawing, the theme's
 words read from its stylesheet, its policy first) and hands it with the page id to the shell's
@@ -91,7 +91,7 @@ with no tag in it), names the file after the stored title, writes it exclusively
 owner_output_folder or else Downloads, and returns where; the shell selects it in File Explorer.
 No page host, frame, migration or model tool is added (R-PAGE-01; core/tests/agent/test_pages.py).
 
-An HTML page is shared the same way (2026-11-14, R-PAGE-08) with the opposite split: the window gives
+An HTML page is shared the same way (R-PAGE-08) with the opposite split: the window gives
 the page id and no text (`pageSave` sends the same command an empty `html`, which the core ignores for a
 page), and the core builds the file itself from the page it stores (`pages.py page_file`: `document()`
 without the helper script that talks to the window, the dark theme's words under
@@ -99,7 +99,7 @@ without the helper script that talks to the window, the dark theme's words under
 runs the same secret scan on it and writes it by the same `save_file`. A plugin's page is not
 saved: it works only through its host.
 
-## No voice output (2026-11-10)
+## No voice output
 
 The app speaks nothing: no text-to-speech service, spoken Alt+Space answer, generated
 audio file or voice call, in the core, the shell or the window. Dictation (speech to
@@ -107,7 +107,7 @@ text) is unchanged. Migrations 22, 64 and 67 keep their voice columns and voice_
 tables, and saved tts_* settings rows and a stored Fish Audio key stay where they are,
 unread (core/tests/test_no_voice.py).
 
-## Conversation metadata boundary (2026-11-05)
+## Conversation metadata boundary
 
 Migration 64 adds bounded owner reaction tables with message/turn ownership, side
 thread root links, the existing draft store's transport kind and member voice_memo.
@@ -117,7 +117,7 @@ context reads metadata through AgentHistory; room transcripts include the same
 explicit non-instruction label. rooms.thread_open validates a main-room root and
 reuses room_threads/thread_id, the existing worker and its isolated transcript.
 
-Migration 82 (2026-11-14) makes the message the primary key of both reaction tables, so a
+Migration 82 makes the message the primary key of both reaction tables, so a
 message carries one reaction (R-REACT-01), and adds `reaction_asks`, the once-only record of
 what was analysed; migration 83 keys it by kind, message and emoji. `set_reaction` replaces in
 one write and returns what the message carries; `agent/reaction_asks.py` keeps the record and
@@ -136,22 +136,22 @@ All frontend IPC stays in api.ts and the
 literal owner-window RPCs use explicit Rust allowlist entries. No worker, provider,
 model loop or settings registry is added (A-01/03/04/06/08).
 
-## Member panel and host preflight projection (2026-11-05)
+## Member panel and host preflight projection
 
-Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
+The member panel has a clear Details / Library / Computer hierarchy and explains the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
 
 member-details.ts reuses ui.tabs and keeps the existing settings/resource pages behind the gear. member-panel-work.ts projects existing worker rows, pages and artifacts; members.list accepts panel_member_id/panel_limit through the existing owner-window allowlist. members/panel.py caps task/page/artifact queries, filesystem entries, depth and visible files; remote volumes are not treated as local folders. No database, migration, model loop or RPC is introduced (A-01/A-03/A-04/A-06/A-08/A-10/A-11).
 
-computer-state.ts owns the full localized screen sentence and the semantically matching short header word, following the owner's 2026-11-05 request to say each thing once. The existing viewer owns its persistent noVNC frame, watch/takeover boundary and screen actions; Enlarge/Take control require a live screen. Location and lifecycle controls live only in the Computer tab; context-menu.ts maps both its header and work-row overflow to the same existing menu path. The member panel owns its one conversation heading and asks the existing conversation list to omit its internal heading. Library file handles resolve through computer.team_file with member/root containment and the shell's existing read-or-reveal behavior; pages return to their existing conversation result.
+computer-state.ts owns the full localized screen sentence and the semantically matching short header word, so that each thing is said once. The existing viewer owns its persistent noVNC frame, watch/takeover boundary and screen actions; Enlarge/Take control require a live screen. Location and lifecycle controls live only in the Computer tab; context-menu.ts maps both its header and work-row overflow to the same existing menu path. The member panel owns its one conversation heading and asks the existing conversation list to omit its internal heading. Library file handles resolve through computer.team_file with member/root containment and the shell's existing read-or-reveal behavior; pages return to their existing conversation result.
 
-LocalVm.status preserves fixed preflight reasons and the missing-image flag. ensure_engine defaults to refusing a stopped host engine; since 2026-11-11 a member's own tool call (`engine_start_allowed()` in vm.py, set only in VmTools._call) passes `start_desktop=True`, while status reads and the viewer never do, and `engine_notice` says so in one progress line. An explicit start_docker request on computer.viewer_status pins the current local host, reuses DockerDesktop and the 120-second wait, clears temporary engine progress and returns normal status. Windows launches the installed Docker Desktop.exe, macOS opens the installed Docker.app; no shell/elevation, remote launch, install or image maintenance occurs during a status read. Fake tests do not prove native launch or container operation.
+LocalVm.status preserves fixed preflight reasons and the missing-image flag. ensure_engine defaults to refusing a stopped host engine; a member's own tool call (`engine_start_allowed()` in vm.py, set only in VmTools._call) passes `start_desktop=True`, while status reads and the viewer never do, and `engine_notice` says so in one progress line. An explicit start_docker request on computer.viewer_status pins the current local host, reuses DockerDesktop and the 120-second wait, clears temporary engine progress and returns normal status. Windows launches the installed Docker Desktop.exe, macOS opens the installed Docker.app; no shell/elevation, remote launch, install or image maintenance occurs during a status read. Fake tests do not prove native launch or container operation.
 
-## Calm conversation projection (owner, 2026-11-05)
+## Calm conversation projection
 
 conversation.ts owns calendar-day dividers; timeline.ts owns inline routine origins, reply actions and collapsed work receipts. The page retains latest-failure visibility as a render dependency. Find opens existing work detail and preserves its state. CliLoop emits one terminal reply, while Driver and Failure carry bounded, redacted stderr diagnostics into the existing foreground/background turn detail. Premature completion uses cli_stopped with the existing retry policy; real connection errors retain network guidance. No RPC, schema, worker, provider or model-loop boundary is added (A-01/03/04/06/08). See R-UI-101 and R-CLI-07.
 
 
-## Signed updates, owner imports and streamed composer files (2026-11-05)
+## Signed updates, owner imports and streamed composer files
 
 The updater feed is https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json.
 Release builds require GITHUB_REPOSITORY=Jheng-Kai/Raphael and publication pins GH_REPO to
@@ -172,7 +172,7 @@ installed-version receipt. A native timer contacts releases only while opted in;
 roster read and Windows idle time gate installation. Native installation/rollback acceptance
 remains separate from fake-feed tests.
 
-The owner memory import was removed on 2026-11-08. Moving to another PC means keeping
+There is no owner memory import. Moving to another PC means keeping
 Raphael's data folder. The existing MemoryFile.apply writer remains shared by normal
 memory edits and growth; there is no separate owner-import RPC or model authority.
 
@@ -181,7 +181,7 @@ then atomically publishes an opaque ID. Both conversation and room admissions re
 IDs through AttachmentStore, using a read-only memory map. Existing readers keep their budgets;
 Office and ffmpeg read stored paths without whole-file copies. `attachment_source` resolves an ID
 through the core (`attachments.path`, which also names the stored type) before granting that exact
-file to the app's own media protocol, `raphael-media` (media_protocol.rs, 2026-11-15, R-MEDIA-03).
+file to the app's own media protocol, `raphael-media` (media_protocol.rs, R-MEDIA-03).
 The protocol answers only the main window, only an ID granted in this run, only raster pictures,
 video and audio, under the stable URL `/<id>` with `Cache-Control: private, max-age=31536000,
 immutable`, the ID as ETag, nosniff and byte ranges of at most 2 MiB: a stored ID names its bytes
@@ -194,7 +194,7 @@ recursive filesystem scope is accepted (A-06/10/11).
 Every stored video and sound plays in the app's own player (media-player.ts, R-MEDIA-01), bound by
 attachment-media.ts on each thread draw; its full screen is the lightbox (media-lightbox.ts).
 
-## Smooth member computers (2026-11-05)
+## Smooth member computers
 
 VmTools owns run_steps in the existing curated catalog; each subcall re-enters
 the same ToolGate.call_plugin, lease, action and audit boundary. The shared
@@ -217,7 +217,7 @@ Member deletion's optional computer cleanup pins host identity and excludes team
 storage. Lifecycle/image changes preserve workspace mounts; native speed work
 uses a random isolated root and exact target cleanup, never a recovery scan.
 
-## Commands, routine admission and owner delivery (2026-11-05)
+## Commands, routine admission and owner delivery
 
 shortcuts.ts resolves guarded keyboard intent and renders the existing ui.ts
 popover; members-shell, sidebar and the conversation page keep routing ownership.
@@ -234,7 +234,7 @@ not add a writer, model loop, worker, grant, migration or filesystem side effect
 (A-01/03/04). Host and member-computer destinations stay distinct. Actual native
 keyboard and model delivery acceptance are deferred by the unit brief.
 
-## Owner management registry (2026-11-05)
+## Owner management registry
 
 core/src/raphael_core/management.py holds owner UI actions, exact RPC/service names, schemas,
 destructiveness and tiers, plus owner-only reasons and explicit read/interaction
@@ -248,13 +248,13 @@ connect_app/request_secret cards, room_post, ask_member and handoff remain share
 Firm destructive confirmation is evaluated by ToolGate/ToolRegistry even under
 bypass and cannot be waived by Always. MembersService also requires the exact
 consumed Approval and refuses replay. T3 cards carry the full scope in words and are
-answered by one press (2026-11-11); the administrative changes of one turn that need a yes (the
+answered by one press; the administrative changes of one turn that need a yes (the
 ones that cannot be undone, and any other that the mode or a rule asks about) are held
 until the turn is in and asked as one `management_batch` card, without a timer in the conversation (R-AG-MGMT-04), whose single yes covers
 exactly its listed changes (`Approval.covering`, one part each). A trusted origin-turn context prevents a requested history deletion
 from cancelling its own executing tool; completion writes a fresh receipt.
 
-## Bounded transcript rendering and incremental history (2026-11-05)
+## Bounded transcript rendering and incremental history
 
 TranscriptWindow owns the shared private/room mount range: newest 25 turns,
 20-turn expansion within 300px of a sentinel, and at most 100 mounted turns.
@@ -273,9 +273,9 @@ Slime transitions retain JS pose clocks, avoid computed-style reads and defer
 invisible strips. Parsed cel templates use a bounded 16-entry LRU; mounted clones
 keep independent phase and colour. Mount timestamps are not content identity.
 
-## Meeting speech and private work lanes (2026-11-04)
+## Meeting speech and private work lanes
 
-Owner follow-up (2026-11-08): explicit meeting exchanges retain meeting=1 and
+Explicit meeting exchanges retain meeting=1 and
 submit one participant at a time from a persisted ordered queue. Each next turn
 reads the current public snapshot; owner corrections re-open the participant
 queue. Ordinary chats retain concurrent snapshot speech. Listener errors retain
@@ -328,7 +328,7 @@ extensions open; executables retain the existing show-in-folder policy.
 This section supersedes older descriptions of sequential speech and room-scope tool work.
 
 
-## A new member's set-up by cards (2026-11-11)
+## A new member's set-up by cards
 
 The greeting turn (`AgentService._greeting_loop`) offers exactly `ask_owner` (an API loop's one tool; a CLI loop's MCP list, with its native tools
 still denied) and parks the card through the ordinary `BackgroundService.park_owner_turn`: the member's words with the card are written as a reply
@@ -339,7 +339,7 @@ That turn is an ordinary interactive turn: `set_my_job`, the connect card (whose
 are the tools it has, and the card after it is parked like any other. A message typed to the member closes the greeting's card like any waiting card (`OwnerQuestions.close_for_message`, unanswered), and the task of a greeting ends there without a set-up. A restart keeps the card (`worker_tasks` continuation) and `AgentService.start` carries on any answer the
 last run did not get to. `agent.history.list` sends each owner question's `created_at_ms`, so a settled card stands among the replies where it was asked.
 
-## Pending owner questions in conversation cards (2026-11-04)
+## Pending owner questions in conversation cards
 
 OwnerQuestions.in_conversation projects only pending ask_owner rows joined to
 their current private conversation/member or room/thread and live task. Existing
@@ -362,7 +362,7 @@ lines name only the app brand plus localized outcome and fields, with a localize
 result label when no app slug is present.
 
 
-## Shared calendar reading and rhythm projection (2026-11-01)
+## Shared calendar reading and rhythm projection
 
 ConnectedCalendar owns the most recent 24 in-memory range readings and attempts, one-minute refresh admission and
 background provider tasks. calendar.changed invalidates the Calendar;
@@ -379,8 +379,8 @@ owns quiet bars and status icons. The calendar's bounded projection emits one rh
 local date. routines.runs and the calendar projection share the SQL projection of unfinished turn status and actual pending owner_questions/worker_questions in live background tasks. Owner questions are confirm; waiting for delegated children alone remains running. No new RPC, Rust allowlist entry, setting or brain
 loop is introduced.
 
-Calendar page instances retain their current date/view until the app closes. The account menu's 行事曆 resumes that instance without a date argument (Home's icon did before 2026-11-12); explicit date/event links keep their navigation semantics. Only view choice is persisted as raphael.calendar.view, guarded and validated with a week default. Grid width determines seven-day layout (fallback below 520px); all-day and timed grids share column templates. The Today navigation group has a scoped R-UI-18 audit exception, without changing other text actions.
-## Member media and datasets (2026-11-01)
+Calendar page instances retain their current date/view until the app closes. The account menu's 行事曆 resumes that instance without a date argument; explicit date/event links keep their navigation semantics. Only view choice is persisted as raphael.calendar.view, guarded and validated with a week default. Grid width determines seven-day layout (fallback below 520px); all-day and timed grids share column templates. The Today navigation group has a scoped R-UI-18 audit exception, without changing other text actions.
+## Member media and datasets
 
 GenerationTools wraps the existing hub for API, authenticated RaphaelMcp and background
 snapshots (A-03/A-04). The single SettingsStore DEFAULTS registry adds image_model and
@@ -407,7 +407,7 @@ attempts OpenAI deletion; remote cancellation and billing are not guaranteed. Da
 work remains under the member VM and explicit rules, installs pinned dependencies
 only on first workspace use, and needs no Docker layer. No new page, RPC or migration.
 
-## Owner demonstration boundary (2026-11-01)
+## Owner demonstration boundary
 
 `computer/teaching.py` binds an owner recording to DesktopViewer's captured target,
 member, conversation and lease. RfbInputGate exposes accepted protocol messages in
@@ -427,7 +427,7 @@ conversation send path. Ordinary skills and routines retain their existing gates
 The single main-window RPC `computer.teach` has a named Rust allowlist entry and
 test; it exposes no raw action-upload or arbitrary capture endpoint (A-03/06/10/11).
 
-## Connected-app event routines (2026-11-01)
+## Connected-app event routines
 
 Migration 49 extends routines with a mutually exclusive when specification and
 poll state, plus routine_receipts for baseline ids and pending/fired receipts.
@@ -446,9 +446,9 @@ core/tests/brain/test_db.py and the existing member/routine suites.
 Offline tests and fixture scenes do not prove real provider result shapes, remote
 pagination completeness, native persistence or live model choices.
 
-## Owner-PC command boundary (2026-11-01, narrowed 2026-11-13)
+## Owner-PC command boundary
 
-Since 2026-11-13 (R-PC-01) the owner's PC is in reach of a quick question alone. The one switch is
+The owner's PC is in reach of a quick question alone (R-PC-01). The one switch is
 `take_snapshot(owner_pc=...)`, set from `AgentService._owner_pc(ask)` (`ask.quick`, not nested): without it no
 snapshot lists, finds or refreshes into `local__local_exec`, `local__local_job`, the harness `computer` tool or a fixed
 command, so API turns, the CLI MCP server, rooms, exchanges, phone messages, tasks and routines have none in any permission
@@ -479,8 +479,8 @@ The local setting is independent of the sandbox computer and the global tool
 mode. Always does not bypass explicit command approval for dangerous patterns,
 opaque scripts/subscription CLIs or a turn that consumed outside content. Secret
 store patterns refuse even an explicit approval. Patterns are best effort, not a
-shell sandbox. Hermes patterns are adapted offline from c419cf7c under MIT with
-the notice and license retained. The exact command is persisted only in its card;
+shell sandbox. The pattern definitions are adapted offline from another open-source project under its licence, with
+the notice and licence kept in `core/packaging/licenses/NOTICES.md`. The exact command is persisted only in its card;
 public progress and audit retain operation metadata only. Driver discovery removes
 session from offered and validation schemas and rejects runtime session injection.
 
@@ -489,7 +489,7 @@ approval/resume, scoped jobs, cancellation, environment filtering and harmless
 read-only PowerShell. Docker, native shell, real subscriptions and live model tool
 selection remain separate acceptance boundaries.
 
-## ChatGPT plan provider (backend, 2026-10-30)
+## ChatGPT plan provider (backend)
 
 `@chatgpt:<slug>` resolves through ProviderRegistry to the public Responses API.
 It uses the same NarratedLoop, worker loop, production tool definitions and gates
@@ -543,7 +543,7 @@ mechanical boundaries below.
 | ID | Invariant | Check | Evidence |
 | --- | --- | --- | --- |
 | A-01 | Member turns use AgentService rather than a second model loop in members or rooms. | pytest | core/tests/architecture/test_boundaries.py::test_members_and_rooms_do_not_create_brain_loops |
-| A-02 | Work tools and app management tools are offered to every speaker alike in the owner's private conversation, Raphael and each member (owner, 2026-11-08: every member has the same abilities), found through `find_tools` and called through `use_tool` (the request never changes the fixed tool list, owner 2026-11-09 decision 2), and checked again where they run; destructive actions keep the owner's yes card, and groups, colleague exchanges and nested requests never gain management through it. | pytest | core/tests/architecture/test_boundaries.py::test_every_owner_private_speaker_has_the_same_management_and_work_tools |
+| A-02 | Work tools and app management tools are offered to every speaker alike in the owner's private conversation, Raphael and each member (every member has the same abilities), found through `find_tools` and called through `use_tool` (the request never changes the fixed tool list), and checked again where they run; destructive actions keep the owner's yes card, and groups, colleague exchanges and nested requests never gain management through it. | pytest | core/tests/architecture/test_boundaries.py::test_every_owner_private_speaker_has_the_same_management_and_work_tools |
 | A-03 | API and CLI conversation paths consume the shared production snapshot; live evaluation uses those loops and definitions. | pytest | core/tests/architecture/test_boundaries.py::test_shared_loop_and_definition_sources |
 | A-04 | CLI conversations use one authenticated RaphaelMcp implementation; no alternate MCP server in agent CLI or evaluation. | pytest | core/tests/architecture/test_boundaries.py::test_one_mcp_server |
 | A-05 | Secrets use the OS credential store; only hosted evaluator CI can read its ephemeral Actions key, and failures never report credential values. | pytest | core/tests/architecture/test_boundaries.py::test_evaluator_credentials_are_ci_scoped; core/tests/brain/test_openrouter.py::test_a_key_provider_failure_is_logged_by_exception_type_only; core/tests/evaluate/test_guardian.py::test_provider_error_is_classified_without_secret_text |
@@ -557,7 +557,7 @@ mechanical boundaries below.
 | A-13 | Every mechanical architecture and product rule links an existing executable test. | vitest | app/src/architecture.test.ts::mechanical rules link existing named tests |
 | A-14 | Native notifications retain their main/overlay channel contracts and behavior. | human | Native notification journeys |
 
-## Long team work (2026-10-31)
+## Long team work
 
 A background task has no clock: it works until it is done, the owner stops it, it stalls (no model
 reply and no tool returns for `RunLimits.seconds`) or it reaches a ceiling (1000 model calls, 2000 tool
@@ -572,15 +572,15 @@ screen by turns (`computer.vm_tools`): a bounded wait with one progress line, th
 who holds it; commands never take the screen. Assigned work (`handoff`) survives the owner
 speaking in a room; only the owner's stop ends it.
 
-Nothing counts how many ways a turn or a task may try (R-PERSIST-01 to 08, 2026-11-14). A failed call
+Nothing counts how many ways a turn or a task may try (R-PERSIST-01 to 08). A failed call
 reaches every brain through one text (`worker.loop.failure_text`): refused only for the owner's and
 the safety rules' decisions, otherwise its own cause and that another way may work. A turn about to end
 on a failed call is sent one note of what failed and what it has not called (`failures.failure_ledger`;
 twice in a background run, with each tool's first failure for a CLI brain); the guardrails stay the
 only thing that ends a task nobody is in. A failed page read is read once more by the next reader the
-owner set up (`ServiceHub.read`): a service, never a model, and never one he did not set up.
+owner set up (`ServiceHub.read`): a service, never a model, and never one the owner did not set up.
 
-## Shared cancellation boundary (owner round 3)
+## Shared cancellation boundary
 
 Main, room and desktop surfaces register visible task targets with the same
 `src/shared/cancel-gesture.ts` document controller. It owns arming, localization,
@@ -598,19 +598,19 @@ it does not create another store or window. Deletion invalidation travels throug
 existing UI events before reloading selected objects. See the conversation,
 dictation, team/rooms and automations feature entries for executable journeys.
 
-## Recording release and launch policy (owner round 4)
+## Recording release and launch policy
 
 The recording composer's Stop uses the existing agentVoice down/up native path.
 It is excluded from generic task cancellation; task repaint preserves the voice
 flyer. Escape alone uses cancelSession and the shared two-press gesture.
 First and single-instance manual launches share first_run::opens_at_start(args);
 only explicit --autostart stays hidden. Every launch opens at the designed 1280x800,
-centred; window-state restores nothing (owner, 2026-10-30). Conversation content never depends on profile_ready.
+centred; window-state restores nothing. Conversation content never depends on profile_ready.
 
 
-## Member memory as living files (2026-10-31, supersedes the notes of phase 2)
+## Member memory as living files
 
-`memory/store.py` is one `MemoryFile` per file, adapted from Hermes: `bots/<id>/MEMORY.md`
+`memory/store.py` is one `MemoryFile` per file: `bots/<id>/MEMORY.md`
 for each member (Raphael too) and one `shared/USER.md`. `bots/<id>/SOUL.md` is written by
 the core from the member's details, which stay in the database (the details pane is its
 editor, many consumers read it), and no member may write it. A file is entries separated
@@ -620,7 +620,7 @@ and keeps the revision journal outside the homes. `memory/growth.py` holds the o
 `memory_update` tool (API and CLI consume one definition registry, A-03/A-04), the daily
 logs and silent, permission-scoped ephemeral FTS5 retrieval over logs and turns.
 `MemoryService.snapshot` is what a turn reads, once, at its start, and it comes with the
-turn's message for every brain (2026-11-10, see "Prompt prefixes a provider can cache"): an
+turn's message for every brain (see "Prompt prefixes a provider can cache"): an
 API brain's system prompt holds the memory's rules alone, and a CLI's session gets the files
 whole at first and then their edits. `memory/brain.py` runs the reflection pass, the consolidation and folding on
 the selected member brain; CLI uses the production CliLoop with no tools and a separate
@@ -631,12 +631,12 @@ read outside content writes only marked entries, and the reflection pass reads o
 owner's words of such a turn. Reads never call notification or mutation paths (A-01).
 
 
-## Prompt prefixes a provider can cache (2026-11-10)
+## Prompt prefixes a provider can cache
 
 A provider reads a request from its cache only as far as it begins like an earlier one:
 tools, then the system prompt, then the messages. One changed byte is paid for again, with
 everything after it. So a system prompt says who the speaker is and how it works, and
-nothing that changes between turns (owner, 2026-11-09). What holds for one turn comes with
+nothing that changes between turns. What holds for one turn comes with
 that turn's message: the memory files and the team as it is now (`build_user_message`'s
 `standing`, after the conversation so far, whose start is so cached as well), who is asking
 (`CONSULTED`), the guidance one request needs (`LEADERSHIP`), and for background work the
@@ -653,7 +653,7 @@ Tests: `core/tests/agent/test_cache_sessions.py`, `core/tests/background/test_ta
 bills: the hit rate is read from the usage ledger after real turns.
 
 
-## Growing skills (phase 3, 2026-10-29)
+## Growing skills
 
 members/skills.py extends the existing MemberCapabilities store, BotHomes journals and
 skills.json state. SQLite keeps skill identity/source/enable metadata; the core-only mirror
@@ -668,7 +668,7 @@ three-failure bounds. This introduces no second conversation loop, settings regi
 RPC boundary. API harness and RaphaelMcp share agent/team.py definitions and guarded
 execution (A-01/A-03/A-04); native CLI memory remains disabled; assigned native skills follow Shared installed skills below.
 
-## Single sidebar (owner decision 2026-10-30)
+## Single sidebar
 
 `main.ts` mounts the agent-owned member column once in `sidebar.ts`, outside the
 page container. Dictation, calendar and conversations share that one DOM
@@ -680,7 +680,7 @@ the current roster without duplicating members or a conversation loop.
 Owner identity uses existing `owner_name`/`owner_photo` settings, the shared avatar
 picker/cropper and bounded image conversion. Sidebar footer and outgoing messages
 consume `owner-avatar.ts`. Settings > Connections is the sole connected-app entry.
-The account menu's 行事曆 is the full calendar entry (Home's mini calendar was before 2026-11-12). Migration 44 adds room pin,
+The account menu's 行事曆 is the full calendar entry. Migration 44 adds room pin,
 hide and read-message position to the existing rooms table; `rooms.list` resolves
 previews/unread from the same visible messages, while `rooms.update` saves actions.
 The mock IPC boundary projects those same summary fields from fixture messages.
@@ -697,12 +697,12 @@ projection retains the bounded seven-day preview and adds compact month date mar
 and connected events. Horizontal wheel/touch navigation uses a finite 160ms slide
 and respects reduced motion.
 
-## The app's own calendar (owner, 2026-10-31)
+## The app's own calendar
 
 `own_calendar.py` holds the one thing in the app that can be changed by hand: one-time
 events in the `calendar_events` table, a timed one as two instants and an all-day one as
 two local dates. The window's `calendar.*` RPCs and the `calendar_*` tools share its one
-check. `home.overview` stays the sole projection for the Calendar page (Home, its other reader, was removed on 2026-11-12, and with it the model-written daily line, the health check, the charts and the allowance, spend, dictation and status figures), and adds
+check. `home.overview` stays the sole projection for the Calendar page (Home, its other reader, is gone, and with it the model-written daily line, the health check, the charts and the allowance, spend, dictation and status figures), and adds
 own events to what it computes; `HomeOverview.between` serves a member's `calendar_list`
 from the same sources. Tools are offered on every path through `take_snapshot`; the API
 and CLI turns reach them through `_harness_call`, a background task through
@@ -718,9 +718,9 @@ six rows prevent month-to-month height changes. A compact date changes page-loca
 selection; full-grid dates and all event links navigate through the existing app.go
 CalendarDate/CalendarEventFocus boundary. Calendar highlights the requested item.
 
-## Computer host transport (2026-11-01)
+## Computer host transport
 
-Layer 6 (2026-11-12, R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01):
+Layer 6 (R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01):
 image `driver-0.37.0-v6`. Three things changed in the image and one in the core, and layer 5
 joined 3 and 4 as a shape `known_previous` recognises (one screen that says its count,
 3 GiB), so every released computer rebuilds on its next start and keeps its workspace.
@@ -730,7 +730,7 @@ owner's JPEG when there is one; the session's `prepare-desktop` no longer starts
 watcher, and the image carries `librsvg2-common` so the town's SVG is drawn (its build
 checks for the loader). What was started is remembered per computer together with the
 picture's time and size, and forgotten when the computer stops or is restarted.
-Since 2026-11-14 (R-UI-92) the default picture is two JPEGs, `day.jpg` and `night.jpg`, and
+The default picture (R-UI-92) is two JPEGs, `day.jpg` and `night.jpg`, and
 the watcher that chooses between them by the hour comes with them from
 `core/src/raphael_core/computer/wallpaper/`, outside the image's build context: what the build
 copies (`image/desktop/` with the town's files) stays as layer 11 built it, so a PC that built
@@ -743,7 +743,7 @@ socket every two seconds without starting a process; a server that is gone takes
 mark away for one screen as for six, and the 20-poll restart described below brings the
 computer back. In the core, `record_repair` only counts: nothing announces a repair.
 
-Stage A (2026-11-11, R-COMP-SCREEN-01): image `driver-0.37.0-v5`, layer 5,
+Stage A (R-COMP-SCREEN-01): image `driver-0.37.0-v5`, layer 5,
 adds the standalone stdlib `image/desktop/screens.py` supervisor helper. It waits
 for X, disables XFCE display prompts, authenticates to main VNC using pure Python
 DES, and creates 1..6 real outputs through RFB ExtendedDesktopSize. A 1x1 update
@@ -791,7 +791,7 @@ treat such a computer as this owner's own before it has ever been upgraded (dele
 data needs neither the new image nor a start). Both existing target modes remain 1/1; member assignment,
 leases, browser behavior and the default mode are outside this stage. Offline
 tests do not prove actual TigerVNC, XFCE, websockify or container readiness: the
-container acceptance of 2026-11-12 is recorded in the member-computer feature file.
+container acceptance run is recorded in the member-computer feature file.
 The image also carries `wmctrl`, for placing a member's window on its own screen
 in the later stages (Chromium opens each new window beside its first).
 
@@ -822,7 +822,7 @@ computers skip idle sweep and local capacity limits. Native journey teardown
 removes its own container by exact target after validation, retaining workspace.
 
 
-## Durable owner input (2026-11-01)
+## Durable owner input
 
 OwnerQuestions stores nonsecret question/card references and a conditional final answer.
 Its partial unique index permits only one unanswered question per worker task. The
@@ -849,7 +849,7 @@ API and CLI/MCP conversation questions transfer the same turn to this worker rat
 than retaining a CLI process. All question states reuse the conversation card component.
 
 
-## CLI recovery after recorded work (2026-11-01)
+## CLI recovery after recorded work
 
 `agent/cli/loop.py` remains the single CLI engine used by AgentService and
 `background/cli.py`. A loop retains its latest native session even for turns that
@@ -865,12 +865,12 @@ Post-action recovery uses the existing RETRY_WAITS and PATIENT_WAITS once each,
 with shared jitter and provider cooldown handling. This is finite (eight attempts
 at current defaults), unlike the API loop's indefinite patient tail. Before any
 action, existing private/background quick waits and the explicit no-retry option
-remain in force. Child EOF/incomplete reads use cli_stopped while retaining the same bounded retry admission (owner, 2026-11-05); protocol
+remain in force. Child EOF/incomplete reads use cli_stopped while retaining the same bounded retry admission; protocol
 errors remain terminal. Each post-action wait is localized progress. Permanent
 failures and cancellation stop on the same model and billing source. Terminal
 summaries expose counts/status only; exact receipts stay out of public events.
 
-Post-action means acted (R-CLI-08, 2026-11-11): a call that succeeded and was not a read, told
+Post-action means acted (R-CLI-08): a call that succeeded and was not a read, told
 by the signal the conversation already keeps (`ask.made`, from `gate.reads_only` and tier T0; a
 task's `TaskRun.acted`), or a command or file change the CLI started that no MCP receipt
 accounts for. A turn that only read takes the quick waits. A private CLI turn passes `stall_s`
@@ -882,7 +882,7 @@ is their watchdog. `Driver._read` gives up after 3 h in any case.
 No RPC, Rust allowlist entry, migration, new worker, settings or frontend is added.
 Tests use generic fake CLI subprocesses and the existing authenticated MCP/gates.
 Real CLI subscription/service recovery and native UX require separate acceptance.
-## Group discussion contract (2026-11-01)
+## Group discussion contract
 
 Room roles are metadata, never a scheduled speaking plan. API, CLI and background
 tool definitions and roster prompts follow R-AG-02: everyone reads every message
@@ -892,7 +892,7 @@ addresses, rounds or automatic conclusion. Concrete assigned work retains the
 shared handoff gate and completed-work report path. Legacy meeting columns remain
 in SQLite for compatibility and confer no tool or speaking restriction.
 
-## Conversation connection proposals (2026-11-01)
+## Conversation connection proposals
 
 integrations/proposals.py owns the editable proposal state in migration 53 (52 is reserved by another worktree). It validates public fields through integrations/config.py, stores secret names only, tests through the existing McpConnector, enables through IntegrationsService and resumes the original turn through AgentService. SecretCards may defer task resumption until the proposal is enabled. Revision plus tested configuration/tool digests reject stale confirmation. The existing connector RPC wrapper supplies locks and redacted errors for managed app mutations.
 
@@ -902,7 +902,7 @@ After a CLI tool result changes the offer, the existing catalog-change restart c
 
 Migration 52 installs login cards and computer_logins before migration 53 installs connection_proposals; schema contracts include both. No live, provider or native acceptance is implied by fixture evidence.
 
-## Moving routine triggers (2026-11-01)
+## Moving routine triggers
 
 Schedule JSON extends the existing registry with monthly day and every minutes, without rewriting routines. The Calendar retains R-CAL-03 rhythm projection; the bounded month projection now covers the five-minute minimum. MembersService advances skipped schedule slots while its existing TaskStore says that same routine has queued/running/waiting work.
 
@@ -916,7 +916,7 @@ Suggested routine cards also consume routineSentenceHTML. Generated webhook cred
 
 Review 3 cold-catalogue correction: ConnectorsService.ensure_tools uses the existing _load_tools and _tool_catalog, with a toolkit lock to share concurrent initial loads. EventPoller.read is shared by pick and poll: for a managed Composio entry it ensures the catalogue before the ordinary _tool classification and gated call, all under one wait_for deadline. Non-Composio reads skip catalogue loading. Load exceptions reach the existing transient poll backoff; only a completed preflight refusal returns None and takes the existing stop path. No new read policy, calendar exception, RPC, migration or stored routine field is introduced.
 
-## Responsive computer boundary (2026-11-04)
+## Responsive computer boundary
 
 computer/vm.py owns the 45-second ready-target confirmation and invalidates it
 against lifecycle/host/timezone changes and observed failures. The hot path never
@@ -944,7 +944,7 @@ used idle computer; active and owner-held computers remain protected.
 Offline tests establish contracts, not container latency or driver compatibility.
 
 
-## Shared installed skills (2026-11-04)
+## Shared installed skills
 
 MemberCapabilities remains the one skill/command store. skill_library.py adds
 bounded local snapshots and internal shared scope to that same store; SkillHomes
@@ -970,7 +970,7 @@ skill input and enabled path configuration. API and background skill scripts use
 the existing local command gate. Import itself never executes code. Offline fake
 protocols and synthetic file tests are not live or installed-CLI acceptance.
 
-## Shared speaker capabilities and private self-work (2026-11-04)
+## Shared speaker capabilities and private self-work
 
 agent/capabilities.py owns the shared capability statement and the reasoned exception
 registry. Persona builders consume it for API, CLI and workers; the real production
@@ -991,7 +991,7 @@ panel uses the same switch and words for all members. Worker reports share the m
 text contract; the existing fit_text projection derives the quick overlay caption.
 
 
-## Routine test and saved timezone boundary (2026-11-05)
+## Routine test and saved timezone boundary
 
 The explicit main-window `routines.run` allowlist entry calls MembersService._run
 with manual admission; it shares the existing background worker, routine_runs,
@@ -1013,7 +1013,7 @@ vault key via constant-time Bearer comparison as well as HMAC. Recipes describe
 user-managed HTTPS forwarding and provider payload fields without provisioning
 cloud infrastructure or storing a second provider credential.
 
-## Plugin sets and marketplaces (2026-11-04)
+## Plugin sets and marketplaces
 
 Migration 62 adds skill_sets/skill_marketplaces and component ownership columns to
 member_skills; rooms 60 and grants 61 remain unchanged. skill_plugins.py owns
@@ -1046,7 +1046,7 @@ and learned date line; skillSourceLabel removes transport prefixes and collapses
 plugin cache paths to name/version. Stored source identifiers remain unchanged.
 
 
-## Colleague recipes, accounts and tunnel probes (2026-11-05)
+## Colleague recipes, accounts and tunnel probes
 
 MembersService owns the main-window-only members.template RPC. The allowlisted recipe codec never reads memory, credentials, pictures or model settings; it validates bounded data before mutations. MemberCapabilities remains the skill writer and MemberStore remains the routine writer. Import grants no app tools and schedules no runs. Existing member creation, AgentHistory greetings, ownerQuestionHTML and the existing sendFromPage composer path supply the local greeting form; NEW_MEMBER_STEP stays next to the owner input. There is no second model loop (A-01/03/04/11).
 
@@ -1061,7 +1061,7 @@ The existing routines.webhook RPC accepts an owner-requested URL probe. PageFetc
 The main-window-only pick_output_folder and member_template_file shell commands reuse tauri_plugin_dialog. No webview-supplied path is accepted; recipe files are bounded text (UTF-8 or UTF-16, with or without a byte-order mark) and filtered to .raphael-member. The installer gives .raphael-member files to Raphael (bundle.fileAssociations): template_file.rs reads the file a launch or the single-instance handover names, keeps its text, and the main window takes it once through member_template_pending (the TemplateFile event only nudges it) to show the import review; show_template_export reveals a prepared publish folder by its 16-character id, which the core resolves (members.template, action folder). Native dialog and installed file-opening acceptance remain separate from IPC fixtures (A-06/10).
 
 
-## Signed member store (2026-11-05)
+## Signed member store
 
 members.template retains the sole owner-window RPC and raphael-member v1 codec.
 members/member_catalog.py owns bounded catalogue HTTP, Ed25519, sequence/revocation
@@ -1076,7 +1076,7 @@ No new RPC, migration, settings registry, worker or brain loop (A-01/05/06/08/10
 catalog-template/ holds the future public repository's schema/scan/signing CI;
 PRs never receive the signing secret. Production trust roots require owner setup.
 
-## Shared owner vault (2026-11-05)
+## Shared owner vault
 
 VaultEntries extends LoginVault at the existing Windows Credential Manager
 boundary. Migration 63 adds nonsecret metadata/member grants and a durable payment
@@ -1098,7 +1098,7 @@ a single-use token and ten-minute expiry; no source path/copy is retained. The
 metadata preview is separate from private import candidates. Core RPC failures
 return fixed field identifiers and counts, never secret-bearing exception text.
 
-## Desktop security review (2026-11-05)
+## Desktop security review
 
 AttachmentStore.open_path is the authoritative native file-association boundary for
 open_attachment and attachment_source. Its reviewed extension allowlist does not
@@ -1134,7 +1134,7 @@ provider loop is introduced (A-01/03/04/06). Voice transcription leaves page dra
 unsent, and an expanded page closes back to the focused composer on placement.
 
 
-## Offline storage security review (2026-11-05)
+## Offline storage security review
 
 paths.local_storage_root keeps the lexical identity of local roots instead of accepting a
 new trust root after resolve. LocalVm validates mounts on cached and fresh starts and again
@@ -1154,7 +1154,7 @@ TaskStore also uses paths.local_storage_root for artifact receipt admission, com
 and opening. MAX_ARTIFACT_BYTES shares the existing 50 MiB opening budget across
 all three paths before hashing bytes; no additional evidence store is introduced.
 
-## Approved native and persistent security boundaries (2026-11-05 follow-up 1)
+## Approved native and persistent security boundaries
 
 RemoteSession owns one SSH local Unix socket and its private temporary directory. The
 owner-only ACL is applied before SSH starts; Docker CLI probes endpoint support, and
@@ -1177,7 +1177,7 @@ mtime and digest in a local ledger; only unchanged tracked versions beyond five 
 source are removed. Existing untracked copies and revision/undo journals are retained.
 Shell/browser privilege separation remains a separate hardening unit (D03 in report).
 
-First start-up (2026-11-11, owner: 「第一次開 app 的速度還是非常慢，就只有第一次而已」). The core is spawned
+First start-up. The core is spawned
 before any window (lib.rs); the windows are created and shown without waiting for it, and the window's calls queue
 in the core's pipe until `core.hello` is answered. `__main__` starts a thread that imports the speech libraries
 while the main thread imports the application and builds it, and joins that thread before the stdin reader starts
@@ -1191,7 +1191,7 @@ telling the window with `providers.changed`. Members carry pictures by revision:
 `avatar_url` and `cover.url` into every members answer, so pages read the same fields as before. The shell's
 `members.picture` is in the main window's method list (commands.rs).
 
-A member's computer needs no grant (2026-11-11, R-COMP-ACCESS-01). `computer/grants.py`, `request_computer`, the grant card, the panel's take-back button and `computer.revoke` are gone;
+A member's computer needs no grant (R-COMP-ACCESS-01). `computer/grants.py`, `request_computer`, the grant card, the panel's take-back button and `computer.revoke` are gone;
 `VmTools.offered_for` offers every member its computer's tools whenever computer tools are on and a catalog exists for its target, and `LocalVm.full_permission()` (the 全部允許 mode) is all
 that is left of the old check, for the checkpoint restore's confirmation. The table `computer_grants` (migration 45) stays in the schema, unread and unwritten, with its member-delete trigger.
-The computer lives in the member panel's third tab only (R-PANEL-06, owner 2026-11-14): the Details tab has no computer row, so the viewer publishes nothing to it and streams only for the Computer tab, the larger view and a conversation card.
+The computer lives in the member panel's third tab only (R-PANEL-06): the Details tab has no computer row, so the viewer publishes nothing to it and streams only for the Computer tab, the larger view and a conversation card.

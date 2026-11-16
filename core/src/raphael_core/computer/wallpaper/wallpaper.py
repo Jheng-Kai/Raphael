@@ -1,6 +1,6 @@
 """The desktop's picture in a computer: the owner's own when there is one, else the default picture for the hour.
 
-The default is two original abstract pictures (owner, 2026-11-14), the light one by day (06:00 to 17:59) and the dark
+The default is two original abstract pictures, the light one by day (06:00 to 17:59) and the dark
 one by night (18:00 to 05:59), by the computer's own clock: it runs with TZ set to the owner's zone
 (vm.refresh_timezone). The app's preview shows the same picture at the same hours (desktop-viewer.ts).
 

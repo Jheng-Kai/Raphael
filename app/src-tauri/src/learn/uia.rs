@@ -42,8 +42,8 @@ use crate::paste::Target;
 
 const MAX_CHARS: usize = 20_000;
 /// How many levels above the focused field the walk to the target window may go. A web page nests
-/// its fields deep: the composer of Claude's desktop app stood 36 levels below its window
-/// (measured 2026-11-14), and a limit of 32 stopped every watch there before it began.
+/// its fields deep: the composer of Claude's desktop app stood 36 levels below its window,
+/// and a limit of 32 stopped every watch there before it began.
 const MAX_ANCESTORS: usize = 128;
 // Twice the depth measured in Claude's desktop app, at the least.
 const _: () = assert!(MAX_ANCESTORS > 36 * 2);

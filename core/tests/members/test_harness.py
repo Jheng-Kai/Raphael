@@ -51,7 +51,7 @@ async def test_ten_local_tool_calls_are_persisted_for_skill_review(setup, client
 
 async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_routine(setup, client, monkeypatch):
     rig, team = setup
-    teacher = member(team, name="紫苑", tools=[])
+    teacher = member(team, name="小葵", tools=[])
 
     async def search(*args):
         return ToolResult("web_search", True, {"text": "NHK https://news.example/article"})

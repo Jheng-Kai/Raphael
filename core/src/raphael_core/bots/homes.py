@@ -5,7 +5,6 @@ the member's details, MEMORY.md, its skills and its daily logs. The owner's prof
 every member, `shared/USER.md`. Skill metadata and the revision journal live outside the writable tree.
 Migration is resumable: copy every file before removing any verified source file.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import hashlib

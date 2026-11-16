@@ -27,8 +27,8 @@ PY
     ) || origin="0 0"
     left=${origin% *} top=${origin#* }
     # The screen's own window of the browser, minimized or not (the oldest, as the core takes it). The Browser icon is a
-    # dock's: it brings that window back with a new tab, and makes a window only when the screen has none (owner,
-    # 2026-11-14: he minimized his member's browser, pressed the icon, and got a second, empty window, not his page).
+    # dock's: it brings that window back with a new tab, and makes a window only when the screen has none (pressing the icon after a minimize
+    # used to open a second, empty window instead of the page).
     window=$(wmctrl -lG | awk -v left="$left" -v top="$top" '
         {x = $3 + $5 / 2; y = $4 + $6 / 2}
         x >= left && x < left + 1280 && y >= top && y < top + 900 {print $1}' | while read -r id; do

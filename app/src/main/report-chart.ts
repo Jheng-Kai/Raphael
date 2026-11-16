@@ -1,6 +1,6 @@
 // The figures and charts of a report page (core agent/report_page.py `_stats`, `_chart`), drawn in the app's own design.
-// The owner's daily overview (2026-11-14: weather, schedule, investments, projects by status and owner, members, every
-// kind of chart, as clean as Grok Bot's) is one report: tiles of figures with a little line of their recent values, lines
+// A daily overview (weather, schedule, investments, projects by status and owner, members, every
+// kind of chart) is one report: tiles of figures with a little line of their recent values, lines
 // and areas over time, columns side by side or stacked with their totals, bars across, and parts of one whole.
 //
 // Each is drawn from its values alone, at any width: the plot is laid out in percentages and its lines are a stretched SVG
@@ -146,7 +146,7 @@ const lineX = (index: number, count: number): number => (count === 1 ? 0.5 : INS
 /** The value axis: its round steps, as hairlines across the plot and their numbers beside it. */
 function axisHTML(axis: Scale): { y: string; grid: string; width: string } {
   // A large step in its short form (1萬, 2萬); written whole when the short forms would repeat (22,900 to 23,500 all read
-  // 2.3萬 on Raphael's first live overview, 2026-11-14).
+  // 2.3萬 on a live overview).
   const short = axis.steps.map(step => figure(step, true));
   const labels = new Set(short).size === short.length ? short : axis.steps.map(step => figure(step));
   const grid = axis.steps.map(step => `<span class="rc-grid${step === 0 ? " is-zero" : ""}" style="bottom:${pct(axis.at(step))}"></span>`).join("");

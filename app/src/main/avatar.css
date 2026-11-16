@@ -5,7 +5,7 @@
 .av .em-d { display: none; }
 :root[data-theme="dark"] .av .em-l { display: none; }
 :root[data-theme="dark"] .av .em-d { display: block; }
-/* The drawn emblem turns as slowly as the corner's ring while he thinks; a transform only, on the compositor. */
+/* The drawn emblem turns as slowly as the corner's ring while it thinks; a transform only, on the compositor. */
 @media (prefers-reduced-motion: no-preference) {
   .av > img.em-turn { animation: av-turn 60s linear infinite; }
   @keyframes av-turn { to { transform: rotate(360deg); } }

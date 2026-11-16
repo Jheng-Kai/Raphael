@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlparse
 
 
 # What a run is told to use in place of a command: the floor keeps commands and file tools off Raphael's own folders, and
-# the tools meant for what a run needs there read it (owner, 2026-11-11: a routine could not read its page template or the log).
+# the tools meant for what a run needs there read it, so that a routine can read its page template and the log.
 READ_INSTEAD = (" To read a skill's own files (a page template, data) use skill_read with its name and reference; "
                 "to see the app's state, its log and recent failures use self_check.")
 # What the model is told. The owner reads other words (`persona.PHRASES.protected_data`), never this sentence.
@@ -199,7 +199,7 @@ class DataFloor:
         if not hits:
             return None
         # The files the owner attached in a conversation are the owner's own, read by the member the owner gave them to
-        # (owner, 2026-11-14: 「機密資訊鎖得太死了」); credentials and every other file of Raphael's folders stay closed.
+        #; credentials and every other file of Raphael's folders stay closed.
         # (An unquoted match stops at the space of a folder name such as "Raphael Dev": it is that path's own front.)
         named = [self.expand(candidate) for candidate in hits if self.attachment(candidate, cwd)]
         attached = all(self.attachment(candidate, cwd) or any(path.startswith(self.expand(candidate) + " ") for path in named)

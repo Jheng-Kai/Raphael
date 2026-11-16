@@ -1,4 +1,4 @@
-"""The interface language is the window's alone (owner, 2026-11-14): 「我不是說過系統的 UI 語言並不會影響到使用者內部聊天的語言
+"""The interface language is the window's alone: 「我不是說過系統的 UI 語言並不會影響到使用者內部聊天的語言
 嗎？它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」.
 
 No prompt, schema or message a model is sent takes the interface language; what must still be chosen per language for
@@ -103,7 +103,7 @@ async def test_a_reply_to_chinese_words_on_a_japanese_interface_names_no_languag
 
 @pytest.mark.parametrize("interface", ["en", "ja", "zh-TW"])
 def test_raphaels_replayed_lines_lose_the_windows_frame(interface):
-    # His lines are kept as the app shows them, 《prefix。…》 in the interface language; the model reads his words alone.
+    # Its lines are kept as the app shows them, 《prefix。…》 in the interface language; the model reads its words alone.
     from raphael_core.agent.history import Turn
     from raphael_core.memory.conversation import turn_text
     from raphael_core.messaging.words import compose

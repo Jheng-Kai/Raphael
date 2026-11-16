@@ -21,7 +21,7 @@ async def rig(rig):
 
 async def test_export_preview_and_import_keep_only_the_recipe(rig):
     service = rig.service
-    original = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "instructions": "Publish a clear guide", "avatar": "slime:shuna"}))["member"]
+    original = (await rig.call("members.create", {"name": "Writer", "role": "Editor", "instructions": "Publish a clear guide", "avatar": "slime:small-horns-pink"}))["member"]
     identifier = original["id"]
     skill = service.capabilities.keep_recipe(identifier, "---\nname: editing\ndescription: Check clarity\n---\nVerify claims.", {"references/check.md": "Check the source", "scripts/check.py": "print('checked')"})
     service.capabilities.homes.keep(identifier, "MEMORY.md", "PRIVATE-MEMORY")
@@ -70,7 +70,7 @@ def app_connections(rig, monkeypatch):
     connections = [{"id": f"composio:{slug}", "name": name, "enabled": True, "services": [slug]}
                    for slug, name in [("notion", "Notion"), ("github", "GitHub"), ("huggingface", "Hugging Face"),
                                       ("gmail", "Gmail"), ("googlecalendar", "Google Calendar"),
-                                      ("mobbin", "Mobbin MCP"), ("googledrive", "Google Drive")]]
+                                      ("moodboard", "Moodboard MCP"), ("googledrive", "Google Drive")]]
     monkeypatch.setattr(rig.service, "_connections", lambda: connections)
     return connections
 
@@ -132,12 +132,12 @@ async def test_template_matching_does_not_match_word_substrings(rig, app_connect
 
 
 async def test_template_matches_an_app_name_without_its_transport_suffix(rig, monkeypatch):
-    monkeypatch.setattr(rig.service, "_connections", lambda: [{"id": "srv-custom", "name": "Mobbin MCP"}])
+    monkeypatch.setattr(rig.service, "_connections", lambda: [{"id": "srv-custom", "name": "Moodboard MCP"}])
     member = (await rig.call("members.create", {"name": "Designer"}))["member"]["id"]
-    await rig.call("routines.create", {"member_id": member, "title": "Design inspiration", "prompt": "Read Mobbin for inspiration.",
+    await rig.call("routines.create", {"member_id": member, "title": "Design inspiration", "prompt": "Read Moodboard for inspiration.",
                   "schedule": {"kind": "daily", "time": "09:00"}})
     value = (await rig.call("members.template", {"action": "export", "id": member}))["template"]
-    assert value["connections"] == ["Mobbin MCP"]
+    assert value["connections"] == ["Moodboard MCP"]
 
 
 # One recipe holding every field raphael-member v1 has. The front end reads the same file

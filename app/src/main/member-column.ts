@@ -1,5 +1,5 @@
 // The member column puts the primary contact first, followed by member groups and ungrouped members.
-// Raphael keeps his emblem even when the primary contact takes the first conversation slot.
+// Raphael keeps its emblem even when the primary contact takes the first conversation slot.
 //
 // A row's borderless 「more」 that shows under the pointer, or a right click on the row (context-menu.ts), opens the row menu
 // (`memberMenu`); a group header's gives 「重新命名」, 「看的地方」 and 「刪除」. What they do is the host's
@@ -189,7 +189,7 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
   const isPrimary = primary === id;
   const pin: ActionItem = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: member?.pinned ? "pinOff" : "pin" };
   const replace: ActionItem = { id: "primary", label: t("members.sideReplacePrimary"), icon: "swap" };
-  // Raphael is not a member row the owner can edit: pinning is all there is to do to him here, and handing on the primary when it is his.
+  // Raphael is not a member row the owner can edit: pinning is all there is to do to it here, and handing on the primary when it is the primary.
   if (id === 0) return openActions(anchor, isPrimary ? [pin, SEP, replace] : [pin], pick => host.memberAction?.(id, pick));
   const unread: ActionItem = { id: "unread", label: t("members.sideUnread"), icon: "mail" };
   const tail: (ActionItem | typeof SEP)[] = [

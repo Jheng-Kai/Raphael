@@ -1,4 +1,4 @@
-// A routine to read, not to fill in (owner, 2026-11-09: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」): its name,
+// A routine to read, not to fill in: its name,
 // when it runs, who runs it and its instructions in the words they were saved with. A change is asked of the member in its
 // conversation; the switch beside the routine in the list still turns it on or off. A dialog that only shows has no
 // footer: its × closes it.
@@ -11,7 +11,7 @@ import { esc, st } from "./ui";
 export function routineViewHTML(routine: Routine, members: readonly Member[]): string {
   const member = members.find(item => item.id === routine.member_id);
   const status = routine.when || routine.last_error ? routineStatus(routine) : "";
-  // A run that did not work is said as one (owner, 2026-11-11): the view must not look as good as a routine that works.
+  // A run that did not work is said as one: the view must not look as good as a routine that works.
   const failed = !!(routine.last_failed && routine.last_error);
   const part = (label: string, html: string, cls: string): string => `<section class="rv-part ${cls}"><h3>${esc(label)}</h3>${html}</section>`;
   return `<div class="rv">` +

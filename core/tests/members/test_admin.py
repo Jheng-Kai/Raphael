@@ -123,7 +123,7 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
             yield Event("final", "Created COO, PM and RD.")
             return
         assert "COO, PM, RD" in kwargs["user"]
-        # The guidance this request needs rides with its turn; the system prompt stays the same every turn (2026-11-09).
+        # The guidance this request needs rides with its turn; the system prompt stays the same every turn.
         assert "Every member has the same management tools" in kwargs["user"]
         assert "Every member has the same owner-private management tools" in kwargs["system"]
         async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
@@ -456,7 +456,7 @@ def test_every_approval_label_including_target_id_and_schedule_uses_local_punctu
                                   "avatar_preset": "alpha", "source": "repository", "description": "Daily",
                                   "template": "Report {input}", "title": "Report", "prompt": "Review",
                                   "schedule": {"kind": "daily", "time": "09:00"}, "enabled": True}, language, "COO")
-        # The card names its target and shows no ID (owner, 2026-11-11: \u300c\u4e0d\u7528\u9019\u9ebc\u8907\u96dc\u300d).
+        # The card names its target and shows no ID (it is kept simple).
         assert "ID" not in text
         assert ("time: 09:00" if language == "en" else "time\uff1a09:00") in text
         if language != "en":
@@ -540,7 +540,7 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
             "personality": "務實清晰",
             "instructions": "每週整理營運週報",
             "group": "核心團隊",
-            "avatar_preset": "slime:shion",
+            "avatar_preset": "slime:horn-lavender",
         },
         {
             **asked["confirm"]["drafts"][2],
@@ -554,7 +554,7 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
     roster = await rig.call("members.list", {})
     created = roster["members"][1:]
     assert [(m["name"], m["role"], m["blurb"], m["personality"], m["instructions"], m["avatar"]) for m in created] == [
-        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "slime:shion"),
+        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "slime:horn-lavender"),
         ("RD", "研發", "研發簡介", "", "", "slime:color:coral"),
     ]
     assert [g["name"] for g in roster["groups"]] == ["核心團隊"]

@@ -1,5 +1,5 @@
-"""An external or unattended turn is told no language: the owner's words say which (owner, 2026-11-14: 「它的 UI 語言就是
-單純 UI 語言而已，它也不會去到 system prompt」). The interface language stays for the app's own notices."""
+"""An external or unattended turn is told no language: the owner's words say which (the interface
+language is only the interface's: it reaches no system prompt). The interface language stays for the app's own notices."""
 
 import pytest
 

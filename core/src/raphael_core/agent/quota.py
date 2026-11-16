@@ -10,7 +10,7 @@ from ..clock import wall_clock_ms
 
 _LIMIT = re.compile(r"quota|usage.?limit|limit.{0,24}(?:reached|exceeded)|resource_exhausted|out of.{0,10}(?:usage|credits)|hit your limit", re.I)
 
-# A subscription window with this share or less left is nine-tenths used: the owner hears it once (owner, 2026-11-09).
+# A subscription window with this share or less left is nine-tenths used: the owner hears it once.
 WARN_AT_REMAINING = 10
 # A told window read again with this share or more left was reset (a new window, a voucher): its next fall to the last
 # tenth is told again. The gap keeps two sources that round one window differently from telling it twice.
@@ -223,7 +223,7 @@ class Quotas:
 
     def _rearm(self, provider: str, periods: list[str]) -> None:
         """A window read with more than its last tenth left is no longer the one the owner was told about (a reset, a
-        voucher): when it falls to the last tenth again he hears it again."""
+        voucher): when it falls to the last tenth again they hear it again."""
         row = self.conn.execute("SELECT value FROM settings WHERE key = ?", (_WARNED,)).fetchone()
         try:
             told = json.loads(row[0]) if row else {}

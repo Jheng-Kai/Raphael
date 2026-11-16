@@ -1,9 +1,9 @@
 # Raphael feature map
 
-## Designed for everyone, pass 1 (owner, 2026-11-16)
+## Designed for everyone, pass 1
 
-R-COPY-01 to R-COPY-05 and R-DEFAULT-01 to R-DEFAULT-04 (RULES.md, "Designed for everyone"). Words and defaults that only
-made sense for the owner, changed where no control he chose moves: every 「設定 › …」 path names a place Settings has
+R-COPY-01 to R-COPY-05 and R-DEFAULT-01 to R-DEFAULT-04 (RULES.md, "Designed for everyone"). Words and defaults that fit only the first user, changed
+where no control a person chose moves: every 「設定 › …」 path names a place Settings has
 (`settings-paths.test.ts`, which also reads the core and the shell's notices), the OpenRouter key row says whose key it
 is and no longer shows milliseconds, prices are counted in words, a failed connection and a stopped program are told
 without MCP or CLI, a model is named by its catalogue name, 保持喚醒 has its line, and a new person starts with no city,
@@ -13,160 +13,159 @@ usage-owner, usage-key-menu, usage-key-removed, quick-model-menu, model-sync, mo
 missing-search, missing-search-repair, missing-vision, missing-pdf, missing-card, missing-card-repair, missing-provider,
 missing-model-list, automations-calendar, automations-tools-awake, calendar-week-fit, onboarding-tools, onboarding-abilities,
 connect-apps-categories and plugins-store (the store rows check now knows a connected app's 已連結 lives inside its one
-button, owner 2026-11-14), both themes at 1120,720,1920x1080. Not changed, and waiting for the owner: the monthly limit
+button), both themes at 1120,720,1920x1080. Not changed, and open for a decision: the monthly limit
 (it has no field, and `chat-usage-limit` still points at the usage page), the key beside the usage page, the guide's
 first screens, the computer tab's wallpaper and the Composio, Connect Apps and dictation-shortcut entries.
 
-## Delete dialog and the member's colour on switches (2026-11-12)
+## Delete dialog and the member's colour on switches
 
-See [Conversation](conversation.md#the-delete-dialog-is-grok-bots-owner-2026-11-12) for R-UI-146: the one delete
-dialog is Grok Bot's small box (title, one sentence, two equal pill buttons, red 刪除, no × and no lines). See
-[Members](members.md#a-members-colour-on-its-switches-owner-2026-11-12) for R-UI-147: a switch that is on in a
+See [Conversation](conversation.md#the-delete-dialog) for R-UI-146: the one delete
+dialog is a small box (title, one sentence, two equal pill buttons, red 刪除, no × and no lines). See
+[Members](members.md#a-members-colour-on-its-switches) for R-UI-147: a switch that is on in a
 member's panel or settings page wears the member's colour. Selected scenes: the delete scenes listed in both
 sections, member-maker, member-maker-taken, member-panel-details, details, raphael-details, the member-switch
 scenes, member-settings-tools and settings-switch-neutral, both themes at 1120,720,1920x1080.
 
-## Deleting a member removes its computer (2026-11-11)
+## Deleting a member removes its computer
 
-See [Member computer](member-computer.md#deleting-a-member-removes-its-computer-2026-11-11): the delete
-question is Grok Bot's (name, one sentence, Cancel and Delete) and asks nothing about a computer; the core
+See [Member computer](member-computer.md#deleting-a-member-removes-its-computer): the delete
+question is the small box (name, one sentence, Cancel and Delete) and asks nothing about a computer; the core
 removes the computer afterwards in the background and never starts Docker for it. Selected scenes:
 member-delete-ask, member-delete-ask-computer, member-delete, press-through-delete-dialog, room-delete and
 quick-clear-confirm, both themes at 1120,720,1920x1080.
 
-## Subscription quota warning (2026-11-10)
+## Subscription quota warning
 
 See [Usage](usage.md) for R-QUOTA-01: a subscription window with 10% or less left is told once per
 provider, window and reset (core `quota_warned` setting, `MainEvent::QuotaWarning`), as one toast in
 the main window that changes no model. Selected scenes: quota-warning and quota-warning-weekly, both
 themes at 1120,720,1920x1080.
 
-## External-input security boundaries (2026-11-05)
+## External-input security boundaries
 
 See [Agent and external-input security boundaries](security-boundaries.md) for current allowlist checks, bounded messaging/webhook/MCP ingress, nonce-bound tunnel probes, OAuth callback admission and the offline verification limits.
 
-## Member panel tabs (2026-11-05)
+## Member panel tabs
 
-The owner request of 2026-11-05 introduces R-PANEL-01 through R-PANEL-04. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations-2026-11-05) and [Daily work](daily-work.md#work-and-files-in-the-member-panel-2026-11-05) map the affected consumers.
+R-PANEL-01 through R-PANEL-04 cover the member panel. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for Details / Library / Computer navigation, shared file/work controls, truthful local Docker recovery, the selected scene matrix and native/judge limits. [Conversation](conversation.md#member-panel-destinations) and [Daily work](daily-work.md#work-and-files-in-the-member-panel) map the affected consumers.
 
-## App updates and attachment limits (2026-11-05)
+## App updates and attachment limits
 
-See [Settings and appearance](settings-appearance.md#signed-updates-2026-11-05)
-and [Conversation](conversation.md#streaming-composer-files-2026-11-05) for the selected
+See [Settings and appearance](settings-appearance.md#signed-updates)
+and [Conversation](conversation.md#streaming-composer-files) for the selected
 matrix, signed-version requirement and native/dependency acceptance boundaries.
 
-## Settings by purpose (2026-11-05)
+## Settings by purpose
 
-See [Settings and appearance](settings-appearance.md#settings-by-purpose-2026-11-05)
+See [Settings and appearance](settings-appearance.md#settings-by-purpose)
 for moved shared settings, member-owned voice/memory, grouped draft preferences,
 legacy agent links, computer location search and the selected offline UI matrix.
 
-## Commands, routine limits and owner output (2026-11-05)
+## Commands, routine limits and owner output
 
 See [Daily work](daily-work.md) for R-NAV-01, R-ROUTINE-01/02 and R-OUTPUT-01,
 the selected deferred scenes, existing native journeys and remaining native/live
-acceptance. Follow-up 1 authorizes the selected look matrix and image review;
+acceptance. The selected look matrix and image review apply;
 native/live and network-backed judge remain deferred.
 
-## Plugin sets and GitHub marketplaces (2026-11-04)
+## Plugin sets and GitHub marketplaces
 
-See [Members](members.md#plugin-sets-and-github-marketplaces-2026-11-04) for
+See [Members](members.md#plugin-sets-and-github-marketplaces) for
 R-SKILL-06/07: one installed plugin entry, bounded whole-set import/update/removal,
 pinned GitHub marketplace sources, inherited member grants, commands, and explicit
-MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Their Connect apps scenes were retired on 2026-11-07 (connectors only, R-SKILL-05).
+MCP setup cards. Migration 62 follows rooms 60 and shared grants 61. Their Connect apps scenes were retired (connectors only, R-SKILL-05).
 Synthetic HTTP/CLI tests do not establish GitHub, installed-CLI or live acceptance.
 
-## Primary-contact owner management (2026-11-05)
+## Primary-contact owner management
 
 See [Owner management](owner-management.md) for R-AG-MGMT-01 through 03,
 primary-only interactive offers, server authorization, firm destructive cards,
-UI RPC/settings coverage and the selected deferred card scenes. This brief allows
-fake offline core checks only and forbids look, native, network and paid APIs.
+UI RPC/settings coverage and the selected deferred card scenes. Only
+fake offline core checks apply: no look, native, network or paid API.
 
-## Long busy conversations (2026-11-05)
+## Long busy conversations
 
-See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting-2026-11-05) for R-PERF-14 through R-PERF-21, shared private/room window scenes, bounded event reads and the isolated native typing journey. Native latency, selected look and judge evidence remain separate.
+See [Conversation](conversation.md#long-busy-conversations-and-bounded-mounting) for R-PERF-14 through R-PERF-21, shared private/room window scenes, bounded event reads and the isolated native typing journey. Native latency, selected look and judge evidence remain separate.
 
 
-## Shared installed skills (2026-11-04)
+## Shared installed skills
 
-See [Members](members.md#shared-installed-skills-2026-11-04) for R-SKILL-01 through
+See [Members](members.md#shared-installed-skills) for R-SKILL-01 through
 R-SKILL-05, shared/member scope, whole local package import, source refresh,
 one shared package row with member grants in its dialog, readable source labels,
-Raphael command parity and native CLI skill delivery. The Connect apps scenes this history named were retired on 2026-11-07 (R-SKILL-05). The Members
+Raphael command parity and native CLI skill delivery. The Connect apps scenes this history named were retired (R-SKILL-05). The Members
 entry maps actions, IPC outcomes and visual comparisons. Native and live acceptance
 remain separate; judge requires external references and authorized subscription use.
 
-## Meetings and private work (2026-11-04)
+## Meetings and private work
 
-See [Team and rooms](team-and-rooms.md#meetings-and-private-work-2026-11-04)
+See [Team and rooms](team-and-rooms.md#meetings-and-private-work)
 for R-ROOM-01 through R-ROOM-07, concurrent snapshots, private work/report destinations,
 status/decisions/cursors, restart close-out and the selected deferred look scenes.
-The unit brief permits offline verification only and explicitly forbids look/network.
+Verification is offline only: no look and no network.
 
 
-## Responsive member computer (2026-11-04)
+## Responsive member computer
 
-See [Member computer](member-computer.md#responsive-computer-tools-2026-11-04)
+See [Member computer](member-computer.md#responsive-computer-tools)
 for R-COMP-PERF-01 through R-COMP-PERF-06: 45-second preflight confirmation,
 bounded targeted reads, browser_open, resource/image limits, cancellable timed
-reads and the full offline offer. The brief requires fake-only checks and forbids
-Docker, network, look and native, so that unit left the exact Linux 0.37.0 schema
-capture and real container timing unverified. The capture has been made since: from
-2026-11-13 the kept list is the driver's own (R-COMP-DRIVER-02). Timings on real
+reads and the full offline offer. These checks are fake-only (no
+Docker, network, look or native), so they leave real container timing unverified.
+The kept tool list is the driver's own (R-COMP-DRIVER-02). Timings on real
 containers are in [Member computer](member-computer.md).
 
-## Pending questions and readable Composio results (2026-11-04)
+## Pending questions and readable Composio results
 
-See [Conversation](conversation.md#pending-conversation-questions-and-readable-results-2026-11-04)
+See [Conversation](conversation.md#pending-conversation-questions-and-readable-results)
 for R-OWNER-03, R-CARD-09/10, page-independent pending questions, the existing
 bring RPC in private/room scope, one-line permission labels and readable result
 projection. The selected seven new scenes and representative shared consumers
-are listed there. Follow-up 2 authorizes the selected look matrix and visual review; native and
+are listed there. The selected look matrix and visual review apply; native and
 live-provider acceptance remain deferred. Judge requires external references and
 authorized network access.
 
 
-## Startup room recovery (2026-11-04)
+## Startup room recovery
 
 See [Startup rooms](startup-rooms.md) for R-PERF-13, failed first-read recovery,
 subscriber readiness replay, manual first-show protection and the twenty-launch
 native journey. Offline tests do not establish native before/after acceptance;
 the integrator retains normal/slow counts and pre-first-show suspension evidence.
 
-## Delegated work and run endings (2026-11-04)
+## Delegated work and run endings
 
-See [Work truth](work-truth.md) for R-WORK-06 through R-WORK-15: private/exchange history, earlier files, local commands, task recovery, existing room posts, search cooldowns, CLI progress, routine steps and capability inventory. This core-only unit uses offline tests; no UI, native or live-provider acceptance is implied. R-WORK-16 through R-WORK-20 (2026-11-14) add how a member treats what its owner asks (in full, no repeated reservation or disclaimer, its own browser before giving up), the pages it made in its later turns and what a routine's report names.
+See [Work truth](work-truth.md) for R-WORK-06 through R-WORK-15: private/exchange history, earlier files, local commands, task recovery, existing room posts, search cooldowns, CLI progress, routine steps and capability inventory. This core-only unit uses offline tests; no UI, native or live-provider acceptance is implied. R-WORK-16 through R-WORK-20 add how a member treats what its owner asks (in full, no repeated reservation or disclaimer, its own browser before giving up), the pages it made in its later turns and what a routine's report names.
 
-## Idle native runtime (2026-11-04)
+## Idle native runtime
 
 See [Idle native runtime](idle-runtime.md) for R-PERF-09 through R-PERF-12:
 computer status/leases, blocking hotkeys, suspended main webview and off-thread
 floating-control cursor sampling. This scoped unit uses fake core tests and
-offline Rust/frontend checks. Its brief defers look, judge and native journeys
+offline Rust/frontend checks. Look, judge and native journeys are deferred
 to integration; those boundaries remain unverified here.
 
-## Quiet idle and visibility (2026-11-04)
+## Quiet idle and visibility
 
 See [Performance](performance.md) for R-UI-99/100 and R-PERF-03 through R-PERF-08,
 the affected scene selection, hidden-window polling and native visibility boundaries.
 
-## Three computer levels (2026-11-02)
+## Three computer levels
 
-See [Member computer](member-computer.md#three-computer-levels-2026-11-02) for
+See [Member computer](member-computer.md#three-computer-levels) for
 R-COMP-3-01 through R-COMP-3-04, the selected matrix and replaced scene contracts.
 
-## Owner polish (2026-11-01)
+## Polish of Settings, Data and conversations
 
-See [owner-polish.md](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
+See [Polish of Settings, Data and conversations](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
 
-## Calendar navigation review (2026-11-01)
+## Calendar navigation review
 
-See [Automations](automations.md#calendar-navigation-review-2026-11-01). Scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls, both themes at 1120,900,720,1920x1080,480. The date lives only in the page instance; view choice survives reload. Seven columns use the actual calendar width, with a dated fallback only below 520px.
+See [Automations](automations.md#calendar-navigation-review). Scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls, both themes at 1120,900,720,1920x1080,480. The date lives only in the page instance; view choice survives reload. Seven columns use the actual calendar width, with a dated fallback only below 520px.
 
-## Calendar rhythms and Composio readings (2026-11-01)
+## Calendar rhythms and Composio readings
 
-See [Automations](automations.md#calendar-rhythms-and-composio-readings-2026-11-01). Selected scenes:
+See [Automations](automations.md#calendar-rhythms-and-composio-readings). Selected scenes:
 calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month,
 calendar-rhythm-popover, calendar-rhythm-hidden,
 automations-google-composio, automation-window, automation-window-menu,
@@ -174,21 +173,21 @@ automation-window-saved, automations-calendar, automations-all-day,
 automation-edit and details-routines. Run both themes at
 1120,720,1920x1080. Fixtures do not prove network, live/provider, cargo,
 native-journey or judge boundaries.
-## Work channels, file restore and private login (2026-11-01)
+## Work channels, file restore and private login
 
-See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login-2026-11-01) for the selected
+See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login) for the selected
 13-scene matrix, shared-component comparisons, privacy/gate tests and acceptance
 boundaries.
-## Member media and datasets (2026-11-01)
+## Member media and datasets
 
-See [Conversation](conversation.md#member-media-2026-11-01) for explicit paid model
+See [Conversation](conversation.md#member-media) for explicit paid model
 selection, image-only choices, work-step billing, repair and CLI/API/background consumers.
-See [Member computer](member-computer.md#named-datasets-2026-11-01) for datasets.
+See [Member computer](member-computer.md#named-datasets) for datasets.
 The selected media matrix and its shared-component comparison scenes are listed there.
 
-## Connected-app event routines (2026-11-01)
+## Connected-app event routines
 
-See [Automations](automations.md#connected-app-event-routines-2026-11-01).
+See [Automations](automations.md#connected-app-event-routines).
 Conversation routine tools accept when instead of schedule; existing member
 routine rows/editors show the condition, check/fire times and existing switch.
 Selected scenes: routine-event-row, routine-event-edit, routine-event-saved,
@@ -196,24 +195,24 @@ routine-event-missing, routine-event-reconnect, routine-event-profile,
 details-routines and automation-edit. Use both themes at
 1120,720,1920x1080.
 
-## Owner-PC commands (2026-11-01)
+## Owner-PC commands
 
-Since 2026-11-13 only a quick question has them (R-PC-01): see
-[member-computer.md](member-computer.md#the-owners-pc-is-for-a-quick-question-alone-2026-11-13-r-pc-01), and
-[member-computer.md](member-computer.md#owner-pc-commands-2026-11-01-now-a-quick-questions-alone-see-above) for the
+Only a quick question has them (R-PC-01): see
+[member-computer.md](member-computer.md#the-owners-pc-is-for-a-quick-question-alone-r-pc-01), and
+[member-computer.md](member-computer.md#owner-pc-commands-now-a-quick-questions-alone-see-above) for the
 stored command mode, first consent, subsequent approvals and background job gate.
-Settings has no control for the mode since 2026-11-14.
+Settings has no control for the mode.
 Selected scenes: local-command-consent, local-command-later,
 local-command-background, local-command-once, local-command-always,
 local-command-never, local-command-deny, local-command-settings-gone
 and the existing local-permission-card consumer. Run both themes at
 1120,720,1920x1080.
 
-## Mascots and the composer (2026-10-31)
+## Mascots and the composer
 
 Members are slimes drawn in code (`app/src/main/slime.ts`), not pictures: one body plus colour, costume and a
 seasonal hat by date (Halloween and Christmas weeks). A member's `avatar` is `slime:<id>`; a member without a
-picture gets a colour from its id; the owner's own pictures and presets still win. Raphael keeps his emblem.
+picture gets a colour from its id; the owner's own pictures and presets still win. Raphael keeps its emblem.
 Idle slimes stand still; motion in other states says what they are doing (`slime.css`, see [Members](members.md#how-a-slime-moves-and-why-it-stays-sharp));
 all of it stops under reduced motion. The picture menu shows them bareheaded so a costume stays visible.
 The composer is the words above a bar: plus attaches a file at once, a named control sets the action policy, and
@@ -223,11 +222,11 @@ the open conversation's model sits beside send (`composer-brain.ts`). Groups hav
 npm run look -- chat member-brain-saved member-avatar sidebar-group-avatar --theme both --width 1120,720,1920x1080
 ```
 
-## Rich replies (2026-10-30)
+## Rich replies
 
 One parser in `message-content.ts` returns ordered text, table, code, diagram and
 image blocks for chief, member and group replies, stored/streamed content, search
-and copy. Text keeps the round 10 authored bubbles; rich cards are siblings outside
+and copy. Text keeps its authored bubbles; rich cards are siblings outside
 bubbles. Owner content stays plain with its existing collapse. Tables wrap first,
 copy as TSV and preserve Markdown in whole-reply copy. Code scrolls locally, never
 executes, and loads only eight small highlighting grammars when needed. Mermaid
@@ -259,16 +258,16 @@ offline core verification does not establish live provider acceptance. One heavy
 process at a time, Vitest maxWorkers=2, explicit process checks, and shared Python
 apply.
 
-## Sidebar redesign (2026-10-30)
+## Sidebar redesign
 
-One sidebar (348px since 2026-11-12, R-SIDE-01) has no brand. Search and plus stand side by side at the top as Grok Bot's two
-36px soft round buttons (2026-11-06); search opens a card in the middle of the dimmed window, across and down (R-MENU-04), with the
+One sidebar (348px, R-SIDE-01) has no brand. Search and plus stand side by side at the top as two
+36px soft round buttons; search opens a card in the middle of the dimmed window, across and down (R-MENU-04), with the
 field, every member as face, name and last line, message results once words are typed, and 新增成員
 at its foot (Enter opens the first row). The edge drags the list down to an 88px rail of faces (hover
 names a face; the plus moves above the owner, with no search on the rail), which is also what the list is under 860px. The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
-appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
+appear on hover, and current-page selection remains unique. The footer is a list without a
 separator: one row, the owner's face (the account menu, [Navigation](navigation.md)) and the Connections pill. Native `owner-face`
 proves a window that loaded before the core still hears it and shows the saved photo.
 Groups are the owner's own: there is no everyone entry, and an empty former team room is not listed.
@@ -285,7 +284,7 @@ contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
 delete-conversation cover navigation in an isolated fake-brain app. No judge,
 OpenRouter or Claude session search; one heavy process at a time.
 
-## Owner round 10 connected apps and chosen models
+## Connected apps and the chosen model
 
 API and CLI brain prompts share the Composio discovery/execution contract:
 COMPOSIO_SEARCH_TOOLS returns a tool slug and schema; execute that slug through
@@ -313,7 +312,7 @@ test_providers_more.py (48). All use fakes or mock transports. No live owner
 Composio, Gmail, OpenRouter, judge or live verification was exercised.
 
 
-## Owner round 10 contracts (supersedes round 9 message previews)
+## Message previews, scrolling, learned words and stable controls
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
 the bubble. Assistant messages render fully; authored reply envelopes retain separate
@@ -341,7 +340,7 @@ Calendar, member and Plugins scene clicks inherit this check. Connections search
 below the fixed Installed/Store switch in both states. A selected look report is
 required to establish the actual covered controls and any remaining movements.
 
-Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+Scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
@@ -351,27 +350,25 @@ process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared nati
 CARGO_TARGET_DIR apply.
 
 
-## Owner round 9 contracts
+## Start view, calendar hours, reply envelopes and the orb
 
-Home was removed on 2026-11-12 (R-UI-114 is retired): the app opens on Raphael's conversation, and the calendar opens from the
+Home was removed (R-UI-114 is retired): the app opens on Raphael's conversation, and the calendar opens from the
 account menu; see [Navigation](navigation.md). Day/week working hours
 fit the viewport below a pinned all-day row; see [Automations](automations.md).
-Owner/member/room messages share eight-line faded previews and the existing
-expand-message control, without inner scrolling. CLI envelope parsing is shared by
+CLI envelope parsing is shared by
 normal, quick, resumed, failure, room and background routes; see
 [Conversation](conversation.md). The ordinary orb has no Stop; focused double-Escape
 and permission/question actions remain. See [Dictation](dictation.md).
 
 Native readable-layout includes the start conversation, the account menu, compact week/day and long owner expansion
-(Home and its allowance-timing journey were removed on 2026-11-12). Run these with self-diagnosis and memory-growth after an offline debug
+(Home and its allowance-timing journey were removed). Run these with self-diagnosis and memory-growth after an offline debug
 build, one heavy process at a time.
 
-## Owner round 8 contracts
+## Details controls, conversation mask, toasts and dictation overview
 
 Details controls, including the shared brain picker, fill the same panel content width.
 The conversation mask has a fully transparent top band before its fade in both themes.
-Home wraps its report at CJK sentence boundaries. Owner round 9 supersedes the old
-Today/stat arrangement with four fixed equal blocks and a mini calendar. Compact dictation
+Compact dictation
 orders totals, activity, then a column-filling shortcut card; that card is a page-level
 overview section, exempt from the generic short-card cap, with exact column alignment
 checked by dictation-overview. Conversation toasts reserve the bottom composer's space; when
@@ -419,7 +416,7 @@ behavior the fixture cannot prove.
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
-| [Connections and MCP](connections-mcp.md) | Connect apps as one view after Grok Bot (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page; 2026-11-12), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and the calendar's private Google calendar read |
+| [Connections and MCP](connections-mcp.md) | Connect apps as one view (chip of the connected apps, search, category chips, 為你推薦 and sections, an app's page), the one colour of everything that floats, connected apps and their count, an app's accounts and tools, members' private skills, managed catalog, MCP setup/discovery and the calendar's private Google calendar read |
 | [Usage](usage.md) | Spend overview, CLI allowances read unseen at each opening of Settings (no refresh button), and the once-per-window 90% warning |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
@@ -439,7 +436,7 @@ subscription acceptance. See the parent skill's Guardian hand-off gates.
 
 ## Content width
 
-Owner item 9 (2026-10-28), R-UI-45: no page becomes a stripe at any window size.
+R-UI-45: no page becomes a stripe at any window size.
 `styles.css` owns the content measures, derived from the existing spacing scale
 (`--sp-6 = 32px`, `--sp-5 = 24px`). They do not grow with viewport width:
 
@@ -461,7 +458,7 @@ previous 1760px capacity, expressed on the same scale.
 
 Available width may shrink any measure. Home uses a 1080px page (including 40px
 gutters), a borderless full-grid emblem/date/headline lead, two rows of two equal
-blocks, then an adaptive six-week month (owner refinement, 2026-10-30). Blocks retain size and position for
+blocks, then an adaptive six-week month. Blocks retain size and position for
 empty/sparse/full data, including at 720px. This composition uses page-level
 summary containers instead of the generic short-card cap. Short inbox rows remain
 reading-capped; checks reject unequal blocks, overflow and a narrow/reordered lead.
@@ -471,15 +468,15 @@ and group chats; below 860px the same list is an 88px rail of faces. Settings re
 640px content measure for every pane header, toolbar, row and grid. Charts and
 heatmaps contain several data columns inside their capped containers.
 
-A conversation's column starts and ends where its composer does (2026-11-10; the judge on 2d5e3cf8 measured the
+A conversation's column starts and ends where its composer does (measured before the fix: the
 messages at 20 px and the composer at 32 at 720, and 29 against 43 at 1120). The column is a box: the thread's
 (`.ra-col` in `.ra-scroll`), the search field over it (`.ra-find`) and the members' conversation laid over it
 (`.peer-thread` in `.peer-scroll`) each take the composer's sides, `--pa-dock-x`. The members' conversation keeps the
 conversation's own sides (`.mb-chat`'s, 16 px under 860 px), and a group's side thread holds its composer at the sides
 of its messages and header (24 px). Inside the column the owner's messages end at its right edge and a reply begins at its
 left edge. In a group's side thread the faces stand inside that column, the owner's at its right and the member's at its
-left with its words beside it; in the group itself they hang in the gutter outside it (2026-11-11), so its words, its
-cards and the owner's bubble begin and end where the composer does (the judge on 6e2ca315 read the face's 32 px slot as
+left with its words beside it; in the group itself they hang in the gutter outside it, so its words, its
+cards and the owner's bubble begin and end where the composer does (the judge read the face's 32 px slot as
 the messages starting inside the composer, page-room-draft and owner-card-room-page). The group's scroll holds the pane's
 own side padding for this (`--room-pad`), and its faces are 24 px, 20 px under 860 px, so they fit the gutter. A reply keeps
 its reading measure (`--pa-bw`, 60 ch), so a long reply ends short of the composer's right edge by design: that is
@@ -488,7 +485,7 @@ beside `content-width` and measures exactly this within 1 px: each column box, t
 reply against their composer; in a group also its words and cards (`.ra-body`), and that each hung face stands beside the
 column, inside the scroll (it measured the reply's box, which held the face's slot, and passed while the judge failed it). A chat wide enough holds both in the same centred 960 px column; 1280x800 is the
 designed window, where the `max-height: 860px` block holds the thread's sides too. The selected scenes are under
-[Conversation](conversation.md#one-column-with-the-composer-2026-11-10).
+[Conversation](conversation.md#one-column-with-the-composer).
 
 The look runner invokes `checkRendered("content-width")` on **every main-entry scene**
 after its interactions (overlay entry is separate). It measures rendered border boxes,
@@ -508,7 +505,7 @@ npm run look -- chat details details-routines sidebar sidebar-folders dictation-
 The dictionary scene uses twelve words to expose column count and wrapping; the
 keyboard scene retains the two-word fixture to expose sparse-grid stretching.
 Compare same-theme card surfaces between Home/dictionary/store and reading columns
-between history/conversation/settings. Unit checks reject the measured 97fa61bd
+between history/conversation/settings. Unit checks reject the measured
 word (694px) and Home card (618px) geometries; baseline browser evidence must also
 show those failures before CSS changes. Native zoom, live data and design judge
 remain separate acceptance boundaries.
@@ -520,7 +517,7 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 
 | Feature | Native journey needed: drive, assert, brain |
 | --- | --- |
-| Navigation | The sidebar-foot journey measures the foot and the account menu; start/restart opens on Raphael's conversation (Home was removed on 2026-11-12). |
+| Navigation | The sidebar-foot journey measures the foot and the account menu; start/restart opens on Raphael's conversation (Home was removed). |
 | Conversation | readable-layout checks shared details edges and compact identity; locale-sweep, voice-conversation, delete-conversation; drive locale/composer/sidebar, real member consultations and room reports, delete recipient conversations/source member; reject old rows/date/exchange chrome in replacement defaults and new named threads, compare actual history IPC with read-only production SQL and NULL conversation rows; native fake brain. Planned conversation-cards: approvals, attachments, Stop and reconnect; fake or signed-in Codex CLI. |
 | Members | delete-conversation creates/deletes members through UI and checks orphan exchange rows/deleted source names. Planned members-persistence: edit/hide/duplicate/primary/resources/voice and right-click menus, restart; assert member/resource/primary state and shared agent path; fake brain, Codex CLI for administration. |
 | Automations | Planned automations-worker: create/edit/delete schedule, trigger worker, cancel/restart; assert schedule, task and report persistence and no late writes; fake brain. |
@@ -531,7 +528,7 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 | Usage | Planned usage-ledger: complete/cancel local fake turns, open grouping/export and allowances; assert SQLite totals, CSV and CLI status classification; fake brain, signed-in Codex CLI for allowance acceptance. |
 | Onboarding | Planned onboarding-native: empty data, complete profile/ability steps, hotkey practice and speech exercise, restart; assert completion gating and persisted first-run choices; fake brain/local STT. |
 
-## Owner round 3 shared interactions
+## Shared Escape, deleted-object fallback and desktop confirmation
 
 The conversation, dictation and team/rooms entries map the shared two-step Escape
 contract (R-UI-46), deleted-object fallback (R-UI-47), opaque desktop confirmation
@@ -540,7 +537,7 @@ actual native-sized viewport as well as the requested matrix size; see dictation
 CI's judge request admission limit is 1998 for the 1980 combinations (330 scenes x six), below
 the unchanged 2000-request hard cap; the monetary limit is unchanged.
 
-## Owner round 4 acceptance
+## Designed window size acceptance
 
 The designed default is 1280x800 with the 720x480 minimum; every launch opens at it,
 centred, and window-state restores nothing. The unspecified look viewport reads the main-window size
@@ -559,32 +556,32 @@ exercising keyboard focus. The retired first-bot scenarios are replaced by no-na
 This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
 
 
-## Owner round 5 acceptance
+## Details inset and compact conversation headers
 
-The historical Team Fit/card checks below were retired with the canvas on
-2026-10-30; sidebar-shell now covers chief and folder rows. The details scroll container owns the single horizontal inset.
+The historical Team Fit/card checks below were retired with the canvas;
+sidebar-shell now covers chief and folder rows. The details scroll container owns the single horizontal inset.
 Compact conversation headers show identity once; caption/identity lines cannot
 flex-shrink. Shared checks cover these contracts in browser and native WebView.
-The owner's specific 1920 half-line clipping was not reproduced on the baseline;
+A half-line clipping at 1920 was not reproduced on the baseline;
 the full-line guard passes before and after and is preventive coverage only.
 
 
-## Owner round 6 contracts
+## Details scrim, label wrapping and the Fit button
 
-Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column.
+These contracts add no scene. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column.
 
 
-## Memory growth native acceptance (phase 2, 2026-10-29)
+## Memory growth native acceptance (phase 2)
 
 `memory-growth` sends 25 turns in the real isolated app with the fake brain,
 checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation is mapped in
-[Members](members.md); no memory page exists since 2026-11-11 (R-MEM-10). This is separate from live provider and design-judge acceptance.
+[Members](members.md); no memory page exists (R-MEM-10). This is separate from live provider and design-judge acceptance.
 
-## Owner round 7 contracts
+## Calendar chips, the sidebar shell and onboarding abilities
 
-Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities (replacing onboarding-abilities-hero since 2026-11-07, beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+The affected journeys include onboarding-abilities (beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar is covered by the sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
-## Connect and Docker acceptance (2026-10-30)
+## Connect and Docker acceptance
 
 The current matrix has 351 scenes and 2106 combinations. CI groups three images
 per judge request, with an admission limit of 702. This acceptance selects only
@@ -593,12 +590,12 @@ See member-computer.md and connections-mcp.md for the lifecycle and native steps
 The host adapter is the sole OS-specific Docker launch boundary. Native catalog
 journeys disable the computer adapter, so they cannot start Docker incidentally.
 
-The additional OpenRouter owner report uses the existing settings/quick/member
+The OpenRouter model chooser uses the existing settings/quick/member
 chooser scenes and the explicit native `model-picker` journey. See
 settings-appearance.md for model identity, effort, price and fake-provider boundaries.
 Only a public model-list read is authorized; no paid OpenRouter request is accepted.
 
-## Theme and computer side panel (2026-10-30)
+## Theme and computer side panel
 
 See settings-appearance.md for the single system/light/dark selector and clarity
 evidence. See member-computer.md for the persistent
@@ -642,7 +639,7 @@ No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference a
 live tool round trips require separately authorized acceptance; fake HTTP is not
 live proof. Never run the owner probe or borrow another application's credentials.
 
-## Member computer hosts (2026-11-01)
+## Member computer hosts
 
 [Member computer](member-computer.md) maps the per-member default, shared team
 folder, local/SSH selection and resource policy. Local UI scope is its 17 listed
@@ -650,66 +647,66 @@ scenes in both themes at 1120,720,1920x1080. `computer-host-remote` verifies set
 through the existing shared menu/input; `desktop-frame` now guards a dark frame
 and top-right collapse in both themes.
 
-## Missing prerequisites (2026-11-01)
+## Missing prerequisites
 
-See [conversation.md](conversation.md#missing-prerequisites-2026-11-01) for the shared failure data, localized note, affected scenes and explicit native/judge limits. Rule R-UI-69 rejects reasons held only in a disabled control title.
+See [conversation.md](conversation.md#missing-prerequisites) for the shared failure data, localized note, affected scenes and explicit native/judge limits. Rule R-UI-69 rejects reasons held only in a disabled control title.
 
-## Durable owner questions (2026-11-01)
+## Durable owner questions
 
-See [Conversation](conversation.md#durable-owner-questions-and-background-cards-2026-11-01)
+See [Conversation](conversation.md#durable-owner-questions-and-background-cards)
 for ask_owner, background card completion and the selected question-card matrix.
 
 
-## Owner input and Telegram files (2026-11-01)
+## Owner input and Telegram files
 
-See [Conversation](conversation.md#owner-input-2026-11-01). Selected scene: owner-addition. Members make no audio
-files since 2026-11-10 ([No voice](conversation.md#no-voice-owner-decision-2026-11-10)).
+See [Conversation](conversation.md#owner-input). Selected scene: owner-addition. Members make no audio
+files ([No voice](conversation.md#no-voice)).
 
 
-## CLI failure recovery (2026-11-01)
+## CLI failure recovery
 
-See [Conversation](conversation.md#cli-recovery-after-recorded-work-2026-11-01)
+See [Conversation](conversation.md#cli-recovery-after-recorded-work)
 for shared conversation/background CLI recovery, receipt context, bounded retries,
 answered-card continuity and fake-subprocess tests. Core-only; no new UI scene.
-## Group and background tool truth (2026-11-01)
+## Group and background tool truth
 
-See [Members](members.md#group-prompt-truth-2026-11-01) for R-AG-02 roles without
+See [Members](members.md#group-prompt-truth) for R-AG-02 roles without
 fixed rounds or automatic conclusions, and
-[Conversation](conversation.md#background-app-discovery-2026-11-01) for background
+[Conversation](conversation.md#background-app-discovery) for background
 find_app, owner sign-in and same-task resumption, plus localized routine events.
 This is a core-only contract change; no rendered scene or frontend is changed.
-## Passive floating controls (2026-11-01)
+## Passive floating controls
 
-See [Dictation](dictation.md#passive-control-hit-regions-2026-11-01) for R-UI-70,
+See [Dictation](dictation.md#passive-control-hit-regions) for R-UI-70,
 physical hit rectangles, held-button release, revision invalidation and the selected
 existing overlay/learned scene matrix. Fixture acceptance does not prove OS clicks.
-# Composer discovery (2026-11-01)
+# Composer discovery
 
 [Composer discovery](composer-discovery.md) covers grouped @ and / completion in conversations and team rooms, including enabled skill invocation on API, CLI and background paths.
 
-## Conversation connection management (2026-11-01)
+## Conversation connection management
 
-See [Connections/MCP](connections-mcp.md#connections-from-a-conversation-2026-11-01) for the editable proposal, shared secret/local consent cards, dynamic API/CLI/background offers and selected look matrix. R-MCP-CHAT-01/02 extend the existing allow-all and durable owner-card contracts.
+See [Connections/MCP](connections-mcp.md#connections-from-a-conversation) for the editable proposal, shared secret/local consent cards, dynamic API/CLI/background offers and selected look matrix. R-MCP-CHAT-01/02 extend the existing allow-all and durable owner-card contracts.
 
 
-## Answer forms (2026-11-01)
+## Answer forms
 
-See [Conversation](conversation.md#answer-forms-2026-11-01) for R-FORM-01/02, schemas, scene coverage and external-text boundaries.
-## Still conversations during team work (2026-11-01)
+See [Conversation](conversation.md#answer-forms) for R-FORM-01/02, schemas, scene coverage and external-text boundaries.
+## Still conversations during team work
 
-See [Conversation](conversation.md#still-conversations-during-team-work-2026-11-01) for R-UI-71, the shared keyed line diff, synchronous cached previews, preserved face nodes, bounded event reads and the busy-team scene matrix.
+See [Conversation](conversation.md#still-conversations-during-team-work) for R-UI-71, the shared keyed line diff, synchronous cached previews, preserved face nodes, bounded event reads and the busy-team scene matrix.
 
 The still-thread review follow-up adds conversation-midnight to the conversation map: shared look clock rollover with unchanged history and retained conversation nodes. Viewing, unread-on-show, core restart and room return are covered by pages/agent-members.test.ts.
 
-## Exchanges and menus (2026-11-02)
+## Exchanges and menus
 
-R-UI-72: [conversation.md](conversation.md#folded-colleague-exchanges-2026-11-02) and [team-and-rooms.md](team-and-rooms.md#folded-room-receipts-2026-11-02) cover folded colleague receipts. handoff-group-long adds long and unbroken names to the selected matrix.
+R-UI-72: [conversation.md](conversation.md#folded-colleague-exchanges) and [team-and-rooms.md](team-and-rooms.md#folded-room-receipts) cover folded colleague receipts. handoff-group-long adds long and unbroken names to the selected matrix.
 
-R-UI-73: [members.md](members.md#menus-beside-their-rows-2026-11-02) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080.
+R-UI-73: [members.md](members.md#menus-beside-their-rows) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080.
 
-Review follow-up (2026-11-02): conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.
+Review follow-up: conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.
 
-### Shared conversation cards (2026-11-02)
+### Shared conversation cards
 
 R-CARD-01..75: see the appended shared-card section in `conversation.md` and
 `app/scripts/look/scenes/cards.mjs`. The common `card-shell` assertion applies to
@@ -722,13 +719,13 @@ Conversation review: R-CARD-07 covers single-call Composio draft projection and 
 
 R-CARD-06 review coverage also includes neutral cancelled questions without redundant disclosures and viewer-driven computer waits without a second live work line. conversation.md records the selected 21-scene recheck and the unchanged-renewal/same-stream regression tests.
 
-## Slime town and computer preparation (2026-11-03)
+## Slime town and computer preparation
 
-See [Member computer](member-computer.md#slime-town-and-computer-preparation-2026-11-03)
+See [Member computer](member-computer.md#slime-town-and-computer-preparation)
 for R-UI-92/93/94, deterministic period fixtures, preparation in all three viewing
 locations, retained motion and wallpaper-to-stream continuity.
 
-## Daily delegation polish (2026-11-03)
+## Daily delegation polish
 
 R-UI-85..91: sidebar.ts owns the existing Connections door and inventory marks;
 conversation-list.ts owns window-entry ordering, without changing core routing.
@@ -754,7 +751,7 @@ insets and equal 36px icon actions. The old nonoverlapping round face grid check
 now protects bare overlapping clusters, fixed bounds and one header row. The
 emblem audit includes composite faces; only sidebar controls have a scoped soft
 surface exception to the general transparent icon policy. Service marks are 18px,
-and the emblem scales to its composite slot, as explicit owner requirements.
+and the emblem scales to its composite slot, as explicit requirements.
 
 Press feedback follows actual pointer down/up on the real controls, recording
 computed colors and fixed bounds. Source audit preserves working default,
@@ -767,23 +764,23 @@ Run npm.cmd run verify and the targeted attachment core tests.
 
 Long draft profiling keeps the owner's focus: unchanged member controls keep focus
 without another layout, and newest-page reads skip the earlier-page scroll anchor.
-## Motion cost (2026-11-03)
+## Motion cost
 
-[Members](members.md#motion-cost-2026-11-03) maps R-PERF-01, bounded event reads, sampled loops and the mixed-state main-thread budget.
+[Members](members.md#motion-cost) maps R-PERF-01, bounded event reads, sampled loops and the mixed-state main-thread budget.
 
 
-## First unseen private turn (2026-11-03)
+## First unseen private turn
 
-See [Conversation](conversation.md#first-unseen-private-turn-2026-11-03) for R-UI-96, migration 57, visit lifetime, paging, scroll and unchanged-line contracts. Selected scenes: thread-new-divider, thread-new-divider-short, thread-new-divider-stays, thread-new-divider-return, thread-new-divider-latest, chat, busy-team-thread, busy-team-follow and send-prompt, both themes at 1120,720,1920x1080.
+See [Conversation](conversation.md#first-unseen-private-turn) for R-UI-96, migration 57, visit lifetime, paging, scroll and unchanged-line contracts. Selected scenes: thread-new-divider, thread-new-divider-short, thread-new-divider-stays, thread-new-divider-return, thread-new-divider-latest, chat, busy-team-thread, busy-team-follow and send-prompt, both themes at 1120,720,1920x1080.
 
-## Durable owner inbox (2026-11-03)
+## Durable owner inbox
 
-See [Conversation](conversation.md#durable-owner-inbox-2026-11-03) for R-QUEUE-01
+See [Conversation](conversation.md#durable-owner-inbox) for R-QUEUE-01
 through R-QUEUE-06 and refinements to R-BATCH-01/R-UI-08. See
-[Team and rooms](team-and-rooms.md#send-while-rooms-work-2026-11-03) for the shared
+[Team and rooms](team-and-rooms.md#send-while-rooms-work) for the shared
 room composer. The send-prompt and send-prompt-slow scenes keep their performance limits.
 
-## Speaker capability parity (2026-11-04)
+## Speaker capability parity
 
 See [Speaker parity](speaker-parity.md) for R-AG-PARITY-01 through R-AG-PARITY-03,
 actual API/CLI/worker offer guards, private self-work, owner instructions, draft preference
@@ -792,29 +789,29 @@ live subscriptions and network are not authorized. The selected deferred UI scen
 listed in that entry.
 
 R-SKILL-08 also covers localized skill origins in member details, Connections,
-discovery and document dialogs; see [Members](members.md#localized-skill-origins-2026-11-05).
+discovery and document dialogs; see [Members](members.md#localized-skill-origins).
 The same selected twenty-scene skill matrix checks raw-source leakage and one learned
 origin/date line.
 
 
-## Shared owner vault (2026-11-05)
+## Shared owner vault
 
-See [Settings and appearance](settings-appearance.md#shared-owner-vault-2026-11-05)
+See [Settings and appearance](settings-appearance.md#shared-owner-vault)
 for R-VAULT-01..05, Safety navigation, shared Credential Manager entries, transient
 CSV import and mandatory payment consent. The merge follow-up maps all nine vault
 scenes plus calm-thread in the ten-scene selected look matrix; the feature entry
 contains the executable look command used by judge context discovery.
 
-## Calm conversations (owner, 2026-11-05)
+## Calm conversations
 
-See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.
+See [Conversation](conversation.md#calm-conversations) for R-UI-101 and R-CLI-07, the selected eleven-scene matrix and offline/native boundaries.
 
 
-## Colleagues (2026-11-05)
+## Colleagues
 
-See [Members](members.md#colleague-recipes-and-goal-first-greeting-2026-11-05), [Connections](connections-mcp.md#named-connected-accounts-2026-11-05), [Automations](automations.md#owner-provided-external-webhook-tunnels-2026-11-05) and [Daily work](daily-work.md#native-output-folder-choice-2026-11-05) for R-COLLEAGUE-01..06 and the selected scene matrix. Recipe preview, imports, account labels and probes reuse existing owner UI/store boundaries; native/OAuth/SSH/live outcomes stay separate from fakes.
+See [Members](members.md#colleague-recipes-and-goal-first-greeting), [Connections](connections-mcp.md#named-connected-accounts), [Automations](automations.md#owner-provided-external-webhook-tunnels) and [Daily work](daily-work.md#native-output-folder-choice) for R-COLLEAGUE-01..06 and the selected scene matrix. Recipe preview, imports, account labels and probes reuse existing owner UI/store boundaries; native/OAuth/SSH/live outcomes stay separate from fakes.
 
-## Desktop security and release path (2026-11-05)
+## Desktop security and release path
 
 [Security boundary](security-boundary.md) maps R-SEC-01 through R-SEC-05 and R-CARD-11, native
 attachment associations, release path validation, publication commit binding and
@@ -822,7 +819,7 @@ the reviewed shell/webview/IPC/update surfaces. Follow-up 1 adds composer-only p
 placement; see conversation.md for the selected scene matrix.
 
 
-## Offline storage and diagnostic security (2026-11-05)
+## Offline storage and diagnostic security
 
 R-SEC-FILES-01..03 and R-SEC-LOG-01 are core-only boundaries. See the appended
 security sections in member-computer.md, settings-appearance.md and conversation.md.

@@ -1,15 +1,13 @@
-// The place a page takes in a conversation (owner, 2026-11-11: 「我要的不是像是這樣子會出現一個 dialog，我要的應該是像是 Grokbot
-// 這樣子直接顯示在對話裡，它就是會直接替代掉對話，就是內部的顯示器的感覺…左上角會變成返回上頁」). A page, an HTML page or a
+// The place a page takes in a conversation. A page, an HTML page or a
 // report, a member's or a group's, opens in the thread's place in the conversation's stage, above the composer that stays
 // where it is. The thread keeps its layout and scroll underneath, hidden, so going back finds it where it was. The way back
 // is the round arrow at the header's top left (Escape goes back too); nothing about the page is a dialog, and no scrim.
 // What the member answers to a message written while a page is open shows under the page: a line while it works, then
 // the first words of its reply, which the arrow brings in full.
-// Since 2026-11-14 (R-PAGE-08; owner, with a page opened from Grok Bot's Library: 「它會直接打開那個檔案本身…然後它有一個share的鍵」) the open
-// page is the whole area right of the sidebar, as Grok Bot's: the header's centre becomes the page's own pill (its mark and
+// The open page (R-PAGE-08) is the whole area right of the sidebar: the header's centre becomes the page's own pill (its mark and
 // title) while it stands, its Share button is at the right, and the area scrolls as one.
-// Since the same day (R-PAGE-11; owner: 「它應該要是全螢幕的輸入框，感覺像是放在這個 HTML 或者是 page 上面的感覺」) the page runs to the window's
-// foot and the composer floats over it, as Grok Bot's does: the view measures what stands over the page's foot (the composer's dock
+// The page (R-PAGE-11) runs to the window's
+// foot and the composer floats over it: the view measures what stands over the page's foot (the composer's dock
 // and the answer line over it) so the page can scroll its last line clear of them.
 import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
@@ -26,7 +24,7 @@ export interface PageViewOpen {
   /**
    * The one thing this page can be passed on by (Share: a report or an HTML page is saved as a file). It stands at the
    * header's top right, where the thread's own share stands, as the round button every header tool is: one place for what is
-   * on screen, as Grok Bot's share (owner, 2026-11-12: 「位置要特別設計過 外觀也是」). A page with none (a plugin's) leaves that
+   * on screen. A page with none (a plugin's) leaves that
    * place empty.
    */
   action?: { icon: IconName; label: string; run(): void };
@@ -156,7 +154,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
       back!.addEventListener("click", () => close());
     }
     tools = pane?.querySelector<HTMLElement>(":scope > .mb-head .ra-tools") ?? null;
-    // The header's centre says which page this is while it stands, as Grok Bot's pill does: the page's mark and its title. A
+    // The header's centre says which page this is while it stands: the page's mark and its title. A
     // room's centre is its own name and faces, which stay.
     const centre = pane?.querySelector<HTMLElement>(":scope > .mb-head .mb-head-c");
     if (centre) {

@@ -2,7 +2,7 @@
 
 Reply language follows the speaker's own language instructions, otherwise the owner's words.
 The interface language selects fixed app notices and labels only, and never reaches a model: no prompt built here
-takes it (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」). The model names the kind
+takes it. The model names the kind
 of a reply with a fixed word (`REPLY_KINDS`); the app shows it as `《prefix。text》` in the interface language, the
 prefix naming the kind of thing said:
 
@@ -75,7 +75,7 @@ PREFIXES: dict[str, Prefixes] = {
     "tr": Prefixes("Yanıt", "Bildirim", "Hayır", "Anlaşıldı", "Soru"),
 }
 # The kinds of a reply as a model names them, the same whatever the interface language: `canonical_prefix` turns one
-# into the prefix the app shows (owner, 2026-11-14: the interface language reaches no model).
+# into the prefix the app shows (the interface language reaches no model).
 REPLY_KINDS = Prefixes("answer", "notice", "negative", "understood", "question")
 
 # What a model might wrap around or after a prefix: brackets, a full stop, a colon.
@@ -172,6 +172,7 @@ class Phrases:
     computer_limit: str  # a run used all its actions, time or money: {steps}
     computer_done: str  # the run ended and the model said nothing
     computer_model: str  # the answer model takes no tools, so nothing can be operated
+    computer_unchecked: str  # a member answered, told to check its last change on the screen, without checking it
     # The memory (`raphael_core.memory`): what Raphael says when the owner asked it to remember or
     # to forget something and the model had nothing more to say.
     remembered: str  # it was written
@@ -268,6 +269,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         computer_limit="已達操作上限。停在第 {steps} 步。",
         computer_done="操作完成。",
         computer_model="目前的模型不支援呼叫工具。無法操作電腦。",
+        computer_unchecked="最後一次操作畫面後沒有再確認結果，這次不算完成。",
         remembered="已記下。",
         remembered_unconfirmed="已記下，標為待確認。",
         forgotten="已刪除此記憶。",
@@ -355,6 +357,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         computer_limit="The operation limit was reached. Stopped at step {steps}.",
         computer_done="Done.",
         computer_model="The current model cannot call tools. The computer cannot be operated.",
+        computer_unchecked="The screen was not checked after the last change; this does not count as done.",
         remembered="Noted.",
         remembered_unconfirmed="Noted, marked as unconfirmed.",
         forgotten="The memory is deleted.",
@@ -435,6 +438,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         computer_limit="操作の上限に達しました。{steps} 手目で停止しました。",
         computer_done="操作を完了しました。",
         computer_model="現在のモデルはツールを呼び出せません。操作できません。",
+        computer_unchecked="画面を最後に操作したあと結果を確認していないため、完了とみなしません。",
         remembered="記憶しました。",
         remembered_unconfirmed="未確認として記憶しました。",
         forgotten="記憶を削除しました。",
@@ -580,7 +584,7 @@ def _last_sentence_end(text: str) -> int:
 # is given all three forms at once and picks by the language it replies in (`_raphael_persona`), never by the interface.
 ADDRESS = {"zh-TW": "主人", "ja": "マスター", "en": "Master"}
 ADDRESS.update({language: "Master" for language in LANGUAGES if language not in ADDRESS})
-# One line in his voice, for the tone: a recommendation, which claims nothing about the world. Every prompt shows the
+# One line in its voice, for the tone: a recommendation, which claims nothing about the world. Every prompt shows the
 # English line, whatever the interface language (`_raphael_persona`).
 _TONE = {
     "zh-TW": "第二個方案最佳。成本低三成，風險相同。",
@@ -677,8 +681,7 @@ The calendar
 """
 _SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
 
-# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01; owner, 2026-11-13:
-# 「正常對話的時候，不會有操控我電腦的邏輯…只會在快速問答的部分」). These words are added to its prompt alone; every other prompt
+# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01). These words are added to its prompt alone; every other prompt
 # says nothing of that PC, and a conversation's work that needs a computer is done on the member's own.
 _OWNER_PC_RULES = """
 The owner's PC (quick question)
@@ -696,7 +699,7 @@ _OWNER_PC_RULES = for_this_system(_OWNER_PC_RULES)
 
 def _contract(owner_pc: bool = False) -> str:
     """The shared contract of a prompt, with the owner's-PC words only for a quick question. It names no interface
-    language: that is the window's and goes to no model (owner, 2026-11-14)."""
+    language: that is the window's and goes to no model."""
     return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
 
 _FACT_RULES = """\
@@ -716,10 +719,10 @@ For dictation and software, "SST" may mean STT, speech-to-text.
 - Temperatures are in degrees Celsius; say the chance of rain as a percentage.
 """
 
-# How a member does what its owner asks (owner, 2026-11-14, from a conversation with a language-teaching member: asked for daily news
+# How a member does what its owner asks. Without it, a member asked for daily news
 # pages for the owner's own study in the owner's own private app, the member lectured on copyright again and again, delivered a headline and one
 # sentence, wrapped every reply in "I will not pretend it is complete" lines, did not open the page in its own computer's browser
-# when the reader met a consent page, and could not name the page it had made that morning). Nothing in Raphael's prompts spoke of
+# when the reader met a consent page, and could not name the page it had made that morning. Nothing in Raphael's prompts spoke of
 # copyright: the refusal was the model's own, and nothing told it that this is the owner's own app and the owner's own use.
 _OWNER_WORK = """\
 Doing the owner's work
@@ -952,7 +955,7 @@ def worker_system_prompt(*, model_calls: int, tool_calls: int, speaker: Speaker 
 # --- the members of the owner's team ----------------------------------------------------------------
 #
 # A member (raphael_core.members) speaks as itself: its name, its role and the owner's instructions
-# for it, in plain sentences, with none of Raphael's prefixes and none of his manner. Its reply is in
+# for it, in plain sentences, with none of Raphael's prefixes and none of its manner. Its reply is in
 # the app's thread, never on the overlay, so it may run to a few sentences. The owner's instructions
 # are the owner's own words: they shape how it works, but the rules of the facts and of the tools stay.
 
@@ -1083,7 +1086,7 @@ def reaction_prompt(speaker: Speaker) -> str:
     """The speaker's own persona and the one thing it does on a reaction: say a few words, or pass."""
     persona = (_raphael_persona(speaker) if speaker.is_raphael else
                _member_fields(speaker.name, speaker.role, speaker.instructions, speaker.personality)["persona"])
-    # The language the owner writes in, never the window's and never the one the member teaches (owner, 2026-11-14: a member
+    # The language the owner writes in, never the window's and never the one the member teaches (a member
     # that teaches Japanese asked what was wrong in Japanese; the interface language reaches no model). REPLY_LANGUAGE, which
     # lets a persona choose, is not part of this prompt, and the task comes after the persona so its words outweigh the persona's.
     return persona + "\n\n" + REACTION

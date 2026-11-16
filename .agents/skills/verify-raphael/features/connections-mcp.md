@@ -1,18 +1,18 @@
 # Connections and MCP
 
-## A connector's argument shape, and a failure repeated (2026-11-14)
+## A connector's argument shape, and a failure repeated
 
 Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape.py`). A call of a
 connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind
 `bad_arguments`), as is a server's own refusal of arguments. A connected app's call that has failed twice with the same error is not made a third time: the model is told what it said, the shape and to try another way, and the run goes on (only its step budget ends it). No scene draws either; the refusal is a tool result inside the run.
 
-## Connect apps as Grok Bot's, one view (2026-11-12): read this first
+## Connect apps, one view: read this first
 
 This section supersedes every later paragraph that speaks of the 已連結 and 商店 tabs, the tab counts, the pager of 18-card pages,
 the chip row that scrolls sideways (`plugins-store-wheel`), the store that lists only the apps not added yet, the need words on a
-row, the 推薦 section under a list of the connected, and the dialog of a connected service (`.cs-dialog` over the list). Owner,
-2026-11-12: 「它不會分已連結跟商店，他們都在一起的…上面放你已連接的，下面放一些推薦的…分全部、溝通、生產力、開發之類的…也不會顯示它現在有幾個」
-(R-APPS-01, R-APPS-02, R-FLOAT-01).
+row, the 推薦 section under a list of the connected, and the dialog of a connected service (`.cs-dialog` over the list). The connected and the
+recommended apps are in one place, not split into 已連結 and a store: the connected ones on top, recommendations under them, then the
+categories (全部, 溝通, 生產力, 開發 and so on), with no count of what the catalogue holds (R-APPS-01, R-APPS-02, R-FLOAT-01).
 
 - The dialog is one view: the title at the left and, at the right, a quiet chip with the marks of up to four connected apps and
   「N 個已連結」 (N is the core's count; with nothing connected the chip is not there; with no number to give it says only 「已連結」);
@@ -24,12 +24,12 @@ row, the 推薦 section under a list of the connected, and the dialog of a conne
   the app's page; 「連結」 runs the existing flow (sign-in, key form, the conversation for n8n, own Google and developer apps).
 - The chip opens the list of the connected apps in the same dialog (rows with tile, name, line and switch; 應用程式 and 尚未連結
   headings as before), behind a back chevron. Esc steps back from an app's page, then from that list, then closes.
-- A connected row is pressable (2026-11-14): the mark, the name, the line and the gap open the app's page (the page the main view's row opens),
+- A connected row is pressable: the mark, the name, the line and the gap open the app's page (the page the main view's row opens),
   the switch only turns the app on or off; a row under the pointer has the pointer and `--float-hover` clear of its words, in the main view's rows too (scene `connect-apps-row-hover`). The back chevron (the
   list's title row and every app's page) is the ✕'s own 36 px round control with an 18 px glyph, on the ✕'s line. Scenes
   `connect-apps-connected-rows` (a real press on each part of a row, the keyboard, the switch, the hover) and `connect-app-from-row`; the check
   `connect-back` is on every scene that shows the chevron.
-- The owner's own list (his picture of 2026-11-14: Gmail, Google Calendar and Google Drive from Composio, Mobbin MCP of his own, Notion, Hugging Face and GitHub built in,
+- The owner's own list (Gmail, Google Calendar and Google Drive from Composio, an MCP server of their own, Notion, Hugging Face and GitHub built in,
   all on, no heading) is the fixture `OWNER_LIST` in `scenes/connect-apps.mjs`: `connected-owner-rows` presses the line, the name, the mark, the empty end and the top edge
   of all seven (real `page.mouse` presses, each must open that app's own page), `-loaded` after every app's tools were read and after a `ConnectionsChanged`, `-late` and
   `-failed` with the tools slow or failing (`toolsLate`, `toolsFail`), `-straddled` with the core's event arriving between the button going down and coming up
@@ -53,7 +53,7 @@ npm run look -- connect-apps connect-apps-scrolled connect-apps-category connect
 npm run look -- member-delete-ask context-menu-member composer-model-small composer-model-sources member-maker automations-detail-own automations-create-slot appearance-menu model-choices-answer profile connections-add-menu server-menu connections-delete --theme both --width 1120,720,1920x1080
 ```
 
-Marks and inner cards (2026-11-13):
+Marks and inner cards:
 
 - Marks keep their owners' colours on the tile and in the chip (R-ICON-01): `connect-icons` shows a row for every mark of `SERVICE_ICONS` (fixture
   variant `iconMarks`) and `icon-colours` compares the computed colour of each with its brand hex (Simple Icons) in the real browser;
@@ -63,13 +63,12 @@ Marks and inner cards (2026-11-13):
   `scenes/index.mjs`); it fails on a near-identical grey without an edge or a darker hole. The model chooser is one tone with a hairline
   between its columns and no light edge on the chosen row (`model-choices-answer`, `quick-model-menu`, `chooser-chatgpt-signed-out`).
 
-Three layers in every dialog (R-FLOAT-03, 2026-11-14, owner: 「它應該是三層顏色，最外層最深 ( dialog 外 )，再來是內層，再來是內容」):
+Three layers in every dialog (R-FLOAT-03): the outermost, outside the dialog, is the deepest colour, then the inner layer, then the content:
 
-- The window under the scrim is the darkest, the dialog and its nav (`--dialog`: dark #121212 as Grok Bot's Settings, light #f5f5f5) the middle, and the cards
+- The window under the scrim is the darkest, the dialog and its nav (`--dialog`: dark #121212, light #f5f5f5) the middle, and the cards
   and groups on it (`--float`: dark #1f1f1f with a #2b2b2b hairline, light white with #e5e5e5) the lightest, in the same order of lightness in both themes.
   Menus and popovers stand on `--float`. Settings' groups (`.slist`) and an app's 資訊 and 工具 boxes (`.cs-box`) are the cards; the 連結 buttons and
-  chips of the list are `--float-ctl` on the dialog itself. Grok Bot has the three layers only in Settings; its Connect Apps is one #1f1f1f surface
-  (`--dialog` is one token, so that can be restored in one line).
+  chips of the list are `--float-ctl` on the dialog itself.
 - The `dialog-layers` check (`DIALOG_LAYER_SCENES` in `scenes/index.mjs`: `profile`, `appearance`, `models`, `usage`, `safety`, `connect-apps`,
   `connect-apps-connected`, `connect-app-oauth`, `connect-app-connected`) reads the computed colours of the scrim over the page, the dialog, its nav and a
   card (or, on the list that has none, a control) and requires outside < dialog < lightest in lightness in both themes. `float-surface` says which layer a
@@ -87,13 +86,13 @@ on the view (`plugins-store*`, `store-n8n`, `plugins-setup-*`); `plugins-store-w
 sideways, and the notice that sent the owner to a store tab is gone with the tab). `plugins-store-needs` now proves a row says
 nothing of what an app asks for; `plugins-store-needs-page` proves the page says it once.
 
-Owner decision 2026-10-30: Settings > Connections is the only connected-app entry.
+Settings > Connections is the only connected-app entry.
 The sidebar has no app entry or badge. The installed tab retains the shared inventory
 count and its unknown/loading state; connection and permission behavior is unchanged.
 
-## Accounts of an app, and a sign-in that waits (2026-11-13): R-ACCT-01, R-ACCT-02, R-ACCT-03
+## Accounts of an app, and a sign-in that waits: R-ACCT-01, R-ACCT-02, R-ACCT-03
 
-Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他會有超級多沒有用的帳號卡在這裡」 and 「為什麼大部分人都沒有辦法連結？」.
+A sign-in cancelled half way can be removed, so no useless accounts pile up, and most people can connect.
 
 - An app's accounts card (a Composio app): each row is a person, a name, a status and a quiet ⋯ (no 帳號名稱 button). The ⋯ opens 重新命名
   and then 移除 in red. A row that is not connected (等待登入, 已過期, 已撤銷, 失敗, 未啟用) is removed at once; a connected one asks the app's
@@ -104,7 +103,7 @@ Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他
   `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.
 - A waiting sign-in holds nothing back: the waiting row says 請在瀏覽器登入… with an enabled 取消 (a Composio one too), every other 連結
   stays pressable, and pressing another one ends the waiting one at the core first (`integrations.connect_cancel`).
-- 移除 of a waiting row works while its sign-in waits (2026-11-16, R-ACCT-03): the core ends that sign-in and removes the row at once, and another account's 移除 does not queue behind a waiting sign-in. The mock core of `look` cannot prove it (it holds no connector lock); `core/tests/test_connector_accounts.py::test_removing_the_account_whose_sign_in_is_waiting_ends_that_sign_in_and_removes_it_at_once` does. The window needed no change: its 移除 on a not-connected row was already a plain call that waits for the core's answer.
+- 移除 of a waiting row works while its sign-in waits (R-ACCT-03): the core ends that sign-in and removes the row at once, and another account's 移除 does not queue behind a waiting sign-in. The mock core of `look` cannot prove it (it holds no connector lock); `core/tests/test_connector_accounts.py::test_removing_the_account_whose_sign_in_is_waiting_ends_that_sign_in_and_removes_it_at_once` does. The window needed no change: its 移除 on a not-connected row was already a plain call that waits for the core's answer. Nothing else the window sends queues behind a waiting sign-in either (disconnecting another app, 重新命名, a switch, reading tools): the sign-in holds the connector lock only to set up and to finish, and disconnecting the app it waits for ends it (`test_nothing_else_of_the_connections_waits_behind_a_sign_in_that_waits`). The Google sign-in still holds the lock for its wait (two minutes at most).
 - Driving it: open Connect Apps (`#nav .sidebar-apps`), the chip 已連結, the app's row; the ⋯ is `[data-conn="account-menu"][data-account]`.
   Gotchas: the menu's items are `account-label` and `account-remove`; a stale account is a fixture row with `stale: true` that the mock
   drops on `connectors.status`; a waiting sign-in is the fixture flag `pluginsConnecting` (the mock holds the connect call until
@@ -114,9 +113,9 @@ Owner, 2026-11-13: 「帳號登入如果中途取消都要可以拿掉 不然他
 npm run look -- accounts-card accounts-menu accounts-remove-ask accounts-remove-yes accounts-remove-waiting accounts-remove-last account-labels account-label-edit sign-in-waits sign-in-replaced sign-in-cancelled --theme both --width 1120,720,1920x1080
 ```
 
-## Setup in the conversation (owner, 2026-11-09)
+## Setup in the conversation
 
-Owner: 「這種設定不管是 composio 還是甚麼的 一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」. In the
+Every such setup, Composio or otherwise, is done in the conversation, unless it ends with a sign-in or with entering a key. In the
 store, a sign-in or one key is still done at once; 加入 on anything more (a server of the owner's own such as n8n, a
 developer app of theirs) puts the owner's words 「幫我連接 <name>」 in the conversation's composer (`store.setUpInChat`)
 and its row says nothing it would have to explain. The member answers with a connect card (`connect_app`): a server
@@ -127,7 +126,7 @@ the member explains each field in its reply. Scenes: store-n8n and plugins-setup
 ```powershell
 npm run look -- store-n8n plugins-setup-own-app plugins-store-needs --theme both --width 1120,720,1920x1080
 ```
-## The store is only what is not added yet; n8n is a preset (owner, 2026-11-08)
+## The store is only what is not added yet; n8n is a preset
 
 The store is one list, 「全部」 (or the chosen chip's name), of the apps not added yet: no 已連結 and no 常用
 sections. Popular apps still lead it while browsing, in bounded 18-card pages. n8n is offered as the owner's
@@ -145,7 +144,7 @@ npm run look -- store-n8n plugins-store plugins-store-key plugins-store-all --th
 the need words, the filled form and the focus.
 
 
-## Owner round 10 connected apps and chosen models
+## Connected apps and chosen models
 
 API and CLI brain prompts share the Composio discovery/execution contract:
 COMPOSIO_SEARCH_TOOLS returns a tool slug and schema; execute that slug through
@@ -172,7 +171,7 @@ core/tests/test_connectors.py (91), core/tests/brain/test_provider_registry.py (
 test_providers_more.py (48). All use fakes or mock transports.
 
 
-## Owner round 10 contracts (supersedes round 9 message previews)
+## Message previews and reply bubbles
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
 the bubble. Assistant messages render fully; authored reply envelopes retain separate
@@ -200,7 +199,7 @@ Calendar, member and Plugins scene clicks inherit this check. Connections search
 below the fixed Installed/Store switch in both states. A selected look report is
 required to establish the actual covered controls and any remaining movements.
 
-Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+Scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
@@ -213,7 +212,7 @@ CARGO_TARGET_DIR apply.
 ## Sub-features
 
 Settings > Connections contains one connected view (the tab 已連結) for Composio
-toolkits, private Google and custom MCP servers: connectors only (owner, 2026-11-07).
+toolkits, private Google and custom MCP servers: connectors only.
 A member's skills, their sharing and their import are managed in that member's own
 panel, never here; the dialog has no skills section, no import button and no skill
 rows. Every row has a bare service mark (or a generic plug),
@@ -271,7 +270,7 @@ Use Store to search and Add a built-in service without configuring Composio;
 complete its existing login, then return to 已連結. Optionally use the setup row at
 the end to save a Composio project key and add its extra apps.
 
-Under the 已連結 list a 推薦 section (owner, 2026-11-08: the page looked empty) shows up to six popular store apps not
+Under the 已連結 list a 推薦 section (so the page never looks empty) shows up to six popular store apps not
 added yet as the store's own cards with 加入 in place; an app already there is never recommended, however it was added
 (matched by id, name, description and its store entry: Notion directly, Gmail through the Google connection). It hides
 while searching; the store tab keeps the whole catalogue. Scene: connections-recommended.
@@ -320,9 +319,9 @@ number, the rows and the roster, `apps-unreadable` checks that an unreadable
 inventory shows no count, and `connectors-only` (scene `connected-apps-only`, whose fixture
 gives the members skills) requires no skills section, import button, skill row, plugin set or word of skills (connections.test.ts pins that the dialog never reads a member's skills; the open member panel behind it may).
 The scenes `connected-apps-skills`, `skill-private-detail` and the `skills-*` import, grant, source and plugin scenes were
-retired on 2026-11-07 with the dialog's skills section; the member panel's skills are covered by `details-skills` and the members map.
+retired with the dialog's skills section; the member panel's skills are covered by `details-skills` and the members map.
 
-All switches in Connections are binary (owner, 2026-10-28). The app switch reflects
+All switches in Connections are binary. The app switch reflects
 only its enabled flag; turning it off or on preserves every tool exclusion. A
 loaded app dialog exposes two permission rows, Write and Read, each with its own
 enabled/total count and switch, above the folded per-tool list. A kind switch is
@@ -464,20 +463,20 @@ states. connector-many-tools runs the same footer check. Happy-dom
 tests cover refusal/denial/timeout/network copy, retry/success/close, stale replies
 after reopening and the footer check's covered-button failure.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Owner round 4 settings alignment
+## Settings alignment of Connections
 
 Connections uses the shared 640px settings-pane measure, including its header
 actions, toolbar and list/store grids. Search ends at the same content edge;
 capability lists outside Settings retain their own reading cap.
 
-## Owner round 7 contracts
+## Connected-app inventory count
 
 Settings retains the connected-app inventory count; the sidebar has no app entry or count. `apps-count` and `apps-unreadable` check the installed tab against the shared inventory.
-## Search-first catalog and chat discovery (2026-10-29)
+## Search-first catalog and chat discovery
 
 Built-in and managed apps share the vocabulary in connectors/finder-data.json:
 name, slug, descriptions and aliases. Connected apps lead, then available popular
@@ -524,7 +523,7 @@ and store/card marks use the same renderer and HTTPS Composio allowlist. Slack's
 public catalog SVG has an exact offline snapshot declared in fixture.json, so
 pending and authorizing scenes exercise the real image element without network.
 
-## Accepted store and connector judge findings (2026-10-29)
+## Accepted store and connector judge findings
 
 The store's search, tabs and single-row group chips stay above a separate results
 scrollport. `plugins-store-all` scrolls to pagination both before and after a page
@@ -550,7 +549,7 @@ are unchanged by this fix.
 npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key connections-command connections-url connections-test connector-slack connector-slack-authorizing chat-connect-gmail connector-authorizing connector-reconnected --theme both --width 1120,720,1920x1080,1180x780
 ```
 
-## Store counts and single-row categories (round 4, 2026-10-29)
+## Store counts and single-row categories
 
 The Store tab counts apps the owner can add under the current search/category,
 excluding already connected entries. The pager uses that same filtered snapshot
@@ -584,7 +583,7 @@ Fixture/browser results do not establish native,
 live-provider or design-judge acceptance.
 
 
-## Store merge geometry (2026-10-29)
+## Store merge geometry
 
 Search, tabs, category chips and results share the settings content measure at
 720, 1120 and 1920x1080. Store grids use two tracks when the pane is wider than
@@ -610,7 +609,7 @@ changed metadata or categories still redraw. The controller regression in
 `app/src/main/connections.test.ts` covers both outcomes, while the existing measured
 Store scenes enforce the unchanged 250ms paint and 50ms long-task budgets.
 
-## Acceptance fixes (2026-10-30)
+## Acceptance fixes
 
 Connect apps categories uses the existing single scrolling row of broad group
 buttons, replacing the retired provider dropdown journey. The scene focuses every
@@ -634,7 +633,7 @@ before selection, reserving the existing right fade padding. The focus helper is
 shared with selected-category repaint, and a unit regression checks both scroll
 directions without changing the selected group or redrawing Settings.
 
-## Store long-task diagnostics (2026-10-30)
+## Store long-task diagnostics
 
 Tab switching also retains the original toolbar, tab buttons and search input.
 Only the result body is replaced, so a clicked tab keeps native focus without a
@@ -651,7 +650,7 @@ events. Compare both with ordinary unprofiled repeats; diagnostic overhead is no
 production timing. Historical failures without samples cannot be assigned a cause
 solely from a later passing run. See app/scripts/look/README.md for clock mapping.
 
-## Store click-to-paint work (third pass, 2026-10-30)
+## Store click-to-paint work
 
 The default first-screen snapshot is prepared as the catalog loads, keyed by the
 catalog identities, configuration and locale; non-default filters use fresh data.
@@ -674,7 +673,7 @@ machine timing; see the shared look README. Neither kind proves native/provider
 timing, or the cause of a historical failure without its CPU samples.
 
 
-## Composio request compatibility (2026-10-30)
+## Composio request compatibility
 
 The v3.1 session PATCH accepts the session configuration, without
 expected_config_version. Keep the local session lock and fail closed on provider
@@ -693,9 +692,9 @@ Raphael and a new member. It stops before consent and never reads account data.
 The browser's provider page still needs separate visual inspection; pending alone
 is not proof of an external page. No CLI brain or OpenRouter is used.
 
-## Apps that ask for the owner's own key or developer app (2026-10-31)
+## Apps that ask for the owner's own key or developer app
 
-Owner report: most of the store could not be added. Measured on the real catalog (1,714 toolkits): about 9% had a
+No app in the store may be impossible to add. Measured on the real catalog (1,714 toolkits): about 9% have a
 shared sign-in; 1,407 take only an API key or token, 88 are OAuth-only without Composio's shared login (X/Twitter
 among them) and need a developer app of the owner's own. Nothing in the store is a dead end now.
 
@@ -729,7 +728,7 @@ npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key p
 fields, the guide or its fallback, the redirect address for a developer app, a key that is in no page text and no call
 but the one that adds the app, and an emptied masked field after a refusal; `card-*` checks require the same for the chat.
 
-An app on the owner's own server (n8n) is set up in the conversation (owner, 2026-11-09: setup happens in the chat
+An app on the owner's own server (n8n) is set up in the conversation (setup happens in the chat
 unless it ends at a sign-in or a key). Its card (`needs: "own_server"`) says 需要自己的伺服器 and carries the fields
 the core declared: the address plain, the token masked, one 安全儲存, no modal and no catalog guide. Both values leave
 in the card's one `integrations.card_connect` call and in no page text.
@@ -738,9 +737,9 @@ in the card's one `integrations.card_connect` call and in no page text.
 npm run look -- connector-server connector-server-sent --theme both --width 1120,720,1920x1080
 ```
 
-## A card says why it did not connect, and the owner's own Google (2026-11-11, R-CONNECT-01 to 03)
+## A card says why it did not connect, and the owner's own Google (R-CONNECT-01 to 03)
 
-Owner's open task since 2026-10-25 (「接上 Composio 與自己的 Google 授權」). Two behaviours, one machine (`connectors/cards.py`):
+Connecting Composio and the owner's own Google authorization. Two behaviours, one machine (`connectors/cards.py`):
 
 - A failed connection card is always a named cause (`CAUSES`: busy, vault, browser, network, no_answer, service_down, rate_limit,
   refused, invalid_request, not_found, bad_response, address, not_allowed, key_refused, needs_*, client_rejected, denied, timeout,
@@ -767,7 +766,7 @@ and in no call but the card's own, the sign-in waiting with only 取消, and the
 client proves: that Google accepts a Desktop client with no registered return address, the real consent screens (including the
 unverified-app warning), the 7-day expiry of a project left in Testing, and that `access_type=offline` returns a refresh token.
 
-## Executable round 10 matrix
+## Executable look matrix
 
 ```powershell
 npm run look -- conversation-chief-up conversation-chief-bottom conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom reply-split-bubbles overlay-learned-pill stable-connections-switch stable-dictionary-controls stable-settings-controls --theme both --width 1120,720,1920x1080
@@ -778,7 +777,7 @@ both read/write group switches in both directions, retaining the control and
 layout above it within one pixel. automations-day visits day/week/day to cover
 both calendar period controls with the same generic stable-click contract.
 
-## Connections from a conversation (2026-11-01)
+## Connections from a conversation
 
 The shared private/room MCP proposal card edits the name, command or URL, arguments and secret names. Secret values use SecretCards and the vault. Test initializes and discovers tools while disabled, groups read/write tools, then enables the tested revision and continues the original request. Stdio uses the existing local-command decisions. Edits invalidate discovery; cancellation settles secret cards too. Saving public fields has the shared stable-click check and the card has no inner scroll panel or JSON editor.
 
@@ -795,7 +794,7 @@ npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-p
 Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks.
 
 
-## Named connected accounts (2026-11-05)
+## Named connected accounts
 
 R-COLLEAGUE-04: Connections > an app shows each public account label; Account label edits that exact account. Add another account reuses existing sign-in and asks for a label afterward. A returned email is the default; provider refresh retains owner labels by account ID. Members and connections_list receive public labels and the shared instruction to ask which account unless specified.
 
@@ -805,12 +804,12 @@ npm run look -- account-labels account-label-edit output-folder-picker output-fo
 
 Core fakes prove persistence and projection. IPC fixtures never prove OAuth or provider metadata. Custom MCP services without multiple managed account identities retain their service identity.
 
-## Primary management intent regression (2026-11-05)
+## Primary management intent regression
 
 Connection management is offered only to the current primary in an interactive
 owner private chat. Connect, enable/disable and turn on/off requests select the
 connection area, alongside disconnect/reconnect and explicit connection/MCP terms.
-Since the fixed tool list (2026-11-10, owner-management.md) every request keeps
+Since the fixed tool list (owner-management.md) every request keeps
 management out of the list: find_tools returns it and use_tool calls it, and the
 words above only rank what find_tools returns. The default primary snapshot lists 43. Discovery never widens nonprimary or worker
 access, and execution rechecks the live primary and exact-action owner approval.
@@ -826,7 +825,7 @@ core/tests/evaluate/test_guardian.py (scenario intent reaches the shared snapsho
 recorded creates without side effects and approval pause/resume). No UI changes;
 look, judge, native providers and live models are outside this offline repair.
 
-## One button per row, one way back, one mark, a search that finds the name (2026-11-14, R-UI-154, R-UI-155, R-APPS-SEARCH-01, R-APPS-MARK-01)
+## One button per row, one way back, one mark, a search that finds the name (R-UI-154, R-UI-155, R-APPS-SEARCH-01, R-APPS-MARK-01)
 
 A row of Connect Apps is one button with 連結, 「✓ 已連結」 or its switch on its fill, whose round corners the list never cuts; the connected
 list's chevron and title are one back button; a search orders apps by how well their names answer it; the @ menu draws the logo the list draws.

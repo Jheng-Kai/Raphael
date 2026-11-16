@@ -132,7 +132,10 @@ def test_migration_85_widens_both_kinds_and_keeps_what_was_saved(monkeypatch, tm
         conn.execute("INSERT INTO vault_entries VALUES ('v1','login','Mail','hint','https://mail.example','[0]','computer-entry:v1')")
     with pytest.raises(Exception):
         conn.execute("INSERT INTO vault_entries VALUES ('v2','key','K','','','[0]','c')")
-    db.migrate(conn)
+    # Only this step: a later migration must not decide what this one is seen to do.
+    with monkeypatch.context() as step:
+        step.setattr(db, "LATEST_VERSION", 85)
+        db.migrate(conn)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 85
     assert conn.execute("SELECT id, kind, name FROM secret_cards").fetchall()[0][:] == ("c1", "env", "Weather")
     assert tuple(conn.execute("SELECT id, kind, label, hint, origin, members, credential FROM vault_entries").fetchone()) == (

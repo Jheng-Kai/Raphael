@@ -29,8 +29,8 @@ export interface MemberTemplate {
   description?: string;
 }
 const STARTERS = [
-  ["coordinator", "rimuru", ""], ["researcher", "souei", ""], ["writer", "shuna", ""], ["developer", "diablo", "github"],
-  ["planner", "benimaru", "googlecalendar"], ["analyst", "hakurou", ""], ["editor", "shion", ""], ["inbox", "gobta", "gmail"],
+  ["coordinator", "blue-plain", ""], ["researcher", "horn-sash-blue", ""], ["writer", "small-horns-pink", ""], ["developer", "streaks-charcoal", "github"],
+  ["planner", "horns-red", "googlecalendar"], ["analyst", "mustache-gray", ""], ["editor", "horn-lavender", ""], ["inbox", "goggles-green", "gmail"],
 ] as const;
 
 export function starterTemplate(index: number): MemberTemplate {
@@ -69,7 +69,7 @@ export function previewTemplateFile(text: string, create: (member: NewMember) =>
   let raw: unknown;
   try { raw = parseTemplateFile(text); }
   catch (error) { toaster.info(templateErrorText(error)); return Promise.resolve(); }
-  return previewTemplate(raw, "slime:rimuru", create, groupId, done);
+  return previewTemplate(raw, "slime:blue-plain", create, groupId, done);
 }
 
 export interface ScanFinding { kind: "secret" | "injection"; path: string }

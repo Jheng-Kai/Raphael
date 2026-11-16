@@ -1,6 +1,6 @@
 """Vault references for private page filling."""
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses/NOTICES.md.
 
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 import hashlib
 import json
 from urllib.parse import urlsplit

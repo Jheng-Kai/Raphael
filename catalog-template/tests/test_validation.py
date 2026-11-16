@@ -17,7 +17,7 @@ class CatalogueValidation(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.package = dict(format="raphael-member", version=1, name="Writer", role="Editor", personality="Careful", instructions="Check sources", reply_style="full",
             skills=[{"text":"---\nname: Editing\ndescription: Check clarity\n---\nReview the draft"}], routines=[], connections=[])
-        self.entry = dict(id="writer", name="Writer", creator="Example", category="marketing", summary="Edit a draft", avatar="shuna", featured=True,
+        self.entry = dict(id="writer", name="Writer", creator="Example", category="marketing", summary="Edit a draft", avatar="small-horns-pink", featured=True,
             package="packages/writer/member.raphael-member", sha256="", version="1.0.0", created="2026-11-05", updated="2026-11-05", skills=1, routines=0, connections=[])
 
     def save(self):

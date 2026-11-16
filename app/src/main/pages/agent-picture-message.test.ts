@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// A picture a member sends is a message the owner can act on, as a text bubble is (owner, 2026-11-14, R-UI-156): the real
+// A picture a member sends is a message the owner can act on, as a text bubble is (R-UI-156): the real
 // page (happy-dom) with the app, the core and the clipboard faked.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AgentTurn, AppContext, MainEvent } from "../types";

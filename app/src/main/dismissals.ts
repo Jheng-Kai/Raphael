@@ -1,11 +1,11 @@
 // One outside-press policy for modal panels and their nested menus (R-UI-121).
 //
 // A press outside what is open closes it and is delivered to what was pressed, in the same press, as if nothing had been
-// open (owner, 2026-11-11). Two shapes of outside, one rule:
+// open. Two shapes of outside, one rule:
 //   - a menu or popover has nothing over the page: the press is simply not stopped, so the page element receives its own
 //     pointerdown, focus and click, and the panel closes between pointerup and click;
 //   - a scrim (a dialog, the settings window) sits over the page and catches the press: the panel closes and the press is spent
-//     (owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好，不用可以直接點到後面的東西」): nothing behind the scrim is pressed,
+//: nothing behind the scrim is pressed,
 //     focused or right-clicked. Only a drawer's scrim (`closeAndPress`, the narrow sidebar and the details panel) hands the press down.
 // A press that began inside, or a drag that ended outside, never closes or passes through.
 // A panel that may not close right now (canClose) keeps the modal's old promise instead: the press is spent and goes nowhere.
@@ -227,8 +227,8 @@ function closeAll(stack: { layer: Layer }[]): boolean {
 /**
  * A frame is another document (a page open in the conversation's place, a computer's screen): a press inside it gives this
  * document no pointer event at all, only the loss of the focus to that frame. That is the outside press, so every panel the
- * frame is outside of closes, and the frame keeps the press and the focus it took (R-UI-121; owner, 2026-11-12: the model
- * card stayed open over a page until the sidebar was pressed). The pointer must be over the frame: a frame that takes the
+ * frame is outside of closes, and the frame keeps the press and the focus it took (R-UI-121: the model
+ * card would stay open over a page until the sidebar was pressed). The pointer must be over the frame: a frame that takes the
  * focus by itself, or by the Tab key, has not been pressed, and a frame under a scrim cannot be.
  */
 function pressedIntoFrame(): void {

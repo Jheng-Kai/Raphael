@@ -1,10 +1,10 @@
-"""A failure is information: a member keeps going until no plausible way is left (owner, 2026-11-14).
+"""A failure is information: a member keeps going until no plausible way is left.
 
 Facts behind it: a language-teaching member, told to use its own computer for a news page, ran a search, read the lead of the
 page, had its page refused twice, and ended with 「我不會再換方式繞過這個攔截」 without opening its browser. Every word of the
 harness on that path pointed at stopping: "inspect once, change approach once, then report the exact blocker", a corrective
 note that allowed "a different approach at most once", "Only open a browser when the owner asks", every failure shown as
-"The call was refused", and a summary and replayed turns that kept yesterday's failures as today's facts. Hermes Agent keeps
+"The call was refused", and a summary and replayed turns that kept yesterday's failures as today's facts. A member keeps
 going because nothing tells it to stop, every failure arrives with its cause, and failures never become rules. These tests
 use fakes for every model, CLI and service; nothing is sent anywhere.
 """
@@ -30,7 +30,7 @@ from raphael_core.worker.loop import FAILURE_CHARS, OTHER_WAYS, Call, ToolOutcom
 
 from .test_service import NOW_MS
 
-FIELDS = dict(name="Shion", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
+FIELDS = dict(name="Ada", role="Japanese teacher", instructions="Teach N1 reading.", personality="Strict.")
 RULE = "A failed call is information: read its cause, fix what you can, then take the next plausible way"
 CAPS = ("change approach once", "at most once", "Do not try another", "after one check",
         "Only open a browser when the owner asks", "answer with what you have; name the gap")

@@ -284,7 +284,7 @@ print(json.dumps({"type":"result", "subtype":"success", "session_id":native, "re
         assert result["text"] == "Finished."
     assert (await typed(rig, "Hello", teacher.id))["text"] == "Finished."
     rows = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
-    # Claude Code keeps one working directory per member (decision 3, 2026-11-09): the fake names its session after
+    # Claude Code keeps one working directory per member: the fake names its session after
     # the member's directory, and only the teacher's own conversation resumes it.
     assert [row["resume"] for row in rows] == [None, None, f"native-{teacher.id}", f"native-{teacher.id}"]
     assert rows[0]["workspace"] == rows[2]["workspace"]
@@ -780,7 +780,7 @@ async def test_paused_cli_cancels_on_stop_but_finishes_after_expiry_and_closes_m
 @pytest.mark.parametrize("stop", [False, True])
 async def test_expiry_cannot_answer_the_next_card_and_an_immediate_stop_still_stops(setup, tmp_path, stop):
     from agent.test_cli_brains import alive
-    # The CLI model is told the fixed words, never the interface's phrase (owner, 2026-11-14).
+    # The CLI model is told the fixed words, never the interface's phrase.
     from raphael_core.agent.policy import EXPIRED_NOTE
 
     rig, team = setup

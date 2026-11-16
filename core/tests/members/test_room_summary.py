@@ -1,5 +1,5 @@
 """The rolling summary of a room thread: what has fallen out of the members' recent window is folded into it, and a failed
-call never blocks the room (owner, 2026-11-11, harness plan of 2026-11-09, section A)."""
+call never blocks the room."""
 import logging
 
 import pytest
