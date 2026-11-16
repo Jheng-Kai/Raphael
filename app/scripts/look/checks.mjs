@@ -3375,8 +3375,9 @@ export function checkRendered(name, context = {}) {
         if (model) {
           const trigger = box(model), arrow = box(chevron);
           require(trigger.height >= 31.5 && visible(chevron) && arrow.width >= 15.5 && arrow.left >= trigger.left - 0.5 && arrow.right <= trigger.right + 0.5, `the model keeps its chevron whole: ${JSON.stringify(round(trigger))}`);
-          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5;
-          require(wordShown || shortened, `the model's name shortens before the permission's word goes: ${JSON.stringify(shown)}`);
+          // A name that fits in the room the model keeps has nothing to give; a longer one shortens before the word goes.
+          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), keep = parseFloat(getComputedStyle(slot).flexBasis);
+          require(wordShown || shortened || box(slot).width <= keep + 0.5, `the model's name shortens before the permission's word goes: ${JSON.stringify(shown)}`);
           Object.assign(result, { modelShortened: shortened });
         }
         Object.assign(result, { modeWord: word.textContent.trim(), modeWordShown: wordShown });
