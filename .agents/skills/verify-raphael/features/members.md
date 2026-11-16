@@ -88,6 +88,8 @@ or toggle.
 
 This supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for the complete selected matrix and deferred native acceptance.
 
+A routine row of Details opens the routine to read; an address in its instructions is a link to the owner's browser, while the row itself (a button, its status line cut short) stays words (R-LINK-01, `urls-member-routine`, described with the other linked surfaces in [conversation](conversation.md)).
+
 ## Quiet resting poses
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.

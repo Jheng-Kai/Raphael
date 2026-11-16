@@ -13,6 +13,7 @@
     "files": ["研究摘要.md", "專案計畫.html", "訪談筆記.txt"],
     "page": "每週工作報告"
   },
+  "linkSample": { "notes": "從任務看板同步。詳細內容請看https://notes.example.com/p/weekly-report-1f2e3d4c5b6a?pvs=4#summary。下週一前確認。", "reason": "對方的議程在這裡（https://docs.example.com/projects/2026/design-review/agenda-and-materials-for-the-thursday-meeting/section-two?team=design&view=full#materials）請先看第二項再回覆。", "prompt": "每週一早上整理專案進度，參考https://notes.example.com/p/weekly-report-1f2e3d4c5b6a的格式，做成週報。" },
   "appUpdateSample": { "version": "1.1.0", "notes": "改善更新安裝、記憶匯入與大型附件。\n更新會保留你的設定與工作資料。" },
   "routineWorkflowSample": {"title":"早晨摘要", "prompt":"整理範例筆記，只在對話中回報。", "done":"已整理三則範例筆記。", "refused":"這位成員每小時已執行 200 次，請稍後再試。", "failed":"範例來源無法讀取，未使用舊資料。"},
   "routineTimezoneSample": {"timezone":"America/New_York"},
