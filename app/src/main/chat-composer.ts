@@ -172,54 +172,9 @@ function fitComposerRow(bar: HTMLElement): void {
   new MutationObserver(fit).observe(model, { childList: true, subtree: true, characterData: true });
 }
 
-/**
- * The move (a CSS `translate`, "" for none) that puts a box seen at `rect`, already moved by `moved`, on whole device pixels at
- * `ratio`; null when the move it has is that one.
- */
-export function pixelMove(rect: { left: number; top: number }, moved: string, ratio: number): string | null {
-  const [tx = 0, ty = 0] = moved.split(" ").map(value => parseFloat(value) || 0);
-  const left = rect.left - tx, top = rect.top - ty;
-  const dx = Math.round(left * ratio) / ratio - left, dy = Math.round(top * ratio) / ratio - top;
-  if (Math.abs(dx - tx) < 1e-3 && Math.abs(dy - ty) < 1e-3) return null;
-  return Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3 ? "" : `${dx.toFixed(4)}px ${dy.toFixed(4)}px`;
-}
-
-/**
- * The emblem's still is a bitmap of exactly its box's device pixels (avatar.ts), so it is sharp only where its box starts on a
- * whole device pixel: the composer's sizes follow the window by fractions of a pixel, and at 125% or 150% almost every place is
- * a fraction, where the screen resampled the bitmap and blurred it (R-UI-161). The button's `translate` takes the picture to the
- * nearest whole device pixel (its own children are redrawn at every keystroke, the button is not), measured again when the
- * picture, the composer, the column around it or the window changes, and after the button's entrance, whose scale falsifies
- * the measure while it runs.
- */
-function keepEmblemOnPixels(voice: HTMLElement): void {
-  if (typeof ResizeObserver !== "function" || typeof MutationObserver !== "function") return;
-  const snap = (): void => {
-    const rect = voice.querySelector(".av > img.em")?.getBoundingClientRect();
-    if (!rect?.width) return;
-    const next = pixelMove(rect, voice.style.translate, window.devicePixelRatio || 1);
-    if (next === null) return;
-    if (next) voice.style.translate = next; else voice.style.removeProperty("translate");
-  };
-  const sizes = new ResizeObserver(snap);
-  let column: Element | null = null;
-  const watch = (): void => {
-    const around = voice.closest(".composer")?.parentElement ?? null;
-    if (around !== column) { if (column) sizes.unobserve(column); if (around) sizes.observe(around); column = around; }
-    snap();
-  };
-  const form = voice.closest(".composer");
-  if (form) sizes.observe(form);
-  new ResizeObserver(watch).observe(voice);
-  new MutationObserver(snap).observe(voice, { childList: true, subtree: true });
-  voice.addEventListener("animationend", snap);
-  window.addEventListener("resize", snap);
-}
-
-/** The row under a composer's field, wherever the composer is built: it gives way in order and keeps its emblem sharp. */
+/** The row under a composer's field, wherever the composer is built: it gives way in order (R-UI-160). */
 export function bindComposerRow(form: HTMLElement): void {
   fitComposerRow(form.querySelector<HTMLElement>(".cmp-bar")!);
-  keepEmblemOnPixels(form.querySelector<HTMLElement>(".cmp-voice")!);
 }
 
 export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8Array {

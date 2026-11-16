@@ -139,7 +139,10 @@ export async function run(options) {
     await warmupEntries(server, options.selected.map(scene => scene.entry || "index.html"), entry => readFile(join(app, entry), "utf8"));
     const address = server.httpServer.address();
     const origin = `http://127.0.0.1:${address.port}`;
-    browser = await puppeteer.launch({ executablePath, headless: true, userDataDir: join(directory, "browser-profile"), args: BROWSER_ARGS, timeout: 60000 });
+    // Another pixel ratio is the browser's own, as a screen at 125% gives it: an emulated one places pictures on whole CSS
+    // pixels and resamples them in between, which a real one does not (measured), so it would show blur the app does not have.
+    const scaled = (options.scale ?? 1) !== 1;
+    browser = await puppeteer.launch({ executablePath, headless: true, userDataDir: join(directory, "browser-profile"), args: scaled ? [...BROWSER_ARGS, `--force-device-scale-factor=${options.scale}`] : BROWSER_ARGS, timeout: 60000 });
     report.browser = await browser.version();
     for (const scene of options.selected) for (const theme of options.themes) for (const width of options.widths) {
       const page = await browser.newPage();
@@ -154,7 +157,7 @@ export async function run(options) {
       const requestFailures = navigationRequests(page);
       page.on("response", response => { if (response.status() >= 400 && !favicon(response.url())) error("http", `${response.status()} ${response.url()}`); });
       try {
-        await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: options.scale ?? 1 });
+        await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: scaled ? 0 : 1 });
         await page.emulateTimezone("Asia/Taipei");
         // Still frames by default; a scene about something that moves turns motion on and holds it with `freeze-motion`.
         await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: scene.motion ? "no-preference" : "reduce" }, { name: "prefers-color-scheme", value: theme }]);

@@ -3406,30 +3406,35 @@ export function checkRendered(name, context = {}) {
     return { check: name, rows, widestWords: words };
   })();
   // The composer's idle emblem is a bitmap of exactly its shown size on the screen's pixels (R-UI-161): as many pixels as its
-  // CSS box times the device pixel ratio, its box on whole device pixels, and nothing between it and the screen that resamples it.
+  // CSS box times the device pixel ratio, an even number of them so that its centre is a corner of the pixel grid, and nothing
+  // between it and the screen that scales, turns, filters or moves it by a fraction of a device pixel. Where its layout box
+  // starts does not matter: at a real pixel ratio the browser starts a picture on a whole device pixel (measured at 100%, 125%
+  // and 150%; an emulated ratio does not, which is why `--scale` sets the browser's own).
   if (name === "emblem-sharp") {
     const ratio = devicePixelRatio, faces = [...document.querySelectorAll('.composer .cmp-voice .av > img')].filter(visible);
     require(faces.length > 0, "the composer shows its idle emblem");
+    const whole = value => Math.abs(value - Math.round(value)) < 0.02;
     const measured = faces.map(img => {
-      const rect = img.getBoundingClientRect(), x = rect.left * ratio, y = rect.top * ratio, w = rect.width * ratio, h = rect.height * ratio;
+      const rect = img.getBoundingClientRect(), w = rect.width * ratio, h = rect.height * ratio;
       const resampling = [];
       for (let element = img; element && element !== document.documentElement; element = element.parentElement) {
-        const style = getComputedStyle(element);
-        // A move is no resampling once the box lands on whole device pixels (measured below); a scale, a turn or a filter is.
-        if (style.transform !== 'none' && !/^matrix\(1, 0, 0, 1, [-\d.e]+, [-\d.e]+\)$/.test(style.transform)) resampling.push(`${element.className || element.tagName}: transform ${style.transform}`);
-        if (style.filter !== 'none') resampling.push(`${element.className || element.tagName}: filter ${style.filter}`);
-        if (style.backdropFilter && style.backdropFilter !== 'none') resampling.push(`${element.className || element.tagName}: backdrop-filter ${style.backdropFilter}`);
-        if (style.scale !== 'none' || style.rotate !== 'none') resampling.push(`${element.className || element.tagName}: scale ${style.scale} rotate ${style.rotate}`);
+        const style = getComputedStyle(element), at = element.className || element.tagName;
+        const move = /^matrix\(1, 0, 0, 1, ([-\d.e]+), ([-\d.e]+)\)$/.exec(style.transform);
+        if (style.transform !== 'none' && !(move && whole(Number(move[1]) * ratio) && whole(Number(move[2]) * ratio))) resampling.push(`${at}: transform ${style.transform}`);
+        if (style.translate !== 'none' && !style.translate.split(' ').every(part => whole(parseFloat(part) * ratio))) resampling.push(`${at}: translate ${style.translate}`);
+        if (style.scale !== 'none' || style.rotate !== 'none') resampling.push(`${at}: scale ${style.scale} rotate ${style.rotate}`);
+        if (style.filter !== 'none') resampling.push(`${at}: filter ${style.filter}`);
+        if (style.backdropFilter && style.backdropFilter !== 'none') resampling.push(`${at}: backdrop-filter ${style.backdropFilter}`);
       }
       return { ratio, source: img.currentSrc.startsWith('data:') ? 'drawn' : img.currentSrc.replace(/^.*\/brand\//, 'brand/'), bitmap: [img.naturalWidth, img.naturalHeight],
-        box: [rect.width, rect.height], device: [x, y, w, h].map(value => Math.round(value * 1000) / 1000), rendering: getComputedStyle(img).imageRendering, resampling };
+        box: [rect.width, rect.height], device: [rect.left * ratio, rect.top * ratio, w, h].map(value => Math.round(value * 1000) / 1000), rendering: getComputedStyle(img).imageRendering, resampling };
     });
     for (const face of measured) {
-      const [x, y, w, h] = face.device, whole = value => Math.abs(value - Math.round(value)) < 0.02;
+      const [, , w, h] = face.device;
       require(face.source === 'drawn', `the emblem is drawn, not a stand-in picture: ${JSON.stringify(face)}`);
       require(face.bitmap[0] === Math.round(w) && face.bitmap[1] === Math.round(h) && whole(w) && whole(h), `the emblem's bitmap is its box times the pixel ratio: ${JSON.stringify(face)}`);
-      require(whole(x) && whole(y), `the emblem's box stands on whole device pixels, so its centre is on the pixel grid: ${JSON.stringify(face)}`);
-      require(face.resampling.length === 0, `nothing resamples the emblem on its way to the screen: ${JSON.stringify(face)}`);
+      require(face.bitmap.every(side => side % 2 === 0), `the emblem's centre is a corner of the pixel grid, not the middle of a pixel: ${JSON.stringify(face)}`);
+      require(face.resampling.length === 0, `nothing scales, turns, filters or moves the emblem by a fraction of a pixel: ${JSON.stringify(face)}`);
     }
     return { check: name, faces: measured };
   }

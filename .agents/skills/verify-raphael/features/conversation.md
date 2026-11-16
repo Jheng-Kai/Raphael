@@ -3005,17 +3005,20 @@ and the longest name of a model that answers in the recorded OpenRouter list, wi
 798 window, the list open, a 520 px panel) and `composer-row-language` (the narrow case in Vietnamese).
 
 The idle emblem is a still drawn once per size and pixel ratio (`emblemStill` in `avatar.ts`): a bitmap of its CSS box times
-the ratio, drawn again when the ratio changes (a window moved to a screen of another scale, a zoom). Two things blurred it:
-the composer's place follows the window by fractions of a pixel, and a bitmap that starts a fraction of a device pixel in is
-resampled by the screen (measured at 125 % and 150 %), so `keepEmblemOnPixels` moves the voice button by that fraction; and at
-32 px the 416 px rune texture sampled at the default quality broke into scattered dots, so a small still averages it down
-(`imageSmoothingQuality: "high"`), stops its rays at the white ring, leaves out the faint circle at the letters' feet and draws
-a whole-pixel white ring with a one-pixel warm edge (`small` in `drawEmblem`; larger emblems keep the anime's numbers).
-`emblem-sharp` fails when the bitmap is not the box times the ratio, when the box is off the device pixel grid, or when a
-scale, turn or filter lies between it and the screen; the step `emblem-picture` saves the emblem as the screen shows it
-(`emblem-<theme>-<width>-x<ratio>.png` in the run) and fails when those pixels are not the bitmap laid on the composer's
-ground at any whole-pixel offset (it skips an emblem under the panel's scrim, under 1120 px). `composer-emblem-ratio` moves the
-window to a 150 % screen mid-scene. Run the emblem at other ratios with `--scale 1.25` and `--scale 1.5`.
+the ratio, drawn again when the ratio changes (a window moved to a screen of another scale, a zoom: the ratio's media query,
+or the resize the move brings). At 32 px the 416 px rune texture sampled at the default quality broke into scattered dots,
+which is what looked muddy, so a small still averages it down (`imageSmoothingQuality: "high"`), stops its rays at the white
+ring, leaves out the faint circle at the letters' feet and draws a whole-pixel white ring with a one-pixel warm edge (`small`
+in `drawEmblem`; larger emblems keep the anime's numbers). Where its layout box starts does not matter: at a real pixel ratio
+the browser starts a picture on a whole device pixel (measured at 100 %, 125 % and 150 % with `--force-device-scale-factor`);
+an emulated ratio places it on whole CSS pixels and resamples it in between, so `--scale` starts the browser at its own ratio.
+`emblem-sharp` fails when the bitmap is not the box times the ratio, when its sides are odd (its centre in the middle of a
+pixel), or when a scale, turn, filter or fractional move lies between it and the screen; the step `emblem-picture` reads the
+whole viewport (a clip is rounded to whole CSS pixels, which at 125 % resamples the capture itself), saves the emblem as the
+screen shows it (`emblem-<theme>-<width>-x<ratio>.png` in the run) and fails when those pixels are not the bitmap laid on the
+composer's ground at any whole-pixel offset (it skips an emblem under the panel's scrim, under 1120 px).
+`composer-emblem-ratio` moves the window to a 150 % screen mid-scene (emulated, so only the bitmap is checked after it).
+Run the emblem at other ratios with `--scale 1.25` and `--scale 1.5`.
 
 ```powershell
 npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
