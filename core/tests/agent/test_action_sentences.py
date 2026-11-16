@@ -20,6 +20,14 @@ def test_sentences(tool, args, present, past):
     assert sentence(tool, args, "zh-TW") == (present, past)
 
 
+@pytest.mark.parametrize("language", ["zh-TW", "en", "ja"])
+def test_a_command_in_the_members_computer_is_never_said_to_run_on_the_owners(language):
+    # vm_exec runs in the member's own computer; "your computer" read as the owner's PC, where nothing of the kind ran.
+    present, past = sentence("computer__vm_exec", {"command": "cd /home/cua/build && ls"}, language, server="computer")
+    assert not any(words in present + past for words in ("你的電腦", "your computer", "あなたのパソコン"))
+    assert sentence("local_exec", {"command": "npm test"}, language) != (present, past)
+
+
 @pytest.mark.parametrize("action,present,past", [("list", "Reading a file", "Read a file"),
                                                    ("restore", "Editing a file", "Edited a file")])
 def test_file_history_action_notifications_match_the_operation(action, present, past):

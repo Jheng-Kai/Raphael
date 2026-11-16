@@ -30,7 +30,11 @@ _PAGE_EN = re.compile(rf"\b{_MAKE}\b[^.\n]{{0,40}}\b(?:web ?page|html page|repor
 _PAGE_ZH = re.compile(r"(?:做|製作|制作|建立|建立出|生成|產生|生出|撰寫|寫|輸出|整理成|做成|變成|成為|整理為)[^。\n]{0,14}(?:網頁|网页|頁面|页面|報告頁)"
                       r"|(?:網頁|网页|頁面|页面|報告頁)[^。\n]{0,6}(?:製作|制作|生成|產生|建立)", re.I)
 _PAGE_JA = re.compile(r"ページ[^。\n]{0,10}(?:作成|作る|作って|生成|まとめ|公開)|(?:作成|作る|作って|生成|まとめ|公開)[^。\n]{0,14}ページ")
-_DRAFT = re.compile(r"\b(?:draft)\b[^.\n]{0,30}\b(?:email|mail|message|slack)\b|\b(?:email|mail|slack)\b[^.\n]{0,30}\bdraft\b|草稿|下書き", re.I)
+# A draft is something made only as an email or a Slack draft (`PRODUCERS["draft"]`): a post, an article or a reply drafted in the
+# conversation is words, not a thing to find, so 草稿 / 下書き alone say nothing (a routine that drafted a post was failed for it).
+_MAIL = r"(?:email|e-mail|mail|gmail|outlook|slack|郵件|邮件|信件|回信|封信|電郵|电邮|メール)"
+_DRAFT = re.compile(r"\b(?:draft)\b[^.\n]{0,30}\b(?:email|mail|message|slack)\b|\b(?:email|mail|slack)\b[^.\n]{0,30}\bdraft\b"
+                    rf"|{_MAIL}[^。.\n]{{0,12}}(?:草稿|下書き)|(?:草稿|下書き)[^。.\n]{{0,12}}{_MAIL}", re.I)
 
 
 def expected(prompt: str) -> str | None:

@@ -89,6 +89,12 @@ async def test_a_tool_that_does_not_exist_is_told_with_the_nearest_real_ones(mak
     ("每天早上製作今日新聞的網頁", "page"),
     ("把日本語のニュースをまとめてページを作成する", "page"),
     ("Write an email draft to the client about the delay", "draft"),
+    ("每天早上先擬好給客戶的郵件草稿", "draft"),
+    ("把 Slack 的回覆先寫成草稿", "draft"),
+    ("取引先へのメールの下書きを作って", "draft"),
+    # A post drafted in the conversation is no email or Slack draft: the run that wrote it is not failed for making none.
+    ("提醒我記錄今天的進度，並幫我先擬好貼文草稿，讓我 3 分鐘內就能發出去", None),
+    ("ブログ記事の下書きを書いて", None),
     ("Check the app's health with self_check and report what is wrong", None),
     ("Do not make a page; only tell me in the conversation", None),
     ("不要做網頁，直接回報", None),
@@ -143,6 +149,8 @@ async def test_a_run_set_to_make_a_page_is_done_only_when_the_page_exists(make_r
                                                status="running", source="routine"))
     task = await ended(rig, first)
     assert (task.state, task.reason) == ("failed", "routine_nothing") and pages == []
+    # What was missing is the app's judgement of the work, no fault of the brain: none is recorded for a member to report.
+    assert history.get(task.turn_id).status == "error" and history.get(task.turn_id).failure is None
     rig.client.replies = [turn("", [call("show_page", {"title": "News", "html": "<p>News</p>"}, "c1")]), report("Made the page.")]
     second = routine_run(rig, prompt)
     rig.service.attach_turn(second, history.add(session_id="routine:1", question="News", route="routine", prefix="", text="",

@@ -187,6 +187,11 @@ CLI_QUESTION_WAIT_S = QUESTION_WAIT_S + 60
 AT_THIS_COMPUTER = "app"
 # The assistant's history calls a task by the status of a turn.
 _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
+# Endings that are the app's judgement of the work, not a fault of the brain: the turn's words say what was missing, and no
+# brain failure is recorded with them. Recorded as one ("unknown" on `cli:claude`), a member asked about its failed routine
+# told the owner of a Claude error of unknown cause (2026-11-16, R-ROUTINE-05).
+_JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
+                             "missing_terminal", "dangling_mention", "child_work_incomplete"))
 # The most of a routine's last report that its next run is shown.
 LAST_REPORT_CHARS = 1500
 # Joins a reply's messages while its hand-back block is taken out; no model writes it.
@@ -3026,7 +3031,8 @@ class BackgroundService:
                         status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - prior_cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
                         failure=(failure or turn_failure(reason, run.model if run is not None else task.model_ref,
-                                                         getattr(run, "model_failure", None))) if state == "failed" else None,
+                                                         getattr(run, "model_failure", None)))
+                                if state == "failed" and (failure or reason not in _JUDGED_ENDINGS) else None,
                         replies=pending_replies(
                             [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
                             [compose(prefix,line,None) for line in terminal_replies if line]))
