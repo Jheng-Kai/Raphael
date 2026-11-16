@@ -66,7 +66,7 @@ describe("the column, drawn", () => {
     for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
-  test("Raphael leads the column as an ordinary row with his blue slime", () => {
+  test("Raphael leads the column as an ordinary row with its blue slime", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);

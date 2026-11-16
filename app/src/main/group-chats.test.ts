@@ -445,7 +445,7 @@ test("reply controls target a member message and can be cancelled",async()=>{
  expect((document.querySelector('.cmp-quote') as HTMLElement).hidden).toBe(true);
 });
 
-test("active exchanges expose stop, and Raphael's wrap-up is his ordinary message",async()=>{
+test("active exchanges expose stop, and Raphael's wrap-up is its ordinary message",async()=>{
  api.roomStop.mockResolvedValue({stopped:true});
  api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,text:'Alice owns testing',kind:'wrapup',created:1,status:'done'}],exchange:{state:'running',stop_requested:0}});
  await pane();

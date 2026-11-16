@@ -500,7 +500,7 @@ async def test_a_cli_that_is_not_installed_says_so_and_never_starts(setup, tmp_p
     assert turn["failure"] == {"kind": "unknown", "provider": "cli:claude", "resets_at": None, "cause": "not_installed"}
 
 
-async def test_raphael_himself_on_an_expired_cli_says_the_same_cause(setup, tmp_path):
+async def test_raphael_itself_on_an_expired_cli_says_the_same_cause(setup, tmp_path):
     rig, _ = setup
     rig.settings.set("agent_model", "cli:claude")
     fake_brain(rig, tmp_path, EXPIRED_SESSION.replace("LAUNCHES", repr(str(tmp_path / "launches.txt"))))

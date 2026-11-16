@@ -2161,7 +2161,7 @@ npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
 | One-card settled local command | `npm run look -- local-command-once --theme both --width 1120,720,1920x1080` | One answer settles the original card and removes decision/settings controls. |
 | Connected message draft rows | `npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080` | Exact delivery fields and body survive settlement/failure; retry answers only the original approval. |
 
-### Card review follow-up
+### Card wording and disclosures
 
 R-CARD-06: known approval action with localized member name; new visible disclosure content; one state per card; shared per-kind prompt table; one-line inline credential hints with folded guides. Regression tests: card.test.ts, card-behavior.test.ts, inline-connection.test.ts, timeline.test.ts, pages/agent-cards.test.ts, scripts/look/audit.test.mjs. Selected visual consumers: card-sheet, card-approval, admin-approval*, card-mail-ready, email-draft-handed-off, card-mail-discarded/failed, card-task-no-file-card, card-key-waiting/guide-retry, card-login, card-secret/failed, connector-app/key-form/key-sent, chat-secret-saved-not-resumed, card-question-waiting/key, owner-question-background/room, card-permission-waiting/once, local-command-background, card-message-waiting, card-computer-waiting/handback, mcp-proposal-stdio, card-mcp-done, card-team-done.
 ```sh

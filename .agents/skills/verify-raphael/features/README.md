@@ -398,11 +398,12 @@ Keep one heavy process at a time and Vitest at --maxWorkers=2.
 
 Use [the verification workflow](../SKILL.md) first. Commands run from `app/` and
 request both themes; local UI handoffs select affected scenes at 720/1120/1920x1080.
-Reserve the full scene matrix for integration/release acceptance, CI, explicit
+Reserve the full scene matrix for integration/release acceptance, explicit
 requests or genuinely app-wide changes. Shared components select representative
 affected consumers rather than unrelated features. Scene definitions in `app/scripts/look/scenes/`
-are the executable source: 351 scenes, 2106 combinations across both themes and
-1120, 720 and 1920x1080. Explicit viewport heights use the shared `options.heights`
+are the executable source. `node scripts/look/index.mjs --list` (from `app/`) prints one line per
+scene, so count its lines for the current number; a full run is that number times the two themes
+times the three default sizes 1120, 720 and 1920x1080. Explicit viewport heights use the shared `options.heights`
 parser; a plain width retains the default 900px height. Native journeys cover
 behavior the fixture cannot prove.
 
@@ -534,8 +535,9 @@ The conversation, dictation and team/rooms entries map the shared two-step Escap
 contract (R-UI-46), deleted-object fallback (R-UI-47), opaque desktop confirmation
 (R-UI-48), and recording-only global Escape (R-AG-16). Desktop scenes record their
 actual native-sized viewport as well as the requested matrix size; see dictation.
-CI's judge request admission limit is 1998 for the 1980 combinations (330 scenes x six), below
-the unchanged 2000-request hard cap; the monetary limit is unchanged.
+The judge runs locally, never in CI. Its request count is bounded by `max_requests` (default
+`DEFAULT_MAX_REQUESTS`, hard cap `MAX_REQUESTS`, both in
+`core/src/raphael_core/evaluate/design_judge.py`) and its monetary limit is unchanged.
 
 ## Designed window size acceptance
 
@@ -553,7 +555,7 @@ npm run look -- chat details details-closed member-text room-text no-naming side
 Dictation, thread-measure, settings-alignment, sidebar-shell and welcome
 checks extend the ordinary scenes. Details checks pointer focus before separately
 exercising keyboard focus. The retired first-bot scenarios are replaced by no-naming.
-This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
+This is local acceptance; the full matrix is every scene at both themes and the three default sizes.
 
 
 ## Details inset and compact conversation headers
@@ -583,8 +585,8 @@ The affected journeys include onboarding-abilities (beside onboarding-tools and 
 
 ## Connect and Docker acceptance
 
-The current matrix has 351 scenes and 2106 combinations. CI groups three images
-per judge request, with an admission limit of 702. This acceptance selects only
+The judge groups three images per request by default (`batch_size` in `design_judge.py`), so a
+full matrix needs a third as many requests as it has combinations. This acceptance selects only
 the affected connections and member-computer scenes.
 See member-computer.md and connections-mcp.md for the lifecycle and native steps.
 The host adapter is the sole OS-specific Docker launch boundary. Native catalog
@@ -696,7 +698,7 @@ See [Conversation](conversation.md#answer-forms) for R-FORM-01/02, schemas, scen
 
 See [Conversation](conversation.md#still-conversations-during-team-work) for R-UI-71, the shared keyed line diff, synchronous cached previews, preserved face nodes, bounded event reads and the busy-team scene matrix.
 
-The still-thread review follow-up adds conversation-midnight to the conversation map: shared look clock rollover with unchanged history and retained conversation nodes. Viewing, unread-on-show, core restart and room return are covered by pages/agent-members.test.ts.
+The still-thread map adds conversation-midnight to the conversation map: shared look clock rollover with unchanged history and retained conversation nodes. Viewing, unread-on-show, core restart and room return are covered by pages/agent-members.test.ts.
 
 ## Exchanges and menus
 
@@ -704,7 +706,7 @@ R-UI-72: [conversation.md](conversation.md#folded-colleague-exchanges) and [team
 
 R-UI-73: [members.md](members.md#menus-beside-their-rows) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080.
 
-Review follow-up: conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.
+Also: conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.
 
 ### Shared conversation cards
 
@@ -713,7 +715,7 @@ R-CARD-01..75: see the appended shared-card section in `conversation.md` and
 new and existing card consumers. Run only the mapped card matrix, both themes,
 1120,720,1920x1080; inspect sheets and full-size controls.
 
-R-CARD-05..77: conversation.md also maps exact connected-message previews and the owner review follow-up (localized action titles, meaningful disclosures, one state, per-kind prompt words and one-line credential hints).
+R-CARD-05..77: conversation.md also maps exact connected-message previews and the card wording and disclosure rules (localized action titles, meaningful disclosures, one state, per-kind prompt words and one-line credential hints).
 
 Conversation review: R-CARD-07 covers single-call Composio draft projection and localized member/app identity while preserving approval semantics. R-CARD-08 exempts unanswered owner questions from the waiting pill and covers the rightmost Close plus visible empty/typed submit states. See conversation.md for the selected card, question and approval matrix.
 

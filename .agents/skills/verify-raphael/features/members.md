@@ -951,7 +951,7 @@ must be compared with the ordinary Connections rows and member resource controls
 The selected offline look matrix is below. Native, network and
 paid API acceptance remain outside it.
 
-### Shared skill import and member choices (review follow-up 3)
+### Shared skill import and member choices
 
 > Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
@@ -980,7 +980,7 @@ Inspect every contact sheet and every full-size image for the member-panel scene
 Vitest: connections.test.ts, member-profile-resources.test.ts and
 app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
 
-### One shared package row and readable sources (review follow-up 4)
+### One shared package row and readable sources
 
 > Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 

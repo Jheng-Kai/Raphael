@@ -141,7 +141,7 @@ async def test_a_failed_reply_blocks_only_its_intent_and_the_room_says_who_did_n
     assert [s['member_id'] for s in rig.background.submitted] == ids
     await finish(rig, exchange, 'Ready')
     result = await history(rig, room)
-    # The blocked intent is the room's line for Alice; no one speaks for her and nothing sums it up.
+    # The blocked intent is the room's line for Alice; no one speaks for it and nothing sums it up.
     assert [(i['recipient_id'], i['state'], i['reason']) for i in result['exchange']['reply_intents']] == [
         (ids[0], 'blocked', 'cli_rate_limited'), (ids[1], 'done', '')]
     assert not wrapups(result)

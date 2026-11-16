@@ -78,7 +78,7 @@ describe("the column's sections", () => {
     expect(memberSections(list).map((s) => s.group?.name ?? null)).toEqual(["專案", "學習", "空的"]);
   });
 
-  test("Raphael is the list's member 0, or his name before there is a list", () => {
+  test("Raphael is the list's member 0, or its name before there is a list", () => {
     expect(raphaelOf(LIST).name).toBe("拉斐爾");
     expect(raphaelOf(null)).toMatchObject({ id: 0, name: "拉斐爾" });
   });
@@ -132,7 +132,7 @@ describe("a row's preview", () => {
 });
 
 describe("the faces", () => {
-  test("Raphael's is the first blue slime, never his emblem, a circle or a placeholder", () => {
+  test("Raphael's is the first blue slime, never its emblem, a circle or a placeholder", () => {
     const html = faceHTML(raphaelOf(LIST), 64);
     expect(html).toContain('class="av mb-av mb-av-slime"');
     expect(html).toContain("<svg");

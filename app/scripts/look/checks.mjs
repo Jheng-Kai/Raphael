@@ -1845,7 +1845,7 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.mb-det input[type=password]'), 'no token field in the panel');
       for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`.mb-panel-suggest [data-intent=setup-${kind}]`)), `${kind} not set up is one row with 設定`);
       const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
-      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in his conversation with the setup intent beside the words, once for two presses");
+      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in its conversation with the setup intent beside the words, once for two presses");
       // While it works on it the button is busy: a spinner and no second press.
       const busy = document.querySelector('.mb-panel-suggest [data-intent=setup-slack]');
       require(busy.disabled && busy.getAttribute('aria-busy') === 'true' && visible(busy.querySelector('.spin')), 'the pressed 設定 is busy with a spinner');
@@ -3537,7 +3537,7 @@ export function checkRendered(name, context = {}) {
       // Raphael is the first blue slime, and its conversation wears its blue like any member's (R-UI-81).
       if (document.querySelector('.mb-chat [data-member="0"][aria-current="true"], .side .mb-chief[aria-current="true"]')) {
         const [r, g, b] = style.backgroundColor.match(/\d+/g).map(Number);
-        require(b > r + 80 && b > g, `Raphael's own conversation wears his blue: ${style.backgroundColor}`);
+        require(b > r + 80 && b > g, `Raphael's own conversation wears its blue: ${style.backgroundColor}`);
       }
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
@@ -4094,14 +4094,14 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     const canvas = document.querySelector('.ob-emblem canvas.ob-emb'), title = document.querySelector('.ob-col > h2');
     require(visible(canvas) && canvas.width > 0, "Raphael's emblem is on the welcome");
-    require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "his name is the headline");
+    require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "its name is the headline");
     const mark = title.querySelector('.ob-wm'), markStyle = mark && getComputedStyle(mark);
     require(visible(mark) && mark.getBoundingClientRect().width >= 200 && `${markStyle.maskImage} ${markStyle.webkitMaskImage}`.includes("wordmark.svg"),
-      "his name is the one wordmark 智慧之王ラファエル, the same in every language");
+      "its name is the one wordmark 智慧之王ラファエル, the same in every language");
     const promise = document.querySelector('.ob-demo-ask'), reply = document.querySelector('.ob-demo-reply');
     require(visible(promise) && promise.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 1, "an ask is typed under the name");
     require(!document.querySelector('.ob-line'), "no slogan under the name");
-    require(reply && document.querySelector('.ob-sr')?.textContent.trim().length > 0, "his answer has its place, and a reader hears what the team does");
+    require(reply && document.querySelector('.ob-sr')?.textContent.trim().length > 0, "its answer has its place, and a reader hears what the team does");
     const language = document.querySelector('.ob-lang .lang-btn'), corner = language.getBoundingClientRect();
     require(visible(language) && corner.left - card.left <= 24 && corner.top - card.top <= 24 && !document.querySelector('.ob-col .lang-btn, .ob-col .sel'), "the language waits at the card's top left, out of the column");
     require(!document.querySelector('.ob-aside, .ob-say, .ob-floaters, .ob-top, [data-ob="back"], .ob-bar-steps'), "the welcome has no side, no slimes floating, no way back and no progress bar");
@@ -4885,7 +4885,7 @@ export function checkRendered(name, context = {}) {
     const heading = host.closest('section')?.querySelector(':scope > .mb-dh');
     require(heading?.textContent === "對話" && !heading.querySelector('button'), "one small heading names the rows, with no button beside it");
     const rows = [...host.querySelectorAll('[data-conversation-open]')];
-    require(rows.map(row => row.querySelector('span')?.textContent).join("|") === "主要對話|快速提問", "the rows are his conversation and his quick questions");
+    require(rows.map(row => row.querySelector('span')?.textContent).join("|") === "主要對話|快速提問", "the rows are its conversation and its quick questions");
     require(rows.filter(row => row.getAttribute('aria-current') === 'true').length === 1, "the open one is marked");
     require(!rows[0].closest('.conversation-row').querySelector('[data-conversation-more]') && !!rows[1].closest('.conversation-row').querySelector('[data-conversation-more]'), "only quick questions have a menu, to clear them");
     require(!document.querySelector('.mb-det [data-conversation-new], .mb-det .conversation-tools'), "nothing makes or searches conversations");
@@ -5323,7 +5323,7 @@ export function checkRendered(name, context = {}) {
     // Each member has one conversation: Raphael's main one is the first row and the one a window opens,
     // and its quick questions wait in the second, named only when the owner picks it.
     const rows = [...document.querySelectorAll('.mb-det [data-conversation-open]')];
-    require(rows.length === 2, `Raphael's details list his main conversation and his quick questions: ${rows.length}`);
+    require(rows.length === 2, `Raphael's details list its main conversation and its quick questions: ${rows.length}`);
     const [main, quick] = rows;
     require(main.dataset.conversationOpen !== "4" && main.textContent.includes("主要對話"), "the main conversation is the first row");
     require(main.getAttribute('aria-current') === "true" && quick.getAttribute('aria-current') === "false", "the window has the main conversation open, never the quick questions");
@@ -8383,7 +8383,7 @@ export function checkRendered(name, context = {}) {
       const rows = [...column.querySelectorAll('.mb-list [data-member]')];
       require(Number(rows[0].dataset.member) === data.primaryId, "the primary occupies the column's top slot");
       require(rows.filter(row => row.dataset.member === '0').length === 1, "Raphael appears exactly once");
-      require(column.querySelector('[data-member="0"] .av') && !column.querySelector('[data-member="0"] .mb-av'), "Raphael keeps his emblem in the exchanged slot");
+      require(column.querySelector('[data-member="0"] .av') && !column.querySelector('[data-member="0"] .mb-av'), "Raphael keeps its emblem in the exchanged slot");
       require(column.querySelector('.mb-sec [data-member="0"]') || data.primaryId === 0 || column.classList.contains('is-collapsed'), "Raphael takes the primary's group slot");
       return order(rows);
     };
@@ -9387,7 +9387,7 @@ export function checkRendered(name, context = {}) {
     require(picked.length > 120, `the rune band is drawn (${picked.length} opaque samples)`);
     const [r, g, b] = [0, 1, 2].map(k => picked.reduce((sum, p) => sum + p[k], 0) / picked.length);
     if (name === "overlay-emblem-gold") require(r > 200 && g > 120 && b < 110 && r - g < 110, `the runes are vivid gold and orange: rgb(${[r, g, b].map(Math.round)})`);
-    else require(r > 180 && g < 110 && b < 110, `the runes are red while he refuses: rgb(${[r, g, b].map(Math.round)})`);
+    else require(r > 180 && g < 110 && b < 110, `the runes are red while it refuses: rgb(${[r, g, b].map(Math.round)})`);
     return { check: name, rgb: [r, g, b].map(Math.round), samples: picked.length };
   }
   if (name === "peer-chat") {
@@ -9410,7 +9410,7 @@ export function checkRendered(name, context = {}) {
     require(!chat.textContent.includes("小森") && !chat.textContent.includes(window.__look.data.peerChatSample.otherRequest), "an exchange with another member is not theirs");
     require(lines.every(line => visible(line.querySelector('.ra-face .av')) && visible(line.querySelector('.peer-who'))), "every message has its speaker's face and name");
     const colour = getComputedStyle(lines[1].querySelector('.peer-who')).color.match(/[\d.]+/g).slice(0, 3).map(Number);
-    require(Math.max(...colour) - Math.min(...colour) > 40, `小晴's name is in her colour, not grey: rgb(${colour})`);
+    require(Math.max(...colour) - Math.min(...colour) > 40, `小晴's name is in its colour, not grey: rgb(${colour})`);
     require(visible(lines[3].querySelector('.ans .message-text')) && lines[3].textContent.includes(window.__look.data.peerChatSample.result), "today's answer is readable in a bubble");
     const close = chat.querySelector('.peer-close'), closeBox = close.getBoundingClientRect();
     require(visible(close) && document.activeElement === close, "Close chat is shown and takes the focus");

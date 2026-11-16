@@ -10,7 +10,7 @@ describe("the follow probe's reading of the frames the owner saw (R-FOLLOW-01)",
     expect(result.failures).toEqual(["words: 1 frame(s) above the bottom, up to 12px from 40ms", "settle: 2 frame(s) above the bottom, up to 405px from 90ms"]);
     expect(result.summary).toMatchObject({ frames: 5, badFrames: 3, worstPx: 405, endGap: 405 });
   });
-  it("counts the opening only when the opening is watched, and leaves the frames after the owner's own scrolling to him", () => {
+  it("counts the opening only when the opening is watched, and leaves the frames after the owner's own scrolling to them", () => {
     expect(judgeFollow([frame("open", 544), frame("settle", 0)]).failures).toEqual([]);
     expect(judgeFollow([frame("open", 544, { at: 7 }), frame("settle", 0)], { opening: true }).failures).toEqual(["open: 1 frame(s) above the bottom, up to 544px from 7ms"]);
     expect(judgeFollow([frame("pinned", 0), frame("words", 120, { input: 1 })]).failures).toEqual([]);

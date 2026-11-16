@@ -33,7 +33,7 @@ export default [
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
-  scene("model-sync", "Raphael's model is chosen on his own page; Settings hold only his quick question", [
+  scene("model-sync", "Raphael's model is chosen on its own page; Settings hold only its quick question", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
     click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'),
     ...settings("models"), check("model-sync-settings"),
@@ -192,7 +192,7 @@ export default [
   scene("dictation-heat-press", "Pressing a heatmap day shows its words above it; nothing shows under the pointer", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), check("dictation-heat-press")]),
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
-  scene("onboarding", "First-run welcome: Raphael's emblem, his name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),
+  scene("onboarding", "First-run welcome: Raphael's emblem, its name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),
   scene("onboarding-tools", "First-run step 1: the AI tools as a store of one-row tiles, a search box, 熱門 the same for everyone, then each kind by name",[click('[data-ob="next"]'), wait('[data-ob-tools] [data-item="claude"].on .ob-tick'), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-tools-key", "First-run step 1: the OpenRouter key being replaced shows its field and paste button", [click('[data-ob="next"]'), wait('[data-ob="key-replace"]'), click('[data-ob="key-replace"]'), wait("#ob-key-input"), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-back-hover", "First-run step 1: the round way back of the foot's pair takes a lighter surface under the pointer", [click('[data-ob="next"]'), wait('.ob-foot [data-ob="back"]'), hover('.ob-foot [data-ob="back"]'), check("onboarding-back-hover")], { onboarding: true }),

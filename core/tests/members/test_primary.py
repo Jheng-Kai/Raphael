@@ -286,7 +286,7 @@ async def test_the_roster_names_the_primary_to_each_kind_of_speaker(rig):
     assert not any("administer" in text for text in (for_alice, for_bob, for_raphael))
 
 
-async def test_raphael_is_told_he_is_the_primary_by_default_and_gives_no_second_chief(rig):
+async def test_raphael_is_told_it_is_the_primary_by_default_and_gives_no_second_chief(rig):
     bob = await make(rig, "Bob")
     for who, expected in ((0, "do only your own work yourself."), (bob, "")):
         text = says(roster_prompt(rig.service, rig.service.speaker(who), "en"))

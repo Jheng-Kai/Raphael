@@ -228,7 +228,7 @@ describe("a member's panel", () => {
 });
 
 describe("Raphael's panel", () => {
-  test("his picture and his name only, and his routines", async () => {
+  test("its picture and its name only, and its routines", async () => {
     current = 0;
     const panel = mount();
     await flush();
@@ -240,7 +240,7 @@ describe("Raphael's panel", () => {
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
-  test("his picture is changed here: from the PC, nothing of presets", async () => {
+  test("its picture is changed here: from the PC, nothing of presets", async () => {
     current = 0;
     const panel = mount();
     await flush();

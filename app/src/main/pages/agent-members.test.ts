@@ -263,7 +263,7 @@ test("member drafts follow the composer owner through switching and page return"
   agent.hide();
 });
 
-test("Raphael's conversation and his quick questions keep their own drafts through activity, sending and other members", async () => {
+test("Raphael's conversation and its quick questions keep their own drafts through activity, sending and other members", async () => {
   const conversations = [
     {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
     {id:9,member_id:0,title:'',kind:'quick',is_default:0,updated_at_ms:20},
@@ -1158,7 +1158,7 @@ test("a roster that moves only a last line, a step or an unread mark starts no L
   watch.disconnect(); agent.hide();
 });
 describe("Raphael's thread", () => {
-  test("reads plainly: his answers without 《》, 問拉斐爾, his voice button, asked with no member", async () => {
+  test("reads plainly: its answers without 《》, 問拉斐爾, its voice button, asked with no member", async () => {
     mount();
     await flush();
     expect(api.agentHistoryList).toHaveBeenCalledWith({ limit: 50 });
@@ -1353,7 +1353,7 @@ describe("a member's thread", () => {
     expect(document.querySelector<HTMLElement>('.ra-find')!.hidden).toBe(true);
   });
 
-  test("back to Raphael: his own thread again, and his composer", async () => {
+  test("back to Raphael: its own thread again, and its composer", async () => {
     mount();
     await flush();
     await pick(3);
@@ -1475,7 +1475,7 @@ describe("a member's thread", () => {
     expect(document.querySelectorAll('[data-mount="background-questions"]')).toHaveLength(1);
   });
 
-  test("the gold card shows in the thread of its member only: their name there, Raphael's emblem in his, plain words in both", async () => {
+  test("the gold card shows in the thread of its member only: their name there, Raphael's emblem in its own, plain words in both", async () => {
     const asked = (member_id: number, text: string) => ({ id: `q-${member_id}`, task_id: 10 + member_id, member_id, prefix: "問", text, tier: null, created_at_ms: 1, expires_at_ms: 2 });
     const waiting: Record<number, ReturnType<typeof asked>[]> = { 0: [asked(0, "要付款嗎？")], 3: [asked(3, "要寄出信件嗎？")] };
     api.core.mockImplementation(async (method: string, params?: { member_id?: number }) =>
