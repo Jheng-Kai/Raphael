@@ -331,6 +331,8 @@ class IsolatedDocker:
         self.created = []
         self.carry_homes = {}
         self.carry_calls = 0
+        # The homes folders this run moved its computers' folders to (Acceptance.relocation), outside its data root.
+        self.moved_homes = set()
 
     async def owned(self, name):
         raw = await self.runner(["container", "inspect", name], timeout=60, limit=200000)
@@ -406,8 +408,10 @@ class IsolatedDocker:
                 *([(self.picture, vm.GUEST_OWN_WALLPAPER)] if self.picture else [])), "Expected product wallpaper copy only")
             await self.owned(name)
         elif command == "ps":
+            from ..computer.carry import helper_prefix
             require(args[:-1] == ["ps", "-a", "--filter", f"label={self.label}", "--format"]
-                    and args[-1] in ("{{.ID}}", "{{.Names}}"),
+                    and args[-1] in ("{{.ID}}", "{{.Names}}", "{{.Names}}\t{{.State}}")
+                    or args == ["ps", "-a", "--filter", "name=" + helper_prefix(self.owner), "--format", "{{.Names}}"],
                     "Expected exact owner-only container listing")
         elif args[:2] == ["container", "inspect"]:
             require(len(args) == 3 and (args[2].startswith(self.prefix)
@@ -454,7 +458,8 @@ class IsolatedDocker:
                     root = home.parent.parent.resolve()
                     import hashlib
                     expected_owner = hashlib.sha256(os.path.normcase(str(root)).encode()).hexdigest()[:16]
-                    require(home.resolve() == root / 'vm-homes' / key and expected_owner == self.owner,
+                    require(home.resolve() == root / 'vm-homes' / key and expected_owner == self.owner
+                            or home.resolve() in {folder / key for folder in self.moved_homes},
                             'Expected workspace in this run\'s data root')
                     target = vm.Target(key, name, home)
                 else:
@@ -2281,6 +2286,48 @@ class Acceptance:
                 await self.check("shared stop", lambda: self.stop(next(iter(targets.values()))))
             require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
 
+    async def relocation(self):
+        """An install made before the computers' folders lived in the machine-local folder, on this run's own data: a
+        stopped computer with a file in its workspace, the move the next start makes (both folders renamed into the
+        machine-local folder, the stopped computer that bound them removed), then that computer made again on the new
+        place with its file kept, and nothing left to move at the start after."""
+        names = await self.command(["ps", "-a", "--filter", f"label={self.docker.label}", "--format", "{{.Names}}"], timeout=60)
+        for name in names.split():
+            await self.command(["stop", name], timeout=90)  # nothing of this run runs while its folders move
+        target = self.machine.target(9401)
+        await self.start(target)
+        await self.text(target, ["sh", "-c", "printf moved > /home/cua/workspace/acceptance-moved.txt"])
+        await self.machine.stop(target)
+        local = (self.root / "machine-local").resolve()
+        self.docker.moved_homes.add(local / vm.HOMES)
+        moved = vm.LocalVm(self.root, runner=self.docker, machine_dir=local)
+        moved.build = self.machine.build
+        try:
+            result = await moved.relocate()
+            require(result == "moved", f"Expected the folders moved, observed {result!r}")
+            require(not (self.root / vm.HOMES).exists() and not (self.root / vm.TEAM).exists() and (local / vm.TEAM).is_dir(),
+                    "Expected both folders renamed into the machine-local folder")
+            require((local / vm.HOMES / target.key / "acceptance-moved.txt").read_text(encoding="utf-8") == "moved",
+                    "Expected the workspace file in the moved home")
+            require(await moved.inspect(target) is None, "Expected the stopped computer that bound the old place removed")
+            again = moved.target(9401)
+            require(again.workspace == local / vm.HOMES / target.key and again.shared == local / vm.TEAM,
+                    f"Expected the computer's folders in the machine-local folder, observed {again.workspace}")
+            await self.start(again, operation=lambda: moved.start(again))
+            raw = await moved.inspect(again)
+            bound = {mount.get("Target"): mount.get("Source") for mount in raw["HostConfig"].get("Mounts") or []}
+            require(Path(bound.get(vm.GUEST, "")).resolve() == again.workspace and Path(bound.get(vm.SHARED, "")).resolve() == again.shared,
+                    f"Expected the computer made again bound to the new place, observed {bound}")
+            content = await self.text(again, ["cat", vm.GUEST + "/acceptance-moved.txt"])
+            require(content == "moved", f"Expected the workspace file kept, observed {content!r}")
+            await moved.stop(again)
+            next_start = await vm.LocalVm(self.root, runner=self.docker, machine_dir=local).relocate()
+            require(next_start == "nothing", f"Expected nothing left to move, observed {next_start!r}")
+        finally:
+            await moved.aclose(stop=False)
+        return ("vm-homes and vm-shared renamed into the machine-local folder; the stopped computer that bound them removed, "
+                "made again there with its workspace file, and nothing left to move")
+
     async def cleanup(self):
         if self.machine:
             try:
@@ -2334,7 +2381,7 @@ class Acceptance:
                 checks=self.results, seconds=seconds, totals=dict(totals), image=self.tag,
                 owner=self.machine.owner if self.machine else None, kept=self.keep), indent=2) + "\n", encoding="utf-8")
 
-    async def run(self, counts, *, shared=True):
+    async def run(self, counts, *, shared=True, relocation_only=False):
         original_image = vm.IMAGE
         parent = asyncio.current_task()
         cancel_path = os.environ.get("RAPHAEL_COMPUTER_CANCEL_FILE")
@@ -2376,14 +2423,16 @@ class Acceptance:
                 require(await self.machine.image(), "Expected built image with production labels")
                 return f"Built isolated image {self.tag}"
             if await self.check("build", build):
-                for count in counts:
+                for count in [] if relocation_only else counts:
                     try:
                         await self.computer(count, max(counts))
                     except Exception as error:
                         self.record(f"{count} screens lifecycle", "failed", f"{type(error).__name__}: {error}")
-                if shared:
+                if shared and not relocation_only:
                     await self.check("shared computer", self.shared)
-                await self.previous()
+                if not relocation_only:
+                    await self.previous()
+                await self.check("folders move", self.relocation)
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.record("interrupted", "failed", "Interrupted; cleaning this run's resources")
         except Exception as error:
@@ -2419,8 +2468,11 @@ def main(argv=None):
     parser.add_argument("--no-shared", action="store_true", help="Skip the two-member shared computer block")
     parser.add_argument("--keep", action="store_true", help="Leave this run's containers, image tag and data for inspection")
     parser.add_argument("--out", type=Path, help="Write computer-acceptance.json in this folder")
+    parser.add_argument("--relocation-only", action="store_true",
+                        help="Run only the build and the move of an earlier install's computer folders")
     options = parser.parse_args(argv)
-    return asyncio.run(Acceptance(keep=options.keep, out=options.out).run(options.screens, shared=not options.no_shared))
+    return asyncio.run(Acceptance(keep=options.keep, out=options.out).run(
+        options.screens, shared=not options.no_shared, relocation_only=options.relocation_only))
 
 
 if __name__ == "__main__":

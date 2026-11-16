@@ -787,7 +787,10 @@ async def test_run_uses_private_tag_and_owner_and_cleans_even_after_failure(keep
         if crash and count == 1:
             raise RuntimeError("synthetic failure on first computer")
         run.record(f"{count} screens fake", "ok", "fake computer only")
+    async def relocation():
+        return "fake move only"
     monkeypatch.setattr(run, "computer", computer)
+    monkeypatch.setattr(run, "relocation", relocation)
     code = await run.run([1, 3], shared=False)
     assert code == (1 if crash else 0)
     assert len(observed) == 2  # Failure on one computer does not suppress the next.
@@ -888,21 +891,63 @@ async def test_shared_block_defaults_on_after_counts_and_no_shared_skips_it(monk
             return "fake shared boundary"
         async def previous():
             order.append("previous")
+        async def relocation():
+            order.append("relocation")
+            return "fake move"
         monkeypatch.setattr(run, "computer", computer)
         monkeypatch.setattr(run, "shared", shared)
         monkeypatch.setattr(run, "previous", previous)
+        monkeypatch.setattr(run, "relocation", relocation)
         assert await run.run([1, 3], shared=enabled) == 0
-        assert order == [1, 3, *(["shared"] if enabled else []), "previous"]
+        assert order == [1, 3, *(["shared"] if enabled else []), "previous", "relocation"]
+
+
+async def test_the_folders_move_alone_runs_after_the_build_and_nothing_else(monkeypatch):
+    run = acceptance.Acceptance(FakeDocker())
+    order = []
+    async def anything(*args):
+        order.append("other block")
+    async def relocation():
+        order.append("relocation")
+        return "fake move"
+    for name in ("computer", "shared", "previous"):
+        monkeypatch.setattr(run, name, anything)
+    monkeypatch.setattr(run, "relocation", relocation)
+    assert await run.run([1, 3], relocation_only=True) == 0
+    assert order == ["relocation"]
+    assert [row["name"] for row in run.results][:3] == ["engine", "build", "folders move"]
+
+
+async def test_guard_lets_the_move_list_this_runs_computers_and_helpers_and_bind_its_moved_homes(tmp_path):
+    runner = FakeDocker()
+    machine = vm.LocalVm(tmp_path, runner=runner, machine_dir=tmp_path / "machine-local")
+    guard = acceptance.IsolatedDocker(runner, machine.owner, "raphael-acceptance/cua-local-vm:test")
+    await guard(["ps", "-a", "--filter", f"label={guard.label}", "--format", "{{.Names}}\t{{.State}}"])
+    await guard(["ps", "-a", "--filter", f"name=raphael-carry-{machine.owner}-", "--format", "{{.Names}}"])
+    for refused in (["ps", "-a", "--filter", "name=raphael-carry-", "--format", "{{.Names}}"],
+                    ["ps", "-a", "--filter", "name=raphael-carry-other-", "--format", "{{.Names}}"],
+                    ["ps", "-a", "--filter", f"label={guard.label}", "--format", "{{.Names}}\t{{.Mounts}}"]):
+        with pytest.raises(AssertionError, match="owner-only container listing"):
+            await guard(refused)
+    target = machine.target(4)
+    args = vm.run_args(target, machine.owner, "transient-password")
+    args[-1] = guard.tag
+    with pytest.raises(AssertionError, match="this run's data root"):
+        await guard(args)  # a home outside the data root is refused until the run moved its folders there
+    guard.moved_homes.add((tmp_path / "machine-local" / vm.HOMES).resolve())
+    await guard(args)
+    assert guard.carry_homes[str(target.workspace)].key == target.key
 
 
 def test_no_shared_cli_option_reaches_the_same_acceptance_runner(monkeypatch):
     seen = []
-    async def run(self, counts, *, shared=True):
-        seen.append((counts, shared))
+    async def run(self, counts, *, shared=True, relocation_only=False):
+        seen.append((counts, shared, relocation_only))
         return 0
     monkeypatch.setattr(acceptance.Acceptance, "run", run)
     assert acceptance.main(["--screens", "1,6", "--no-shared"]) == 0
-    assert seen == [([1, 6], False)]
+    assert acceptance.main(["--relocation-only"]) == 0
+    assert seen == [([1, 6], False, False), ([1, 3, 6], True, True)]
 
 
 async def test_guard_authorizes_real_bridge_exec_without_running_it_and_keeps_owner_checks(tmp_path):
