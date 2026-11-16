@@ -309,6 +309,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
+  // The composer's row at its fullest (R-UI-160): a permission mode with a long word (`mode`, in `language` when one is named)
+  // and the scene's `model`, with a depth beside it.
+  if (variant.composerLongRow) {
+    data.settings.action_mode = variant.composerLongRow.mode ?? "bypass";
+    if (variant.composerLongRow.language) data.device.ui_language = variant.composerLongRow.language;
+    const long = { ...structuredClone(data.catalog.llm[0]), ...variant.composerLongRow.model };
+    data.catalog.llm.push(long);
+    data.settings.agent_model = `${long.id}?effort=high`;
+  }
   if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.conversationSamples.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
   if (variant.sidebarMany) {

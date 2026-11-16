@@ -304,6 +304,10 @@ as `navigationAborts`; current-document aborts, other network failures and HTTP
 errors remain failures. Closing the captured page is outside the capture window.
 
 `--width` accepts widths (900px height) and explicit `WIDTHxHEIGHT` viewports.
+`--scale 1.25` (or 1.5) starts the browser at that device pixel ratio (`--force-device-scale-factor`), as
+Windows at 125% or 150% does; it is off (1) by default and is meant for the sharpness of drawn pictures such
+as `emblem-sharp`. An emulated ratio (the `viewport` step's `scale`) places pictures on whole CSS pixels and
+resamples them in between, which a real ratio does not, so judge sharpness only under `--scale`.
 Each run creates `.look/run-*/` with viewport PNGs, paginated PNG contact sheets,
 `contacts.json` and `report.json`. `--out` changes the parent directory. A nonzero exit
 means a scene, runtime, layout, raw translation key, raw Markdown text, mixed-language copy, non-finite work duration, or visible native select/time-input

@@ -373,6 +373,12 @@ export interface DrawOptions {
   boost?: number;
   /** Calm in gold, or angry in red: the ring, its rays and its centre. */
   mood?: Mood;
+  /**
+   * A still a few dozen pixels across (the composer's voice button): what is finer than a pixel there only smears the runes.
+   * The rays stop at the white ring, the faint circle at the letters' feet is left out, the white ring is a whole number of
+   * pixels wide and its warm edge one pixel. The anime's numbers stay those of every larger emblem (R-UI-161).
+   */
+  small?: boolean;
 }
 
 /** Draws one frame, centered on the context's origin, `R` pixels in outer radius. */
@@ -425,7 +431,7 @@ export function drawEmblem(
   }
 
   // The photo's thin faint yellow circle just inside the letters' feet.
-  if (p.glyphA > 0.003) {
+  if (p.glyphA > 0.003 && !o.small) {
     ctx.save();
     ctx.globalAlpha = base * p.glyphA * o.dim;
     ctx.strokeStyle = angry ? "rgba(255,96,70,0.4)" : "rgba(242,200,40,0.4)";
@@ -463,7 +469,8 @@ export function drawEmblem(
       const a = ((i + (rnd() - 0.5) * 0.9) / n) * TAU;
       const pick = rnd();
       const reach = pick < 0.55 ? 0.5 + rnd() * 0.1 : pick < 0.85 ? 0.62 + rnd() * 0.16 : 0.8 + rnd() * 0.35;
-      const len = R * p.raysScale * reach * (0.94 + 0.12 * o.lvl * o.calm);
+      const reaches = R * p.raysScale * reach * (0.94 + 0.12 * o.lvl * o.calm);
+      const len = o.small ? Math.min(reaches, R * p.ringR) : reaches;
       const al = clamp((0.5 + 0.45 * rnd()) * p.rays * (0.55 + 0.45 * o.calm) * (unknown ? 1.4 : 1));
       const half = Math.max(0.45, R * 0.0045 * (0.6 + rnd()));
       const x = Math.cos(a), y = Math.sin(a);
@@ -499,9 +506,9 @@ export function drawEmblem(
     }
     ctx.closePath();
     ctx.lineJoin = "round";
-    const w = Math.max(1, R * p.ringW);
+    const w = o.small ? Math.max(1, Math.round(R * p.ringW)) : Math.max(1, R * p.ringW);
     // Over an unknown desktop the white ring keeps a firm warm edge, so a white window behind it never swallows it.
-    ctx.lineWidth = w + (unknown ? 3 : 1.5);
+    ctx.lineWidth = w + (o.small ? 1 : unknown ? 3 : 1.5);
     ctx.strokeStyle = unknown ? "rgba(120,70,0,0.55)" : "rgba(8,14,18,0.3)";
     ctx.stroke();
     ctx.shadowColor = angry ? "rgba(255,110,90,0.8)" : "rgba(214,232,244,0.55)";

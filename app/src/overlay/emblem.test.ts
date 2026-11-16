@@ -79,7 +79,7 @@ test("the canvas leaves room for the rays: 1.3 times the diameter", () => {
 
 // A canvas context that records every call, so the port can be exercised without a browser.
 function recordingContext() {
-  const calls: Array<{ name: string; args: unknown[]; alpha?: number; op?: string; style?: string }> = [];
+  const calls: Array<{ name: string; args: unknown[]; alpha?: number; op?: string; style?: string; width?: number }> = [];
   const state: Record<string, unknown> = {
     globalAlpha: 1,
     globalCompositeOperation: "source-over",
@@ -95,7 +95,7 @@ function recordingContext() {
         };
       }
       return (...args: unknown[]) => {
-        calls.push({ name: prop, args, alpha: target.globalAlpha as number, op: target.globalCompositeOperation as string, style: target.strokeStyle as string });
+        calls.push({ name: prop, args, alpha: target.globalAlpha as number, op: target.globalCompositeOperation as string, style: target.strokeStyle as string, width: target.lineWidth as number });
       };
     },
     set(target, prop: string, value) {
@@ -122,6 +122,27 @@ test("every phase draws with finite numbers, with or without the glyph texture",
       }
     }
   }
+});
+
+test("a small still keeps its rays inside the white ring and draws whole-pixel strokes (R-UI-161)", () => {
+  const R = 15.4;
+  const rays = (small: boolean) => {
+    const { ctx, calls } = recordingContext();
+    drawEmblem(ctx, R, { ...params("steady", 0, 0.3)!, glyphA: 0, ringA: 0, coreA: 0 }, { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent", small });
+    return Math.max(...calls.filter((call) => call.name === "lineTo").map((call) => Math.hypot(call.args[0] as number, call.args[1] as number)));
+  };
+  expect(rays(false)).toBeGreaterThan(R * 0.6);
+  expect(rays(true)).toBeLessThanOrEqual(R * 0.6 + 1e-9);
+  const strokes = (small: boolean) => {
+    const { ctx, calls } = recordingContext();
+    drawEmblem(ctx, R, { ...params("steady", 0, 0.3)!, rays: 0, coreA: 0 }, { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent", small });
+    return calls.filter((call) => call.name === "stroke").map((call) => call.width);
+  };
+  // After the runes (plain strokes here, without the texture): the faint circle at the letters' feet, the white ring's warm
+  // edge, the white ring; a small still leaves the circle out and draws one pixel of edge around a whole pixel of ring.
+  expect(strokes(false).slice(-3)).toEqual([0.5, R * 0.075 + 3, R * 0.075]);
+  const plain = strokes(false);
+  expect(strokes(true).slice(-3)).toEqual([plain[plain.length - 4], 2, 1]);
 });
 
 test("hidden draws nothing at all", () => {
