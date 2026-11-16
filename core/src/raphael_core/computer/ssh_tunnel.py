@@ -1,6 +1,7 @@
 """Temporary loopback viewer forwards.
 
 
+Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 Uses the owner's SSH config alias, never keys or an interactive password prompt.
 """
 

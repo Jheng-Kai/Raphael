@@ -1,5 +1,6 @@
 """Local desktops as a PluginHub adapter, under the existing gate and snapshots."""
 
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64

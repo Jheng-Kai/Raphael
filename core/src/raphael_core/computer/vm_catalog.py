@@ -7,6 +7,8 @@ Browser tools support Linux CDP; this is a capability contract, not image smoke 
 Raphael owns lifecycle/control and uses vm_exec/attach_file.
 Each line below is all a model is told a tool is for (its parameters carry the driver's own words): the driver's
 description is not offered, so a tool reads the same before and after the driver is asked.
+
+Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 DRIVER_TOOLS = {

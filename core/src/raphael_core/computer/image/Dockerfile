@@ -1,3 +1,4 @@
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 FROM docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b
 USER root
 COPY desktop/ /opt/raphael-desktop/

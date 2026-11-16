@@ -381,3 +381,55 @@ CC0 text remain in `app/scripts/release-licenses/manifest.json` and
 `app/scripts/release-licenses/simple-icons-16.35.0-LICENSE.txt`.
 The marks are trademarks of their owners, who do not sponsor or endorse Raphael.
 
+## Files that carry adapted code
+
+Each file below holds code adapted from the named project and changed for Raphael. The files themselves point here.
+
+OpenMausBot (Apache-2.0):
+
+- `app/src/main/transcript-window.ts`
+- `core/src/raphael_core/agent/pages.py`
+- `core/src/raphael_core/computer/dataset_runtime.py`
+- `core/src/raphael_core/computer/datasets.py`
+- `core/src/raphael_core/computer/image/Dockerfile`
+- `core/src/raphael_core/computer/logins.py`
+- `core/src/raphael_core/computer/ssh_tunnel.py`
+- `core/src/raphael_core/computer/vm.py`
+- `core/src/raphael_core/computer/vm_bridge.py`
+- `core/src/raphael_core/computer/vm_catalog.py`
+- `core/src/raphael_core/computer/vm_tools.py`
+- `core/src/raphael_core/connectors/mcp.py`
+- `core/src/raphael_core/integrations/client.py`
+- `core/src/raphael_core/integrations/service.py`
+
+OpenBot (MIT):
+
+- `core/src/raphael_core/computer/teaching.py`
+
+NousResearch/hermes-agent (MIT):
+
+- `core/src/raphael_core/agent/cli/drivers.py`
+- `core/src/raphael_core/agent/inbox.py`
+- `core/src/raphael_core/bots/homes.py`
+- `core/src/raphael_core/brain/providers/clients.py`
+- `core/src/raphael_core/brain/streams.py` (with opencode, MIT)
+- `core/src/raphael_core/computer/checkpoints.py`
+- `core/src/raphael_core/computer/local_patterns.py`
+- `core/src/raphael_core/failures.py`
+- `core/src/raphael_core/memory/compression.py`
+- `core/src/raphael_core/memory/growth.py`
+- `core/src/raphael_core/memory/scan.py`
+- `core/src/raphael_core/memory/store.py`
+- `core/src/raphael_core/messaging/channels/discord.py`
+- `core/src/raphael_core/messaging/channels/slack.py`
+- `core/src/raphael_core/messaging/channels/telegram.py`
+- `core/src/raphael_core/retry_utils.py`
+- `core/src/raphael_core/services/generation.py`
+- `core/src/raphael_core/services/generation_tools.py`
+- `core/src/raphael_core/services/web_backends.py`
+- `core/src/raphael_core/worker/context.py` (with opencode, MIT)
+- `core/src/raphael_core/worker/guards.py`
+- `core/src/raphael_core/worker/owner_input.py`
+- `core/src/raphael_core/worker/repetition_guard.py`
+- `core/src/raphael_core/worker/stall_guards.py`
+- `core/src/raphael_core/worker/tool_guardrails.py`
