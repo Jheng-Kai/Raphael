@@ -1433,7 +1433,7 @@ owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_t
 conversation, Raphael's or a member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event
 runs, on API and CLI brains, in every permission mode. The fast router (Jev) is asked about a quick question alone, so a
 conversation never routes to a command or a desktop run. The prompt of such a turn carries no owner's-PC words
-(`persona._OWNER_PC_RULES` and the owner-context output-folder sentence are added to a quick question only); it says
+(`persona._OWNER_PC_RULES` is added to a quick question only; since 2026-11-16 the owner's files are every turn's, see below); it says
 that anything needing a computer is done on the member's own computer and, when that is not available, to say so.
 `LocalTools.call` refuses a call whose context is not a quick question (`presence_required`, even under 全部允許), and
 the harness `computer`, command and CLI native-command paths repeat the check (`AgentService._owner_pc`). A quick
@@ -1444,6 +1444,39 @@ until the owner decides whether a quick question asks at the overlay.
 Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question, the member's
 own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
 members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
+
+## The owner's files: read everywhere, write in the owner's folders (2026-11-16, R-PC-04, R-PC-05)
+
+Owner: 「控制電腦只限快速提問…但是其他本地的檔案都要是可以看到的才對」, 「寫應該要可以限制資料夾位置 但是讀取理論上是整台電腦」,
+「排程跟 telegram slack 之類的都要可以」. Modelled on Claude Code (its file tools read the whole computer; Write and Edit only the
+working and added directories). `computer/owner_files.py` adds five pinned plugin tools under the `owner_files` server,
+offered by `LocalTools.offered_for` beside the local commands but not keyed `mcp:local/`, so `take_snapshot` never drops them:
+every turn and task, every source and brain (API, and CLI through its MCP list) and every permission mode has them.
+
+- Reads (T0, kind read, no card): `read_file` (Claude Code's Read through `file_tools.Files` and the guest helper
+  `files_guest.handle` run on this computer: numbered lines, pictures as images, PDFs by pages), `glob` and `grep` (Python
+  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound).
+- Kept from every read and write, through links too (`owner_files.kept`): SSH, GPG and cloud keys, the keychain and
+  Windows' credential stores, browsers' profiles, password managers, `.env` files (not `.env.example`) and private keys.
+  Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
+  start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
+  Privacy & Security › Files and Folders or Full Disk Access.
+- Writes (T2, kind write): `write_file`, `edit_file`, only inside `owner_output_folder` and `owner_write_folders`
+  (Settings › General, 成員可以寫入的資料夾: picked, never typed, removed one by one; owner-only, never a management tool).
+  Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write that cannot happen.
+- The owner context names the output folder and the write folders for every turn (`brain/owner.py`).
+
+Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
+places and links, glob and grep, writes inside and outside, an unapproved write), brain/test_owner.py, and
+settings-view.test.ts. Look: `owner-write-folders` (adds with the picker, removes the first) beside the output folder
+scenes:
+
+```powershell
+npm run look -- owner-write-folders owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a
+real Windows disk (CI runs the offline suite there).
 
 ## Owner-PC commands (2026-11-01; now a quick question's alone, see above)
 

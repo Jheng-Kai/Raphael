@@ -425,6 +425,23 @@ function outputFolderRow(v: SettingsView): string {
 }
 
 /**
+ * The folders members may write to on this computer, beside the output folder: reading reaches the whole computer
+ * (R-PC-04), writing only these (R-PC-05). Each is a row of its own with its whole path; removing one waits in its ⋯
+ * and asks once (R-UI-56). Folders are added with the native picker, never typed.
+ */
+function writeFolderRows(v: SettingsView): string[] {
+  const folders = v.brain?.owner_write_folders ?? [], off = v.brain === null ? " disabled" : "";
+  const head = row(t("writeFolders.title"), "",
+    btn(ico("plus") + esc(t("writeFolders.add")), "sm", ` data-act="write-folder-add"${off}`), { attrs: ' data-row="write-folders"' });
+  return [head, ...folders.map((folder, index) => {
+    const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+    return row(`<span class="output-path">${esc(folder)}</span>`, "",
+      iconBtn("more", t("members.more", { p0: name }), ` data-act="write-folder-menu" data-folder-index="${index}" aria-haspopup="menu" aria-expanded="false"${off}`),
+      { cls: "write-folder", attrs: ' data-row="write-folder"' });
+  })];
+}
+
+/**
  * 一般, in a fixed order of sections: who you are, how the window looks, what Raphael works with (the timezone of
  * routines and the folder of what is delivered), and the guide. What he remembers is the 記憶 tab.
  */
@@ -439,6 +456,7 @@ function generalHTML(v: SettingsView): string {
     section(t("agent.title"), [
       row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
       outputFolderRow(v),
+      ...writeFolderRows(v),
     ])
     // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
     // Nothing of them is set here.

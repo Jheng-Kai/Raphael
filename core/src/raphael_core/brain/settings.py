@@ -46,6 +46,8 @@ DEFAULTS: dict[str, Any] = {
     "owner_name": "",
     "owner_about": "",
     "owner_output_folder": "",
+    # Folders on the owner's computer members may write to (R-PC-05), beside the output folder.
+    "owner_write_folders": [],
     "routine_timezone": "",
     "routine_detected_timezone": "",
     "routine_owner_seen_ms": 0,
@@ -339,6 +341,14 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         if value and (len(value) > 1000 or any(ord(char) < 32 for char in value)
                       or not (PureWindowsPath(value).is_absolute() or PurePosixPath(value).is_absolute())):
             raise ValueError("Output folder must be an absolute path without control characters")
+    if key == "owner_write_folders":
+        from pathlib import PureWindowsPath, PurePosixPath
+        if any(type(item) is not str for item in value):
+            raise TypeError("Setting 'owner_write_folders' must be a list of paths")
+        value = list(dict.fromkeys(item.strip() for item in value if item.strip()))
+        if len(value) > 50 or any(len(item) > 1000 or any(ord(char) < 32 for char in item)
+                                  or not (PureWindowsPath(item).is_absolute() or PurePosixPath(item).is_absolute()) for item in value):
+            raise ValueError("Write folders must be at most 50 absolute paths without control characters")
     if key == "routine_owner_seen_ms" and value < 0:
         raise ValueError("Owner activity time cannot be negative")
     if key in ("owner_name", "owner_about"):
