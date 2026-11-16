@@ -161,7 +161,7 @@ function mulberry32(seed: number): () => number {
 
 // ---------- the glyph texture ----------
 
-/** How Raphael feels: calm, or angry (red) while he refuses. */
+/** How Raphael feels: calm, or angry (red) while it refuses. */
 export type Mood = "calm" | "angry";
 
 // The ring texture is app/public/brand/glyph-ring.png, the runes of the owner's own picture, kept soft as they always were
@@ -227,7 +227,7 @@ function completeGlyph(tex: HTMLImageElement): CanvasImageSource {
 /**
  * The photo's colours on the texture, made once per mood: its dark brown matte goes, and its letters, whose soft edges are
  * a little lighter than their middles, take the photo's golden yellow at the edges and its orange in the middle (red when
- * he is angry). The letters' shapes and softness are the texture's own.
+ * it is angry). The letters' shapes and softness are the texture's own.
  */
 const INK = { calm: { middle: [236, 104, 26], edge: [247, 198, 28] }, angry: { middle: [170, 18, 32], edge: [255, 96, 72] } } as const;
 function inkedGlyph(tex: HTMLImageElement, mood: Mood): CanvasImageSource {
@@ -450,14 +450,14 @@ export function drawEmblem(
   }
 
   // Forty thin yellow-green rays extend from the centre, most reaching the white ring,
-  // some passing through it to the letters' feet and a few out past the letters: his light shines out.
+  // some passing through it to the letters' feet and a few out past the letters: its light shines out.
   // They go under the white ring, which hides them where they cross it.
   if (p.rays > 0.01) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     const rnd = mulberry32(5000 + Math.round(o.tq * 24));
     const n = Math.round(36 + 10 * o.lvl * o.calm);
-    // Over an unknown desktop a deeper yellow that reads on white as on black; red when he is angry.
+    // Over an unknown desktop a deeper yellow that reads on white as on black; red when it is angry.
     const rgb = angry ? (unknown ? "236,70,48" : "255,138,108") : unknown ? "222,196,24" : "228,242,96";
     for (let i = 0; i < n; i++) {
       const a = ((i + (rnd() - 0.5) * 0.9) / n) * TAU;

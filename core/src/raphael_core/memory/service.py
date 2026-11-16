@@ -315,7 +315,7 @@ class MemoryService(Growth):
         return "the assistant" if row is None else str(row[0])
 
     def _told_name(self, member_id: int, language: str = "zh-TW") -> str:
-        """Whom a shared entry was told to, as the owner knows them: Raphael by his name in `language`, the language
+        """Whom a shared entry was told to, as the owner knows them: Raphael by its name in `language`, the language
         of the conversation the entry came from (`_written_in`). The files are what every model reads, so the interface
         language never picks it."""
         return RAPHAEL_NAMES.get(language, RAPHAEL_NAMES["zh-TW"]) if member_id == 0 else self._name_of(member_id)

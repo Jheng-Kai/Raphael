@@ -16,7 +16,7 @@ import { currentSlimeId } from "./slime-ids";
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
 
-/** Raphael's colour: the first blue slime's, his face (the `blue-plain` character below). */
+/** Raphael's colour: the first blue slime's, its face (the `blue-plain` character below). */
 export const RAPHAEL_COLOR = "#3DB5FF";
 
 /** The plain slimes' colours, with clear, saturated swatches. */

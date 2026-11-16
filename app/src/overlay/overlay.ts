@@ -49,7 +49,7 @@ export type AskTier = "T2" | "T3";
 export type OverlayEvent =
   | { type: "mouse"; revision: number }
   | { type: "cancelkey"; reset: boolean }
-  /** `line`: Raphael's greeting to a question, beside the emblem while he listens. A dictation has none. */
+  /** `line`: Raphael's greeting to a question, beside the emblem while it listens. A dictation has none. */
   | { type: "show"; mode: Mode; line?: string }
   /**
    * `quiet`: thinking about a question, which has no progress to show. Its `lines` (Raphael's
@@ -98,8 +98,8 @@ export interface EmblemControl {
 }
 
 /**
- * Whether a line is one of Raphael's refusals: his notices and answers start with 告 (report) or 否 (refusal) in Chinese
- * and Japanese and `Notice.` or `Negative.` in English (notices.rs). A refusal is when he is angry.
+ * Whether a line is one of Raphael's refusals: its notices and answers start with 告 (report) or 否 (refusal) in Chinese
+ * and Japanese and `Notice.` or `Negative.` in English (notices.rs). A refusal is when it is angry.
  */
 export const isRefusal = (text: string): boolean => /^\s*《?\s*(?:否|Negative|No|거절|Non|Nein|Não|Нет|Không|ไม่|Tidak|Hayır)[。.]/u.test(text);
 
@@ -192,7 +192,7 @@ export class OverlayController {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private ask: Ask | null = null;
   private askTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Raphael's greeting is on screen (or about to be) while he listens for a question. */
+  /** Raphael's greeting is on screen (or about to be) while it listens for a question. */
   private greeting = false;
   private greetTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly progress = new ProgressArc();
@@ -419,8 +419,8 @@ export class OverlayController {
   }
 
   /**
-   * Raphael greets a question: the line stays beside the listening emblem until he has heard it.
-   * It is written whatever the subtitles setting says, like his answers: it is what tells a
+   * Raphael greets a question: the line stays beside the listening emblem until it has heard it.
+   * It is written whatever the subtitles setting says, like its answers: it is what tells a
    * question from a dictation.
    */
   private greet(line: string): void {
@@ -495,7 +495,7 @@ export class OverlayController {
   /**
    * A question is being thought about, and nothing reports how far it has come: a waiting line
    * beside the emblem, in the caption's place, shows that Raphael is at work. It belongs to the
-   * question, like his greeting and his answer, so like the percentage it is written whatever the
+   * question, like its greeting and its answer, so like the percentage it is written whatever the
    * subtitles setting says.
    */
   private startWaiting(lines: string[]): void {
@@ -513,7 +513,7 @@ export class OverlayController {
 
   /**
    * Raphael operates an app: the emblem shows (it appears if hidden) in the `operating` mode and
-   * `line` stands in the caption's place, still. Like his answers it is written whatever the
+   * `line` stands in the caption's place, still. Like its answers it is written whatever the
    * subtitles setting says. A question on screen goes without an answer being sent, and the
    * reports that waited go too, as with a dictation that starts.
    */
@@ -600,7 +600,7 @@ export class OverlayController {
     }
     this.busy = false;
     this.view.clearLine();
-    // Whatever takes the emblem next (a dictation, a question) starts in his gold.
+    // Whatever takes the emblem next (a dictation, a question) starts in its gold.
     this.emblem.mood = "calm";
   }
 }

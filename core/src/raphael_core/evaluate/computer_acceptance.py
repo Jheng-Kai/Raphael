@@ -1873,7 +1873,7 @@ class Acceptance:
 
             async def persons_browser():
                 """The members' browser is one a person signs in with: Google's own Chrome where there is one, a page
-                is not told it is automated, and nothing warns over the window. An owner signing in to Google for his
+                is not told it is automated, and nothing warns over the window. An owner signing in to Google for their
                 members met "This browser or app may not be secure", a yellow bar and "Restore pages?"."""
                 target = targets[members[0]]
                 profile = "/home/cua/workspace/.browser-profiles/driver/main"

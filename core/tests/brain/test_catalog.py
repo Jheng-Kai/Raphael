@@ -159,7 +159,7 @@ def test_entries_that_are_no_models_and_ids_a_setting_could_not_hold_are_skipped
 
 
 def test_a_model_without_modalities_is_of_no_kind_whoever_made_it():
-    # Raphael keeps no list of models of his own: not even his default is known without the list.
+    # Raphael keeps no list of models of its own: not even its default is known without the list.
     models = [
         {"id": "openai/gpt-6-luna", "pricing": {"prompt": "0.0000001", "completion": "0.0000005"}},
         {"id": "elevenlabs/scribe-v2", "architecture": {"output_modalities": "transcription"}},

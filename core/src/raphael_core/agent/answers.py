@@ -593,8 +593,8 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         prefix = prefix or match[1]
         full = match[2].strip()
     detail = _one_line_text(data.get("detail")).strip()
-    # The conversation folds `detail` away: a reply that sends the owner to it points at nothing he can open. What it
-    # pointed at is said where he reads, and the pointing sentence goes.
+    # The conversation folds `detail` away: a reply that sends the owner to it points at nothing they can open. What it
+    # pointed at is said where they read, and the pointing sentence goes.
     pointed = False
     if messages:
         cleaned = [_unpointed(text) for text in messages]

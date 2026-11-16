@@ -21,7 +21,7 @@ export const PREFIXES = [
 const OPENING = new RegExp(`^《(?:${PREFIXES.join("|")})[。.：:]\\s*`, "iu");
 
 /**
- * The messages of one of Raphael's replies without his 《prefix。…》. The core writes a long reply as
+ * The messages of one of Raphael's replies without its 《prefix。…》. The core writes a long reply as
  * several messages of one line: the first opens it with 《prefix。 and the last before the next opening
  * closes it with 》. Anything else, a 》 that ends a book's title included, is kept as it is. A 《prefix。 that starts a piece
  * while the line is still open (the piece before it does not end with 》) is the line's own words, a quoted example: the

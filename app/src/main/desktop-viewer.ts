@@ -308,8 +308,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     clearTimeout(lingering);
     lingering = setTimeout(closeStream, LINGER_MS);
   }
-  /** The owner's own Ctrl+V in the live screen: his clipboard text goes to the screen's page, which pastes it into the computer.
-   *  Only while he holds this screen; a member at work, or the owner only watching, reads nothing of his clipboard. */
+  /** The owner's own Ctrl+V in the live screen: their clipboard text goes to the screen's page, which pastes it into the computer.
+   *  Only while they hold this screen; a member at work, or the owner only watching, reads nothing of their clipboard. */
   async function answerPaste(id: unknown): Promise<void> {
     if (typeof id !== 'number' || !session || !interactive || state?.control !== 'owner') return;
     const target = frame.contentWindow, origin = new URL(session.url).origin, held = session;
@@ -595,7 +595,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     watching = true; document.documentElement.setAttribute('data-desktop-watch', '');
     await control(false);
     if (session !== opened) return;
-    // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes his input again.
+    // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes their input again.
     if (state?.control === 'owner') { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); send(true); }
     draw();
   }

@@ -360,7 +360,7 @@ async def sign_in_waiting_for(tmp_path, conn, *, stage="browser", accounts=()):
     ("connectors.tools", {"id": "composio:github"}),
 ], ids=["disconnect", "rename", "switch", "tools"])
 async def test_nothing_else_of_the_connections_waits_behind_a_sign_in_that_waits(tmp_path, conn, stage, method, params):
-    """The owner works on the apps while a sign-in waits in the browser (up to ten minutes): what he presses is done, not queued
+    """The owner works on the apps while a sign-in waits in the browser (up to ten minutes): what they press is done, not queued
     behind the lock until it runs out its 30 seconds and fails."""
     router, service, fake, task = await sign_in_waiting_for(tmp_path, conn, stage=stage)
     try:

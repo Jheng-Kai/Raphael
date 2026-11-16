@@ -1,8 +1,8 @@
 /* 拉斐爾: one conversation. The head (the title, search and Raphael's settings), then the
    stage: the thread, which scrolls, and the composer under it; or, with no turn at all, Raphael in
-   the middle with the composer under him. The person's words are bubbles on the right, Raphael's
-   are on the left beside his face. Colours are the app's tokens (styles.css); Raphael's own gold
-   (--rg-*) is only on the card of his YES/NO question. Every movement stops with
+   the middle with the composer under it. The person's words are bubbles on the right, Raphael's
+   are on the left beside its face. Colours are the app's tokens (styles.css); Raphael's own gold
+   (--rg-*) is only on the card of its YES/NO question. Every movement stops with
    prefers-reduced-motion (the rule at the end of styles.css, and the last block here). */
 
 /* ---------- the size of the page ---------- */
@@ -532,7 +532,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    without changing the words' metrics. The box is the mark's own width, so that a narrower @ does not make it overflow sideways. */
 .mention-ico { position: absolute; inset-block: 0; inset-inline-start: 0; width: 16px; display: grid; place-items: center; translate: -3px 0; -webkit-text-fill-color: currentColor; }
 .mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
-/* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
+/* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send it turns
    into a bare send icon (a level paper plane, no background). */
 .composer .cmp-pair:has(.cmp-send:disabled) .cmp-send, .composer .cmp-pair:has(.cmp-send:not(:disabled)) .cmp-voice { display: none; }
 .composer .cmp-pair .btn.cmp-send, .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { background: transparent; color: var(--accent-icon); animation: cmp-turn 140ms ease-out; }
@@ -682,7 +682,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .btn.attachment-file { display: flex; justify-content: flex-start; gap: var(--sp-2); width: 320px; min-height: 56px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); text-align: start; background: var(--surface-2); }
 .attachment-file .attachment-name { flex: 1; gap: var(--sp-1); }
 
-/* ---------- Raphael asks: his gold, a soft breathing glow, his face, 否 outlined and 是 gold ---------- */
+/* ---------- Raphael asks: its gold, a soft breathing glow, its face, 否 outlined and 是 gold ---------- */
 .ask-card { display: grid; grid-template-columns: var(--pa-ask-face) minmax(0, 1fr); align-items: center; gap: calc(12px + 4 * var(--pa-u)); padding: calc(12px + 4 * var(--pa-u)) calc(14px + 6 * var(--pa-u)) calc(12px + 4 * var(--pa-u)) calc(12px + 6 * var(--pa-u)); border: 1px solid var(--rg-edge); background: var(--rg-bg); border-radius: var(--pa-ask-r); box-shadow: 0 0 0 3px var(--rg-glow), 0 10px 30px var(--rg-glow); }
 .ask-face { display: block; width: var(--pa-ask-face); height: var(--pa-ask-face); }
 .ask-face .av { --av: var(--pa-ask-face) !important; }
@@ -696,7 +696,7 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .page-agent .btn.ask-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
 .ask-yes-t { position: relative; z-index: 1; }
 
-/* ---------- nothing yet: Raphael in the middle, his line, the composer under him ---------- */
+/* ---------- nothing yet: Raphael in the middle, its line, the composer under it ---------- */
 .ra-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); min-height: 0; padding: var(--sp-4) var(--sp-4) 48px; text-align: center; }
 /* Raphael's picture is 132 px at every size: the voice mode's flyer lands on it and is the same box (voice-mode.ts) */
 .ra-hero { width: 132px; height: 132px; }

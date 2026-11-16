@@ -24,7 +24,7 @@ describe("the dictionary filter", () => {
   });
 
   test("what a correction saved shows with the word and finds it", () => {
-    // The owner corrected Pinebox to his 「pinebot」: the form is a hint until it is seen again.
+    // The owner corrected Pinebox to their 「pinebot」: the form is a hint until it is seen again.
     const corrected: DictionaryEntry = { ...entry("pinebot", "manual"), heard: ["Pinebox"] };
     expect(heardAs(corrected)).toEqual(["Pinebox"]);
     expect(matches(corrected, "all", "pinebox")).toBe(true);

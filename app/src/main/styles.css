@@ -67,7 +67,7 @@
   /* The sidebar dot of a question that waits for the owner: orange, told from the red of a failure (3:1 on every row surface, check-palette.mjs). */
   --wait: #d05f00;
   --computer-active: #7138bd;
-  /* Raphael's blue: his own colour, and the usage bars'. */
+  /* Raphael's blue: its own colour, and the usage bars'. */
   --raphael-color: #1f9fe8;
   --meter: var(--raphael-color);
   --ans-edge: #ececec;
@@ -260,7 +260,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .nav[aria-current="page"] { background: var(--selected); color: var(--text); }
 .nav[aria-current="page"]:active { background: var(--pressed); }
 .nav[aria-current="page"] .i { color: var(--accent-text); }
-/* 拉斐爾 is Raphael's face, and a gold dot while he waits for a YES or a NO */
+/* 拉斐爾 is Raphael's face, and a gold dot while it waits for a YES or a NO */
 .nav .nav-face { margin: -1px; }
 .nav-dot { position: absolute; right: 12px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: var(--r-pill); background: var(--rg-btn); }
 @media (prefers-reduced-motion: no-preference) {
@@ -726,7 +726,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob[data-step="abilities"] .ob-col { width: min(100%, 560px); }
 /* The two stores are wide enough for three tiles of one row each. */
 .ob:is([data-step="tools"], [data-step="services"]) .ob-col { width: min(100%, 900px); }
-/* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask he answers. */
+/* The welcome is short: it stands in the middle of the card, its emblem over its name and an ask it answers. */
 .ob[data-step="welcome"] .ob-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding-top: var(--sp-4); }
 .ob[data-step="welcome"] .ob-col { justify-items: center; width: min(100%, 440px); text-align: center; }
 .ob[data-step="welcome"] .ob-col > h2 { margin-top: var(--sp-3); font-size: 40px; }
@@ -736,7 +736,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .ob-wordmark > .ob-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ob-emblem { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; height: 125px; }
 .ob-emblem canvas { display: block; }
-/* What the team can do, typed: an ask appears a letter at a time with a caret, his answer (告。…)
+/* What the team can do, typed: an ask appears a letter at a time with a caret, its answer (告。…)
    fades in under it in a quieter grey, then the ask is deleted and the next one typed. Both lines keep their height, so
    nothing under them moves. A reader hears one sentence instead (.ob-sr). */
 .ob-demo { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); width: 100%; margin-top: var(--sp-4); }

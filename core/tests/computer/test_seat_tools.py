@@ -651,7 +651,7 @@ def test_firefox_esr_is_purged_and_nothing_that_opens_it_is_left():
 
 def test_the_members_browser_is_never_signed_in_to_as_a_browser_and_keeps_nothing_typed():
     # Every member reads the one profile. Google's own Chrome offers an owner who signs in to Google on a page to
-    # "turn on sync": his own passwords, history and bookmarks would come down into that profile. As policy, which
+    # "turn on sync": their own passwords, history and bookmarks would come down into that profile. As policy, which
     # holds whatever a profile says, for Chrome and for Chromium.
     dockerfile = (Path(module.__file__).parent / "image" / "Dockerfile").read_text(encoding="utf-8")
     written = next(line for line in dockerfile.splitlines() if "BrowserSignin" in line)

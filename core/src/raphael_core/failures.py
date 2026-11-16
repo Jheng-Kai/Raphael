@@ -23,7 +23,7 @@ CAUSES = frozenset(("expired", "signed_out", "not_installed"))
 # What is worth asking again. A spent quota (`credits`, `usage_limit`) is not: waiting does not refill it.
 TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout", "cli_stopped"))
 # A failed model call is made again after these waits, which are all a question gets before the owner is told: nothing
-# was done yet, and he learns in seconds. After something was done it goes on at the patient pace until he stops it.
+# was done yet, and they learn in seconds. After something was done it goes on at the patient pace until they stop it.
 RETRY_WAITS = (1.0, 3.0, 8.0)
 PATIENT_WAITS = (30.0, 60.0, 120.0, 300.0)
 # How a CLI says a tool server it needs did not start.

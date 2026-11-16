@@ -974,9 +974,9 @@ export interface GroupDraft {
 }
 
 /**
- * A member as `members.list` lists it, Raphael first as member 0 (he is no row of the core).
+ * A member as `members.list` lists it, Raphael first as member 0 (it is no row of the core).
  * `avatar_url` is a picture the page may show as it is (a `data:image/...` URL), absent for a member
- * with none; Raphael's is the owner's picture of him with its `avatar_crop`, absent while he is his
+ * with none; Raphael's is the owner's picture of it with its `avatar_crop`, absent while it is its
  * emblem. `unread`: a turn arrived while the owner was not reading its thread (until
  * `members.read`); `waiting`: a question waits for the owner there. `preview` is the last line of
  * its thread (the core cuts it to one line), `last_at` when it was said.
@@ -1003,7 +1003,7 @@ export interface Member {
   avatar_url?: string;
   /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). */
   avatar_rev?: string;
-  /** Raphael's only: the cut of the owner's picture of him (avatar.ts `AvatarCrop`). */
+  /** Raphael's only: the cut of the owner's picture of it (avatar.ts `AvatarCrop`). */
   avatar_crop?: { x: number; y: number; zoom: number };
   /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
   /** A picture's `position` is how far down it is shown, in percent (50 when the owner never moved it). */

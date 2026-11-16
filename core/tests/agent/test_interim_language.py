@@ -2,7 +2,7 @@
 
 A CLI brain writes notes of its own between its tool calls, and a member on one (brain
 cli:claude) posted them in English ("The popover helper already supports submenus...") to an owner who writes Chinese: a
-message here, a progress line there. The owner's language is read from his own words, never from the interface, and a
+message here, a progress line there. The owner's language is read from their own words, never from the interface, and a
 CLI is told that every text it writes is in it; a note that still comes out in another language is not shown (the step it
 came with keeps its label).
 """

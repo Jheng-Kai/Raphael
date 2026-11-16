@@ -44,7 +44,7 @@ def test_a_note_to_itself_before_the_answer_is_taken_out_of_the_reply():
 @pytest.mark.parametrize("text", [
     "好，我來看一下。",                                                               # nothing English
     "OK. 好的，已經處理了。",                                                         # too short to be a note
-    "Dear Anna, I should like to thank you for the lovely gift you sent us last week.\n\n這是你要的英文信。",  # a draft he asked for
+    "Dear Anna, I should like to thank you for the lovely gift you sent us last week.\n\n這是你要的英文信。",  # a draft the owner asked for
     "The update goes out on Friday and the notes are on the release page for anyone who needs them.\n\n詳情在發布頁。",  # no planning
     "```\nI should respond to the user with the plan and then ask about the form\n```\n\n這是範例。",  # code
     "- I should respond to the user, explain the plan and ask about the form\n\n這是範例。",         # a list item
@@ -123,7 +123,7 @@ def test_a_reply_that_sends_the_owner_to_detail_says_what_it_pointed_at():
     reply = parse_reply({"text": "已更新例行工作。完整新提示詞見 detail。下次執行是明天。", "detail": "新提示詞全文：每天整理市場。"}, "zh-TW")
     assert "detail" not in reply.text and "見" not in reply.text
     assert reply.text == "已更新例行工作。下次執行是明天。\n\n新提示詞全文：每天整理市場。"
-    assert reply.detail is None  # it is said where he reads, not kept in the field
+    assert reply.detail is None  # it is said where they read, not kept in the field
 
 
 def test_a_pointer_in_the_words_of_a_member_goes_too_and_its_messages_carry_what_it_pointed_at():

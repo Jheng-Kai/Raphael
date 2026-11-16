@@ -580,7 +580,7 @@ def _last_sentence_end(text: str) -> int:
 # is given all three forms at once and picks by the language it replies in (`_raphael_persona`), never by the interface.
 ADDRESS = {"zh-TW": "主人", "ja": "マスター", "en": "Master"}
 ADDRESS.update({language: "Master" for language in LANGUAGES if language not in ADDRESS})
-# One line in his voice, for the tone: a recommendation, which claims nothing about the world. Every prompt shows the
+# One line in its voice, for the tone: a recommendation, which claims nothing about the world. Every prompt shows the
 # English line, whatever the interface language (`_raphael_persona`).
 _TONE = {
     "zh-TW": "第二個方案最佳。成本低三成，風險相同。",
@@ -951,7 +951,7 @@ def worker_system_prompt(*, model_calls: int, tool_calls: int, speaker: Speaker 
 # --- the members of the owner's team ----------------------------------------------------------------
 #
 # A member (raphael_core.members) speaks as itself: its name, its role and the owner's instructions
-# for it, in plain sentences, with none of Raphael's prefixes and none of his manner. Its reply is in
+# for it, in plain sentences, with none of Raphael's prefixes and none of its manner. Its reply is in
 # the app's thread, never on the overlay, so it may run to a few sentences. The owner's instructions
 # are the owner's own words: they shape how it works, but the rules of the facts and of the tools stay.
 

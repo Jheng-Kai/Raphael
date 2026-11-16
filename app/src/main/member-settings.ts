@@ -153,7 +153,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   function idHTML(member: Member): string {
     // A press on the face opens the picker (slimes, 生成) at once, as the panel's does; under the pointer a pencil shows on it.
     const face = `<button type="button" class="btn mb-face-edit ms-face" data-ms="avatar" data-k="ms-face" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 96)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button>`;
-    // Raphael's name is not the owner's to change here, nor has he a role.
+    // Raphael's name is not the owner's to change here, nor has it a role.
     if (member.id === RAPHAEL_ID) return face + `<b class="ms-name ms-static">${esc(member.name)}</b>`;
     return face +
       `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
@@ -497,7 +497,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   async function saveField(input: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
     const member = host.list()?.members.find(item => item.id === Number(input.dataset.member)) ?? (host.member().id === Number(input.dataset.member) ? host.member() : null);
     if (!member) return;
-    // Raphael's name and role are not the owner's to type; his personality and instructions are, as everyone's.
+    // Raphael's name and role are not the owner's to type; its personality and instructions are, as everyone's.
     if (member.id === RAPHAEL_ID && (input.id === "ms-name" || input.id === "ms-role")) return;
     if (input.id === "ms-name") {
       const value = cleanName(input.value);

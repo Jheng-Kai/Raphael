@@ -82,7 +82,7 @@ async function run(options) {
       // The owner's frozen return: WebView2 refused one power step and the rest never ran.
       if (journey.name === "hidden-window-refused") env.RAPHAEL_TEST_NATIVE_POWER_REFUSE = "normal memory";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
-      // The owner's real speech-to-text and cleanup through his OpenRouter key, a fraction of a cent.
+      // The owner's real speech-to-text and cleanup through their OpenRouter key, a fraction of a cent.
       if (journey.name === "dictation-dictionary") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "owner-words") env.RAPHAEL_TEST_NATIVE_LOCAL = "1";
       if (journey.name === "long-think") env.RAPHAEL_NATIVE_THINK_S = "75";

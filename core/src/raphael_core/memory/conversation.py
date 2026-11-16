@@ -191,7 +191,7 @@ def turn_text(turn: Turn, *, detail: bool, untrusted: bool = False) -> str:
     said = turn.text or turn.prefix
     if turn.messages and turn.route != "exchange":
         # Raphael's lines are kept framed as the app shows them, 《prefix。…》, the prefix in the interface language:
-        # the model reads his words without the window's frame (the interface language goes to no model).
+        # the model reads its words without the window's frame (the interface language goes to no model).
         from ..messaging.words import plain_replies
         said = "\n".join(plain_replies(turn.messages))
     unfinished = is_unfinished(turn) or bool(turn.stopped)

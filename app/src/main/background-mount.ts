@@ -7,7 +7,7 @@
 // place the page puts it: `mountBackgroundQuestions` is called for the open thread each time it
 // changes (pages/agent.ts), with the slot above the composer. The slot holds one component for as
 // long as the page lives; when the thread becomes another member's, the cards of the last one go
-// at once and the new thread's are read. Raphael's thread (member 0) is the only one with his
+// at once and the new thread's are read. Raphael's thread (member 0) is the only one with its
 // 《問。》 line and bare emblem; a member's shows that member's face and name (`asker`).
 
 import { type Asker, type BackgroundQuestions, createBackgroundQuestions } from "./background-questions";

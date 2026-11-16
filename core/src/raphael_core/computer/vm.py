@@ -47,8 +47,8 @@ SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
 IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "13"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
-# The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
-# waits for him and a recording are held until he says so): a lease nobody uses blocks every member.
+# The owner's hold of a screen ends by itself after this long without a click or a key of theirs (a sign-in request that
+# waits for them and a recording are held until they say so): a lease nobody uses blocks every member.
 OWNER_IDLE_S = 300
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -211,7 +211,7 @@ def bound_folder(path):
     """Make a folder of this PC that a computer binds. On Windows, Python 3.12.4 and later give a folder made with mode 0o700
     a DACL closed to all but its owner, and the files the engine makes in it inherit that: it makes them as another account,
     so the owner could not read what a member made there. There the folder takes the access of
-    the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is his to do."""
+    the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is theirs to do."""
     path = Path(path)
     if os.name == "nt":
         path.mkdir(parents=True, exist_ok=True)

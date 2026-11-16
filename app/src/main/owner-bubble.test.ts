@@ -75,7 +75,7 @@ test("a switch that is on wears the member's colour and its knob stands off it i
   expect(memberSwitch("#FFC83D").knob).toBe("light-dark(var(--on-tint-dark), var(--on-tint-dark))");
   expect(memberSwitch("#D5D9D6").knob).toBe("light-dark(var(--on-tint-dark), var(--on-tint-dark))");
   expect(memberSwitch("#905AFB").knob).toBe("light-dark(var(--on-tint-light), var(--on-tint-light))");
-  // Raphael's own places wear Raphael's colour: the same source as his bubble.
+  // Raphael's own places wear Raphael's colour: the same source as its bubble.
   expect(memberSwitch(memberColor({ id: 0 }))).toEqual(memberSwitch(RAPHAEL_COLOR));
 });
 

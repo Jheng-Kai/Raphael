@@ -234,7 +234,7 @@ describe("Raphael's panel", () => {
     await flush();
     expect(panel.el.querySelector("input, textarea")).toBeNull();
     expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("拉斐爾");
-    // The first blue slime: his emblem shows only in voice.
+    // The first blue slime: its emblem shows only in voice.
     expect(panel.el.querySelector(".mb-face-edit .av.mb-av-slime svg.slime")).not.toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect(api.routinesList).toHaveBeenCalledWith(0);
@@ -332,7 +332,7 @@ test("訊息平台: a bot not set up is one row whose 設定 asks the member in 
   expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord"]);
   suggest.querySelector<HTMLButtonElement>('[data-intent="setup-telegram"]')!.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("幫我設定 Telegram", [], current, { intent: "setup-telegram" });
-  // Raphael's own bots are in his panel now, Settings no longer holds them.
+  // Raphael's own bots are in its panel now, Settings no longer holds them.
   current = 0; panel.showMember(); await flush();
   expect(panel.el.querySelectorAll('.mb-panel-suggest [data-det="setup"]').length).toBeGreaterThan(0);
 });

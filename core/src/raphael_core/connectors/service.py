@@ -679,7 +679,7 @@ class ConnectorsService:
         connected = permitted = False
         try:
             # The lock is taken to set the sign-in up and to finish it, never for the wait between: the owner goes on working
-            # in the apps while the browser waits, and whatever he does meanwhile is the state the sign-in leaves.
+            # in the apps while the browser waits, and whatever they do meanwhile is the state the sign-in leaves.
             async with self._lock:
                 await self._session()
                 before = self._config()

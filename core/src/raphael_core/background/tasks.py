@@ -306,7 +306,7 @@ class TaskStore:
             if scope_key.startswith('room:'):
                 # The same work for the same colleague under another stage_id is the same work: a refusal is not mended by a
                 # new code (live, eight refused hand-offs were sent again that way).
-                # Since the owner last wrote in the thread: a request he makes again is new work.
+                # Since the owner last wrote in the thread: a request they make again is new work.
                 _, room_id, thread_id = scope_key.split(':')
                 since = self._conn.execute("SELECT COALESCE(MAX(created),0) FROM room_messages WHERE room_id=? AND thread_id IS ? AND member_id IS NULL",
                                            (int(room_id), None if thread_id == 'None' else int(thread_id))).fetchone()[0]

@@ -152,7 +152,7 @@ RUN set -eux; \
 # What the members' browser keeps, and whose it is, as the browser's own policy: it holds whatever a profile says and
 # whether or not the profile could be written. Every member reads the one profile. So the browser is never signed in
 # to as a browser and never syncs: an owner who signs in to Google on a page is otherwise offered "Turn on sync",
-# and his own saved passwords, history and bookmarks would come down into a profile every member reads. And it
+# and their own saved passwords, history and bookmarks would come down into a profile every member reads. And it
 # keeps no password, card or address that is typed into it. Signing in to a site is untouched: that is a cookie.
 RUN set -eux; \
     for folder in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do \

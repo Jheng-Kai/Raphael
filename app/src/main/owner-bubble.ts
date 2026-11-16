@@ -28,7 +28,7 @@ export function ownerBubble(color: string): { fill: string; words: "light" | "da
   return { fill: hexOf(rgb), words: "light" };
 }
 
-/** A member's colour, Raphael's being his first blue slime's (it was his gold). */
+/** A member's colour, Raphael's being the first blue slime's (it was gold). */
 export const memberColor = (member: { id: number; avatar?: string | null }): string => member.id === 0 ? RAPHAEL_COLOR : slimeColorOf(member);
 
 /**

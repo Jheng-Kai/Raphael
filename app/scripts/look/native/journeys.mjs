@@ -1280,7 +1280,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
       if (close && await close.isVisible()) await close.click();
     }
     if (targets.size !== 2) throw new Error("Both members report the same seat target");
-    // A member asks its owner to sign in at its seat, which is how an owner gives every member his own account: the
+    // A member asks its owner to sign in at its seat, which is how an owner gives every member their own account: the
     // owner opens that screen larger, takes it and types. An owner was shown "you are in control" there with nothing
     // getting in. A computer per member has had this journey since it was built; a seat had not.
     const third = people.find(row => row.name === "NativeSeatC");
@@ -1945,7 +1945,7 @@ if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) thro
     result.first = await dictate("dictated-first");
     if (!result.first.pasted.includes("pinebot")) throw new Error(`pinebot did not come out as the dictionary spells it: ${JSON.stringify(result.first)}`);
 
-    // 2. He corrects the name speech-to-text got wrong, in the composer, and sends.
+    // 2. The owner corrects the name speech-to-text got wrong, in the composer, and sends.
     const misheard = result.first.pasted.match(/[Hh]er+d\w*/)?.[0];
     result.misheard = misheard ?? null;
     if (!misheard || misheard === "herdr") throw new Error(`No misheard 「herdr」 to correct: ${result.first.pasted}`);

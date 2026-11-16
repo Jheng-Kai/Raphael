@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Raphael's face on the 拉斐爾 page is his emblem exactly as it is at the bottom right: bare, with no
+// Raphael's face on the 拉斐爾 page is its emblem exactly as it is at the bottom right: bare, with no
 // background, border, ring, disc, shadow or circle crop, in the member column, the pill, the details
 // panel and the thread. These tests inspect style rules that could reach the emblem's element or
 // its drawing surface, along with the rendered HTML.

@@ -14,7 +14,7 @@
   runs next. Raphael has routines too, as member 0.
 - `member_unread`: the threads (Raphael's as 0) with news the owner has not seen.
 
-Raphael himself is not a row: he is member 0 everywhere, cannot be renamed or deleted, and has
+Raphael itself is not a row: it is member 0 everywhere, cannot be renamed or deleted, and has
 every tool. The primary contact is the member whose `primary_contact` is 1 (at most one, by the table's
 own index), or Raphael while none is. It also owns the unique chief capability
 and a member that is hidden or deleted hands that role back to Raphael. A name, a role, a personality,

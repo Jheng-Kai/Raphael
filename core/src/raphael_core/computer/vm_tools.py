@@ -72,7 +72,7 @@ ENGINE_STARTING = with_ui_words({
 })
 
 # The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01: the
-# computer wakes when a member decides a task needs it, or when he starts it, and never silently). One quiet line in the
+# computer wakes when a member decides a task needs it, or when they start it, and never silently). One quiet line in the
 # conversation, naming the member and why; no toast, and never a reply bubble (R-TEXT-08). The status's `woken` is no
 # longer read by the app (R-PANEL-06).
 WOKE = {reason: with_ui_words(table) for reason, table in {

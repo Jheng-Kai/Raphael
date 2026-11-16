@@ -1,6 +1,6 @@
-/* The questions of the background (background-questions.ts): Raphael asks, so they are in his gold
-   (the --rg-* tokens of styles.css, the approval card's), with a soft breathing glow, his face, an
-   outlined 「否」 and a gold 「是」. They sit where the thread ends, as wide as one of his answers. */
+/* The questions of the background (background-questions.ts): Raphael asks, so they are in its gold
+   (the --rg-* tokens of styles.css, the approval card's), with a soft breathing glow, its face, an
+   outlined 「否」 and a gold 「是」. They sit where the thread ends, as wide as one of its answers. */
 .bgq-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin: var(--sp-1) 0 var(--sp-1); }
 .bgq-list[hidden] { display: none; }
 .bgq-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); max-width: min(92%, 640px); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--rg-edge); border-radius: var(--r-lg); background: var(--rg-bg); box-shadow: 0 0 0 3px var(--rg-glow); }
