@@ -1115,6 +1115,10 @@ class BackgroundService:
             for task_id in self._store.invalidate_tree(task.id):
                 if (run := self._runs.get(task_id)) is not None:
                     self._host.cancel(run)
+                elif task_id != task.id and self._waits(task_id):
+                    # It waits for the owner's yes or answer, or for its own colleagues: it ends as Stop ends it, its card or
+                    # question closed with it. Until then the generation raised above keeps it from going on.
+                    self._end_later(task_id)
                 else:
                     self._withdraw(task_id, prefix='')
             # The asker was never told to the owner: it ends without a report.
@@ -1832,6 +1836,9 @@ class BackgroundService:
             attachment_store=self._attachment_store,
             artifact=lambda payload: self._artifact(task, payload),
         )
+        # The generation the task was taken up at, not the one it has now: a Stop while it was being started (its member's
+        # computer seated, its files read) raised it, and the run then ends before it begins (R-PUMP-02).
+        run.generation = task.generation
         from ..agent.actions import action_scope
         run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
         snapshot.tool_allowed = run.tool_allowed
@@ -2067,6 +2074,15 @@ class BackgroundService:
         logger.info("Background task %d goes on: approved=%s", task.id, approved)
         await self._carry(task, run, spec, prepare)
 
+    def _stopped_while_starting(self, task: Task, run: TaskRun) -> bool:
+        """Whether the task was stopped between being taken up and its run beginning (R-PUMP-02): Stop raised its generation
+        then, and it ends here, cancelled and silent, before its worker or its model is asked anything."""
+        current = self._store.get(task.id)
+        if current is not None and current.state == RUNNING and current.generation == run.generation:
+            return False
+        self._conclude_run(task, run, {"status": "cancelled"})
+        return True
+
     async def _carry_cli(self, task, run, spec=None):
         """Keep the shared CLI loop alive across the worker's existing approval cards."""
         run.activity = current()
@@ -2074,6 +2090,8 @@ class BackgroundService:
         self._runs[task.id] = run
         self._changed(task.id, RUNNING)
         try:
+            if self._stopped_while_starting(task, run):
+                return
             # No clock of its own, in a room too: every word or step of the CLI is progress, and only a stall ends it.
             outcome = await run._guarded(run.watch(loop.run()))
             if self._model_observer is not None and loop.actual_model:  # a turn stopped before the CLI ran has none
@@ -2130,6 +2148,8 @@ class BackgroundService:
         self._runs[task.id] = run
         self._changed(task.id, RUNNING)
         try:
+            if self._stopped_while_starting(task, run):
+                return
             if prepare is not None:
                 spec = {**spec, "messages": await prepare()}
             try:
@@ -3259,6 +3279,9 @@ class BackgroundService:
         if (run := self._runs.get(task_id)) is not None:
             self._host.cancel(run)
             return {"cancelled": True}
+        if task_id in self._active and getattr(self._store.get(task_id), "state", None) == RUNNING and task_id not in self._paused:
+            # Being started, before its run exists: the generation its stop raised ends it as its run begins.
+            return {"cancelled": True}
         paused = self._paused.get(task_id)
         if paused is not None:
             # A task that waits for the owner (or was answered and waits for its turn) ends here.
@@ -3276,6 +3299,22 @@ class BackgroundService:
         # Waiting for its place, or given one a moment ago and not yet begun: it ends here, and its carrier,
         # finding it ended, does nothing.
         return {"cancelled": self._withdraw(task_id)}
+
+    def _waits(self, task_id: int) -> bool:
+        """Whether a task waits, carried by nothing: for the owner's yes (`_paused`), for the owner's answer or its own
+        colleagues (a continuation). `_cancel` ends such a task, closing what it waits on."""
+        if task_id in self._paused or task_id in self._handoff_runs:
+            return True
+        task = self._store.get(task_id)
+        return task is not None and task.state == WAITING and bool(task.continuation)
+
+    def _end_later(self, task_id: int) -> None:
+        """End a waiting task as Stop does, from code that cannot wait for it (closing an owner's card is a call of its own)."""
+        try:
+            ending = asyncio.get_running_loop().create_task(self._cancel({"task_id": task_id, "_tree": True}))
+        except RuntimeError:
+            return  # no loop: its raised generation still ends it before it goes on
+        ending.add_done_callback(lambda done: done.cancelled() or done.exception())
 
     def _withdraw(self, task_id: int, prefix: str | None = None) -> bool:
         """End a task that has not begun: it waits for its place, was given one a moment ago, or is queued and nothing carries it
