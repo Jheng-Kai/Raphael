@@ -95,7 +95,7 @@ class Speaker:
         with four chosen tools said it would use its own computer and could not). Every member has its computer
         (R-COMP-ACCESS-01); whether one is on offer at all is the computer's own state, never this list's."""
         server = plugin_server(key)
-        if self.tools is None or server is None or server in {"local", "computer", "media"} or server.startswith("computer-"):
+        if self.tools is None or server is None or server in {"local", "owner_files", "computer", "media"} or server.startswith("computer-"):
             return True
         allowed = {(plugin_server(item) or item).casefold() for item in self.tools}
         return server.casefold() in allowed

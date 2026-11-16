@@ -84,6 +84,19 @@ print(json.dumps({"type": "control_response", "response": {"subtype": "success",
     assert [m["id"] for m in models][:2] == ["cli:claude:claude-opus-5-5", "cli:claude:claude-fable-5-1"]
 
 
+async def test_every_listing_is_asked_in_the_same_folder_so_claude_code_keeps_one_records_folder(tmp_path):
+    seen = tmp_path / "seen.txt"
+    command = _fake_claude(tmp_path, '''import json, os, sys
+open(%r, "a", encoding="utf-8").write(os.getcwd() + "\\n")
+sys.stdin.readline()
+print(json.dumps({"type": "control_response", "response": {"subtype": "success", "response": {"models": json.loads(%r)}}}), flush=True)
+''' % (str(seen), json.dumps(CLAUDE_INITIALIZE)))
+    stable = tmp_path / ".raphael" / "cli-workspaces" / "models"
+    for _ in range(2):
+        await claude_cli_models(command, {**__import__("os").environ}, tmp_path, cwd=stable)
+    assert seen.read_text(encoding="utf-8").splitlines() == [str(stable)] * 2
+
+
 async def test_the_claude_models_arrive_in_the_list_and_a_silent_cli_leaves_the_known_ones(tmp_path):
     from raphael_core.agent.cli.discovery import CliBrains
     import os

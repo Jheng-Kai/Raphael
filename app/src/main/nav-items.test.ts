@@ -7,7 +7,7 @@ import { setLocale } from "./i18n";
 afterEach(() => { setAvatar(null); setLocale("zh-TW"); });
 
 describe("the sidebar's pages", () => {
-  test("a new language names 拉斐爾 again and leaves his face where it is, the person's picture too", () => {
+  test("a new language names 拉斐爾 again and leaves its face where it is, the person's picture too", () => {
     const nav = document.createElement("nav");
     nav.innerHTML = navItemHTML("agent", "拉斐爾", avatarHTML({ size: 18, cls: "nav-face" })) + navItemHTML("dictation", "聽寫", "<svg></svg>");
     // the picture is loaded: it takes the emblem's place

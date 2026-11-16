@@ -88,6 +88,18 @@ or toggle.
 
 This supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for the complete selected matrix and deferred native acceptance.
 
+A routine row of Details opens the routine to read; an address in its instructions is a link to the owner's browser, while the row itself (a button, its status line cut short) stays words (R-LINK-01, `urls-member-routine`, described with the other linked surfaces in [conversation](conversation.md)).
+
+## The same eyes in WebKit (macOS)
+
+On a Mac the faces of 48 px and under had eyes of every size, some upside down, changing with the window: WebKit loses
+the angle unit of an `atan2()` whose length is relative (`cqw`), so `tan()` read degrees as radians. The face's size
+now reaches `tan(atan2())` as the registered length `--slime-size` (`slime.css`). WebKit also has no CSS `d`, so every
+state showed the resting eyes: the drawing writes the state's path into `d` as well (`slime-motion.ts` `eyePath`, read
+from slime.css's `--eyes` through the generated data; `slime.ts` `slimeSVG`, `enter` and the strips). Chromium still
+takes `d: var(--eyes)` and eases between shapes; WebKit changes them at once. The tests in `slime.test.ts` keep both.
+The look harness renders in Chromium, so a WebKit change is checked in a WKWebView by hand.
+
 ## Quiet resting poses
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.
@@ -223,6 +235,22 @@ another tab and compares the picker's, the place's and every tab's box before an
 drawn earlier still shows where it is the face (`mb-av-pic`, from `avatar_url`). Under the pointer the
 face itself dims along its outline (a slime's base and hat included, never a circle that leaves corners) with a white
 pencil in its middle. Scenes: member-face-hover, slime-picker, slime-picker-tab.
+
+### Words not yet sent stand in the row (R-SIDE-05)
+
+A conversation's sidebar row shows what the owner is writing there before it is sent, as messaging apps do: the second line reads
+草稿：<the words> in place of the last line, for a member and a group chat alike, the open conversation's row too. The words come from the kept
+draft (`composer-drafts.ts` `writeDraftWords`, which the composer calls 300 ms after the last key and again when the draft is sent, emptied or
+given up) and every write tells its key (`DRAFT_EVENT`); the member column and the group rows redraw on it, and `patchHTML` touches only the line
+that changed. `unsentWords(scope, id)` reads a member's main conversation's draft first, else another of its conversations', or a group's
+(`room:<id>`); it parses the kept drafts again only when they changed, since every row of every draw asks. A quote alone or spaces are no words.
+A draft stands in place of a waiting question's gold line. `sidebar-draft` types in a member's composer and waits for the row's 草稿 line,
+`sidebar-draft-cleared` empties the composer and waits for the last line to come back, `sidebar-draft-room` does the same in a group chat.
+Gotcha: the line follows the kept draft, so it changes 300 ms after typing stops, not on each key.
+
+```
+npm run look -- sidebar-draft sidebar-draft-cleared sidebar-draft-room --theme both --width 1120,720,1920x1080
+```
 
 ## Driving it with look
 
@@ -951,7 +979,7 @@ must be compared with the ordinary Connections rows and member resource controls
 The selected offline look matrix is below. Native, network and
 paid API acceptance remain outside it.
 
-### Shared skill import and member choices (review follow-up 3)
+### Shared skill import and member choices
 
 > Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 
@@ -980,7 +1008,7 @@ Inspect every contact sheet and every full-size image for the member-panel scene
 Vitest: connections.test.ts, member-profile-resources.test.ts and
 app/scripts/look/mock-ipc.test.mjs (scene fixture source propagation).
 
-### One shared package row and readable sources (review follow-up 4)
+### One shared package row and readable sources
 
 > Retired: Connect apps lists connectors only, so the Connections skills section, its import dialog, library rows, grants dialog and plugin sets are gone from the app, together with the scenes connected-apps-skills, skill-private-detail, skills-installed-sources, skills-import-shared, skills-member-grants, skills-source-changed, skills-plugin-entry, skills-marketplace, skills-plugin-set, skills-plugin-update and skills-plugin-details (connected-apps-only and its `connectors-only` check replace the first). Skills belong to each member and are managed in that member's right panel (details-skills, raphael-skills). The core capability and its pytest evidence stay. What follows is the history of the retired dialog.
 

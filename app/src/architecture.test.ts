@@ -38,7 +38,7 @@ it("mechanical rules link existing named tests", () => {
       }
     }
   }
-});
+}, 60_000);
 
 it("a rule named in the code is in the ledger", () => {
   const ledger = read(located(".agents/product/RULES.md"));

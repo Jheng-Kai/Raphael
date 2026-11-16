@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "./i18n";
+import { linkedText } from "./message-content";
 import { connectionMarkHTML } from "./secret-card";
 import { permissionCardHTML, permissionCardsHTML, permissionFor, permissionStateText } from "./permission-card";
 import { emptyTimelineState, turnHTML, type TurnLook } from "./timeline";
@@ -11,7 +12,9 @@ afterEach(() => setLocale("zh-TW"));
 test("payment approval shows merchant, amount and card label without expanding details", () => {
   const summary = "Company travel · https://shop.example · NT$ 1,280 · You complete payment.";
   const html = permissionCardHTML(card({ tool: "fill_card", service: "Computer", summary, always: false }));
-  expect(html).toContain(`<p class="card-body cc-state">${summary}</p>`);
+  // The merchant's address is a link like any other in words read whole (R-LINK-01).
+  expect(html).toContain(`<p class="card-body cc-state">${linkedText(summary)}</p>`);
+  expect(linkedText(summary)).toContain('data-url="https://shop.example/" rel="noreferrer noopener">https://shop.example</a>');
   expect(actions(html)).toEqual(["perm-once", "perm-deny"]);
   expect(html).not.toContain('class="card-detail"');
 });
@@ -135,7 +138,8 @@ const turn = (over: Partial<AgentTurn> = {}): AgentTurn => ({
 const LOOK: TurnLook = { face: () => "<i></i>" };
 // The words as read: a tag is a space, except between the clauses of a line, which a comma joins.
 const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").replace(/\s+/g, " ").replace(/(?<=[，、]) /g, "").trim();
-const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)"/g)].map((match) => match[1]);
+// The card's answers are its buttons; a link in its words opens an address, not an answer.
+const actions = (html: string): string[] => [...html.matchAll(/<button[^>]*?data-act="([^"]+)"/g)].map((match) => match[1]);
 
 describe("a permission card", () => {
   test("says the exact action in plain words and offers 允許一次, 一律允許 and 拒絕, the primary first", () => {

@@ -7,7 +7,7 @@ vi.mock("./api", () => api);
 import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
-import { computerStateText } from './computer-state';
+import { computerStateText, computerUpdateLine } from './computer-state';
 const running: DesktopState = { state:"running", ready:true, control:"member" };
 const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
 let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false;
@@ -593,6 +593,40 @@ test.each(['starting','building','preparing'] as const)('%s shows no preparation
   expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
+// R-COMP-UPDATE-01: an update of the computer's image can take minutes, so it is said in one state line under the
+// screen, with how long it may take; the screen itself stays as bare as R-UI-93 has it, and nothing is a notice.
+test.each(['building','preparing','starting'] as const)('an update says so in one line under the screen while it is %s, and the line goes with it',async state=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue({state,ready:false,control:'member',update:true,progress:'#12 [12/21] RUN apt-get install'});mounted.show();await flush();
+  const caption=panel().querySelector<HTMLElement>('.desktop-caption')!;
+  expect(caption.hidden).toBe(false); expect(caption.textContent).toBe(t('desktop.updateLine')); expect(caption.getAttribute('role')).toBe('status');
+  expect(panel().hasAttribute('data-desktop-update')).toBe(true); expect(panel().dataset.desktopState).toBe(state);
+  expect(caption.closest('.desktop-screen')).toBeNull(); expectBareScreen(panel());
+  expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(true);
+  expect(shownText(panel())).not.toContain('#12'); expect(enlarge().hidden).toBe(true); expect(api.desktopOpen).not.toHaveBeenCalled();
+  // An unchanged renewal writes nothing, the line included.
+  const observer=new MutationObserver(()=>{}); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});
+  await vi.advanceTimersByTimeAsync(2000); await flush(); expect(observer.takeRecords()).toHaveLength(0); observer.disconnect();
+  api.desktopStatus.mockResolvedValue(running); await vi.advanceTimersByTimeAsync(4000); await flush();
+  expect(caption.hidden).toBe(true); expect(panel().hasAttribute('data-desktop-update')).toBe(false);
+});
+test.each(['zh-TW','en','ja'] as const)('in %s the update line is its own sentence of the language',locale=>{
+  setLocale(locale);
+  expect(computerUpdateLine({state:'building',ready:false,control:'member',update:true})).toBe(t('desktop.updateLine'));
+  expect(t('desktop.updateLine')).not.toBe('desktop.updateLine');
+  for (const quiet of [{state:'building'},{state:'preparing'},{state:'running',update:true},{state:'stopped',update:true}] as const)
+    expect(computerUpdateLine({...quiet,ready:false,control:'member'} as DesktopState)).toBe('');
+});
+test('a maintenance press while the computer is being updated answers with the update and shows no failure',async()=>{
+  const updating: DesktopState = {...maintenanceState,state:'building',ready:false,update:true};
+  panelOpen=true;api.desktopStatus.mockResolvedValue(updating);api.desktopMaintain.mockResolvedValue(updating);mounted.show();await flush();
+  menuPick(1);await flush();
+  expect(api.desktopMaintain).toHaveBeenCalledExactlyOnceWith(1,'restart',updating,false);
+  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-caption')!.textContent).toBe(t('desktop.updateLine'));
+  expect(panel().dataset.desktopState).toBe('building'); expect(api.desktopOpen).not.toHaveBeenCalled();
+});
+
 test('real build percent updates change only the state in data and an unchanged refresh writes nothing',async()=>{
  panelOpen=true; api.desktopStatus.mockResolvedValue({state:'building',ready:false,control:'member',progress:'Downloading 12%'}); mounted.show(); await flush();
  expect(panel().dataset.desktopState).toBe('building'); expectBare();
@@ -1037,7 +1071,7 @@ const wire = (): void => { peer = { postMessage: vi.fn() }; Object.definePropert
 const holdControl = async (): Promise<void> => { panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); api.desktopControl.mockResolvedValue({ ...running, control: 'owner' }); await takeOver(); message('interactive', { held: true }); await flush(); };
 const pasteReplies = (sent: { mock: { calls: unknown[][] } }): unknown[][] => sent.mock.calls.filter(([data]) => (data as { type?: string }).type === 'raphael-desktop-paste');
 
-test('the owner pasting into the screen he holds sends his clipboard text to the page, and to that page alone', async () => {
+test('the owner pasting into the screen they hold sends their clipboard text to the page, and to that page alone', async () => {
   await holdControl();
   api.ownerClipboardText.mockResolvedValue('sk-or-v1-0123456789abcdef');
   const sent = peer.postMessage;
@@ -1046,7 +1080,7 @@ test('the owner pasting into the screen he holds sends his clipboard text to the
   expect(pasteReplies(sent)).toEqual([[{ type: 'raphael-desktop-paste', id: 7, text: 'sk-or-v1-0123456789abcdef' }, 'http://127.0.0.1:5000']]);
 });
 
-test('nothing is read from his clipboard while he only watches or while a member works', async () => {
+test('nothing is read from their clipboard while they only watch or while a member works', async () => {
   panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush();
   const sent = peer.postMessage;
   askPaste(7); await flush();

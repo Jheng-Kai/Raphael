@@ -536,7 +536,8 @@ export function checkRendered(name, context = {}) {
       // The whole screen is the one press: it opens the larger view while the computer runs and starts it in every other state but getting ready.
       require(!!visible(cover) === !preparing && (!asleep || phase === 'stopped'), 'the screen is the one press that opens or starts the computer, except while it is getting ready');
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
-      require(!visible(panel.querySelector('.desktop-caption')), 'no caption stands under the screen');
+      // R-COMP-UPDATE-01: the one line under the screen is an update of the computer's image, said while it lasts.
+      require(!visible(panel.querySelector('.desktop-caption')) || preparing && !!panel.querySelector('.desktop-panel[data-desktop-update]'), 'no caption stands under the screen but the line of an update');
       require(!!visible(panel.querySelector('.computer-lifecycle-state')) === runs, 'the header names the state only once the computer runs');
       if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
       if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
@@ -721,6 +722,19 @@ export function checkRendered(name, context = {}) {
     require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
     if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === 'desktop-updating') {
+    // R-COMP-UPDATE-01: an update of the computer's image says so in one line under the screen, with how long it may
+    // take; the screen stays bare (R-UI-93), cannot be pressed, and nothing is a notice or a toast.
+    const panel = document.querySelector('.desktop-panel'), screen = panel?.querySelector('.desktop-screen'), caption = panel?.querySelector('.desktop-caption');
+    require(panel?.hasAttribute('data-desktop-update') && ['starting', 'building', 'preparing'].includes(panel.dataset.desktopState), 'the panel is in an update');
+    require(visible(caption) && caption.textContent === '正在更新電腦。更新後第一次開啟可能需要幾分鐘。', `the update line is shown (${caption?.textContent})`);
+    require(caption.getBoundingClientRect().top >= screen.getBoundingClientRect().bottom - 1, 'the line stands under the screen, never over it');
+    require(caption.getBoundingClientRect().right <= screen.getBoundingClientRect().right + 1 && caption.getBoundingClientRect().left >= screen.getBoundingClientRect().left - 1, 'the line is no wider than the screen');
+    requireBareScreen(screen);
+    require(!visible(panel.querySelector('[data-desktop="enlarge"]')), 'a computer being updated is not pressable');
+    require(!visible(panel.querySelector('.desktop-error')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no notice and no header word');
     return {check:name};
   }
   if (name === "app-attachment-count") {
@@ -1029,7 +1043,9 @@ export function checkRendered(name, context = {}) {
       require(Math.abs(bounds.right - innerWidth) <= 2 && bounds.left <= 2, 'the larger view fills the whole window');
       require(getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'the sidebar steps away under the larger view');
       const collapse = document.querySelector('.window-chrome > [data-desktop="collapse"]'), strip = document.querySelector('.window-chrome').getBoundingClientRect();
-      require(visible(collapse) && collapse.getBoundingClientRect().bottom <= strip.bottom + 1 && collapse.getBoundingClientRect().right <= document.querySelector('.window-controls').getBoundingClientRect().left + 1, 'fold back sits beside the window buttons');
+      // On a Mac the window's buttons are macOS's lights at the top left, and nothing of the page stands at the right but fold back.
+      const captionLeft = document.documentElement.dataset.platform === 'macos' ? innerWidth : document.querySelector('.window-controls').getBoundingClientRect().left;
+      require(visible(collapse) && collapse.getBoundingClientRect().bottom <= strip.bottom + 1 && collapse.getBoundingClientRect().right <= captionLeft + 1, 'fold back sits beside the window buttons');
       const dock = panel.querySelector('.desktop-dock'), screenBox = panel.querySelector('.desktop-screen').getBoundingClientRect();
       require(visible(dock) && Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - innerWidth / 2) <= 2 && dock.getBoundingClientRect().top >= screenBox.bottom, 'one pill sits centred below the screen');
       require(Math.abs(screenBox.width / screenBox.height - 1280 / 900) < 0.03, 'the screen keeps its own proportions');
@@ -1053,6 +1069,20 @@ export function checkRendered(name, context = {}) {
       }
       const frame = panel.querySelector('iframe');
       if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+    }
+    return {check:name};
+  }
+  if (name === "owner-write-folders") {
+    const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
+    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "owner_write_folders").map(call => call.params.value);
+    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "R-PC-05: the picker adds a folder and its ⋯ removes one");
+    require(sets[0].length === 3 && sets[0][2] === sample && JSON.stringify(sets[1]) === JSON.stringify(sets[0].slice(1)), "the first folder is the one removed, the picked one kept");
+    const head = document.querySelector('[data-row="write-folders"]'), rows = [...document.querySelectorAll('[data-row="write-folder"]')];
+    require(visible(head) && !document.querySelector('[data-row^="write-folder"] input, [data-row^="write-folder"] textarea'), "folders are picked, never typed");
+    require(rows.length === 2 && rows.every(row => visible(row)), "each folder is a row of its own");
+    for (const row of rows) {
+      const path = row.querySelector('.output-path'), more = row.querySelector('[data-act="write-folder-menu"]');
+      require(visible(path) && visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
     }
     return {check:name};
   }
@@ -1791,9 +1821,11 @@ export function checkRendered(name, context = {}) {
         const search = document.querySelector('[data-room-search]'), menu = document.querySelector('[data-room-menu]');
         const box = search.getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
         const controls = document.querySelector('.window-controls').getBoundingClientRect(), tools = room.querySelector('.page-head .ra-tools'), reserve = parseFloat(getComputedStyle(tools).marginRight);
+        // On a Mac there are no buttons at the right (macOS draws its lights at the top left): the tool keeps the pane's own inset from the window's edge.
+        const mac = document.documentElement.dataset.platform === 'macos', end = mac ? innerWidth : controls.left, gap = mac ? Math.max(16, parseFloat(getComputedStyle(room).paddingRight)) : 14, what = mac ? 'edge' : 'buttons';
         require(visible(search) && search.closest('.page-head .ra-tools') && getComputedStyle(menu).display === 'none', 'group search stands alone in the shared header tool row; the menu is the row\'s right click');
         require(Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides (${head.left - pane.left} / ${pane.right - head.right})`);
-        if (reserve > 0) require(Math.abs(controls.left - box.right - 14) <= 2, `group search ends 14 px short of the window's buttons (${controls.left - box.right})`);
+        if (reserve > 0) require(Math.abs(end - box.right - gap) <= 2, `group search ends ${gap} px short of the window's ${what} (${end - box.right})`);
         else require(Math.abs(box.right - head.right) <= 1, `group search ends the head where a side thread stands at the right (${head.right - box.right} short)`);
         require(Math.abs(box.top + box.height / 2 - (heading.top + heading.height / 2)) <= 2, 'group search shares the heading\'s line');
       }
@@ -1845,7 +1877,7 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.mb-det input[type=password]'), 'no token field in the panel');
       for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`.mb-panel-suggest [data-intent=setup-${kind}]`)), `${kind} not set up is one row with 設定`);
       const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
-      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in his conversation with the setup intent beside the words, once for two presses");
+      require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in its conversation with the setup intent beside the words, once for two presses");
       // While it works on it the button is busy: a spinner and no second press.
       const busy = document.querySelector('.mb-panel-suggest [data-intent=setup-slack]');
       require(busy.disabled && busy.getAttribute('aria-busy') === 'true' && visible(busy.querySelector('.spin')), 'the pressed 設定 is busy with a spinner');
@@ -2954,14 +2986,20 @@ export function checkRendered(name, context = {}) {
   const footBox = el => el.getBoundingClientRect();
   const footNear = (a, b, message) => require(Math.abs(a - b) <= 1, `${message}: ${Math.round(a * 10) / 10} not ${Math.round(b * 10) / 10}`);
   const footRail = () => document.documentElement.hasAttribute('data-sidebar-collapsed');
-  if (name === 'foot-starter-apps') {
-    // With nothing connected the pill shows what it is for: Gmail, Notion and Google Calendar (sidebar.ts STARTER_APPS).
+  if (name.startsWith('foot-pill-marks-')) {
+    // The pill always shows three marks: the connected apps' own, most recently used first, then the starters that are not
+    // connected (sidebar.ts STARTER_APPS), each named by its mark's id. The name carries the marks the scene's apps must give.
+    const want = name.slice('foot-pill-marks-'.length).split(',');
     const pill = document.querySelector('#nav .sidebar-apps[data-connect-apps]');
-    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) { require(![...pill.querySelectorAll('.sidebar-app-marks .mono')].some(visible), 'on the rail the door has no marks'); return { check: name, rail: true }; }
-    const marks = [...pill.querySelectorAll('.sidebar-app-marks .mono')].filter(visible);
-    require(marks.length === 3, `the three starter marks show beside the words: ${marks.length}`);
+    const all = [...pill.querySelectorAll('.sidebar-app-marks .sidebar-app-mark')];
+    require(all.map(mark => mark.dataset.mark).join() === want.join(), `the pill's marks are ${want.join()}, not ${all.map(mark => mark.dataset.mark).join()}`);
+    require(all.every(mark => mark.querySelector('.mono')), 'every mark is drawn');
+    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) { require(!all.some(mark => visible(mark.querySelector('.mono'))), 'on the rail the door has no marks'); return { check: name, rail: true }; }
+    const shown = all.filter(mark => visible(mark.querySelector('.mono')));
+    require(shown.length === 3, `three marks show beside the words: ${shown.length}`);
+    require(shown.every((mark, at) => mark === all[at]), 'the marks that fit are the first ones: the last drop first');
     require(visible(pill.querySelector('.nav-t')), 'the words stay whole');
-    return { check: name };
+    return { check: name, marks: want };
   }
   if(name==='foot-rest'){
     // The foot at rest, both shapes: the list's one row (measured by sidebar-air) or the rail's column; the app opens on a conversation, so no Home
@@ -3339,6 +3377,105 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, ...widths };
   }
+  // The composer's row of controls stays inside the composer however narrow it is (R-UI-160): one row, no control past the
+  // composer's inner edge or over another, the voice or send button whole at the right end. Short of room, the model's name
+  // shortens first (its chevron stays), then the permission's word goes and its shield stays, named still for a screen reader.
+  if (name === "composer-row-fits") return (async () => {
+    const forms = [...document.querySelectorAll('.composer')].filter(visible);
+    require(forms.length > 0, "a composer is on screen");
+    const box = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    const round = rect => Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * 10) / 10]));
+    const rows = forms.map(form => {
+      const style = getComputedStyle(form), outer = box(form), bar = form.querySelector('.cmp-bar');
+      const inner = { left: outer.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft), right: outer.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+        top: outer.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop), bottom: outer.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) };
+      const controls = [...bar.children].filter(child => !child.matches('.cmp-bar-fill') && visible(child));
+      const slot = [...form.querySelectorAll('.cmp-pair > button')].find(visible);
+      const rects = controls.map(control => ({ control: control.className.split(' ').find(word => word.startsWith('cmp-')), ...box(control) }));
+      const shown = { inner: round(inner), controls: rects.map(round), slot: slot && round(box(slot)) };
+      for (const rect of rects) require(rect.left >= inner.left - 0.5 && rect.right <= inner.right + 0.5 && rect.top >= inner.top - 0.5 && rect.bottom <= inner.bottom + 0.5, `${rect.control} lies inside the composer: ${JSON.stringify(shown)}`);
+      for (let i = 1; i < rects.length; i++) require(rects[i].left >= rects[i - 1].right - 0.5, `${rects[i].control} stands beside ${rects[i - 1].control}, not over it: ${JSON.stringify(shown)}`);
+      const middles = rects.map(rect => (rect.top + rect.bottom) / 2);
+      require(Math.max(...middles) - Math.min(...middles) <= 2 && bar.scrollWidth <= bar.clientWidth + 1, `one row, nothing scrolled or wrapped: ${JSON.stringify(shown)}`);
+      require(slot, "the voice or send button is shown");
+      const end = box(slot);
+      require(end.width >= 31.5 && end.height >= 31.5 && end.left >= inner.left - 0.5 && end.right <= inner.right + 0.5, `the voice or send button is whole inside the composer: ${JSON.stringify(shown)}`);
+      require(Math.abs(end.right - box(bar).right) <= 1 && rects.at(-1).control === 'cmp-pair', `the voice or send button stands at the row's right end: ${JSON.stringify(shown)}`);
+      const attach = form.querySelector('.cmp-attach'), mode = form.querySelector('.cmp-mode'), shield = mode?.querySelector('svg.i'), word = mode?.querySelector('span');
+      require(box(attach).width >= 31.5 && box(attach).height >= 31.5, `the + keeps its 32px: ${JSON.stringify(round(box(attach)))}`);
+      const result = { composer: Math.round(outer.width), controls: rects.map(rect => [rect.control, Math.round(rect.width)]) };
+      if (mode) {
+        const own = box(mode), mark = box(shield), letters = word && box(word);
+        require(own.height >= 25.5 && mark.width >= 15.5 && mark.left >= own.left && mark.right <= own.right + 0.5 && visible(shield), `the permission keeps its shield whole: ${JSON.stringify(round(own))}`);
+        const wordShown = !!word && visible(word) && letters.left >= own.left - 0.5 && letters.right <= own.right + 0.5 && letters.top >= own.top - 0.5 && letters.bottom <= own.bottom + 0.5;
+        require((mode.getAttribute('aria-label') ?? '').includes(word.textContent.trim()), "the permission is named for a screen reader whether its word shows or not");
+        const model = form.querySelector('.cmp-model .mp-trigger'), modelName = model?.querySelector('.mp-tname'), chevron = model?.querySelector(':scope > svg.i');
+        if (model) {
+          const trigger = box(model), arrow = box(chevron);
+          require(trigger.height >= 31.5 && visible(chevron) && arrow.width >= 15.5 && arrow.left >= trigger.left - 0.5 && arrow.right <= trigger.right + 0.5, `the model keeps its chevron whole: ${JSON.stringify(round(trigger))}`);
+          // The word goes only when the row cannot hold it beside the model's first six letters (a shorter name whole), and
+          // stays whenever it can; a name shortened has all the room there is, with no gap left before it.
+          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+          const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
+          const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width);
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          const need = fixed + (rects.length - 1) * gap + modeWide + modelNeed, room = bar.clientWidth;
+          require(wordShown ? room + 1 >= need : room < need + 1.5, `the permission's word shows exactly while the row holds it beside the model's first letters: ${JSON.stringify({ room, need: Math.round(need * 10) / 10, wordShown })}`);
+          const before = rects[rects.findIndex(rect => rect.control === 'cmp-model') - 1];
+          require(!shortened || box(slot).left <= before.right + gap + 1, `a shortened name leaves no room unused before it: ${JSON.stringify(shown)}`);
+          Object.assign(result, { modelShortened: shortened, room, need: Math.round(need * 10) / 10 });
+        }
+        Object.assign(result, { modeWord: word.textContent.trim(), modeWordShown: wordShown });
+      }
+      return result;
+    });
+    // How wide each language's words for the four modes are in the permission's own type, widest first: which language the
+    // narrow scenes must prove.
+    const mode = forms[0].querySelector('.cmp-mode span');
+    let words = [];
+    if (mode) {
+      const { catalogs } = await import('/src/main/i18n/index.ts');
+      const context = document.createElement('canvas').getContext('2d');
+      context.font = getComputedStyle(mode).font;
+      words = Object.entries(catalogs).flatMap(([locale, messages]) => ['chat.modeDirect', 'chat.modeAsk', 'chat.modePlan', 'chat.modeBypass'].map(key => [locale, key.slice(9), messages[key], Math.round(context.measureText(messages[key]).width * 10) / 10]))
+        .sort((a, b) => b[3] - a[3]).slice(0, 6);
+    }
+    return { check: name, rows, widestWords: words };
+  })();
+  // The composer's idle emblem is a bitmap of exactly its shown size on the screen's pixels (R-UI-161): as many pixels as its
+  // CSS box times the device pixel ratio, an even number of them so that its centre is a corner of the pixel grid, and nothing
+  // between it and the screen that scales, turns, filters or moves it by a fraction of a device pixel. Where its layout box
+  // starts does not matter: at a real pixel ratio the browser starts a picture on a whole device pixel (measured at 100%, 125%
+  // and 150%; an emulated ratio does not, which is why `--scale` sets the browser's own).
+  if (name === "emblem-sharp") {
+    const ratio = devicePixelRatio, faces = [...document.querySelectorAll('.composer .cmp-voice .av > img')].filter(visible);
+    require(faces.length > 0, "the composer shows its idle emblem");
+    const whole = value => Math.abs(value - Math.round(value)) < 0.02;
+    const measured = faces.map(img => {
+      const rect = img.getBoundingClientRect(), w = rect.width * ratio, h = rect.height * ratio;
+      const resampling = [];
+      for (let element = img; element && element !== document.documentElement; element = element.parentElement) {
+        const style = getComputedStyle(element), at = element.className || element.tagName;
+        const move = /^matrix\(1, 0, 0, 1, ([-\d.e]+), ([-\d.e]+)\)$/.exec(style.transform);
+        if (style.transform !== 'none' && !(move && whole(Number(move[1]) * ratio) && whole(Number(move[2]) * ratio))) resampling.push(`${at}: transform ${style.transform}`);
+        if (style.translate !== 'none' && !style.translate.split(' ').every(part => whole(parseFloat(part) * ratio))) resampling.push(`${at}: translate ${style.translate}`);
+        if (style.scale !== 'none' || style.rotate !== 'none') resampling.push(`${at}: scale ${style.scale} rotate ${style.rotate}`);
+        if (style.filter !== 'none') resampling.push(`${at}: filter ${style.filter}`);
+        if (style.backdropFilter && style.backdropFilter !== 'none') resampling.push(`${at}: backdrop-filter ${style.backdropFilter}`);
+      }
+      return { ratio, source: img.currentSrc.startsWith('data:') ? 'drawn' : img.currentSrc.replace(/^.*\/brand\//, 'brand/'), bitmap: [img.naturalWidth, img.naturalHeight],
+        box: [rect.width, rect.height], device: [rect.left * ratio, rect.top * ratio, w, h].map(value => Math.round(value * 1000) / 1000), rendering: getComputedStyle(img).imageRendering, resampling };
+    });
+    for (const face of measured) {
+      const [, , w, h] = face.device;
+      require(face.source === 'drawn', `the emblem is drawn, not a stand-in picture: ${JSON.stringify(face)}`);
+      require(face.bitmap[0] === Math.round(w) && face.bitmap[1] === Math.round(h) && whole(w) && whole(h), `the emblem's bitmap is its box times the pixel ratio: ${JSON.stringify(face)}`);
+      require(face.bitmap.every(side => side % 2 === 0), `the emblem's centre is a corner of the pixel grid, not the middle of a pixel: ${JSON.stringify(face)}`);
+      require(face.resampling.length === 0, `nothing scales, turns, filters or moves the emblem by a fraction of a pixel: ${JSON.stringify(face)}`);
+    }
+    return { check: name, faces: measured };
+  }
   if (name === "panel-width" || name === "panel-closed") {
     const page = document.querySelector('.page-agent'), panel = page.querySelector('.mb-det');
     if (name === "panel-closed") {
@@ -3537,7 +3674,7 @@ export function checkRendered(name, context = {}) {
       // Raphael is the first blue slime, and its conversation wears its blue like any member's (R-UI-81).
       if (document.querySelector('.mb-chat [data-member="0"][aria-current="true"], .side .mb-chief[aria-current="true"]')) {
         const [r, g, b] = style.backgroundColor.match(/\d+/g).map(Number);
-        require(b > r + 80 && b > g, `Raphael's own conversation wears his blue: ${style.backgroundColor}`);
+        require(b > r + 80 && b > g, `Raphael's own conversation wears its blue: ${style.backgroundColor}`);
       }
     }
     return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
@@ -4094,14 +4231,14 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     const canvas = document.querySelector('.ob-emblem canvas.ob-emb'), title = document.querySelector('.ob-col > h2');
     require(visible(canvas) && canvas.width > 0, "Raphael's emblem is on the welcome");
-    require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "his name is the headline");
+    require(title && title.textContent.trim().length > 0 && parseFloat(getComputedStyle(title).fontSize) >= 28, "its name is the headline");
     const mark = title.querySelector('.ob-wm'), markStyle = mark && getComputedStyle(mark);
     require(visible(mark) && mark.getBoundingClientRect().width >= 200 && `${markStyle.maskImage} ${markStyle.webkitMaskImage}`.includes("wordmark.svg"),
-      "his name is the one wordmark 智慧之王ラファエル, the same in every language");
+      "its name is the one wordmark 智慧之王ラファエル, the same in every language");
     const promise = document.querySelector('.ob-demo-ask'), reply = document.querySelector('.ob-demo-reply');
     require(visible(promise) && promise.getBoundingClientRect().top >= title.getBoundingClientRect().bottom - 1, "an ask is typed under the name");
     require(!document.querySelector('.ob-line'), "no slogan under the name");
-    require(reply && document.querySelector('.ob-sr')?.textContent.trim().length > 0, "his answer has its place, and a reader hears what the team does");
+    require(reply && document.querySelector('.ob-sr')?.textContent.trim().length > 0, "its answer has its place, and a reader hears what the team does");
     const language = document.querySelector('.ob-lang .lang-btn'), corner = language.getBoundingClientRect();
     require(visible(language) && corner.left - card.left <= 24 && corner.top - card.top <= 24 && !document.querySelector('.ob-col .lang-btn, .ob-col .sel'), "the language waits at the card's top left, out of the column");
     require(!document.querySelector('.ob-aside, .ob-say, .ob-floaters, .ob-top, [data-ob="back"], .ob-bar-steps'), "the welcome has no side, no slimes floating, no way back and no progress bar");
@@ -4417,9 +4554,10 @@ export function checkRendered(name, context = {}) {
     require(note.textContent === expected, `which subscription, what is left and when it resets: ${note.textContent}`);
     require(note.getAttribute("role") === "status", "it is read out as a status");
     require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the toast is inside the window: ${JSON.stringify(box)}`);
-    // Reading the catalogue of models moves nothing; on a loaded machine the composer's own read of it lands after the mark.
+    // Reading the catalogues of models (the cloud's and this computer's speech models) moves nothing; on a loaded machine the
+    // composer's own read of them lands after the mark.
     const moved = window.__look.calls.slice(window.__quotaCallsBefore ?? 0)
-      .filter(call => call.method !== "models.catalog" && (["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`)));
+      .filter(call => !["models.catalog", "models.local"].includes(call.method) && (["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`)));
     require(moved.length === 0, `no model, member or setting moves: ${JSON.stringify(moved)}`);
     return { check: name, text: note.textContent, width: Math.round(box.width), height: Math.round(box.height) };
   }
@@ -4885,7 +5023,7 @@ export function checkRendered(name, context = {}) {
     const heading = host.closest('section')?.querySelector(':scope > .mb-dh');
     require(heading?.textContent === "對話" && !heading.querySelector('button'), "one small heading names the rows, with no button beside it");
     const rows = [...host.querySelectorAll('[data-conversation-open]')];
-    require(rows.map(row => row.querySelector('span')?.textContent).join("|") === "主要對話|快速提問", "the rows are his conversation and his quick questions");
+    require(rows.map(row => row.querySelector('span')?.textContent).join("|") === "主要對話|快速提問", "the rows are its conversation and its quick questions");
     require(rows.filter(row => row.getAttribute('aria-current') === 'true').length === 1, "the open one is marked");
     require(!rows[0].closest('.conversation-row').querySelector('[data-conversation-more]') && !!rows[1].closest('.conversation-row').querySelector('[data-conversation-more]'), "only quick questions have a menu, to clear them");
     require(!document.querySelector('.mb-det [data-conversation-new], .mb-det .conversation-tools'), "nothing makes or searches conversations");
@@ -5044,6 +5182,7 @@ export function checkRendered(name, context = {}) {
   if(name.startsWith("p04-")) {
     const messages=[...document.querySelectorAll('.au-room-thread .message-text')];
     if(name==='p04-blocked'){const chat=document.querySelector('.peer-chat'),task=window.__look.data.roomHandoffs[0],lines=[...(chat?.querySelectorAll('.peer-line')??[])];require(visible(chat)&&chat.querySelector('.peer-state')?.textContent.includes('缺少驗收所需的檔案'),'missing artifact reason is actionable');require(lines[0]?.dataset.peerFrom===String(task.from_member_id)&&lines[0].querySelector('.message-text')?.textContent===task.request,"the request is only ever the delegating member's own message");}
+    if(name==='p04-childwork-open'||name==='p04-unreadable'){const state=document.querySelector('.peer-chat .peer-state')?.textContent??'',line=name==='p04-unreadable'?'檔案在，但無法開啟':'交給別人的工作還在進行，就先停下了';require(state.includes(line),'the ending says in plain words which it was');require(!/_|missing|artifact|child_work/u.test(state),'no reason code reaches the screen');}
     if(name==='p04-chief-last')require(document.querySelector('.au-room-thread .tn:last-child .au-room-wrapup') || document.querySelector('.au-room-thread .tn:last-child.au-room-wrapup'),'chief is last');
     if(name==='p04-status-only')require(!messages.some(message=>message.textContent.includes('正在發言')),'progress never enters final bodies');
     if(name==='p04-addresses')require(!messages.some(message=>/@(?:\s|$)/u.test(message.textContent)),'no dangling address');
@@ -5323,7 +5462,7 @@ export function checkRendered(name, context = {}) {
     // Each member has one conversation: Raphael's main one is the first row and the one a window opens,
     // and its quick questions wait in the second, named only when the owner picks it.
     const rows = [...document.querySelectorAll('.mb-det [data-conversation-open]')];
-    require(rows.length === 2, `Raphael's details list his main conversation and his quick questions: ${rows.length}`);
+    require(rows.length === 2, `Raphael's details list its main conversation and its quick questions: ${rows.length}`);
     const [main, quick] = rows;
     require(main.dataset.conversationOpen !== "4" && main.textContent.includes("主要對話"), "the main conversation is the first row");
     require(main.getAttribute('aria-current') === "true" && quick.getAttribute('aria-current') === "false", "the window has the main conversation open, never the quick questions");
@@ -6052,6 +6191,31 @@ export function checkRendered(name, context = {}) {
     require([...document.querySelectorAll('.cal-chip.is-own b')].some(node => node.textContent === "拜訪客戶"), "the event is drawn at once");
     require(!document.querySelector('.au-pop-editor') && !document.querySelector('.au-draft'), "the form and its placeholder are gone");
     return { check: name };
+  }
+  // R-LINK-01: an address in words read whole (an event's notes, a card's words, a routine's instructions) is a link whose words
+  // are the address, ending where the punctuation or the Chinese words after it begin; every line of it stays inside its words
+  // and what holds them at this width; the scene's real press opened it once, in the browser, and pressed nothing around it.
+  if (name === "urls-are-links") {
+    const words = [...document.querySelectorAll(".au-pop-notes, .conversation-card .card-body, .rv-prompt")].filter(box => visible(box) && box.querySelector("a.message-link"));
+    require(words.length === 1, "one surface shows words with a link");
+    const box = words[0], link = box.querySelector("a.message-link"), holder = box.closest(".au-pop, .conversation-card, .mb-dialog");
+    require(visible(link) && visible(holder), "the link and what holds it are on screen");
+    require(new URL(link.textContent).href === link.dataset.url && link.getAttribute("href") === link.dataset.url, "its words are the address it opens");
+    require(!link.hasAttribute("title") && !link.hasAttribute("aria-label"), "no tooltip repeats it");
+    const after = link.nextSibling?.textContent ?? "";
+    require(!after || /^[^\x00-\x7f]/.test(after), `the address ends where the words after it begin (after it: ${after.slice(0, 4)})`);
+    const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+    const within = box.getBoundingClientRect(), held = holder.getBoundingClientRect();
+    for (const line of link.getClientRects()) require(inside(line, within) && inside(line, held), `every line of the link stays inside its words and what holds them at ${innerWidth}px`);
+    require(held.left >= 0 && held.right <= innerWidth && holder.scrollWidth <= holder.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, "nothing is widened or scrolls sideways");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--link)"; document.body.append(probe);
+    const blue = getComputedStyle(probe).color; probe.remove();
+    require(getComputedStyle(link).color === blue, "it wears the app's one link colour");
+    const opened = window.__look.calls.filter(call => call.command === "open_external_url");
+    require(opened.length === 1 && opened[0].url === link.dataset.url && window.__look.urls.at(-1) === link.dataset.url, "the press opened the address once, in the browser");
+    require(!window.__look.calls.some(call => call.command === "agent_question_answer" || ["calendar.update", "calendar.delete", "routines.update"].includes(call.method)), "nothing around the link was pressed");
+    return { check: name, url: link.dataset.url, lines: link.getClientRects().length };
   }
   if (name === "calendar-detail-own" || name === "calendar-detail-read") {
     const panel = document.querySelector('.au-pop-detail');
@@ -8383,7 +8547,7 @@ export function checkRendered(name, context = {}) {
       const rows = [...column.querySelectorAll('.mb-list [data-member]')];
       require(Number(rows[0].dataset.member) === data.primaryId, "the primary occupies the column's top slot");
       require(rows.filter(row => row.dataset.member === '0').length === 1, "Raphael appears exactly once");
-      require(column.querySelector('[data-member="0"] .av') && !column.querySelector('[data-member="0"] .mb-av'), "Raphael keeps his emblem in the exchanged slot");
+      require(column.querySelector('[data-member="0"] .av') && !column.querySelector('[data-member="0"] .mb-av'), "Raphael keeps its emblem in the exchanged slot");
       require(column.querySelector('.mb-sec [data-member="0"]') || data.primaryId === 0 || column.classList.contains('is-collapsed'), "Raphael takes the primary's group slot");
       return order(rows);
     };
@@ -8563,6 +8727,96 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, rows: rows.length };
   }
+  // The row that offers Composio ends the one view of the apps: it stands whole inside the dialog's visible part, with every line of its
+  // sentence and its button, whatever the dialog's height and the sentence's length, and the list above it still reaches its last row.
+  if (name === "composio-foot") {
+    const row = document.querySelector('.cs-composio-setup');
+    require(visible(row), "the row that offers Composio is drawn");
+    // What can clip a box: every ancestor that scrolls or hides what overflows it, and the window.
+    const clips = [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }];
+    for (let node = row.parentElement; node && node !== document.body; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      const hides = value => !!value && value !== 'visible';
+      if (hides(style.overflowY) || hides(style.overflowX) || String(style.contain ?? '').match(/paint|strict/)) clips.push(node.getBoundingClientRect());
+    }
+    const room = { left: Math.max(...clips.map(box => box.left)), top: Math.max(...clips.map(box => box.top)), right: Math.min(...clips.map(box => box.right)), bottom: Math.min(...clips.map(box => box.bottom)) };
+    const inside = box => box.left >= room.left - 1 && box.right <= room.right + 1 && box.top >= room.top - 1 && box.bottom <= room.bottom + 1;
+    const where = box => `${Math.round(box.top)}-${Math.round(box.bottom)} in ${Math.round(room.top)}-${Math.round(room.bottom)}`;
+    const frame = row.getBoundingClientRect();
+    require(inside(frame), `the whole row is inside the dialog's visible part (${where(frame)})`);
+    const sentence = row.querySelector(':scope > span:not(.cs-composio-mark)'), button = row.querySelector('[data-conn="configure-composio"]');
+    require(sentence && sentence.textContent.trim() && visible(button) && inside(button.getBoundingClientRect()), "the sentence and its button are inside it");
+    const range = document.createRange();
+    range.selectNodeContents(sentence);
+    const lines = [...range.getClientRects()].filter(box => box.width > 0 && box.height > 0);
+    require(lines.length > 0 && lines.every(inside), `no line of the sentence is cut by the dialog's edge (${lines.map(where).join(', ')})`);
+    // The row stands after the list: the list's last row is never under it.
+    const scroller = row.closest('[data-cs-scroll]');
+    let reach = null;
+    if (scroller) {
+      const before = scroller.scrollTop;
+      scroller.scrollTop = scroller.scrollHeight;
+      const cards = [...scroller.querySelectorAll('.cs-card')], last = cards[cards.length - 1], now = row.getBoundingClientRect();
+      reach = last ? Math.round(now.top - last.getBoundingClientRect().bottom) : null;
+      scroller.scrollTop = before;
+      require(reach === null || reach >= -1, `at the end of the list its last row is above the Composio row (${reach}px apart)`);
+    }
+    return { check: name, row: where(frame), lines: lines.length, reach };
+  }
+  // A price is made of parts joined by 「 · 」, each one a number with its unit ("輸入 $2.00 / 輸出 $12 約每百萬字"). A part is never broken
+  // across lines while a line of the row could hold it: a line ends between parts, so no number is parted from its unit and no line
+  // holds a lone character. Measured from the client rects of each part's own text, where the price is shown in the model chooser's rows
+  // and in the rows of Settings.
+  if (name === "price-parts") {
+    const prices = [...document.querySelectorAll('.mc-price, [data-price]:not([data-price="note"]), [data-media-price]')].filter(visible);
+    require(prices.length > 0, "a price is shown");
+    const lineCount = range => {
+      const centres = [...range.getClientRects()].filter(box => box.width > 0 && box.height > 0).map(box => (box.top + box.bottom) / 2).sort((a, b) => a - b);
+      return centres.reduce((count, centre, index) => count + (index === 0 || centre - centres[index - 1] > 6 ? 1 : 0), 0);
+    };
+    const block = element => { let node = element; while (node && getComputedStyle(node).display.startsWith('inline')) node = node.parentElement; return node; };
+    let parts = 0, wrapped = 0;
+    for (const price of prices) {
+      const nodes = [], walker = document.createTreeWalker(price, NodeFilter.SHOW_TEXT);
+      let text = '';
+      while (walker.nextNode()) { nodes.push({ node: walker.currentNode, start: text.length }); text += walker.currentNode.textContent; }
+      const at = (offset, end) => {
+        const found = nodes.find(item => end ? offset > item.start && offset <= item.start + item.node.textContent.length : offset >= item.start && offset < item.start + item.node.textContent.length);
+        return found ? { node: found.node, offset: offset - found.start } : null;
+      };
+      // The room a part could have: a line of the model's row, or of the line the price is written on.
+      const owner = price.closest('.mc-row'), frame = getComputedStyle(owner ?? block(price));
+      const holder = owner ?? block(price);
+      const room = holder.clientWidth - parseFloat(frame.paddingLeft) - parseFloat(frame.paddingRight);
+      let cursor = 0;
+      for (const [index, part] of text.split(' · ').entries()) {
+        const first = at(cursor, false), last = at(cursor + part.length, true);
+        // The 「· 」 before a part but the first belongs to its box when it is written inside it.
+        const dot = index > 0 ? at(cursor - 2, false) : null;
+        cursor += part.length + 3;
+        if (!part.trim() || !first || !last) continue;
+        const range = document.createRange();
+        range.setStart(first.node, first.offset); range.setEnd(last.node, last.offset);
+        parts++;
+        if (lineCount(range) < 2) continue;
+        wrapped++;
+        // Broken: then it must be a part no line of the row could hold. Its width on one line, as it would be written:
+        const style = price.style.whiteSpace; price.style.setProperty('white-space', 'nowrap', 'important');
+        const whole = document.createRange();
+        whole.setStart(dot && dot.node.textContent.slice(dot.offset, dot.offset + 2) === '· ' ? dot.node : first.node, dot && dot.node.textContent.slice(dot.offset, dot.offset + 2) === '· ' ? dot.offset : first.offset);
+        whole.setEnd(last.node, last.offset);
+        const natural = whole.getBoundingClientRect().width;
+        price.style.whiteSpace = style;
+        require(natural > room, `the part 「${part}」 is broken across lines though a line of its row holds ${Math.round(room)}px and it needs ${Math.round(natural)}px`);
+      }
+    }
+    // The name keeps its room: a short name is never cut to an ellipsis by the price beside it.
+    for (const row of document.querySelectorAll('.mc-row')) {
+      const model = row.querySelector('.mc-model-line strong');
+      if (model && visible(model) && row.querySelector('.mc-price') && model.textContent.trim().length <= 24) require(model.scrollWidth <= model.clientWidth + 1, `the name 「${model.textContent.trim()}」 is cut by the price beside it`);
+    }
+    return { check: name, prices: prices.length, parts, wrapped };
+  }
   if (name === "typo-mention") {
     const first = document.querySelector('#app-popover[data-team-mentions] [data-value]');
     require(visible(first) && first.dataset.value === "Notion", `「@notoin」 finds Notion first (${first?.dataset.value})`);
@@ -8596,7 +8850,13 @@ export function checkRendered(name, context = {}) {
     // No tool meets the window's buttons: it ends 14 px short of them where the pane reaches the window's edge, and at its pane's edge where another pane stands to its right.
     const tools = buttons.filter(button => button.closest(".ra-tools")), edge = tools.length ? Math.max(...tools.map(button => box(button).right)) : null;
     const reaches = page.right >= innerWidth - 1 && !pane.classList.contains("has-side-thread") && !(pane.closest(".page-agent")?.dataset.det === "open" && !pane.classList.contains("au-room-pane") && innerWidth >= 1120);
-    if (edge !== null && reaches) require(Math.abs(controls.left - edge - 14) <= 2, `the tools end 14 px short of the window's buttons: ${Math.round(controls.left - edge)} (${Math.round(edge)} and ${Math.round(controls.left)})`);
+    // On a Mac there are no buttons at the right (macOS draws its lights at the top left): the tools keep the pane's own inset, at
+    // least the details panel's padding (16 px) clear of the window's edge.
+    const mac = document.documentElement.dataset.platform === "macos", end = mac ? innerWidth : controls.left;
+    if (edge !== null && reaches && !mac) require(Math.abs(controls.left - edge - 14) <= 2, `the tools end 14 px short of the window's buttons: ${Math.round(controls.left - edge)} (${Math.round(edge)} and ${Math.round(controls.left)})`);
+    // The pane's own inset is its `--row-edge`, measured where the pane resolves it; the room Windows keeps for its buttons
+    // (`--row-end`) is not part of it, so a Mac row that still kept that room fails.
+    if (edge !== null && reaches && mac) { const probe = document.createElement("div"); probe.style.cssText = "position:absolute;visibility:hidden;width:var(--row-edge)"; pane.append(probe); const inset = probe.getBoundingClientRect().width; probe.remove(); require(inset >= 16 && Math.abs(innerWidth - edge - inset) <= 2, `on a Mac the tools keep the pane's inset (${inset} px) from the window's edge: ${Math.round(innerWidth - edge)}`); }
     for (const button of tools) { const b = box(button); require(b.right <= page.right + 1, "a tool stays inside its pane"); }
     // What the pointer reaches: the pill and every button press; the empty stretch of the row moves the window. Under 1120 px an open
     // details panel lies over the chat with a dim over its header: nothing of the row presses, and the scrim's top row moves the window. A
@@ -8618,7 +8878,7 @@ export function checkRendered(name, context = {}) {
     const gapX = (() => { const a = box(who.closest("button") ?? who); return (a.right + (buttons.filter(b => box(b).left > a.right)[0]?.getBoundingClientRect().left ?? a.right + 40)) / 2; })();
     const empty = at(gapX, 14);
     require(empty?.closest(".mb-head") === head && !empty.closest("button"), `an empty part of the row is the header's own, under no strip of the window: ${empty?.className}`);
-    return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), firstMessageTop: first ? Math.round(box(first).top) : null, toolsGap: edge === null ? null : Math.round(controls.left - edge), findOpen };
+    return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), firstMessageTop: first ? Math.round(box(first).top) : null, toolsGap: edge === null ? null : Math.round(end - edge), findOpen };
   }
   // The details panel reaches the window's top: its own head is its top row, its round buttons level with the window's, its last one 14 px short of them.
   if (name === "details-top-row") {
@@ -8630,12 +8890,14 @@ export function checkRendered(name, context = {}) {
     require(buttons.length >= 2, "the panel's gear and close stand in its row");
     for (const button of buttons) require(Math.abs(box(button).top + box(button).height / 2 - 30) <= 2, `a panel button is level with the window's buttons' row, 30 px from the top: ${Math.round(box(button).top + box(button).height / 2)}`);
     const last = Math.max(...buttons.map(button => box(button).right));
-    require(Math.abs(controls.left - last - 14) <= 2, `the panel's last button ends 14 px short of the window's buttons: ${Math.round(controls.left - last)}`);
+    // On a Mac there are no buttons at the right: the last button ends the panel's padding (16 px) short of the window's edge.
+    const mac = document.documentElement.dataset.platform === "macos", end = mac ? innerWidth : controls.left, gap = mac ? 16 : 14;
+    require(Math.abs(end - last - gap) <= 2, `the panel's last button ends ${gap} px short of the window's ${mac ? "edge" : "buttons"}: ${Math.round(end - last)}`);
     require(head.hasAttribute("data-window-drag"), "the panel's row moves the window");
     for (const button of buttons) { const b = box(button), hit = document.elementFromPoint(b.left + b.width / 2, b.top + 6); require(hit && button.contains(hit), `the pointer reaches the panel's ${button.getAttribute("aria-label")} at the top of the row`); }
     const scroll = panel.querySelector(":scope > .mb-det-scroll");
     require(box(scroll).top >= box(head).bottom - 1, "the panel's contents start under its row");
-    return { check: name, rowHeight: Math.round(box(head).height), closeGap: Math.round(controls.left - last) };
+    return { check: name, rowHeight: Math.round(box(head).height), closeGap: Math.round(end - last) };
   }
   // The thread read higher up has messages under the row; they fade (the mask) and the pill and buttons stay on their own opaque surfaces.
   if (name === "conversation-top-row-scrolled") {
@@ -9370,11 +9632,80 @@ export function checkRendered(name, context = {}) {
         `time ${time.textContent} fits chip (${Math.round(text.width)}px text, ${Math.round(bounds.width)}px chip)`);
       require(text.right <= face.getBoundingClientRect().left - 1, "event time and fixed avatar do not overlap");
       require(chip.title.includes(label.textContent) && chip.title.includes(time.textContent), "tooltip preserves full title and time");
-      require(getComputedStyle(label).whiteSpace === "normal" && getComputedStyle(label).webkitLineClamp === '2', "calendar titles allow two recognisable lines");
+      // A chip with a face and the marks of a run has one line: its time row, the line and the marks' foot row take its hour (R-CAL-10).
+      require(getComputedStyle(label).whiteSpace === "normal" && getComputedStyle(label).webkitLineClamp === (chip.querySelector('.cal-chip-end') ? '1' : '2'), "calendar titles allow two recognisable lines");
       const titleBox = label.getBoundingClientRect();
       require(titleBox.bottom <= bounds.bottom + 1 && titleBox.height <= parseFloat(getComputedStyle(label).lineHeight) * 2 + 1, "two title lines fit inside the event");
     }
     return { check: name, chips: chips.length };
+  }
+  if (name.startsWith("calendar-chip-marks")) {
+    // The marks of a run (the icon of a failed or waiting one, the dot of the last) belong to the chip's end, and a mark changes nothing else of
+    // the chip (R-CAL-10): none lies on a letter of the title, of the time or on its neighbour mark; where the chip draws its time and has room,
+    // they stand in the time row, centred on the time; the title is as wide as the chip's content, and its first line, the time and the time
+    // row stand where they stand in an unmarked chip of the same routine and size. The title's box is measured, not only the letters left in
+    // it, so that a short title cannot hide a layout that would cover a long one. A chip too short for a line and the marks' row has them
+    // beside its single line, and its title is then narrower by exactly that.
+    const hit = (a, b) => a.left < b.right - .5 && b.left < a.right - .5 && a.top < b.bottom - .5 && b.top < a.bottom - .5;
+    const all = [...document.querySelectorAll('.au-page:not([hidden]) .cal-chip')].filter(visible);
+    const marked = all.filter(chip => chip.querySelector('.cal-run-mark, .au-history-mark'));
+    const bare = all.filter(chip => chip.classList.contains('au-occurrence') && !chip.querySelector('.cal-run-mark, .au-history-mark'));
+    // A month's day that cannot hold every chip counts the rest in 「還有 N 個」: at a small window the marked chips may be among them.
+    const folded = !!document.querySelector('.au-page:not([hidden]) .au-month-chips > .cal-more:not([hidden])');
+    require(marked.length > 0 || folded, "the view draws a chip with the mark of its last run");
+    let cut = 0, dotOnly = 0, twins = 0;
+    const textBox = node => { const r = document.createRange(); r.selectNodeContents(node); return { boxes: [...r.getClientRects()].filter(x => x.width > 0), whole: r.getBoundingClientRect() }; };
+    const padding = (node, side) => parseFloat(getComputedStyle(node)[`padding${side}`]);
+    for (const chip of marked) {
+      const title = chip.querySelector('b'), copy = chip.querySelector('.cal-chip-copy'), time = chip.querySelector('time'), line = chip.classList.contains('is-line');
+      const chipBox = chip.getBoundingClientRect(), marks = [...chip.querySelectorAll('.cal-run-mark, .au-history-mark')].filter(visible);
+      const own = title.getBoundingClientRect(), room = copy.getBoundingClientRect(), label = title.textContent;
+      // What of the title the copy shows: the copy clips the lines that do not fit above the marks' row.
+      const box = { left: Math.max(own.left, room.left), right: Math.min(own.right, room.right), top: Math.max(own.top, room.top), bottom: Math.min(own.bottom, room.bottom) };
+      if (title.scrollWidth > title.clientWidth + 1 || title.scrollHeight > title.clientHeight + 1) cut++;
+      const letters = textBox(title).boxes.map(x => ({ left: Math.max(x.left, box.left), right: Math.min(x.right, box.right), top: Math.max(x.top, box.top), bottom: Math.min(x.bottom, box.bottom) }));
+      const timeLetters = visible(time) ? textBox(time).whole : null;
+      for (const mark of marks) {
+        const spot = mark.getBoundingClientRect();
+        require(spot.left >= chipBox.left - .5 && spot.right <= chipBox.right + .5 && spot.top >= chipBox.top - .5 && spot.bottom <= chipBox.bottom + .5, `the ${mark.className} of "${label}" stays inside its chip (mark ${Math.round(spot.left)},${Math.round(spot.top)}-${Math.round(spot.right)},${Math.round(spot.bottom)}; chip ${Math.round(chipBox.left)},${Math.round(chipBox.top)}-${Math.round(chipBox.right)},${Math.round(chipBox.bottom)})`);
+        require(!hit(box, spot), `the ${mark.className} of "${label}" does not lie on the title's box (${Math.round(spot.left)}-${Math.round(spot.right)} against ${Math.round(box.left)}-${Math.round(box.right)})`);
+        for (const letter of letters) require(!hit(letter, spot), `the ${mark.className} does not cover a letter of "${label}"`);
+        if (timeLetters) require(!hit(timeLetters, spot), `the ${mark.className} of "${label}" does not cover its time (${Math.round(timeLetters.right)} against ${Math.round(spot.left)})`);
+      }
+      for (const [i, a] of marks.entries()) for (const other of marks.slice(i + 1)) require(!hit(a.getBoundingClientRect(), other.getBoundingClientRect()), `the marks of "${label}" do not cover each other`);
+      require(getComputedStyle(title).display !== "none", "the title is drawn beside its marks");
+      if (line) continue;
+      if (!chip.querySelector('.cal-run-mark')) dotOnly++;
+      // An unmarked chip of the same routine and size: the same first line, time and time row.
+      const twin = bare.find(other => other.dataset.entry?.split(":")[1] === chip.dataset.entry?.split(":")[1] && Math.abs(other.getBoundingClientRect().width - chipBox.width) < .5 && Math.abs(other.getBoundingClientRect().height - chipBox.height) < .5);
+      if (twin && chip.classList.contains('au-occurrence')) {
+        twins++;
+        const twinBox = twin.getBoundingClientRect(), twinTitle = twin.querySelector('b').getBoundingClientRect(), twinTime = twin.querySelector('time');
+        if (visible(time) && visible(twinTime)) {
+          const a = time.getBoundingClientRect(), t = twinTime.getBoundingClientRect();
+          require(Math.abs(a.height - t.height) < .5 && Math.abs(a.top - chipBox.top - (t.top - twinBox.top)) < .5, `the time row of "${label}" is ${a.height}px at ${Math.round(a.top - chipBox.top)}, ${t.height}px at ${Math.round(t.top - twinBox.top)} in its unmarked twin`);
+        }
+        require(Math.abs(own.top - chipBox.top - (twinTitle.top - twinBox.top)) < .5, `the first line of "${label}" stands ${Math.round(own.top - chipBox.top)}px from its chip's top, ${Math.round(twinTitle.top - twinBox.top)}px in its unmarked twin`);
+        require(Math.abs(own.width - twinTitle.width) < .5 || padding(copy, "Right") > 0, `the title of "${label}" is ${Math.round(own.width)}px wide, ${Math.round(twinTitle.width)}px in its unmarked twin`);
+      }
+      const content = chip.clientWidth - padding(chip, "Left") - padding(chip, "Right"), beside = padding(copy, "Right");
+      // The title keeps the chip's whole width, less what its single line gives the marks standing beside it.
+      require(own.width >= content - beside - 1, `the marks cost "${label}" no width: the title is ${Math.round(own.width)}px of ${Math.round(content)}px`);
+      // Whole lines only: a line the marks' row leaves no room for is not drawn half.
+      for (const text of textBox(title).boxes) if (text.top < room.bottom - 1) require(text.bottom <= room.bottom + 1, `a line of "${label}" is cut by the marks' row (${Math.round(text.bottom)} against ${Math.round(room.bottom)})`);
+      // Room for the marks in the time row: they stand there, centred on the time.
+      const face = [...chip.children].some(child => child.classList.contains('av') && visible(child));
+      const width = marks.reduce((sum, mark) => sum + mark.getBoundingClientRect().width, 0) + (marks.length - 1) * 4;
+      if (timeLetters && !face && timeLetters.right + 4 + width <= chipBox.right - padding(chip, "Right") + .5)
+        for (const mark of marks) {
+          const spot = mark.getBoundingClientRect();
+          require(Math.abs((spot.top + spot.bottom) / 2 - (timeLetters.top + timeLetters.bottom) / 2) <= 1.5 && spot.right <= chipBox.right - padding(chip, "Right") + .5, `the marks of "${label}" stand in the time row, centred on the time (mark ${Math.round(spot.top)}-${Math.round(spot.bottom)}, time ${Math.round(timeLetters.top)}-${Math.round(timeLetters.bottom)})`);
+        }
+    }
+    if (name === "calendar-chip-marks-cut") require(cut > 0, "a title longer than its chip is among the marked ones, so that the check has a title to cut");
+    if (name === "calendar-chip-marks-dot") require(dotOnly > 0, "a chip with a dot and no icon is in the view, so that the check has a title the dot could narrow");
+    if (name === "calendar-chip-marks-twin") require(twins > 0, "a marked chip has an unmarked twin of its routine and size in the view, so that the check has a chip to compare it with");
+    return { check: name, marked: marked.length, cut, dotOnly, twins };
   }
   if (name === "overlay-emblem-gold" || name === "overlay-emblem-angry") {
     // The rune band, sampled where the letters stand: gold for a report, red while it refuses.
@@ -9387,7 +9718,7 @@ export function checkRendered(name, context = {}) {
     require(picked.length > 120, `the rune band is drawn (${picked.length} opaque samples)`);
     const [r, g, b] = [0, 1, 2].map(k => picked.reduce((sum, p) => sum + p[k], 0) / picked.length);
     if (name === "overlay-emblem-gold") require(r > 200 && g > 120 && b < 110 && r - g < 110, `the runes are vivid gold and orange: rgb(${[r, g, b].map(Math.round)})`);
-    else require(r > 180 && g < 110 && b < 110, `the runes are red while he refuses: rgb(${[r, g, b].map(Math.round)})`);
+    else require(r > 180 && g < 110 && b < 110, `the runes are red while it refuses: rgb(${[r, g, b].map(Math.round)})`);
     return { check: name, rgb: [r, g, b].map(Math.round), samples: picked.length };
   }
   if (name === "peer-chat") {
@@ -9410,7 +9741,7 @@ export function checkRendered(name, context = {}) {
     require(!chat.textContent.includes("小森") && !chat.textContent.includes(window.__look.data.peerChatSample.otherRequest), "an exchange with another member is not theirs");
     require(lines.every(line => visible(line.querySelector('.ra-face .av')) && visible(line.querySelector('.peer-who'))), "every message has its speaker's face and name");
     const colour = getComputedStyle(lines[1].querySelector('.peer-who')).color.match(/[\d.]+/g).slice(0, 3).map(Number);
-    require(Math.max(...colour) - Math.min(...colour) > 40, `小晴's name is in her colour, not grey: rgb(${colour})`);
+    require(Math.max(...colour) - Math.min(...colour) > 40, `小晴's name is in its colour, not grey: rgb(${colour})`);
     require(visible(lines[3].querySelector('.ans .message-text')) && lines[3].textContent.includes(window.__look.data.peerChatSample.result), "today's answer is readable in a bubble");
     const close = chat.querySelector('.peer-close'), closeBox = close.getBoundingClientRect();
     require(visible(close) && document.activeElement === close, "Close chat is shown and takes the focus");

@@ -22,7 +22,7 @@ while still going up) or they press the latest button. A thread that cannot scro
 unread line, the settings page's way back) keeps its own place as before (`releaseRichScroll`). No timer and no smooth scrolling.
 
 ```powershell
-npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom --theme both --width 1120,720,1920x1080
+npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom owner-question-brought owner-question-pending-page owner-question-pending-room --theme both --width 1120,720,1920x1080
 ```
 
 `follow-probe` (`scripts/look/follow-probe.mjs`) samples every painted frame: a 1 px probe changes size each animation frame, and its
@@ -237,6 +237,33 @@ python -m pytest tests/computer/test_checkpoints.py tests/computer/test_checkpoi
 npm run verify -- --contract                                                                      # from app/
 ```
 
+## An address in words read whole is a link (R-LINK-01)
+
+Outside a message an address was dead text: the calendar's detail card drew an all-day item's notes, synced from another app, with
+its page's address as plain words. Now `linkedText` (`message-content.ts`, sharing `bareUrl` with the message renderer) draws plain
+words with each `http(s)` address as a link whose words are the address itself, and `installLinkOpener` (`link-opener.ts`, started in
+`main.ts`) is the window's one listener for every `[data-act="open-url"]`: a click, Ctrl or Shift click and middle click open it
+through `open_external_url`, taken before the row, card or panel around it hears the press (the conversation page no longer has a
+handler of its own; a message's link chip opens the same way). Linked: the calendar's detail card notes, a conversation card's
+words (`cardHTML` body) and a question card's title, a permission card's message and step, a sent mail, a connection's technical
+reason, a room's decisions, a routine's instructions (the view opened from the member panel), a template's words, a connected step's
+result, the release notes and a connected app's description. Plain on purpose: fields being edited (the calendar form's notes, mail
+drafts), one-line previews cut short (sidebar rows, chips, quotes, search snippets, card titles other than a question's), words
+inside a button (a routine row, a question's options, member settings' personality and instructions), code and file contents, and
+the page card's "open this?" dialog, whose address must not open without its Yes.
+
+`urls-calendar-detail` (fixture `linkedNotes`: an all-day item of a member on today, its notes a Chinese sentence with the address
+and a full stop right after it), `urls-card` (fixture `linkedReason`: a long address in full-width brackets in a permission card's
+words) and `urls-member-routine` (a routine read from the member panel, its instructions with Chinese words right after the address)
+press the link with the real mouse and run `urls-are-links`: the link's words are the address it opens, it ends before the
+punctuation or words after it, every line of it is inside its words and what holds them at that width, it is the `--link` colour, and
+exactly one `open_external_url` with that address was made while nothing around it was answered or changed. Not covered here: the
+native shell opening the browser.
+
+```powershell
+npm run look -- urls-calendar-detail urls-card urls-member-routine automations-detail-own automations-detail-member automations-edit-own card-permission-waiting card-question-waiting card-message-waiting card-connect-failed card-sheet details-routine-view routine-view-failed room-status-board template-review-pages update-found link-chips --theme both --width 1120,720,1920x1080
+```
+
 ## A model's link to a file it delivered is that file's chip (R-MSG-LINK-01)
 
 A routine's message once ended with
@@ -253,6 +280,36 @@ file card above, and one `open_attachment` call with that id. Not covered: the n
 ```powershell
 npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
 ```
+
+An image link to a stored file is its chip too (R-MSG-LINK-02). A member's reply ended with
+`![影片中的反向金字塔截圖](attachment:<id>.png)` under the picture it had just sent as a media message, and the renderer showed that
+markdown raw: `parseMessageBlocks` takes only `http(s)` images and `inline` kept any other `![` as text. Now `inline` reads an
+image whose target is of the `attachment:` kind as R-MSG-LINK-01 reads a link: a file of the conversation is its chip (the picture
+itself stays the media message above, not drawn twice), any other target says 「圖片「<words>」無法顯示」 (`chat.pictureMissing`,
+`chat.pictureMissingBare`, all 15 locales), a renderer given no files shows the words alone, and one still arriving shows its words.
+attachment-links.test.ts holds it with a turn of the real shape; `message-attachment-link` does not draw an image link yet.
+
+## A link a phone cannot open goes as the file, or in words (R-MSG-LINK-03)
+
+The owner reads members on Telegram on his phone and could not open links they sent: in his database, three replies of 43
+Telegram turns (and 22 tasks) named a file by its path in the member's computer (`/home/cua/team/...`), next to six with
+public links that open. Every message to an outside chat (Telegram, Slack, Discord; Raphael's bot and a member's own; a reply,
+a task's report, a routine's) leaves through `Switchboard.tell`, and there it passes `messaging/links.py deliverable`. The one
+judgement is `unreachable(target)`: a path of a computer (POSIX under a system top folder, `~/`, a drive letter, a share,
+`file:`, `sandbox:`), an `attachment:` link, this PC's page host (`http://127.0.0.1:<port>/p/<token>`) and any other local
+address (loopback, private, link-local and shared ranges, a one-label name, `.local`/`.internal`/… and `localhost:<port>`
+without a scheme). A public link, `mailto:`, `tg:` and an API path like `/api/users` are none. The app's `LinkedFiles`
+finds the file: a path under the member's `/home/cua/workspace` or `/home/cua/team`, read from the folder this PC keeps for it
+(the reach of its `attach_file`; a computer on another host has none here), a stored `attachment:` id, or a page as the HTML
+file `pages.export` saves (`Pages.file_at`; a report or a plugin's page is none). A found file goes after the messages through
+the channel's own document/photo upload, once (a file the turn already delivered is not sent again), and its link becomes its
+name; anything else becomes its name or words and a note in the interface language (`link_file`, `link_local`, all 15 locales),
+never the dead link. A path of this PC is never uploaded for a link (R-BATCH-02). A link in a fenced code block is code.
+The member is told twice: the turn being answered from a chat carries `PHONE_LINKS` with its source line (attach the file with
+`attach_file`), and a turn of the conversation so far that went over a chat says how many of its links a phone cannot open.
+Offline contracts: core/tests/messaging/test_links.py (the judgement table, words in five languages, the folders, a fake Bot API
+receiving the document and no dead link, a report naming the member whose work it was) and
+core/tests/agent/test_card_context.py (the note in the next actual prompt). Not covered: a real Telegram chat on a phone.
 
 ## One member, one working slime (R-SLIME-03)
 
@@ -865,6 +922,11 @@ in the window's language; `media-models-menu` asserts OpenRouter's own mark in t
 covered by the unit case that every tool in `CLIS` resolves to its maker's mark under its id and its lowercased name; their sources appear in the
 answer picker only. Not covered: a live Codex login.
 
+`price-parts` (R-MODEL-06) runs in `media-models-unset`, `media-models-set` and `media-models-menu` (and in `models`, `quick-model-menu` and `model-choices-*`):
+a price is parts joined by 「 · 」 and no part is broken across lines while a line of its row could hold it, measured from the client rects of each part's own
+text, and a short model name is never cut by its price. Inspect Gemini Image's row (the longest price) at 720 and 1120 wide, in the picker and in the
+rows of Settings, and with `--locale es` and `--locale pt-BR` (the longest prices); the composer's model menu keeps a price on one line.
+
 ## Connected apps and chosen models
 
 API and CLI brain prompts share the Composio discovery/execution contract:
@@ -1045,7 +1107,7 @@ npm run look -- plain-bot-chat centred-system-events --theme both --width 1120,7
 Keep reports and result PNGs: answer/attachment, expanded work, open menus/dialogs,
 quoted draft and highlighted search target. Inspect action-menu placement and
 composer clearance at 720. Slash commands use the slash's measured text rectangle, start-aligned above the line with a below-line fallback. The slash-commands scene checks its left edge within 24px of the character. The chat scene also checks 15px/24px message type,
-12px bubble radii, a borderless answer and the original Raphael emblem and other members' 40px faces. Owner
+12px bubble radii, an answer with only a hairline (R-UI-162) and the original Raphael emblem and other members' 40px faces. Owner
 messages use the bubble colors; assistant messages use a raised surface. Every thread reads plainly
 (R-UI-42): the core stores Raphael's replies and progress as its 《prefix。…》 line, split over messages when long,
 and the window shows, copies and quotes them without it; its in-app questions are plain too, while the overlay keeps
@@ -1194,9 +1256,9 @@ turns keep no native session, and each turn records the model that actually answ
 face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
 quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
 progress has no reply message: the thread shows its text after the work line. A quick question is the one
-turn that reaches the owner's own PC (R-PC-01): the fast router, the commands to open, lock or
-copy, the desktop run and the local command tools are its alone, and a spoken or typed turn of a formal
-conversation goes to the narrated harness with none of them.
+turn that reaches the owner's own screen (R-PC-01): the fast router, the commands to open, lock or
+copy and the desktop run are its alone, and a spoken or typed turn of a formal conversation goes to the
+narrated harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
 
 ```powershell
 npm run look -- quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
@@ -1911,7 +1973,9 @@ Telegram returns only attachments from the completed turn's stored tool receipts
 to the paired chat. PNG/JPEG up to 10 MiB use sendPhoto; MP3/M4A use sendAudio;
 other files use sendDocument, with a 50 MiB maximum. An oversized file names the
 original Raphael conversation as the place to open it. Revocation is checked again
-before delivery. Paths supplied by a model are never uploaded.
+before delivery. A path of this PC supplied by a model is never uploaded; a link in the
+words that names a file of the member's computer folders, a stored file or a page goes
+as that file (R-MSG-LINK-03).
 
 Offline contracts: core/tests/agent/test_steering.py,
 core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
@@ -2063,7 +2127,7 @@ npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing b
 
 R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups, and so does a different pair of members (below). Shared thread-diff.ts keeps every handoff line node, and the open state of received-message lines. What was said opens in the conversation between members (see below).
 
-Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail.
+Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-workflow-childwork-open, room-workflow-file-unreadable, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion retains the two original handoff receipt labels; the meeting is in reply detail.
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
 
 
@@ -2073,12 +2137,12 @@ npm run look -- handoff-group handoff-group-done handoff-group-many handoff-grou
 
 ## Conversation between members
 
-The line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, the exchanges between the same members at the same time in the loaded thread (or room) oldest first (one begun more than 30 minutes after the last one moved is another conversation with its own line, `PEER_SESSION_GAP_MS`) under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason, and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
+The line is a button 「與 X 的 N 則訊息」 with no disclosure under it: N counts each request and each answer. peer-chat.ts opens the conversation in place over the member's header, thread and composer (`.mb-chat > .peer-chat`): the pill 「A ⇄ B」, the exchanges between the same members at the same time in the loaded thread (or room) oldest first (one begun more than 30 minutes after the last one moved is another conversation with its own line, `PEER_SESSION_GAP_MS`) under each speaker's face and coloured name (owner-bubble.ts `nameAccent`), day dividers, an unfinished answer as its state and reason (the reason has a line of its own for a file that is missing, there but unreadable or changed, no verified action, an incomplete final answer, work it handed on still open, and a stop; `peer-chat.test.ts` keeps each in every language), and 「關閉對話」 where the composer was. Esc and leaving the conversation close it; an arriving answer redraws it. The scenes peer-chat (two days with one member, a third member's exchange excluded) and peer-chat-close drive it; handoff-group-open keeps it open through arriving receipts; bot-ask-centred, handoff-centred-line and room-workflow-blocked read the request, result, files and reason inside it.
 
 For member-to-member exchanges, `receivedLineHTML` appears in the respondent's own thread for its received ask or consult handoff. Its completed exchange is part of that member's later conversation context, scoped to that member and conversation; the asker retains the colleague's answer in its source turn context. `bot-message-from-centred` exercises the ask_member/consult receipt in the respondent's thread.
 
 ```powershell
-npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-handoff-result --theme both --width 1120,720,1920x1080
+npm run look -- peer-chat peer-chat-close handoff-group handoff-group-open handoff-group-room centred-system-events bot-ask-centred handoff-centred-line room-workflow-blocked room-workflow-childwork-open room-workflow-file-unreadable room-handoff-result --theme both --width 1120,720,1920x1080
 ```
 
 ### Who each message speaks to
@@ -2161,7 +2225,7 @@ npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
 | One-card settled local command | `npm run look -- local-command-once --theme both --width 1120,720,1920x1080` | One answer settles the original card and removes decision/settings controls. |
 | Connected message draft rows | `npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080` | Exact delivery fields and body survive settlement/failure; retry answers only the original approval. |
 
-### Card review follow-up
+### Card wording and disclosures
 
 R-CARD-06: known approval action with localized member name; new visible disclosure content; one state per card; shared per-kind prompt table; one-line inline credential hints with folded guides. Regression tests: card.test.ts, card-behavior.test.ts, inline-connection.test.ts, timeline.test.ts, pages/agent-cards.test.ts, scripts/look/audit.test.mjs. Selected visual consumers: card-sheet, card-approval, admin-approval*, card-mail-ready, email-draft-handed-off, card-mail-discarded/failed, card-task-no-file-card, card-key-waiting/guide-retry, card-login, card-secret/failed, connector-app/key-form/key-sent, chat-secret-saved-not-resumed, card-question-waiting/key, owner-question-background/room, card-permission-waiting/once, local-command-background, card-message-waiting, card-computer-waiting/handback, mcp-proposal-stdio, card-mcp-done, card-team-done.
 ```sh
@@ -2307,6 +2371,21 @@ records), and withdrawing it first removes it from the pending note. A turn that
 makes no further call before it ends leaves the message unread; it then starts the
 next turn in FIFO order, as before.
 
+R-QUEUE-10: words handed to running work that its model never read are never left behind, however the work ends:
+answered, failed, stopped, its CLI gone, handed off to a colleague (a Claude Code turn that hands off sets them aside
+unread, `OwnerInput.set_aside`), ended on a question for the owner (the loop parks in the background and is closed), or
+waiting on a card that is refused or runs out (`_drop_followup`). They go back to the front of the inbox in the order
+they were said and are each answered as a turn of their own, before anything queued after them. One step does it,
+`AgentService._release_steering`, wherever the inbox is read (`_claim` before every drain step, every admission,
+「立即送出」, the end of every loop): a steering row stays only while a live loop (its turn running or waiting on a card,
+its input open) still holds it unread. What a model reads is settled at that moment (`OwnerInput.on_read`, `_steered`),
+so start-up (`AgentInbox.recover`) puts back only unread steering rows, once, at the front. 「立即送出」 on a steering row
+that no work holds takes it back; on a queued row behind one, the drain takes both in order. The app is unchanged: its
+button was never disabled; the core answered `sent: true` while its claim refused every row behind the left steering
+row. Evidence: core/tests/agent/test_unread_steering.py, core/tests/agent/test_owner_questions.py (asks the owner, API
+and CLI) and core/tests/test_e2e_steering.py (a real core over stdio, the fake LLM and the `[native-steer:ask]` journey
+script of native_journeys.py).
+
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
 queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
@@ -2318,7 +2397,8 @@ started as its own turn this way too (it never steers). Rooms keep a new exchang
 A message already steered and read, or already started, is not sent again (`sent: false`).
 Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read
 shows as sent, not queued, so it has no 「立即送出」; Stop returns it to the field, and the
-messages with files or behind another queued one show 「排隊中」 and offer it.
+messages with files or behind another queued one show 「排隊中」 and offer it. Once that
+work ends without reading it, it runs at once or waits as 「排隊中」 again (R-QUEUE-10).
 ```powershell
 npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
@@ -2571,6 +2651,18 @@ the theme they are opened in (as the core's helper tells a real page), so the da
 embed: only a page's frame is shown at any height; a PDF keeps its fixed height with its own 展開, the YouTube player is 16:9,
 pictures and videos are at most 300 px, diagrams, tables and code blocks keep their own size rules, a report is a link card, and the
 computer's screen card is 16:9 with no pointer: none of these changed.
+
+A page that cannot draw says so (R-PAGE-13). A member's daily page loaded a Google Fonts style sheet in its head and stood as an
+empty grey box under 準備就緒: with the font host silent the page painted nothing and its frame never fired `load`, the only thing
+that took the card out of its placeholder (reproduced in Edge with that page's shape served by the core's own host and the font
+host mapped to a local port that never answers: `loading`, no paint, no height). The helper (`_HELPER` in core agent/pages.py)
+now lets a style sheet hold the page back for three seconds, then puts it back with a media no screen matches, which takes its own
+media once it has come (measured: the page drew at about 3.5 s; with a host that answers after 5 s the style sheet applied then).
+The card (`page-card.ts`) is ready on the page's first message or its `load`, whichever is first; a line drawn again while the page
+is on its way stays the placeholder; and a page silent for 15 seconds (`DRAW_MS`) shows 「這個頁面顯示不出來。」 (`page.notDrawn`, all
+15 locales) with 再試一次 and a failed pill, and stands after all if it draws later. page-card.test.ts and core
+tests/agent/test_pages.py hold it; no look scene covers a silent host yet (the look fixture's pages are `data:` documents that
+load nothing from elsewhere), and the real app with a silent font host was not run.
 
 The matrix below covers both themes at 1120, 720 and 1920x1080:
 
@@ -2950,7 +3042,7 @@ while the search bar stands under the row) as its top padding, and its mask fade
 At the right the tools end 14 px short of the window's three buttons (`--pa-top-end`) where the pane reaches the window's edge. With the
 details panel open as a column (1120 and wider) the panel's own head (`.mb-det-head`) is the row over it, its last button 14 px short of the
 window's buttons, and the conversation's tools go to the pane's edge; under 1120 px the panel lies over the chat and its scrim dims the
-header. A group's side thread does the same with its header. Under 860 px the sidebar is the 88px rail of faces beside the pane (no menu button),
+header. A group's side thread does the same with its header. On a Mac there are no caption buttons at the right (macOS draws its traffic lights at the top left), so `--window-controls-width` is 0 and `--window-controls-gap` the panel's padding there (styles.css): the panel's close stands 16 px from the window's edge, mirroring its gear, and the conversation's tools keep the pane's inset. The look checks that measure against the caption buttons measure against the window's edge on a Mac. Under 860 px the sidebar is the 88px rail of faces beside the pane (no menu button),
 so the pill row starts at the pane's own edge.
 
 Dragging: the header carries `data-window-drag` (and the panel's and the side thread's heads, and the peer view's), so its empty parts move
@@ -2983,4 +3075,43 @@ and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeov
 
 ```powershell
 npm run look -- message-text-colour chat card-computer-handback card-sheet --theme both --width 1120,720,1920x1080
+```
+
+## The composer's row gives way, and its emblem stays sharp (R-UI-160, R-UI-161)
+
+Under the field stand `+`, the permission (a shield and its word), the model (its name, its depth and a chevron) and, at the
+right end, the one round button (`.cmp-voice`, the emblem while idle). However narrow the composer is, the row stays one row
+inside it. Short of room the model's name shortens first (CSS: the model stands at the right and shrinks, its depth and chevron
+keep their width); once the name would go under six letters the permission's word hides and its shield stays, the button still
+named with the word, and the room goes back to the name (`fitComposerRow` in `chat-composer.ts` measures the row when it, the
+word or the model changes, with a pixel of hysteresis so the word never flickers at the edge); last the name shortens away. The
+`+`, the shield and the right-hand button never shrink. The narrowest composer is 301 px (the details panel as wide as it goes
+at 1120).
+
+`composer-row-fits` measures every control of the row against the composer's inner box, their order and overlap, the
+right-hand button's 32 px box and place, the shield and chevron, that the word shows exactly while the row holds it beside the
+model's first six letters, and that a shortened name has no room left unused before it; it also reports how wide each
+language's four permission words are in the button's own type (Vietnamese 「Cho phép tất cả」 is the widest, 98 px). It ends
+the `panel-*` scenes, `room`, and the composer's own: `composer-row-narrow` (the details panel as wide as it goes, 全部允許,
+and the longest name of a model that answers in the recorded OpenRouter list, with its depth), `composer-row-owner` (a 1288 by
+798 window, the list open, a 520 px panel) and `composer-row-language` (the narrow case in Vietnamese).
+
+The idle emblem is a still drawn once per size and pixel ratio (`emblemStill` in `avatar.ts`): a bitmap of its CSS box times
+the ratio, rounded (`stillSide`: a ratio reported as 1.5000000596 made a 48 px box a 49 px bitmap when it was rounded up), drawn again when the ratio changes (a window moved to a screen of another scale, a zoom: the ratio's media query,
+or the resize the move brings). At 32 px the 416 px rune texture sampled at the default quality broke into scattered dots,
+which is what looked muddy, so a small still averages it down (`imageSmoothingQuality: "high"`), stops its rays at the white
+ring, leaves out the faint circle at the letters' feet and draws a whole-pixel white ring with a one-pixel warm edge (`small`
+in `drawEmblem`; larger emblems keep the anime's numbers). Where its layout box starts does not matter: at a real pixel ratio
+the browser starts a picture on a whole device pixel (measured at 100 %, 125 % and 150 % with `--force-device-scale-factor`);
+an emulated ratio places it on whole CSS pixels and resamples it in between, so `--scale` starts the browser at its own ratio.
+`emblem-sharp` fails when the bitmap is not the box times the ratio, when its sides are odd (its centre in the middle of a
+pixel), or when a scale, turn, filter or fractional move lies between it and the screen; the step `emblem-picture` reads the
+whole viewport (a clip is rounded to whole CSS pixels, which at 125 % resamples the capture itself), saves the emblem as the
+screen shows it (`emblem-<theme>-<width>-x<ratio>.png` in the run) and fails when those pixels are not the bitmap laid on the
+composer's ground at any whole-pixel offset (it skips an emblem under the panel's scrim, under 1120 px).
+`composer-emblem-ratio` moves the window to a 150 % screen mid-scene (emulated, so only the bitmap is checked after it).
+Run the emblem at other ratios with `--scale 1.25` and `--scale 1.5`.
+
+```powershell
+npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
 ```

@@ -94,7 +94,7 @@ export default [
   scene("admin-draft-cancel", "Cancel discards every proposal without changing the roster", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="cancel"]'), wait('.composer:not([hidden])'), check("admin-draft-cancel")], { adminApproval: "draft" }),
   scene("admin-draft-apply-result", "Apply settles once and updates the member column", [...adminDraftEdits, click('[data-draft-act="confirm"]'), wait('.draft-done'), click('[data-act="draft-done"]'), check("admin-edited-result")], { adminApproval: "draft" }),
   scene("live-scenario-owner-view", "Guardian S17 owner-visible failure and separate public work", [check("conversation-design"), check("live-scenario-owner-view")], { liveScenarioOwnerView: true }),
-  scene("quick-conversation-list", "Raphael's main conversation first, with his persistent quick questions in the row below it", [{ action: "open-details" }, check("quick-conversation-list")]),
+  scene("quick-conversation-list", "Raphael's main conversation first, with its persistent quick questions in the row below it", [{ action: "open-details" }, check("quick-conversation-list")]),
   scene("quick-conversation", "Open and continue the persistent quick conversation", [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.ra .chat-message[data-reply]'), check("quick-conversation")]),
   scene("quick-question-result", "An Alt+Space answer arrives in the open quick conversation, answered by the quick model",
     [...quickOpen, { action: "main-event", event: { type: "AgentTurn", turn_id: 91, member_id: 0 } }, wait('.tn[data-id="91"] .ra .chat-message[data-reply]'), check("quick-question-result")],
@@ -105,7 +105,7 @@ export default [
   scene("quick-stop", "Stop in the gold slot ends a running quick question and leaves the formal thread alone",
     [...quickOpen, wait('.composer[data-task-state="running"] .cmp-voice'), click('.composer[data-task-state="running"] .cmp-voice'),
       wait('.tn[data-id="90"][data-status="denied"]'), check("quick-stop")], { quickRunning: true }),
-  scene("chat-connect-gmail", "A task in Raphael's chat that needs Gmail shows Gmail's connector card below his reply",
+  scene("chat-connect-gmail", "A task in Raphael's chat that needs Gmail shows Gmail's connector card below its reply",
     [wait('[data-connector="card-gmail"]'), check("connector-card")], { connectorCard: "gmail" }),
   scene("chat-connect-calendar", "A task in a member's chat that needs Google Calendar shows its connector card there",
     [member(1), wait('[data-connector="card-calendar"]'), check("connector-card")], { connectorCard: "calendar" }),
@@ -311,7 +311,7 @@ export default [
   scene("speaker-draft-profile", "The member settings page holds the draft preference as one switch row with the page's own words", [
     ...details, ...gear, ...msKind('tools'), wait('.ms-pane [data-ms="draft"][aria-checked="true"]'),
   ]),
-  scene("composer-model-small", "The composer's model menu opens as a small card: the model and its depth, nothing else", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .mc-range'), check("composer-model-small"), check("depth-fill-covers-thumb")]),
+  scene("composer-model-small", "The composer's model menu opens as a small card: the model and its depth, nothing else", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now .mc-range'), check("composer-model-small"), check("depth-fill-covers-thumb"), check("emblem-sharp")]),
   scene("composer-model-favorites", "What the owner starred in Settings is right there when choosing a model", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-pick'), click('.cb-pick'), wait('.cb-menu [data-cb-source="favorites"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="favorites"]'), wait('.cb-menu .cb-list small'), check("composer-model-browse"), check("composer-favorites")]),
   scene("composer-model-sources", "One card on the composer: the model and its depth, then the sources on the left and a source's models on the right under a centred title", [member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu .cb-now'), check("composer-model-small"), click('.cb-pick'), wait('.cb-menu .cb-source'), check("composer-model-browse"), click('.cb-menu [data-cb-source="cli:codex"]'), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-browse"), click('.cb-menu [data-cb-source="cli:claude"]'), wait('.cb-menu [data-model="cli:claude:claude-sonnet-5-5"]'), check("composer-model-browse"), click('.cb-menu .cb-back'), wait('.cb-now:not([hidden]) .cb-pick'), check("composer-model-small")]),
   scene("composer-model-same", "Whatever the source, the card is the same: the source, the model, one ruler of depth", [click('.composer .cmp-model .mp-trigger'), wait('.cb-now .mc-range'), check("composer-card-same"),
@@ -363,7 +363,7 @@ export default [
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),
   scene("search-target", "Navigate to a message search match", [search("研究"), click("[data-message-result]"), wait(".is-search-target")]),
   scene("tooltip", "A message action beside an answer names its icon in the one app tooltip", [hover('.ra .chat-message[data-reply] .message-actions [data-act="reply-message"]'), check("message-action-tooltip")]),
-  scene("room", "Room conversation", [room(1), wait(".au-room-thread .chat-message")]),
+  scene("room", "Room conversation", [room(1), wait(".au-room-thread .chat-message"), check("composer-row-fits")]),
   ...["member", "room"].flatMap(context => {
     const base = context === "member" ? [member(1)] : [room(1)];
     const form = context === "member" ? ".mb-chat:not(.au-room-pane) .composer" : ".au-room-pane .composer";

@@ -38,6 +38,14 @@ def file_named_in(text, name):
     return False
 
 
+def exists_unreadable(path, error):
+    """Whether `error`, raised on reading the file `path`, says it is there but cannot be read (a folder of that name, no
+    permission, held open by another program), and not that it is missing, too large or outside the folder it may be in."""
+    if isinstance(error, (FileNotFoundError, NotADirectoryError)):
+        return False
+    return path.exists() if isinstance(error, OSError) else path.is_dir()
+
+
 # A member names the files it made by the path they have inside its own computer: its folder or its team's shared folder.
 COMPUTER_PATH = re.compile(r"""/home/cua/(?:workspace|team)/[^\s"'`<>|?*]+""")
 

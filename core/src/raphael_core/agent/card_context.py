@@ -190,9 +190,36 @@ def viewing_text(page) -> str:
             f"It is open beside their message, so \"here\" and \"this\" mean it.{change}")
 
 
-def source_text(source: str) -> str:
+# What a member answering a chat on a phone is told of links (R-MSG-LINK-03): the core sends what it can find, but the
+# member is the one that gives the file.
+PHONE_LINKS = ("Their phone opens public web links only: a path in your computer, a file:// or attachment: link, a page of "
+               "the app, and an address of this PC, of your computer or of a private network (localhost included) do not "
+               "open there. Give a file as the file: attach it (attach_file). Such a link left in a reply goes as the file "
+               "it names when that is found, and otherwise is replaced by a note that it could not be sent.")
+
+
+def source_text(source: str, *, now: bool = True) -> str:
+    """The line that says a turn came over a messaging app; for the turn being answered (`now`), with what the owner's
+    phone can open (PHONE_LINKS). A turn of the conversation so far carries the line alone."""
     platform = PLATFORMS.get(source)
-    return f"Message source: {platform}; the owner is talking over {platform}.\n" if platform else ""
+    if not platform:
+        return ""
+    return f"Message source: {platform}; the owner is talking over {platform}.\n" + (PHONE_LINKS + "\n" if now else "")
+
+
+def unreachable_note(source: str, said: str) -> str:
+    """For a turn of the conversation so far that went over a messaging app: how many links or paths of what the member
+    said there name a place the owner's phone cannot open (messaging/links.py), so that a later turn knows what the owner
+    could not open; empty when there are none."""
+    platform = PLATFORMS.get(source)
+    if not platform:
+        return ""
+    from ..messaging.links import unreachable_links
+    count = len(unreachable_links(said))
+    if not count:
+        return ""
+    things = "link or path" if count == 1 else "links or paths"
+    return f"\n[Over {platform}: {count} {things} of this reply name a place the owner's phone cannot open.]"
 
 
 def messaging_facts(messaging, member_id: int) -> list[dict]:

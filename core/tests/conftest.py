@@ -117,6 +117,39 @@ def collect_garbage_after_each_test():
 
 
 @pytest.fixture
+def lock_file() -> Iterator:
+    """`lock(path)` makes a file that is there and cannot be opened, as one another program holds: on Windows it is held
+    open without sharing, elsewhere its mode is taken away. The test is skipped where this PC still lets it be read (a
+    superuser). Whatever was locked is let go when the test is over."""
+    undo = []
+
+    def lock(path: Path) -> None:
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.CreateFileW.restype = wintypes.HANDLE
+            kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                                           wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+            handle = kernel.CreateFileW(str(path), 0x80000000, 0, None, 3, 0x80, None)  # read, shared with none, must exist
+            assert handle not in (None, wintypes.HANDLE(-1).value), ctypes.get_last_error()
+            undo.append(lambda: kernel.CloseHandle(handle))
+        else:
+            mode = path.stat().st_mode
+            path.chmod(0)
+            undo.append(lambda: path.chmod(mode))
+        try:
+            path.read_bytes()
+        except PermissionError:
+            return
+        pytest.skip("this PC lets the file be read though it is locked")
+
+    yield lock
+    for release in reversed(undo):
+        release()
+
+
+@pytest.fixture
 def conn() -> Iterator[sqlite3.Connection]:
     connection = db.connect(":memory:")
     yield connection

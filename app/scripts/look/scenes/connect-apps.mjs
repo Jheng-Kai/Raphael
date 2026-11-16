@@ -72,7 +72,7 @@ const everyPart = OWNER_ROWS.flatMap(([id, name]) => partsOf(id, name).flatMap((
 const ownerList = [...linked, check("owner-list")];
 const refreshed = { action: "emit", events: [{ type: "ConnectionsChanged" }], wait: 400 };
 const ownerRowScenes = [
-  scene("connected-owner-rows", "His list of seven, no heading: a real press on the line, the name, the mark, the empty end and the top edge of every row opens that app's page", [
+  scene("connected-owner-rows", "The owner's list of seven, no heading: a real press on the line, the name, the mark, the empty end and the top edge of every row opens that app's page", [
     ...ownerList, ...everyPart, check("owner-list"),
   ], OWNER_LIST),
   scene("connected-owner-rows-loaded", "The same presses after the tools of every app were read once, and again after the core says the list changed", [

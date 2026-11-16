@@ -84,7 +84,8 @@ export async function slimeBoard(rows, columns = 1) {
   };
   const board = document.createElement("div");
   board.className = "look-slime-board";
-  board.style.cssText = `position:fixed;inset:0;z-index:100000;overflow:hidden;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));align-content:start;gap:6px;padding:8px;background:var(--content);color:var(--text-3);font-size:11px;line-height:12px`;
+  // On a Mac the board starts under the traffic lights macOS draws at the top left (traffic-lights.mjs).
+  board.style.cssText = `position:fixed;inset:0;z-index:100000;overflow:hidden;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));align-content:start;gap:6px;padding:${document.documentElement.dataset.platform === "macos" ? 40 : 8}px 8px 8px;background:var(--content);color:var(--text-3);font-size:11px;line-height:12px`;
   board.innerHTML = rows.map(({ label, cells, paddingTop = 0 }) => `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding-top:${paddingTop}px"><span style="flex:none;width:44px;color:var(--text-2)">${label ?? ""}</span>${cells.map(cell =>
     `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state, moving: !cell.still })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
   document.body.append(board);

@@ -14,6 +14,10 @@ downloaded.
 Raphael's long-term memory (`memory_dir`, raphael_core.memory) is machine-local too, for another
 reason: it is what Raphael knows about the user, which must stay on this PC, so it never goes where
 a roaming profile could carry it.
+
+The members' computer folders (`vm-homes`, `vm-shared`, raphael_core.computer.vm) are machine-local too: they hold
+gigabytes that belong to this PC's Docker (`machine_dir`). An install made before keeps them in the data directory
+until `LocalVm.relocate` has moved them.
 """
 
 import os
@@ -99,10 +103,20 @@ def memory_dir(base: Path | None = None) -> Path:
         if not override:
             return local_dir() / "memory"
         base = Path(override)
+    return machine_dir(base) / "memory"
+
+
+def machine_dir(base: Path) -> Path:
+    """The machine-local folder that goes with the data directory `base`: where the large data that belongs to this
+    PC is kept (the members' computer folders, the memory). A data directory right under `%APPDATA%` (the release's
+    `Raphael`, a development build's `Raphael Dev`) has the folder of the same name under `%LOCALAPPDATA%`: Roaming is
+    for small settings that may follow a profile, and gigabytes of workspaces must not. Any other data directory (the
+    tests, the end-to-end runs, macOS, where both folders are Application Support) is its own. Only a path: nothing is
+    created."""
     roaming, local = os.environ.get("APPDATA"), os.environ.get("LOCALAPPDATA")
     if roaming and local and _same_folder(base.parent, Path(roaming)):
-        return Path(local) / base.name / "memory"
-    return base / "memory"
+        return Path(local) / base.name
+    return base
 
 
 def _same_folder(a: Path, b: Path) -> bool:

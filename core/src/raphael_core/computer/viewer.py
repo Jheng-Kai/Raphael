@@ -486,6 +486,8 @@ class DesktopViewer:
         return {"state": state["state"], "ready": state["state"] == "running",
                 **({"image": state["image"]} if "image" in state else {}),
                 **({"progress": state["progress"]} if state.get("progress") else {}),
+                # The computer is being made again on a newer image: the panel says so in one line (R-COMP-UPDATE-01).
+                **({"update": True} if state.get("update") is True else {}),
                 **({"error": state["error"]} if state.get("error") else {})}
 
     async def control(self, params):

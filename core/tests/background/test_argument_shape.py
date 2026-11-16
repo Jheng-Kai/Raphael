@@ -1,10 +1,13 @@
-"""A connector's arguments sent in a wrong wrapper are answered with the shape that fits, and are not sent again and again
-(a routine on a ChatGPT brain once wrapped a Notion query's arguments in a `data` object
-five times, then ran 143 steps until the connector's query allowance was spent, with no card changed). Nothing here
-reaches a real connector."""
+"""A connector's arguments sent in a wrong shape are answered with the shape that fits, and are not sent again and again
+(a routine on a ChatGPT brain once sent a query tool's arguments in shapes it refused five times, then ran 143 steps until
+the connector's query allowance was spent, with no card changed). That tool's own one argument is `data`: its schema had
+run over the kept length and it was offered as "an object", so the model guessed. Nothing here reaches a real connector."""
 import json
 
-from raphael_core.agent.plugins import argument_shape, shape_advice, shape_problem
+from raphael_core.agent.plugins import PluginTool, argument_shape, inner_shape, make_offer, shape_advice, shape_problem
+from raphael_core.agent.policy import Tier
+from raphael_core.integrations import config
+from raphael_core.integrations.config import tool_record
 from raphael_core.worker.loop import ToolOutcome, result_text
 
 from .test_run import rig  # noqa: F401
@@ -45,6 +48,56 @@ def test_a_servers_refusal_of_arguments_is_answered_with_what_it_said_and_the_sh
     assert shape_advice("look", {"type": "object"}, "validation error") is None  # no shape to tell
     long = shape_advice("look", QUERY, "Invalid arguments " + "x" * 2000)
     assert len(long) < 1500 and long.count("x") <= 300
+
+
+# A query tool whose one argument, `data`, is one of three shapes told apart by `mode`; the sql shape's address is shared
+# through a `$ref`, as schema generators write a part used twice.
+UNION = {"type": "object", "required": ["data"], "properties": {"data": {"anyOf": [
+    {"type": "object", "required": ["mode", "data_source_urls", "query"], "properties": {
+        "mode": {"const": "sql"}, "data_source_urls": {"type": "array", "items": {"type": "string"}},
+        "query": {"type": "string"}, "params": {"type": "array"}}},
+    {"type": "object", "required": ["mode", "view_url"], "properties": {
+        "mode": {"const": "view"}, "view_url": {"type": "string"}, "page_size": {"type": "integer"}}},
+    {"type": "object", "required": ["mode", "data_source_url"], "properties": {
+        "mode": {"const": "rows"}, "data_source_url": {"$ref": "#/properties/data/anyOf/1/properties/view_url"}}},
+]}}}
+REFUSED = "Input validation error: Invalid arguments for tool query-data-sources: data: Invalid input"
+
+
+def test_a_tool_whose_own_argument_is_data_is_never_told_to_unwrap_it_and_is_told_the_shapes_data_takes():
+    said = shape_advice("query-data-sources", UNION, REFUSED)
+    assert said.startswith("query-data-sources refused these arguments. It said: Input validation error")
+    assert "never inside another object" not in said
+    assert "The top-level arguments of query-data-sources are: data (one of 3 shapes, required)." in said
+    assert ('`data` takes one of these shapes: {mode ("sql", required); data_source_urls (array of string, required); '
+            'query (string, required); params (array)} | {mode ("view", required); view_url (string, required); '
+            'page_size (integer)} | {mode ("rows", required); data_source_url (string, required)}.') in said
+    # A missing `data` is still caught before the call, without the advice to unwrap it.
+    missing = shape_problem("query-data-sources", UNION, {"mode": "sql", "query": "x"})
+    assert "needs data at the top level" in missing and "never inside another object" not in missing
+    assert '`data` takes one of these shapes: {mode ("sql", required)' in missing
+
+
+def test_only_an_argument_the_server_names_and_that_holds_more_than_a_value_is_opened():
+    assert inner_shape(UNION, "data").count(" | ") == 2
+    assert inner_shape(QUERY, "data_source_id") == "" and inner_shape(QUERY, "nothing") == ""
+    said = shape_advice("look", QUERY, "1 validation error for lookArguments data_source_id Field required")
+    assert "takes" not in said.split("are: ")[-1], "a plain value has nothing inside to tell"
+    # The tool's own name holds `data` and is not taken for the argument.
+    assert "`data` takes" not in shape_advice("query-data-sources", UNION, "Invalid arguments for tool query-data-sources")
+
+
+def test_a_schema_too_long_to_keep_whole_is_offered_with_its_shape_not_as_any_object():
+    words = "Explains this at length. " * 250
+    long = json.loads(json.dumps(UNION))
+    for variant in long["properties"]["data"]["anyOf"]:
+        variant["description"] = words
+    assert len(json.dumps(long, ensure_ascii=False)) > config.MAX_SCHEMA_CHARS
+    record = tool_record("query-data-sources", "Query rows, SQL or a view.", long)
+    offered = make_offer([PluginTool("mcp:Notes/query-data-sources", "Notes", record.name, record.description,
+                                     record.input_schema, Tier.T0)])
+    parameters = offered.definition("Notes__query-data-sources")["function"]["parameters"]
+    assert parameters == UNION, "the shape whole, only the words that explain it gone"
 
 
 async def test_a_wrapped_call_is_not_sent_and_the_model_is_told_the_shape_whole(rig):  # noqa: F811

@@ -106,7 +106,7 @@ describe("when connected", () => {
     expect(html).toContain('class="msg-badge num"');
   });
 
-  test("the people who may talk to her, each on a row whose ⋯ is named for them and holds the removal (R-UI-56)", () => {
+  test("the people who may talk to it, each on a row whose ⋯ is named for them and holds the removal (R-UI-56)", () => {
     const html = messagingHTML(view({ status: status({ allowed: [{ user_id: "42", name: "Ann <b>" }] }), expanded: true }));
     expect(html).toContain('aria-label="「Ann &lt;b&gt;」的選項"');
     expect(html).toContain('data-msg="user-menu" data-user="42"');

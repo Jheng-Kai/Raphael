@@ -299,6 +299,67 @@ async def test_a_server_that_does_not_answer_in_time_is_a_timeout(client, meteo,
     assert asyncio.get_running_loop().time() - started < 5
 
 
+@pytest.mark.parametrize("which", ["geocoding", "forecast"])
+async def test_a_request_whose_try_timed_out_is_asked_once_more_and_answers(client, meteo, which, caplog):
+    # Five lookups failed after 6.4 s each: one try waited out its five seconds and the eight left no time for another.
+    answer = getattr(meteo, which)
+    tries = []
+
+    async def slow_once(request):
+        tries.append(request)
+        if len(tries) == 1:
+            raise httpx.ReadTimeout("no answer", request=request)
+        return httpx.Response(200, json=answer)
+
+    setattr(meteo, which, slow_once)
+    with caplog.at_level(logging.INFO, logger=tools_module.logger.name):
+        result = await Tools(client, http=meteo.http, now=lambda: NOW).weather("台北", "zh-TW")
+    assert result.ok and result.data["now"] == {"temperature_c": 24.1, "sky": "partly cloudy"}
+    assert len(tries) == 2 and len(meteo.requests) == 3
+    stage = "place" if which == "geocoding" else "forecast"
+    assert f"{stage} request failed on try 1 of 2" in caplog.text and "ReadTimeout" in caplog.text
+    assert "台北" not in caplog.text and "Taipei" not in caplog.text
+
+
+async def test_a_try_that_hangs_is_cut_short_so_a_second_fits_the_budget(client, meteo, monkeypatch):
+    hung = []
+
+    async def hangs_once(request):
+        hung.append(request.extensions["timeout"]["read"])
+        if len(hung) == 1:
+            await asyncio.sleep(30)
+        return httpx.Response(200, json=GEOCODING)
+
+    meteo.geocoding = hangs_once
+    monkeypatch.setattr(tools_module, "WEATHER_TRY_S", 0.2)
+    monkeypatch.setattr(tools_module, "WEATHER_TIMEOUT_S", 3.0)
+    started = asyncio.get_running_loop().time()
+    result = await Tools(client, http=meteo.http, now=lambda: NOW).weather("台北", "zh-TW")
+    assert result.ok and len(hung) == 2
+    assert asyncio.get_running_loop().time() - started < 2.5
+    assert all(wait <= 0.2 for wait in hung), "each try asks httpx for no more than its own share"
+
+
+async def test_a_request_that_never_answers_is_tried_twice_and_is_a_timeout(client, meteo, monkeypatch):
+    tried = []
+
+    async def never(request):
+        tried.append(request)
+        await asyncio.sleep(30)
+
+    meteo.geocoding = never
+    monkeypatch.setattr(tools_module, "WEATHER_TRY_S", 0.05)
+    monkeypatch.setattr(tools_module, "WEATHER_TIMEOUT_S", 2.0)
+    result = await Tools(client, http=meteo.http, now=lambda: NOW).weather("台北", "zh-TW")
+    assert (result.ok, result.error) == (False, "timeout") and len(tried) == 2
+
+
+async def test_an_error_page_is_not_asked_for_again(tools, meteo):
+    meteo.forecast = httpx.Response(503, text="down")
+    result = await tools.weather("台北", "zh-TW")
+    assert (result.ok, result.error) == (False, "http_error") and len(meteo.requests) == 2
+
+
 async def test_the_weather_never_logs_the_city_or_the_place(tools, meteo, caplog):
     meteo.forecast = httpx.Response(500, text="down")
     with caplog.at_level(logging.DEBUG, logger=tools_module.logger.name):

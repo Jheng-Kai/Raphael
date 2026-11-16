@@ -35,6 +35,7 @@ from ..services.attachments import (
 )
 from ..services.attachments import Attachment as File
 from .channels.base import Attachment, Channel, ChannelError, Incoming, send_through_rate_limits
+from .links import deliverable
 from .pairing import Pairing
 from .words import heard, words
 
@@ -78,8 +79,11 @@ class Ask(Protocol):
 
 # stop(session_id) ends what the chat has under way and says whether there was something.
 # transcribe(audio, language) -> text.
+# find(member, kind, target) -> the file a link of a message names (`links.LinkedFiles`), or None; `member` is whose
+# message it is when that is not the bot's own member (None).
 Stop = Callable[[str], Awaitable[bool]]
 Transcribe = Callable[[bytes, str], Awaitable[str]]
+FindLinked = Callable[[int | None, str, str], Awaitable[File | None]]
 
 
 class Answer(str):
@@ -148,7 +152,8 @@ class Switchboard:
     `is_allowed(user)` and `chat_allowed(chat)` are read at each message, so removing a user takes
     effect at once. `language()` selects fixed app notices, not authored replies. Without `transcribe`, a voice
     message is declined. `album_wait` is how long an album is waited for after its latest
-    message (shorter in tests).
+    message (shorter in tests). `find` looks up the file a link of an outgoing message names; without it every such
+    link is said in words (`tell`).
     """
 
     def __init__(
@@ -164,8 +169,10 @@ class Switchboard:
         pairing: Pairing | None = None,
         album_wait: float = ALBUM_WAIT_SECONDS,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        find: FindLinked | None = None,
     ) -> None:
         self._sleep = sleep
+        self._find = find
         self._channel = channel
         self._ask = ask
         self._stop = stop
@@ -451,12 +458,21 @@ class Switchboard:
         else:
             await send_through_rate_limits(lambda: self._reply(chat, text), self._sleep)
 
-    async def tell(self, chat: str, text: str | Sequence[str], *, files: Sequence[File] = ()) -> None:
-        """Send `text` (or each of several messages, in order) to a chat that is allowed (a
-        background report). A chat that is not allowed, or a failure, sends nothing."""
+    async def tell(
+        self, chat: str, text: str | Sequence[str], *, files: Sequence[File] = (), member: int | None = None,
+    ) -> None:
+        """Send `text` (or each of several messages, in order) to a chat that is allowed (an answer, a
+        background report). A chat that is not allowed, or a failure, sends nothing.
+
+        Every message passes `links.deliverable` first (R-MSG-LINK-03): a link the owner's phone cannot open goes as the
+        file it names, after the messages with `files`, when `find` finds it in the computer of `member` (the bot's own
+        member when None), and is otherwise said in plain words; a public link is left as it is."""
         if not self._chat_allowed(chat):
             return
         messages = [text] if isinstance(text, str) else list(text)
+        find = None if self._find is None else (lambda kind, target: self._find(member, kind, target))
+        messages, linked = await deliverable(messages, find, self._language(), sent=files)
+        files = [*files, *linked]
         try:
             for message in messages:
                 if message.strip():

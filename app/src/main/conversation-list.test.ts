@@ -21,7 +21,7 @@ test("a window opens the one conversation, and the quick one only when nothing e
   expect(rows.map(row=>row.id)).toEqual([3,1]);
 });
 
-test("Raphael's panel has two rows, his conversation and quick questions, with no search, new or rename", async () => {
+test("Raphael's panel has two rows, its conversation and quick questions, with no search, new or rename", async () => {
   core.mockResolvedValue({ conversations: RAPHAEL });
   const host = document.createElement("div"); document.body.append(host);
   const onOpen = vi.fn();

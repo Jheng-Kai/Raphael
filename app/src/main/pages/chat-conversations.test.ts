@@ -123,7 +123,7 @@ test("a question typed in the quick conversation names the quick destination, an
   page.hide();
 });
 
-test("Raphael's conversation and his quick questions retain independent approval cards", async () => {
+test("Raphael's conversation and its quick questions retain independent approval cards", async () => {
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   const conversations = [{ id: 1, member_id: 0, title: "Main", is_default: 1, kind: "standard" }, { id: 2, member_id: 0, title: "", is_default: 0, kind: "quick" }];

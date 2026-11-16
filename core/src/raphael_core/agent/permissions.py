@@ -249,11 +249,14 @@ def qualifies(*, source: str, quick: bool, nested: bool, scope: str) -> bool:
 AT_THIS_COMPUTER = ("voice", "overlay", "app")
 
 
-def owner_pc(*, source: str, quick: bool, nested: bool, own_computer: bool = False) -> bool:
-    """Whether a request may reach the owner's own PC: only a quick question asked at this computer, never one member
-    handed another (R-PC-01), and never one that says the member's own computer is the one to use (`own_computer`,
-    `whose_computer`). The service's offer and the local tools' door ask this one question."""
-    return quick and not nested and not own_computer and source in AT_THIS_COMPUTER
+def owner_screen(*, source: str, quick: bool, nested: bool) -> bool:
+    """Whether a request may show things on the owner's own screen and drive it (the run on the desktop, the fixed commands
+    that open, lock, copy and change the volume, the fast router's shortcuts): only a quick question asked at this
+    computer, never one member handed another (R-PC-01). There the owner's PC is the default for everything, and the
+    member's own computer, offered beside it, is the one the owner's words name; the model reads which. Every other turn
+    and task runs hidden commands on the owner's PC with the card (R-PC-02) and shows nothing on its screen (R-PC-06).
+    The service's offer and the local tools' door ask this one question."""
+    return quick and not nested and source in AT_THIS_COMPUTER
 
 
 class PermissionCards:

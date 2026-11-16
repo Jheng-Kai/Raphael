@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { ownerQuestionBring } from "./api";
 import { mountPendingQuestions } from "./pending-questions";
@@ -100,4 +102,18 @@ test("a failed bring stays pending and can be retried", async () => {
   await vi.waitFor(() => expect(document.querySelector<HTMLElement>('.pending-questions [role="alert"]')!.hidden).toBe(false));
   expect(document.querySelector<HTMLButtonElement>(".pending-question")!.disabled).toBe(false);
   expect(view.changed).not.toHaveBeenCalled();
+});
+
+test("a member's conversation and a room press the same row, and nothing else calls the bring request", () => {
+  const source = (file: string): string => readFileSync(join(__dirname, file), "utf8");
+  for (const file of ["./pages/agent.ts", "./group-chats.ts"]) {
+    const text = source(file);
+    expect(text, file).toMatch(/import \{ mountPendingQuestions \} from "\.\.?\/pending-questions"/);
+    expect(text.match(/mountPendingQuestions\(/g), file).toHaveLength(1);
+    // The row reloads the conversation it stands in and moves the window to the newest turn.
+    expect(text, file).toMatch(/mountPendingQuestions\(thread, \w+, \(\) => (?:refresh|load)\(/);
+  }
+  const callers = readdirSync(__dirname, { recursive: true, encoding: "utf8" })
+    .filter(file => /\.ts$/.test(file) && !/\.test\.ts$/.test(file) && /ownerQuestionBring\(/.test(source(file)));
+  expect(callers.map(file => file.split("\\").join("/")).sort()).toEqual(["pending-questions.ts"]);
 });

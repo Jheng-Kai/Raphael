@@ -5,12 +5,12 @@ import { UI_LOCALES } from "./locales.mjs";
 const mainWindow = JSON.parse(readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8")).app.windows.find(window => window.label === "main");
 
 export function parseOptions(args, scenes) {
-  const options = { names: [], themes: ["light"], widths: [mainWindow.width], heights: { [mainWindow.width]: mainWindow.height }, locale: "zh-TW", out: resolve(".look"), all: false, list: false, help: false };
+  const options = { names: [], themes: ["light"], widths: [mainWindow.width], heights: { [mainWindow.width]: mainWindow.height }, scale: 1, locale: "zh-TW", out: resolve(".look"), all: false, list: false, help: false };
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (["--all", "--list", "--help"].includes(flag)) { options[flag.slice(2)] = true; continue; }
     if (!flag.startsWith("-")) { options.names.push(flag); continue; }
-    if (!["--theme", "--width", "--locale", "--out"].includes(flag)) throw new Error(`Unknown option: ${flag}`);
+    if (!["--theme", "--width", "--scale", "--locale", "--out"].includes(flag)) throw new Error(`Unknown option: ${flag}`);
     const value = args[++i];
     if (!value || value.startsWith("--")) throw new Error(`Missing value for ${flag}`);
     if (flag === "--theme") {
@@ -21,6 +21,11 @@ export function parseOptions(args, scenes) {
       if (!/^\d+(x\d+)?(,\d+(x\d+)?)*$/.test(value) || sizes.some(([w, h = 900]) => w < 320 || w > 7680 || h < 320 || h > 4320)) throw new Error(`Invalid width: ${value} (320..7680, or WIDTHxHEIGHT)`);
       options.widths = [...new Set(sizes.map(([w]) => w))];
       options.heights = Object.fromEntries(sizes.filter(size => size.length > 1));
+    } else if (flag === "--scale") {
+      // The screen's pixel ratio (Windows at 125% is 1.25): what a drawn picture's sharpness depends on. Every other run is at 1.
+      const scale = Number(value);
+      if (!/^\d+(\.\d+)?$/.test(value) || scale < 1 || scale > 3) throw new Error(`Invalid scale: ${value} (1..3)`);
+      options.scale = scale;
     } else if (flag === "--locale") {
       if (!UI_LOCALES.includes(value)) throw new Error(`Invalid locale: ${value}`);
       options.locale = value;

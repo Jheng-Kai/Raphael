@@ -185,7 +185,7 @@ def test_bridge_pictures_are_requested_and_stopped_explicitly():
     assert "pagehide', () => {snapshot(); clearInterval(framesTimer)" in script
 
 
-def test_the_page_holds_back_the_owners_paste_only_while_he_holds_control_and_never_reads_a_clipboard():
+def test_the_page_holds_back_the_owners_paste_only_while_they_hold_control_and_never_reads_a_clipboard():
     # R-PASTE-01. What the page does is run against a stand-in for noVNC in app/src/main/desktop-paste-page.test.ts.
     from raphael_core.computer.viewer import BOOTSTRAP
     script = BOOTSTRAP.decode()
@@ -453,7 +453,7 @@ async def test_take_control_refuses_active_tools_and_handback_releases_only_its_
     assert not bridge.vm.held
 
 
-async def test_the_owner_takes_over_from_a_hold_another_view_of_his_left_behind(viewer):
+async def test_the_owner_takes_over_from_a_hold_another_view_of_theirs_left_behind(viewer):
     """The owner can take over at any time. Two views of one computer are the owner's own."""
     bridge, _, _ = viewer
     one, two = await bridge.open({}), await bridge.open({})

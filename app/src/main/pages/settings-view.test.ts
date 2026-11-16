@@ -30,7 +30,7 @@ import {
 
 afterEach(() => setLocale("zh-TW"));
 
-test("Safety has no setting for local commands: only a quick question reaches this PC", () => {
+test("Safety has no setting for local commands: the stored mode applies", () => {
   const html = tab("safety");
   expect(html).not.toContain('data-k="local-commands"');
   expect(html).not.toContain("本機指令");
@@ -329,6 +329,18 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
+  test("the folders members may write to are added with the picker and each is removed from its own ⋯", () => {
+    const none = tab("general");
+    expect(rowOf(none, "成員可以寫入的資料夾")).toContain('data-act="write-folder-add"');
+    expect(none).not.toContain('data-row="write-folder"');
+    const two = tab("general", { brain: { ...brain, owner_write_folders: ["/Users/owner/Notes", "C:\\Owner\\工作\\"] } });
+    expect(two).not.toMatch(/<input[^>]*write-folder/);
+    expect(two.match(/data-row="write-folder"/g)).toHaveLength(2);
+    expect(two).toContain('<span class="output-path">/Users/owner/Notes</span>');
+    // Removing one waits in its ⋯ (R-UI-56).
+    expect(two).toContain('data-act="write-folder-menu" data-folder-index="1"');
+    expect(two).not.toContain("write-folder-remove");
+  });
   test("General groups its sections: you, appearance and Raphael, the bots live elsewhere, and no way back into the guide", () => {
     const html = tab("general");
     expect(html).not.toContain("data-msg-section");
@@ -466,7 +478,7 @@ describe("拉斐爾", () => {
     expect(rowOf(html, "問拉斐爾")).toContain("尚未設定");
   });
 
-  test("warns about Right Alt under her key only when the keyboard uses it as AltGr", () => {
+  test("warns about Right Alt under their key only when the keyboard uses it as AltGr", () => {
     const html = tab("dictation", { altgr: true });
     expect(html).toContain("AltGr");
     expect(html.indexOf("AltGr")).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));
@@ -570,7 +582,7 @@ describe("Models", () => {
       const row = rowOf(html, name);
       expect(row).toContain(`data-row="${k}"`);
       expect(row).toContain(
-        `<span class="price num" data-price="${k}">${price}</span></div></div>` +
+        `<span class="price num" data-price="${k}"><span class="price-part">${price}</span></span></div></div>` +
           `<div class="ctl"><span class="mp-slot" data-model-picker="${role}"><button type="button" class="sel mp-trigger" aria-haspopup="dialog"`,
       );
       // The button names what is chosen and leaves its price to the line under the row's name.
@@ -618,7 +630,7 @@ describe("Models", () => {
     expect(modelPickerLook(local, "stt").current).toBe("elevenlabs/scribe-v2");
     const row = rowOf(tab("models", { brain: { ...brain, stt_engine: "local", stt_local_model: "sensevoice" } }), "語音轉文字");
     expect(row).toContain('<strong class="mp-tname">SenseVoice</strong><span class="mp-source">本機</span>');
-    expect(row).toContain('data-price="stt-model">免費</span>');
+    expect(row).toContain('data-price="stt-model"><span class="price-part">免費</span></span>');
   });
 
   test("gives each picker the favourites of its own role, none when the core has not said", () => {
@@ -641,7 +653,7 @@ describe("Models", () => {
   test("shows a saved model the catalog does not have by its id, with an unknown price", () => {
     const row = rowOf(tab("models", { brain: { ...brain, cleanup_model: "x/old" } }), "整理文字");
     expect(row).toContain('<strong class="mp-tname">old</strong>');
-    expect(row).toContain('data-price="model">價格未知</span>');
+    expect(row).toContain('data-price="model"><span class="price-part">價格未知</span></span>');
   });
 });
 

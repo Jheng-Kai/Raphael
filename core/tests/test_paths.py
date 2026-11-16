@@ -126,3 +126,15 @@ def test_the_data_dir_override_takes_the_models_with_it(fake_home, monkeypatch, 
     monkeypatch.setenv("RAPHAEL_DATA_DIR", str(tmp_path / "d"))
     assert paths.models_dir() == tmp_path / "d" / "models"
     assert not (fake_home / "AppData").exists()  # the real local folder is never named
+
+
+def test_the_machine_data_of_a_roaming_data_dir_lives_in_the_local_folder_of_the_same_name(fake_home, tmp_path):
+    roaming, local = fake_home / "AppData" / "Roaming", fake_home / "AppData" / "Local"
+    assert paths.machine_dir(roaming / "Raphael Dev") == local / "Raphael Dev"
+    assert paths.machine_dir(roaming / "Raphael") == local / "Raphael"
+    # The memory goes with it, as it always has.
+    assert paths.memory_dir(roaming / "Raphael Dev") == local / "Raphael Dev" / "memory"
+    # A data directory anywhere else (the tests, the end-to-end runs, macOS) keeps its machine data itself.
+    assert paths.machine_dir(tmp_path / "run") == tmp_path / "run"
+    assert paths.machine_dir(roaming / "Raphael Dev" / "nested") == roaming / "Raphael Dev" / "nested"
+    assert not (fake_home / "AppData").exists()  # only paths: nothing is made

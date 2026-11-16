@@ -3,13 +3,14 @@
 Said into the overlay (Alt+Space), 「用你的電腦開…」 meant Raphael's own computer, but the voice
 router took 「開」 as the fixed command that opens things and opened the page on their own PC, with an empty reply. A quick
 request that names the member's computer goes to the member's turn; the shortcut, when it runs, says what it did; a request
-that names neither computer is asked once. Fakes only: no model, no PC, no Docker.
+that names neither computer is the owner's PC's, the quick question's default, and asks nothing. Fakes only: no model, no PC,
+no Docker.
 """
 
 import pytest
 
 from raphael_core.agent.persona import PHRASES
-from raphael_core.agent.whose_computer import MEMBER, OWNER, UNSURE, answer_to_the_question, whose_computer
+from raphael_core.agent.whose_computer import MEMBER, OWNER, whose_computer
 from .conftest import decision
 from .test_narration import chat
 from .test_owner_pc_reach import PC_TOOLS, names, prompt_of, with_own_computer  # noqa: F401
@@ -44,33 +45,21 @@ def test_a_request_that_names_the_owners_pc_is_the_owners(text):
 
 
 @pytest.mark.parametrize("text", [
+    "開 youtube", "打開計算機", "open spotify", "電腦的音量大一點", "what is a computer", "你的機器人好嗎", "open the pcb file",
     "用電腦開 YouTube", "幫我用電腦打開這個網頁", "open it on the computer", "launch Spotify on a computer", "パソコンでYouTubeを開いて",
 ])
-def test_a_request_that_names_no_ones_computer_is_unsure(text):
-    assert whose_computer(text) == UNSURE
-
-
-@pytest.mark.parametrize("text", [
-    "開 youtube", "打開計算機", "open spotify", "電腦的音量大一點", "what is a computer", "你的機器人好嗎", "open the pcb file",
-])
-def test_a_request_about_no_computer_is_left_to_the_router(text):
+def test_a_request_that_names_no_ones_computer_is_left_to_the_router(text):
+    # The owner's PC is a quick question's default (R-PC-01): a computer with no one's name on it is that one.
     assert whose_computer(text) is None
-
-
-@pytest.mark.parametrize(("reply", "side"), [
-    ("你自己的", MEMBER), ("拉斐爾自己的電腦", MEMBER), ("your own", MEMBER), ("好", MEMBER), ("either", MEMBER),
-    ("這台", OWNER), ("我的", OWNER), ("this one", OWNER), ("my pc", OWNER), ("このパソコン", OWNER),
-    ("現在幾點", None), ("open YouTube and then tell me how the weather is today", None),
-])
-def test_the_reply_to_which_computer_names_a_side(reply, side):
-    assert answer_to_the_question(reply) == side
 
 
 # --- a quick request ---------------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("text", ["用你的電腦開 YouTube", "用你自己的電腦打開 youtube.com", "open YouTube on your own computer"])
-async def test_a_quick_request_for_the_members_computer_goes_to_its_turn_not_to_the_owners_pc(with_own_computer, client, text):
+async def test_a_quick_request_for_the_members_computer_skips_the_shortcut_and_the_model_picks(with_own_computer, client, text):
+    # The shortcut can only open things on the owner's PC, so it is skipped; the turn holds both computers and the model
+    # reads the owner's words (R-PC-01): nothing in the code takes the owner's PC away.
     rig, hub = with_own_computer
     await hub.prepare(0)
     client.chats = [chat("Opening it.", ("computer__vm_exec", {"command": "echo opening"})), chat('{"text":"Opened."}')]
@@ -80,9 +69,8 @@ async def test_a_quick_request_for_the_members_computer_goes_to_its_turn_not_to_
     assert not rig.actions.calls  # nothing was opened on the owner's PC
     rig.host.execute.assert_not_awaited()
     offered = names(client.chat_calls[0]["tools"])
-    assert {"computer__browser_open", "computer__vm_exec"} <= offered
-    assert not offered & PC_TOOLS and not [name for name in offered if name.startswith("local__")]
-    assert "owner's PC" not in prompt_of(client.chat_calls[0])
+    assert {"computer__browser_open", "computer__vm_exec", "open", "local__local_exec"} <= offered
+    assert "only when the owner's words name it" in prompt_of(client.chat_calls[0])
 
 
 async def test_the_member_that_has_no_computer_says_so_and_still_does_not_borrow_the_owners(make_rig, client, conn):
@@ -92,8 +80,8 @@ async def test_the_member_that_has_no_computer_says_so_and_still_does_not_borrow
     result = await rig.ask("用你的電腦開 YouTube", language="zh-TW")
     assert result["status"] == "done" and result["text"]
     assert client.decide_calls == [] and not rig.actions.calls
-    offered = names(client.chat_calls[0]["tools"])
-    assert not offered & PC_TOOLS and not [name for name in offered if name.startswith("local__")]
+    assert not rig.host.execute.await_count
+    assert "when they do and you have none, say so plainly and never use the owner's" in prompt_of(client.chat_calls[0])
 
 
 @pytest.mark.parametrize("text", ["用我的電腦開 youtube.com", "open youtube.com on my computer", "打開 youtube.com"])
@@ -135,38 +123,18 @@ async def test_an_app_that_was_opened_is_named_as_the_start_menu_names_it(make_r
     assert result["text"] == "Opened Calculator on your computer."
 
 
-# --- asked once ------------------------------------------------------------------------------------------------------
+# --- the default ------------------------------------------------------------------------------------------------------
 
 
-async def test_a_request_that_names_no_ones_computer_is_asked_once_and_costs_nothing(make_rig, client, actions):
+@pytest.mark.parametrize("text", ["用電腦開 youtube.com", "open youtube.com on the computer"])
+async def test_a_request_that_names_no_ones_computer_opens_on_the_owners_pc_without_a_question(make_rig, client, actions, text):
+    # The owner's PC is a quick question's default for what is seen too (R-PC-01): nothing asks which computer.
     rig = make_rig()
-    first = await rig.ask("用電腦開 YouTube", language="zh-TW")
-    assert "這台電腦" in first["text"] and "自己的電腦" in first["text"] and first["prefix"] == "問"
-    assert client.calls == 0 and not rig.actions.calls  # nothing was routed, nothing was opened
-    [turn] = await rig.turns()
-    assert turn["status"] == "done" and turn["text"] == first["text"]
-
-
-@pytest.mark.parametrize("reply", ["你自己的", "好", "用電腦開 YouTube", "your own"])
-async def test_the_members_own_computer_answers_without_asking_again(with_own_computer, client, reply):
-    rig, hub = with_own_computer
-    await hub.prepare(0)
-    asked = await rig.ask("open YouTube on the computer", language="en")
-    assert asked["text"] == PHRASES["en"].which_computer.format(who="Raphael")
-    client.chats = [chat("Opening it.", ("computer__vm_exec", {"command": "echo opening"})), chat('{"text":"Opened."}')]
-    again = await rig.ask(reply, language="en")
-    assert again["text"] not in {asked["text"], ""}  # it was asked once, and now it is done
-    assert client.decide_calls == [] and not rig.actions.calls
-    assert not names(client.chat_calls[0]["tools"]) & PC_TOOLS
-
-
-async def test_this_pc_as_the_answer_keeps_the_owner_pc_shortcut(make_rig, client, actions):
-    rig = make_rig()
-    await rig.ask("open youtube.com on the computer", language="en")
     client.decisions.append(decision("command", "open"))
-    result = await rig.ask("this one", language="en")
-    assert len(client.decide_calls) == 1  # the router was asked, as it is for any quick request
-    assert result["status"] == "done"
+    client.replies.append(site("https://youtube.com/", "YouTube"))
+    result = await rig.ask(text, language="zh-TW" if "電腦" in text else "en")
+    assert len(client.decide_calls) == 1 and did(actions) == [("open_url", "https://youtube.com/")]
+    assert result["status"] == "done" and result["prefix"] != "問"
 
 
 def test_a_mac_is_the_owners_computer_by_its_own_names():
@@ -174,8 +142,7 @@ def test_a_mac_is_the_owners_computer_by_its_own_names():
         assert whose_computer(text) == OWNER, text
 
 
-def test_on_a_mac_the_question_says_this_mac(monkeypatch):
+def test_on_a_mac_the_computer_words_are_the_macs(monkeypatch):
     from raphael_core.agent.persona import phrase
     monkeypatch.setattr("raphael_core.system_words.MAC", True)
-    assert phrase("en", "which_computer", who="Raphael") == "Open it on this Mac, or on Raphael's own computer?"
     assert "輸入監控" in phrase("zh-TW", "computer_watch")

@@ -1,4 +1,5 @@
 """Production conversation and MCP paths transfer the same turn to a durable wait."""
+import asyncio
 import json
 
 import pytest
@@ -534,3 +535,34 @@ async def test_allow_all_still_asks_what_only_the_owner_knows(wired, client):
     await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
     await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
     assert background.task(question["task_id"]).state == "done"
+
+
+@pytest.mark.parametrize("brain", ["api", "cli"])
+async def test_words_sent_while_the_member_works_are_answered_after_it_asks_the_owner(wired, client, monkeypatch, tmp_path, brain):
+    """The member's turn ends with a question for the owner, its loop parked in the background, and never read what the owner
+    wrote meanwhile: those words are a turn of their own at once, and the card still waits (R-QUEUE-10)."""
+    from .test_unread_steering import working_cli
+    agent, background = wired
+    if brain == "cli":
+        _, state = working_cli(None, monkeypatch, tmp_path, "asked the owner", rig=agent)
+        started, release = state.started, state.release
+    else:
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def asking(**kwargs):
+            started.set()
+            await release.wait()
+            return chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday", "Tuesday"]}))
+        client.chats = [asking, chat(json.dumps({"prefix": "", "text": "Answer 2", "detail": ""}))]
+    first = asyncio.create_task(typed(agent, "Arrange a visit"))
+    await asyncio.wait_for(started.wait(), 2)
+    said = await asyncio.wait_for(typed(agent, "Lunch is at noon"), .5)
+    assert said["steered"] is True
+    release.set()
+    asked = await first
+    await until(lambda: agent.service._inbox.get(said["turn_id"])["state"] == "terminal" and not agent.service._drains)
+    assert agent.service._inbox.get(said["turn_id"])["outcome"] == "completed"
+    turn = agent.service.turn(said["turn_id"])
+    assert (turn.status, turn.route, turn.text) == ("done", "answer", "Answer 2")
+    [question] = background.service.owner_questions.for_turn(asked["turn_id"])
+    assert question["state"] == "asked"

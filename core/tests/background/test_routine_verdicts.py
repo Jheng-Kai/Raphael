@@ -220,7 +220,7 @@ def test_a_read_of_an_app_is_never_what_a_run_made():
 
 # --- the words of every judged ending ---------------------------------------------------------------------------------------
 
-JUDGED_PHRASES = ["routine_refused", "routine_nothing", "work_only_words", "work_file_missing", "work_children_open", "no_answer"]
+JUDGED_PHRASES = ["routine_refused", "routine_nothing", "work_only_words", "work_file_missing", "work_file_unreadable", "work_children_open", "no_answer"]
 
 
 @pytest.mark.parametrize("language", sorted(PHRASES))

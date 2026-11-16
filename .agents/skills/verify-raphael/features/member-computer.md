@@ -1,10 +1,139 @@
 # Member computer (Phases A and B)
 
+## A launch opens on its member's screen
+
+R-COMP-SEAT-02. Seen on the owner's shared computer: a member at seat 5 launched `xfce4-terminal --title=PR-progress ...`
+with `launch_app`; the driver answered with a pid, the member's own `list_windows` and `get_desktop_state` showed only its
+panel, `bring_to_front` by pid was refused, and the terminal stood on seat 1's screen. The window manager (xfwm4) opens a
+new window on the monitor the pointer is on, which is any member's. The core moved a new window only when its pid was the
+launch's (or the one other new window) and looked once: xfce4-terminal opens a later launch's window in the copy already
+running (another pid), and a window often maps after that one look.
+
+Now (`computer/seat_launch.py`, `VmTools._seat_launch`, `LocalVm.command_path` and `launch_marks`):
+- Each launch at a seat is tagged as a desktop launcher tags one (freedesktop startup notification): the driver gets
+  `launch_path = env DESKTOP_STARTUP_ID=<tag> RAPHAEL_LAUNCH=<tag> <the program's path> <the launch's other words>` and the
+  member's `additional_arguments` as they were. The program is the first word of `launch_path` (else `name`), tagged only
+  when the computer's shell finds it (`command -v`, an absolute path); any other (a desktop-entry name, a shell builtin such
+  as `cd`) and `urls` stay the driver's own and are untagged. The reply, and the driver's refusal, show the member's own
+  command, never the tag. A Chromium-family program gets `--force-renderer-accessibility`, which the driver adds only to a
+  program it runs itself.
+- The driver runs `launch_path` without a shell (cua-driver 0.37.0's source, `spawn_launch_command` in
+  `platform-linux/src/tools/impl_.rs`, tag `cua-driver-rs-v0.37.0`): it splits it on white space and runs the first word
+  with the rest and then `additional_arguments`, though its definition says "spawned directly via the system shell". It
+  then waits for a new window of the process it started (20 s while the process runs), else a new window whose class
+  matches the command (`window_matches_launch_key`: the class against the command after its last `/`), which is how a
+  window handed to a copy already running is found; when the process has ended and no such window appeared within 8 s
+  it refuses: `launch_handoff_timeout`, "handed off for D-Bus activation but no new window appeared within 8s". It reads
+  every window on the canvas (`list_windows_dispatch(None)`), never a seat's, so a window outside the seat never fails a
+  launch. The program goes by its absolute path so that this match reads what it reads untagged (`env ... xfce4-terminal
+  --title=a.b` would not match: its first word is `env`).
+- The first real-engine run (72 ok, 3 failed): the tag was sent as `env ... sh -c '<command>'`; the driver split the quoted
+  command apart, sh got `'/usr/bin/xfce4-terminal` (an unterminated quote) and exited, nothing opened, and both seat
+  checks got that refusal. The unit tests and the acceptance's offline world had answered every launch themselves; they
+  now run each launch through a model of the driver's own code (`test_seat_tools.driver_runs`, `driver_matches`,
+  `driver_refusal`, `driver_launched`), which refuses that form as the real driver did.
+- The windows are waited for up to `launch_window_wait_s` (10 s, under the unit native lock; it ends at the first tied
+  window). Each new window is judged once by one `docker exec` (`seat_launch.MARKS`: xprop of `_NET_STARTUP_ID` on the window
+  and on its `WM_CLIENT_LEADER`, and `RAPHAEL_LAUNCH` in `/proc/<pid>/environ`): the window's own startup id, else its
+  leader's, decides (another launch's id is never this launch's, whatever the process); without one, the launch's tag in its
+  process's environment or the launch's pid ties it. Tied windows are moved to the seat; the reply names them
+  (`This launch's window on your screen:` and the window rows). An untied window is left where it opened, and when it stands
+  outside the seat the reply says so and how to start a separate copy (`xfce4-terminal --disable-server`, `browser_open` for pages);
+  a launch with no window says so after the wait.
+- What this relies on: xfce4-terminal (1.0.4 `main.c`) reads `DESKTOP_STARTUP_ID` before `gtk_init`, removes it from its
+  environment and passes it on as `--startup-id` (to the copy already running, or to itself), and `terminal_app_open_window`
+  calls `gtk_window_set_startup_id`, which writes `_NET_STARTUP_ID` on the new window. Measured on the image by the
+  acceptance check below: each of the three windows carried its own launch's id on the window itself, three different ids,
+  and their one leader carried one too, so the window's own id has to decide.
+- `browser_window_missing` (a member's `browser_open` at seat 1, three times, in the same evening) is not this defect: a seat's
+  browser window is found by `raphael-seat-browser`'s per-launch title marker, never by the launch's pid or a lone new
+  window. The code is one for both of its waits (60 s for the window, 30 s to settle); `LocalVm.seat_browser` now logs the
+  launcher's own line, which tells them apart next time.
+
+Offline (`core/tests/computer/test_seat_tools.py`, launches through the driver model): `test_launch_moves_only_the_windows_tied_to_it`,
+`test_a_launch_handed_to_the_copy_already_running_brings_its_window_to_the_members_screen`,
+`test_a_launch_that_runs_its_own_copy_brings_its_window_to_the_members_screen` (the terminal wall's launch),
+`test_two_members_launching_at_once_each_get_their_own_window`,
+`test_a_window_that_maps_after_the_driver_answered_is_waited_for_and_brought`,
+`test_a_launch_that_opens_nothing_is_the_drivers_refusal_in_the_members_words`,
+`test_a_window_nothing_ties_to_the_launch_stays_where_it_opened_and_the_reply_says_so`,
+`test_a_launch_with_no_window_says_so_after_its_bounded_wait`, `test_a_launch_is_tagged_so_that_its_windows_can_be_told_from_every_other_launchs`,
+`test_the_driver_reads_a_tagged_launch_as_it_reads_the_launch_untagged`,
+`test_a_window_is_a_launchs_by_its_startup_id_first_then_its_process`, `test_the_marks_command_reads_the_window_its_leader_and_its_process`
+(runs the shipped script with an `xprop` double; needs a POSIX `sh`), `test_the_computer_answers_where_a_name_is_a_program_and_what_ties_windows_in_one_command`;
+`tests/evaluate/test_computer_acceptance.py::test_shared_acceptance_drives_real_tools_through_every_numbered_check` (a world
+whose driver runs and answers launches as the real one; `launch_failure="unrunnable"` sends that first form and fails the
+terminal wall and the launch check with the driver's refusal, `"untied"` ties nothing and fails both by place).
+
+Real computer: "shared launches land on their own screens" in `npm run verify -- --computer` (Docker already running; it
+never starts Docker). The pointer is put on screen 6 (nobody's); seats 1 and 2 launch `xfce4-terminal --title=lands-<member>-<hex>`
+together through `launch_app`, then seat 2 launches a second one; each launch's reply must name its window, the window must be
+wholly inside its seat in that member's `list_windows`, on its seat's screen on the canvas, absent from the other member's list
+and desktop, with no other new window on either seat. Its detail says whether the windows were opened by another process than
+their launch's (the copy), whether the second seat's second window is in the copy that holds the first seat's window, and on
+how many windows a startup id stood (on the window itself, on its leader). The terminal wall before it launches
+`xfce4-terminal` by name with `--disable-server` at each seat. From `core/`, Docker already running:
+`python -m raphael_core.evaluate.computer_acceptance --out <folder>` (about 15 minutes; it makes and removes its own
+`raphael-acceptance*` image and containers). With this change: 85 ok, 0 failed, 9 skipped (the previous-layer images this
+PC does not hold); the terminal wall passed, and "shared launches land" passed with the first seat's launch the copy (its
+own process) and both of the second seat's windows opened in it, each wholly inside its own screen, startup ids on 3 of 3
+windows (3 different); every check behind the terminal wall ran and passed.
+
+## Where the app's data lives
+
+R-COMP-PLACE-01, R-CLI-12, R-MEM-15. Every kind of data the app writes, where it goes, and what bounds it. `<F>` is the
+identity's folder name: `Raphael` for the release, `Raphael Dev` for a development build (app/src-tauri/src/identity.rs
+`RELEASE`/`DEVELOPMENT`; the shell sets `RAPHAEL_DATA_DIR` for a development build, `data_env`). On macOS `%APPDATA%\<F>`
+and `%LOCALAPPDATA%\<F>` are both `~/Library/Application Support/<F>`, so `paths.machine_dir(base)` is the data folder
+itself and nothing moves. Sizes are the ones read on the owner's PC when the layout changed (folder listings only).
+
+| Data | Where | Chosen in code | Size then | How it grows | What bounds it |
+| --- | --- | --- | --- | --- | --- |
+| Database `raphael.db` (+ WAL) | `%APPDATA%\<F>` | core `paths.data_dir`/`db_path`; shell `device_settings::data_dir` | 155 MB + 37 MB WAL (dev); release about 3 MB | turns, messages, steps, tool events, room messages, tasks | turns, messages and room messages: nothing (recall, search and history read them all); dictation history 30 days; `tool_audit` 2,000 rows |
+| Small settings (`device.json`, `integrations.json`, `connectors.json`, `messaging.json`, `schedule-awake.json`, `.window-state.json`) | `%APPDATA%\<F>` | shell `device_settings.rs`, `schedule_awake.rs`; core `IntegrationsService`, `MessagingStore` (data folder) | under 1 MB | rewritten | fixed shape |
+| `connectors-catalog.json` (a downloaded catalogue) | `%APPDATA%\<F>` | `connectors/service.py` `CATALOG_FILE` | 3.8 MB | replaced | one file |
+| Attachments | `%APPDATA%\<F>\attachments` | `services/attachment_store.py` (`root / "attachments"`) | 988 MB, 262 files | each attached file | nothing |
+| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal 30 days (R-MEM-15) |
+| Conversation folding | database (`conversation_summaries`, `conversation_context_summaries`, `room_thread_summaries`) | `memory/conversation.py`, `members/room_summary.py` | in the database | one row per conversation or thread | `SUMMARY_MAX_TOKENS`; goes with its conversation |
+| Vault, keys, sign-ins | Windows Credential Manager, macOS Keychain (never a file) | `brain/secrets.py` `CredentialKeyStore`, `CredentialVault` | none on disk | per secret | none needed |
+| Logs | `%LOCALAPPDATA%\<F>\logs` | shell `lib.rs` `log_plugin`, `identity.rs` | 3.5 MB | per line | 1 MB files, three kept |
+| Speech models | `%LOCALAPPDATA%\Raphael\models` (both builds) | `paths.models_dir`; `identity.rs` `data_env` | 956 MB | per model fetched | a fixed set; deleted from Settings |
+| Webview data | `%LOCALAPPDATA%\<F>\WebView2` | shell `data_layout.rs` `WEBVIEW_DIR` | 211 MB dev, 82 MB release | the webview's cache | WebView2's own |
+| Members' computer homes `vm-homes/<key>` and the team folder `vm-shared` | `%LOCALAPPDATA%\<F>` (were `%APPDATA%\<F>`; an earlier install moves them at a start, R-COMP-PLACE-01) | `computer/vm.py` `placed`, `target_for`, `relocate` | 3,776 MB (the shared computer's home 3,021 MB) and 3,507 MB (projects 2,055 MB, bot-office 1,312 MB) | members' files, browser profiles, checkpoints | nothing on this PC: the 90% disk notice, a reset, a member's deletion; inside a computer `/tmp` and job logs (`scratch_args`) |
+| The owner's desktop picture for the computers | `%APPDATA%\<F>\computer-wallpaper.jpg` | `vm.py` `OWN_WALLPAPER` | none (a `wallpaper-own-kept` folder of 0.2 MB that no code writes) | one file | 8 MB |
+| Pictures of members | `%LOCALAPPDATA%\<F>\avatars`, `avatar` | shell `avatar.rs`; `MembersService` | 7.2 MB | one per member | replaced |
+| Exported templates | `%LOCALAPPDATA%\<F>\template-exports` | `members/member_catalog.py` | 4 folders, under 1 MB | per export | nothing |
+| CLI workspaces | `~\.raphael\cli-workspaces\<member>\claude`, `<member>\<conversation>\codex` and `\gemini` (Gemini's private home inside) | `agent/cli/records.py` `workspace_root` | 140 MB, 38 member folders | a folder per conversation for Codex and Gemini | nothing |
+| Members' Codex homes (their own `CODEX_HOME`, with Codex's records) | `~\.raphael\codex-brains\<sha256 of the workspace>` | `agent/cli/drivers.py` `codex_home` | 1,945 MB, 192 homes | one per conversation workspace | nothing |
+| Claude Code's records of the members' runs | `~\.claude\projects\<folder named after the working folder>` | Claude Code; the names come from `workspace_root` and `process.PRIVATE_PREFIX` | 1,225 folders: 336 of member workspaces (1,000 sessions), 822 of the model listing's temporary folders (an empty `memory` each), the rest the owner's own; none older than 19 days | a folder per working folder, a file per session | R-CLI-12 |
+| The CLIs' own homes `~\.codex`, `~\.gemini` | the owner's | the CLIs | not measured | | not Raphael's |
+| Swap backups `backup-<time>` | `%APPDATA%\Raphael Dev` | the owner's swap script, outside the repository | 3 x 190 MB | per swap | three kept |
+| Look and judge output | `app\.look` in the checkout, never in a user's data | `app/scripts/look` | | per run | git-ignored |
+
+Layout. Roaming (`%APPDATA%\<F>`) keeps the database and the small settings. Everything large or belonging to this PC
+is in `%LOCALAPPDATA%\<F>`: the memory, the logs, the webview, the pictures, the exported templates and now the computer
+folders; the speech models stay in the release's local folder for both builds. Proposed next, each the owner's call:
+the attachments (988 MB) and the downloaded catalogue to `%LOCALAPPDATA%\<F>` (turns name an attachment by id, but the
+data floor and the shell know the folder, so both move together); the swap backups out of Roaming; and `~\.raphael` to
+`%LOCALAPPDATA%\<F>\cli`, one per build. Today the release and a development build run members of the same id in the
+same `~\.raphael\cli-workspaces\<id>` and Codex homes, so their native sessions share folders. Moving it is not free:
+Claude Code finds a session to `--resume` in the records folder named after the working folder (`drivers.py` passes
+`--resume`, `loop.py` the workspace as `cwd`), and a Codex home is named by a hash of the workspace's path
+(`codex_home`), so every conversation's native session would be lost once. The loop survives that (a session not found
+is forgotten and a fresh one starts with a bounded record of the turns, `loop.py` `missing_session`), but it costs each
+conversation its native context; it is left until the owner decides.
+
+Checks: `core/tests/computer/test_relocation.py`, `core/tests/test_paths.py`, `core/tests/agent/cli/test_records.py`,
+`core/tests/agent/test_cli_models.py`, `core/tests/members/test_bot_homes.py`. On a real engine, with Docker already
+running, from `core/`: `python -m raphael_core.evaluate.computer_acceptance --relocation-only` (a throwaway image, data
+folder and owner label; `ok folders move: ...` then the cleanup lines). No scene changes: look does not apply.
+
 ## Housekeeping: size, scratch, locale
 
 A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
 R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): the container's shape changed (the UTF-8
-locale), no file of the image did, so only the final `LABEL` step reruns on a PC that built v12. The owner's layer-12
+locale), no file of the image did, so only the final `LABEL` step should rerun on a PC that built v12 (on the owner's PC
+it did not: steps 12 to 21 ran again, see "A new image layer" below). The owner's layer-12
 computer is made again once, when idle; its workspace and sign-ins are kept; hand-installed packages and `/tmp` go.
 `vm.py`: `resources`, `sized`, `machine_size`, `fit_limits`, `run_args` (locale), `scratch_args`; `carry_runtime.py` (staging
 ownership).
@@ -25,6 +154,62 @@ cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m p
 
 Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
 Docker running is that check.
+
+## A new image layer: its cache source, the old images, the update line
+
+R-COMP-IMAGE-01, R-COMP-IMAGE-02, R-COMP-UPDATE-01. Measured on the owner's PC at the switch to layer 13: Docker Desktop
+started by the app (51 s), then the image built in 4 min 31 s, its package step (`[12/21]`, 186 s) and Chrome (37 s) run
+again although layer 13 changed only comments and the last `LABEL`; the steps before were CACHED. Inferred, not proved:
+the engine's build cache had dropped those records, and the build named no cache source. A restart pressed meanwhile
+answered `busy`, the panel said nothing, and the images of layers 9, 11 and 12 all stayed.
+
+What is true now (`vm.py`, `lifecycle.py`, `viewer.py`, `computer-state.ts`, `desktop-viewer.ts`):
+- The build (`build_args`) writes BuildKit's inline cache record into the image and names the newest earlier image of
+  ours as `--cache-from` (`cache_source`, from `owned_images`: tags of `raphael/cua-local-vm` that carry
+  `org.raphael.computer=1` and a lower layer). Relied on: Docker's documentation of the inline cache
+  (docs.docker.com/build/cache/backends/inline/: `BUILDKIT_INLINE_CACHE=1` instead of `--cache-to type=inline`, imported
+  with `--cache-from`) and of the `docker` driver (Docker Desktop's default builder), which exports the inline cache; and
+  that the daemon's BuildKit reads `--cache-from` from a local image before any registry (moby's local inline-cache
+  importer), which was not checked against this PC's Docker. Images built before carry no record: on the owner's PC the
+  first build to gain is layer 14 built from a layer 13 that this code built, so at the earliest the layer after next.
+- Once a computer is ready on the current image, `clean_soon` looks (first ready start of the core, then once a day per
+  engine) and `remove_old_images` removes the older tags of ours that no container references, under the build lock,
+  never forced. The acceptance's and the tests' injected runners never remove (`clean_images`). The acceptance's
+  previous-layer checks need those old images: once the app has removed them they are skipped.
+- A preparation that builds with an earlier image, or makes a computer of an earlier layer again, is marked `update`
+  (`LocalVm.updating`, `_progress`); `computer.viewer_status` passes it on and the Computer tab shows
+  `desktop.updateLine` in `.desktop-caption` under the bare screen (`data-desktop-update` on the panel). A restart,
+  update or repair pressed during any preparation (`preparing_now`) returns its state instead of `busy`; reset still
+  waits.
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_image_workflow.py tests/computer/test_lifecycle.py tests/computer/test_viewer.py tests/evaluate/test_computer_acceptance.py -q
+cd app; node node_modules/vitest/vitest.mjs run src/main/desktop-viewer.test.ts src/main/i18n/i18n.test.ts
+```
+
+The look scene of the update line (not yet run when it was added):
+
+```powershell
+npm run look -- desktop-updating desktop-building desktop-preparing computer-state-updating --theme both --width 1120,720,1920x1080
+```
+
+On a real engine, with Docker already running and the owner's say (it never starts Docker): `npm run verify -- --computer`
+runs `image update` after the previous-layer checks, with throwaway images of two files (`tiny_dockerfile`) in a repository
+of the run's own; the computer's own image is never built twice for it. Expected lines, in order:
+
+```text
+ok image update fixtures: Built layers 11, 12, 14 and an unlabelled tag in raphael-acceptance-<token>/cua-local-vm with the product's build command; a stopped container uses layer 11
+ok image update record: Layer 12, built by the product's command, carries BuildKit's inline cache record
+ok image update cache source: The product names raphael-acceptance-<token>/cua-local-vm:driver-0.37.0-v12 as the cache source, over the older, the newer and the unlabelled tags
+ok image update press during the build: A restart pressed while the engine built answered building with update; the panel said the same; the preparation ended ready
+ok image update cached steps: The unchanged step was CACHED and the changed one built; the log names the import from ... (the engine's own cache also held that step)
+ok image update old tags: Removed ...-v12; kept layer 11 (a stopped container uses it), the current, the newer and the unlabelled tags; every other image on the engine is as it was
+ok image update cleanup: Removed raphael-acceptance-<token>/cua-local-vm and its container
+```
+
+"as the build began" instead of "while the engine built", or "does not name the import", is still a pass and says what
+was seen. Not proved anywhere: that a cache source alone gives the unchanged heavy steps once the engine has lost its
+own cache (that would mean clearing the owner's build cache), and how much faster the next real layer builds.
 
 ## A member's files
 
@@ -50,7 +235,8 @@ id) or a task; what it read is the file's sha256. Paths are absolute or taken fr
 the team folder the guest opens each component without following a link. Searches skip `.git`, `.browser-profiles`,
 `.raphael-checkpoints` and `.raphael-jobs` and honour `.gitignore`; they search hidden files. Results pass the same login
 redaction as every computer tool. No card asks for any of these in the member's own computer; the CLI vendors' own Read,
-Write, Edit, Glob, Grep and shell stay off (R-PC-01): a CLI brain gets these through the `computer` MCP server.
+Write, Edit, Glob, Grep and shell stay off (they would act on the owner's PC outside Raphael's card, R-PC-02): a CLI brain
+gets these through the `computer` MCP server.
 
 Offline evidence (fake docker `Runtime`; the guest helper itself runs on a folder of the test; ripgrep's answers are scripted):
 `core/tests/computer/test_file_read.py`, `test_file_tools.py`, `test_file_search.py`, and `test_catalog_stays.py` (the
@@ -141,10 +327,12 @@ said into the overlay, opened the page on the owner's own PC with an empty reply
   is the answer at once. `ComputerWork.begin` revives a work item whose stop was only inferred from a cancelled first call.
   Offline: core/tests/computer/test_first_call.py (fakes for each transient kind, the bound, each real failure, the cut-short call
   and the owner's own stop).
-- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's goes to the member's turn
-  with the owner's PC out of reach; the owner's keeps the router and the shortcut; an unsure open request is asked once
-  (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py. The quick overlay's own look
-  scenes are unchanged (no UI change), so no look run.
+- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's skips the fast
+  router's shortcut (which can only use the owner's PC) and goes to the member's turn of the quick question, which holds both
+  computers: the model reads the owner's words and picks (R-PC-01); the owner's, and a request that names no one's computer
+  (the owner's PC is the default), keep the router and the shortcut, and nothing asks which computer; the shortcut says
+  `opened`. Offline: core/tests/agent/test_whose_computer.py.
+  The quick overlay's own look scenes are unchanged (no UI change), so no look run.
 
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole
 
@@ -473,7 +661,7 @@ Docker Desktop, Linux engine): 44 ok, 0 failed, 0 skipped in 650.718 s.
 
 Not proven: a remote (SSH) host; the native app's own panel around the stream; a
 member's real turn at the desktop.
-## Shared seats, stages B2 and C
+## Shared seats
 
 R-COMP-SEAT-01 replaces shared mode's old one-screen rotation with one six-screen
 container and durable first-use seats. Per-bot remains the default. target() does
@@ -499,7 +687,7 @@ shared containers rebuild while keeping home and team mounts. Deletion releases
 all hosts' seats without erasing shared storage and retains historic per-bot cleanup.
 Dataset and teaching are available in shared mode: datasets use .raphael-data/members/<core member key>/ with a common venv/install lock, and teaching records only the member's current seat through core input/tick, the member window projection and a clipped RFB capture. Private-page marks and PRIVATE titles withhold text and images. Historical homes are carried before the shared browser starts by the read-only Linux helper and the core's record, sign-ins first, as a background task the browser waits for only within a budget, with busy-source deferral, next-start retry and three attempts. Offline evidence: computer/test_shared_datasets.py, computer/test_shared_teaching.py and computer/test_carry.py; the shared --computer block checks namespaces, a seat-2 recording (with what a press waits for) and persistent-cookie/file/dataset carry on this run's own homes.
 
-Stage C2: SHARED_ARGUMENTS classifies every offered driver's top-level and nested
+SHARED_ARGUMENTS classifies every offered driver's top-level and nested
 property. Unreviewed parameters, target/from_zoom/capture_id/screenshot_out_file,
 caller desktop scope and desktop coordinate_frame are refused. Fresh same-session
 canvas rows check every window/pid and every page target's recorded native window,
@@ -513,7 +701,8 @@ placements back. Driver tree/element_token prose stays intact; page replies appe
 one JSON line. Pointer prose and move summary use seat coordinates; click canvas
 trailers are removed. Desktop pictures still use authenticated clipped screen-N
 RFB, 1280x900 RGB PNG. AX/screenshot nodes remain window-local. launch_app moves
-new windows matching reply pid/launcher_pid; only when no such window appeared and exactly one other new window appeared does it use that helper fallback. Multiple unmatched windows stay put. A lone concurrent peer window or same-process peer window remains a possible attribution error. windows[] is filtered/projected after movement.
+only the new windows tied to the launch by its startup id, its tag in a process's environment or its pid (R-COMP-SEAT-02,
+"A launch opens on its member's screen" above); the old single-unmatched-window fallback is gone. windows[] is filtered/projected after movement.
 
 The browser belongs to the computer. Layer 7 adds the existing-profile grant and
 installs raphael-seat-browser. The launcher uses now-minus-before plus a unique
@@ -561,7 +750,7 @@ native app panel behavior. The measured launcher panel height and result shapes,
 window mapping delay, profile attachment/lifetime and frame strip thresholds must
 be settled by real-container acceptance on the final tree.
 
-## Image screen plumbing, stage A
+## Image screen plumbing
 
 R-COMP-SCREEN-01 covers image `driver-0.37.0-v5` (layer 5). RAPHAEL_SCREENS
 selects 1..6 real VNC outputs in 1280x900 cells, with one panel per output.
@@ -630,7 +819,7 @@ now encoded in the opt-in `verify -- --computer` command described below):
   and keeps its workspace and browser profile.
 - Six idle screens with no viewer: about 0 % CPU, 425 MiB.
 
-Measured again on the round 3 tree (same way), because the mark's meaning changed:
+Measured again, the same way, after the mark's meaning changed:
 - 1 to 6 screens start with no helper retry and no repair restart (the one-pixel
   payload limit holds against the real server). The mark is written 10.5 s (four
   screens) and 15.2 s (six) after the container starts; the driver's socket at 6.5 s.
@@ -649,11 +838,11 @@ Measured again on the round 3 tree (same way), because the mark's meaning change
   removes its container and its folder.
 Not covered: the app's own window around that viewer page, a remote (SSH) host, a
 viewer that stays connected while its clipped server dies, and everything about
-members sharing one container (later stages).
-`wmctrl` is in the image for those stages: Chromium opens every new window beside
+members sharing one container (the seat sections below).
+`wmctrl` is in the image for the seat work: Chromium opens every new window beside
 its first and the driver has no tool that moves one.
 
-Round 2 offline evidence:
+Offline evidence for the screen helper and the view processes:
 `core/tests/computer/test_screens.py::test_clipped_server_runs_the_foreground_binary_with_real_parameter_names`,
 `core/tests/computer/test_screens.py::test_tcp_listener_parser_requires_the_loopback_port_and_listen_state`,
 `core/tests/computer/test_screens.py::test_leftover_cleanup_kills_exact_binary_and_waits_for_every_view_port`,
@@ -666,8 +855,8 @@ Round 2 offline evidence:
 `core/tests/computer/test_screens.py::test_image_installs_screen_views_and_preserves_the_single_token_port`,
 `core/tests/computer/test_screens.py::test_image_build_context_has_no_bytecode`.
 
-Round 3 (an independent review of the first commit proved six defects the offline
-tests and the container run had both missed; each has a test that was red first):
+Offline evidence for six defects that neither the first offline tests nor the container run had
+shown (each has a test that was red first):
 `core/tests/computer/test_lifecycle.py::test_previous_computer_maintenance_rebuilds_without_starting_old_image`,
 `core/tests/computer/test_lifecycle.py::test_previous_member_data_deletion_needs_no_new_image_or_start`,
 `core/tests/computer/test_remote_viewer.py::test_old_remote_computer_of_a_previous_layer_still_upgrades`,
@@ -705,9 +894,9 @@ Offline framing, authentication, parser and isolation tests live in
 `core/tests/evaluate/test_computer_acceptance.py`; no Docker or network is used by
 those tests. They establish contracts only. This command exercises the core relay;
 the native app's own panel, remote SSH host, a viewer retained across a clipped
-server death, and member seat/lease stages remain outside its acceptance scope.
+server death, and the member seat and lease paths remain outside its acceptance scope.
 
-The form check (round 5, per-bot and shared, through product calls and the common fill helper): a
+The form check (per-bot and shared, through product calls and the common fill helper): a
 main-document Name field that starts with a value, a same-origin frame holding a field of the same name,
 and a second loopback origin. It proves replacement, refusal of the frame's field, window and desktop
 pictures withheld after a private fill and after same-origin navigation, the another-origin read timing,
@@ -715,8 +904,8 @@ and a closed tab (a real ctrl+w with a spare tab open) retiring its mark so pict
 block also moves the marked window onto the peer's screen (the peer's desktop and window pictures come
 back empty), refuses a hand-over when one window list fails at the IsolatedDocker boundary (exact holder
 restored, `computer_busy`), and shows a free screen's leftover window gone before its new holder.
-Offline fakes do not prove driver or X11 behaviour: round 5 passed 1205 offline tests and thirteen
-rule-removal mutations and still could not seat anyone on a real computer (the desktop window spans every
+Offline fakes do not prove driver or X11 behaviour: the whole offline suite and thirteen
+rule-removal mutations passed and still could not seat anyone on a real computer (the desktop window spans every
 screen), knew only one of the driver's two closed-tab replies, and displaced the wrong member on a retry.
 Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
 `test_login_visibility.py::test_private_marks_follow_windows_on_the_same_shared_computer`,
@@ -730,7 +919,7 @@ Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
 `::test_failed_restore_cannot_give_leftover_windows_to_the_next_holder`,
 `test_seat_view.py::test_cleanup_window_lists_retain_unknown_classes_and_reject_incomplete_geometry`.
 
-The shared block's three stage D checks (all through product tools, on this run's own homes): two seats
+The shared block's three checks of datasets, recording and carry-over (all through product tools, on this run's own homes): two seats
 import a dataset of the same name and each answers and lists only its own; a recording started on seat 2
 holds no window of seat 1, a 1280x900 picture and no canvas-wide driver call, and says what an owner's
 press waits for; a per-bot computer of the run makes a persistent cookie (kept 40 s so the browser writes
@@ -746,7 +935,7 @@ said so: 113 test files were green. Regressions:
 `test_carry.py::test_large_home_keeps_only_its_files_in_place_and_an_unknown_folder_is_never_merged`,
 `::test_a_copy_that_keeps_failing_is_paid_for_three_times_and_then_left_in_place`,
 `::test_the_browser_waits_only_its_budget_and_a_slow_copy_keeps_the_old_homes_guard`.
-An independent review of stage D (0 blockers, 3 major, 2 minor) found what neither the tests nor the real run had: the helper's ownership pass walked `.browser-profiles` even when a member had made it a link; the budget ended the carry's task and with it the old home's guard while the copy's container went on; a recording that could not be written kept its event in memory and could end the viewer's monitor; a framebuffer update's rectangles were all held at once. All four are fixed with regressions (`test_carry.py::test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared`, `::test_a_hung_helper_is_killed_by_name_before_its_error_is_raised`, `members/test_teaching.py::test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event`, `test_rfb_view.py::test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end`); the fifth, a member swapping its own dataset folder for a link mid-call, is stated in R-COMP-SEAT-01 as outside what the folders are for. A second review of those fixes (0 blockers, 2 major, 4 minor) found that a failed or unfinished profile copy left `.browser-profiles/driver` root-owned, so on a host with real ownership the launcher could not make its profile (`::test_folders_made_on_the_way_are_handed_over_before_a_copy_that_may_fail`); that a kill whose answer was not awaited, or a helper left by a core that died, still released a home being read (`::test_a_closing_core_leaves_its_copy_to_finish_but_sees_a_kill_through`, `::test_a_helper_an_earlier_core_left_running_is_waited_for_and_then_asked_once_more`); that the write at a recording's end could still raise into the viewer's close (`members/test_teaching.py::test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer`); and that the carry's lock was held for the whole wait (`::test_every_browser_of_a_computer_waits_until_the_same_moment_and_another_computer_does_not_queue`). A third, narrow check found one more: a kill that failed was taken for an ended helper (`::test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to_its_old_computer`). Stated in R-COMP-SEAT-01, not changed: the helper's staging names can be swapped by a member, inside a throwaway container whose one writable mount is the members' own workspace; POSIX rename puts the carried profile in place of a folder the launcher has only just made. The same hand-over had two failures only this machine's whole run showed, in files the author could not run (loopback sockets), and one only the contract showed (a rule naming a renamed test).
+Reading the shared block against the paths it touches found what neither the tests nor the real run had: the helper's ownership pass walked `.browser-profiles` even when a member had made it a link; the budget ended the carry's task and with it the old home's guard while the copy's container went on; a recording that could not be written kept its event in memory and could end the viewer's monitor; a framebuffer update's rectangles were all held at once. All four are fixed with regressions (`test_carry.py::test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared`, `::test_a_hung_helper_is_killed_by_name_before_its_error_is_raised`, `members/test_teaching.py::test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event`, `test_rfb_view.py::test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end`); the fifth, a member swapping its own dataset folder for a link mid-call, is stated in R-COMP-SEAT-01 as outside what the folders are for. Reading those fixes again found that a failed or unfinished profile copy left `.browser-profiles/driver` root-owned, so on a host with real ownership the launcher could not make its profile (`::test_folders_made_on_the_way_are_handed_over_before_a_copy_that_may_fail`); that a kill whose answer was not awaited, or a helper left by a core that died, still released a home being read (`::test_a_closing_core_leaves_its_copy_to_finish_but_sees_a_kill_through`, `::test_a_helper_an_earlier_core_left_running_is_waited_for_and_then_asked_once_more`); that the write at a recording's end could still raise into the viewer's close (`members/test_teaching.py::test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer`); and that the carry's lock was held for the whole wait (`::test_every_browser_of_a_computer_waits_until_the_same_moment_and_another_computer_does_not_queue`). A third, narrow read found one more: a kill that failed was taken for an ended helper (`::test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to_its_old_computer`). Stated in R-COMP-SEAT-01, not changed: the helper's staging names can be swapped by a member, inside a throwaway container whose one writable mount is the members' own workspace; POSIX rename puts the carried profile in place of a folder the launcher has only just made. The same hand-over had two failures only this machine's whole run showed, in files the author could not run (loopback sockets), and one only the contract showed (a rule naming a renamed test).
 Not covered by the run: a profile after weeks of use (its size and copy time), a remote host's named
 volumes, the app's own viewer during a shared recording.
 
@@ -1410,28 +1599,76 @@ desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.p
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
 native shell, live model quality and judge remain separately unverified.
 
-## The owner's PC is for a quick question alone (R-PC-01)
+## The owner's screen is a quick question's; hidden commands are every turn's (R-PC-01, R-PC-02, R-PC-06)
 
-The owner's PC is controlled only from a quick question (Alt+Space), never from an ordinary conversation.
-One switch decides it, `take_snapshot(owner_pc=...)` (`ask.quick`, never nested): without it a turn is offered, finds and
-refreshes into none of `mcp:local/local_exec`, `mcp:local/local_job`, the harness `computer` tool (the guarded run on the
-owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken
-conversation, Raphael's or a member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event
-runs, on API and CLI brains, in every permission mode. The fast router (Jev) is asked about a quick question alone, so a
-conversation never routes to a command or a desktop run. The prompt of such a turn carries no owner's-PC words
-(`persona._OWNER_PC_RULES` and the owner-context output-folder sentence are added to a quick question only); it says
-that anything needing a computer is done on the member's own computer and, when that is not available, to say so.
-`LocalTools.call` refuses a call whose context is not a quick question (`presence_required`, even under 全部允許), and
-the harness `computer`, command and CLI native-command paths repeat the check (`AgentService._owner_pc`). A quick
-question is unchanged, including that it can show no card, so a local command runs there only where nothing waits for a
-yes. The consent card, the Settings mode and the background approvals below are kept in the code, with no door
-until the owner decides whether a quick question asks at the overlay.
+What shows on the owner's screen is driven only from a quick question (Alt+Space). One switch decides it,
+`take_snapshot(owner_screen=...)` (`permissions.owner_screen`: a quick question asked at this computer, never nested):
+without it a turn is offered and finds none of the harness `computer` tool (the guarded run on the owner's desktop) or the
+fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken conversation, Raphael's or a
+member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event runs, on API and CLI brains, in
+every permission mode. The fast router (Jev) is asked about a quick question alone. What such a turn shows on a screen
+(a website, YouTube, a program, clicks, typing) it shows on the member's own computer; with none it says so.
 
-Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question, the member's
-own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
-members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
+The local commands (`mcp:local/local_exec`, `mcp:local/local_job`, its background jobs, and a CLI brain's own command)
+run hidden on the owner's PC from every turn and task again, through the approval machinery they always had: the
+first-consent card and the chat approvals without a timer in a private conversation at this computer, the 30-minute
+background approvals of a task or a routine, in the stored mode (ask, always, never; 全部允許 runs without a card).
+Settings has no control for the mode. Where no card can be shown (a phone, an exchange, a quick question) a command runs
+only under 全部允許; a room's speaking turn has its speaking tools alone, as before. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
+seen is done on the member's own computer (`agent/capabilities.py`, `persona._SHARED_CONTRACT`).
 
-## Owner-PC commands (now a quick question's alone, see above)
+The safety net (R-PC-06): outside a quick question a command whose purpose is to show something on the owner's screen
+(Start-Process, saps, start, cmd /c start, explorer, Invoke-Item, ii, rundll32 url.dll, Process.Start, a URL, a shortcut
+or a document typed as the command, a windowed program, `open` on a Mac) is refused in every mode without a card, and the
+member is told to open it on its own computer (`computer/on_screen.py`, checked in `LocalTools.tier_for_call` and `call`,
+`AgentService._cli_permission` and the background CLI loop). It stops a model that picked the wrong computer; it is no
+defence against someone set on getting round it.
+
+A quick question keeps the owner's PC as its default for everything, commands and what is seen alike, and also holds the
+member's own computer for a request whose words name it (`persona._OWNER_PC_RULES` says which is the default and how the
+owner names the other; the desktop `computer` stays beside the member's computer tools). The model picks; no word matched in
+code takes either computer away. A quick question can show no card, so a local command runs there only under 全部允許.
+
+Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question beside the
+member's own computer), computer/test_local_commands.py (contexts, the table of commands that show something and of those
+that do not, every mode), agent/test_local_commands.py and agent/test_local_command_flow.py (cards in a conversation, the
+CLI's own command), background/test_local_commands.py (30-minute approvals, a task's refused opener),
+members/test_local_commands.py, members/test_cli_brains.py, members/test_connection_floor.py, agent/test_computer_choice.py
+and agent/test_whose_computer.py. No look scene changes: nothing rendered changed (the cards are the existing ones).
+
+## The owner's files: read everywhere, write in the owner's folders (R-PC-04, R-PC-05)
+
+Members read every file of the owner's computer from every turn, task and source, and write only in folders the owner chose; its screen stays a quick question's. Modelled on Claude Code (its file tools read the whole computer; Write and Edit only the
+working and added directories). `computer/owner_files.py` adds five pinned plugin tools under the `owner_files` server,
+offered by `LocalTools.offered_for` beside the local commands but not keyed `mcp:local/`, so `take_snapshot` never drops them:
+every turn and task, every source and brain (API, and CLI through its MCP list) and every permission mode has them.
+
+- Reads (T0, kind read, no card): `read_file` (Claude Code's Read through `file_tools.Files` and the guest helper
+  `files_guest.handle` run on this computer: numbered lines, pictures as images, PDFs by pages), `glob` and `grep` (Python
+  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound).
+- Kept from every read and write, through links too (`owner_files.kept`): SSH, GPG and cloud keys, the keychain and
+  Windows' credential stores, browsers' profiles, password managers, `.env` files (not `.env.example`) and private keys.
+  Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
+  start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
+  Privacy & Security › Files and Folders or Full Disk Access.
+- Writes (T2, kind write): `write_file`, `edit_file`, only inside `owner_output_folder` and `owner_write_folders`
+  (Settings › General, 成員可以寫入的資料夾: picked, never typed, removed one by one; owner-only, never a management tool).
+  Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write that cannot happen.
+- The owner context names the output folder and the write folders for every turn (`brain/owner.py`).
+
+Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
+places and links, glob and grep, writes inside and outside, an unapproved write), brain/test_owner.py, and
+settings-view.test.ts. Look: `owner-write-folders` (adds with the picker, removes the first) beside the output folder
+scenes:
+
+```powershell
+npm run look -- owner-write-folders owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a
+real Windows disk (CI runs the offline suite there).
+
+## Owner-PC commands (hidden, every turn's, with the card; see above)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
@@ -1472,7 +1709,7 @@ Acceptance still requires the owner's real CPU question to a member on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
 tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
-journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
+journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03/06 and R-AG-13.
 
 The optional Docker desktop defaults to one shared computer on this PC (a seat per member, section
 "Shared computer seats" above; 6 GiB and four CPUs) and, on a remote host or when `computer_vm_mode=per-bot`
@@ -1817,8 +2054,9 @@ and full-size changed controls. Extend scripts/look rather than adding a harness
 Focused tests: messaging/test_work_channels.py, computer/test_checkpoints.py,
 computer/test_checkpoint_revision.py, computer/test_login_visibility.py,
 computer/test_login_vault.py, agent/test_private_login.py, brain/test_db.py,
-work-channels.test.ts and scripts/look/audit.test.mjs. The review follow-up runs
-computer, messaging, agent and background in full once, then targets any fixes.
+work-channels.test.ts and scripts/look/audit.test.mjs. After a change here run the
+computer, messaging, agent and background folders in full once (each through the place-keeper on a
+shared PC), then only the files a later fix touches.
 Report explicitly if that full run preceded the last change. Frontend verify uses
 two Vitest workers.
 

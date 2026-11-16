@@ -98,6 +98,9 @@ impl Paster for MacPaster {
 
 /// One paste, on the current thread.
 fn paste(text: &str, at_stop: Option<&Target>) -> PasteDelivery {
+    // The key is found first: reading the layout may wait for the main thread, and nothing may stand between the
+    // focus check and the chord, or ⌘V could reach a window the person switched to meanwhile.
+    let v = keys::key_for('v').unwrap_or(keys::code::ANSI_V);
     let session =
         Session::begin().and_then(|mut session| session.publish_text(text).map(|()| session));
     // Decided once the text is on the pasteboard: as late as possible before the chord.
@@ -117,7 +120,6 @@ fn paste(text: &str, at_stop: Option<&Target>) -> PasteDelivery {
             let program = at_stop.map_or("", |target| target.process_name.as_str());
             log::info!("paste: ⌘V into {program}");
             let receipt = PasteReceipt::new();
-            let v = keys::key_for('v').unwrap_or(keys::code::ANSI_V);
             let chord_sent = keys::chord(&[keys::Modifier::Command], v, || {
                 thread::sleep(CHORD_HOLD);
             });
@@ -142,22 +144,27 @@ fn paste(text: &str, at_stop: Option<&Target>) -> PasteDelivery {
 /// longer has the focus. The posted chord carries ⌘ alone, so the Right Option still held for the
 /// tidy key does not reach the app as ⌥⌘C.
 fn copy(at_key: Option<&Target>) -> Selection {
+    // Whatever can wait comes before the last focus check, as in `paste`: the layout's reading (the main thread) and the
+    // snapshot of the pasteboard (an app that offers its data lazily is asked for it then), so that ⌘C goes to the
+    // window just checked and not to one the person switched to meanwhile.
+    let c = keys::key_for('c').unwrap_or(keys::code::ANSI_C);
+    let session = Session::begin();
+    let count = || pasteboard::current_change_count() as u32;
+    let before = count();
     if let Decision::CopyOnly(reason) = decide(at_key, foreground_target().as_ref(), false) {
+        // Nothing was written: the person's pasteboard is as it was.
         log::info!("copy: not copying ({reason:?})");
         return Selection::Refused(reason);
     }
-    let session = match Session::begin() {
+    let session = match session {
         Ok(session) => session,
         Err(e) => {
             log::error!("copy: could not use the clipboard: {e}");
             return Selection::Failed;
         }
     };
-    let count = || pasteboard::current_change_count() as u32;
-    let before = count();
     let program = at_key.map_or("", |target| target.process_name.as_str());
     log::info!("copy: ⌘C in {program}");
-    let c = keys::key_for('c').unwrap_or(keys::code::ANSI_C);
     if !keys::chord(&[keys::Modifier::Command], c, || thread::sleep(CHORD_HOLD)) {
         return Selection::Failed;
     }
@@ -223,4 +230,40 @@ pub(crate) fn describe_process(pid: u32) -> (String, bool) {
         .map(|app| app.id)
         .unwrap_or_default();
     (id, false)
+}
+
+#[cfg(test)]
+mod tests {
+    /// Reading the layout may wait for the main thread (keys.rs `on_main`) and the pasteboard's snapshot for an app that
+    /// offers its data lazily, so both come before the last focus check: nothing that can wait stands between that check
+    /// and the chord.
+    #[test]
+    fn what_can_wait_comes_before_the_last_focus_check() {
+        let source = include_str!("macos.rs");
+        for (function, key) in [
+            ("fn paste(", "keys::key_for('v')"),
+            ("fn copy(", "keys::key_for('c')"),
+        ] {
+            let body = &source[source.find(function).unwrap()..];
+            let body = &body[..body.find("\n}\n").unwrap()];
+            let at = |needle: &str| {
+                body.find(needle)
+                    .unwrap_or_else(|| panic!("{function}: {needle}"))
+            };
+            let decided = at("decide(");
+            assert!(
+                at(key) < decided,
+                "{function}: the key is found before the focus check"
+            );
+            assert!(
+                at("Session::begin()") < decided,
+                "{function}: the pasteboard is taken before the focus check"
+            );
+            assert_eq!(
+                body.matches("keys::key_for(").count(),
+                1,
+                "{function}: one reading of the layout"
+            );
+        }
+    }
 }

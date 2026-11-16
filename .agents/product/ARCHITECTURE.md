@@ -71,7 +71,7 @@ profile. A title-only data page carries a unique launch marker. The launcher sel
 now-minus-before windows and matches both marker and browser main pid, then moves,
 maximizes and waits for settled seat geometry. Each seat attaches its own window
 using existing_profile, binds and navigates in its own session. Per-bot computers
-retain driver-owned browser launch. launch_app, under the unit lock, moves new foreign-screen windows matching reply pid/launcher_pid. Only when none match and exactly one other new window appeared is that window moved as a helper fallback; otherwise unmatched windows stay. A lone concurrent peer window can still be misattributed, and matching pids do not distinguish simultaneous same-process peer windows. windows[] is filtered and projected after movement. Owner takeover checks its
+retain driver-owned browser launch. launch_app, under the unit lock, tags the launch (`env` sets DESKTOP_STARTUP_ID and RAPHAEL_LAUNCH in front of the program's path; the driver runs launch_path split on white space, without a shell; `seat_launch.py`), waits up to 10 s for its windows and moves to the seat only those tied to it by their startup id, else by the tag in their process's environment or the launch's pid (R-COMP-SEAT-02); every other window stays. windows[] is filtered and projected after movement. Owner takeover checks its
 own non-command activity and the unit native lock before and after a status await;
 other seats' background page/read/command activity is allowed.
 
@@ -448,13 +448,17 @@ pagination completeness, native persistence or live model choices.
 
 ## Owner-PC command boundary
 
-The owner's PC is in reach of a quick question alone (R-PC-01). The one switch is
-`take_snapshot(owner_pc=...)`, set from `AgentService._owner_pc(ask)` (`ask.quick`, not nested): without it no
-snapshot lists, finds or refreshes into `local__local_exec`, `local__local_job`, the harness `computer` tool or a fixed
-command, so API turns, the CLI MCP server, rooms, exchanges, phone messages, tasks and routines have none in any permission
-mode. `LocalTools.call` refuses every other context, the fast router is asked for a quick question alone, and the prompt of
-every other turn carries no owner's-PC words (`persona._OWNER_PC_RULES`). A conversation's work that needs a computer
-is done on the member's own computer. What follows describes the adapter as built.
+The owner's screen is in reach of a quick question alone (R-PC-01). The one switch is
+`take_snapshot(owner_screen=...)`, set from `AgentService._owner_screen(ask)` (`permissions.owner_screen`: a quick question
+asked at this computer, not nested): without it no snapshot lists or finds the harness `computer` tool or a fixed command,
+so API turns, the CLI MCP server, rooms, exchanges, phone messages, tasks and routines have none in any permission mode, and
+the fast router is asked for a quick question alone. What those turns show on a screen they show on the member's own
+computer. `local__local_exec` and `local__local_job` run hidden on the owner's PC and are listed for every turn and task,
+with the card where one can be shown (R-PC-02); `LocalTools.call` refuses, outside a quick question and in every mode, a
+command that would show something on the owner's screen (`computer/on_screen.py`, R-PC-06), as `_cli_permission` and the
+background CLI loop do for a CLI's own command. A quick question's prompt adds `persona._OWNER_PC_RULES`: the owner's PC is
+its default for everything, and the member's own computer, offered beside it, is used when the owner's words name it; the
+model picks. What follows describes the adapter as built.
 
 `computer/local_tools.py` wraps the existing `VmTools` hub with two pinned tools:
 `local__local_exec` and `local__local_job`. Production API snapshots, authenticated

@@ -9,7 +9,7 @@
 import "./slime.css";
 import { t } from "./i18n";
 import { motionStrips } from "./slime-cels";
-import { celsOf, loopState, LOOPS, sample, easing } from "./slime-motion";
+import { celsOf, eyePath, loopState, LOOPS, sample, easing } from "./slime-motion";
 import { crownedId } from "./crown";
 import { currentSlimeId } from "./slime-ids";
 
@@ -260,9 +260,6 @@ const HATS: Record<Hat, string> = {
     fill("M 25 30 Q 47 26 67 31 Q 71 35 67 39 Q 47 35 25 39 Q 21 35 25 30 Z M 84 27 A 6 6 0 1 1 72 27 A 6 6 0 1 1 84 27 Z", "#FFF5E7"),
 };
 
-// The eyes at rest, one path; slime.css bends it into every other state.
-const EYES = "M 42.5 44.5 Q 43 48 43.5 51.5 M 55.5 44.5 Q 56 48 56.5 51.5";
-
 // The eyes carry the character at 40 px, so they are drawn larger than the sheets, about their own middle; a hat clears them.
 const FACE_SCALE = "translate(49.5 48) scale(1.25) translate(-49.5 -48)";
 
@@ -271,7 +268,7 @@ const drawings = new Map<string, { back: string; worn: string }>();
 const drawingIds = new Map<string, string>();
 
 function strips(state: SlimeState, drawing: {back: string; worn: string}): [string,string] {
-  return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,drawing.back,drawing.worn) : ['',''];
+  return loopState(state) ? motionStrips(state,BODY,eyePath(state),FACE_SCALE,drawing.back,drawing.worn) : ['',''];
 }
 
 /**
@@ -300,7 +297,7 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   const aside = member !== undefined && Math.abs(member) % 2 === 1 ? 3 : -3;
   const body = `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
-    `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-follow"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g></g>` +
+    `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-follow"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${eyePath(state)}"/></g></g></g></g></g>` +
     `</g></g></g></g>`;
   // A picture has no clock, no member to hand over to and no motion variables; `data-slime-still` names whose it is for patchHTML.
   if (!moving) return `<span class="slime-surface" data-slime-still="${member ?? ''}" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:still:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color}"><svg class="slime" viewBox="4 11 92 92" data-state="${state}" aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-aside:${aside}px">${body}</svg></span>`;
@@ -345,7 +342,7 @@ interface SlimeClock {
   surface: HTMLElement; drawingKey: string; drawing?: { back: string; worn: string }; pending: boolean;
   /** The strips being put in, a slice a frame; a newer state or a redraw drops them. */
   mounting?: Mounting;
-  settle: SVGElement; look: SVGElement; motion: SVGElement; gaze: SVGElement;
+  settle: SVGElement; look: SVGElement; motion: SVGElement; gaze: SVGElement; eyes: SVGElement;
   marks: { part: SVGElement; bridge: SVGElement; give: number }[];
 }
 const clocks = new WeakMap<SVGElement, SlimeClock>();
@@ -365,6 +362,7 @@ function clockOf(svg: SVGElement): SlimeClock {
     surface, drawingKey, drawing: drawings.get(drawingKey), pending: false,
     settle: svg.querySelector<SVGElement>('.slime-settle')!, look: svg.querySelector<SVGElement>('.slime-look')!,
     motion: svg.querySelector<SVGElement>('.slime-motion')!, gaze: svg.querySelector<SVGElement>('.slime-gaze')!,
+    eyes: svg.querySelector<SVGElement>('.slime-eyes')!,
     marks: [...svg.querySelectorAll<SVGElement>('.slime-mark')].map(part => ({ part,
       bridge: part.closest<SVGElement>('.slime-correction')!, give: parseFloat(part.style.getPropertyValue('--mark-give')) || 1 })) };
   clocks.set(svg, clock);
@@ -466,6 +464,8 @@ function enter(svg: SVGElement, state: SlimeState, visible = true): void {
   if (clock.state !== state) {
     svg.dataset.state = svg.dataset.moved = state;
     surface.dataset.state = state;
+    // The new state's eyes are the drawing's own as well: WebKit has no CSS `d`, so it changes them here, at once.
+    clock.eyes.setAttribute('d', eyePath(state));
     clock.state = state;
   }
   for (const strip of surface.querySelectorAll(':scope > .slime-loop')) strip.remove();

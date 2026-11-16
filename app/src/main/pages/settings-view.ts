@@ -28,7 +28,7 @@ import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelDisplayName, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, splitEffort } from "../model-picker";
+import { type ModelPickerLook, modelDisplayName, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, priceHTML, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -227,8 +227,11 @@ export function priceTexts(v: SettingsView): Record<string, string> {
   };
 }
 
+/** What a price element holds: a price in parts that never break inside; the note on where the prices come from is a sentence. */
+export const priceMarkup = (k: string, text: string): string => (k === "note" ? esc(text) : priceHTML(text));
+
 const priceSpan = (v: SettingsView, k: string, cls = ""): string =>
-  `<span${cls ? ` class="${cls}"` : ""} data-price="${k}">${esc(priceTexts(v)[k] ?? "")}</span>`;
+  `<span${cls ? ` class="${cls}"` : ""} data-price="${k}">${priceMarkup(k, priceTexts(v)[k] ?? "")}</span>`;
 
 // ---------- the model rows ----------
 // A member's model is chosen in its own conversation, so nothing here says what any member answers on: the rows are
@@ -305,7 +308,7 @@ export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string 
     (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
 }
 const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[number]): string =>
-  row(label(), role === "image" || role === "video" ? `<span data-media-price="${role}">${esc(mediaRowPrice(v, role))}</span>` : priceSpan(v, k, "price num"),
+  row(label(), role === "image" || role === "video" ? `<span data-media-price="${role}">${priceHTML(mediaRowPrice(v, role))}</span>` : priceSpan(v, k, "price num"),
     modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
 
 // ---------- the OpenRouter rows ----------
@@ -425,6 +428,23 @@ function outputFolderRow(v: SettingsView): string {
 }
 
 /**
+ * The folders members may write to on this computer, beside the output folder: reading reaches the whole computer
+ * (R-PC-04), writing only these (R-PC-05). Each is a row of its own with its whole path; removing one waits in its ⋯
+ * and asks once (R-UI-56). Folders are added with the native picker, never typed.
+ */
+function writeFolderRows(v: SettingsView): string[] {
+  const folders = v.brain?.owner_write_folders ?? [], off = v.brain === null ? " disabled" : "";
+  const head = row(t("writeFolders.title"), "",
+    btn(ico("plus") + esc(t("writeFolders.add")), "sm", ` data-act="write-folder-add"${off}`), { attrs: ' data-row="write-folders"' });
+  return [head, ...folders.map((folder, index) => {
+    const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+    return row(`<span class="output-path">${esc(folder)}</span>`, "",
+      iconBtn("more", t("members.more", { p0: name }), ` data-act="write-folder-menu" data-folder-index="${index}" aria-haspopup="menu" aria-expanded="false"${off}`),
+      { cls: "write-folder", attrs: ' data-row="write-folder"' });
+  })];
+}
+
+/**
  * 一般, in a fixed order of sections: who you are, how the window looks, what Raphael works with (the timezone of
  * routines and the folder of what is delivered), and the guide. What it remembers is the 記憶 tab.
  */
@@ -439,6 +459,7 @@ function generalHTML(v: SettingsView): string {
     section(t("agent.title"), [
       row(t("zone.title"), t("zone.help"), sel([{value:v.brain?.routine_timezone ?? "",label:v.brain?.routine_timezone ? zoneLabel(v.brain.routine_timezone) : `${t("zone.auto")} · ${zoneLabel(detectedTimezone())}`}], v.brain?.routine_timezone ?? "", t("zone.title"), ' data-k="routine-timezone"' + (v.brain === null ? ' disabled' : ''))),
       outputFolderRow(v),
+      ...writeFolderRows(v),
     ])
     // Telegram, Slack and Discord moved to each member's panel, Raphael's too, and are set up in the conversation
     // Nothing of them is set here.

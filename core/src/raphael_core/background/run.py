@@ -65,7 +65,7 @@ from ..failures import Failure
 from ..agent.gate import ToolGate
 from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
-from ..agent.plugins import PluginResult
+from ..agent.plugins import SAID_WHOLE, PluginResult
 from ..agent.progress_updates import ProgressUpdates
 from ..worker.guards import argument_limit
 from ..brain.prompt_cache import cache_options
@@ -1057,7 +1057,7 @@ class TaskRun:
             "kind": result.kind,
             "content": text,
             "truncated": cut or result.truncated,
-            **({"instruction": result.text} if result.kind == "bad_arguments" and result.text else {}),
+            **({"instruction": result.text} if result.kind in SAID_WHOLE and result.text else {}),
             **({"blocks": result.blocks} if result.blocks else {}),
             **({"billing": result.billing} if result.billing else {}),
         }

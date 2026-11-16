@@ -1,5 +1,6 @@
 """Fixed UI translations of lines the core writes into a conversation: the quiet line of a CLI's file change
-(agent/cli/loop.py) and the lines of a question card written for a chat (messaging/words.py).
+(agent/cli/loop.py), the lines of a question card written for a chat and the words that stand in a chat for a link
+its phone cannot open (messaging/words.py).
 
 Each English source maps to its twelve translations, in the order of `ui_words.NEW_LANGUAGES`; the catalogue test in
 tests/agent/test_ui_languages.py holds them to the same format fields as their source.
@@ -8,6 +9,20 @@ tests/agent/test_ui_languages.py holds them to the same format fields as their s
 _ORDER = ("zh-CN", "ko", "es", "fr", "de", "pt-BR", "it", "ru", "vi", "th", "id", "tr")
 
 _ROWS = {
+    "{name} (couldn't be sent here; open it on the computer)": (
+        "{name}（无法发送到这里，请在电脑上打开）", "{name}(여기로 보낼 수 없습니다. 컴퓨터에서 여세요)",
+        "{name} (no se pudo enviar aquí; ábrelo en el ordenador)", "{name} (impossible de l'envoyer ici ; ouvrez-le sur l'ordinateur)",
+        "{name} (konnte nicht hierher gesendet werden; öffnen Sie es am Computer)", "{name} (não foi possível enviar aqui; abra no computador)",
+        "{name} (non è stato possibile inviarlo qui; aprilo sul computer)", "{name} (не удалось отправить сюда; откройте на компьютере)",
+        "{name} (không thể gửi tới đây; hãy mở trên máy tính)", "{name} (ส่งมาที่นี่ไม่ได้ เปิดได้ที่คอมพิวเตอร์)",
+        "{name} (tidak bisa dikirim ke sini; buka di komputer)", "{name} (buraya gönderilemedi; bilgisayarda açın)"),
+    "(a link that opens only on the computer)": (
+        "（这个链接只能在电脑上打开）", "(컴퓨터에서만 열리는 링크입니다)", "(un enlace que solo se abre en el ordenador)",
+        "(un lien qui ne s'ouvre que sur l'ordinateur)", "(ein Link, der sich nur am Computer öffnen lässt)",
+        "(um link que só abre no computador)", "(un link che si apre solo sul computer)",
+        "(ссылка, которая открывается только на компьютере)", "(liên kết chỉ mở được trên máy tính)",
+        "(ลิงก์นี้เปิดได้เฉพาะในคอมพิวเตอร์)", "(tautan yang hanya bisa dibuka di komputer)",
+        "(yalnızca bilgisayarda açılan bir bağlantı)"),
     "CLI reported a file change": (
         "CLI 报告文件已更改", "CLI가 파일 변경을 보고했습니다", "La CLI informó de un cambio en un archivo",
         "La CLI a signalé une modification de fichier", "Die CLI hat eine Dateiänderung gemeldet",

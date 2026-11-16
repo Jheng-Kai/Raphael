@@ -394,6 +394,7 @@ OWNER_ONLY_SETTINGS = {
     **dict.fromkeys(("raphael_tools", "raphael_notify"),
                    "First Bot preferences use member_update validation; tool access retains exact-action approval instead of a generic setting write."),
     "memory_threshold_tokens_cap": "Conversation compression policy is chosen by the owner.",
+    "owner_write_folders": "Where members may write on the owner's computer is the owner's choice, never a member's (R-PC-05).",
     "memory_max_unused_days": "Automatic forgetting policy is chosen by the owner.",
     "routine_timezone": "The owner's routine time zone preference is never model-editable.",
     "routine_detected_timezone": "Internal detected device time zone, never model-editable.",

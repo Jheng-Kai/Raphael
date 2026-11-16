@@ -19,7 +19,7 @@ export function withStandingChecks(scenes) {
     ...(original.name === "member-conversation-sections" ? [check("details-alignment")] : []),
     ...(["details", "raphael-details", "details-routines"].includes(original.name) ? [check("details-sheet")] : []),
     ...(["profile", "dictation", "appearance", "skins", "models", "usage"].includes(original.name) ? [check("settings-concise")] : []),
-    ...(original.name === "models" ? [check("models-responsive")] : []),
+    ...(original.name === "models" ? [check("models-responsive"), check("price-parts")] : []),
     ...(original.name === "dictation-overview" ? [check("compact-action")] : []),
     ...(["chat", "details", "details-closed", "member-text", "raphael-details"].includes(original.name) ? [check("conversation-header"), check("details-alignment")] : []),
   ]}));

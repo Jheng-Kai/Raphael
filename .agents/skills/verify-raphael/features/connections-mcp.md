@@ -6,6 +6,21 @@ Core behaviour only (R-TOOL-01, R-TOOL-02; `tests/background/test_argument_shape
 connected app's tool with a required top-level argument missing is not sent: the model is told the shape that fits (kind
 `bad_arguments`), as is a server's own refusal of arguments. A connected app's call that has failed twice with the same error is not made a third time: the model is told what it said, the shape and to try another way, and the run goes on (only its step budget ends it). No scene draws either; the refusal is a tool result inside the run.
 
+A tool whose schema is longer than the kept 16000 characters keeps its shape and loses only the words that explain it
+(R-TOOL-04; `tests/integrations/test_config.py`), so a model is never shown such a tool as "an object" while its shape could
+fit. A tool that itself takes `data`, `input` or `params` is never advised to send its arguments outside it, and a refusal
+naming an argument that holds an object or one of several shapes is told those shapes. To check on a live install, read a
+`find_tools` result in `turn_tool_events`: a connected tool's `parameters` should list its arguments, not
+`{"type": "object", "additionalProperties": true}` (the tool list is read again on the next call or refresh).
+
+A connected tool whose service answered that the account's plan does not include it (kind `plan_excluded`) is not sent
+again for a day, or until the owner refreshes or signs in to that app again; one whose allowance is used up
+(`allowance_spent`) is held only until the time the service named, and not at all when it named none (R-TOOL-05;
+`tests/integrations/test_held_tools.py`). The member is told, whole, what the service said, until when, and the app's other
+tools not refused so; the step reads 「你在這項服務的方案不包含這個工具…」 or 「這項服務的這個工具額度暫時用完…」. A router
+that reaches many apps (`managed_by`) is never held. To check on a live install: after such a refusal the next call of the
+same tool has no `HTTP Request` line of its service in the log and a step with that reason.
+
 ## Connect apps, one view: read this first
 
 This section supersedes every later paragraph that speaks of the 已連結 and 商店 tabs, the tab counts, the pager of 18-card pages,
@@ -103,7 +118,7 @@ A sign-in cancelled half way can be removed, so no useless accounts pile up, and
   `core/tests/test_connector_accounts.py` does, and the scene `accounts-card` shows the list after the core gave the old one back.
 - A waiting sign-in holds nothing back: the waiting row says 請在瀏覽器登入… with an enabled 取消 (a Composio one too), every other 連結
   stays pressable, and pressing another one ends the waiting one at the core first (`integrations.connect_cancel`).
-- 移除 of a waiting row works while its sign-in waits (R-ACCT-03): the core ends that sign-in and removes the row at once, and another account's 移除 does not queue behind a waiting sign-in. The mock core of `look` cannot prove it (it holds no connector lock); `core/tests/test_connector_accounts.py::test_removing_the_account_whose_sign_in_is_waiting_ends_that_sign_in_and_removes_it_at_once` does. The window needed no change: its 移除 on a not-connected row was already a plain call that waits for the core's answer. Nothing else the window sends queues behind a waiting sign-in either (disconnecting another app, 重新命名, a switch, reading tools): the sign-in holds the connector lock only to set up and to finish, and disconnecting the app it waits for ends it (`test_nothing_else_of_the_connections_waits_behind_a_sign_in_that_waits`). The Google sign-in still holds the lock for its wait (two minutes at most).
+- 移除 of a waiting row works while its sign-in waits (R-ACCT-03): the core ends that sign-in and removes the row at once, and another account's 移除 does not queue behind a waiting sign-in. The mock core of `look` cannot prove it (it holds no connector lock); `core/tests/test_connector_accounts.py::test_removing_the_account_whose_sign_in_is_waiting_ends_that_sign_in_and_removes_it_at_once` does. The window needed no change: its 移除 on a not-connected row was already a plain call that waits for the core's answer. Nothing else the window sends queues behind a waiting sign-in either (disconnecting another app, 重新命名, a switch, reading tools): the sign-in holds the connector lock only to set up and to finish, and disconnecting the app it waits for ends it (`test_nothing_else_of_the_connections_waits_behind_a_sign_in_that_waits`). The built-in Google sign-in takes the lock the same way (to set up and to finish, never for its two minutes in the browser): a second one asked for meanwhile is told it is busy, and a cancel, a timeout, the core closing, changing the Google settings and disconnecting Google each end it with nothing half written (`test_cancelling_a_google_sign_in_ends_it_and_leaves_nothing_half_written`, `test_closing_the_core_ends_a_sign_in_that_waits_and_leaves_nothing_half_written`).
 - Driving it: open Connect Apps (`#nav .sidebar-apps`), the chip 已連結, the app's row; the ⋯ is `[data-conn="account-menu"][data-account]`.
   Gotchas: the menu's items are `account-label` and `account-remove`; a stale account is a fixture row with `stale: true` that the mock
   drops on `connectors.status`; a waiting sign-in is the fixture flag `pluginsConnecting` (the mock holds the connect call until
@@ -299,6 +314,10 @@ grid styling. Unit tests compare the sources in all four service states.
 checks built-ins plus the optional setup row without issuing connectors.catalog.
 Both error scenes open the small password dialog. `plugins-connecting` joins the
 built-in GitHub entry without a Composio key and checks integrations.connect.
+While no Composio key is set the view ends with one row (the mark, 「還沒有 Composio 金鑰…」 and its button); `composio-foot` runs in `plugins-store-key`,
+`plugins-store-key-openrouter`, `plugins-store-key-consumer` and `plugins-connecting` (R-CONNECT-04) and measures that the whole row and every line of its
+sentence are inside the dialog's visible part without scrolling, and that the list's last app is above it at the end of the list. At 720 wide the sentence is
+two lines; inspect it there and in `--locale fr` (the longest sentence) and `--locale id`.
 The fixture has four representative built-ins from the repository catalog. The
 configured Store scenes add 360 synthetic entries with multiple category
 memberships and a duplicate. Broad-group chips and local search operate on the

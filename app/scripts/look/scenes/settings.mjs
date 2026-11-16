@@ -33,7 +33,7 @@ export default [
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
-  scene("model-sync", "Raphael's model is chosen on his own page; Settings hold only his quick question", [
+  scene("model-sync", "Raphael's model is chosen on its own page; Settings hold only its quick question", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
     click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'),
     ...settings("models"), check("model-sync-settings"),
@@ -45,7 +45,7 @@ export default [
   // The models are held back by the mock until the `codex-arrives` step, so the menu is seen in both states whatever the speed of the run:
   // first "being read" (nothing is known of them yet), then the models in its place, and a menu opened again shows them at once (R-START-05).
   scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end; once known they are there at once", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), codexArrives(), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived"), key("Escape"), waitGone('.cb-menu'), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-arrived")], { codexLate: true }),
-  scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
+  scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]'), check("price-parts")]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
     click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), wait('.model-chooser .mc-effort [data-effort="low"][data-on="true"]'), check("model-effort-order")]),
@@ -53,7 +53,7 @@ export default [
     ...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
     click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), { action: "slider-stop", selector: ".model-chooser .mc-range", level: "high" }, click('.model-chooser [data-dlg="use"]'),
     wait('[data-k="quick-model"][aria-label*="GPT-6.1"]'), check("quick-model-row"), check("quick-model-selection")]),
-  ...["answer", "cleanup", "stt"].map(role => scene(`model-choices-${role}`, `Spaced ${role} choices with separate metadata and actions`, [...modelChooser(role), check("model-choice-layout"), ...(role === "answer" ? [check("model-effort-order")] : role === "cleanup" ? [check("cleanup-no-effort")] : [])])),
+  ...["answer", "cleanup", "stt"].map(role => scene(`model-choices-${role}`, `Spaced ${role} choices with separate metadata and actions`, [...modelChooser(role), check("model-choice-layout"), check("price-parts"), ...(role === "answer" ? [check("model-effort-order")] : role === "cleanup" ? [check("cleanup-no-effort")] : [])])),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),
   scene("model-choices-local-selected", "Preview a local model without downloading and keep keyboard focus visible", [...localChooser, click('.lm-main[data-name="qwen3-asr"]'), key("Tab"), { action: "focus", selector: '.lm-main[data-name="qwen3-asr"]' }, check("model-choice-selection"), check("model-choice-layout")]),
   scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and still asks in the row", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.lm-confirm'), check("local-model-asks")], { localModels: downloaded }),
@@ -81,6 +81,8 @@ export default [
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
   scene("connections-recommended", "Under the connected apps, a few popular ones not added yet, each addable in place", [...settings("connections"), check("connections-recommended")]),
   ...["general", "appearance", "connections", "models", "dictation", "tools", "safety", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
+  scene("dictation-languages", "The spoken languages: one row per language, a chosen one with several written forms ending in a chip", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-language="zh"]')]),
+  scene("dictation-language-variants", "A chip opens the written forms of its language beside the picker, never under it", [...settings("dictation"), click('[data-k="languages"]'), wait('.lang-panel [data-variant-menu="zh"]'), click('.lang-panel [data-variant-menu="zh"]'), wait('.lang-variant-menu [data-variant="zh-TW"]')]),
   scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
   scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...linked, wait('[data-conn="open"][data-id="composio:notion"]')]),
@@ -122,14 +124,14 @@ export default [
   { ...scene("plugins-store-motion", "Every row is there and nothing is still moving before the native-style capture, without a blank band", [
     ...store, { action: "settle-motion" }, check("plugins-store-settled"), check("plugins-store-groups"),
   ], { pluginsMany: true }), motion: true },
-  scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), scroll('.cs-composio-setup')], { composioConfigured: false }),
+  scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), check("composio-foot")], { composioConfigured: false }),
   scene("plugins-store-key-openrouter", "An OpenRouter key gets an actionable, value-free Composio error", [
     ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
-    type('#conn-key', 'sk-or-look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-openrouter"), check("plugins-store-rows"),
+    type('#conn-key', 'sk-or-look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-openrouter"), check("plugins-store-rows"), check("composio-foot"),
   ], { composioConfigured: false }),
   scene("plugins-store-key-consumer", "A consumer key directs the owner to a Composio project key without echoing it", [
     ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
-    type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"),
+    type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"), check("composio-foot"),
   ], { composioConfigured: false }),
   scene("plugins-store-needs", "A row stays plain (the mark, the name, 連結) and says nothing of what the app asks for: its page does", [
     ...store, click('[data-conn="store-group"][data-id="productivity"]'), wait('[data-conn="join"][data-id="acme-ledger"]'), check("plugins-store-needs"), check("plugins-store-rows"),
@@ -161,7 +163,7 @@ export default [
   scene("plugins-setup-plan-failed", "When what the app needs cannot be read the dialog says so and offers to try again", [
     ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-dlg="retry"]'), check("setup-plan-failed"),
   ], { toolkitPlanFails: true }),
-  scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows")], { composioConfigured: false, pluginsConnecting: true }),
+  scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows"), check("composio-foot")], { composioConfigured: false, pluginsConnecting: true }),
   scene("connections-hover", "MCP server hover", [...linked, hover('[data-k="cs-open:notes"]')]),
   scene("server-menu", "MCP server detail actions", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]')]),
   scene("connections-add-menu", "Add a connection menu", add),
@@ -192,7 +194,7 @@ export default [
   scene("dictation-heat-press", "Pressing a heatmap day shows its words above it; nothing shows under the pointer", [...dictation("overview"), click('.heat [data-date="2026-10-24"]'), check("dictation-heat-press")]),
   scene("dictation-notice", "Dictation connection notice", dictation("overview"), { problem: true }),
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
-  scene("onboarding", "First-run welcome: Raphael's emblem, his name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),
+  scene("onboarding", "First-run welcome: Raphael's emblem, its name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),
   scene("onboarding-tools", "First-run step 1: the AI tools as a store of one-row tiles, a search box, 熱門 the same for everyone, then each kind by name",[click('[data-ob="next"]'), wait('[data-ob-tools] [data-item="claude"].on .ob-tick'), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-tools-key", "First-run step 1: the OpenRouter key being replaced shows its field and paste button", [click('[data-ob="next"]'), wait('[data-ob="key-replace"]'), click('[data-ob="key-replace"]'), wait("#ob-key-input"), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-back-hover", "First-run step 1: the round way back of the foot's pair takes a lighter surface under the pointer", [click('[data-ob="next"]'), wait('.ob-foot [data-ob="back"]'), hover('.ob-foot [data-ob="back"]'), check("onboarding-back-hover")], { onboarding: true }),

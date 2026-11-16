@@ -210,6 +210,50 @@ def previous_args(target, owner, password, layer="4"):
     return result
 
 
+def tiny_dockerfile(layer=None):
+    """A throwaway image as small as one can be, for the image update check: two files on nothing (no download, no
+    shell), the first the same in every build and the second its layer. With `layer` it carries the computer's labels
+    at that layer, as the computer's own image does; without, none (an image of the repository that is not ours)."""
+    lines = ["FROM scratch", "COPY unchanged.txt /unchanged.txt", "COPY layer.txt /layer.txt"]
+    if layer is not None:
+        labels = {**vm.IMAGE_LABELS, f"{vm.LABEL}.layer": str(layer)}
+        lines.append("LABEL " + " ".join(f'{key}="{value}"' for key, value in labels.items()))
+    return "\n".join(lines) + "\n"
+
+
+def build_command(tag, context, previous=None):
+    """The product's own build command (`vm.build_args`) for another tag than the computer's."""
+    saved = vm.IMAGE
+    vm.IMAGE = tag
+    try:
+        return vm.build_args(context, previous)
+    finally:
+        vm.IMAGE = saved
+
+
+def cached_steps(log):
+    """The instructions BuildKit's plain progress says were taken from a cache, by their text."""
+    names, cached = {}, set()
+    for line in log.splitlines():
+        line = line.strip()
+        if match := re.fullmatch(r"#(\d+) \[[^\]]*\] (.+)", line):
+            names.setdefault(match.group(1), match.group(2).strip())
+        elif match := re.fullmatch(r"#(\d+) CACHED", line):
+            cached.add(match.group(1))
+    return {names[number] for number in cached if number in names}
+
+
+def inline_cache_record(archive):
+    """Whether the image `docker save` wrote to `archive` carries BuildKit's inline cache record in its configuration:
+    what makes it a cache source for the next build. Only the two named members are read, nothing is extracted."""
+    import tarfile
+    with tarfile.open(archive) as tar:
+        manifest = json.load(tar.extractfile("manifest.json"))
+        config = json.load(tar.extractfile(manifest[0]["Config"]))
+    record = config.get("moby.buildkit.cache.v0")
+    return isinstance(record, str) and bool(record)
+
+
 def colour_share(pixels, colour):
     return sum(all(abs(a - b) <= 40 for a, b in zip(pixel, colour)) for pixel in pixels) / len(pixels)
 
@@ -327,10 +371,14 @@ class IsolatedDocker:
         self.runner, self.owner, self.tag = runner, owner, tag
         self.label = f"{vm.LABEL}.owner={owner}"
         self.prefix = f"raphael-computer-{owner}-"
+        # Set only while the image update check runs: its throwaway repository and its own folder.
+        self.update_repository, self.update_folder = None, None
         self.after_start = None
         self.created = []
         self.carry_homes = {}
         self.carry_calls = 0
+        # The homes folders this run moved its computers' folders to (Acceptance.relocation), outside its data root.
+        self.moved_homes = set()
 
     async def owned(self, name):
         raw = await self.runner(["container", "inspect", name], timeout=60, limit=200000)
@@ -341,8 +389,41 @@ class IsolatedDocker:
                 f"Refused container {name}: expected owner {self.owner}")
         return data
 
+    def image_update_command(self, args):
+        """The image update check's own commands (`Acceptance.image_update`), only while it runs: builds, lists,
+        inspections, a save and removals of tags of its throwaway repository alone, from its own folder; one stopped
+        container of its own; and two read-only reads of which image every container on the engine was made from (the
+        product's own test before it removes an image)."""
+        repository, folder = self.update_repository, self.update_folder
+        if not repository or not folder:
+            return False
+        ours = lambda tag: isinstance(tag, str) and bool(re.fullmatch(re.escape(repository) + r":[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag))
+        inside = lambda path: Path(path).resolve().is_relative_to(folder)
+        if args[:4] == ["build", "--progress=plain", "--build-arg", "BUILDKIT_INLINE_CACHE=1"]:
+            rest = args[4:]
+            if len(rest) == 5:
+                if rest[0] != "--cache-from" or not ours(rest[1]):
+                    return False
+                rest = rest[2:]
+            return len(rest) == 3 and rest[0] == "--tag" and ours(rest[1]) and inside(rest[2])
+        if args in (["image", "ls", "--filter", f"label={vm.LABEL}=1", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"],
+                    ["image", "ls", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"],
+                    ["image", "ls", "--no-trunc", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}"],
+                    ["ps", "-a", "-q", "--no-trunc"]):
+            return True
+        if args[:2] in (["image", "inspect"], ["image", "rm"]) and len(args) > 2 and all(ours(tag) for tag in args[2:]):
+            return args[1] == "inspect" or len(args) == 3
+        if args[:4] == ["container", "inspect", "--format", "{{.Image}}"] and len(args) > 4:
+            return all(re.fullmatch(r"[0-9a-f]{64}", identifier) for identifier in args[4:])
+        if args[:2] == ["save", "-o"] and len(args) == 4:
+            return inside(args[2]) and ours(args[3])
+        return (len(args) == 7 and args[:2] == ["create", "--name"] and args[2].startswith(self.prefix)
+                and args[3:5] == ["--label", self.label] and ours(args[5]) and args[6] == "/unchanged.txt")
+
     async def authorize(self, args):
         require(bool(args), "Expected a Docker command")
+        if self.image_update_command(args):
+            return
         command = args[0]
         if command == "run":
             if args[1:6] == ['--rm', '--network', 'none', '--user', '0']:
@@ -406,8 +487,10 @@ class IsolatedDocker:
                 *([(self.picture, vm.GUEST_OWN_WALLPAPER)] if self.picture else [])), "Expected product wallpaper copy only")
             await self.owned(name)
         elif command == "ps":
+            from ..computer.carry import helper_prefix
             require(args[:-1] == ["ps", "-a", "--filter", f"label={self.label}", "--format"]
-                    and args[-1] in ("{{.ID}}", "{{.Names}}"),
+                    and args[-1] in ("{{.ID}}", "{{.Names}}", "{{.Names}}\t{{.State}}")
+                    or args == ["ps", "-a", "--filter", "name=" + helper_prefix(self.owner), "--format", "{{.Names}}"],
                     "Expected exact owner-only container listing")
         elif args[:2] == ["container", "inspect"]:
             require(len(args) == 3 and (args[2].startswith(self.prefix)
@@ -454,7 +537,8 @@ class IsolatedDocker:
                     root = home.parent.parent.resolve()
                     import hashlib
                     expected_owner = hashlib.sha256(os.path.normcase(str(root)).encode()).hexdigest()[:16]
-                    require(home.resolve() == root / 'vm-homes' / key and expected_owner == self.owner,
+                    require(home.resolve() == root / 'vm-homes' / key and expected_owner == self.owner
+                            or home.resolve() in {folder / key for folder in self.moved_homes},
                             'Expected workspace in this run\'s data root')
                     target = vm.Target(key, name, home)
                 else:
@@ -1186,6 +1270,166 @@ class Acceptance:
             return f"layer {layer} shared computer: incompatible -> ready on the new image with six screens, workspace file kept"
         await self.check(f"{name} start", exercise)
 
+    async def image_update(self):
+        """A new image layer on the real engine (R-COMP-IMAGE-01, R-COMP-IMAGE-02, R-COMP-UPDATE-01), with throwaway images
+        of two files (`tiny_dockerfile`) in a repository of this run's own, at the layers around the current one: an older
+        one a stopped container of this run uses, the previous one, a newer one, and one without the computer's labels.
+        The product's own build command makes them; its own code then names the cache source, prepares the update (its
+        preparation, its build command, its state; only the base's pull and the computer's start are left out, since this
+        image has neither), takes a maintenance press during that build, and removes the older tags. The computer's own
+        image is not built twice: a previous layer's real computer made again on the current image is the "previous layer"
+        checks. That a cache source alone gives the unchanged steps once the engine has lost its own cache is not proved
+        here, since that would mean clearing the owner's build cache."""
+        token = secrets.token_hex(6)
+        repository = f"raphael-acceptance-{token}/cua-local-vm"
+        current = int(vm.IMAGE_LABELS[f"{vm.LABEL}.layer"])
+        older, previous, newer = current - 2, current - 1, current + 1
+        tags = {layer: f"{repository}:driver-{vm.VERSION}-v{layer}" for layer in (older, previous, current, newer)}
+        unlabelled = f"{repository}:unlabelled"
+        folder = (self.root / "image-update").resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        holder = f"{self.docker.prefix}image-update-{token}"
+        target = self.machine.target(9501)
+        saved = vm.IMAGE, vm.REPOSITORY, self.machine.build, self.machine._start, self.machine._make_room
+        self.docker.update_repository, self.docker.update_folder = repository, folder
+        logs, seen = {}, {}
+
+        def context(layer):
+            path = folder / (f"layer-{layer}" if layer is not None else "unlabelled")
+            path.mkdir(exist_ok=True)
+            (path / "Dockerfile").write_text(tiny_dockerfile(layer), encoding="utf-8")
+            (path / "unchanged.txt").write_text(f"raphael acceptance {token}\n", encoding="utf-8")
+            (path / "layer.txt").write_text(f"layer {layer}\n", encoding="utf-8")
+            return path
+
+        async def images_elsewhere():
+            listed = await self.command(["image", "ls", "--no-trunc", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}"], timeout=60)
+            return {line.strip() for line in listed.splitlines() if line.strip() and not line.split()[-1].startswith(repository + ":")}
+
+        async def ours():
+            listed = await self.command(["image", "ls", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"], timeout=60)
+            return {line.strip() for line in listed.splitlines() if line.strip()}
+
+        async def fixtures():
+            seen["before"] = await images_elsewhere()
+            for tag, layer in ((tags[older], older), (tags[previous], previous), (tags[newer], newer), (unlabelled, None)):
+                result = await self.docker(build_command(tag, context(layer)), timeout=300)
+                require(result.code == 0, f"Expected the build of {tag} exit 0, observed {result.code}: {result.stderr.strip()[-1000:]}")
+            await self.command(["create", "--name", holder, "--label", self.docker.label, tags[older], "/unchanged.txt"], timeout=60)
+            seen["holder"] = True
+            return (f"Built layers {older}, {previous}, {newer} and an unlabelled tag in {repository} with the product's build "
+                    f"command; a stopped container uses layer {older}")
+
+        async def record():
+            archive = folder / "previous.tar"
+            await self.command(["save", "-o", str(archive), tags[previous]], timeout=120)
+            require(inline_cache_record(archive), "Expected the product's build to write BuildKit's inline cache record into the image")
+            return f"Layer {previous}, built by the product's command, carries BuildKit's inline cache record"
+
+        async def source():
+            vm.IMAGE, vm.REPOSITORY = tags[current], repository
+            found = await self.machine.cache_source(target)
+            require(found == tags[previous], f"Expected the cache source {tags[previous]}, observed {found!r}")
+            return f"The product names {found} as the cache source, over the older, the newer and the unlabelled tags"
+
+        async def press():
+            building, pressed = asyncio.Event(), asyncio.Event()
+
+            async def build(target=None, *, progress=None, previous=None):
+                # The product's build of this image's folder, without its pull of the base (`FROM scratch` has none). It
+                # starts at once; the preparation stays in its build until the press and the panel's read are done,
+                # however fast the engine is with two files.
+                seen["previous"] = previous
+                seen["build"] = asyncio.create_task(self.docker(build_command(tags[current], context(current), previous),
+                                                                timeout=300, **({"progress": progress} if progress else {})))
+                building.set()
+                await asyncio.wait_for(pressed.wait(), 120)
+                result = await seen["build"]
+                logs["current"] = result.stdout + "\n" + result.stderr
+                if result.code or not await self.machine.image(target):
+                    raise vm.VmError("build_failed")
+
+            async def started(target):
+                return {"state": "running", "ready": True}  # this image has no desktop: no computer is made from it
+
+            async def no_room(target):
+                return None  # and so no other computer is stopped to make room for one
+
+            self.machine.build, self.machine._start, self.machine._make_room = build, started, no_room
+            self.machine.launch(target)
+            try:
+                await asyncio.wait_for(building.wait(), 120)
+                answer = await lifecycle.maintain(self.machine, target, "restart")
+                during = not seen["build"].done()
+                viewer = DesktopViewer(self.machine)
+                try:
+                    status = await viewer.status({"member_id": 9501})
+                finally:
+                    await viewer.aclose()
+            finally:
+                pressed.set()
+            await asyncio.wait_for(self.machine.preparing[target.state_key], 300)
+            require(seen["previous"] == tags[previous], f"Expected the update to build from {tags[previous]}, observed {seen['previous']!r}")
+            require(answer.get("state") == "building" and answer.get("update") is True,
+                    f"Expected the press to join the update and answer its state, observed {answer}")
+            require(status.get("state") == "building" and status.get("update") is True,
+                    f"Expected the panel's status to say the computer is being updated, observed {status}")
+            require(target.state_key not in self.machine.preparation and not self.machine.updating
+                    and not self.machine.maintenance, "Expected the preparation and the update state to end with the build")
+            return (f"A restart pressed {'while the engine built' if during else 'as the build began'} answered "
+                    f"{answer['state']} with update; the panel said the same; the preparation ended ready")
+
+        async def cache():
+            log = logs.get("current", "")
+            cached = cached_steps(log)
+            require("COPY unchanged.txt /unchanged.txt" in cached, f"Expected the unchanged step taken from a cache, observed {sorted(cached)}")
+            require("COPY layer.txt /layer.txt" not in cached, "Expected the changed step built again")
+            imported = f"importing cache manifest from {tags[previous]}" in log
+            return (f"The unchanged step was CACHED and the changed one built; the log "
+                    f"{'names' if imported else 'does not name'} the import from {tags[previous]} (the engine's own cache "
+                    "also held that step)")
+
+        async def removal():
+            removed = await self.machine.remove_old_images(target)
+            require(removed == [tags[previous]], f"Expected only layer {previous} removed, observed {removed}")
+            left = await ours()
+            require(left == {tags[older], tags[current], tags[newer], unlabelled},
+                    f"Expected the used, current, newer and unlabelled tags kept, observed {sorted(left)}")
+            require(await images_elsewhere() == seen["before"], "Expected every image outside this run's repository untouched")
+            return (f"Removed {tags[previous]}; kept layer {older} (a stopped container uses it), the current, the newer "
+                    "and the unlabelled tags; every other image on the engine is as it was")
+
+        steps = (("fixtures", fixtures), ("record", record), ("cache source", source),
+                 ("press during the build", press), ("cached steps", cache), ("old tags", removal))
+        try:
+            for index, (name, step) in enumerate(steps):
+                if not await self.check(f"image update {name}", step):
+                    for later, _ in steps[index + 1:]:
+                        self.record(f"image update {later}", "skipped", f"image update {name} failed")
+                    break
+        finally:
+            vm.IMAGE, vm.REPOSITORY, self.machine.build, self.machine._start, self.machine._make_room = saved
+            pending = self.machine.preparing.get(target.state_key)
+            if pending is not None and not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+            if seen.get("build") is not None and not seen["build"].done():
+                await asyncio.gather(seen["build"], return_exceptions=True)
+            self.machine.invalidate(target)
+            try:
+                if self.keep:
+                    print(f"Kept image update tags in {repository} and container {holder}", flush=True)
+                else:
+                    async def tidy():
+                        if seen.get("holder"):
+                            await self.command(["rm", "-f", holder], timeout=90)
+                        for tag in sorted(await ours()):
+                            await self.command(["image", "rm", tag], timeout=90)
+                        return f"Removed {repository} and its container"
+                    await self.check("image update cleanup", tidy)
+            finally:
+                self.docker.update_repository = self.docker.update_folder = None
+
     async def form(self, hub, target, member, *, peer=None):
         """Type synthetic values through the same page helper used by all saved fills."""
         from ..agent.plugins import tool_key
@@ -1729,6 +1973,100 @@ class Acceptance:
                     require(before == len([call for call in calls if call[1] == name]), f"Expected no {name} driver dispatch")
                 return "Two seat-local terminals; foreign window read/click refused before driver dispatch"
             terminals_ok = await self.check("shared terminal wall", launches)
+
+            async def launches_land():
+                """A program a member launches opens on that member's screen and on no other. Seen on a real shared
+                computer: a terminal launched at one seat opened on another member's screen, and its own member could
+                not find it. The window manager opens a new window on the screen the pointer is on, so the pointer is
+                first put on a screen nobody holds; xfce4-terminal opens a later launch's window in the copy already
+                running, so both seats launch it together (no --disable-server), and then one seat launches it again
+                while a copy with a window on the other seat runs. Every window is found by what the launch's own reply
+                names, through the members' own tools."""
+                target = targets[members[0]]
+                screens = {member: targets[member].screen for member in members}
+                nobody = vm.screen_grid(target.screens)[0][target.screens - 1]
+                marker = secrets.token_hex(3)
+                opened = {}
+
+                async def pointer_on_nobodys_screen():
+                    await self.guest(target, ["python3", "-c", X_WARP, str(nobody[0] + 640), str(nobody[1] + 400)])
+
+                async def launch(member, title):
+                    result = await tool(member, "launch_app", {"launch_path": f"xfce4-terminal --title={title}"})
+                    named = re.search(r"This launch's window on your screen:\n\s+window_id=(\d+) pid=(\d+)", result.text)
+                    require(named, f"Expected member {member}'s launch to name its window on its own screen, observed {result.text[-400:]!r}")
+                    launched = re.search(r"\(pid (\d+)\)", result.text)
+                    opened[int(named[1])] = dict(member=member, title=title, pid=int(named[2]),
+                                                 launch_pid=int(launched[1]) if launched else None)
+
+                before = {row["window_id"] for row in (await machine.seat_windows(target))["windows"]}
+                try:
+                    await pointer_on_nobodys_screen()
+                    began = time.monotonic()
+                    # Both run to their end before anything is judged or closed: a launch still waiting holds its window.
+                    for outcome in await asyncio.gather(*(launch(member, f"lands-{member}-{marker}") for member in members),
+                                                        return_exceptions=True):
+                        if isinstance(outcome, BaseException):
+                            raise outcome
+                    together = time.monotonic() - began
+                    first_copy = next(window["pid"] for window in opened.values() if window["member"] == members[0])
+                    await pointer_on_nobodys_screen()
+                    await launch(members[1], f"lands-{members[1]}-again-{marker}")
+                    canvas = (await machine.seat_windows(target))["windows"]
+                    held = set(screens.values())
+                    stray = [row for row in canvas if row["window_id"] not in before | opened.keys()
+                             and seat_view.holder(row["bounds"], target.screens) in held]
+                    require(not stray, f"Expected no other new window on a member's screen, observed {stray}")
+                    lists = {member: {row["window_id"]: row for row in await rows(member)} for member in members}
+                    for identifier, window in opened.items():
+                        member = window["member"]
+                        local = lists[member].get(identifier)
+                        require(local, f"Expected {window['title']} in member {member}'s own window list, observed {sorted(lists[member])}")
+                        x, y, width, height = (local["bounds"][key] for key in ("x", "y", "width", "height"))
+                        require(0 <= x and 0 <= y and x + width <= 1280 and y + height <= 900,
+                                f"Expected {window['title']} wholly inside screen {screens[member]}, observed seat-local {local['bounds']}")
+                        row = next((row for row in canvas if row["window_id"] == identifier), None)
+                        require(row and seat_view.holder(row["bounds"], target.screens) == screens[member],
+                                f"Expected {window['title']} on screen {screens[member]} of the canvas, observed {row}")
+                        for other in members:
+                            require(other == member or identifier not in lists[other],
+                                    f"Expected {window['title']} not to be listed for member {other}")
+                    for member in members:
+                        shown = (await tool(member, "get_desktop_state", {})).text
+                        for identifier, window in opened.items():
+                            require((f"window_id={identifier} " in shown) == (window["member"] == member),
+                                    f"Expected member {member}'s desktop to show its own launches only: {window['title']} "
+                                    f"{'missing' if window['member'] == member else 'shown'}")
+                    handed = [window["title"] for window in opened.values()
+                              if window["launch_pid"] is not None and window["pid"] != window["launch_pid"]]
+                    again = next(window for window in opened.values() if "-again-" in window["title"])
+                    # What tied each window, as the core read it (seat_launch.MARKS): a startup id on the window itself
+                    # (xfce4-terminal's --startup-id), on its client leader (GTK at display open), or neither.
+                    marks = await machine.launch_marks(target, [dict(window_id=identifier, pid=window["pid"])
+                                                                for identifier, window in opened.items()])
+                    ids = {kind: [mark[kind] for mark in marks.values() if mark.get(kind)] for kind in ("own", "leader")}
+                    return (f"pointer on screen {target.screens}, nobody's; two seats launched together in {together:.1f} s and one again: "
+                            + "; ".join(f"{window['title']} window {identifier} pid {window['pid']} (launch pid {window['launch_pid']}) "
+                                        f"wholly inside screen {screens[window['member']]}" for identifier, window in opened.items())
+                            + f"; opened by another process than its launch's: {', '.join(handed) or 'none (each its own process)'}"
+                            + f"; the second seat's second window {'is' if again['pid'] == first_copy else 'is not'} in the copy "
+                              f"that holds the first seat's window; a startup id on the window itself on {len(ids['own'])} of "
+                              f"{len(opened)} ({len(set(ids['own']))} different), on its leader on {len(ids['leader'])}"
+                            + "; each seat's list and desktop show only its own")
+                finally:
+                    left = []
+                    for row in (await machine.seat_windows(target))["windows"]:
+                        if row["window_id"] not in before and "terminal" in row.get("app_name", "").lower():
+                            left.append(row["window_id"])
+                            await self.guest(target, ["wmctrl", "-i", "-c", str(row["window_id"])], allow_failure=True)
+                    until = time.monotonic() + 5
+                    while left:
+                        present = {row["window_id"] for row in (await machine.seat_windows(target))["windows"]}
+                        left = [identifier for identifier in left if identifier in present]
+                        require(not left or time.monotonic() < until, f"Expected the launched terminals closed, observed {left}")
+                        if left:
+                            await asyncio.sleep(.2)
+            await self.check("shared launches land on their own screens", launches_land)
 
             async def pointer_wall():
                 member = members[1]
@@ -2281,6 +2619,48 @@ class Acceptance:
                 await self.check("shared stop", lambda: self.stop(next(iter(targets.values()))))
             require(not any(row["result"] == "failed" for row in self.results[first_result:]), "One or more shared checks failed; see named results")
 
+    async def relocation(self):
+        """An install made before the computers' folders lived in the machine-local folder, on this run's own data: a
+        stopped computer with a file in its workspace, the move the next start makes (both folders renamed into the
+        machine-local folder, the stopped computer that bound them removed), then that computer made again on the new
+        place with its file kept, and nothing left to move at the start after."""
+        names = await self.command(["ps", "-a", "--filter", f"label={self.docker.label}", "--format", "{{.Names}}"], timeout=60)
+        for name in names.split():
+            await self.command(["stop", name], timeout=90)  # nothing of this run runs while its folders move
+        target = self.machine.target(9401)
+        await self.start(target)
+        await self.text(target, ["sh", "-c", "printf moved > /home/cua/workspace/acceptance-moved.txt"])
+        await self.machine.stop(target)
+        local = (self.root / "machine-local").resolve()
+        self.docker.moved_homes.add(local / vm.HOMES)
+        moved = vm.LocalVm(self.root, runner=self.docker, machine_dir=local)
+        moved.build = self.machine.build
+        try:
+            result = await moved.relocate()
+            require(result == "moved", f"Expected the folders moved, observed {result!r}")
+            require(not (self.root / vm.HOMES).exists() and not (self.root / vm.TEAM).exists() and (local / vm.TEAM).is_dir(),
+                    "Expected both folders renamed into the machine-local folder")
+            require((local / vm.HOMES / target.key / "acceptance-moved.txt").read_text(encoding="utf-8") == "moved",
+                    "Expected the workspace file in the moved home")
+            require(await moved.inspect(target) is None, "Expected the stopped computer that bound the old place removed")
+            again = moved.target(9401)
+            require(again.workspace == local / vm.HOMES / target.key and again.shared == local / vm.TEAM,
+                    f"Expected the computer's folders in the machine-local folder, observed {again.workspace}")
+            await self.start(again, operation=lambda: moved.start(again))
+            raw = await moved.inspect(again)
+            bound = {mount.get("Target"): mount.get("Source") for mount in raw["HostConfig"].get("Mounts") or []}
+            require(Path(bound.get(vm.GUEST, "")).resolve() == again.workspace and Path(bound.get(vm.SHARED, "")).resolve() == again.shared,
+                    f"Expected the computer made again bound to the new place, observed {bound}")
+            content = await self.text(again, ["cat", vm.GUEST + "/acceptance-moved.txt"])
+            require(content == "moved", f"Expected the workspace file kept, observed {content!r}")
+            await moved.stop(again)
+            next_start = await vm.LocalVm(self.root, runner=self.docker, machine_dir=local).relocate()
+            require(next_start == "nothing", f"Expected nothing left to move, observed {next_start!r}")
+        finally:
+            await moved.aclose(stop=False)
+        return ("vm-homes and vm-shared renamed into the machine-local folder; the stopped computer that bound them removed, "
+                "made again there with its workspace file, and nothing left to move")
+
     async def cleanup(self):
         if self.machine:
             try:
@@ -2334,7 +2714,7 @@ class Acceptance:
                 checks=self.results, seconds=seconds, totals=dict(totals), image=self.tag,
                 owner=self.machine.owner if self.machine else None, kept=self.keep), indent=2) + "\n", encoding="utf-8")
 
-    async def run(self, counts, *, shared=True):
+    async def run(self, counts, *, shared=True, relocation_only=False):
         original_image = vm.IMAGE
         parent = asyncio.current_task()
         cancel_path = os.environ.get("RAPHAEL_COMPUTER_CANCEL_FILE")
@@ -2376,14 +2756,17 @@ class Acceptance:
                 require(await self.machine.image(), "Expected built image with production labels")
                 return f"Built isolated image {self.tag}"
             if await self.check("build", build):
-                for count in counts:
+                for count in [] if relocation_only else counts:
                     try:
                         await self.computer(count, max(counts))
                     except Exception as error:
                         self.record(f"{count} screens lifecycle", "failed", f"{type(error).__name__}: {error}")
-                if shared:
+                if shared and not relocation_only:
                     await self.check("shared computer", self.shared)
-                await self.previous()
+                if not relocation_only:
+                    await self.previous()
+                    await self.image_update()
+                await self.check("folders move", self.relocation)
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.record("interrupted", "failed", "Interrupted; cleaning this run's resources")
         except Exception as error:
@@ -2419,8 +2802,11 @@ def main(argv=None):
     parser.add_argument("--no-shared", action="store_true", help="Skip the two-member shared computer block")
     parser.add_argument("--keep", action="store_true", help="Leave this run's containers, image tag and data for inspection")
     parser.add_argument("--out", type=Path, help="Write computer-acceptance.json in this folder")
+    parser.add_argument("--relocation-only", action="store_true",
+                        help="Run only the build and the move of an earlier install's computer folders")
     options = parser.parse_args(argv)
-    return asyncio.run(Acceptance(keep=options.keep, out=options.out).run(options.screens, shared=not options.no_shared))
+    return asyncio.run(Acceptance(keep=options.keep, out=options.out).run(
+        options.screens, shared=not options.no_shared, relocation_only=options.relocation_only))
 
 
 if __name__ == "__main__":

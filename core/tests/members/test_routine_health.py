@@ -180,3 +180,27 @@ async def test_a_file_that_is_too_large_or_not_text_is_refused(rig):
     for name in ("big.html", "binary.html"):
         with pytest.raises(MemberError):
             rig.service.skill_file(member.id, "daily-page", name)
+
+
+# --- a file that is there but cannot be read is not a missing file ---------------------------------------------------------
+
+
+async def test_a_folder_of_the_files_name_is_told_apart_from_a_file_that_is_not_there(rig):
+    member = rig.service.store.create_member(name="小葵", role="新聞")
+    folder = skill_with_files(rig, member)
+    (folder / "templates" / "extra.html").mkdir()
+    with pytest.raises(MemberError) as folder_in_the_way:
+        rig.service.skill_file(member.id, "daily-page", "templates/extra.html")
+    with pytest.raises(MemberError) as nothing_there:
+        rig.service.skill_file(member.id, "daily-page", "templates/missing.html")
+    assert folder_in_the_way.value.kind == "unreadable" and "folder" in str(folder_in_the_way.value)
+    assert nothing_there.value.kind == "not_found"
+
+
+async def test_a_file_another_program_holds_is_told_apart_from_a_file_that_is_not_there(rig, lock_file):
+    member = rig.service.store.create_member(name="小葵", role="新聞")
+    folder = skill_with_files(rig, member)
+    lock_file(folder / "notes.txt")
+    with pytest.raises(MemberError) as raised:
+        rig.service.skill_file(member.id, "daily-page", "notes.txt")
+    assert raised.value.kind == "unreadable" and "not missing" in str(raised.value)

@@ -112,7 +112,7 @@ describe("the page of a member", () => {
     expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg, [data-cat="model"], [data-cat="voice"], [data-cat="general"], [data-slot="model"]')).toBeNull();
   });
 
-  test("Raphael has the same kinds as every member, and only his name and role are not typed", async () => {
+  test("Raphael has the same kinds as every member, and only its name and role are not typed", async () => {
     await open(0);
     expect(page.el.querySelector("#ms-name, #ms-role")).toBeNull();
     expect($(".ms-name").textContent).toBe("拉斐爾");

@@ -30,12 +30,13 @@ import {
   type LanguageGroup,
   chooseLanguageVariant,
   languagePanelHTML,
+  variantMenuHTML,
   languageSummary,
   toggleTranscriptionLanguage,
 } from "../languages";
 import { createHotkeyRecording } from "../hotkey-recording";
 import { isTopLayer, registerDismissal } from "../dismissals";
-import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, replacementNotices, splitEffort, withFavorite } from "../model-picker";
+import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, priceHTML, replacementNotices, splitEffort, withFavorite } from "../model-picker";
 import { createServices } from "../services";
 import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
@@ -46,6 +47,7 @@ import {
   type Choice,
   type MenuAction,
   closeMenu,
+  closeSubmenus,
   copyButton,
   esc,
   iconBtn,
@@ -88,6 +90,7 @@ import {
   paneListHTML,
   localView,
   priceTexts,
+  priceMarkup,
   retentionChoices,
   retentionOf,
   sttEngine,
@@ -349,7 +352,7 @@ export function createSettings(app: AppContext): SettingsPage {
   function paintPrices(): void {
     const texts = priceTexts(view());
     el.querySelectorAll<HTMLElement>("[data-price]").forEach((node) => {
-      node.textContent = texts[node.dataset.price ?? ""] ?? "";
+      node.innerHTML = priceMarkup(node.dataset.price ?? "", texts[node.dataset.price ?? ""] ?? "");
     });
   }
 
@@ -540,23 +543,40 @@ export function createSettings(app: AppContext): SettingsPage {
     });
     languagePanel = panel;
     panel.addEventListener("click", (e) => {
+      const chip = (e.target as Element).closest<HTMLElement>("[data-variant-menu]");
+      if (chip) { openVariants(chip); return; }
       const item = (e.target as Element).closest<HTMLElement>(".lang-item");
-      if (!item) return;
-      if (item.dataset.language) void pickLanguage(item.dataset.language, false);
-      else if (item.dataset.variant) void pickLanguage(item.dataset.variant, true);
+      if (item?.dataset.language) void pickLanguage(item.dataset.language, false);
     });
     (panel.querySelector<HTMLElement>('[aria-pressed="true"], .lang-item') ?? panel).focus();
     if (languageGroups === null) void loadLanguages();
   }
 
-  /** Left and right move and select within the current variant's radio group. */
+  /** Opens the variants of a chosen language beside the picker, from the chip at the end of its row. */
+  function openVariants(chip: HTMLElement): void {
+    const groupId = chip.dataset.variantMenu!;
+    const group = languageGroups?.find((g) => g.id === groupId);
+    const sub = openPopover(chip, variantMenuHTML(languageGroups ?? [], languagesOf(view()), groupId), {
+      className: "menu menu-submenu lang-variant-menu",
+      role: "menu",
+      label: chip.getAttribute("aria-label") ?? group?.name,
+      placement: "beside",
+    });
+    sub.addEventListener("click", (e) => {
+      const item = (e.target as Element).closest<HTMLElement>("[data-variant]");
+      if (!item) return;
+      closeSubmenus();
+      void pickLanguage(item.dataset.variant!, true);
+      languagePanel?.querySelector<HTMLElement>(`[data-variant-menu="${CSS.escape(groupId)}"]`)?.focus({ preventScroll: true });
+    });
+    (sub.querySelector<HTMLElement>('[aria-checked="true"]') ?? sub.querySelector<HTMLElement>("[data-variant]"))?.focus();
+  }
+
+  /** Right on a chip opens its variants, as a menu row with a submenu would. */
   function languageKey(e: KeyboardEvent): boolean {
     const active = document.activeElement as HTMLElement | null;
-    if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || !active?.dataset.variant || !languagePanel?.contains(active)) return false;
-    const items = Array.from(active.closest('[role="radiogroup"]')!.querySelectorAll<HTMLElement>("[data-variant]"));
-    const next = items[(items.indexOf(active) + (e.key === "ArrowRight" ? 1 : items.length - 1)) % items.length];
-    next.focus();
-    void pickLanguage(next.dataset.variant!, true);
+    if (e.key !== "ArrowRight" || !active?.dataset.variantMenu || !languagePanel?.contains(active)) return false;
+    openVariants(active);
     return true;
   }
 
@@ -573,7 +593,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const active = document.activeElement as HTMLElement | null;
     let again: string | null = null;
     if (active && languagePanel.contains(active)) {
-      if (active.dataset.variant) again = `[data-variant="${CSS.escape(active.dataset.variant)}"]`;
+      if (active.dataset.variantMenu) again = `[data-variant-menu="${CSS.escape(active.dataset.variantMenu)}"]`;
       else if (active.dataset.language) again = `[data-language="${CSS.escape(active.dataset.language)}"]`;
     }
     languagePanel.innerHTML = languagePanelHTML(languageGroups, chosen);
@@ -691,7 +711,7 @@ export function createSettings(app: AppContext): SettingsPage {
     paintPrices();
     for (const role of ["image", "video"] as const) {
       const price = body.querySelector<HTMLElement>(`[data-media-price="${role}"]`);
-      if (price) price.textContent = mediaRowPrice(view(), role);
+      if (price) price.innerHTML = priceHTML(mediaRowPrice(view(), role));
     }
     for (const [role, picker] of pickers) picker.update(lookFor(role));
   }
@@ -1097,6 +1117,20 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "write-folder-add": void api.pickOutputFolder().then(path => {
+        if (path === null) return;
+        const folders = brain?.owner_write_folders ?? [];
+        if (!folders.includes(path)) return changeBrain("owner_write_folders", [...folders, path]);
+      }).catch(error => toaster.info(describeError(error))); break;
+      case "write-folder-menu": {
+        const anchor = target.closest<HTMLElement>("[data-folder-index]")!, index = Number(anchor.dataset.folderIndex);
+        const folders = brain?.owner_write_folders ?? [], folder = folders[index];
+        if (folder === undefined) break;
+        const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+        openConfirmMenu(anchor, { label: t("writeFolders.remove", { p0: name }), ask: t("settings.keyRemoveConfirm"),
+          run: () => void changeBrain("owner_write_folders", (brain?.owner_write_folders ?? []).filter(item => item !== folder)) });
+        break;
+      }
       case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;

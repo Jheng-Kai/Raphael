@@ -27,6 +27,24 @@ let texture: "waiting" | "ready" | "missing" = "waiting";
 let drawable: boolean | undefined;
 const canDraw = (): boolean => drawable ??= typeof document !== "undefined" && !!document.createElement("canvas").getContext?.("2d");
 
+/**
+ * The window moved to a screen of another scale, or the page was zoomed: the pixel ratio changed, so every face is drawn again
+ * for it. A still drawn for the old ratio would be resampled to its box, which is what blurs it (R-UI-161). The ratio's media
+ * query says so; a window resized by the move says so too where the query stays silent (a headless browser's emulated ratio).
+ */
+let ratioSeen = 0;
+function pixelRatioMoved(): void {
+  const ratio = window.devicePixelRatio || 1;
+  if (ratio === ratioSeen) return;
+  ratioSeen = ratio;
+  notify();
+}
+function watchPixelRatio(): void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  ratioSeen ||= window.devicePixelRatio || 1;
+  window.matchMedia(`(resolution: ${ratioSeen}dppx)`)?.addEventListener?.("change", () => { pixelRatioMoved(); watchPixelRatio(); }, { once: true });
+}
+
 /** The rune texture arrived (or could not be read): every face is drawn again. */
 export function emblemTextureArrived(ok = true): void {
   texture = ok ? "ready" : "missing";
@@ -34,11 +52,18 @@ export function emblemTextureArrived(ok = true): void {
   notify();
 }
 
+/**
+ * How many device pixels a still `px` CSS pixels square has at `ratio`: its box's, rounded. A ratio is often a float a hair off
+ * its value (1.5000000596 for 125% times 120%), where rounding up made a 48 px box a 49 px bitmap that the screen then
+ * shrank, blurring it (R-UI-161).
+ */
+export const stillSide = (px: number, ratio: number): number => Math.min(512, Math.max(1, Math.round(px * ratio)));
+
 /** The emblem standing still, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
 function emblemStill(px: number): string | null {
   if (!glyphTextureReady()) return null;
   const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const side = Math.min(512, Math.ceil(px * ratio));
+  const side = stillSide(px, ratio);
   const key = String(side);
   if (stills.has(key)) return stills.get(key)!;
   let url: string | null = null;
@@ -47,10 +72,14 @@ function emblemStill(px: number): string | null {
     canvas.width = canvas.height = side;
     const ctx = canvas.getContext("2d");
     if (ctx) {
+      // The rune texture is many times larger than the face: averaged down ("high"), its letters stay a ring of letters; sampled
+      // ("low", the default) they break into scattered dots, which is what made the composer's emblem look muddy (R-UI-161).
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.translate(side / 2, side / 2);
       // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
       // word break stands at one o'clock.
-      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent" });
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent", small: px < 48 });
       url = canvas.toDataURL("image/png");
     }
   } catch {
@@ -121,6 +150,8 @@ motionQuery?.addEventListener?.("change", (e) => {
   reduced = e.matches;
   notify();
 });
+watchPixelRatio();
+if (typeof window !== "undefined") window.addEventListener?.("resize", pixelRatioMoved);
 
 /** The kinds of picture that may move. */
 const MAY_MOVE = /^data:image\/(gif|webp);/;

@@ -156,6 +156,19 @@ _HELPER = """<script>
     const data = event.data;
     if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
   });
+  // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own
+  // script waits. One still on its way after a few seconds stops holding the page, which draws in the fonts and styles it
+  // has, and is still applied if it comes later (R-PAGE-13).
+  setTimeout(() => {
+    if (document.readyState === 'complete') return;
+    for (const link of document.querySelectorAll('link[rel~="stylesheet" i]')) {
+      if (link.sheet || !link.isConnected) continue;
+      const late = link.cloneNode(), media = link.media || 'all';
+      late.media = 'print';
+      late.addEventListener('load', () => { late.media = media; }, {once: true});
+      link.replaceWith(late);
+    }
+  }, 3000);
   addEventListener('DOMContentLoaded', () => {
     let previous = 0, framed = innerHeight;
     const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);
@@ -343,6 +356,21 @@ class PageHost:
             token = self.tokens.setdefault(page_id, secrets.token_urlsafe(32))
         return f"http://127.0.0.1:{port}/p/{token}?theme={theme}"
 
+    def page_at(self, url):
+        """The page this host serves at `url` (an address `url` gave while it runs), or None."""
+        if self.server is None or not isinstance(url, str):
+            return None
+        try:
+            parts = urlsplit(url)
+            port = parts.port
+        except ValueError:
+            return None
+        token = parts.path.removeprefix("/p/") if parts.path.startswith("/p/") else ""
+        if parts.scheme != "http" or parts.hostname != "127.0.0.1" or port != self.server.sockets[0].getsockname()[1] or not token:
+            return None
+        page_id = next((key for key, value in self.tokens.items() if secrets.compare_digest(value, token)), None)
+        return self.store.get(page_id) if page_id else None
+
     async def video_base(self):
         """Where a YouTube video plays inside the window on a Mac (`/v/<id>`): WebKit sends YouTube no referrer from the
         app's own `tauri://` page, and YouTube then refuses to play (its error 153), so the player is put in a page of this
@@ -477,6 +505,19 @@ class Pages:
                 or page["member_id"] != member_id or page["conversation_id"] != conversation_id):
             return None
         return page
+
+    def file_at(self, url):
+        """The page this core serves at `url`, as the file `export` saves of it (`page_file`, R-PAGE-08), for a chat on a
+        phone that cannot open this PC's addresses (R-MSG-LINK-03): (name, html), or None for no such page and for a
+        report or a plugin's page, which only the window can draw."""
+        page = self.host.page_at(url)
+        if page is None or page["source"] != "html" or is_report(page):
+            return None
+        from .report_page import FILE_BYTES, file_name  # report_page imports this module
+        try:
+            return file_name(page["title"]) + ".html", checked_text(page_file(page), "the page file", FILE_BYTES)
+        except PageError:
+            return None
 
     async def call(self, params):
         page = self.of(params)

@@ -67,7 +67,7 @@ describe("every screen", () => {
 });
 
 describe("the welcome", () => {
-  test("is Raphael's emblem, his name and an ask he answers as himself, with no slogan and no language field in the column", () => {
+  test("is Raphael's emblem, its name and an ask it answers as itself, with no slogan and no language field in the column", () => {
     const host = dom(welcomeHTML());
     expect(host.querySelector('.ob-emblem[aria-hidden="true"] canvas.ob-emb')).not.toBeNull();
     expect(host.querySelector("h2")!.textContent).toBe("Raphael");

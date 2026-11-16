@@ -3,7 +3,7 @@ import { mountMessageMetadata, reactionControlHTML, withReactions } from "./mess
 import { roomBoardHTML, roomReportHTML } from "./room-meeting";
 import { openMemberThread } from "./team-navigation";
 import { wholeLinks } from "./composer-links";
-import { readDraftWords, writeDraftWords } from "./composer-drafts";
+import { DRAFT_EVENT, readDraftWords, unsentWords, writeDraftWords } from "./composer-drafts";
 import { carryInlineSetup } from "./connection-setup";
 import { patchThread } from "./thread-diff";
 import { sameWire, ThreadRenderCache } from "./thread-render";
@@ -646,10 +646,14 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
     drawnRows = rows;
     patchHTML(el, html);
   };
+  // A draft kept or let go redraws the rows; only the line that changed is touched (`patchHTML`).
+  window.addEventListener(DRAFT_EVENT, event => { if (/^room:/.test(String((event as CustomEvent).detail)) && el.isConnected) draw(); });
   /** A group chat's row in the sidebar, the hidden ones' too. */
   function rowOf(room: Room): string {
         const name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${lightHTML(lightOf(room, active() && selectedRoom === room.id))}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+        // Words written in its composer and not yet sent stand in its second line, as typed (R-SIDE-05).
+        const unsent = plainLine(unsentWords("room", room.id));
+        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}</span><span class="mb-row-p${unsent ? " is-draft" : room.waiting ? " is-wait" : ""}">${esc(unsent ? t("members.draft", { p0: unsent }) : room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${lightHTML(lightOf(room, active() && selectedRoom === room.id))}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
   }
   /** The hidden group chats wait in the sidebar's hidden folder (member-column.ts), drawn again with it (R-UI-112). */
   let hiddenRows = "";

@@ -34,7 +34,7 @@ export const journeys = [
   { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
-  { name: "dictation-dictionary", description: "The owner's dictation on MAI-Transcribe 2 through his key: a dictionary word comes out as spelled, a correction of a misheard name is learned with its pill and page row, and the next dictation spells it" },
+  { name: "dictation-dictionary", description: "The owner's dictation on MAI-Transcribe 2 through their key: a dictionary word comes out as spelled, a correction of a misheard name is learned with its pill and page row, and the next dictation spells it" },
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
   { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },

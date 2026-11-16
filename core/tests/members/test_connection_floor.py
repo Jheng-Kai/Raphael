@@ -64,13 +64,14 @@ async def test_actual_brain_offers_filter_connections_without_removing_harness(s
 
 
 async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, monkeypatch):
-    # A command of the CLI's own runs on the owner's PC, so only a quick question may ask for one (R-PC-01); there the data
-    # floor still refuses a write and still asks before a read of Raphael's data, 全部允許 or not.
+    # A command of the CLI's own runs on the owner's PC, hidden, from a conversation or a quick question (R-PC-02); the data
+    # floor still refuses a write and still asks before a read of Raphael's data, 全部允許 or not, and outside a quick
+    # question one that would open something on the owner's screen is refused without a card (R-PC-06).
     from raphael_core.worker.loop import Stop
     rig, team = setup
     rig.settings.set("action_mode", "bypass")
-    ordinary = SimpleNamespace(source="app", quick=False, nested=False, declined=False, language="en", own_computer=False)
-    ask = SimpleNamespace(source="overlay", quick=True, nested=False, declined=False, language="en", own_computer=False)
+    ordinary = SimpleNamespace(source="app", quick=False, nested=False, declined=False, language="en")
+    ask = SimpleNamespace(source="overlay", quick=True, nested=False, declined=False, language="en")
     loop = SimpleNamespace(response=None)
     cards = []
     followup = SimpleNamespace(loop=None)
@@ -81,17 +82,18 @@ async def test_native_cli_read_still_opens_a_card_in_allow_all(setup, client, mo
     monkeypatch.setattr(rig.service, "_ask_plugin", card)
     denied = await rig.service._cli_permission(ask, {"command": "del C:/data/raphael.db"}, None, loop)
     assert not denied.ok and denied.kind == "protected_data" and not cards
-    away = await rig.service._cli_permission(ordinary, {"command": "Get-Content C:/data/raphael.db"}, None, loop)
-    assert not away.ok and away.kind == "presence_required" and not cards
-    with pytest.raises(Stop):
-        await rig.service._cli_permission(ask, {"command": "Get-Content C:/data/raphael.db"}, None, loop)
-    assert len(cards) == 1 and followup.loop is loop
+    shown = await rig.service._cli_permission(ordinary, {"command": "Start-Process https://www.youtube.com"}, None, loop)
+    assert not shown.ok and shown.kind == "shows_on_screen" and "your own computer" in shown.instruction and not cards
+    for request in (ordinary, ask):
+        with pytest.raises(Stop):
+            await rig.service._cli_permission(request, {"command": "Get-Content C:/data/raphael.db"}, None, loop)
+    assert len(cards) == 2 and followup.loop is loop
     rig.settings.set("action_mode", "direct")
     monkeypatch.setattr(rig.service._gate, "waived", lambda action: True)
     assert (await rig.service._cli_permission(ask, {"command": "Get-Process"}, None, loop)).ok
     with pytest.raises(Stop):
         await rig.service._cli_permission(ask, {"command": "Get-Content C:/data/raphael.db"}, None, loop)
-    assert len(cards) == 2
+    assert len(cards) == 3
 
 
 @pytest.mark.parametrize("mode", ["ask", "plan", "direct", "bypass"])

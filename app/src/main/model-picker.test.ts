@@ -18,6 +18,7 @@ import {
   moveIndex,
   pickerRows,
   priceDescription,
+  priceHTML,
   priceText,
   providerChoices,
   reasonText,
@@ -152,6 +153,18 @@ describe("prices", () => {
     expect(priceText(FREE, "cleanup")).toBe("Free");
     expect(priceText(ROUTER, "cleanup")).toBe("Price varies");
     expect(priceDescription(LUNA, "cleanup")).toBe("Input $0.10 / output $0.50 per million words (approx.)");
+  });
+
+  test("a price is drawn in parts that never break inside, and reads as the text does", () => {
+    const first = "輸入 $2.00 / 輸出 $12 約每百萬字", second = "圖片輸出 $30 每百萬單位";
+    // A part is a number with its unit; the 「·」 stands before every part but the first, so the words read as the text does.
+    const html = priceHTML(`${first} · ${second}`);
+    expect(html).toBe(`<span class="price-part">${first}</span> <span class="price-part">· ${second}</span>`);
+    expect(html.replace(/<[^>]+>/g, "")).toBe(`${first} · ${second}`);
+    // One part is one box; a price with a single part is one box as well.
+    expect(priceHTML(priceText(LUNA, "cleanup"))).toBe('<span class="price-part">$0.10 / $0.50</span>');
+    // What is written into a price is text, never markup.
+    expect(priceHTML("<b>x</b> · $1")).toBe('<span class="price-part">&lt;b&gt;x&lt;/b&gt;</span> <span class="price-part">· $1</span>');
   });
 
   test("context lengths are short", () => {

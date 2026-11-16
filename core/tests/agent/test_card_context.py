@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from raphael_core.agent.card_context import card_outcomes, messaging_state, outcomes_text, source_text
+from raphael_core.agent.card_context import PHONE_LINKS, card_outcomes, messaging_state, outcomes_text, source_text
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.ledger import Ledger
 from raphael_core.agent.permissions import PermissionCards
@@ -255,6 +255,9 @@ def test_source_visible_in_current_and_historical_context(conn, source):
     assert source.title() in source_text(source)
     assert f"Message source: {source.title()}" in turn_text(read, detail=False)
     assert read.id == identifier
+    # What the owner's phone opens is told to the turn being answered, not again with every turn before it.
+    assert PHONE_LINKS in source_text(source) and PHONE_LINKS not in turn_text(read, detail=False)
+    assert source_text("app") == source_text("app", now=False) == ""
 
 
 @pytest.mark.parametrize("source", ["telegram", "slack", "discord"])
@@ -265,6 +268,21 @@ async def test_incoming_platform_is_visible_in_actual_next_prompt(make_rig, clie
                                          "source": source, "member_id": 0})
     assert result["status"] == "done"
     assert f"Message source: {source.title()}; the owner is talking over {source.title()}." in capture(client)
+    assert PHONE_LINKS in capture(client)
+
+
+def test_a_turn_that_went_over_a_chat_says_how_many_of_its_links_a_phone_could_not_open(conn):
+    history = AgentHistory(conn, lambda: NOW_MS)
+    said = "Saved /home/cua/team/plan.md; preview http://localhost:3000; source https://example.com/a."
+    for source in ("telegram", "app"):
+        history.add(session_id="synthetic-links", question="Where is it?", route="answer", prefix="", text=said,
+                    status="done", source=source)
+    over_chat, in_app = history.recent(2)
+    assert "[Over Telegram: 2 links or paths of this reply name a place the owner's phone cannot open.]" in turn_text(over_chat, detail=False)
+    assert "phone" not in turn_text(in_app, detail=False)
+    history.add(session_id="synthetic-links", question="And the news?", route="answer", prefix="",
+                text="Here: https://example.com/a", status="done", source="telegram")
+    assert "phone" not in turn_text(history.recent(1)[0], detail=False)
 
 
 def test_background_prompt_uses_same_wrapped_card_facts_without_losing_injection_guard(conn):

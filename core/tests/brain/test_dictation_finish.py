@@ -7,7 +7,7 @@ import pytest
 
 from raphael_core.brain.cleanup import CleanedPart, CleanupResult
 from raphael_core.brain.history import HistoryStore
-from raphael_core.brain.textnorm import finish_chinese_dictation, remove_dictation_fillers, remove_unspoken_ma
+from raphael_core.brain.textnorm import drop_final_full_stop
 from raphael_core.members.store import MemberStore
 from raphael_core.protocol import RpcError
 
@@ -24,63 +24,45 @@ from .test_service import clock, fake_client, finalize, keys, make_brain, router
     ("請看 https://example.org/a.b?q=x%20y。接著回報。", "請看 https://example.org/a.b?q=x%20y。接著回報"),
     ("https://example.org/a.b?q=x%20y", "https://example.org/a.b?q=x%20y"),
     ("完成。\n`內文。`", "完成。\n`內文。`"),
-    ("完成。\n日本語です。", "完成。\n日本語です。"),
+    ("完成。\n日本語です。", "完成。\n日本語です"),
     ("文字，，\n保留逗號，", "文字，，\n保留逗號，"),
     ("請看 README.md. Version 1.2, OK?。", "請看 README.md. Version 1.2, OK?"),
     ("日本語です。請保留。\n下一行。", "日本語です。請保留。\n下一行"),
-    ("カタカナ。\nﾃｽﾄ。", "カタカナ。\nﾃｽﾄ。"),
+    ("カタカナ。\nﾃｽﾄ。", "カタカナ。\nﾃｽﾄ"),
     ("執行 `print('。')`。\n``。``。", "執行 `print('。')`。\n``。``"),
     ("```python\nx = '。'\n```\n完成。", "```python\nx = '。'\n```\n完成"),
     ("~~~text\n原文。，，\n~~~~\n完成。", "~~~text\n原文。，，\n~~~~\n完成"),
     ("```\n未關閉。\n", "```\n未關閉。\n"),
     ("執行 `第一行。\n第二行。`。\n完成。", "執行 `第一行。\n第二行。`。\n完成"),
     ("~~~\n未配對 `。\n~~~\n後面。", "~~~\n未配對 `。\n~~~\n後面"),
+    # R-DICT-STOP-01: every script ends the same way, by what its mark is, not by its language. A
+    # full stop that only ever ends a sentence goes; a dot that may close an abbreviation or a
+    # number stays, and the model, which reads the words, leaves out a closing one.
+    ("明日の会議は10時からです。", "明日の会議は10時からです"),
+    ("完成｡", "完成"),
+    ("वह घर गया।", "वह घर गया"),
+    ("Please check the fan.", "Please check the fan."),
+    ("Done. Check it.\n", "Done. Check it.\n"),
+    ("Send it at 3 p.m.", "Send it at 3 p.m."),
+    ("We need milk, eggs, etc.", "We need milk, eggs, etc."),
+    ("She moved to the U.S.", "She moved to the U.S."),
+    ("Brot, Milch usw.", "Brot, Milch usw."),
+    ("Fertig．", "Fertig．"),
+    ("下午3點開會，帶 v1.2.", "下午3點開會，帶 v1.2."),
+    ("Wait...", "Wait..."),
+    ("等一下。。", "等一下。。"),
+    ("等一下…。", "等一下…。"),
+    ("Really?", "Really?"),
+    ("Visit example.org", "Visit example.org"),
 ])
-def test_chinese_full_stops_only_change_unprotected_prose(text, expected):
-    assert finish_chinese_dictation(text) == expected
-    assert finish_chinese_dictation(expected) == expected
-
-
-@pytest.mark.parametrize(("text", "expected"), [
-    ("我呃想整理書桌。", "我想整理書桌。"),
-    ("先確認，呃，再寄出。", "先確認，再寄出。"),
-    ("欸，請關門。", "請關門。"),
-    ("先確認，欸，再寄出。", "先確認，再寄出。"),
-    ("好欸！欸乃一聲。", "好欸！欸乃一聲。"),
-    ("uh, check the fan, UM, then leave.", "check the fan, then leave."),
-    ("先，嗯，再等一下。", "先，再等一下。"),
-    ("先， 嗯 ，再，嗯，確認。", "先，再，確認。"),
-    ("嗯，好。收到。嗯，好。", "嗯，好。收到。嗯，好。"),
-    ("收到，嗯。嗯嗯，好。", "收到，嗯。嗯嗯，好。"),
-    ('詞語「呃」『欸』“um”"uh"，請呃確認。', '詞語「呃」『欸』“um”"uh"，請確認。'),
-    ('“例子「呃」和 uh”，再呃確認。', '“例子「呃」和 uh”，再確認。'),
-    ("呃，。下一句，呃，？還有，欸，！", "。下一句？還有！"),
-    ("，，請確認， ，。 \n，呃，回覆。", "請確認。 \n回覆。"),
-    ("執行 `say('uh呃')`，呃，完成。", "執行 `say('uh呃')`，完成。"),
-    ("執行 `呃，\num`，呃，完成。", "執行 `呃，\num`，完成。"),
-    ('```text\n"呃，uh\n```\n呃，請確認。', '```text\n"呃，uh\n```\n請確認。'),
-    ("~~~text\n呃，um\n~~~\n請呃確認。", "~~~text\n呃，um\n~~~\n請確認。"),
-    ("查看 https://example.org/um?x=uh，呃，再回覆 um@example.org。", "查看 https://example.org/um?x=uh，再回覆 um@example.org。"),
-    ("HTTPS://example.org/uh，呃，繼續。", "HTTPS://example.org/uh，繼續。"),
-    ("日本語です，呃，um。\n請呃確認。", "日本語です，呃，um。\n請確認。"),
-    ("「第一行呃，\n嗯，第二行uh」\n請呃確認。", "「第一行呃，\n嗯，第二行uh」\n請確認。"),
-    ("「呃\n日本語です」\n請呃確認。", "「呃\n日本語です」\n請確認。"),
-    ("「，呃，，。」\n請呃確認。", "「，呃，，。」\n請確認。"),
-    ("  uh，請確認。\r\n", "  請確認。\r\n"),
-    ("uh, um，呃", ""),
-    ("uh, , ?", "?"),
-    ("1. 呃，檢查門鎖。\n2. um, check the fan", "1. 檢查門鎖。\n2. check the fan"),
-    ("- 欸，請確認。", "- 請確認。"),
-    ("plum umbrella human UHF summary um_file uh-oh", "plum umbrella human UHF summary um_file uh-oh"),
-    ("", ""),
-])
-def test_dictation_fillers_keep_quotes_answers_code_urls_and_kana(text, expected):
-    assert remove_dictation_fillers(text) == expected
-    assert remove_dictation_fillers(expected) == expected
+def test_only_a_final_sentence_only_full_stop_goes_in_any_language_outside_code(text, expected):
+    assert drop_final_full_stop(text) == expected
+    assert drop_final_full_stop(expected) == expected
 
 
 @pytest.mark.parametrize("mode", ["cleaned", "pieces", "fallback"])
-async def test_finalization_removes_fillers_after_joining_and_keeps_raw_history(make_brain, monkeypatch, mode):
+async def test_finalization_leaves_the_words_to_the_model_and_keeps_raw_history(make_brain, monkeypatch, mode):
+    # No rule of one language edits the words after the model: fillers are the prompt's to remove.
     brain = make_brain()
     raw = "請保留「呃，\n嗯，例子」。再呃檢查。"
     result = CleanupResult(raw, mode != "fallback", None, None, 0, 0)
@@ -89,37 +71,20 @@ async def test_finalization_removes_fillers_after_joining_and_keeps_raw_history(
                                         CleanedPart("嗯，例子」。再呃檢查。", True)))
     monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=result))
     reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
-    assert reply["text"] == "請保留「呃，\n嗯，例子」。再檢查"
+    assert reply["text"] == "請保留「呃，\n嗯，例子」。再呃檢查"
     history = brain._history.get(reply["id"])
     assert history.text == reply["text"] and history.raw_text == raw
 
 
-async def test_english_dictation_removes_hesitations_without_a_chinese_setting(make_brain, monkeypatch):
+async def test_a_latin_full_stop_and_the_words_are_the_models_to_clean(make_brain, monkeypatch):
+    # The same in every language: nothing after the model removes a word, and a dot that may
+    # close an abbreviation ("3 p.m.") is left to the model, which reads the words.
     brain = make_brain()
     brain._settings.set("languages", ["en-US"])
-    raw = "uh, check the fan"
-    monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=CleanupResult(raw, True, None, None, 0, 0)))
-    reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
-    assert reply["text"] == "check the fan"
-
-
-@pytest.mark.parametrize(("raw", "cleaned", "expected"), [
-    ("可以幫我確認一下", "可以幫我確認一下嗎？", "可以幫我確認一下"),
-    ("顯示嘛", "顯示嗎？", "顯示"),
-    ("先確認一下 再通知我", "先確認一下嗎？再通知我。", "先確認一下，再通知我。"),
-    ("真的可以嗎", "真的可以嗎？", "真的可以嗎？"),
-    ("你有空嗎 幫我確認一下", "你有空嗎？幫我確認一下嗎？", "你有空嗎？幫我確認一下"),
-    ("確認 一下，嗎", "確認一下嗎？再幫忙嗎？", "確認一下嗎？再幫忙"),
-    ("先確認", "先確認嗎\n再回覆嗎？\n", "先確認\n再回覆\n"),
-    ("Please check README.md", "Please check README.md 嗎？", "Please check README.md "),
-    ("日本語", "日本語です嗎？", "日本語です嗎？"),
-    ("請執行", "請執行 `嗎？`。", "請執行 `嗎？`。"),
-    ("程式", "```text\n嗎？\n```", "```text\n嗎？\n```"),
-    ("可以嗎 可以嗎", "可以嗎？", "可以嗎？"),
-    ("怎麼辦嗎 然後再顯示", "應該怎麼處理嗎？然後再顯示嗎？", "應該怎麼處理嗎？然後再顯示"),
-])
-def test_only_unspoken_question_particles_are_removed(raw, cleaned, expected):
-    assert remove_unspoken_ma(raw, cleaned) == expected
+    for raw in ("uh, check the fan.", "Send it at 3 p.m."):
+        monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=CleanupResult(raw, True, None, None, 0, 0)))
+        reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
+        assert reply["text"] == raw
 
 
 @pytest.mark.parametrize("mode", ["cleaned", "pieces", "fallback"])
@@ -132,7 +97,8 @@ async def test_finalization_finishes_single_chunked_and_fallback_results(make_br
         result = replace(result, parts=(CleanedPart(cleaned, True),))
     monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=result))
     reply = await brain._finalize_dictation(dict(raw_text=raw, audio_seconds=1, stt_ms=1))
-    expected = "請幫我確認一下。再顯示結果" if mode == "fallback" else "請幫我確認一下，再顯示結果"
+    # The model's 嗎 is the model's: no rule after it removes a particle in one language.
+    expected = "請幫我確認一下。再顯示結果" if mode == "fallback" else "請幫我確認一下嗎？再顯示結果"
     assert reply["text"] == expected
     assert brain._history.get(reply["id"]).text == reply["text"]
     assert reply["raw_text"] == raw
@@ -152,7 +118,7 @@ async def test_cleaned_stt_sentence_boundaries_survive_finalization_and_history(
     assert brain._history.get(reply["id"]).text == reply["text"]
 
 
-async def test_fallback_keeps_the_speakers_real_question_and_non_chinese_stays_unchanged(make_brain, monkeypatch):
+async def test_fallback_keeps_the_speakers_real_question_whatever_the_language(make_brain, monkeypatch):
     brain = make_brain()
     text = "確認一下嗎？。"
     monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=CleanupResult(text, False, "no_key", None, 0, 0)))
@@ -160,7 +126,7 @@ async def test_fallback_keeps_the_speakers_real_question_and_non_chinese_stays_u
     assert result["text"] == "確認一下嗎？"
     brain._settings.set("languages", ["ja-JP"])
     result = await brain._finalize_dictation(dict(raw_text=text, audio_seconds=1, stt_ms=1))
-    assert result["text"] == text
+    assert result["text"] == "確認一下嗎？"
 
 
 async def test_each_cleaned_chunk_uses_its_own_raw_and_finishes_after_joining(make_brain, monkeypatch):
@@ -171,7 +137,7 @@ async def test_each_cleaned_chunk_uses_its_own_raw_and_finishes_after_joining(ma
     ))
     monkeypatch.setattr(brain._cleanup, "clean", AsyncMock(return_value=result))
     reply = await brain._finalize_dictation(dict(raw_text="請確認一下。再顯示結果。", audio_seconds=1, stt_ms=1))
-    assert reply["text"] == "請確認一下\n再顯示結果"
+    assert reply["text"] == "請確認一下嗎？\n再顯示結果嗎？"
 
 
 @pytest.mark.parametrize("source", [{"kind": "ask"}, {"purpose": "agent"}])

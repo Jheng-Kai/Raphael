@@ -87,7 +87,10 @@ FOLD_INPUT_TOKENS = 16_000
 DETAIL_CHARS = 400
 # The pauses after a fold that failed, one after another; the last one repeats.
 FOLD_PAUSES_S = (60.0, 300.0, 900.0)
-FOLD_TIMEOUT_S = 30.0
+# One summariser call. Folds that worked took 20 to 30 s on the models members use, and at 30 s every slower one was
+# cut off and paid for without a summary (measured in the app's log); writing up to SUMMARY_MAX_TOKENS of summary
+# needs minutes' worth, not seconds'.
+FOLD_TIMEOUT_S = 150.0
 FOLD_MAX_TOKENS = 10_200
 SUMMARY_PURPOSE = "memory"
 DEFAULT_CONTEXT_WINDOW = 32_000
@@ -216,8 +219,10 @@ def turn_text(turn: Turn, *, detail: bool, untrusted: bool = False) -> str:
             cut = answer if len(answer) <= 600 else answer[:600].rstrip() + "…"
             lines += "\n" + labelled_lines("Other member's answer", cut)
     from ..agent.reactions import reaction_context
-    from ..agent.card_context import outcomes_text, source_text
-    return source_text(turn.source) + lines + reaction_context(turn.reactions) + outcomes_text(turn.card_outcomes)
+    from ..agent.card_context import outcomes_text, source_text, unreachable_note
+    if not unfinished:
+        lines += unreachable_note(turn.source, said)
+    return source_text(turn.source, now=False) + lines + reaction_context(turn.reactions) + outcomes_text(turn.card_outcomes)
 
 
 def _turn_tokens(turn: Turn) -> int:
@@ -653,11 +658,14 @@ class Conversation:
                     ),
                     FOLD_TIMEOUT_S,
                 )
+            began = time.monotonic()
             try:
                 try:
                     completion = await request(selected_model)
                 except (OpenRouterError, TimeoutError, AgentFailure) as first:
-                    if selected_model == model or is_context_overflow(first):
+                    # A summariser that ran out of time was paid for what it wrote: the member's own brain is slower
+                    # with the same input, and asking it too paid twice for nothing. The next fold tries again.
+                    if selected_model == model or is_context_overflow(first) or _timed_out(first):
                         raise
                     from .brain import failure_summary
                     kind, _ = failure_summary(first)
@@ -674,7 +682,8 @@ class Conversation:
             if is_context_overflow(error):
                 # No input is short enough, so asking again cannot help: the turns are left out of the summary.
                 return self._fall_back(summary, all_due, through, "context_overflow")
-            self._failed(getattr(error, "kind", None) or type(error).__name__)
+            self._failed(getattr(error, "kind", None) or type(error).__name__,
+                         seconds=time.monotonic() - began, tokens=tokens)
             if self._failures >= FOLD_FALLBACK_AFTER:
                 return self._fall_back(summary, all_due, through, f"failed {self._failures} times")
             return False
@@ -696,11 +705,21 @@ class Conversation:
         self._save(cap_summary(text, budget), batch_through)
         self._save_fragment(*progress)
         self._failures = 0
-        logger.info("The conversation was folded: %d turns", len(folded))
+        # How long a fold takes is what its time limit is set by: it is written down for every one.
+        logger.info("The conversation was folded: %d turns in %.1f s", len(folded), time.monotonic() - began)
         return True
 
-    def _failed(self, why: str) -> None:
+    def _failed(self, why: str, *, seconds: float | None = None, tokens: int | None = None) -> None:
         pause = FOLD_PAUSES_S[min(self._failures, len(FOLD_PAUSES_S) - 1)]
         self._failures += 1
         self._paused_until = self._clock() + pause
-        logger.warning("The conversation could not be folded: %s", why)
+        if seconds is None:
+            logger.warning("The conversation could not be folded: %s", why)
+        else:
+            logger.warning("The conversation could not be folded: %s after %.1f s (input about %d tokens, failure %d in a row)",
+                           why, seconds, tokens or 0, self._failures)
+
+
+def _timed_out(error: BaseException) -> bool:
+    """Whether a summariser call ended because its time ran out, however the brain that made it says so."""
+    return isinstance(error, TimeoutError) or getattr(error, "kind", None) == "timeout"

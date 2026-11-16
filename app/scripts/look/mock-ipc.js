@@ -145,6 +145,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
+  if (variant.ownerWriteFolders) data.settings.owner_write_folders = ["C:\\Owner\\Notes", "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"];
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
@@ -308,6 +309,15 @@ export function installMock(fixture, config = {}, target = window) {
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
+  // The composer's row at its fullest (R-UI-160): a permission mode with a long word (`mode`, in `language` when one is named)
+  // and the scene's `model`, with a depth beside it.
+  if (variant.composerLongRow) {
+    data.settings.action_mode = variant.composerLongRow.mode ?? "bypass";
+    if (variant.composerLongRow.language) data.device.ui_language = variant.composerLongRow.language;
+    const long = { ...structuredClone(data.catalog.llm[0]), ...variant.composerLongRow.model };
+    data.catalog.llm.push(long);
+    data.settings.agent_model = `${long.id}?effort=high`;
+  }
   if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.conversationSamples.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
   if (variant.sidebarMany) {
@@ -445,7 +455,7 @@ export function installMock(fixture, config = {}, target = window) {
   const arrivals = new Map((variant.arrivals ?? []).map(turn => [turn.id, structuredClone(turn)]));
   const pendingReplies = new Map();
   if (variant.p04Blocked) {
-    data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:"missing_artifact",result:"",evidence:[]}];
+    data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:typeof variant.p04Blocked==="string"?variant.p04Blocked:"missing_artifact",result:"",evidence:[]}];
     data.messages.at(-1).text="尚未取得檔案，目前沒有可驗收結果。";
     data.messages.push({...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴的檔案尚未完成，補齊後可以重新驗收，要不要重試由你決定。"});
   }
@@ -647,6 +657,8 @@ export function installMock(fixture, config = {}, target = window) {
       Object.assign(made.turn, { question: "幫我填入出差住宿的付款資料。", text: "", messages: [] });
     }
     if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
+    // The member's reason in the card's words holds a long address in brackets, with Chinese words right after it (R-LINK-01).
+    if (variant.linkedReason) made.turn.permissions[0].reason = data.linkSample.reason;
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
   }
@@ -817,6 +829,8 @@ export function installMock(fixture, config = {}, target = window) {
     own(2, "供應商會議", octoberAt(23, 13), octoberAt(23, 14, 30), { ...addedBy(1), notes: "從今天的信件整理：對方想確認交期。" }),
     own(3, "交付截止日", octoberAt(22, 0), octoberAt(23, 0), { all_day: true }),
   ];
+  // An all-day item a member synced from another app, its notes a Chinese sentence holding the page's address with a full stop right after it (R-LINK-01).
+  if (variant.linkedNotes) data.home.calendar_events.push(own(4, "專案週報", octoberAt(24, 0), octoberAt(25, 0), { all_day: true, ...addedBy(1), notes: data.linkSample.notes }));
   if (variant.presence === "calendar") data.home.calendar_events.find(item => item.id === "own:1").title = data.presenceSample.calendar;
   if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
   if (variant.calendarBusy) data.home.calendar_events.push(
@@ -862,7 +876,9 @@ export function installMock(fixture, config = {}, target = window) {
   };
   reproject();
   if (variant.calendarRhythm) {
-    const rhythm = { id:91, member_id:1, title:"Gmail 與行程檢查", prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
+    // `calendarLongTitle`: the run's chips carry a title longer than any chip, so that a mark beside it has a title to cut (check `calendar-chip-marks-cut`).
+    const rhythmTitle = variant.calendarLongTitle ? "每三小時檢查 Gmail、行程與尚未回覆的客戶來信，再整理成一頁簡報" : "Gmail 與行程檢查";
+    const rhythm = { id:91, member_id:1, title:rhythmTitle, prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
     data.routines = [rhythm,{...rhythm,id:92,title:"每日摘要",schedule:{kind:"daily",time:"09:00"},next_run:octoberAt(24,9)}];
     data.routineRuns = [[8,"done"],[11,"error"],[14,"confirm"]].map(([hour,status],i)=>({id:901+i,routine_id:91,scheduled:octoberAt(24,hour),started:octoberAt(24,hour),finished:status==="confirm"?null:octoberAt(24,hour)+60000,status,turn_id:2,summary:"樣本報告",cost:0}));
     data.home.calendar_events = [own(80,"樣本整理日",octoberAt(24,0),octoberAt(25,0),{all_day:true})];
@@ -1687,7 +1703,8 @@ export function installMock(fixture, config = {}, target = window) {
         turn.owner_questions = turn.owner_questions.filter(item => item.id !== p.id);
         turn.task = null;
         data.turns.push(moved);
-        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: data.now, turn_id: moved.id, turn: moved });
+        // The core stamps the message it makes with the time of the press, so it stands after every message the room holds.
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: Math.max(data.now, ...data.messages.map(item => item.created)) + 1, turn_id: moved.id, turn: moved });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         notify("AgentTurn", { turn_id: moved.id, member_id: turn.member_id });
         notify("RoomsChanged", { room_id: 1 });

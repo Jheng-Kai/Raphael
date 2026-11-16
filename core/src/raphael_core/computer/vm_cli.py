@@ -19,7 +19,7 @@ async def main():
     args = parser.parse_args()
     args.data_dir.mkdir(parents=True, exist_ok=True)
     conn = connect(paths.db_path(args.data_dir))
-    vm = LocalVm(args.data_dir, settings=SettingsStore(conn))
+    vm = LocalVm(args.data_dir, settings=SettingsStore(conn), machine_dir=paths.machine_dir(args.data_dir))
     try:
         target = vm.target(args.member)
         if args.action == "build":

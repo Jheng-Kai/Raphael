@@ -6,6 +6,7 @@ import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML } from "
 import { openNewGroupChat } from "./group-chats";
 import { installContextMenus } from "./context-menu";
 import { setLocale, t } from "./i18n";
+import { writeDraftWords } from "./composer-drafts";
 import { closeMenu } from "./ui";
 vi.mock("./group-chats", () => ({ createRoomsSection: () => document.createElement("section"), openNewGroupChat: vi.fn() }));
 import type { Member, MembersList } from "./types";
@@ -66,7 +67,7 @@ describe("the column, drawn", () => {
     for (const last_at of [new Date(2026, 9, 24, 13, 45).getTime(), null, NaN, 1e20]) expect(dom(memberRowHTML(member(1, { last_at }), view())).querySelector("time")).toBeNull();
   });
 
-  test("Raphael leads the column as an ordinary row with his blue slime", () => {
+  test("Raphael leads the column as an ordinary row with its blue slime", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
@@ -459,5 +460,46 @@ describe("the column, used", () => {
     drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname', 70);
     expect(host.reorderGroup).toHaveBeenCalledWith(20, 10);
     expect(column.el.querySelector(".is-dragged")).toBeNull();
+  });
+});
+
+describe("words not yet sent (R-SIDE-05)", () => {
+  beforeEach(() => { localStorage.clear(); setLocale("zh-TW"); });
+
+  test("a member's row shows the words waiting in its composer, then its last line again once they go", () => {
+    writeDraftWords("member:1:main", { text: "還沒送出的\n  第二行" });
+    const line = dom(memberRowHTML(member(1), view())).querySelector(".mb-row-p")!;
+    expect(line.textContent).toBe(t("members.draft", { p0: "還沒送出的 第二行" }));
+    expect(line.classList.contains("is-draft")).toBe(true);
+    writeDraftWords("member:1:main");
+    const back = dom(memberRowHTML(member(1), view())).querySelector(".mb-row-p")!;
+    expect(back.textContent).toBe("第 17 號工單已開");
+    expect(back.classList.contains("is-draft")).toBe(false);
+  });
+
+  test("a draft stands in place of a waiting question's line, and a quote alone or spaces are no words", () => {
+    writeDraftWords("member:2:main", { text: "   ", quote: { text: "引用" } });
+    expect(dom(memberRowHTML(LIST.members[2], view())).querySelector(".mb-row-p")!.classList.contains("is-wait")).toBe(true);
+    writeDraftWords("member:2:main", { text: "回覆它" });
+    const line = dom(memberRowHTML(LIST.members[2], view())).querySelector(".mb-row-p")!;
+    expect(line.textContent).toBe(t("members.draft", { p0: "回覆它" }));
+    expect(line.classList.contains("is-wait")).toBe(false);
+  });
+
+  test("typing in a composer redraws only its row's line in the mounted column", () => {
+    const host = { view: () => ({ list: LIST, current: 1, previews, fresh: new Set() }), select: vi.fn(), newMember: vi.fn(), newGroup: vi.fn(),
+      moveMember: vi.fn(), deleteMember: vi.fn(), renameGroup: vi.fn(), editSources: vi.fn(), deleteGroup: vi.fn(), memberAction: vi.fn() } as never;
+    const column = createMemberColumn(host);
+    document.body.append(column.el);
+    column.draw();
+    const row = column.el.querySelector<HTMLElement>('.mb-row[data-member="1"]')!;
+    const other = column.el.querySelector<HTMLElement>('.mb-row[data-member="3"]')!;
+    writeDraftWords("member:1:main", { text: "打字中" });
+    expect(column.el.querySelector('.mb-row[data-member="1"]')).toBe(row);
+    expect(column.el.querySelector('.mb-row[data-member="3"]')).toBe(other);
+    expect(row.querySelector(".mb-row-p")!.textContent).toBe(t("members.draft", { p0: "打字中" }));
+    writeDraftWords("member:1:main");
+    expect(row.querySelector(".mb-row-p")!.textContent).toBe("第 17 號工單已開");
+    column.el.remove();
   });
 });

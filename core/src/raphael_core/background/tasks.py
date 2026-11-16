@@ -487,6 +487,18 @@ class TaskStore:
             raise ValueError('artifact_size')
         self.record_evidence(task_id, 'file_before', kind='file_before', uri=str(path), digest=_artifact_digest(path), mime="application/octet-stream")
 
+    def note_unreadable(self, task_id, path):
+        """Write down that `path`, a file the task was to leave, is there but cannot be read: it is no artifact, and no missing file either."""
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO task_evidence(task_id,tool_call_id,kind,uri,digest,mime,scope,verified_at_ms,verdict) "
+                "SELECT id,'artifact_unreadable','artifact_unreadable',?,'','text/plain',scope,?,'unreadable' FROM worker_tasks WHERE id=?",
+                (str(path), self._now_ms(), task_id))
+
+    def forget_unreadable(self, task_id):
+        """Each look for the files of a task starts with what it finds now: a file that was locked a moment ago may be free."""
+        with self._conn:
+            self._conn.execute("DELETE FROM task_evidence WHERE task_id=? AND kind='artifact_unreadable'", (task_id,))
+
     def file_changed(self, item):
         path = Path(item['uri']).resolve(strict=True)
         return (path.is_file() and path.stat().st_size <= MAX_ARTIFACT_BYTES
@@ -495,15 +507,16 @@ class TaskStore:
     def completion_reason(self, task, *, verifiable=True, said=""):
         """Validate receipts and explicit file requirements, even without a member workspace."""
         receipts = self.evidence(task.id)
-        evidence = [item for item in receipts if item['kind'] not in ('file_before', 'artifact_note')]
+        evidence = [item for item in receipts if item['kind'] not in ('file_before', 'artifact_note', 'artifact_unreadable')]
         before = {item['uri']: item for item in receipts if item['kind'] == 'file_before'}
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
         waived = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_note']
+        unreadable = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_unreadable']
         expected = [name for name in deliverable_names(task.done_when) if not any(
             found == name.lower() or found.endswith(' ' + name.lower()) for found in waived)] if task.requires_artifact else []
         requires_artifact = task.requires_artifact and (not waived or bool(expected) or bool(before))
         if requires_artifact and not artifacts:
-            return 'missing_artifact'
+            return 'artifact_unreadable' if unreadable else 'missing_artifact'
         if not evidence:
             return None if not requires_artifact and written_length(said) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
@@ -515,14 +528,21 @@ class TaskStore:
                     return 'artifact_changed'
                 if str(path) in before and not self.file_changed(before[str(path)]):
                     return 'missing_artifact'
-            except (OSError, TypeError, ValueError):
+            except (FileNotFoundError, NotADirectoryError, TypeError, ValueError):
                 return 'missing_artifact'
+            except OSError:
+                # The file is there (the system said so, not that it is gone) and cannot be read.
+                return 'artifact_unreadable'
         names = [Path(item['uri']).name.lower() for item in artifacts]
-        # A filename extracted from prose can be the last word of a named path containing spaces.
-        # Chinese and Japanese have no spaces, so a name can stand against the words around it: it is that name alone.
-        if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
-                       or file_named_in(name, found) for found in names) for name in expected):
-            return 'missing_artifact'
+
+        def is_named(name, found):
+            # A filename extracted from prose can be the last word of a named path containing spaces.
+            # Chinese and Japanese have no spaces, so a name can stand against the words around it: it is that name alone.
+            return found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower())) or file_named_in(name, found)
+
+        lacking = [name for name in expected if not any(is_named(name, found) for found in names)]
+        if lacking:
+            return 'artifact_unreadable' if any(is_named(name, found) for name in lacking for found in unreadable) else 'missing_artifact'
         return None
 
     def invalidate_tree(self, task_id):
@@ -573,7 +593,7 @@ class TaskStore:
                 (state, self._now_ms(), prefix, text, detail, reason, handback, task_id),
             )
             stage_state = 'done' if state == 'done' else 'cancelled' if state == 'cancelled' else 'incomplete' if reason in (
-                'missing_artifact','artifact_changed','work_without_action','missing_terminal','dangling_mention','child_work_incomplete') else 'blocked'
+                'missing_artifact','artifact_unreadable','artifact_changed','work_without_action','missing_terminal','child_work_incomplete') else 'blocked'
             self._conn.execute('UPDATE task_stage_owners SET state=?,reason=? WHERE owner_task_id=?',
                                (stage_state,reason or '',task_id))
             if publish is not None:

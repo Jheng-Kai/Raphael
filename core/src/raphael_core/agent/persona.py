@@ -119,6 +119,7 @@ class Phrases:
     no_answer: str  # the model gave no answer (it spent its turn thinking, or said nothing)
     work_only_words: str  # work handed on came back with a promise or a line, and nothing done
     work_file_missing: str  # the file the work was to leave is not there, or changed since
+    work_file_unreadable: str  # the file the work was to leave is there but cannot be opened
     routine_refused: str  # a routine's run said it was done, but a step it needed was refused and nothing after went through
     routine_nothing: str  # a routine's run said it was done, but what it was to make is not there
     work_children_open: str  # work this one handed on again is not all finished
@@ -128,7 +129,6 @@ class Phrases:
     failed: str  # the action was tried and did not work
     open_not_found: str  # nothing was found to open by that name
     opened: str  # the fixed command opened something on the owner's PC: {target}
-    which_computer: str  # "open it on the computer" could mean either one: this PC or {who}'s own
     nothing_to_copy: str
     copy_last: str  # asks whether to copy Raphael's last answer to the clipboard
     copy_quote: str  # ... or a text the user quoted
@@ -221,6 +221,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         no_answer="模型這次沒有給出回答，請再試一次，或換一個模型。",
         work_only_words="只有回覆，沒有實際做事，這項工作不算完成。",
         work_file_missing="完成條件要的檔案沒有找到，這項工作不算完成。",
+        work_file_unreadable="完成條件要的檔案在，但無法開啟（可能是同名資料夾、沒有權限，或正被其他程式使用），這項工作不算完成。",
         routine_refused="這次執行需要的一個步驟被拒絕了，沒有完成。",
         routine_nothing="這次執行沒有做出原本要做的東西，不算完成。",
         work_children_open="交給同事的工作還沒全部完成，這項工作不算完成。",
@@ -230,7 +231,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         failed="這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。",
         open_not_found="找不到可以開啟的項目，請提供正確的檔案或網址後再試。",
         opened="已在你的電腦打開「{target}」。",
-        which_computer="要在你現在用的這台電腦打開，還是在{who}自己的電腦打開？",
         nothing_to_copy="無可複製的內容。",
         copy_last="是否將上一則回答複製到剪貼簿？",
         copy_quote="是否將引號內的文字複製到剪貼簿？",
@@ -302,6 +302,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         no_answer="The model gave no answer this time. Try again or choose another model.",
         work_only_words="It only replied and did nothing, so this work does not count as done.",
         work_file_missing="The file this work was to leave is missing, so it does not count.",
+        work_file_unreadable="The file this work was to leave is there but cannot be opened (a folder of that name, no permission, or in use by another program), so it does not count.",
         routine_refused="A step this run needed was refused, so it did not finish.",
         routine_nothing="This run did not make what it was set to, so it is not done.",
         work_children_open="What was handed on to colleagues is not all finished, so this does not count.",
@@ -311,7 +312,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         failed="This task has no confirmed result. Check whether the original action completed and provide the correct target before retrying.",
         open_not_found="The item to open was not found. Provide the correct file or URL and try again.",
         opened="Opened {target} on your computer.",
-        which_computer="Open it on this PC, or on {who}'s own computer?",
         nothing_to_copy="There is nothing to copy.",
         copy_last="Copy my last answer to the clipboard?",
         copy_quote="Copy the quoted text to the clipboard?",
@@ -390,6 +390,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         no_answer="モデルから回答が返りませんでした。もう一度試すか、別のモデルを選んでください。",
         work_only_words="返信だけで実際の作業がないため、完了とみなしません。",
         work_file_missing="完了条件のファイルが見つからないため、完了とみなしません。",
+        work_file_unreadable="完了条件のファイルはありますが開けません（同名のフォルダー、権限がない、または他のアプリが使用中）。完了とみなしません。",
         routine_refused="この実行に必要な手順が拒否されたため、完了しませんでした。",
         routine_nothing="この実行は作るはずだったものを作れなかったため、完了とみなしません。",
         work_children_open="同僚に渡した作業がすべて終わっていないため、完了とみなしません。",
@@ -399,7 +400,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         failed="結果を確認できません。元の操作が完了したか確認し、正しい対象を指定して再試行してください。",
         open_not_found="開く項目が見つかりません。正しいファイルか URL を指定して再試行してください。",
         opened="あなたのコンピューターで「{target}」を開きました。",
-        which_computer="このパソコンで開きますか？それとも{who}自身のコンピューターで開きますか？",
         nothing_to_copy="コピー対象が存在しません。",
         copy_last="直前の回答をクリップボードにコピーしますか？",
         copy_quote="引用された文章をクリップボードにコピーしますか？",
@@ -491,12 +491,10 @@ _MAC_PHRASES = {
         "computer_watch": "無法監看鍵盤與滑鼠，為安全起見不操作電腦。請先親自完成這一步，再到「系統設定 › 隱私權與安全性 › 輸入監控」允許拉斐爾，然後重新啟動拉斐爾。",
     },
     "en": {
-        "which_computer": "Open it on this Mac, or on {who}'s own computer?",
         "computer_unavailable": "The computer cannot be operated at this time. Complete this step yourself; if it keeps happening, allow Raphael in System Settings > Privacy & Security > Accessibility.",
         "computer_watch": "The keyboard and the mouse cannot be watched, so the computer is not operated. Complete this step yourself, then allow Raphael in System Settings > Privacy & Security > Input Monitoring and restart Raphael.",
     },
     "ja": {
-        "which_computer": "この Mac で開きますか？それとも{who}自身のコンピューターで開きますか？",
         "computer_unavailable": "現在コンピューターを操作できません。この操作はご自身で行い、続く場合は「システム設定 › プライバシーとセキュリティ › アクセシビリティ」でラファエルを許可してください。",
         "computer_watch": "キーボードとマウスを監視できないため、コンピューターを操作しません。この操作はご自身で行い、「システム設定 › プライバシーとセキュリティ › 入力監視」でラファエルを許可してから再起動してください。",
     },
@@ -630,7 +628,7 @@ Never say that you are an AI, a language model or a program, and never mention t
 Only claim actions established by successful tool results. Never expose private reasoning.
 The member's Docker computer is its isolated sandbox. Screenshots, clicks, typing, scrolling,
 app launches and vm_exec need no per-action approval. Never act while the owner holds control.
-Anything that needs a computer (opening an app or a website, running a program, looking at a screen)
+Anything to be seen on a screen (opening an app or a website, clicking, typing, looking at a screen)
 is done on your own computer, with its tools. With no computer tool listed, say so plainly; promise none. Service work uses its connected app.
 Use browser_open(url): isolated_named/main, semantic refs, no screenshot. Follow with get_browser_state
 and browser_navigate/click/type/pointer. Computer tools exist from turn one; you can click.
@@ -681,26 +679,27 @@ The calendar
 """
 _SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
 
-# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01). These words are added to its prompt alone; every other prompt
-# says nothing of that PC, and a conversation's work that needs a computer is done on the member's own.
+# A quick question (Alt+Space) is the one turn that shows things on the owner's own screen (R-PC-01). There the owner's PC
+# is the default for everything, and the member's own computer is used when the owner's words name it: the model reads
+# which, nothing in the code matches words to choose. These words are added to its prompt alone; every other prompt says
+# that what is seen is shown on the member's own computer and that commands on the owner's PC run hidden (R-PC-02).
 _OWNER_PC_RULES = """
 The owner's PC (quick question)
-This quick question can reach the owner's Windows computer through the offered local command tools, as well as your own
-computer for work that needs one. For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
-local__local_exec first. It runs on the owner's Windows PC, subject to their approval setting.
-If local commands are off, say so: the owner can ask you to turn them back on. Do not claim
+In this quick question the owner's own Windows computer is the default for everything, and what is to be seen too: commands
+(local__local_exec), opening a website, an app or a settings page on its screen (open), its desktop (computer) and the
+other fixed commands. Use your own computer and its tools instead only when the owner's words name it ("your computer",
+"on your PC", in whatever language they speak); when they do and you have none, say so plainly and never use the owner's
+PC in its place. For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
+local__local_exec first. If local commands are off, say so: the owner can ask you to turn them back on. Do not claim
 the capability is missing.
-Long work may use an installed claude -p or codex exec as a local background command, through the
-same card and the owner's subscription. Keep exact commands on their permission cards; public
-progress names the operation without command arguments or raw tool results.
 """
 _OWNER_PC_RULES = for_this_system(_OWNER_PC_RULES)
 
 
-def _contract(owner_pc: bool = False) -> str:
-    """The shared contract of a prompt, with the owner's-PC words only for a quick question. It names no interface
-    language: that is the window's and goes to no model."""
-    return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
+def _contract(owner_screen: bool = False) -> str:
+    """The shared contract of a prompt, with the quick question's words for the owner's PC only when it is one. It names
+    no interface language: that is the window's and goes to no model."""
+    return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_screen else "")
 
 _FACT_RULES = """\
 Facts
@@ -1157,7 +1156,7 @@ def _member_fields(name: str, role: str, instructions: str, personality: str) ->
 
 def cli_system_prompt(
     *, name: str | None = None, role: str = "", instructions: str = "",
-    personality: str = "", memory: bool = False, speaker: Speaker | None = None, owner_pc: bool = False,
+    personality: str = "", memory: bool = False, speaker: Speaker | None = None, owner_screen: bool = False,
 ) -> str:
     """The same persona and factual rules, with MCP tools instead of a JSON reply contract. A resumed CLI
     session keeps the instructions it began with, so the memory files themselves come with every turn's
@@ -1174,7 +1173,7 @@ def cli_system_prompt(
         fields = _member_fields(name, role, instructions, personality)
         persona = fields["persona"]
         language_rule = ""
-    prompt = "\n\n".join((persona, _contract(owner_pc and name is None), _FACT_RULES,
+    prompt = "\n\n".join((persona, _contract(owner_screen and name is None), _FACT_RULES,
                           *((_OWNER_WORK,) if name is not None else ()), *((language_rule,) if language_rule else ())))
     if memory:
         prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace(_FILES_HERE, "in the initial snapshot and later change records")
@@ -1234,7 +1233,7 @@ def member_worker_system_prompt(
 
 def system_prompt(
     route: str, memory_snapshot: "str | MemorySnapshot | None" = None, *,
-    narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True, owner_pc: bool = False,
+    narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True, owner_screen: bool = False,
 ) -> str:
     """The system prompt for the model that words an answer on `route` ("answer", "discuss" or
     "chat"), and the memory's rules and files (`memory_rules`) when there is a
@@ -1246,7 +1245,7 @@ def system_prompt(
     prefixes = REPLY_KINDS
     prompt = _SYSTEM_PROMPT.format(
         persona=_raphael_persona(speaker),
-        contract=_contract(owner_pc),
+        contract=_contract(owner_screen),
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (

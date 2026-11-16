@@ -137,6 +137,15 @@ Offline: `core/tests/agent/test_persistence.py`, `core/tests/worker/test_persist
 owner's own models: whether a given model, told all this, now opens its browser or tries another source instead of
 stopping; a live read of a real consent page; a real reading service's fallback.
 
+## A weather request that hangs is asked once more (R-WEATHER-01)
+
+`agent/tools.Tools._get_json`: each Open-Meteo request (the place, then the forecast) has tries of `WEATHER_TRY_S` and a
+second try when one hangs or loses its connection, inside the one `WEATHER_TIMEOUT_S`; an error page is not asked again. A
+member still told `timeout` reads "The call failed (timeout). Another way may still work." and in every case seen took a web
+search next. Offline: `core/tests/agent/test_tools.py` (an `httpx.MockTransport` Open-Meteo, which ignores httpx's own
+timeouts, so a hang is an `asyncio.sleep` and a stage timeout a raised `httpx.ReadTimeout`). Not covered offline: whether
+Open-Meteo answers a second try when it hangs; the log line names the request, the try and the error class to tell.
+
 ## Work that was to leave a file is judged on a file that exists (R-WORK-FILE-01, R-WORK-FILE-02)
 
 - `background/service.py::_record_artifacts` records as evidence the files found in the member's folders (its own, then its team's):

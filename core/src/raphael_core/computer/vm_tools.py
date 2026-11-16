@@ -28,8 +28,10 @@ from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
+from . import seat_launch
 from . import seat_view
 from . import file_tools
+from . import checkpoints as checkpoint_store
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
 from ..worker.computer_verification import meaningful_expectation
 
@@ -118,6 +120,26 @@ def _size_words(kib):
     return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
 
 
+# How long a turn waits for its first file checkpoint: past the guest's own end of the store's script.
+CHECKPOINT_WAIT_S = checkpoint_store.GUEST_SECONDS + 3
+
+# A computer call that broke in the core itself, not in the computer or the page: what the member is told.
+COMPUTER_FAULT = "computer_fault"
+COMPUTER_FAULT_NOTE = ("Raphael's own computer layer failed on this call ({kind}), not the computer or the page; whether "
+                       "anything was done is unknown. Read the current window or page before the next action.")
+
+
+def _raised_at(error):
+    """`file:line in function` of the innermost frame an exception was raised in: where, never what it said."""
+    frame = error.__traceback__
+    while frame is not None and frame.tb_next is not None:
+        frame = frame.tb_next
+    if frame is None:
+        return "an unknown place"
+    code = frame.tb_frame.f_code
+    return f"{PurePosixPath(code.co_filename.replace(chr(92), '/')).name}:{frame.tb_lineno} in {code.co_name}"
+
+
 ENGINE_FAILURES = {
     "docker_stopped": "Docker Desktop is not running, so the computer could not start. Tell the owner plainly that Docker Desktop "
                       "is not running, and that opening it (or pressing the computer's screen) lets you try again.",
@@ -167,6 +189,11 @@ SHARED_CONTRACT = (" Shared with other members, a screen each: /home/cua/workspa
                    " The shell has no screen here; open a window with launch_app.")
 # The tools that sentence is about. On every tool it would be said forty times over.
 SHARED_NOTED = frozenset({"vm_exec", "launch_app", "clipboard_read", "clipboard_write"})
+# What a launch at a seat adds to the driver's reply when it cannot bring a window to the member's screen (seat_launch).
+UNTIED_LAUNCH = ("A window opened during this launch that nothing ties to it, so it was left where it opened, on another screen. "
+                 "A program that keeps one copy running opens a second launch's window in that copy: start it as a separate "
+                 "copy (xfce4-terminal --disable-server), and open web pages with browser_open.")
+NO_LAUNCH_WINDOW = "No window of this launch appeared within {seconds} s; call list_windows before launching it again."
 
 RUN_STEPS = {"description": "Perform 1–10 short driver actions, then return one window/page observation. Every step uses the ordinary gate and current control checks. Stop on the first failure; failed_step is one-based. Never batch shell commands, secrets, takeover or another composite. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {
@@ -262,6 +289,9 @@ class VmTools:
     browser_open_s = 300.0
     # How long a window that was moved onto its screen is waited for before it is called outside it.
     window_fit_wait_s = 10.0
+    # How long a launch at a seat waits for a window it opened: one handed to a copy already running, or started on a
+    # loaded PC, maps after the driver has answered. The wait ends at the first such window.
+    launch_window_wait_s = 10.0
     # A first call after a wake waits for the computer to be ready, and when it finds the computer still on its way up
     # (`TRANSIENT_START`, `TRANSIENT_CONNECT`) it looks again: this many tries in all, after a growing pause, and never
     # past this many seconds since the first. A real failure is not tried again.
@@ -569,10 +599,9 @@ class VmTools:
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        # True once the member's own computer has a tool catalog. The snapshot then leaves out the owner's-desktop
-        # `computer` tool, so that two tools called computer never leave the choice of machine to the model. Without a
-        # catalog (computer tools off, no Docker on this PC) a member simply has no computer: only a quick question
-        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01).
+        # True once the member's own computer has a tool catalog. Without one (computer tools off, no Docker on this PC)
+        # a member simply has no computer: only a quick question shows anything on the owner's screen, and an ordinary
+        # turn never falls back to it (R-PC-01, R-PC-06).
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
@@ -644,7 +673,8 @@ class VmTools:
             if notice:
                 notice.cancel()
                 await asyncio.gather(notice, return_exceptions=True)
-        if reading and result.kind not in NOTICES:
+        # A failure says why it failed; the time it took is never all it says (a bare "Elapsed" was read as its reason).
+        if reading and result.kind not in NOTICES and (result.ok or result.text):
             elapsed = round(time.monotonic() - began, 2)
             prefix, _, tail = result.text.rpartition("\n")
             try:
@@ -703,15 +733,17 @@ class VmTools:
             if ticket in self.checkpointed:
                 return
             self.checkpointed.add(ticket)
-            failures = getattr(self.vm, "checkpoint_failures", None)
-            if failures is None:
-                self.vm.checkpoint_failures = failures = {}
+            began = time.monotonic()
             try:
-                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
-                failures.pop(target.state_key, None)
+                # The guest ends the store's script itself (`GUEST_SECONDS`); this waits a little longer, so that the
+                # store's own end, with its partial checkpoint written, is what comes back.
+                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), CHECKPOINT_WAIT_S)
             except Exception as error:
-                failures[target.state_key] = True
-                logger.warning("File checkpoint skipped: %s", type(error).__name__)
+                # Without it this run's changes have no record of their own and its undo covers nothing: which kind
+                # (the store took too long, or could not be read) and after how long is written down, never a path.
+                kind = str(error) if isinstance(error, VmError) else type(error).__name__
+                logger.warning("File checkpoint skipped: %s after %.1f s (%s)", kind, time.monotonic() - began,
+                               "a command" if command is not None else "a file tool")
 
     def _observe_page(self, target, page, *, remember=True):
         from urllib.parse import urlsplit
@@ -1132,9 +1164,13 @@ class VmTools:
             self.vm.invalidate(target)
             result = PluginResult(False, "connection_error")
             return result
-        except Exception:
+        except Exception as error:
+            # Nothing the computer said: a fault of this layer, told as one to the member and the owner rather than as a
+            # cause unknown. Its type and where it was raised are written down (never its message, which can hold what
+            # the screen showed).
             self.vm.invalidate(target)
-            result = PluginResult(False, "error")
+            logger.warning("Computer tool %s failed in the core: %s at %s", tool.name, type(error).__name__, _raised_at(error))
+            result = PluginResult(False, COMPUTER_FAULT, COMPUTER_FAULT_NOTE.format(kind=type(error).__name__))
             return result
         finally:
             if self.logins and result.kind:
@@ -1725,32 +1761,12 @@ class VmTools:
                 picture = await asyncio.to_thread(capture, port, password, target.screen)
                 reply["content"].append({"type": "image", "mimeType": "image/png", "data": base64.b64encode(picture).decode()})
             return reply
-        before = await self._canvas_windows(client, session) if name == "launch_app" else None
+        if name == "launch_app":
+            return await self._seat_launch(target, client, session, args)
         reply = await client.request("tools/call", {"name": name, "arguments": args})
-        if before is not None and not reply.get("isError"):
-            after = await self._canvas_windows(client, session)
-            existing = {row["window_id"] for row in before["windows"]}
-            launched = reply.get("structuredContent") or {}
-            launch_pids = {launched.get("pid"), launched.get("launcher_pid")} - {None, 0}
-            new = [row for row in after["windows"] if row["window_id"] not in existing]
-            owned = [row for row in new if row["pid"] in launch_pids]
-            candidates = owned or (new if len(new) == 1 else [])
-            for row in candidates:
-                if not seat_view.mine(row["window_id"], after, target.screen, target.screens):
-                    await self.vm.move_window(target, row["window_id"])
-            after = await self._canvas_windows(client, session)
         if reply.get("isError"):
             return reply
-        state = reply.get("structuredContent")
-        if not isinstance(state, dict):
-            for block in reply.get("content", []):
-                if block.get("type") == "text":
-                    try:
-                        state = json.loads(block["text"])
-                    except ValueError:
-                        continue
-                    if isinstance(state, dict):
-                        break
+        state = self._reply_state(reply)
         if name == "get_cursor_position":
             if not isinstance(state, dict) or not {"x", "y"} <= state.keys():
                 return self._seat_error("Pointer position is unavailable.")
@@ -1773,14 +1789,96 @@ class VmTools:
             if isinstance(state, dict) and isinstance(state.get("summary"), str):
                 state = {**state, "summary": re.sub(r"\s*\[window_point=.*?screen_point=.*?\]", "", state["summary"])}
                 reply["structuredContent"] = state
-        if isinstance(state, dict) and name in ("get_window_state", "verify_state", "get_browser_state", "browser_prepare", "launch_app"):
+        if isinstance(state, dict) and name in ("get_window_state", "verify_state", "get_browser_state", "browser_prepare"):
             state = seat_view.window_state(state, target.screen, target.screens)
-            if name == "launch_app" and isinstance(state.get("windows"), list):
-                # Use settled bounds after any move, retaining only windows actually named by the launch reply.
-                ids = {row["window_id"] for row in state["windows"]}
-                state["windows"] = seat_view.windows(after, target.screen, target.screens)["windows"]
-                state["windows"] = [row for row in state["windows"] if row["window_id"] in ids]
             return seat_view.projected_reply(reply, state)
+        return reply
+
+    @staticmethod
+    def _reply_state(reply):
+        state = reply.get("structuredContent")
+        if not isinstance(state, dict):
+            for block in reply.get("content", []):
+                if block.get("type") == "text":
+                    try:
+                        state = json.loads(block["text"])
+                    except ValueError:
+                        continue
+                    if isinstance(state, dict):
+                        break
+        return state
+
+    async def _seat_launch(self, target, client, session, args):
+        """The windows a launch at a seat opened are brought to this member's screen, and no other window is
+        (seat_launch). The caller holds the unit native lock: no other member's launch runs meanwhile."""
+        tag = seat_launch.token()
+        program = seat_launch.program(args)
+        sent = seat_launch.tagged(args, tag, program and await self.vm.command_path(target, program))
+        if sent is None:
+            tag, sent = None, args
+        before = await self._canvas_windows(client, session)
+        reply = await client.request("tools/call", {"name": "launch_app", "arguments": sent})
+        if tag is not None:
+            reply = seat_launch.as_asked(reply, sent, args)
+        # A refusal stands, in the member's words. The driver refuses when the process it started ended and no new
+        # window of the launch appeared within 8 s anywhere on the canvas (launch_handoff_timeout), not by a seat.
+        if reply.get("isError"):
+            return reply
+        launched = reply.get("structuredContent") or {}
+        pids = {launched.get("pid"), launched.get("launcher_pid")} - {None, 0}
+        existing = {row["window_id"] for row in before["windows"]}
+        # A window is judged once, when it first appears: what ties it is written before it maps.
+        judged = {}
+        until, pause = time.monotonic() + self.launch_window_wait_s, .1
+        while True:
+            after = await self._canvas_windows(client, session)
+            fresh = [row for row in after["windows"] if row["window_id"] not in existing and row["window_id"] not in judged]
+            if fresh:
+                found = await self.vm.launch_marks(target, fresh)
+                judged.update((row["window_id"], seat_launch.tied(found.get(row["window_id"]), tag, row.get("pid"), pids))
+                              for row in fresh)
+            if any(judged.values()) or time.monotonic() >= until:
+                break
+            await asyncio.sleep(min(pause, max(0.0, until - time.monotonic())))
+            pause = min(pause * 2, 1.0)
+        mine = {identifier for identifier, own in judged.items() if own}
+        away = [identifier for identifier in mine if not seat_view.mine(identifier, after, target.screen, target.screens)]
+        for identifier in away:
+            await self.vm.move_window(target, identifier)
+        # The window manager applies a move when it gets to it.
+        until, pause = time.monotonic() + self.window_fit_wait_s, .05
+        while away:
+            after = await self._canvas_windows(client, session)
+            present = {row["window_id"] for row in after["windows"]}
+            if time.monotonic() >= until or all(identifier not in present or seat_view.mine(
+                    identifier, after, target.screen, target.screens) for identifier in away):
+                break
+            await asyncio.sleep(pause)
+            pause = min(pause * 2, 1.0)
+        local = seat_view.windows(after, target.screen, target.screens)["windows"]
+        state = self._reply_state(reply)
+        if isinstance(state, dict):
+            state = seat_view.window_state(state, target.screen, target.screens)
+            if isinstance(state.get("windows"), list) or mine:
+                # Settled bounds after any move, of the windows the driver named or this launch opened, on this screen only.
+                named = {row.get("window_id") for row in state.get("windows") or [] if isinstance(row, dict)} | mine
+                state["windows"] = [row for row in local if row["window_id"] in named]
+            reply = seat_view.projected_reply(reply, state)
+        own = [row for row in local if row["window_id"] in mine]
+        shown = {row["window_id"] for row in local}
+        present = {row["window_id"] for row in after["windows"]}
+        elsewhere = [identifier for identifier, tied in judged.items() if not tied and identifier in present - shown]
+        if own:
+            # A member is shown a reply's text: the window's id is here, not only in the structured rows.
+            note = "This launch's window on your screen:\n" + "\n".join(seat_view.windows_text({"windows": own}).splitlines()[1:])
+        elif elsewhere:
+            note = UNTIED_LAUNCH
+        elif not judged:
+            note = NO_LAUNCH_WINDOW.format(seconds=f"{self.launch_window_wait_s:g}")
+        else:
+            note = None
+        if note:
+            reply = {**reply, "content": [*reply.get("content", []), {"type": "text", "text": note}]}
         return reply
 
     async def _connection(self, target, *, member=None, owner_observation=False):

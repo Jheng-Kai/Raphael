@@ -41,12 +41,11 @@ def test_output_folder_is_shared_escaped_data_and_changes_never_move_files(conn,
     settings.set("owner_output_folder", str(first))
     assert str(first).replace("\\", "\\\\") in owner_context(settings)
     settings.set("owner_output_folder", str(second))
-    prompt = owner_context(SettingsStore(conn), owner_pc=True)
-    assert "by default" in prompt and "grants no additional permission" in prompt
-    # Everywhere else the owner's PC is not mentioned and no tool to write there is suggested (R-PC-01).
-    ordinary = owner_context(SettingsStore(conn))
-    assert "owner's PC" not in ordinary and "command tools" not in ordinary and "grants no additional permission" in ordinary
-    assert str(second).replace("\\", "\\\\") in ordinary
+    # Every turn and task writes there with the owner's file tools (R-PC-05): the file tools are the way, not a command.
+    prompt = owner_context(SettingsStore(conn))
+    assert "by default" in prompt and "write_file of owner_files" in prompt
+    assert "owner's PC" not in prompt and "command" not in prompt
+    assert str(second).replace("\\", "\\\\") in prompt
     assert original.read_text(encoding="utf-8") == "keep"
     assert not second.exists()
     settings.set("owner_output_folder", "")
@@ -57,3 +56,16 @@ def test_output_folder_is_shared_escaped_data_and_changes_never_move_files(conn,
 def test_output_folder_requires_an_absolute_path(conn, path):
     with pytest.raises(ValueError, match="absolute path"):
         SettingsStore(conn).set("owner_output_folder", path)
+
+
+def test_the_write_folders_are_listed_beside_the_output_folder(conn, tmp_path):
+    settings = SettingsStore(conn)
+    settings.set("owner_write_folders", [str(tmp_path / "notes"), "  ", str(tmp_path / "notes")])
+    assert settings.get("owner_write_folders") == [str(tmp_path / "notes")]
+    prompt = owner_context(settings)
+    data = json.loads(prompt.split("<owner_context>\n")[1].split("\n</owner_context>")[0])
+    assert data["write_folders"] == [str(tmp_path / "notes")] and "everywhere else on it is read-only" in prompt
+    with pytest.raises(ValueError, match="absolute paths"):
+        settings.set("owner_write_folders", ["relative"])
+    with pytest.raises(TypeError):
+        settings.set("owner_write_folders", [3])

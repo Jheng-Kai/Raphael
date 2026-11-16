@@ -1,5 +1,6 @@
 import * as api from "./api";
 import { t } from "./i18n";
+import { linkedText } from "./message-content";
 import { btn, esc, row, tg, toaster } from "./ui";
 
 export function updateHTML(view: api.UpdateView | null, automatic: boolean, currentVersion = ""): string {
@@ -17,7 +18,7 @@ export function updateHTML(view: api.UpdateView | null, automatic: boolean, curr
       state === "error" ? t(view?.error === "busy" ? "update.busy" : view?.error === "version" ? "update.versionError" : view?.error === "verification" ? "update.signatureError" : "update.feedError") : t(state === "ready" ? "update.ready" : state === "downloading" ? "update.downloading" : state === "checking" ? "update.checking" : available ? "update.available" : "update.current"),
       btn(t(available ? state === "ready" ? "update.restart" : "update.install" : "update.check"), "", ` data-act="${available ? "update-install" : "update-check"}"${busy ? " disabled" : ""}`)) +
     row(t("update.auto"), t("update.autoHelp"), tg(automatic, t("update.auto"), ' data-k="auto-update"')) + `</div>` +
-    (view?.notes ? `<p class="note update-notes">${esc(view.notes)}</p>` : "") + `</section>`;
+    (view?.notes ? `<p class="note update-notes">${linkedText(view.notes)}</p>` : "") + `</section>`;
 }
 
 export async function installedUpdateNotice(): Promise<void> {

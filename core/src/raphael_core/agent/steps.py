@@ -26,7 +26,8 @@ SERVICE_REASONS = frozenset(("provider_missing", "provider_broken", "provider_of
 # bad_arguments: the tool was given something it does not take. auth: it needs a new sign-in.
 # missing_secret: a key or token it needs is not set. denied: the sign-in was refused. timeout:
 # the service did not answer in time. network: it could not be reached. not_found: what was asked
-# for is not there (a city, a program). blocked: the tool may not run now (switched off, no yes, not
+# for is not there (a city, a program). unreadable: what was asked for is there but cannot be read (a folder,
+# no permission, in use by another program). blocked: the tool may not run now (switched off, no yes, not
 # a tool of the task). gone: the tool is no longer there. tool_error: the service said it failed.
 # protocol: it answered with something that is not an answer. cancelled: the user stopped it.
 # not_made: the turn could ask about one call only, so this one was not made. credits, budget,
@@ -44,6 +45,7 @@ REASONS = KINDS | SERVICE_REASONS | frozenset(
         "timeout",
         "network",
         "not_found",
+        "unreadable",
         "blocked",
         "approval_required",
         "memory_refused",
@@ -76,6 +78,7 @@ _ALIASES = {
     "elevated": "handoff",
     "own_window": "blocked",
     "keys_not_allowed": "blocked",
+    "shows_on_screen": "blocked",  # a command that would open something on the owner's screen (R-PC-06)
     "failed": "error",
 }
 
@@ -132,7 +135,7 @@ def step_view(step: Step) -> dict:
 # A call that failed for one of these reasons was refused before it did anything, or by the tool
 # itself; any other failure came after the call was sent, so it may have been made.
 REFUSED_REASONS = frozenset(
-    {"tool_error", "auth", "bad_arguments", "blocked", "missing_secret", "not_found", "denied",
+    {"tool_error", "auth", "bad_arguments", "blocked", "missing_secret", "not_found", "unreadable", "denied",
      "not_configured", "disabled", "unavailable", "vision_unsupported", "auth_expired", "permission_denied",
      "provider_missing", "provider_broken", "provider_off", "chatgpt_scope", "chatgpt_plan_unavailable"}
 )

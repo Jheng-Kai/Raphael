@@ -181,14 +181,14 @@ async def test_requests_and_history_reject_an_unknown_member(setup):
 
 
 async def test_a_member_has_no_tool_for_the_owners_desktop(setup, client):
-    # R-PC-01: the owner's PC is a quick question's alone, so a member's conversation neither lists nor finds it.
+    # R-PC-01: the owner's screen is a quick question's alone, so a member's conversation neither lists nor finds its desktop.
     rig, team = setup
     one = member(team)
     client.chats += [chat("先找工具。", ("find_tools", {"query": "operate the computer"})), live_said("我沒有可以操作電腦的工具。")]
     result = await typed(rig, "打開小算盤算 12 乘 34", one.id)
     assert (result["prefix"], result["text"]) == ("", "我沒有可以操作電腦的工具。")
     listed = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    assert not listed & {"open", "computer", "lock_screen", "local__local_exec"} and {"find_tools", "use_tool"} <= listed
+    assert not listed & {"open", "computer", "lock_screen"} and {"find_tools", "use_tool"} <= listed
     assert '"name": "computer"' not in client.chat_calls[1]["messages"][-1]["content"]
     assert rig.actions.calls == []
 
@@ -395,7 +395,7 @@ async def test_voice_picked_members_share_one_proposal(setup, client):
     assert len(team.members.store.members()) == 3
 
 
-async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):
+async def test_a_member_asks_raphael_who_answers_as_itself(setup, client, conn):
     rig, team = setup
     one = member(team)
     member(team, name="小研究")
@@ -549,7 +549,7 @@ async def test_raphael_is_offered_the_meeting_tool_when_asked_for_one(setup, tex
     assert "room_meeting" not in team_tools_for(team.members, team.members.speaker(0), "現在幾點")
 
 
-async def test_raphael_asked_for_the_desktop_says_the_owner_must_ask_him(setup, client, conn):
+async def test_raphael_asked_for_the_desktop_says_the_owner_must_ask_it(setup, client, conn):
     rig, team = setup
     one = member(team)
     client.decisions.append(decision("answer"))

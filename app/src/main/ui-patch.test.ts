@@ -116,7 +116,7 @@ test("a changed row preserves its slime clock and active transition", async () =
   expect(records).toHaveLength(0);
 });
 
-test("a face never becomes another member's: Raphael's face where the pearl bow tie's stood is a new one, so its bow cannot move on him", () => {
+test("a face never becomes another member's: Raphael's face where the pearl bow tie's stood is a new one, so its bow cannot move on it", () => {
   const root=document.createElement('div');
   patchHTML(root,`<button>${slimeSVG({character:'bowtie-pearl'},{state:'idle',member:7,moving:true})}</button>`);
   const before=root.querySelector('svg.slime');

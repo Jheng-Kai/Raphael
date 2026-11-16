@@ -192,7 +192,7 @@ test("public turn progress replaces the previous subtitle without rotating or re
   expect(view.waiting).toBeNull();
 });
 
-test("Raphael is red while he refuses (a 否 line) and his gold again for a report or a new dictation", () => {
+test("Raphael is red while it refuses (a 否 line) and its gold again for a report or a new dictation", () => {
   send({ type: "notice", text: "《否。未偵測到麥克風。請接上裝置。》" });
   expect(emblem.mood).toBe("angry");
   vi.advanceTimersByTime(30_000);
