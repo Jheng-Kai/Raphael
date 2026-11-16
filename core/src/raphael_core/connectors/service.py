@@ -465,7 +465,7 @@ class ConnectorsService:
         if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        # A sign-in still waiting in the browser ends here, so it gives back what it made before the core is gone.
+        # A sign-in still waiting in the browser ends here, so that nothing is left half done when the core goes.
         await self._end_sign_in(set(self._signing_in))
 
     async def categories(self, params):
@@ -969,8 +969,8 @@ class ConnectorsService:
                 raise ConnectorFailure("not_configured")
             scopes, kept = scopes_for(entry.gmail, entry.calendar), self.vault.get(PREFIX + "refresh_token")
             entry.status = "INITIATED"
-            self._signing_in.add(GOOGLE_SIGN_IN)
             self._save()
+            self._signing_in.add(GOOGLE_SIGN_IN)
         try:
             granted = await self.google.connect(scopes, self._open)
             async with self._lock:
