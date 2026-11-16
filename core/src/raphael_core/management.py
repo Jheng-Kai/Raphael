@@ -35,8 +35,8 @@ def background_actor():
 
 def only_reads(name, arguments):
     """Whether the call is one of the reads of `READS` (listing a member's routines or skills, reading its settings...): it
-    changes nothing, so no card is asked for it (owner, 2026-11-14: a health check of the team raised a card for every member
-    it read, 16 in two days, and the runs were cancelled while they waited)."""
+    changes nothing, so no card is asked for it (a health check of the team raised a card for every member
+    it read, and the runs were cancelled while they waited)."""
     from .protocol import RpcError
     if not isinstance(arguments, dict):
         return False

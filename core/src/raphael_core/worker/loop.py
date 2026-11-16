@@ -108,15 +108,14 @@ SOURCE_CUT = "\n[The source cut this result short. To read the rest, ask it for 
 # What the owner decided: the turn takes no other way to the same end, and is not pushed to (`CORRECTIVE_NOTE`).
 OWNER_DENIED = frozenset(("denied", "declined", "cancelled", "owner_denied", "forbidden", "presence_required",
                           "private_chat_only", "member_create_limit"))
-# The only failures the model is told were refused: the owner's decisions and the safety rules (R-PERSIST-02, owner,
-# 2026-11-14). A model reads "refused" as a verdict and stops, so a page that did not load or a URL to look up first
+# The only failures the model is told were refused: the owner's decisions and the safety rules (R-PERSIST-02). A model reads "refused" as a verdict and stops, so a page that did not load or a URL to look up first
 # is told as a failure with its cause.
 REFUSED = OWNER_DENIED | {"protected_data", "tool_disabled"}
 # Calls the harness did not make because something else comes first (an answer that did not come in time, a hand-off,
 # a ceiling, the owner at the desk): neither refused nor a way that failed.
 NOT_MADE = frozenset(("expired", "unanswered", "not_made", "tools_disabled", "waiting_for_handoff", "stopped", "limit",
                       "already_done", "waiting_for_connection", "computer_busy", "owner_holds_control"))
-# How much of a tool's own words of why it failed the model reads (Hermes bounds an error at 2048 characters).
+# How much of a tool's own words of why it failed the model reads.
 FAILURE_CHARS = 2000
 OTHER_WAYS = "Another way may still work."
 

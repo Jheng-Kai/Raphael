@@ -457,7 +457,7 @@ def classify(value: object, *, secrets=(), record=True) -> Failure:
             ("tool_broken", r"docker_(?:stopped|start_failed|missing)"),
             ('tool_broken', r'\bCLI tool (?:is missing|failed)\b'),
             # A server that cannot start does not start on a second try: a setting is wrong, and the owner is told
-            # which server rather than kept waiting through retries (design, 2026-11-09).
+            # which server rather than kept waiting through retries.
             ("tool_broken", _MCP_START),
             ("cli_stopped", r"CLI (?:process|stream) ended before completion|CLI ended without an answer"),
             ("credits", _CREDITS),
@@ -501,9 +501,9 @@ def tool_failure(kind, content="", *, record=True):
     return classify({"kind": kind, "message": content or kind or "unknown"}, record=record)
 
 
-# What a turn about to end right after a failed call is told before it may (R-PERSIST-03, owner, 2026-11-14: members gave up
+# What a turn about to end right after a failed call is told before it may (R-PERSIST-03: members gave up
 # after one failure). A list of facts, never a count of how many ways to try: what failed, which of the tools it was
-# offered it has not called, and to take the next plausible way. Hermes keeps a model on its tools the same way.
+# offered it has not called, and to take the next plausible way.
 CORRECTIVE_NOTE = "<harness_note>A call failed in this turn. Before you finish, take the next plausible way, or say why none fits."
 LEDGER_FAILED = 6
 LEDGER_UNTRIED = 40

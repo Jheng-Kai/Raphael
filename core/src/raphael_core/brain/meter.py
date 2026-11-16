@@ -105,7 +105,7 @@ def chat(usage) -> Usage:
 
 def responses(usage) -> Usage:
     """OpenAI's Responses usage (the ChatGPT sign-in): `input_tokens` includes the cache, `output_tokens` the
-    reasoning, as Codex reads them (codex-api/src/sse/responses.rs)."""
+    reasoning."""
     if not isinstance(usage, dict):
         return Usage()
     details, out = usage.get("input_tokens_details"), usage.get("output_tokens_details")

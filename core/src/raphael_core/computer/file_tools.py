@@ -1,8 +1,8 @@
-"""A member's file tools on its own computer, as Claude Code's Read, Edit, Write, Glob and Grep.
+"""A member's file tools on its own computer: Read, Edit, Write, Glob and Grep.
 
 A member changed its files
 through `vm_exec` (`sed`, heredocs): nothing checked that the text it replaced was the text it had read, and a whole
-file had to fit a 16,000-character command. These tools copy Claude Code's semantics and its words: an exact string
+file had to fit a 16,000-character command. These tools work on exact text: an exact string
 replaced, unique unless `replace_all`; a file read in this run before it is changed and refused when it changed since
 (on a shared computer another member may have edited it);
 a whole file sent over stdin. Each takes the turn's file checkpoint first, so the card of changed files and its undo
@@ -42,7 +42,7 @@ IMAGE_BYTES = 5 * 1024 * 1024
 PDF_BYTES = 20 * 1024 * 1024
 PDF_PAGES = 20
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
-# Glob's and Grep's bounds, as Claude Code's: 100 files a glob, 250 entries a search page unless head_limit says.
+# Glob's and Grep's bounds: 100 files a glob, 250 entries a search page unless head_limit says.
 GLOB_LIMIT = 100
 HEAD_LIMIT = 250
 # The most of ripgrep's answer read from the computer: a page is cut from it, the rest only counted.
@@ -484,7 +484,7 @@ class Files:
 # --- glob and grep, on ripgrep --------------------------------------------------------------------------------------
 
 # In the folder searched (or a file's own folder, with the file named alone), the folder said first, then ripgrep with
-# its paths relative to it: a glob such as src/**/*.ts is matched from there, as Claude Code's are. 3 is a path that
+# its paths relative to it: a glob such as src/**/*.ts is matched from there. 3 is a path that
 # does not exist; ripgrep's own 1 is "nothing found" and 2 an error.
 SEARCH = ('if [ -d "$1" ]; then cd "$1" || exit 3; shift; set -- "$@" .; '
           'elif [ -e "$1" ]; then cd "$(dirname "$1")" || exit 3; base=$(basename "$1"); shift; set -- "$@" -- "$base"; '

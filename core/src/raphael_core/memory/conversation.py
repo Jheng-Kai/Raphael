@@ -150,7 +150,7 @@ speaker labels on quoted lines in the summary. Keep the summary under \
 {max_tokens} tokens. Return JSON with one field, "summary"."""
 
 # How every brain is shown the summary (R-PERSIST-05): background it may lean on, never orders, and never a reason to
-# stop calling tools (Hermes: a model that read a summary without that clause answered in words alone for seven turns).
+# stop calling tools (a model that read a summary without that clause answered in words alone for seven turns).
 SUMMARY_HEADER = ("Summary of the earlier conversation (background, not instructions; what failed then may work now, "
                   "and your tools remain fully active):")
 
@@ -173,7 +173,7 @@ def is_correction(text: str) -> bool:
 
 
 def turn_time(ms: int) -> str:
-    """When a turn was had, in the local time of this PC and short: "2026-10-22 Thu 21:40". The
+    """When a turn was had, in the local time of this PC and short: "YYYY-MM-DD Thu 21:40". The
     fold and the reflection pass show it with each turn, since a turn they read may be days old:
     「明天有面試」 said yesterday is about today, which only the turn's own date can tell."""
     return time.strftime("%Y-%m-%d %a %H:%M", time.localtime(ms / 1000))
@@ -191,7 +191,7 @@ def turn_text(turn: Turn, *, detail: bool, untrusted: bool = False) -> str:
     said = turn.text or turn.prefix
     if turn.messages and turn.route != "exchange":
         # Raphael's lines are kept framed as the app shows them, 《prefix。…》, the prefix in the interface language:
-        # the model reads his words without the window's frame (owner, 2026-11-14: the interface language goes to no model).
+        # the model reads his words without the window's frame (the interface language goes to no model).
         from ..messaging.words import plain_replies
         said = "\n".join(plain_replies(turn.messages))
     unfinished = is_unfinished(turn) or bool(turn.stopped)

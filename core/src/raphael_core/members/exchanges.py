@@ -1,6 +1,6 @@
 """Bounded meeting rounds: members choose to speak on one shared snapshot.
 
-No one is asked beforehand whether they will speak (Hermes, gateway/hosted_room_discussion.py): an address is answered by
+No one is asked beforehand whether they will speak: an address is answered by
 whoever it names, a message that names no one goes to the room's default responder first, and everyone else then reads
 that answer in a speech turn of their own and speaks or passes. A member the owner addresses may not pass.
 Speech uses the shared worker with a separate admission pool. Durable private work returns through report cards; no

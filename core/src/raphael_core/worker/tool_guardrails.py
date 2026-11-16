@@ -60,7 +60,7 @@ EXACT = (
     "the error and change the approach instead of trying it unchanged.</harness_note>"
 )
 # Calls of different tools that failed one after another (R-PERSIST-04): web_read, then show_page, then a command is
-# the usual way a model gives up, and no one tool's count sees it. Hermes's words: keep using tools, diagnose first.
+# the usual way a model gives up, and no one tool's count sees it.
 STREAK_NOTE_AT = 3
 STREAK = (
     "<harness_note>The last {count} calls failed ({tools}). Do not switch to text-only replies; keep using tools, "

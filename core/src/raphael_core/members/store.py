@@ -85,8 +85,8 @@ _GITHUB_URL = re.compile(r"https://(?:www\.)?github\.com/([^/?#]+/[^/?#]+?)(?:\.
 _NOTION_ID = re.compile(r"[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 _NOTION_URL = re.compile(r"https://(?:www\.)?(?:notion\.so|[a-z0-9-]+\.notion\.site)/\S*")
 # A slime is named as the app names it (slime.ts `CHARACTERS` and `COLORS`): lower-case words joined by hyphens, as
-# "oni-red" and "cat-ears" are. The rule took letters alone until 2026-11-11, so every slime with a hyphen in its name
-# (most of those added on 2026-11-09) was refused when chosen; the app's own test now holds every name it has to this rule.
+# "oni-red" and "cat-ears" are. The rule once took letters alone, so every slime with a hyphen in its name
+# was refused when chosen; the app's own test now holds every name it has to this rule.
 _SLIME_NAME = r"[a-z][a-z0-9]{0,31}(?:-[a-z0-9]{1,31}){0,3}"
 _AVATAR = re.compile(rf"(?:preset|file):[A-Za-z0-9._ -]{{1,120}}|slime:{_SLIME_NAME}(?::{_SLIME_NAME})?")
 

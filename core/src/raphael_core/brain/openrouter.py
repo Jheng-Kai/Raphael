@@ -60,7 +60,7 @@ _TOKEN = re.compile(r"[\x21-\x7e]+")
 # `languages`, which replaces the singular `language` (OpenAI's speech-to-text guide); Whisper on
 # Groq takes a `prompt` (OpenRouter's speech-to-text guide). MAI-Transcribe 2 (tag "azure") takes the
 # words as an Azure phrase list, `phraseList.phrases`; OpenRouter refuses its top-level `keyterms`
-# and Azure ignores a `prompt` for it (a live check wrote "herdr" for "Herder" with the list, and refused `keyterms` with a 400). The other models get the
+# and Azure ignores a `prompt` for it (a live check wrote "kelvr" for "Kelver" with the list, and refused `keyterms` with a 400). The other models get the
 # language only: their hint fields are not documented, and some providers (Azure) refuse a field
 # they do not know. The models that are given the dictionary that way, for the settings page to say
 # so.

@@ -50,8 +50,8 @@ def accepted(word: str, misheard: str) -> bool:
         return False
     if _plain_latin(word) and _plain_latin(misheard) and not is_plausible(word, misheard):
         # A word in lower case letters only carries no mark of a name, so only a correction that
-        # sounds or is spelled like what was heard is a recognition error ("Note Bus" for
-        # "notebot"); "meeting" for "workshop" is rewording, never a dictionary term.
+        # sounds or is spelled like what was heard is a recognition error ("Pine Bus" for
+        # "pinebot"); "meeting" for "workshop" is rewording, never a dictionary term.
         return False
     return True
 

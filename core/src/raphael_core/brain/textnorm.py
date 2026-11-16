@@ -352,11 +352,11 @@ def apply_replacements(text: str, rules: Sequence[tuple[str, str]]) -> str:
     return text
 
 
-# A Latin word of a text, and what may stand between the words of a split one ("Note Bot", "note-bot").
+# A Latin word of a text, and what may stand between the words of a split one ("Pine Bot", "pine-bot").
 _LATIN_TOKEN = re.compile(r"[0-9A-Za-zÀ-ɏ]+")
 _SPLIT_GAP = re.compile(r"[ \t\-]+")
 _WORD_GAP = re.compile(r"[ \t]+")
-# The most words a split dictionary word is found in: "Note Bot", "tele gram", "Open Ro uter".
+# The most words a split dictionary word is found in: "Pine Bot", "tele gram", "Open Ro uter".
 _MAX_SPLIT = 3
 
 
@@ -413,14 +413,14 @@ def _spelled_as(texts: list[str], gaps: list[str], targets: dict[str, str]) -> s
     return None
 
 
-# The plural endings a dictionary word takes ("notebots"), and the letters its own spelling must
+# The plural endings a dictionary word takes ("pinebots"), and the letters its own spelling must
 # have: a word of two letters plus an "s" is too often another word.
 _PLURAL_ENDINGS = ("es", "s")
 _MIN_PLURAL_STEM_LETTERS = 3
 
 
 def _plural_of(texts: list[str], gaps: list[str], targets: dict[str, str]) -> str | None:
-    """The dictionary word that `texts` writes as a plural ("Notebots" for 「notebot」): the word
+    """The dictionary word that `texts` writes as a plural ("Pinebots" for 「pinebot」): the word
     as the dictionary spells it, and the ending as it was written. The ending is lower case; a
     text that is a word of the dictionary itself is no plural (that is `_spelled_as`)."""
     if "".join(text.casefold() for text in texts) in targets:
@@ -505,20 +505,20 @@ def respell_dictionary_words(
     text: str, words: Sequence[str], forms: Sequence[tuple[str, str]] = ()
 ) -> str:
     """`text` with each Latin word of the dictionary written as the dictionary spells it, inside
-    Chinese or Japanese text, where the text has it in other letter case ("Notebot" for
-    「notebot」, "github" for 「GitHub」), split apart ("Note Bot", "open-router"), or misspelt the
-    way speech-to-text writes a name it does not know ("Notebox", "Notbot", "Note Bus" for
-    「notebot」, "Herder" for 「herdr」; `_misspelt_name`).
+    Chinese or Japanese text, where the text has it in other letter case ("Pinebot" for
+    「pinebot」, "github" for 「GitHub」), split apart ("Pine Bot", "open-router"), or misspelt the
+    way speech-to-text writes a name it does not know ("Pinebox", "Pinbot", "Pine Bus" for
+    「pinebot」, "Kelver" for 「kelvr」; `_misspelt_name`).
 
     Speech-to-text cuts dictation at pauses and starts each piece with a capital, and an English
     name inside Chinese has no sentence of its own whose case could matter: the dictionary's
     spelling is the one meant. The cleanup model was told the same and did not do it (it
-    kept "Note Bus" and "Notebox" with the dictionary word named beside them), so this is no request but a rule. In English text the case and the
+    kept "Pine Bus" and "Pinebox" with the dictionary word named beside them), so this is no request but a rule. In English text the case and the
     words belong to the sentence ("Space" is not "space"), so nothing there changes. A split word is
     joined only from words that are no function words ("type less" stays). Words of the dictionary
     come first in the order given: an earlier one wins a text that two of them spell alike.
 
-    A plural of a word keeps its ending ("Notebots" is 「notebots」). A longer word that merely
+    A plural of a word keeps its ending ("Pinebots" is 「pinebots」). A longer word that merely
     holds the dictionary word ("SpaceX" for "Space") is never a misspelling of it. A misspelling
     that is a real word ("Cloud" for "Claude") is only respelled where it is on record: `forms`
     are `(misheard, word)` pairs, the rules of the dictionary and what its corrections saved

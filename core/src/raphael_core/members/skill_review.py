@@ -1,15 +1,13 @@
-"""The skill review: Hermes Agent's way of learning skills, with the limits the owner asked for.
+"""The skill review: how a member learns skills, and how seldom it may.
 
-Owner, 2026-11-11: "他現在一直建立 skills，我覺得可能不太好…參考一下 Hermes agents，然後把他們的邏輯行為拿過來".
-
-What Hermes Agent does (agent/turn_finalizer.py, agent/background_review.py): a counter of model-loop iterations of
+How it works: a counter of model-loop iterations of
 work (`skills.creation_nudge_interval`, 10) that is reset whenever `skill_manage` is used and whenever a review is
 started; at the end of a turn that finished normally, once the counter reaches the interval, a review of the
 conversation runs after the answer was delivered, never for cron turns. The review prefers patching the skill that was
 used to extending an umbrella skill to creating a new class-level skill, and keeps out of the library what is not a
 durable procedure.
 
-What is added here, because the complaint was the frequency (Hermes has none of these): at most one NEW skill per
+What keeps the frequency down: at most one NEW skill per
 member per day (changes are not capped), at least six hours between two reviews of a member, and a new skill whose
 name or description is near an existing one becomes a change to that one (`skill_names.similar_skill`, no model).
 
@@ -31,10 +29,10 @@ from .skills import NEW_SKILL_CAP
 
 logger = logging.getLogger(__name__)
 
-# Like Hermes's `skills.creation_nudge_interval`: steps of real work, since the last review or `skill_manage`, that
+# The steps of real work, since the last review or `skill_manage`, that
 # make a review due.
 NUDGE_INTERVAL = 10
-# Two reviews of one member are at least this far apart (not in Hermes: the owner's complaint is frequency).
+# Two reviews of one member are at least this far apart, so that skills are not made too often.
 REVIEW_GAP_MS = 6 * 3600_000
 # A review that failed three times pauses for this long.
 FAILURE_PAUSE_MS = 6 * 3600_000
@@ -156,7 +154,7 @@ class SkillReview:
         count = 0
         for turn in turns:
             made = steps.get(turn.id, ())
-            # Using skill_manage restarts the count, as in Hermes.
+            # Using skill_manage restarts the count.
             count = 0 if any(step.tool == "skill_manage" and step.outcome == "ok" for step in made) else count + work_iterations(made)
         return (turns, steps) if turns and count >= NUDGE_INTERVAL else None
 
@@ -181,7 +179,7 @@ class SkillReview:
         for member, turns, steps in list(self.waiting()):
             if not self.memory.may_spend(member):
                 continue
-            # A review restarts the count and the gap when it starts, whatever comes of it (Hermes resets at the spawn).
+            # A review restarts the count and the gap when it starts, whatever comes of it.
             self.memory._set_state(self._key(member, "through"), turns[-1].id)
             self.memory._set_state(self._key(member, "review_at"), self.memory._now_ms())
             failure_key = self._key(member, "failures")

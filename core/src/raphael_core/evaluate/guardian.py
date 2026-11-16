@@ -349,7 +349,7 @@ async def run(models, output, *, max_turns=200, seconds=90, brains=None, client=
         home = directory
         command = brains.command
         logged_in = brains.logged_in
-        # CliLoop asks which brains can run (2026-11-15: without it every CLI cell failed before an outcome).
+        # CliLoop asks which brains can run (without it every CLI cell failed before an outcome).
         available = brains.available
     isolated = IsolatedBrains()
     isolated.environ = environ

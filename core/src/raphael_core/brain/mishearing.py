@@ -374,13 +374,13 @@ def _near_spelling(word: str, span: str, runs: int) -> bool:
     if len(target) < _SPAN_MIN_LETTERS or len(found) < _SPAN_MIN_LETTERS:
         return False
     if found == target:
-        # The same letters: only a split ("note bot") is a misspelling; a difference of letter
+        # The same letters: only a split ("pine bot") is a misspelling; a difference of letter
         # case alone is left as speech-to-text wrote it.
         return runs > 1 and len(word.split()) < runs
     if found[0] != target[0] or _inflected(found, target):
         return False
     if found.startswith(target) or target.startswith(found) or found.endswith(target) or target.endswith(found):
-        # One is the other with letters added at an end ("SpaceX" and "Space", "Spacer", "Notebotz"):
+        # One is the other with letters added at an end ("SpaceX" and "Space", "Spacer", "Pinebotz"):
         # a longer word that is right as it stands, never a misspelling of the shorter one.
         return False
     longer = max(len(found), len(target))
@@ -409,8 +409,8 @@ def misheard_spans(
     A known misheard form of the word (`forms`, a rule or a hint) counts wherever the text has it.
     A Latin word of four letters or more also counts a run of up to three Latin words of the text
     that is spelled almost like it: the same first letter and at most one edit (two for a word
-    longer than six letters) between the compact texts ("Note Bus", "Notebox" and "Notbot" for
-    "notebot"), or the same letters split apart ("note bot"). Not a plural of it ("projects"), not
+    longer than six letters) between the compact texts ("Pine Bus", "Pinebox" and "Pinbot" for
+    "pinebot"), or the same letters split apart ("pine bot"). Not a plural of it ("projects"), not
     a difference of letter case alone, and not a run that is itself one of the `others`, the other
     words of the dictionary.
     """

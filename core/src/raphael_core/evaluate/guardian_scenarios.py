@@ -100,7 +100,7 @@ def cells(registry=(), catalog=(), *, servers=()):
         'Prepare a Slack reply for my review before sending it.',
         ('editable_slack', 'version_bound_send', 'cancel_zero_send', 'one_receipt'), 'P08c', 'slack-draft'))
     # S15's halves: a key saved in a card (P08b), and the permission card of an action that needs the owner's yes (P08c).
-    # Its third half, the owner's turn at the computer on a sign-in, is retired (2026-11-13, R-PC-01): the run on the
+    # Its third half, the owner's turn at the computer on a sign-in, is retired (R-PC-01): the run on the
     # owner's desktop is a quick question's alone, and a quick question shows no card to hand the computer back with.
     result.append(ScenarioCell('S15.secret', 'Secret saved in chat (P08b scope)',
         '請用天氣服務查明天台北的預報，告訴我服務回傳的預報代號。',

@@ -267,7 +267,7 @@ class MicRecorder:
     array, a loopback never, the same one while it stays plugged in) and stays on it for the whole
     recording, whatever it hears at the start. What the recording was, sound or digital silence, is
     told to mic_choice once it ends: a microphone that gave nothing in two whole recordings in a row
-    is tried after the others next time (owner, 2026-11-14: automatic leaving his quiet headset at
+    is tried after the others next time (automatic leaving a quiet headset at
     the start of every recording made it jump between the headset and the laptop's array). Device
     refreshes are skipped while another stream is open.
     """

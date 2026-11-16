@@ -156,8 +156,8 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
 # instructions once (agent/persona.py), not on every tool.
 # The outward-action rule is said whole once, in the shared contract every prompt carries (agent/persona.py: no
 # per-action approval in the sandbox, nothing while the owner holds control, approve or the API equivalent for the
-# exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, as Claude Code keeps
-# a tool's description about the tool and its policy in the system prompt: the 350 characters it was, on 34 listed
+# exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, so that
+# a tool's description is about the tool and its policy is in the system prompt: the 350 characters it was, on 34 listed
 # tools, were about 1,560 tokens more in every request of a member with a computer (measured).
 VM_CONTRACT = ("Outward acts (send a message, post, delete outside the workspace, pay) need the owner's yes for the exact "
                "act first (approve on CLI); sandbox success is not approval.")

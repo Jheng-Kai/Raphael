@@ -1,7 +1,7 @@
 """What the owner reads on the card of a management change, in the owner's language and plain words.
 
 A card names each change by its effect and its target by name (never an ID, never JSON, never a fragment of another
-language: owner, 2026-11-11: 「不用這麼複雜」, and the standing rules of one language and no raw JSON). Several changes
+language: the standing rules are one language and no raw JSON). Several changes
 asked for in one turn share one card: one line each (`batch`), one yes for all of them.
 """
 
