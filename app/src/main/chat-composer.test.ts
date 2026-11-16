@@ -2,7 +2,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 const api=vi.hoisted(()=>({roomTranscribe:vi.fn(),core:vi.fn()}));
 vi.mock("./api",()=>api);
-import { createChatComposer, drawTaskSlot, permissionWordFits, wavBytes } from "./chat-composer";
+import { createChatComposer, drawTaskSlot, permissionWordFits, pixelMove, wavBytes } from "./chat-composer";
 import { watchChipRows } from "./chip-scroll";
 import { setLocale } from "./i18n";
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
@@ -129,6 +129,20 @@ test("the permission's word shows exactly while the row holds it beside the mode
   expect(permissionWordFits({ ...row, room: 283.6, shown: true })).toBe(true);
   expect(permissionWordFits({ ...row, room: 284.5, shown: false })).toBe(false);
   expect(permissionWordFits({ ...row, room: 285, shown: false })).toBe(true);
+});
+
+test("the composer's emblem is moved onto whole device pixels, and left alone once it is there (R-UI-161)", () => {
+  // At 125% a box at 651.016 CSS px starts at 813.77 device px: it moves to 814, a fraction of a CSS pixel.
+  const move = pixelMove({ left: 651.016, top: 831.344 }, "", 1.25)!;
+  const [dx, dy] = move.split(" ").map(parseFloat);
+  const whole = (value: number): number => Math.abs(value - Math.round(value));
+  expect(whole((651.016 + dx) * 1.25)).toBeCloseTo(0, 3);
+  expect(whole((831.344 + dy) * 1.25)).toBeCloseTo(0, 3);
+  // Measured again with that move applied, nothing changes; on whole pixels already, no move at all.
+  expect(pixelMove({ left: 651.016 + dx, top: 831.344 + dy }, move, 1.25)).toBeNull();
+  expect(pixelMove({ left: 648, top: 833 }, "", 1)).toBeNull();
+  // A move left over from a place that needed one is taken off where the box is whole without it.
+  expect(pixelMove({ left: 648.2, top: 833.1 }, "0.2px 0.1px", 1)).toBe("");
 });
 
 test("WAV encoding produces mono PCM with correct sample rate and clipping",()=>{

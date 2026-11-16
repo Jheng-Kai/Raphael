@@ -3415,10 +3415,11 @@ export function checkRendered(name, context = {}) {
       const resampling = [];
       for (let element = img; element && element !== document.documentElement; element = element.parentElement) {
         const style = getComputedStyle(element);
-        if (style.transform !== 'none' && !/^matrix\(1, 0, 0, 1, -?\d+, -?\d+\)$/.test(style.transform)) resampling.push(`${element.className || element.tagName}: transform ${style.transform}`);
+        // A move is no resampling once the box lands on whole device pixels (measured below); a scale, a turn or a filter is.
+        if (style.transform !== 'none' && !/^matrix\(1, 0, 0, 1, [-\d.e]+, [-\d.e]+\)$/.test(style.transform)) resampling.push(`${element.className || element.tagName}: transform ${style.transform}`);
         if (style.filter !== 'none') resampling.push(`${element.className || element.tagName}: filter ${style.filter}`);
         if (style.backdropFilter && style.backdropFilter !== 'none') resampling.push(`${element.className || element.tagName}: backdrop-filter ${style.backdropFilter}`);
-        if (style.scale !== 'none' || (style.translate !== 'none' && !/^-?\d+px( -?\d+px)?$/.test(style.translate))) resampling.push(`${element.className || element.tagName}: scale ${style.scale} translate ${style.translate}`);
+        if (style.scale !== 'none' || style.rotate !== 'none') resampling.push(`${element.className || element.tagName}: scale ${style.scale} rotate ${style.rotate}`);
       }
       return { ratio, source: img.currentSrc.startsWith('data:') ? 'drawn' : img.currentSrc.replace(/^.*\/brand\//, 'brand/'), bitmap: [img.naturalWidth, img.naturalHeight],
         box: [rect.width, rect.height], device: [x, y, w, h].map(value => Math.round(value * 1000) / 1000), rendering: getComputedStyle(img).imageRendering, resampling };
