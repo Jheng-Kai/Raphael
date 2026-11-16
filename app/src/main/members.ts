@@ -20,7 +20,8 @@ import { findsName } from "./find-match";
 /**
  * A member as a page about it draws it: without what changes with each word it says or step it takes (its last line,
  * its time, its unread mark, its activity and the words for it). The panel and the settings page compare this, not the
- * whole row, so a reply that streams in or a worker that moves on does not draw them again (an update would flash). Its face carries the rest of it (a long silence, a wait) in its own markup.
+ * whole row, so a reply that streams in or a worker that moves on does not draw them again (an update would flash).
+ * Its face carries the rest of it (a long silence, a wait) in its own markup.
  */
 export function stableMember<T extends Partial<Member>>(member: T): Omit<T, "preview" | "last_at" | "unread" | "unread_from" | "unread_kind" | "waiting" | "activity" | "activity_label"> {
   const { preview: _preview, last_at: _lastAt, unread: _unread, unread_from: _unreadFrom, unread_kind: _unreadKind, waiting: _waiting, activity: _activity, activity_label: _label, ...rest } = member;
