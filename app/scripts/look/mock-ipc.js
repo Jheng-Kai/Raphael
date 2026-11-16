@@ -308,7 +308,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
-  if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.ownerRound.emptyRecords));
+  if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.conversationSamples.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
   if (variant.sidebarMany) {
     const roster = data.sidebarRoster;
@@ -2190,7 +2190,7 @@ export function installMock(fixture, config = {}, target = window) {
         notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true, member_id: member });
         if (args.kind === "agent_up" && variant.ownerVoice === "answer") {
           // As the core writes it: the newest turn of the thread, made now.
-          const turn = { ...copy(data.ownerRound.voiceReply), id: Math.max(0, ...data.turns.map(item => item.id)) + 1, created_at_ms: Date.now(), member_id: member, conversation_id: args.conversationId };
+          const turn = { ...copy(data.conversationSamples.voiceReply), id: Math.max(0, ...data.turns.map(item => item.id)) + 1, created_at_ms: Date.now(), member_id: member, conversation_id: args.conversationId };
           data.turns.push(turn); notify("AgentTurn", { turn_id: turn.id, member_id: member });
         }
         return;

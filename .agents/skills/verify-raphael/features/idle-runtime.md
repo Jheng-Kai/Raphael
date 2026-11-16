@@ -53,10 +53,10 @@ Tauri cursor_position or inner_position. Non-Windows cursor fallback is retained
 Run the existing isolated fake-brain journeys, with one heavy job at a time:
 
 ```powershell
-npm.cmd run native -- hidden-window hidden-window-refused owner-round10 voice-conversation voice-keys locale-sweep delete-conversation
+npm.cmd run native -- hidden-window hidden-window-refused conversation-and-learned-pill voice-conversation voice-keys locale-sweep delete-conversation
 ```
 
-owner-round10 covers learned hover/expiry, mouse pass-through, foreground
+conversation-and-learned-pill covers learned hover/expiry, mouse pass-through, foreground
 continuity, monitor positioning and Undo. voice-conversation and voice-keys cover
 worker/controller input, release, cancellation and dictation timing; debug native
 journeys omit registration on the owner's global keyboard, so a separately

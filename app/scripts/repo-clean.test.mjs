@@ -264,3 +264,9 @@ describe("the walk over tracked files", () => {
     expect(trackedHits(folder, ["clean.md"])).toEqual([]);
   });
 });
+
+describe("this repository", () => {
+  it("carries no provenance mark, dated comment or pointer into history in any tracked file", () => {
+    expect(trackedHits().map(({ path, line, rule }) => `${path}:${line}:${rule}`)).toEqual([]);
+  });
+});

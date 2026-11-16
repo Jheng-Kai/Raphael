@@ -1632,10 +1632,10 @@ npm run look -- esc-main-armed esc-member-armed esc-room-armed conversation-chie
 ## Native regression journey
 
 ```powershell
-npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conversation
+npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sweep delete-conversation
 ```
 
-`owner-round10` uses the bundled debug shell, real Rust correction Tracker, core
+`conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
 two Escape presses for a pending fake answer, a complete learned batch, five-second
 hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
