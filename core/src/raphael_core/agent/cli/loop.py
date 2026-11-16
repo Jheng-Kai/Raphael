@@ -28,6 +28,7 @@ from ...conversation_language import in_language
 from ...ui_languages import LANGUAGE_NAMES
 from ..narration import CLI_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
+from ..persona import phrase
 from ..policy import CONFIRM_TIMEOUT_S, EXPIRED_NOTE
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
@@ -56,6 +57,9 @@ NATIVE_READS = frozenset(("Read", "Glob", "Grep", "LS", "Skill", "ToolSearch", "
                           "webSearch"))
 RECOVERY_RECORD_CHARS = 2000
 RECOVERY_BLOCK_CHARS = 40000
+# Why a turn that answered does not count as done: after a change on the computer's screen it never read the result back,
+# not even once told to (worker/computer_verification.py, R-COMP-PERF-09).
+UNCHECKED = "computer_unchecked"
 
 COMPUTER_CHANGED = ("The computer tool catalog changed. Reload the computer MCP catalog and continue "
                     "the original task. Do not repeat completed actions.")
@@ -291,7 +295,7 @@ class CliLoop:
         self.tool_messages = []
         self.response = None
         self.permission_always = False
-        # Why the turn failed ("missing", "login", "busy", "error", "quota", "rate_limited"), else None.
+        # Why the turn failed ("missing", "login", "busy", "error", "quota", "rate_limited", UNCHECKED), else None.
         self.failure = None
         self.actual_model = None
         self.driver = None
@@ -1209,10 +1213,8 @@ class CliLoop:
                         return None
                     final = self._unthought(event.text).strip()
                     if final:
-                        if check := self._computer_check.finishing():
-                            if check == "stop":
-                                self._queue.put_nowait(Outcome("stopped", kind="computer_verification_required"))
-                                return None
+                        check = self._computer_check.finishing()
+                        if check and check != "stop":
                             self.reload_note = check
                             self.catalog_changed = True
                             return "tools_changed"
@@ -1223,6 +1225,14 @@ class CliLoop:
                         self.owner_input.closed = True
                         if hasattr(self.brains, "sign_in_back"):
                             self.brains.sign_in_back(name)  # it answered: its sign-in stands
+                        if check == "stop":
+                            # Told once to read its last change on the screen back, it answered again without doing so
+                            # (R-COMP-PERF-09). The answer stays in front of the owner, and the turn ends on why it does
+                            # not count as done: a stop with no words was read as a reply that said nothing.
+                            self.failure, self.failure_reason = UNCHECKED, None
+                            self._queue.put_nowait(Outcome("stopped", final=phrase(self.language, "computer_unchecked"),
+                                                           kind="computer_verification_required"))
+                            return None
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()
