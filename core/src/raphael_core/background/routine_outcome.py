@@ -1,5 +1,4 @@
-"""Whether a routine's run did its work (owner, 2026-11-11: runs ended "done" with nothing made, and the owner could not tell a
-failed run from a good one).
+"""Whether a routine's run did its work: a run that ended "done" with nothing made must not look like a good one.
 
 A run is done only when its turn ended without an error AND the work was not refused on the way AND, for a routine whose purpose
 is something made (a page, a draft), what it was to make exists. The judgement reads what the run did (`TaskRun.succeeded`,

@@ -189,7 +189,7 @@ AT_THIS_COMPUTER = "app"
 _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 # Endings that are the app's judgement of the work, not a fault of the brain: the turn's words say what was missing, and no
 # brain failure is recorded with them. Recorded as one ("unknown" on `cli:claude`), a member asked about its failed routine
-# told the owner of a Claude error of unknown cause (2026-11-16, R-ROUTINE-05).
+# told the owner of a Claude error of unknown cause (R-ROUTINE-05).
 _JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
                              "missing_terminal", "dangling_mention", "child_work_incomplete"))
 # Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
