@@ -76,7 +76,7 @@ export function itemHTML(item: HistoryItem, expanded: boolean): string {
 
 /** The history page, which can also be opened at one day. */
 export interface HistoryPage extends Page {
-  /** Shows only the dictations of the day `2026-10-14` (or all days, with null) from the next time the page is shown. */
+  /** Shows only the dictations of the day `YYYY-MM-DD` (or all days, with null) from the next time the page is shown. */
   setDay(date: string | null): void;
   /** The day the page shows, or will show when it is shown next; null for all of them. */
   day(): string | null;
@@ -120,7 +120,7 @@ export function createHistory(app: AppContext): HistoryPage {
   let loads = 0;
   let filter: Filter = "all";
   let pending = false;
-  /** The one day shown, `2026-10-14`; null for all of them. */
+  /** The one day shown, `YYYY-MM-DD`; null for all of them. */
   let day: string | null = null;
 
   /** The chip that names the day shown and takes the filter off. */

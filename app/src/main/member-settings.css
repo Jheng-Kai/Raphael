@@ -8,7 +8,7 @@
 
 /* The way back stays in sight at the page's top left, on the cover's picture and over a view's heading, under the window's
    own strip. It and the cover's change icon are
-   Grok Bot's soft round edge buttons (styles.css): a solid surface at rest, under the pointer and pressed, so no picture
+   soft round edge buttons (styles.css): a solid surface at rest, under the pointer and pressed, so no picture
    swallows them. The window's own buttons get a surface
    on a picture too. Escape goes back from anywhere. */
 .ms-bar { position: absolute; z-index: 2; inset: 0 0 auto 0; display: flex; box-sizing: border-box; padding: calc(var(--window-controls-height) + var(--sp-1)) var(--sp-4) var(--sp-1); pointer-events: none; }
@@ -87,7 +87,7 @@
 .btn.ms-open > .i { flex: none; color: var(--text-3); }
 .ms-row > .btn.ms-open { width: auto; }
 /* A row that opens something is lit as one: the fill is the row's, and a switch in it stands on that fill, never beside a
-   lit button (owner, 2026-11-14, after Connect Apps: 「不是說都不要這樣分開來 toggle 跟原本的 button 嗎」; R-UI-157). */
+   lit button (R-UI-157). */
 .ms-row:has(> .btn.ms-open:not(:disabled)):hover { background: var(--hover); }
 .ms-row:has(> .btn.ms-open:active:not(:disabled)) { background: var(--pressed); }
 .ms-row > .btn.ms-open:is(:hover, :active):not(:disabled) { background: transparent; }
@@ -97,7 +97,7 @@
 .ms-row.ms-app { padding-left: var(--sp-2); }
 .ms-row.ms-app > .mono { flex: none; }
 
-/* Moving a cover picture, as Notion's Reposition: the picture follows the pointer, a quiet line in its middle says so,
+/* Moving a cover picture: the picture follows the pointer, a quiet line in its middle says so,
    and 取消 / 儲存位置 stand where the change button was. */
 .ms-cover[data-repositioning] .ms-cover-img { cursor: grab; touch-action: none; user-select: none; }
 .ms-cover[data-repositioning] .ms-cover-img:active { cursor: grabbing; }

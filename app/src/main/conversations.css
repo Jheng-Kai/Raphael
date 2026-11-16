@@ -106,7 +106,7 @@
 /* The turn a search or a report opened is only brought to the middle of the view: `.is-search-target` marks it for
    the code and draws nothing, no tint and no ring. */
 .work-section { margin: var(--sp-1) 0 var(--sp-2); }
-/* What a step was missing stands in sight under the reply with its repair; the work itself is never shown (2026-11-10). */
+/* What a step was missing stands in sight under the reply with its repair; the work itself is never shown. */
 .turn-prerequisites { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); max-width: var(--layout-reading-max); margin: var(--sp-2) 0; }
 /* The repair button follows its sentence instead of standing at the far edge of the reading width. */
 .turn-prerequisites > .missing-note { margin: 0; }

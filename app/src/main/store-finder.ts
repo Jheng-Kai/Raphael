@@ -9,7 +9,7 @@ const preparedNames = new WeakMap<StoreService, PreparedName[]>();
 const normalize = (text: string): string => text.normalize("NFKC").toLowerCase().trim();
 
 /**
- * How well a found app's own names answer the query, best first (owner, 2026-11-14: 「line」 listed apps whose descriptions
+ * How well a found app's own names answer the query, best first (a search for 「line」 must not list apps whose descriptions
  * say "timeline" or "online" before LINE itself): 0 the name (or id, or another name) is the query, 1 the name starts with
  * it, 2 a word of the name starts with it, 3 the name holds it, 4 its id, publisher or other names hold it, 5 only its
  * description does.

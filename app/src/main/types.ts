@@ -1099,7 +1099,7 @@ export interface NewMember {
 export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
   /** `pattern:<id>` chooses a pattern; null puts the dotted band back and forgets a picture. */
   cover?: string | null;
-  /** Where a cover picture is shown, 0 (its top) to 100 (its bottom), as Notion's Reposition. */
+  /** Where a cover picture is shown, 0 (its top) to 100 (its bottom). */
   cover_position?: number;
 };
 
@@ -1223,7 +1223,7 @@ export type PageId = "agent" | "dictation" | "history" | "dictionary" | "setting
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
-/** The tabs of the settings panel. "memory" is no tab since 2026-11-11 (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
+/** The tabs of the settings panel. "memory" is no tab (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
 export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
@@ -1259,7 +1259,7 @@ export interface AppContext {
    * "usage"); the 拉斐爾 page takes a draft for its composer (the settings close on the way).
    */
   go(page: PageId, arg?: PageArgument): void;
-  /** Opens the history at one day, `2026-10-14`: its dictations only, with a way back to all of them. */
+  /** Opens the history at one day, `YYYY-MM-DD`: its dictations only, with a way back to all of them. */
   showDay(date: string): void;
   /** The device settings as they are now. */
   device(): DeviceSettings;

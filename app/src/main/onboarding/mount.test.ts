@@ -158,7 +158,7 @@ describe("the guide", () => {
       expect(back!.dataset.ob).toBe("back");
       expect(primary!.dataset.ob).toBe("next");
       expect(primary!.classList.contains("pri")).toBe(true);
-      // Neither has words (owner, 2026-11-11 evening): each is a drawing, named for assistive tech and in its tooltip.
+      // Neither has words: each is a drawing, named for assistive tech and in its tooltip.
       for (const control of [back!, primary!]) {
         expect(control.classList.contains("icon")).toBe(true);
         expect(control.textContent).toBe("");

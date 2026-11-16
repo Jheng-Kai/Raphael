@@ -24,10 +24,10 @@ describe("the dictionary filter", () => {
   });
 
   test("what a correction saved shows with the word and finds it", () => {
-    // The owner corrected Grokbox to his 「grokbot」: the form is a hint until it is seen again.
-    const corrected: DictionaryEntry = { ...entry("grokbot", "manual"), heard: ["Grokbox"] };
-    expect(heardAs(corrected)).toEqual(["Grokbox"]);
-    expect(matches(corrected, "all", "grokbox")).toBe(true);
+    // The owner corrected Zefir to his 「zephyr」: the form is a hint until it is seen again.
+    const corrected: DictionaryEntry = { ...entry("zephyr", "manual"), heard: ["Zefir"] };
+    expect(heardAs(corrected)).toEqual(["Zefir"]);
+    expect(matches(corrected, "all", "zefir")).toBe(true);
     expect(heardAs({ ...entry("Raphael", "manual", ["Rafael"]), heard: ["Rafael", "Rafel"] })).toEqual(["Rafael", "Rafel"]);
     expect(heardAs(entry("Tauri", "manual"))).toEqual([]);
   });

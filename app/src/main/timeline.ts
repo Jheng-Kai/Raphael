@@ -658,8 +658,7 @@ export function routineLineHTML(turn: AgentTurn): string {
 }
 
 /**
- * Several pictures stand side by side as small square thumbnails, in as many rows as they need, as Claude, ChatGPT and Grok
- * show the pictures a person sent (R-ATTACH-02); one picture keeps its own size (R-UI-149). Other visual media share a grid;
+ * Several pictures stand side by side as small square thumbnails, in as many rows as they need (R-ATTACH-02); one picture keeps its own size (R-UI-149). Other visual media share a grid;
  * audio and documents stack underneath.
  */
 export function filesHTML(files: readonly TurnAttachment[] | undefined): string {
@@ -691,7 +690,7 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  * (a group's or a side thread's) keeps Copy in sight instead.
  */
 export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
-  // A message that waits its turn says so and offers 立即送出 in sight, as Claude Code does: it is the exception, not a menu item
+  // A message that waits its turn says so and offers 立即送出 in sight: it is the exception, not a menu item
   //.
   const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
   return `<div class="message-actions">${waiting}` + extra +
@@ -864,8 +863,7 @@ function mediaMissing(text: string): Missing | null {
 }
 
 /**
- * A file a member delivered in a media message. A picture is a message of its own, as a text bubble is (owner, 2026-11-14:
- * 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」, R-UI-156): `picture` gives it the actions
+ * A file a member delivered in a media message. A picture is a message of its own, as a text bubble is (R-UI-156): `picture` gives it the actions
  * beside it, and its reaction stands on its corner. Without `picture` it is drawn as before, with no actions.
  */
 function artifactHTML(text: string, seq: number, replied = false, picture?: { actions: string; reactions?: readonly string[] }): string {

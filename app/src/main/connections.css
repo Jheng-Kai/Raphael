@@ -1,4 +1,4 @@
-/* 連結應用程式, one view as Grok Bot's Connect Apps: the title and a chip of the connected apps, a search, a row of
+/* 連結應用程式, one view: the title and a chip of the connected apps, a search, a row of
    category chips, then the apps in two columns, each on a white tile; an app's page replaces the view. It stands on the floating surface
    (styles.css: `--float`), and what is on it (a chip, a button) is filled `--float-ctl`. Colours are the app's tokens. */
 .cs { width: 100%; max-width: var(--layout-reading-max); container: connections / inline-size; }
@@ -33,7 +33,7 @@
 .cs-chips > * { flex: none; }
 .cs-chip.btn, .cs-chip.sel { height: var(--h-ctl); min-height: var(--h-ctl); padding: 0 var(--sp-3); border-radius: var(--r-pill); border-color: transparent; font-size: var(--fs-sm); }
 .cs-chip.sel { gap: var(--sp-1); padding-right: var(--sp-2); }
-/* The chosen chip is a light fill with dark words (Grok Bot's 「All」). */
+/* The chosen chip is a light fill with dark words. */
 .cs-chip[aria-pressed="true"], .cs-chip[aria-pressed="true"]:hover:not(:disabled) { color: var(--float-on-sel); background: var(--float-sel); border-color: transparent; }
 .cs-none { margin: var(--sp-5) var(--sp-1); font-size: var(--fs-sm); line-height: 1.6; color: var(--text-3); text-align: center; text-wrap: pretty; }
 /* The top, the search and the chips stand still; only the apps scroll under them. */
@@ -54,7 +54,7 @@
 :root[data-theme="dark"] .logo-art .lg-d { display: block; }
 :root[data-theme="dark"] .logo-art .lg-d ~ .lg-l, :root[data-theme="dark"] .logo-art .lg-l:has(+ .lg-d) { display: none; }
 
-/* The mark of an app stands on a white rounded tile (Grok Bot's), 40 px in a row and 56 px on its page, whichever theme the dialog is in: the
+/* The mark of an app stands on a white rounded tile, 40 px in a row and 56 px on its page, whichever theme the dialog is in: the
    mark is drawn in its own colours (or near-black), and the dark theme's light twin of a dark logo is not used. */
 .cs-tile { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--r-md); background: var(--tile); box-shadow: inset 0 0 0 1px var(--tile-edge); color: var(--on-tile); color-scheme: light; overflow: hidden; }
 .cs-tile .mono { width: 24px; height: 24px; color: var(--on-tile); }
@@ -64,7 +64,7 @@
 .cs-tile.lg { width: 56px; height: 56px; border-radius: var(--r-lg); }
 .cs-tile.lg .mono { width: 32px; height: 32px; }
 .cs-tile.lg .mono > .i { width: 20px; height: 20px; }
-/* The connected chip's small marks stand on the same white disc (owner, 2026-11-14: GitHub's white twin vanished there). */
+/* The connected chip's small marks stand on the same white disc (GitHub's white twin would vanish there). */
 :root[data-theme="dark"] :is(.cs-tile, .cs-mini) .logo-art .lg-d { display: none; }
 :root[data-theme="dark"] :is(.cs-tile, .cs-mini) .logo-art .lg-l, :root[data-theme="dark"] :is(.cs-tile, .cs-mini) .logo-art .lg-l:has(+ .lg-d) { display: block; }
 
@@ -102,8 +102,7 @@
 .cs-state { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; }
 .cs-state > .i { color: var(--ok); }
 .cs-linked > .tg { flex: none; }
-/* A row of this view is one button, the connected list's and the main view's alike (owner, 2026-11-14: 「就是一個 button 只是上面會有
-   connect 的 button 而已 不要分開來」): the pointer, and under it one hover fill of the floating surface over the whole row, 8 px clear of the
+/* A row of this view is one button, the connected list's and the main view's alike: the pointer, and under it one hover fill of the floating surface over the whole row, 8 px clear of the
    words (R-UI-53), with 連結, 「✓ 已連結」 or the switch standing on it. The padding is given back by the margin, so the tile stays on the
    content's edge, and the fill's corners stay round. */
 .cs-linked, .cs-card { cursor: pointer; padding-inline: var(--sp-2); margin-inline: 0; border-radius: var(--r-md); }
@@ -118,7 +117,7 @@
 /* An app's page: a bare back chevron at the top left (the dialog's own ✕ is at the other corner), the mark on a white tile with the name beside
    it and what can be done at the right, a paragraph on the app, then bordered cards of what is known of it. */
 /* The back chevron is the dialog ✕'s own control: 36 px, round and bare, its glyph 18 px, so it is as easy to hit and stands on the ✕'s line
-   (owner, 2026-11-14: the 26 px one could not be hit). Its margin puts the glyph, not the hit area, on the content's left edge. */
+   (a 26 px one could not be hit). Its margin puts the glyph, not the hit area, on the content's left edge. */
 .cs .btn.icon.cs-back { flex: none; width: 36px; min-width: 36px; height: 36px; min-height: 36px; margin: 0 0 var(--sp-1) -9px; padding: 0; border-radius: var(--r-pill); }
 .cs .btn.icon.cs-back .i { width: 18px; height: 18px; }
 .cs-connected > .cs-top { margin-bottom: var(--sp-4); }

@@ -1,6 +1,6 @@
 /* The members of the 拉斐爾 page (members-shell.ts): the member column, the chat between, the details
    panel, and their dialogs. Colours are the app's tokens (styles.css); Raphael's gold (--rg-*) is only
-   where a question waits for the owner, as the brief asks. The sizes are the page's own fluid
+   where a question waits for the owner. The sizes are the page's own fluid
    tokens (--pa-*, at the top of agent.css): compact in a small window, roomy in a maximised one.
 
    Raphael's face is his emblem exactly as it is at the bottom right: bare, with no background,
@@ -91,7 +91,7 @@
 .mb-dot.is-done { background: var(--ok); }
 .mb-dot.is-unread { background: var(--text); }
 /* A row draws no 「more」 (its right click is the menu, styles.css), so nothing makes room for one: the light and the words
-   stand still under the pointer (R-SIDE-04, owner 2026-11-15). */
+   stand still under the pointer (R-SIDE-04). */
 
 .mb-who-face { position: relative; display: inline-flex; }
 
@@ -238,7 +238,7 @@
 .mb-offer-t { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .mb-offer-t b { font-size: var(--pa-dfs); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
 .mb-offer-t > .routine-sentence { font-size: var(--pa-rt-s); overflow-wrap: anywhere; }
-/* A confirmation, as Grok Bot's dialogs: a 440 px panel, its
+/* A confirmation: a 440 px panel, its
    question in a compact semibold head over a hairline, what it does in secondary words, and a footer over a hairline with
    Cancel then the action at the right. With a Cancel there is no × as well: Escape and the scrim still close it. */
 .mb-dialog.mb-confirm { width: min(440px, 100%); gap: 0; padding: 0; border: 1px solid var(--edge); border-radius: var(--r-lg); }
@@ -252,15 +252,15 @@
 /* With nothing to say under the question, one hairline parts it from the buttons, not two. */
 .mb-confirm:has(.mb-dlg-body:empty) .mb-dlg-act { border-top: 0; }
 .mb-confirm .mb-dlg-act .btn { padding-inline: var(--sp-4); }
-/* The delete question, the app's one, measured on Grok Bot's at 1068 px: a 320 px
+/* The delete question, the app's one: a 320 px
    box with 16 px at the sides and 12 px over and under, no × and no line inside; the title over one sentence in the ordinary text
    colour (6 px between them, 8 here), then, 24 px lower, one row of two buttons of the same width filling the box, Cancel in the
-   quiet button colour and Delete in red with white words, fully rounded (Grok Bot's are 32 px tall, 140 px wide and 10 px apart). */
+   quiet button colour and Delete in red with white words, fully rounded. */
 .mb-dialog.mb-confirm.mb-delete { width: min(320px, 100%); gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); }
 .mb-confirm.mb-delete .mb-dlg-head { min-height: 0; padding: 0; border-bottom: 0; }
 .mb-confirm.mb-delete .mb-dlg-head h2 { font-size: var(--fs-sm); line-height: 1.5; }
 /* The sentence runs to the box's right edge as ordinary text does; `pretty` only keeps a lone word or two off its last line
-   (owner, 2026-11-12: 「為什麼字會卡在左邊」 when `balance` cut it into two half-width lines). */
+   (`balance` cut it into two half-width lines). */
 .mb-confirm.mb-delete .mb-dlg-body { padding: 0; line-height: 1.5; color: var(--text); text-wrap: pretty; }
 .mb-confirm.mb-delete .mb-dlg-act { flex-wrap: nowrap; gap: var(--sp-2); margin-top: calc(var(--sp-5) - var(--sp-2)); padding: 0; border-top: 0; }
 .mb-confirm.mb-delete .mb-dlg-act .btn { flex: 1 1 0; min-width: 0; padding-inline: var(--sp-3); border-radius: var(--r-pill); font-size: var(--fs-sm); }

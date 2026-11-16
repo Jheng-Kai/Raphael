@@ -204,7 +204,6 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-det="close"]')?.getAttribute('aria-label')).toBe(t('members.close'));
   });
 
-  // Owner, 2026-11-09: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」.
   test("its routine row opens the routine to read, with nothing to type, save or delete, and no plus to add one", async () => {
     const panel = mount();
     await flush();
@@ -363,7 +362,6 @@ describe("primary changes do not add face badges", () => {
 });
 
 describe("the computer lives in its own tab only", () => {
-  // Owner, 2026-11-14: 「右邊這邊詳細資料裡面不用有電腦…我們就固定在第三個 tab 裡面，有電腦就好了」.
   test("Details has no computer row, heading or press, for any member", async () => {
     for (const id of [3, 0]) {
       current = id; const panel = mount(); await flush();

@@ -57,7 +57,7 @@ export function dayNumber(ms: number): number {
   return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
 }
 
-/** The local midnights that start and end a day written `2026-10-14`, in ms: `[from, to)`. A day can be 23 or 25 hours long. */
+/** The local midnights that start and end a day written `YYYY-MM-DD`, in ms: `[from, to)`. A day can be 23 or 25 hours long. */
 export function dayBounds(date: string): [number, number] {
   const [year, month, day] = date.split("-").map(Number);
   return [new Date(year, month - 1, day).getTime(), new Date(year, month - 1, day + 1).getTime()];

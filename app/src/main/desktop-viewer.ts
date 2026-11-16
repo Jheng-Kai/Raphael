@@ -241,15 +241,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(panel.dataset, "desktopState", label);
     paint(panel.dataset, "interactive", String(interactive));
     // The preview only opens the larger view; input is taken there, with Take control, or from a card (R-PANEL-03).
-    // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手 (owner, 2026-11-13:
-    // 「明明顯示我正在控制，但我根本就沒辦法控制」). Watching is view-only whoever holds the lease.
+    // 你正在控制 only once the screen itself says the owner's input reaches it; until then 正在接手. Watching is view-only whoever holds the lease.
     // A press the core is still deciding (`changing`) is a take too: until it answers the pill says so, and if the core
     // refuses it the pill watches again with the button, however the press began.
     const mode = !watching && (owner || changing) ? interactive ? "operating" : "taking" : "watching";
     paint(modeLabel.querySelector('span')!, "textContent", t(mode === "operating" ? "desktop.operating" : mode === "taking" ? "desktop.taking" : "desktop.watching"));
     paint(modeLabel.dataset, "mode", mode);
-    // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease (owner, 2026-11-14:
-    // 「理論上不管甚麼時候我都應該要可以接手」): a pill that watches always offers the way out of it.
+    // The owner can take over whenever the pill says 觀看中, whoever the core says holds the lease: a pill that watches always offers the way out of it.
     paint(take, "textContent", t("desktop.take")); paint(take, "hidden", mode !== "watching" || !running || !expanded || !!demonstration); paint(take, "disabled", changing || !connected);
     paint(frame, "hidden", !running || !connected);
     paint(frame.style, "pointerEvents", interactive && !watching ? "auto" : "none");
@@ -583,8 +581,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     expand(false); review.hidden = true; closeStream();
     if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.();
     // The panel that stays open is a preview of a computer that runs: it streams again at once. `suspended` only keeps a
-    // returned request's card from reopening its stream, and a visible panel is not that card (owner, 2026-11-14: a black
-    // frame with only 開啟 after he ended control).
+    // returned request's card from reopening its stream, and a visible panel is not that card (otherwise a black
+    // frame with only 開啟 would show after control ended).
     if (options.panelVisible()) { suspended = false; if (state?.state === 'running') void openStream(); }
     draw(); return true;
   }

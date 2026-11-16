@@ -361,9 +361,8 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
    groups stand on one another in one cell, so the place is as big as the largest group and a press on a tab moves nothing
    (a control just pressed never moves). Where the largest group does not fit the window, only the place scrolls; the tabs
    stay.
-   The menu is as wide as its row of tabs and no wider (owner, the same evening, of ten across with the tabs ending short of
-   the right edge: 「不要設計的這麼寬 上面 tab 右邊不要有空白」): the tabs hug their words and their row sets the width (six
-   tabs, about 300 px in Chinese, as Grok Bot's picture picker is 298), the slimes stand in six tracks that share it, and the
+   The menu is as wide as its row of tabs and no wider (no empty space right of the tabs): the tabs hug their words and their row sets the width (six
+   tabs, about 300 px in Chinese), the slimes stand in six tracks that share it, and the
    last tab and the last slime end at the same edge. In a language whose tabs are shorter than six slimes the tabs spread
    to that edge; where they are longer than the menu may be, the row scrolls by its arrows. */
 /* The picker keeps one size in every window: its cells and gaps do not grow with the pane as the page's own do, so a large
@@ -417,7 +416,7 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-surface:has(> .slime-loop[data-slime-loading]) > .slime { visibility: visible !important; }
   /* The vector stands in for its strips for the moment of a change of state, and the strips show when it ends: 320 ms, and 1.6 s
      for error (--slime-moment). A rule of error's own for the strips lost to this one by specificity while the vector was still
-     standing, so the strips showed at 320 ms over the vector's still-visible error pose: two horns for a moment (2026-11-11). */
+     standing, so the strips showed at 320 ms over the vector's still-visible error pose: two horns for a moment. */
   .slime-surface:has(> .slime[data-transitioning]) > .slime-loop { animation: slime-loop-show var(--slime-moment, 320ms) steps(1, end) both; }
   .slime-surface[data-state="error"] { --slime-moment: 1.6s; }
   .slime[data-transitioning]:is([data-state="thinking"], [data-state="working"], [data-state="searching"], [data-state="computer"], [data-state="waiting"], [data-state="blocked"]) { animation: slime-idle-hide 320ms steps(1, end) both; }
@@ -435,7 +434,7 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
 /* A group of the picker that is not the open one shows nothing, whatever the rules above say of a slime's own parts: with
-   reduced motion they made the slimes of every closed group show through the open one, one drawing on another (2026-11-11). */
+   reduced motion they made the slimes of every closed group show through the open one, one drawing on another. */
 .mb-slime-group:not([data-active]) :is(.slime, .slime-body, .slime-eyes, .slime-back, .slime-marks, .slime-loop) { visibility: hidden !important; }
 /* Two keyframes and a steps() count slide a strip through its cels on the compositor, whatever their number. */
 @keyframes slime-loop-show {

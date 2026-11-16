@@ -88,8 +88,8 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
 }
 
 /**
- * How long the two members may be quiet before their next exchange is another conversation (owner, 2026-11-15: every
- * exchange stuck together hid what each one was about; a daily routine's exchange is that day's alone).
+ * How long the two members may be quiet before their next exchange is another conversation (otherwise every
+ * exchange stuck together hides what each one was about; a daily routine's exchange is that day's alone).
  */
 export const PEER_SESSION_GAP_MS = 30 * 60_000;
 

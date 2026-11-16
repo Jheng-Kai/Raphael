@@ -227,8 +227,8 @@ function closeAll(stack: { layer: Layer }[]): boolean {
 /**
  * A frame is another document (a page open in the conversation's place, a computer's screen): a press inside it gives this
  * document no pointer event at all, only the loss of the focus to that frame. That is the outside press, so every panel the
- * frame is outside of closes, and the frame keeps the press and the focus it took (R-UI-121; owner, 2026-11-12: the model
- * card stayed open over a page until the sidebar was pressed). The pointer must be over the frame: a frame that takes the
+ * frame is outside of closes, and the frame keeps the press and the focus it took (R-UI-121: the model
+ * card would stay open over a page until the sidebar was pressed). The pointer must be over the frame: a frame that takes the
  * focus by itself, or by the Tab key, has not been pressed, and a frame under a scrim cannot be.
  */
 function pressedIntoFrame(): void {

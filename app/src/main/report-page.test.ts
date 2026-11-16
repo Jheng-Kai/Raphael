@@ -42,7 +42,7 @@ const dashboard: Report = {
     { kind: "chart", title: "比例", type: "pie", labels: ["是", "否"], series: [{ values: [1, 3] }] },
   ],
 };
-// A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list): a summary line, a note, a table with a dropdown, a column of
+// A document-style report: a summary line, a note, a table with a dropdown, a column of
 // figures and a column of links.
 const document_: Report = {
   as_of: "2026-11-14T00:00:00Z",
@@ -507,7 +507,7 @@ test("share saves the report on screen as a file, once a press, says where it we
   thread.querySelector<HTMLButtonElement>("button.pg-link")!.click();
   await flush();
   const view = stage.querySelector<HTMLElement>(".rp-view")!;
-  // Nothing floats over the report (owner, 2026-11-12: its place as Grok Bot's share): its one button stands first in the header's
+  // Nothing floats over the report: its one button stands first in the header's
   // tools at the top right, where the thread's share stands; its name is its only word, so its tooltip repeats nothing on screen.
   expect(view.querySelector("button.btn.icon, .rp-top, [data-report-act]")).toBeNull();
   const tools = document.querySelector<HTMLElement>(".mb-head > .ra-tools")!;

@@ -19,7 +19,7 @@ export interface Cell {
   state: CellState;
 }
 
-/** `2026-10-05` -> a Date at noon UTC that day (noon: no time zone can move it to another day). */
+/** `YYYY-MM-DD` -> a Date at noon UTC that day (noon: no time zone can move it to another day). */
 const parse = (date: string): Date => new Date(`${date}T12:00:00Z`);
 const iso = (d: Date): string => d.toISOString().slice(0, 10);
 const addDays = (d: Date, n: number): Date => new Date(d.getTime() + n * 86_400_000);

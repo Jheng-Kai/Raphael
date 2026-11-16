@@ -67,7 +67,7 @@ import type {
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
 /**
  * Reads that only look, and that several parts of the window ask for at once (start-up asked for the roster five
- * times, owner 2026-11-10: 開啟 app 的速度太慢). The same read asked for again while it is under way shares its answer
+ * times, which made opening the app slow). The same read asked for again while it is under way shares its answer
  * (each caller gets its own copy), unless the core was asked to change something since: it answers in order, so a
  * read asked after a change must see it. A conversation's turns and questions are never shared.
  */

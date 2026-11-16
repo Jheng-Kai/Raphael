@@ -41,7 +41,7 @@ export const exchangeTurn = (turn: AgentTurn): boolean =>
 /**
  * Whether another member handed this turn's words to the member that answers it: a brief the member works on in its own
  * conversation (`route` "worker" or "delegate", `peer_id` the member who handed it over). Those words are that member's, never
- * the owner's: no owner bubble (owner, 2026-11-11: Raphael's brief stood in a member's conversation as the owner's message).
+ * the owner's: no owner bubble (otherwise Raphael's brief would stand in a member's conversation as the owner's message).
  */
 export const delegatedTurn = (turn: AgentTurn): boolean =>
   (turn.route === "worker" || turn.route === "delegate") && turn.peer_id != null && turn.peer_id !== turn.member_id;
@@ -94,7 +94,7 @@ function joinedWork(oldestFirst: readonly AgentTurn[]): Map<number, AgentTurn[]>
  * colleague asked or handed this member, several times in a row on one day, is one line.
  * A message the owner sent while a turn worked, and that the work took in, stands where it was sent: the turn's line
  * breaks there into stretches (`TurnPart`), what the work said before it above the message and what it said after,
- * the reply that answers it among them, below it (owner, 2026-11-14: his words mid-work stood last, under the reply).
+ * the reply that answers it among them, below it (otherwise the owner's words mid-work would stand last, under the reply).
  */
 export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadItem[] {
   const oldestFirst = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id).filter(visibleTurn);

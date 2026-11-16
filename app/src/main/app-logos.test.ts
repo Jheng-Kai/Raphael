@@ -5,7 +5,6 @@ import { senderMarkHTML } from "./mail-card";
 import { connectionMarkHTML } from "./secret-card";
 
 test("a card that only knows an app's name draws the picture the lists draw, from the one source", () => {
-  // Owner, 2026-11-15: 「不是說統一來源嗎? 為甚麼這邊還是沒有 outlook 的 icon 我不是有說要統一確認嗎?」.
   const logo = "https://logos.composio.dev/api/outlook";
   const box = document.createElement("div");
   box.innerHTML = connectionMarkHTML("Outlook");

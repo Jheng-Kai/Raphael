@@ -1,4 +1,4 @@
-// What the calendar and the review of an imported template say: the words that outlived Home (removed 2026-11-12).
+// What the calendar and the review of an imported template say: the words that outlived Home.
 export const homeZh = {
   "overview.emptyDay": "這天沒有行程", "overview.moreEvents": "還有 {p0} 個", "overview.calendar": "行事曆",
   "home.listJoin": "、",

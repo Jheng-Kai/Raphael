@@ -2,7 +2,7 @@
 // role, instructions and group, with 「取消」 and 「建立」), the routine the core offers with a
 // new member of a group with places to look (taken only with 「加入」), the question before a member
 // or a group is deleted, a group's name, a group's 看的地方, and the popover that changes a picture
-// (the slimes and, for the owner and Raphael, 「從電腦選…」).
+// (the slimes and, for the owner and Raphael, also 「從電腦選…」).
 //
 // Each dialog sits over the window on a dimmed scrim, grows in as the settings' dialogs do (styles.css,
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
@@ -144,7 +144,7 @@ export function openDialog(o: DialogOptions): Dialog {
 }
 
 /**
- * Confirms deletion or history clearing with the app's one delete dialog, Grok Bot's: a small box with the
+ * Confirms deletion or history clearing with the app's one delete dialog: a small box with the
  * title, one sentence and one row of two equal buttons, Cancel then a red Delete, no × and no lines (members.css `.mb-delete`).
  * A member's own says that the member and its conversation go for good. Nothing is asked about what the deletion also clears
  * (a member's computer is the app's to remove, without a word to the owner). The focus starts on Cancel, so Enter never deletes.
@@ -361,7 +361,7 @@ export interface AvatarPickerOptions {
 }
 
 /**
- * The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. A member's face is a slime:
+ * The small popover of a picture: the slimes and, for the owner and Raphael, also 「從電腦選…」. A member's face is a slime:
  * there is no picture drawn by an image model.
  */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {

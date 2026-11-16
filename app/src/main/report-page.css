@@ -9,7 +9,7 @@
 .rp-scroll:focus { outline: none; }
 
 .rp-doc { max-width: var(--pa-colw); margin: 0 auto; padding: calc(var(--sp-6) + var(--sp-2)) 0 calc(2 * var(--sp-6)); }
-/* A document's title is large, as Grok Bot's pages have it (the owner's picture: about 32 px: 1.45 times the app's 22 px heading, the type scale
+/* A document's title is large (about 32 px: 1.45 times the app's 22 px heading, the type scale
    having no size of its own for it), then one line of what it holds. */
 /* (`.page h1` of styles.css is as specific as a class and a tag: the title says where it stands.) */
 .rp-head .rp-title { margin: 0; font: var(--weight-medium) calc(var(--fs-h1) * 1.45)/1.25 var(--ui); letter-spacing: -0.015em; overflow-wrap: anywhere; }
@@ -32,7 +32,7 @@
 .rp-callout { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--panel); }
 .rp-callout > .i { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--text-2); }
 .rp-callout p { margin: 0; font-size: var(--fs-sm); line-height: 1.6; overflow-wrap: anywhere; }
-/* A note section: an icon and a heading in its tone's colour on a tint of it (the owner's blue 「說明」 box on Grok Bot's page). */
+/* A note section: an icon and a heading in its tone's colour on a tint of it. */
 .rp-note { --tone: var(--link); display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); border-radius: var(--r-md); background: var(--panel); }
 @supports (background: color-mix(in srgb, red 10%, blue)) {
   .rp-note { background: color-mix(in srgb, var(--tone) 12%, var(--content)); }
@@ -59,7 +59,7 @@
 .rp-st[data-tone="muted"] { color: var(--text-3); }
 
 .rp-table-box > .tabs { margin-bottom: var(--sp-2); }
-/* The dropdown over a table: the column's name small above it, as Grok Bot's 「區域」 over its table. */
+/* The dropdown over a table: the column's name small above it. */
 .rp-filter { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); margin-bottom: var(--sp-3); }
 .rp-filter-l { color: var(--text-3); font-size: var(--fs-xs); }
 .rp-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); line-height: 1.5; }
@@ -247,7 +247,7 @@
 .rc-pv { color: var(--text); font-variant-numeric: tabular-nums; }
 .rc-ps { color: var(--text-3); text-align: end; font-variant-numeric: tabular-nums; }
 
-/* The values under the pointer: what floats in the app, after Grok Bot's (styles.css --float). */
+/* The values under the pointer: what floats in the app (styles.css --float). */
 .rc-tip { position: absolute; z-index: 2; min-width: 148px; max-width: 280px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--float); box-shadow: var(--pop), inset 0 0 0 1px var(--float-edge); font-size: var(--fs-xs); line-height: 1.6; pointer-events: none; }
 .rc-tt { display: block; margin-bottom: 2px; color: var(--text); font-weight: var(--weight-medium); }
 .rc-tr { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); color: var(--text-2); }

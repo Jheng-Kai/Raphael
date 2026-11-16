@@ -58,7 +58,7 @@ if (typeof document !== "undefined") document.addEventListener("click", event =>
 });
 
 /** `message` null leaves only 重試: a card whose title already says what failed and whose work is in plain sight (an
- *  unsent message is back in the field) needs no sentence repeating it (judge R-UI-02, 2026-11-10). */
+ *  unsent message is back in the field) needs no sentence repeating it (R-UI-02). */
 export function cardFailure(card: Element | null, retry: () => void, dismiss?: () => void, message: string | null = t("cards.retained")): boolean {
   if (!card) return false;
   let failure = card.querySelector<HTMLElement>(":scope > .card-failure");

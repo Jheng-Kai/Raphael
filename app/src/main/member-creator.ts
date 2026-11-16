@@ -1,4 +1,4 @@
-// 新增成員, as Grok Bot's Create New Bot: one small dialog over the
+// 新增成員: one small dialog over the
 // dimmed window. The slime as it will be, large; the name directly under it, the only thing asked; the same tabbed slime picker the
 // face popover uses (slime-tabs.ts), then 取消 and 建立. The member then opens and asks what it is for (the core's greeting), and the
 // owner's answer becomes its job: nothing else is asked here. The store and the templates have their own entry (member-store.ts).

@@ -437,7 +437,7 @@ describe("the search", () => {
   });
 
   test("the app whose name is what was typed comes first, then names that start with it or hold it, then the rest", () => {
-    // Owner, 2026-11-14: 「line」 listed apps whose descriptions say "timeline" or "online" before LINE itself.
+    // A search for 「line」 must not list apps whose descriptions say "timeline" or "online" before LINE itself.
     const catalog = [service("timely", "Timely"), service("onliner", "Onliner"), service("linear", "Linear"), service("line", "LINE")];
     expect(found("line", { catalog }).slice(0, 3)).toEqual(["LINE", "Linear", "Onliner"]);
     expect(found("line", { catalog })).toContain("Timely"); // its description still finds it, last
@@ -690,7 +690,7 @@ describe("the connected apps", () => {
   });
 });
 
-// Owner, 2026-11-14: 「這個 dialog 應該要可以點那個已連接應該也要可以點，然後那個 button 可以設計得大一點點，不然點不到」.
+// A connected row is one button like the others, and the back chevron is big enough to hit.
 describe("a connected row and the back chevron", () => {
   const css = readFileSync(join(__dirname, "connections.css"), "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
   const rule = (selector: string): string => css.split("\n").filter((line) => line.startsWith(`${selector} {`)).pop() ?? "";
@@ -1804,7 +1804,7 @@ describe("what the dialog does", () => {
     } finally { vi.unstubAllGlobals(); await grid.happyDOM.abort(); }
   });
 
-  // Owner, 2026-11-09: 「一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」.
+  // Everything beyond a sign-in or one key is done in the conversation.
   test("連結 on n8n, or on an app that needs a developer app, leaves for the conversation with the owner's words", async () => {
     api.integrationsCatalog.mockResolvedValue({ services: [...CATALOG, service("acme", "Acme", { needs: "own_app" })] });
     const c = createConnections(host);
@@ -1818,7 +1818,7 @@ describe("what the dialog does", () => {
     expect(api.connectorsConnect).not.toHaveBeenCalled();
   });
 
-  // Owner request (10-25, 「接上 Composio 與自己的 Google 授權」): the owner's own Google is reachable where the Google row is.
+  // The owner's own Google is reachable where the Google row is.
   test("the view offers the owner's own Google, and its 連結 leaves for the conversation where the card walks the steps", async () => {
     const c = createConnections(host);
     await c.load();

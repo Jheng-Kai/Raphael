@@ -1,11 +1,10 @@
-// A report page a member shows (core agent/report_page.py), drawn here in the app's own design and theme. The owner
-// asked for Grok Bot's Page (2026-11-09: 「grokbot 甚至可以在內部做報告 挺猛的」「還有這種圖 也挺好的」): a link card in the
+// A report page a member shows (core agent/report_page.py), drawn here in the app's own design and theme. It is a link card in the
 // conversation that opens the page in the conversation's place, the composer staying below it. The page is a title,
 // the time its data is from and the promise that it only states recorded facts, its contents, findings with coloured
 // status words under a summary box, tables with tabs for their groups, and the team as boxes in each member's colour
 // joined by labelled arrows. Everything in it is the member's plain text, escaped here: no markup or script of a model
 // ever runs, so a report needs no frame (R-PAGE-01). Shared, it is a file of this same drawing (`reportFile`). Its figures
-// and charts (R-PAGE-04, the owner's daily overview of 2026-11-14) are drawn by report-chart.ts.
+// and charts (R-PAGE-04) are drawn by report-chart.ts.
 import "./report-page.css";
 import pageStyle from "./report-page.css?raw";
 import * as api from "./api";
@@ -36,7 +35,7 @@ const statusHTML = (status: ReportStatus, label?: string): string =>
   `<span class="rp-st" data-tone="${TONES[status]}">${esc(label || t(STATUS_WORDS[status]))}</span>`;
 
 /**
- * The line under the title. The member's own summary when it gave one (the owner, 2026-11-14, after Grok Bot's pages: one line
+ * The line under the title. The member's own summary when it gave one (one line
  * of what the page holds); else the time the report's data is from, in the window's language, with the promise that it only
  * states recorded facts: 「資料截至 2026/11/10 09:30 · 只寫有紀錄的事實」.
  */
@@ -60,7 +59,7 @@ const words = (cell: ReportCell): string => (typeof cell === "string" ? cell : c
 const FIGURE = /^[+\-−–]?\s?(?:NT\$|US\$|[$¥€£])?\s?\d[\d,.]*\s?(?:%|％|[A-Za-z°]{1,3}|元|件|分|萬|億|筆|人|次)?$/;
 const BLANK = /^[—–-]?$/;
 
-/** The columns of figures: every cell with words in it is a number. They are set at the right, as Grok Bot's table has them. */
+/** The columns of figures: every cell with words in it is a number. They are set at the right. */
 export function figureColumns(section: Extract<ReportSection, { kind: "table" }>): boolean[] {
   return section.columns.map((_, at) => at > 0 && section.rows.some(row => !BLANK.test(words(row.cells[at] ?? "").trim())) &&
     section.rows.every(row => { const value = words(row.cells[at] ?? "").trim(); return BLANK.test(value) || FIGURE.test(value); }));
@@ -78,13 +77,13 @@ function tableHTML(section: Extract<ReportSection, { kind: "table" }>, people: R
   const columns = [...section.columns, ...(statuses ? [section.status_title || t("page.report.status")] : [])];
   const figures = figureColumns(section), short = shortColumns(section, figures);
   const marks = (at: number): string => `${figures[at] ? " data-num" : ""}${short[at] ? " data-short" : ""}`;
-  // A dropdown over one column's values (the owner's 「區域」 over Grok Bot's table): a choice needs at least two values, and a
+  // A dropdown over one column's values: a choice needs at least two values, and a
   // file has nothing to run it with.
   const filterAt = tabbed && section.filter ? section.columns.indexOf(section.filter) : -1;
   const values = filterAt < 0 ? [] : [...new Set(section.rows.map(row => words(row.cells[filterAt] ?? "").trim()).filter(Boolean))];
   const dropdown = values.length > 1 ? `<div class="rp-filter"><span class="rp-filter-l">${esc(section.filter!)}</span>` +
     `${sel(filterChoices(values), "", section.filter!, " data-report-filter")}</div>` : "";
-  // A tab per group, as Grok Bot's report has over its table; only where there is more than one group to choose.
+  // A tab per group over its table; only where there is more than one group to choose.
   const filter = tabbed && groups.length > 1 ? tabs([
     { id: "all", label: t("page.report.all"), count: section.rows.length, attrs: ' data-report-tab="all"' },
     ...groups.map((group, index) => ({ id: `g${index}`, label: group, count: section.rows.filter(row => row.group === group).length, attrs: ` data-report-tab="g${index}"` })),
@@ -164,7 +163,7 @@ const PAIRED_LABELS = 12;
 
 /**
  * The sections that stand beside another: two half sections in a row are a pair; a half section alone takes the width.
- * Where the member gave no span at all (Raphael's daily overviews on a live model gave none even when told, 2026-11-14),
+ * Where the member gave no span at all (a live model gave none even when told),
  * two charts in a row of at most twelve labels each pair the same way, so a dashboard reads as one.
  */
 export function halves(sections: readonly ReportSection[]): Set<number> {
@@ -187,7 +186,7 @@ export function reportHTML(title: string, report: Report, people: ReportPeople, 
   const titled = report.sections.flatMap((section, index) => (section.title ? [{ title: section.title, index }] : []));
   const contents = t("page.report.contents");
   // A long list of contents (more than six titles, as a daily overview has) shows only beside the page, never above it.
-  // A box that lists the sections, as Grok Bot's 「On this page」 does.
+  // A box that lists the sections.
   const toc = titled.length > 1 ? `<nav class="rp-toc"${titled.length > 6 ? " data-many" : ""} aria-label="${esc(contents)}"><span class="rp-toc-h">${esc(contents)}</span><ul>` +
     titled.map(entry => `<li><a href="#rp-s${entry.index}" data-report-goto="rp-s${entry.index}">${esc(entry.title)}</a></li>`).join("") + `</ul></nav>` : "";
   const paired = halves(report.sections);
@@ -198,7 +197,7 @@ export function reportHTML(title: string, report: Report, people: ReportPeople, 
 // ---------- the page as a file ----------
 
 /**
- * The owner shares a report as a file (2026-11-10, of Grok Bot's Share: 存成檔案): this same drawing as one HTML
+ * The owner shares a report as a file (存成檔案): this same drawing as one HTML
  * document that any browser opens, in its reader's light or dark theme and white on paper. Nothing in it runs or loads,
  * as its policy says first; the core checks it so before writing it (agent/report_page.py `checked_file`).
  */
@@ -737,7 +736,7 @@ export function mountReportView(pages: PageView, people: () => ReportPeople): Re
     current = { id, rev: opened.rev, title: opened.title, report: opened.report };
     // Nothing floats over the report. Saving it as a file is the page's one action, and it stands where a thread's share
     // stands, at the header's top right (page-view.ts), drawn as a file with an arrow into it: never the arrow out of a
-    // box, which shares a member (owner, 2026-11-11: the two must not look alike; 2026-11-12: its place and look as Grok Bot's).
+    // box, which shares a member (the two must not look alike).
     host.innerHTML = `<div class="rp-scroll" tabindex="-1"><article class="rp-doc">${reportHTML(opened.title, opened.report, people())}</article></div>`;
     if (!host.isConnected) pages.body.replaceChildren(host);
     pages.open({ id, title: opened.title, kind: "report", opener, leave, action: { icon: "fileDown", label: t("page.report.share"), run: () => { void share(); } } });

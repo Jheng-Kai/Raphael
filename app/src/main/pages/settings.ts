@@ -377,8 +377,7 @@ export function createSettings(app: AppContext): SettingsPage {
    * Every opening of Settings, on whatever tab, reads 模型與用量 again at once and unseen, so that the allowances are
    * current when they are reached: what was last known stays on the page, and a new value replaces it in place (the
    * pieces draw only what changed). No spinner, no toast; a reading that fails leaves what is shown. An opening while
-   * one is under way joins it. The allowances are asked at every opening, however soon after the last (owner,
-   * 2026-11-11, and again 2026-11-12: a reset must show at the next opening); only the catalogue and the speech models
+   * one is under way joins it. The allowances are asked at every opening, however soon after the last (a reset must show at the next opening); only the catalogue and the speech models
    * are reused soon after a good reading. No model turn is spent: `usage.allowances` asks Codex's app-server for its
    * windows, and has Claude's and Antigravity's from what their turns reported.
    */
@@ -1304,8 +1303,7 @@ export function createSettings(app: AppContext): SettingsPage {
       limitError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
-      // Every opening starts afresh: 模型與用量 at 模型, 用量 only when the way in asks for it (owner, 2026-11-15:
-      // 「每次進到設定的時候，它的狀態要重置 他不會跳到用量 而是在最初模型的地方才對」).
+      // Every opening starts afresh: 模型與用量 at 模型, 用量 only when the way in asks for it.
       modelsTab = open === "usage" ? "usage" : "models";
       connections.reset();
       rules.reset();

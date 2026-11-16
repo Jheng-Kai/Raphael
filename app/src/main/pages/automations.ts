@@ -1,8 +1,7 @@
 import { visibilityGate, windowVisible } from "../window-visibility";
 // The app's own calendar, modelled on Google Calendar: the month, what it shows and 建立 in a rail on the left; a day, week
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
-// here and say where they come from. A routine is made or changed by its member in the conversation (owner, 2026-11-09:
-// 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」): a routine opens to read, and 例行任務 at a time puts the
+// here and say where they come from. A routine is made or changed by its member in the conversation: a routine opens to read, and 例行任務 at a time puts the
 // owner's words for it in the member's composer.
 import * as api from "../api";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";

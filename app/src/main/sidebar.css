@@ -1,5 +1,5 @@
 /* One fixed conversation list, shared by the conversation, the calendar and dictation. */
-/* A row's highlight is 54 px tall and its face 36 px on the rail, as Grok Bot's; the list is 12 px in from its edges. */
+/* A row's highlight is 54 px tall and its face 36 px on the rail; the list is 12 px in from its edges. */
 .side { --side-row: 54px; --side-face: 36px; position: relative; overflow: hidden; padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); }
 /* The list is dragged by its edge (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
    line shows only while it moves or has the keyboard. */
@@ -14,14 +14,14 @@
 .side .mb-top { justify-content: flex-end; min-height: calc(40px + var(--sp-2)); margin-top: calc(-1 * var(--sp-2)); padding: var(--sp-2) 0 var(--sp-1); gap: var(--sp-1); }
 .side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
-/* A folder's label, as Grok Bot's section labels: 13 px, a little more air over it and a little under it than the rows' own gap. */
+/* A folder's label: 13 px, a little more air over it and a little under it than the rows' own gap. */
 .side .mb-sec:has(> .mb-ghead) { margin-top: var(--sp-2); }
 .side .mb-ghead { min-height: calc(var(--pa-gh-h) + var(--sp-1)); margin-bottom: var(--sp-1); font-size: var(--fs-xs); }
 .side :is(.mb-list, .mb-gclip) { gap: var(--sp-1); }
 .side .mb-row-t i { display: inline; max-width: 50%; }
 .side .mb-row-t b:not(:only-child) { max-width: none; }
 .side .mb-row-p { min-height: 17px; }
-/* Rows with Grok Bot's air (R-UI-77, owner 2026-11-12): a 40 px face, the name over one quiet line, a highlight 54 px tall
+/* Rows with air (R-UI-77): a 40 px face, the name over one quiet line, a highlight 54 px tall
    and 58 px from the next, 12 px in from the list's edges (the list's own padding), the name 14 px and its line 13. */
 .side .nav.mb-row { grid-template-columns: 40px minmax(0, 1fr) auto; min-height: var(--side-row); padding-block: 0; border-radius: var(--r-md); }
 .side .mb-row-main { gap: 0; }
@@ -40,9 +40,9 @@
 .side .mb-pinned:not([data-count="1"]) .nav.mb-tile b { font-size: var(--fs-sm); }
 .side .nav.mb-tile[aria-current="true"] b { color: var(--accent-text); }
 .side .nav.mb-tile > .mb-dot { position: absolute; top: 10px; right: 12px; }
-/* The rail of faces, Grok Bot's: 88 px wide, each face (36 px) on a 54 px rounded square that is lit for the open conversation,
+/* The rail of faces: 88 px wide, each face (36 px) on a 54 px rounded square that is lit for the open conversation,
    no names or lines of text, the unread dot on the face's corner, a faint line under Raphael's row and between folders; at its
-   foot, in a column, the plus alone (no search on the rail, owner 2026-11-12 23:25), then the icon button of 連結應用程式 and the account's face. It is what the list becomes on a
+   foot, in a column, the plus alone (no search on the rail), then the icon button of 連結應用程式 and the account's face. It is what the list becomes on a
    window narrower than 860 px, and what a drag of the list's edge folds it to; every control keeps working and each face is
    named on hover or focus. */
 :root[data-sidebar-collapsed] { --sidebar-width: 88px; }
@@ -88,7 +88,7 @@
 .side .mb-ghead:is(:hover, :focus-within) .mb-fold { opacity: 1; }
 .side .au-rooms-section { border: 0; margin: 0; padding: 0; }
 .side .au-room-row { margin: var(--sp-1) 0 0; }
-/* The foot is one row, as Grok Bot's (owner, 2026-11-12 evening, R-SIDE-01): the owner's face, 32 px and round, then the 連結應用程式 pill
+/* The foot is one row (R-SIDE-01): the owner's face, 32 px and round, then the 連結應用程式 pill
    taking the rest of the row, 36 px tall and fully round, on --surface-2. The row holds only these two, so the pill's words never wrap.
    Only the rail (above) stands them in a column. */
 .side .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: none; margin: 0; padding: var(--sp-1) 0 0; border: 0; }
@@ -97,7 +97,7 @@
 .side .sidebar-account { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; }
 .side .sidebar-account:is(:hover, :active) { background: transparent; }
 .side .sidebar-account:active { opacity: 0.8; }
-/* Search and plus only light up: under the pointer the icon brightens, with no frame and no filled square (2026-11-03). A press
+/* Search and plus only light up: under the pointer the icon brightens, with no frame and no filled square. A press
    dims it for a moment, so it still answers (R-UI-88). */
 .side :is(.btn.mb-tool, .side-foot .btn.icon) { border-color: transparent; background: transparent; color: var(--text-2); }
 .side :is(.btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
@@ -114,7 +114,7 @@
 .side .side-foot .sidebar-update-btn:is(:hover, :active):not(:disabled) { background: var(--hover); }
 .side .side-foot .sidebar-update-btn .nav-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 .side .side-foot .sidebar-update-act { flex: none; font-size: var(--fs-xs); font-weight: var(--weight-semibold); color: var(--accent-text); }
-/* The pill, as Grok Bot's: its words and the connected apps' marks form one group centred in it, the marks right after the words, each on its own
+/* The pill: its words and the connected apps' marks form one group centred in it, the marks right after the words, each on its own
    small white tile and the tiles touching at rest (one strip). The words never wrap; the marks drop first when the row is narrow
    (sidebar.ts `fitMarks`), and only a translation longer than the whole pill is cut with an ellipsis. */
 .side .side-foot .sidebar-apps { --marks-spread: 3px; --marks-lift: 1.5px; --marks-scale: 1.1; --marks-turn: 8deg; --marks-time-in: 180ms; --marks-ease-in: ease-out; --marks-time-out: 280ms; --marks-ease-out: ease-in-out;
@@ -135,7 +135,7 @@
 /* The tile is white in both themes (`color-scheme: light` makes a near-black brand keep its own ink): a logo that has a twin for the dark theme shows its light one. */
 :root[data-theme="dark"] .side .sidebar-app-mark .logo-art .lg-d { display: none; }
 :root[data-theme="dark"] .side .sidebar-app-mark .logo-art .lg-l, :root[data-theme="dark"] .side .sidebar-app-mark .logo-art .lg-l:has(+ .lg-d) { display: block; }
-/* Under the pointer the marks fan out like a hand of cards, as Grok Bot's do (owner, 2026-11-12; values measured from its frames): the outer ones
+/* Under the pointer the marks fan out like a hand of cards: the outer ones
    move 3px away from the middle one and turn 8deg outward, the middle one lifts 1.5px, all grow to 1.1; in 180ms ease-out, out 280ms
    ease-in-out. Transform only, once each way, none under reduced motion (the fill may change). Retune the values on `.sidebar-apps` above. */
 .side .sidebar-apps { transition: background-color var(--marks-time-out) var(--marks-ease-out); }

@@ -266,7 +266,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       const picture = fileButton.querySelector<HTMLImageElement>('img[src]');
       if (!file) return;
       if (file.kind === 'image' && picture) openMediaLightbox(fileButton, picture.src);
-      // A page opens as the page itself (R-PAGE-08): the area beside the sidebar shows it whole, as Grok Bot's Library does.
+      // A page opens as the page itself (R-PAGE-08): the area beside the sidebar shows it whole.
       else if (file.kind === 'page' && file.turn_id) {
         const page = { id: file.id.replace(/^page:/, ''), title: file.title, conversation: file.conversation_id ?? undefined, turn: file.turn_id };
         if (host.openPage) host.openPage(page);
