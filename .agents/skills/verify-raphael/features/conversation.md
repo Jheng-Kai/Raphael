@@ -865,6 +865,11 @@ in the window's language; `media-models-menu` asserts OpenRouter's own mark in t
 covered by the unit case that every tool in `CLIS` resolves to its maker's mark under its id and its lowercased name; their sources appear in the
 answer picker only. Not covered: a live Codex login.
 
+`price-parts` (R-MODEL-06) runs in `media-models-unset`, `media-models-set` and `media-models-menu` (and in `models`, `quick-model-menu` and `model-choices-*`):
+a price is parts joined by 「 · 」 and no part is broken across lines while a line of its row could hold it, measured from the client rects of each part's own
+text, and a short model name is never cut by its price. Inspect Gemini Image's row (the longest price) at 720 and 1120 wide, in the picker and in the
+rows of Settings, and with `--locale es` and `--locale pt-BR` (the longest prices); the composer's model menu keeps a price on one line.
+
 ## Connected apps and chosen models
 
 API and CLI brain prompts share the Composio discovery/execution contract:

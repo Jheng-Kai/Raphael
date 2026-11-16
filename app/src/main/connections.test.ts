@@ -186,6 +186,8 @@ describe("the one view", () => {
     const setup = dom(connectionsHTML(view({ configured: false })));
     expect(setup.querySelector(".cs-composio-setup")!.textContent).toContain(t("plugins.moreApps"));
     expect(setup.querySelector('.cs-composio-setup [data-conn="configure-composio"]')).not.toBeNull();
+    // The row ends the scrolling list, in its body: that is what lets it stay whole on the dialog's bottom edge (the look check composio-foot).
+    expect(setup.querySelector("[data-cs-scroll] > [data-cs-body]")!.lastElementChild!.classList.contains("cs-composio-setup")).toBe(true);
     expect(connectionsHTML(view({ configured: true, composioCatalog: "loading" }))).toContain("讀取中");
     const failed = dom(connectionsHTML(view({ configured: true, composioCatalog: "failed" })));
     expect(failed.querySelector('[data-conn="retry-store"]')).not.toBeNull();

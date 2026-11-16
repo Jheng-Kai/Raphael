@@ -218,7 +218,8 @@
 .cs-dialog em.num { margin-left: var(--sp-1); font-style: normal; font-weight: 500; color: var(--text-3); }
 .cs-dialog .cs-desc { margin: 0; }
 .cs-dialog .ca-alert, .cs-dialog .cs-device { margin: 0; }
-.cs-composio-setup { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); padding: var(--sp-4) 0; border-top: 1px solid var(--float-edge); }
+/* The row stands after the list, and when the list is longer than the dialog it stays on the dialog's bottom edge, whole, with the apps scrolling under it: it is never a row the edge cuts. */
+.cs-composio-setup { position: sticky; bottom: 0; z-index: 1; display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-5); padding: var(--sp-4) 0; border-top: 1px solid var(--float-edge); background: var(--content); }
 .cs-composio-setup > span:nth-child(2) { flex: 1; min-width: 0; font-size: var(--fs-sm); }
 .cs-composio-setup > button { flex: none; }
 .cs-composio-mark { color: var(--text-2); }

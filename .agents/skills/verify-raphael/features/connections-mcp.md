@@ -306,6 +306,10 @@ grid styling. Unit tests compare the sources in all four service states.
 checks built-ins plus the optional setup row without issuing connectors.catalog.
 Both error scenes open the small password dialog. `plugins-connecting` joins the
 built-in GitHub entry without a Composio key and checks integrations.connect.
+While no Composio key is set the view ends with one row (the mark, 「還沒有 Composio 金鑰…」 and its button); `composio-foot` runs in `plugins-store-key`,
+`plugins-store-key-openrouter`, `plugins-store-key-consumer` and `plugins-connecting` (R-CONNECT-04) and measures that the whole row and every line of its
+sentence are inside the dialog's visible part without scrolling, and that the list's last app is above it at the end of the list. At 720 wide the sentence is
+two lines; inspect it there and in `--locale fr` (the longest sentence) and `--locale id`.
 The fixture has four representative built-ins from the repository catalog. The
 configured Store scenes add 360 synthetic entries with multiple category
 memberships and a duplicate. Broad-group chips and local search operate on the
