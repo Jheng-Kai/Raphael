@@ -2984,3 +2984,39 @@ and never the work's live state (R-COMP-HANDOFF-01, R-CARD-15). `computer-takeov
 ```powershell
 npm run look -- message-text-colour chat card-computer-handback card-sheet --theme both --width 1120,720,1920x1080
 ```
+
+## The composer's row gives way, and its emblem stays sharp (R-UI-160, R-UI-161)
+
+Under the field stand `+`, the permission (a shield and its word), the model (its name, its depth and a chevron) and, at the
+right end, the one round button (`.cmp-voice`, the emblem while idle). However narrow the composer is, the row stays one row
+inside it. Short of room the model's name shortens first (CSS: the model stands at the right and shrinks, its depth and chevron
+keep their width); once the name would go under six letters the permission's word hides and its shield stays, the button still
+named with the word, and the room goes back to the name (`fitComposerRow` in `chat-composer.ts` measures the row when it, the
+word or the model changes, with a pixel of hysteresis so the word never flickers at the edge); last the name shortens away. The
+`+`, the shield and the right-hand button never shrink. The narrowest composer is 301 px (the details panel as wide as it goes
+at 1120).
+
+`composer-row-fits` measures every control of the row against the composer's inner box, their order and overlap, the
+right-hand button's 32 px box and place, the shield and chevron, that the word shows exactly while the row holds it beside the
+model's first six letters, and that a shortened name has no room left unused before it; it also reports how wide each
+language's four permission words are in the button's own type (Vietnamese 「Cho phép tất cả」 is the widest, 98 px). It ends
+the `panel-*` scenes, `room`, and the composer's own: `composer-row-narrow` (the details panel as wide as it goes, 全部允許,
+and the longest name of a model that answers in the recorded OpenRouter list, with its depth), `composer-row-owner` (a 1288 by
+798 window, the list open, a 520 px panel) and `composer-row-language` (the narrow case in Vietnamese).
+
+The idle emblem is a still drawn once per size and pixel ratio (`emblemStill` in `avatar.ts`): a bitmap of its CSS box times
+the ratio, drawn again when the ratio changes (a window moved to a screen of another scale, a zoom). Two things blurred it:
+the composer's place follows the window by fractions of a pixel, and a bitmap that starts a fraction of a device pixel in is
+resampled by the screen (measured at 125 % and 150 %), so `keepEmblemOnPixels` moves the voice button by that fraction; and at
+32 px the 416 px rune texture sampled at the default quality broke into scattered dots, so a small still averages it down
+(`imageSmoothingQuality: "high"`), stops its rays at the white ring, leaves out the faint circle at the letters' feet and draws
+a whole-pixel white ring with a one-pixel warm edge (`small` in `drawEmblem`; larger emblems keep the anime's numbers).
+`emblem-sharp` fails when the bitmap is not the box times the ratio, when the box is off the device pixel grid, or when a
+scale, turn or filter lies between it and the screen; the step `emblem-picture` saves the emblem as the screen shows it
+(`emblem-<theme>-<width>-x<ratio>.png` in the run) and fails when those pixels are not the bitmap laid on the composer's
+ground at any whole-pixel offset (it skips an emblem under the panel's scrim, under 1120 px). `composer-emblem-ratio` moves the
+window to a 150 % screen mid-scene. Run the emblem at other ratios with `--scale 1.25` and `--scale 1.5`.
+
+```powershell
+npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
+```
