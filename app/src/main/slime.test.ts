@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
-import { GAZE_ROWS, PROP_ROWS, celCount } from "./slime-motion";
+import { GAZE_ROWS, PROP_ROWS, celCount, eyePath, loopState } from "./slime-motion";
 import { crownedId, crownPrimary } from "./crown";
 import { catalogs } from "./i18n";
 import { defaultSlimeAvatar, followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeCharactersHTML, slimeColorOf, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
@@ -415,6 +415,59 @@ test("only whole-frame cel strips use composited transforms (R-UI-63, R-PERF-01)
 
 test("a slime's box is a whole number of pixels, whatever the window works out", () => {
   expect(css).toMatch(/\.av\.mb-av\.mb-av-slime \{[^}]*width: round\(var\(--av\), 1px\);[^}]*height: round\(var\(--av\), 1px\);/);
+});
+
+test("tan(atan2()) in slime.css divides pixels: WebKit loses the unit of an atan2() whose length is relative", () => {
+  // macOS, 2026-11-17: a container unit reaching atan2() made tan() read degrees as radians, so a 22px face's unit was
+  // 1.215 for 0.239 and its eyes seven times too large. The face's size comes through a registered length instead.
+  expect(css).toContain('@property --slime-size { syntax: "<length>";');
+  const calls = [...css.matchAll(/atan2\(/g)].map(match => {
+    let depth = 0, end = match.index! + "atan2".length;
+    do { const c = css[end++]; if (c === "(") depth++; else if (c === ")") depth--; } while (depth > 0 && end < css.length);
+    return css.slice(match.index!, end);
+  });
+  expect(calls.length).toBeGreaterThan(0);
+  for (const call of calls) {
+    expect(call).not.toMatch(/\d(?:cq[a-z]*|r?em|ex|ch|[sld]?v[whib]|vmin|vmax)\b|\d%/);
+    // A custom property in it must already be pixels: the registered length, or the unit made from it.
+    for (const name of call.match(/--[\w-]+/g) ?? []) expect(["--slime-size", "--slime-unit"]).toContain(name);
+  }
+});
+
+test("each state's eyes are the drawing's own path as well, the ones slime.css gives it (WebKit has no CSS d)", () => {
+  // slime.css is the one source: a state's own --eyes, else the resting one. Every rule that names states agrees with it.
+  const rules = [...css.matchAll(/(\.slime(?:\[data-state="[\w-]+"\]|:is\([^)]*\))?) \{([^}]*)\}/g)]
+    .flatMap(([, selector, body]) => { const path = /--eyes: path\("([^"]+)"\)/.exec(body!)?.[1]; return path ? [{ selector: selector!, path }] : []; });
+  const resting = rules.find(rule => rule.selector === ".slime")!.path;
+  const own = (state: string): string => rules.find(rule => rule.selector === `.slime[data-state="${state}"]`)?.path ?? resting;
+  const states: SlimeState[] = ["idle", "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "sleeping", "arriving"];
+  for (const rule of rules) for (const [, state] of rule.selector.matchAll(/data-state="([\w-]+)"/g)) expect(rule.path, rule.selector).toBe(own(state!));
+  expect(new Set(states.map(own)).size).toBe(8);
+  const eyesOf = (html: string): { vector: string; cels: string[] } => {
+    const host = document.createElement("div"); host.innerHTML = html;
+    return { vector: host.querySelector(".slime-eyes")!.getAttribute("d")!, cels: [...new Set([...host.querySelectorAll(".slime-cel-eye")].map(cel => cel.getAttribute("d")!))] };
+  };
+  for (const state of states) {
+    expect(eyePath(state), state).toBe(own(state));
+    // Drawn moving: the vector, and every cel of a strip.
+    const moving = eyesOf(slimeSVG({ color: "sky" }, { ...plain, state }));
+    expect(moving.vector, state).toBe(own(state));
+    expect(moving.cels, state).toEqual(loopState(state) ? [own(state)] : []);
+  }
+  // A picture keeps the pose of its state: asleep shows closed eyes.
+  expect(eyesOf(slimeSVG({ color: "sky" }, { state: "sleeping" })).vector).toBe(own("sleeping"));
+  expect(eyesOf(slimeSVG({ color: "sky" }, { state: "working" })).vector).toBe(resting);
+  // A face on screen that takes another state takes its eyes at once, with no restyle: the large face is its vector.
+  document.body.innerHTML = slimeFaceHTML({ id: 91 }, 96, "", true);
+  const svg = document.querySelector<SVGElement>("svg.slime")!, eyes = svg.querySelector(".slime-eyes")!;
+  const styled = vi.spyOn(window, "getComputedStyle");
+  try {
+    for (const state of ["working", "computer", "waiting", "blocked", "error", "thinking", "searching", "done", "sleeping", "arriving", "idle"] as SlimeState[]) {
+      handOver(svg, state);
+      expect([svg.dataset.state, eyes.getAttribute("d")], state).toEqual([state, own(state)]);
+    }
+    expect(styled).not.toHaveBeenCalled();
+  } finally { styled.mockRestore(); }
 });
 
 test("each moving state retains its body performance while idle and sleeping have no loop", () => {

@@ -87,6 +87,13 @@ describe("a conversation's header is the window's top row", () => {
     expect(agent).toContain("--pa-top-end: calc(var(--window-controls-width) + var(--window-controls-gap));");
   });
 
+  test("on a Mac the row's right end keeps no room for caption buttons, which macOS draws at the top left, only the panel's padding", () => {
+    const mac = styles.replace(/\/\*[\s\S]*?\*\//g, "").match(/:root\[data-platform="macos"\] \{([^}]*)\}/)?.[1] ?? "";
+    expect(mac).toMatch(/--window-controls-width:\s*0px;/);
+    expect(mac).toMatch(/--window-controls-gap:\s*var\(--sp-4\);/);
+    expect(agent).toMatch(/--pa-dpad:\s*var\(--sp-4\);/);
+  });
+
   test("the header takes no room from the thread, which has no strip above it and passes under the row", () => {
     expect(members).toMatch(/\.mb-chat \{[^}]*padding: 0 var\(--pa-chat-pad\);/);
     expect(members).toMatch(/\.page-head\.mb-head \{[^}]*z-index: 3;[^}]*height: var\(--pa-top\);[^}]*margin-bottom: calc\(-1 \* var\(--pa-top\)\);/);

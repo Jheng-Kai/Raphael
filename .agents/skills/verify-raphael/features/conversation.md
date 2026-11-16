@@ -2975,7 +2975,7 @@ while the search bar stands under the row) as its top padding, and its mask fade
 At the right the tools end 14 px short of the window's three buttons (`--pa-top-end`) where the pane reaches the window's edge. With the
 details panel open as a column (1120 and wider) the panel's own head (`.mb-det-head`) is the row over it, its last button 14 px short of the
 window's buttons, and the conversation's tools go to the pane's edge; under 1120 px the panel lies over the chat and its scrim dims the
-header. A group's side thread does the same with its header. Under 860 px the sidebar is the 88px rail of faces beside the pane (no menu button),
+header. A group's side thread does the same with its header. On a Mac there are no caption buttons at the right (macOS draws its traffic lights at the top left), so `--window-controls-width` is 0 and `--window-controls-gap` the panel's padding there (styles.css, 2026-11-17): the panel's close stands 16 px from the window's edge, mirroring its gear, and the conversation's tools keep the pane's inset. The look checks that measure against the caption buttons measure against the window's edge on a Mac. Under 860 px the sidebar is the 88px rail of faces beside the pane (no menu button),
 so the pill row starts at the pane's own edge.
 
 Dragging: the header carries `data-window-drag` (and the panel's and the side thread's heads, and the peer view's), so its empty parts move

@@ -4,7 +4,7 @@
 /* The list is dragged by its edge (edge-drag.ts): no handle is drawn, the cursor changes over it, and a thin
    line shows only while it moves or has the keyboard. */
 .side-edge { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
-.side-edge:focus-visible::after, .side-edge.is-dragging::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 2px; background: var(--edge); }
+.side-edge:focus-visible::after, .side-edge.is-dragging::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--edge); }
 :root[data-resizing] body { cursor: col-resize; user-select: none; }
 .side .btn.icon:hover:not(:disabled) { background: var(--hover); }
 .side .btn.icon:active:not(:disabled) { background: var(--pressed); }
@@ -79,7 +79,7 @@
 :root[data-sidebar-collapsed] .side .side-foot .sidebar-update-act { display: none; }
 :root[data-sidebar-narrow] .side-edge { display: none; }
 /* Where a dragged row lands: one line between two rows, the row itself dimmed in its place. */
-.mb-drop-line { position: fixed; z-index: 30; height: 2px; border-radius: var(--r-pill); background: var(--accent-text); pointer-events: none; }
+.mb-drop-line { position: fixed; z-index: 30; height: 1px; border-radius: var(--r-pill); background: var(--accent-text); pointer-events: none; }
 .side .is-dragged { opacity: 0.4; }
 /* Under the pointer only its words brighten, with no fill: no hover frames. */
 .side .mb-ghead { cursor: pointer; border-radius: var(--r-sm); }

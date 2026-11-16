@@ -222,6 +222,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
    and the drag strip starts after the lights. */
 :root[data-platform="macos"] .window-controls { display: none; }
 :root[data-platform="macos"] .window-chrome { padding-left: 92px; }
+/* Nor does the top row keep their room at its right end: there it keeps the details panel's own padding, the same as at its left. */
+:root[data-platform="macos"] { --window-controls-width: 0px; --window-controls-gap: var(--sp-4); }
 .window-button { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); cursor: default; transition: background-color 120ms ease, color 120ms ease; }
 .window-button svg { grid-area: 1 / 1; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; }
 .window-button svg.window-line-glyph { shape-rendering: crispEdges; }

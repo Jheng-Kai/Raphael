@@ -459,7 +459,7 @@ export const es = {
   "missing.urlRead": "No se pudo leer esta URL directamente. Proporciona una página pública o un archivo descargado; abre tú las páginas restringidas o con acceso.",
   "missing.unknown": "La causa del fallo es desconocida. Conserva esta conversación y prueba una vez más; informa si persiste.",
   "missing.microphone": "Falló el acceso al micrófono. Permite su uso a Raphael y activa las apps de escritorio en la privacidad del micrófono de Windows.",
-  "missing.accessibility": "Las teclas de dictado necesitan Accesibilidad. Permite Raphael en Ajustes del Sistema > Privacidad y seguridad > Accesibilidad.",
+  "missing.accessibility": "Las teclas de dictado necesitan Accesibilidad. Permite Raphael en Ajustes del Sistema > Privacidad y seguridad > Accesibilidad. Si ya está activado, quita Raphael con − y vuelve a añadirlo.",
   "ownerQuestion.submit": "Enviar respuesta",
   "ownerQuestion.answered": "Respondido",
   "ownerQuestion.skip": "Omitir",

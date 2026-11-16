@@ -459,7 +459,7 @@ export const ko = {
   "missing.urlRead": "이 URL을 직접 읽지 못했습니다. 공개 페이지를 제공하거나 다운로드한 파일을 첨부하세요. 로그인이 필요하거나 제한된 페이지는 직접 여세요.",
   "missing.unknown": "실패 원인을 알 수 없습니다. 이 대화를 보관하고 한 번 더 시도하세요. 계속되면 문제를 보고하세요.",
   "missing.microphone": "마이크 접근에 실패했습니다. Raphael의 마이크 사용을 허용하고 Windows 마이크 개인정보 설정에서 데스크톱 앱을 허용하세요.",
-  "missing.accessibility": "받아쓰기 단축키에는 손쉬운 사용 권한이 필요합니다. 시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용에서 Raphael을 허용하세요.",
+  "missing.accessibility": "받아쓰기 단축키에는 손쉬운 사용 권한이 필요합니다. 시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용에서 Raphael을 허용하세요. 이미 켜져 있다면 −로 Raphael을 제거한 뒤 다시 추가하세요.",
   "ownerQuestion.submit": "답변 제출",
   "ownerQuestion.answered": "답변함",
   "ownerQuestion.skip": "건너뛰기",

@@ -90,6 +90,16 @@ or toggle.
 
 The owner's 2026-11-05 request supersedes the former landing panel. R-PANEL-01/02/03/04 require the existing member identity followed by shared Details / Library / Computer tabs. Details contains work, routines and conversations; Library uses the existing file chip; Computer owns the screen, location and lifecycle controls. Gear keeps identity/resource editing. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the complete selected matrix and deferred native acceptance.
 
+## The same eyes in WebKit (macOS, 2026-11-17)
+
+On a Mac the faces of 48 px and under had eyes of every size, some upside down, changing with the window: WebKit loses
+the angle unit of an `atan2()` whose length is relative (`cqw`), so `tan()` read degrees as radians. The face's size
+now reaches `tan(atan2())` as the registered length `--slime-size` (`slime.css`). WebKit also has no CSS `d`, so every
+state showed the resting eyes: the drawing writes the state's path into `d` as well (`slime-motion.ts` `eyePath`, read
+from slime.css's `--eyes` through the generated data; `slime.ts` `slimeSVG`, `enter` and the strips). Chromium still
+takes `d: var(--eyes)` and eases between shapes; WebKit changes them at once. The tests in `slime.test.ts` keep both.
+The look harness renders in Chromium, so a WebKit change is checked in a WKWebView by hand.
+
 ## Quiet resting poses (2026-11-04)
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.
