@@ -79,6 +79,15 @@ def test_a_cli_hands_work_to_a_colleague_only_with_raphaels_handoff():
     assert "A colleague gets work only through handoff, never spawn_agent, followup_task" in loop.system
 
 
+@pytest.mark.parametrize("model", ["cli:claude:fake", "cli:codex:fake", "cli:antigravity:fake"])
+def test_every_cli_brain_is_told_the_same_way_to_hand_work_on(model):
+    """Whatever the program, a colleague gets work only through `handoff` (a turn with a reply schema has no tools at all)."""
+    loop = cli.CliLoop(brains=SimpleNamespace(environ={}, home=None), sessions=None, member_id=5, model=model,
+                       ledger=None, language="en", plain=True, system="", user="x", tools=[], progress=print,
+                       thinking=lambda text: None, event=lambda text: None, execute=None)
+    assert "A colleague gets work only through handoff, never spawn_agent, followup_task or another sub-agent tool." in loop.system
+
+
 # --- the loop --------------------------------------------------------------------------------------------------------
 
 
