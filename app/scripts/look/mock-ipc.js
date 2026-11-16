@@ -2,7 +2,7 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
-  /** The conversation in which the owner asked for his own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
+  /** The conversation in which the owner asked for their own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
   function ownGoogleTurn(data) {
     const turn = structuredClone(data.connectorTurns.server);
     const text = "Google 要用你自己的帳號連接：照卡片上的步驟在 Google Cloud 建立桌面應用程式，再把 Client ID 與 Client secret 貼進卡片，最後按「連接 Google」。";
@@ -52,8 +52,8 @@ export function installMock(fixture, config = {}, target = window) {
     }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
     if (variant.ownerEdit === 'placed') {
-      // A member's thread as the owner's has it: routine turns posted after his message (07:00 and 08:00), so an edit that
-      // went to the end of the thread would be seen far from where he edited.
+      // A member's thread as the owner's has it: routine turns posted after their message (07:00 and 08:00), so an edit that
+      // went to the end of the thread would be seen far from where they edited.
       const routine = (id, hour, words) => ({...structuredClone(base), id, session_id:`routine-${id}`, source:'routine', route:'routine', question:`${hour}:00 例行`, prefix:'', text:words, created_at_ms:data.now + (id - 8200) * 3_600_000,
         messages:[{seq:1,kind:'reply',text:words,at_ms:data.now + (id - 8200) * 3_600_000}], drafts:[], reactions:{}, owner_questions:[], permissions:[]});
       data.turns.push(routine(8203, '07', '早上七點的例行整理已送出。'), routine(8204, '08', '早上八點的例行整理已送出。'));
@@ -114,11 +114,11 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.memberSettings) {
     data.servers.forEach(server => { server.enabled = true; });
     data.servers.push({ ...structuredClone(data.servers[0]), id: "calendar", name: "行事曆" });
-    // An app named as Claude's connectors name it, drawn with its own mark (owner, 2026-11-10).
+    // An app named as its connector is named, drawn with its own mark.
     data.servers.push({ ...structuredClone(data.servers[0]), id: "mobbin", name: "Mobbin MCP" });
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
   }
-  // A long conversation as the owner's are (2026-11-10: pages of 100-440 KB): `count` answered turns of written words,
+  // A long conversation, as a daily user's are (pages of 100-440 KB): `count` answered turns of written words,
   // a list, a table and a code card each, the newest with the id `heavyThread.newest`.
   if (variant.heavyThread) {
     const { member = 1, count = 50, newest = 300050 } = variant.heavyThread;
@@ -145,6 +145,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
+  if (variant.ownerWriteFolders) data.settings.owner_write_folders = ["C:\\Owner\\Notes", "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"];
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
@@ -308,7 +309,16 @@ export function installMock(fixture, config = {}, target = window) {
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
-  if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.ownerRound.emptyRecords));
+  // The composer's row at its fullest (R-UI-160): a permission mode with a long word (`mode`, in `language` when one is named)
+  // and the scene's `model`, with a depth beside it.
+  if (variant.composerLongRow) {
+    data.settings.action_mode = variant.composerLongRow.mode ?? "bypass";
+    if (variant.composerLongRow.language) data.device.ui_language = variant.composerLongRow.language;
+    const long = { ...structuredClone(data.catalog.llm[0]), ...variant.composerLongRow.model };
+    data.catalog.llm.push(long);
+    data.settings.agent_model = `${long.id}?effort=high`;
+  }
+  if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.conversationSamples.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
   if (variant.sidebarMany) {
     const roster = data.sidebarRoster;
@@ -330,7 +340,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.members[1].last_at = data.now;
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
-  // The one light of a row (sidebar-light.ts, owner 2026-11-14): `sidebarLights` maps a member id to what that member is in. A member that
+  // The one light of a row (sidebar-light.ts): `sidebarLights` maps a member id to what that member is in. A member that
   // thinks has said nothing, so it has no news; one that waits for the owner has news too, which its orange question outranks.
   if (variant.sidebarLights) {
     const states = {
@@ -353,7 +363,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.messages.push({ ...spoken, id: next, room_id: 2, text: "會議結束，結論已整理好" }, { ...spoken, id: next + 1, room_id: 3, text: "要先確認預算嗎？" });
     Object.assign(data.expectedLights.rooms, { 1: "message", 2: "done", 3: "waiting" });
   }
-  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by his own setting): the core lists the pinned first, then by
+  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by its own setting): the core lists the pinned first, then by
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
   if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
   if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
@@ -412,7 +422,7 @@ export function installMock(fixture, config = {}, target = window) {
       runningTurn.task = { id: 71, state: "running", started_at_ms: data.now - 5000, finished_at_ms: null };
     }
     if (variant.oneSlime) {
-      // The owner's picture of 2026-11-14 (R-SLIME-03): a reply that queued research in the background, its task that waits (an empty
+      // R-SLIME-03: a reply that queued research in the background, its task that waits (an empty
       // slime under the reply) and a task that works with its progress words. One member, one working slime: only the line that works.
       const sample = data.presenceSample;
       runningTurn.status = "done";
@@ -445,7 +455,7 @@ export function installMock(fixture, config = {}, target = window) {
   const arrivals = new Map((variant.arrivals ?? []).map(turn => [turn.id, structuredClone(turn)]));
   const pendingReplies = new Map();
   if (variant.p04Blocked) {
-    data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:"missing_artifact",result:"",evidence:[]}];
+    data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:typeof variant.p04Blocked==="string"?variant.p04Blocked:"missing_artifact",result:"",evidence:[]}];
     data.messages.at(-1).text="尚未取得檔案，目前沒有可驗收結果。";
     data.messages.push({...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴的檔案尚未完成，補齊後可以重新驗收，要不要重試由你決定。"});
   }
@@ -495,11 +505,11 @@ export function installMock(fixture, config = {}, target = window) {
     turn.handoffs = [{ ...data.roomHandoff, state: "done" }, { ...data.roomHandoff, task_id: 43, member_id: 2, member_name: "小森", mode: "consult", state: "running", result: "", evidence: [] }];
     turn.messages.push({ seq: 99, kind: "event", text: JSON.stringify(data.p02MeetingEvent), at_ms: data.now });
   }
-  // Raphael as his emblem, with no picture of the owner's in its place.
+  // Raphael as its emblem, with no picture of the owner's in its place.
   if (variant.emblem) data.avatar = null;
   if (variant.peerChat) {
     // Raphael asked 小晴 twenty minutes ago and now, and 小森 once in between: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
-    // Yesterday's exchange with 小晴 is another conversation with its own line, so it is not in this one (owner, 2026-11-15).
+    // Yesterday's exchange with 小晴 is another conversation with its own line, so it is not in this one.
     const turn = data.turns.find(turn => turn.id === 1), sample = data.peerChatSample, DAY = 86_400_000, EARLIER = 20 * 60_000;
     const exchange = (id, member, name, created, request, result) => ({ ...structuredClone(data.roomHandoff), task_id: id, work_turn_id: id + 100,
       member_id: member, member_name: name, mode: "consult", state: "done", created_at_ms: created, started_at_ms: created, finished_at_ms: created + 40_000,
@@ -525,7 +535,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns = [{ ...turn, question: sample.request, text: sample.answer, messages: [], steps: [], handoffs: tasks }];
     if (variant.handoffGroup === "room") {
       // A room takes nobody's side: one line per pair of members in a row (Raphael and Ada twice), and work a member
-      // handed itself (Ben, waiting for the owner) is a line of its own that opens Ben's conversation (owner, 2026-11-09).
+      // handed itself (Ben, waiting for the owner) is a line of its own that opens Ben's conversation.
       tasks.forEach((task, i) => Object.assign(task, i === 2 ? { member_id: 2, member_name: people[1], from_member_id: 2, own_work: true, mode: "work" }
         : { member_id: i < 2 ? 1 : i < 5 ? 3 : 4, member_name: people[i < 2 ? 0 : i < 5 ? 2 : 3] }));
       data.roomHandoffs = tasks;
@@ -581,12 +591,12 @@ export function installMock(fixture, config = {}, target = window) {
     const turn = (id, question, text, extra) => ({ ...base, id, member_id: 1, conversation_id: 11, question, text, steps: [], messages: [], secrets: [], ...extra });
     data.turns.push(turn(141, "幫我設定 Slack", "我需要一個 Slack 機器人權杖：照卡片上的步驟建立機器人，再把權杖貼進來。", { secrets: [{ id: "card-slack", name: "Slack", secret: "bot_token", state: "pending", error: null, expires_at_ms: data.now + 600000, resumed: false, platform: "slack", link: "https://api.slack.com/apps" }],
       pairings: [{ id: "pair-1", platform: "slack", member_id: 1, code: "SL7Q2K", who: "Sam", expires_at_ms: data.now + 300000, state: "pending" }] }));
-    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容，再儲存成檔案或準備發布請求。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:shion", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
+    data.turns.push(turn(142, "把你自己打包成範本，讓別人也能用", "範本做好了，可以先看內容，再儲存成檔案或準備發布請求。", { templates: [{ id: "tpl-1", state: "draft", name: "研究與資訊整理", avatar: "slime:horn-lavender", description: "幫人查證來源、整理成一份能直接讀的研究摘要。", counts: { skills: 2, routines: 1 }, connections: ["Gmail", "Notion"], findings: [] }] }));
     // A code that came later is a turn of its own at the bottom, with no words (the core's pairing turn).
     if (variant.latePairing) data.turns.push(turn(143, "", "", { route: "pairing", source: "messaging", session_id: "pairing-late", created_at_ms: data.now + 1000,
       pairings: [{ id: "pair-late", platform: "slack", member_id: 1, code: "SL9X4M", who: "Sam", expires_at_ms: data.now + 600000, state: "pending" }] }));
   }
-  // A turn with two replies, the computer's card and one question (owner, 2026-11-11): it stands at the end only while it waits
+  // A turn with two replies, the computer's card and one question: it stands at the end only while it waits
   // ("asked"); "answered" it stands where it was asked, before the replies it led to. The core does not send its time yet.
   if (variant.ownerQuestionOrder) {
     const question = structuredClone(data.ownerQuestionCard), waiting = variant.ownerQuestionOrder === "asked";
@@ -599,7 +609,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
-    // The shapes of the card the member may ask for (owner, 2026-11-11): a grey line, a grey line under some rows, several choices, a skip row.
+    // The shapes of the card the member may ask for: a grey line, a grey line under some rows, several choices, a skip row.
     Object.assign(question, {
       described: { subtitle: "選最重要的一個。", descriptions: ["", "今天與本週的行程", "", "會議與待辦的紀錄"], skip: true },
       multiple: { multiple: true }, skip: { skip: true },
@@ -647,6 +657,8 @@ export function installMock(fixture, config = {}, target = window) {
       Object.assign(made.turn, { question: "幫我填入出差住宿的付款資料。", text: "", messages: [] });
     }
     if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
+    // The member's reason in the card's words holds a long address in brackets, with Chinese words right after it (R-LINK-01).
+    if (variant.linkedReason) made.turn.permissions[0].reason = data.linkSample.reason;
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
   }
@@ -701,7 +713,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.conversations.push({ id: 12, member_id: 1, title: "較早的整理", is_default: false, kind: "standard", created_at_ms: data.now - 9 * 86400000, updated_at_ms: data.now - 8 * 86400000 });
     for (const turn of data.turns) if ([801, 802, 803].includes(turn.id)) turn.conversation_id = 12;
   }
-  // A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list) and an HTML page that writes no style of its own, so that
+  // A document-style report and an HTML page that writes no style of its own, so that
   // only the app's base style (core agent/page_style.py) draws it: each is a member's turn with the page's card.
   for (const [flag, id, title, kind, text] of [["documentTurn", "page-document", () => data.pageDocument.title, "report", "整理好了，點開就能用篩選慢慢挑。"],
     ["baseTurn", "page-base", () => "東京行程候選清單", undefined, "整理好了，點開就能讀。"]]) {
@@ -711,7 +723,7 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text, at_ms: data.now }], attachments: [],
       pages: [{ id, title: title(), rev: 1, height: id === "page-base" ? 900 : 320, source: "html", server: null, fallback: title(), ...(kind ? { kind } : {}) }] });
   }
-  // Raphael's daily overview (owner, 2026-11-14: the old home is now this page, sent by a 07:00 routine to his conversation):
+  // Raphael's daily overview (the page a 07:00 routine sends to Raphael's conversation):
   // a routine's turn that says in a few words what it did, and the page.
   if (variant.dashboardTurn) {
     const base = data.turns.find(turn => turn.member_id === 0 && turn.conversation_id === 1);
@@ -725,7 +737,7 @@ export function installMock(fixture, config = {}, target = window) {
       pages: [{ id: "page-dashboard", title: data.pageDashboard.title, rev: 1, height: 320, source: "html", server: null, fallback: data.pageDashboard.title, kind: "report" }] });
   }
   if (variant.attachmentLink) {
-    // The owner's picture of 2026-11-14 (R-MSG-LINK-01): a routine's message that ends with a model's markdown link to the file it delivered
+    // R-MSG-LINK-01: a routine's message that ends with a model's markdown link to the file it delivered
     // in the same turn, `[words](attachment:<id>)`, and one to a file no turn of the conversation holds.
     const sample = data.presenceSample;
     const base = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11);
@@ -817,6 +829,8 @@ export function installMock(fixture, config = {}, target = window) {
     own(2, "供應商會議", octoberAt(23, 13), octoberAt(23, 14, 30), { ...addedBy(1), notes: "從今天的信件整理：對方想確認交期。" }),
     own(3, "交付截止日", octoberAt(22, 0), octoberAt(23, 0), { all_day: true }),
   ];
+  // An all-day item a member synced from another app, its notes a Chinese sentence holding the page's address with a full stop right after it (R-LINK-01).
+  if (variant.linkedNotes) data.home.calendar_events.push(own(4, "專案週報", octoberAt(24, 0), octoberAt(25, 0), { all_day: true, ...addedBy(1), notes: data.linkSample.notes }));
   if (variant.presence === "calendar") data.home.calendar_events.find(item => item.id === "own:1").title = data.presenceSample.calendar;
   if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
   if (variant.calendarBusy) data.home.calendar_events.push(
@@ -862,7 +876,9 @@ export function installMock(fixture, config = {}, target = window) {
   };
   reproject();
   if (variant.calendarRhythm) {
-    const rhythm = { id:91, member_id:1, title:"Gmail 與行程檢查", prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
+    // `calendarLongTitle`: the run's chips carry a title longer than any chip, so that a mark beside it has a title to cut (check `calendar-chip-marks-cut`).
+    const rhythmTitle = variant.calendarLongTitle ? "每三小時檢查 Gmail、行程與尚未回覆的客戶來信，再整理成一頁簡報" : "Gmail 與行程檢查";
+    const rhythm = { id:91, member_id:1, title:rhythmTitle, prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
     data.routines = [rhythm,{...rhythm,id:92,title:"每日摘要",schedule:{kind:"daily",time:"09:00"},next_run:octoberAt(24,9)}];
     data.routineRuns = [[8,"done"],[11,"error"],[14,"confirm"]].map(([hour,status],i)=>({id:901+i,routine_id:91,scheduled:octoberAt(24,hour),started:octoberAt(24,hour),finished:status==="confirm"?null:octoberAt(24,hour)+60000,status,turn_id:2,summary:"樣本報告",cost:0}));
     data.home.calendar_events = [own(80,"樣本整理日",octoberAt(24,0),octoberAt(25,0),{all_day:true})];
@@ -877,7 +893,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_counts['2026-10-24']=4;
     data.home.calendar_days=Object.keys(data.home.calendar_counts);
   }
-  // The owner has not set up his own Google yet: its row is in the store (R-CONNECT-02).
+  // The owner has not set up their own Google yet: its row is in the store (R-CONNECT-02).
   // One store row for each mark of the set (`iconMarks`): the tile of each is checked in the real browser (check `icon-colours`).
   if (variant.iconMarks) for (const id of variant.iconMarks) data.services.push({ ...data.services[0], id: `mark-${id}`, name: `Mark ${id}`, publisher: "icon-mark", icon: id, category: "other", popular: false, server_id: null, auth: "oauth" });
   if (variant.noOwnGoogle) data.managedConnectors = data.managedConnectors.filter(c => c.id !== "google");
@@ -895,7 +911,7 @@ export function installMock(fixture, config = {}, target = window) {
     claude.windows = [{ period: "weekly", remaining_percent: 3, resets_at: Math.round(data.now / 1000) + 3 * 86400, updated_at_ms: data.now - 20 * 60000 }, ...claude.windows.filter(window => window.period !== "weekly")];
   }
   if (variant.allowanceTwo) data.allowances.brains = data.allowances.brains.filter(brain => brain.id === "claude" || brain.id === "codex");
-  // The owner's own mix on 2026-11-14 (R-SIDE-02): Codex read live at 65% used with five days to go; Claude's last report named a window whose reset has since passed
+  // A mix of every source (R-SIDE-02): Codex read live at 65% used with five days to go; Claude's last report named a window whose reset has since passed
   // (allowed, no percentage); the ChatGPT sign-in, whose plan has no number to read; and an OpenRouter key with its own monthly usage and a limit.
   if (variant.usageOwner) {
     const stamp = Math.round(data.now / 1000);
@@ -1030,7 +1046,7 @@ export function installMock(fixture, config = {}, target = window) {
     Object.assign(data.members.find(member => member.id === 1), {role: sample.role, name:sample.name, unread:false, activity:"idle", waiting:false});
     data.turns = data.turns.filter(turn => turn.member_id !== 1).concat({...base,id:9800,session_id:"colleague-greeting",member_id:1,conversation_id:11,question:"",route:"answer",source:"app",text:sample.handoff,detail:null,status:"done",steps:[],messages:[],task:null,permissions:[],owner_questions:[],computers:[],secrets:[],connectors:[],drafts:[],pages:[],handoffs:[]});
   }
-  // A new member's set-up by cards (owner, 2026-11-11): the greeting with its question card ("card"), the card answered, the job saved
+  // A new member's set-up by cards: the greeting with its question card ("card"), the card answered, the job saved
   // and the first-task card ("job"), the one app the job needs ("connect"), or a clear answer that skips the cards ("collapsed").
   // "flow" starts as "card" and moves to "job" when the card is answered. The core sends each question's time (created_at_ms).
   const setupStage = stage => {
@@ -1088,14 +1104,14 @@ export function installMock(fixture, config = {}, target = window) {
     if (latest) latest.is_default = true;
     else data.conversations.push({ id: nextId(data.conversations), member_id: member, title: "", is_default: true, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now });
   };
-  // As the core does since 2026-11-11: the member types while its own model writes the greeting; it comes as its line and one question card.
+  // As the core does: the member types while its own model writes the greeting; it comes as its line and one question card.
   const greet = member => {
     mainConversation(member.id);
     const conversation = data.conversations.find(item => item.member_id === member.id && item.is_default);
     const greeting = { id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: "", detail: null, status: "running", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() };
     data.turns.push(greeting);
     if (!variant.greetingPending) setTimeout(() => {
-      // The member's own line with the one question card (the core's greeting since 2026-11-11), asked after the line.
+      // The member's own line with the one question card (the core's greeting), asked after the line.
       const line = `嗨，我是${member.name} 👋 很高興加入你的團隊。`;
       Object.assign(greeting, { status: "done", text: line, messages: [{ seq: 1, kind: "reply", text: line, at_ms: data.now }],
         task: { id: 9900 + greeting.id, state: "waiting", waiting_owner: 1, started_at_ms: data.now, created_at_ms: data.now + 1, finished_at_ms: null },
@@ -1356,7 +1372,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "dictionary.delete": data.dictionary = data.dictionary.filter(item => item.id !== p.id); return { deleted: true };
       case "members.library": {
-        // As the core since brief 10: only what the member delivered, newest first, with the day it was handed over.
+        // As the core: only what the member delivered, newest first, with the day it was handed over.
         if (!variant.memberPanelFiles) return { files: [], has_more: false };
         // `core`: the Library the core's own snapshot reads from a synthetic database (runner.mjs `coreFixtures`).
         if (variant.memberPanelFiles === "core") return data.coreLibrary;
@@ -1443,7 +1459,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { member };
       }
       case "members.avatar_generate": {
-        // As the core (brief 10): the owner's chosen image model draws one square candidate, not applied; without a model the
+        // As the core: the owner's chosen image model draws one square candidate, not applied; without a model the
         // window is told so with the place that chooses one. The window reads the kind from the error text (window_error).
         if (!data.settings.image_model) throw '[1001] Avatar generation failed {"kind":"image_model_missing","repair":"models","resource":"image"}';
         const canvas = document.createElement("canvas"); canvas.width = canvas.height = 256;
@@ -1687,7 +1703,8 @@ export function installMock(fixture, config = {}, target = window) {
         turn.owner_questions = turn.owner_questions.filter(item => item.id !== p.id);
         turn.task = null;
         data.turns.push(moved);
-        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: data.now, turn_id: moved.id, turn: moved });
+        // The core stamps the message it makes with the time of the press, so it stands after every message the room holds.
+        if (variant.ownerQuestion === "pending-room") data.messages.push({ id: Math.max(...data.messages.map(item => item.id)) + 1, room_id: 1, thread_id: 1, member_id: 1, text: "", status: "done", created: Math.max(data.now, ...data.messages.map(item => item.created)) + 1, turn_id: moved.id, turn: moved });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         notify("AgentTurn", { turn_id: moved.id, member_id: turn.member_id });
         notify("RoomsChanged", { room_id: 1 });
@@ -1958,7 +1975,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.template_card_publish": {
         const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
-        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?quick_pull=1" };
+        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/SlimesStore/compare/main...main?quick_pull=1" };
         Object.assign(turn.templates[0], { state: "published", ...prepared });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return prepared;
@@ -2190,7 +2207,7 @@ export function installMock(fixture, config = {}, target = window) {
         notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true, member_id: member });
         if (args.kind === "agent_up" && variant.ownerVoice === "answer") {
           // As the core writes it: the newest turn of the thread, made now.
-          const turn = { ...copy(data.ownerRound.voiceReply), id: Math.max(0, ...data.turns.map(item => item.id)) + 1, created_at_ms: Date.now(), member_id: member, conversation_id: args.conversationId };
+          const turn = { ...copy(data.conversationSamples.voiceReply), id: Math.max(0, ...data.turns.map(item => item.id)) + 1, created_at_ms: Date.now(), member_id: member, conversation_id: args.conversationId };
           data.turns.push(turn); notify("AgentTurn", { turn_id: turn.id, member_id: member });
         }
         return;
@@ -2343,7 +2360,7 @@ export function installMock(fixture, config = {}, target = window) {
                 position: data.members.length,
               });
               data.conversations.push({ id: 80 + id, member_id: id, title: "", is_default: true, created_at_ms: data.now, updated_at_ms: data.now });
-              // As the core's member_create tool since 2026-11-10: a member made by a member greets the owner too.
+              // As the core's member_create tool: a member made by a member greets the owner too.
               greet(data.members.find(member => member.id === id));
             }
             notify("MembersChanged", { member_id: 8 });
@@ -2395,7 +2412,7 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "keyboard_has_altgr") return false;
-      // The owner's clipboard is never read by a look: the live view's paste asks only while he holds a real screen.
+      // The owner's clipboard is never read by a look: the live view's paste asks only while they hold a real screen.
       if (command === "owner_clipboard_text") return null;
       // The shell's read of the clipboard (macOS, where the page may not read it): a scene's clipboard is the browser's own.
       if (command === "clipboard_text") return navigator.clipboard.readText().catch(() => "");

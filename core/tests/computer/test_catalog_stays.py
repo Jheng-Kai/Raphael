@@ -2,7 +2,7 @@
 
 A CLI brain reads its tool list once and a provider caches it. The list kept with the code used to be older than the
 driver in the image (other parameters, some the driver refuses), so the member's first use of its computer replaced
-all thirty tools, the CLI turn started again and that first call's result was lost (real members, 2026-11-12).
+all thirty tools, the CLI turn started again and that first call's result was lost.
 """
 
 from copy import deepcopy
@@ -112,8 +112,8 @@ async def test_every_computer_tool_says_what_it_is_for_first_and_is_read_whole(c
     openings = {description[:DESCRIPTION_CHARS // 8] for description in shown.values()}
     assert len(openings) == len(shown)
     # Shown whole, their length is the core's to keep: the whole computer, in every request of every member.
-    # Measured 2026-11-13: 17.8 thousand characters in all (18.4 at a seat); the longest is the shell's, 1304 at a seat.
-    # 2026-11-14: the outward-action rule is one sentence on each tool and whole in the shared contract once (R-TOOL-03).
+    # Measured: 17.8 thousand characters in all (18.4 at a seat); the longest is the shell's, 1304 at a seat.
+    # The outward-action rule is one sentence on each tool and whole in the shared contract once (R-TOOL-03).
     # The six member file tools fit within this 14.5 thousand character ceiling with a little room.
     assert sum(map(len, shown.values())) <= 14_500
     assert max(map(len, shown.values())) <= 1_400

@@ -128,13 +128,13 @@ def test_a_time_in_milliseconds_is_not_a_card_number():
 @pytest.mark.parametrize(
     "text",
     [
-        # The two links that kept Raphael's daily overview off its page on 2026-11-14.
+        # The two links that kept Raphael's daily overview off its page.
         "https://www.accuweather.com/zh/tw/taichung-city/315040/weather-forecast/315040",
         "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition/",
         "https://finance.yahoo.com/news/nvidia-stock-falls-after-ceo-transition-2026-11-13-153000",
         "C:/Users/me/Documents/Projects/Raphael/weekly-report/2026/v2/final-notes",
         "https://github.com/OpenAI/codex/releases/tag/v2-mp4-h264-support-notes-2026",
-        # The news links of the member 紫苑 (a Japanese teacher), refused three times the same day: a path piece that
+        # The news links of the member 小葵 (a Japanese teacher), refused three times the same day: a path piece that
         # mixes letters and digits is an article's number, not a key.
         "https://news.web.nhk/newsweb/na/nd-20261114de75840",
         "https://news.web.nhk/news/easy/20261112de74710/20261112de74710.html",
@@ -190,8 +190,8 @@ def test_an_iban_is_told_by_its_check_digits_and_a_bank_account_by_its_word():
 
 @pytest.mark.parametrize("text", ["身分證 A123456789", "ID: A123456789", "身份證字號 B234567890、F121234567", "パスポート TK1234567"])
 def test_a_personal_identifier_is_not_a_credential(text):
-    # Owner, 2026-11-14: only passwords, keys and tokens, and card and bank secrets are secret. A national ID number was
-    # refused until then.
+    # Only passwords, keys and tokens, and card and bank secrets are secret. A national ID number was
+    # once refused.
     assert find_secret(text) is None
 
 
@@ -262,7 +262,7 @@ def test_words_written_to_steer_a_model_are_refused(text):
     ],
 )
 def test_a_plain_link_with_a_query_string_or_a_picture_at_a_plain_address_is_a_fact(text):
-    # Owner, 2026-11-14: a link is shown, not obeyed. What stays refused is an order and an image that carries a query.
+    # A link is shown, not obeyed. What stays refused is an order and an image that carries a query.
     assert find_injection(text) is None
     assert refusal(text) is None
 

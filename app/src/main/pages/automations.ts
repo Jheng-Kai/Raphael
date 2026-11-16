@@ -1,8 +1,7 @@
 import { visibilityGate, windowVisible } from "../window-visibility";
-// The app's own calendar, modelled on Google Calendar: the month, what it shows and 建立 in a rail on the left; a day, week
+// The app's own calendar: the month, what it shows and 建立 in a rail on the left; a day, week
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
-// here and say where they come from. A routine is made or changed by its member in the conversation (owner, 2026-11-09:
-// 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」): a routine opens to read, and 例行任務 at a time puts the
+// here and say where they come from. A routine is made or changed by its member in the conversation: a routine opens to read, and 例行任務 at a time puts the
 // owner's words for it in the member's composer.
 import * as api from "../api";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";
@@ -201,10 +200,9 @@ export function createAutomationsPage(app: AppContext): Page {
     const place = `top:calc(${top} * var(--au-hour));height:calc(${drawn} * var(--au-hour) - 2px);left:calc(${part.lane * 100 / part.lanes}% + 1px);width:calc(${100 / part.lanes}% - 3px)`;
     const label = labelOf(entry), focused = entry.id === focusedHomeItem ? " is-home-focus" : "";
     const cls = entry.kind === "routine" ? `au-occurrence${entry.run && !isRunException(entry) ? " is-past" : ""}` : entry.kind === "event" ? `au-calendar-event${focused}${past ? " is-past" : ""}` : `au-own-event${focused}${past ? " is-past" : ""}`;
-    const chip = chipHTML(entry, `${cls}${short ? " is-line" : ""}`, `${entryAttrs(entry, label)}${entry.run ? ` data-run="${entry.run.id}" data-status="${entry.run.status}"` : ""}`, { face: short ? 0 : 20 });
-    const mark = entry.run ? `<i class="au-history-mark" data-status="${entry.run.status}"></i>` : "";
+    const chip = chipHTML(entry, `${cls}${short ? " is-line" : ""}`, `${entryAttrs(entry, label)}${entry.run ? ` data-run="${entry.run.id}" data-status="${entry.run.status}"` : ""}`, { face: short ? 0 : 20, history: true });
     const edge = entry.kind === "own" && part.end === entry.end ? `<i class="au-event-edge" data-edge="bottom"></i>` : "";
-    return `<div class="au-event${entry.kind === "own" ? " is-movable" : ""}${period !== "day" && (part.lanes > 1 || calendarWidth()/range().n < 120) ? " is-tight" : ""}" data-wrap="${esc(entry.id)}" data-part-start="${part.start}" style="${place}">${chip}${mark}${moreOf(entry)}${edge}</div>`;
+    return `<div class="au-event${entry.kind === "own" ? " is-movable" : ""}${period !== "day" && (part.lanes > 1 || calendarWidth()/range().n < 120) ? " is-tight" : ""}" data-wrap="${esc(entry.id)}" data-part-start="${part.start}" style="${place}">${chip}${moreOf(entry)}${edge}</div>`;
   }
   const draftTitle = (): string => draft?.title.trim() || t("cal.title");
   function draftOnDay(key: string): string {

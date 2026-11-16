@@ -1,10 +1,10 @@
-"""A member's file tools on its own computer, as Claude Code's Read, Edit, Write, Glob and Grep.
+"""A member's file tools on its own computer: Read, Edit, Write, Glob and Grep.
 
-Owner, 2026-11-14: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member changed its files
+A member changed its files
 through `vm_exec` (`sed`, heredocs): nothing checked that the text it replaced was the text it had read, and a whole
-file had to fit a 16,000-character command. These tools copy Claude Code's semantics and its words: an exact string
+file had to fit a 16,000-character command. These tools work on exact text: an exact string
 replaced, unique unless `replace_all`; a file read in this run before it is changed and refused when it changed since
-(on a shared computer another member may have edited it; Hermes Agent's read-before-write guard is the same idea);
+(on a shared computer another member may have edited it);
 a whole file sent over stdin. Each takes the turn's file checkpoint first, so the card of changed files and its undo
 see the change as they see a command's. Files are found and searched with ripgrep, which is in the computer image, with
 Claude Code's options and output modes; a search that finds nothing is an answer, not a failure.
@@ -42,7 +42,7 @@ IMAGE_BYTES = 5 * 1024 * 1024
 PDF_BYTES = 20 * 1024 * 1024
 PDF_PAGES = 20
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
-# Glob's and Grep's bounds, as Claude Code's: 100 files a glob, 250 entries a search page unless head_limit says.
+# Glob's and Grep's bounds: 100 files a glob, 250 entries a search page unless head_limit says.
 GLOB_LIMIT = 100
 HEAD_LIMIT = 250
 # The most of ripgrep's answer read from the computer: a page is cut from it, the rest only counted.
@@ -260,6 +260,14 @@ def _guest_failure(answer):
 class Files:
     """The file tools of one computer call: `vm.file_request` to the guest, the run's read state and its checkpoint."""
 
+    # Where a path is, and where a file these tools cannot take is sent instead. The owner's computer's file tools
+    # (`owner_files`) read their own paths and have no vm_exec to send a file to.
+    place = staticmethod(guest_path)
+    BINARY, NOT_TEXT, TOO_LARGE = BINARY, NOT_TEXT, TOO_LARGE
+    PICTURE_TOO_LARGE = ("This picture is {size:,} bytes; read_file shows pictures of at most 5 MiB. Make a smaller copy "
+                         "with vm_exec and read that.")
+    PDF_TOO_LARGE = "This PDF is {size:,} bytes; read_file reads PDFs of at most 20 MiB. Use vm_exec (pdftotext, python3) for a larger one."
+
     def __init__(self, vm, target, reads, run, checkpoint, history=None):
         self.vm, self.target, self.reads, self.run, self.checkpoint, self.history = vm, target, reads, run, checkpoint, history
 
@@ -274,7 +282,7 @@ class Files:
     async def read_file(self, arguments):
         """Claude Code's Read on a file of the computer. A read of a file, whole or a part, is what lets this run change
         it (`edit_file`, `write_file`): what it saw is the file's sha256."""
-        path = guest_path(arguments["path"])
+        path = self.place(arguments["path"])
         extension = posixpath.splitext(path)[1].lower()
         whole = IMAGE_BYTES if extension in IMAGES else PDF_BYTES if extension == ".pdf" else 0
         offset = arguments.get("offset", 1)
@@ -315,7 +323,7 @@ class Files:
             data = data[:data.rindex(b"\n") + 1]  # the last line whole, or not at all
         found = decoded_text(data, partial=cut)
         if found is None:
-            return PluginResult(False, "not_text", BINARY.format(size=answer["size"]))
+            return PluginResult(False, "not_text", self.BINARY.format(size=answer["size"]))
         lines = read_lines(found[0], offset=offset, limit=limit, first=answer.get("start_line") or offset,
                            total=answer.get("total_lines"), partial=cut)
         body = lines["text"]
@@ -325,8 +333,7 @@ class Files:
 
     async def _picture(self, path, mime, data, answer):
         if answer["size"] > IMAGE_BYTES:
-            return PluginResult(False, "too_large", f"This picture is {answer['size']:,} bytes; read_file shows pictures of "
-                                                    "at most 5 MiB. Make a smaller copy with vm_exec and read that.")
+            return PluginResult(False, "too_large", self.PICTURE_TOO_LARGE.format(size=answer["size"]))
         words = f"Picture {path} ({mime}, {answer['size']:,} bytes)."
         see = SEE.get()
         if see is not None and not see[0]():
@@ -344,8 +351,7 @@ class Files:
         from ..services.common import ServiceError
         from ..services.pdf import page_texts
         if answer["size"] > PDF_BYTES:
-            return PluginResult(False, "too_large", f"This PDF is {answer['size']:,} bytes; read_file reads PDFs of at most "
-                                                    "20 MiB. Use vm_exec (pdftotext, python3) for a larger one.")
+            return PluginResult(False, "too_large", self.PDF_TOO_LARGE.format(size=answer["size"]))
         try:
             count, texts, unread = await asyncio.to_thread(page_texts, data)
         except ServiceError as error:
@@ -390,7 +396,7 @@ class Files:
         return answer, None
 
     async def write_file(self, arguments):
-        path = guest_path(arguments["path"])
+        path = self.place(arguments["path"])
         data = arguments["content"].encode("utf-8")
         try:
             answer = await self.look(path)
@@ -411,7 +417,7 @@ class Files:
         return PluginResult(True, text=f"The file {path} has been overwritten ({lines:,} lines, {written['size']:,} bytes).")
 
     async def edit_file(self, arguments):
-        path = guest_path(arguments["path"])
+        path = self.place(arguments["path"])
         old, new, replace_all = arguments["old_string"], arguments["new_string"], arguments.get("replace_all", False)
         try:
             answer = await self.look(path, MAX_EDIT_BYTES)
@@ -426,14 +432,14 @@ class Files:
             if answer["kind"] != "file":
                 raise Refused("not_a_file", NOT_A_FILE.get(answer["kind"], NOT_A_FILE["other"]))
             if answer["size"] > MAX_EDIT_BYTES:
-                raise Refused("too_large", TOO_LARGE.format(size=answer["size"]))
+                raise Refused("too_large", self.TOO_LARGE.format(size=answer["size"]))
             self.current(path, answer)
             data = base64.b64decode(answer["data"], validate=True)
             if hashlib.sha256(data).hexdigest() != answer["sha256"]:
                 raise Refused("changed_since_read", CHANGED)  # It changed while it was read.
             text = decoded(data)
             if text is None:
-                raise Refused("not_text", NOT_TEXT)
+                raise Refused("not_text", self.NOT_TEXT)
             text, form = text
             if not old:
                 if text:
@@ -484,7 +490,7 @@ class Files:
 # --- glob and grep, on ripgrep --------------------------------------------------------------------------------------
 
 # In the folder searched (or a file's own folder, with the file named alone), the folder said first, then ripgrep with
-# its paths relative to it: a glob such as src/**/*.ts is matched from there, as Claude Code's are. 3 is a path that
+# its paths relative to it: a glob such as src/**/*.ts is matched from there. 3 is a path that
 # does not exist; ripgrep's own 1 is "nothing found" and 2 an error.
 SEARCH = ('if [ -d "$1" ]; then cd "$1" || exit 3; shift; set -- "$@" .; '
           'elif [ -e "$1" ]; then cd "$(dirname "$1")" || exit 3; base=$(basename "$1"); shift; set -- "$@" -- "$base"; '

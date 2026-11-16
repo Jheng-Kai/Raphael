@@ -164,13 +164,13 @@ def test_the_models_said_to_get_the_dictionary_are_the_ones_that_get_it(model):
 
 
 def test_mai_transcribe_2_gets_the_dictionary_as_an_azure_phrase_list():
-    # The owner's speech-to-text. Without the list it wrote "Herder" for 「herdr」 and "Grokbot"
-    # for 「grokbot」; with it, the dictionary's spelling (live check, 2026-11-14). OpenRouter
+    # Without the list this model wrote "Kelver" for 「kelvr」 and "Pinebot" for 「pinebot」; with it,
+    # the dictionary's spelling. OpenRouter
     # refuses its top-level `keyterms` with a 400.
     body = transcription_body(
-        "microsoft/mai-transcribe-2", AUDIO, "wav", language="zh", hints=["grokbot", "herdr"]
+        "microsoft/mai-transcribe-2", AUDIO, "wav", language="zh", hints=["pinebot", "kelvr"]
     )
-    assert body["provider"]["options"] == {"azure": {"phraseList": {"phrases": ["grokbot", "herdr"]}}}
+    assert body["provider"]["options"] == {"azure": {"phraseList": {"phrases": ["pinebot", "kelvr"]}}}
     assert body["provider"]["data_collection"] == "deny"
     assert body["language"] == "zh"
     assert "keyterms" not in body and "prompt" not in json.dumps(body)
@@ -179,10 +179,10 @@ def test_mai_transcribe_2_gets_the_dictionary_as_an_azure_phrase_list():
 
 
 def test_the_phrase_list_obeys_the_keyword_rules():
-    hints = ["  grokbot  ", "", "a<b", "x" * 200] + [f"w{i}" for i in range(200)]
+    hints = ["  pinebot  ", "", "a<b", "x" * 200] + [f"w{i}" for i in range(200)]
     body = transcription_body("microsoft/mai-transcribe-2", AUDIO, "wav", language=None, hints=hints)
     phrases = body["provider"]["options"]["azure"]["phraseList"]["phrases"]
-    assert phrases[0] == "grokbot" and len(phrases) == openrouter.MAX_KEYWORDS
+    assert phrases[0] == "pinebot" and len(phrases) == openrouter.MAX_KEYWORDS
     assert all(p.strip() == p and "<" not in p for p in phrases)
 
 

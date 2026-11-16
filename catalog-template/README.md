@@ -5,7 +5,7 @@
 Until both are done the store in Raphael says "The store is not open yet" and asks the network for nothing:
 `PUBLIC_KEYS` in `core/src/raphael_core/members/member_catalog.py` is empty, and no key is generated or kept by Raphael or by this repository.
 
-1. **Create the catalogue repository.** Make the public repository `Jheng-Kai/raphael-catalog` on GitHub (or another HTTPS root, see
+1. **Create the catalogue repository.** Make the public repository `Jheng-Kai/SlimesStore` on GitHub (or another HTTPS root, see
    `RAPHAEL_CATALOG_URL` below) and copy this directory into it. Turn on branch protection for `main` that requires the validation
    check and a human review, and let only the signing identity publish `index.json.sig`.
 2. **Generate the signing key, once, outside this repository.** Make an Ed25519 key pair. Put the private half (the base64 of its raw
@@ -16,7 +16,7 @@ Until both are done the store in Raphael says "The store is not open yet" and as
 Then publish the first signed index (`python scripts/sign.py`, run by the repository's workflow on a push to `main`) before the release
 that carries the key goes out: a store with a key and no signed index shows "offline" until it exists.
 
-Copy this directory into the owner-created public `Jheng-Kai/raphael-catalog` repository.
+Copy this directory into the owner-created public `Jheng-Kai/SlimesStore` repository.
 The catalogue uses Raphael's existing `.raphael-member` v1 format; never add private
 memory, credentials, permissions, images or model choices. Packages live at
 `packages/<id>/member.raphael-member`, beside a README identifying creator and license.

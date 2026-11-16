@@ -14,7 +14,7 @@ const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt
 const failedRoutine = { id: 2, member_id: 1, title: "每日新聞", prompt: "每天早上整理日本語的新聞，做成一個網頁。", schedule: { kind: "daily", time: "08:00" }, enabled: true,
   last_run: 1792803600000, next_run: 1792890000000, last_error: "這次執行需要的一個步驟被拒絕了，沒有完成。", last_failed: true };
 const eventDetails = [member(1), { action: "open-details" },  wait('[data-routine="90"]')];
-const rhythm = {calendarRhythm:true};
+const rhythm = {calendarRhythm:true}, longMarks = {calendarRhythm:true, calendarLongTitle:true};
 const rhythmDetail = [...auto, ...view("day"), wait('.au-all-day-row .is-rhythm'), click('.au-all-day-row .is-rhythm'), wait('.au-rhythm-runs')];
 const sentenceRoundTrip = [member(1),wait('[data-act="open-routine"]'),check('moving-sentence'),click('[data-act="open-routine"]'),wait('.mb-dialog.rv-dialog'),check('routine-view'),click('.rv-dialog [data-dlg="close"]'),waitGone('.rv-dialog')];
 export default [
@@ -34,15 +34,19 @@ export default [
   scene("calendar-view-reload", "Reload keeps the view preference and starts on today", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-view-stored"),{action:"reload"},...auto,check("calendar-view-reload")], rhythm),
   scene("calendar-week-fit", "Seven week columns and aligned all-day bars fit the available width", [...auto,check("calendar-shell"),check("calendar-week-fit")], rhythm),
   scene("calendar-today-controls", "Quiet previous, today and next controls stay aligned through hover and return", [...auto,click('[data-au="next"]'),check("calendar-nav-away"),hover('[data-au="today"]'),check("calendar-nav-hover"),click('[data-au="today"]'),check("calendar-nav-today")], rhythm),
-  scene("calendar-rhythm-week", "One quiet rhythm above the hours, daily work and exceptions keep their times", [...auto, check("calendar-rhythm-week")], rhythm),
-  scene("calendar-rhythm-day", "One daytime rhythm and the failed run in the day", [...auto,...view("day"),check("calendar-rhythm-day")], rhythm),
-  scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month")], rhythm),
+  scene("calendar-rhythm-week", "One quiet rhythm above the hours, daily work and exceptions keep their times", [...auto, check("calendar-rhythm-week"), check("calendar-chip-marks")], rhythm),
+  scene("calendar-rhythm-day", "One daytime rhythm and the failed run in the day", [...auto,...view("day"),check("calendar-rhythm-day"),check("calendar-chip-marks")], rhythm),
+  scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month"),check("calendar-chip-marks")], rhythm),
+  scene("calendar-marks-week", "A title longer than its chip is cut before the mark of its last run, in the week", [...auto, check("calendar-chip-marks-cut")], longMarks),
+  scene("calendar-marks-month", "A title longer than its chip is cut before the mark of its last run, in the month", [...auto, ...view("month"), check("calendar-chip-marks")], longMarks),
   scene("calendar-rhythm-popover", "Today's runs, icon statuses, next run, edit and off", [...rhythmDetail,check("calendar-rhythm-popover")], rhythm),
   scene("calendar-rhythm-hidden", "The member checkbox hides rhythm and exceptions together", [...auto,{action:"calendar-tools"},click('[data-source="member:1"]'),check("calendar-rhythm-hidden")], rhythm),
   scene("routine-event-profile", "The panel's Details lists an event routine with the app and its times, and its own switch", [...eventDetails, check("routine-event-profile")], { routines: [eventRoutine] }),
   scene("routine-event-row", "An event and its check/fire times share the existing routine row and switch", [...eventDetails, check("routine-event-row")], { routines: [eventRoutine] }),
 
   scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-blocked')], {p04Blocked:true}),
+  scene("room-workflow-childwork-open", "A member that stopped while work it handed on was open says so", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-childwork-open')], {p04Blocked:'child_work_incomplete'}),
+  scene("room-workflow-file-unreadable", "A file that is there but cannot be opened is not called missing", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-unreadable')], {p04Blocked:'artifact_unreadable'}),
   scene("room-final-owner", "Chief is last after delivered work", [room(1),check('room-wrapup'),check('p04-chief-last')], {p03Handoff:'done',roomWrapup:true}),
   scene("room-progress-status-only", "Work progress stays in its status row", [room(1),check('room-thinking'),check('p04-status-only')], {roomThinking:true}),
   scene("room-no-dangling-mention", "Published final has no incomplete address", [room(1),check('p04-addresses')]),
@@ -73,14 +77,14 @@ export default [
   scene("automations-sparse", "Sparse week keeps working hours in view", [...auto, check("calendar-shell")], { calendarSparse: true }),
   scene("automations-day-sparse", "Sparse day keeps working hours in view", [...auto, ...view("day"), check("calendar-shell")], { calendarSparse: true }),
   scene("automations-all-day", "A full week retains all-day items above compact timed rows", [...auto, check("calendar-shell"), check("calendar-all-day")], { calendarAllDay: true }),
-  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now")]),
+  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now"), check("calendar-chip-marks-dot"), check("calendar-chip-marks-twin")]),
   scene("automations-day", "The day view, and the view dropdown keeps its place", [...calendar, ...view("day"), ...view("week"), ...view("day"), check("calendar-shell"), check("calendar-now")]),
   scene("automations-view-menu", "The view dropdown is the shared menu", [...auto, click('[data-au="view"]'), wait("#app-popover")]),
   scene("automations-month", "The month: chips in each day", [...auto, ...view("month"), check("calendar-month")]),
   scene("automations-month-busy", "A full month day counts what does not fit and opens the day", [...auto, ...view("month"), check("calendar-month"), check("calendar-month-more"), click('[data-month-day="2026-10-28"] .cal-more'), wait('.au-day-col[data-day="2026-10-28"]')], { calendarBusy: true }),
   scene("automations-busy", "Overlapping events stand side by side, long ones run across the all-day row", [...auto, ...view("week"), { action: "calendar-date", date: "2026-10-21" }, check("calendar-shell"), check("calendar-overlaps")], { calendarBusy: true }),
   scene("automations-busy-day", "One day's overlaps with room to read them", [...auto, ...view("day"), { action: "calendar-date", date: "2026-10-21" }, check("calendar-overlaps")], { calendarBusy: true }),
-  // A busy day (owner, 2026-11-12): 「還有 N 個」 opens the all-day band in place to every item, 「收合」 folds it again, and a month's count lands on the open day.
+  // A busy day: 「還有 N 個」 opens the all-day band in place to every item, 「收合」 folds it again, and a month's count lands on the open day.
   scene("automations-more-day", "A busy day folds its all-day band to three rows and counts the rest in 「還有 7 個」", [...auto, ...view("day"), check("calendar-more-folded")], many(10)),
   scene("automations-more-day-open", "Pressing 「還有 7 個」 opens the band in place: every all-day item shows and the hours move down", [...auto, ...view("day"), check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open")], many(10)),
   scene("automations-more-day-closed", "Pressing 「收合」 folds the band again and the hours are where they were", [...auto, ...view("day"), check("calendar-more-folded"), click(moreToggle), wait(isOpen), check("calendar-more-open"), click(moreToggle), waitGone(".au-grid-head.is-open"), check("calendar-more-closed")], many(10)),
@@ -101,8 +105,10 @@ export default [
   scene("automations-create-all-day", "An all-day event has dates and no times", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="all-day"]'), check("calendar-editor")]),
   scene("automations-create-saved", "Saving draws it at once", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), type("#cal-title", "拜訪客戶"), click('.au-pop-editor [data-pop="save"]'), waitGone(".au-pop-editor"), { action: "wait-text", selector: ".cal-chip.is-own b", text: "拜訪客戶" }, check("calendar-saved")]),
   scene("automations-detail-own", "An own event: its time, notes, who added it, edit and ⋯", [...auto, click(ownChip), wait(".au-pop-detail"), check("calendar-detail-own")]),
+  // R-LINK-01: the address in an all-day item's notes is a link that ends at the full stop after it and opens in the browser.
+  scene("urls-calendar-detail", "The address in an event's notes is a link: pressed, it opens in the browser and the card stays open", [...auto, click('.cal-chip.is-own[data-entry="own:4"]'), wait(".au-pop-detail .au-pop-notes .message-link"), click(".au-pop-detail .au-pop-notes .message-link"), check("urls-are-links")], { linkedNotes: true }),
   scene("automations-detail-member", "An event a member added names the member", [...auto, { action: "calendar-date", date: "2026-10-23" }, click('.cal-chip.is-own[data-entry="own:2"]'), wait(".au-pop-detail"), check("calendar-detail-own")]),
-  // A member dropped on a time asks it for a routine in its conversation: the calendar fills in nothing itself (owner, 2026-11-09).
+  // A member dropped on a time asks it for a routine in its conversation: the calendar fills in nothing itself.
   scene("automation-drag-asks", "A member dropped on a time opens its conversation with the owner's words for a routine then", [...tools, { action: "drag-start", selector: '[data-drag-member="2"]' }, { action: "drop", selector: '[data-slot][data-hour="9"]', memberId: 2 }, wait('.page-agent:not([hidden]) .composer textarea'), check("routine-asked")]),
   scene("automations-detail-routine", "A routine is read here, says whose it is and opens to read", [...routineDetail, check("calendar-detail-read")]),
   scene("automations-detail-google", "A Google event is read here and says where it comes from", [...auto, click('.au-calendar-event[data-au="entry"]'), wait(".au-pop-detail"), check("calendar-detail-read")]),
@@ -136,7 +142,7 @@ export default [
   scene("room-private-isolation", "Room delivery stays outside private history", [room(1), type('#room-message', 'roomnonce-private-isolation'), key('Enter'), check('room-isolation-send'), { action: "member", id: 1 }, check('room-private-isolation')]),
   scene("room-reply-owner", "Member answers identify the owner source", [room(1), check("room-reply-owner")]),
   scene("room-reply-peer", "Peer replies identify the source author", [room(1), check("room-reply-peer")], { roomDiscussion: true }),
-  // Owner 2026-11-09: in a long room ending in reply chips the wheel scrolled the whole conversation away into an empty main area.
+  // In a long room ending in reply chips the wheel once scrolled the whole conversation away into an empty main area.
   scene("room-long-reply-wheel", "A long room ending in reply chips scrolls only inside its thread", [room(1), { action: "wheel", selector: ".au-room-pane .ra-scroll", deltaY: 4000 }, { action: "wheel", selector: ".au-room-pane .ra-scroll", deltaY: 4000 }, check("room-contained-scroll")], { longRoomMessages: true, roomDiscussion: true }),
   scene("room-reply-source-missing", "Deleted reply source stays unavailable", [room(1), check("room-reply-source-missing")], { roomMissingSource: true }),
   scene("room-reply-send", "Reply to a specific member through the composer", [room(1), hover('[data-room-message="2"] .chat-message'), click('[data-room-message="2"] [data-room-act="reply"]'), click('[data-room-act="cancel-reply"]'), check("room-reply-cancel"), click('[data-room-message="2"] [data-room-act="reply"]'), type('#room-message', '請補充檢查結果。'), key("Enter"), check("room-reply-send")]),

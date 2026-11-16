@@ -7,6 +7,9 @@ const PNG = "data:image/png;base64,iVBORw0KGgo=";
 const STILL = "data:image/png;base64,U1RJTEw=";
 
 let change: ((e: { matches: boolean }) => void) | null = null;
+/** What hears the screen's pixel ratio change, and the ratio each listener was made for. */
+let ratioChange: (() => void) | null = null;
+const ratioQueries: string[] = [];
 let reduce = true;
 
 async function load() {
@@ -20,18 +23,56 @@ const flush = async (): Promise<void> => {
 
 beforeEach(() => {
   change = null;
+  ratioChange = null;
+  ratioQueries.length = 0;
   reduce = true;
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: query.includes("reduce") ? reduce : false,
-    media: query,
-    addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => (change = fn),
+  const query = (media: string) => ({
+    matches: media.includes("reduce") ? reduce : false,
+    media,
+    addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
+      if (media.includes("resolution")) { ratioQueries.push(media); ratioChange = () => fn({ matches: false }); } else change = fn;
+    },
     removeEventListener() {},
-  }));
+  });
+  vi.stubGlobal("matchMedia", query);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("a screen of another scale", () => {
+  const ratio = (value: number): void => { Object.defineProperty(window, "devicePixelRatio", { value, configurable: true }); };
+  afterEach(() => ratio(1));
+
+  test("the faces are drawn again for the new pixel ratio, and the next change is heard too", async () => {
+    ratio(1);
+    const avatar = await load();
+    const heard = vi.fn();
+    avatar.onAvatarChange(heard);
+    expect(ratioQueries).toEqual(["(resolution: 1dppx)"]);
+    ratio(1.25);
+    ratioChange!();
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(ratioQueries).toEqual(["(resolution: 1dppx)", "(resolution: 1.25dppx)"]);
+    ratio(1.5);
+    ratioChange!();
+    expect(heard).toHaveBeenCalledTimes(2);
+  });
+
+  test("a window resized by the move redraws the faces once, and a plain resize draws nothing", async () => {
+    ratio(1);
+    const avatar = await load();
+    const heard = vi.fn();
+    avatar.onAvatarChange(heard);
+    window.dispatchEvent(new Event("resize"));
+    expect(heard).not.toHaveBeenCalled();
+    ratio(1.5);
+    window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("resize"));
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("with reduced motion", () => {

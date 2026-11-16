@@ -35,8 +35,8 @@ def background_actor():
 
 def only_reads(name, arguments):
     """Whether the call is one of the reads of `READS` (listing a member's routines or skills, reading its settings...): it
-    changes nothing, so no card is asked for it (owner, 2026-11-14: a health check of the team raised a card for every member
-    it read, 16 in two days, and the runs were cancelled while they waited)."""
+    changes nothing, so no card is asked for it (a health check of the team raised a card for every member
+    it read, and the runs were cancelled while they waited)."""
     from .protocol import RpcError
     if not isinstance(arguments, dict):
         return False
@@ -394,6 +394,7 @@ OWNER_ONLY_SETTINGS = {
     **dict.fromkeys(("raphael_tools", "raphael_notify"),
                    "First Bot preferences use member_update validation; tool access retains exact-action approval instead of a generic setting write."),
     "memory_threshold_tokens_cap": "Conversation compression policy is chosen by the owner.",
+    "owner_write_folders": "Where members may write on the owner's computer is the owner's choice, never a member's (R-PC-05).",
     "memory_max_unused_days": "Automatic forgetting policy is chosen by the owner.",
     "routine_timezone": "The owner's routine time zone preference is never model-editable.",
     "routine_detected_timezone": "Internal detected device time zone, never model-editable.",

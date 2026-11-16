@@ -1,4 +1,4 @@
-// 連結應用程式, one view as Grok Bot's Connect Apps (owner, 2026-11-12): a search over the whole catalog, a row of category chips, then
+// 連結應用程式, one view: a search over the whole catalog, a row of category chips, then
 // 為你推薦 and a section for each category (or one list for a chosen chip or a search); the connected and the ones to connect stand together,
 // with no tabs and no count of the catalogue. A chip at the top right opens the list of the connected apps (managed toolkits, private Google and
 // custom MCP servers; connectors only, since a member's skills are managed in that member's own panel: the number is the core's, the one the
@@ -16,6 +16,7 @@ import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
+import { linkedText } from "./message-content";
 import { STORE_GROUPS, popularApp, popularRank, storeGroup, storeMatches, storeNameRank, storeNear } from "./store-finder";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
@@ -322,8 +323,7 @@ function lineOf(g: ConnectionGroup, v: ConnectionsView): string {
   return esc(g.description || (entry ? words(entry.summary) : where(g)));
 }
 
-// ---------- the dialog's one view, as Grok Bot's Connect Apps ----------
-// (owner, 2026-11-12: 「它不會分已連結跟商店，他們都在一起…上面放你已連接的，下面放一些推薦的…分全部、溝通、生產力、開發之類的…也不會顯示它現在有幾個」)
+// ---------- the dialog's one view ----------
 
 /** The chip at the top right: the marks of up to four connected apps, overlapped, then how many are connected. */
 const HAVE_MARKS = 4;
@@ -383,7 +383,7 @@ function layoutOf(v: ConnectionsView): AppsLayout {
   return { list: null, recommended, recommendedMore: all.length > recommended.length, sections };
 }
 
-/** The mark of an app on the white tile of its row (Grok Bot's): bare, in its own colours, whichever theme the dialog is in. */
+/** The mark of an app on the white tile of its row: bare, in its own colours, whichever theme the dialog is in. */
 const tileHTML = (mark: string, size: "" | "lg" = ""): string => `<span class="cs-tile${size ? ` ${size}` : ""}" aria-hidden="true">${mark}</span>`;
 
 /** The button that connects an app, or what takes its place: the wait for its login, or that it is connected. */
@@ -402,7 +402,7 @@ const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img 
 
 /**
  * A row of the dialog: the mark on its tile and the name open the app's page. A connected app's 「✓ 已連結」 is part of that one button, its
- * fill running under the check (owner, 2026-11-14: the button and 已連結 are one, not two pieces); 「連結」 is the one control beside it.
+ * fill running under the check (the button and 已連結 are one, not two pieces); 「連結」 is the one control beside it.
  */
 function appRowHTML(s: StoreService, v: ConnectionsView): string {
   const here = v.login?.target === s.id;
@@ -574,7 +574,7 @@ export const connectionsAddHTML = (): string =>
 
 /** A bare chevron at the top left: back from an app's page or from the list of the connected apps. */
 const backHTML = (): string => iconButton("left", t("conn.back"), ' data-conn="back" data-k="cs-back" data-nav-back', "cs-back");
-/** The connected list's title is its way back: the chevron and the title are one button (owner, 2026-11-14, asked more than three times). */
+/** The connected list's title is its way back: the chevron and the title are one button. */
 const backTitleHTML = (title: string): string =>
   btn(`${ico("left")}<span>${esc(title)}</span>`, "cs-back cs-back-title", ` data-conn="back" data-k="cs-back" data-nav-back title="${esc(t("conn.back"))}"`);
 
@@ -612,7 +612,7 @@ function installedHTML(v: ConnectionsView): string {
   const counted = v.groups.filter(connected);
   const others = v.groups.filter((g) => !connected(g));
   // The connected first; then what is on but cannot be called (waiting for a sign-in, failed, a second way to an app already counted); then
-  // what is switched off, under 「已關閉」, each with its switch (owner's coordinator, 2026-11-12). A section with nothing in it is not drawn.
+  // what is switched off, under 「已關閉」, each with its switch. A section with nothing in it is not drawn.
   const waiting = others.filter((g) => g.enabled);
   const off = others.filter((g) => !g.enabled);
   const list = (groups: ConnectionGroup[]): string => `<div class="cs-grid">${groups.map((g) => itemHTML(g, v)).join("")}</div>`;
@@ -625,7 +625,7 @@ function installedHTML(v: ConnectionsView): string {
   );
 }
 
-// ---------- an app's page, as Grok Bot's ----------
+// ---------- an app's page ----------
 
 /**
  * The name of a tool for the screen: the title its server gives it, else its name made readable (the
@@ -781,7 +781,7 @@ function appPageHTML(s: StoreService | undefined, g: ConnectionGroup | undefined
       ? `<span class="cs-wait" role="status">${esc(t(s!.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "cs-connect", ' data-conn="cancel-login"')
       : btn(esc(t("conn.connect")), "pri cs-connect", ` data-conn="join" data-id="${esc(s!.id)}"`);
   const head = `<div class="cs-head">${tileHTML(mark, "lg")}<h2 class="big" id="cs-page-title">${esc(name)}</h2><div class="cs-join">${action}</div></div>`;
-  const about = `<p class="cs-desc">${esc(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
+  const about = `<p class="cs-desc">${linkedText(g?.description || (s ? words(s.about) : t("conn.customServer")))}</p>`;
   const secrets = g ? [...g.env, ...g.headers] : [];
   // What signing in asks of the owner, said once, in a line, where the old page said it twice.
   const lead = !g && s?.needs === "key" && !inChat(s) ? `<p class="cs-needs">${esc(t("setup.leadKey", { p0: s.name }))}</p>` : "";
@@ -1575,8 +1575,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         const entry = entryById(id);
         if (!entry || entry.server_id) break;
         // A sign-in, or one key, is done here at once. Anything more (a server of the owner's own, a developer app) is set
-        // up in the conversation, where the member says what it needs and explains it (owner, 2026-11-09: 「一律全部都在對話中
-        // 進行…除非真的是登入就結束 或是輸入金鑰匙就結束」).
+        // up in the conversation, where the member says what it needs and explains it.
         if (inChat(entry)) { host.tryPrompt(entry.id === OWN_GOOGLE ? t("store.googleSetUp") : t("store.setUpInChat", { p0: entry.name })); break; }
         if (entry.needs === "key") void addWithForm(entry, entry.needs);
         else void signIn({ catalog_id: entry.id }, entry.name, false);

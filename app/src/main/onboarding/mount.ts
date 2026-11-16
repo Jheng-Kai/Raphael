@@ -164,12 +164,9 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   /**
    * A step's foot is two round buttons together in the middle, the way back at the left and the way on at the right, each
-   * a filled triangle that points where it goes (owner, 2026-11-11 evening, of two worded pills at the row's ends:
-   * 「改成集中在中間這邊好不好？然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」; a left and a right
-   * button at all since 「我要的是左右 button」 that afternoon, and one row since 「上下堆疊會造成我們畫面有些空間比較緊」). Neither
+   * a filled triangle that points where it goes (not two worded pills at the row's ends). Neither
    * has words, so each is named for assistive tech and in its tooltip. The last step's way on is a check: it finishes, and
-   * nothing comes after it. The welcome has nowhere to go back to and is its one wide pill alone (owner, 2026-11-14:
-   * 「第一頁應該只會有開始就好了」).
+   * nothing comes after it. The welcome has nowhere to go back to and is its one wide pill alone.
    */
   function footHTML(): string {
     const next = ` data-ob="next"${finishing ? " disabled" : ""}`;

@@ -1,7 +1,8 @@
 """Durable conversation pages and their ephemeral, isolated loopback host.
 
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 No page is served from the application's origin.
+
+Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 import asyncio
@@ -36,7 +37,7 @@ class PageError(Exception):
 # What an embedded file or a library's fingerprint holds is content, not a credential: a picture's or a font's bytes in
 # base64 and a script's integrity hash are set aside, so that no run of them can pass for a key's shape. A text file (an
 # SVG, JSON, plain text) is decoded and read like the rest of the page; a binary one is not read. Only credentials and
-# payment secrets are refused on a page (`memory/scan.py`): an address, an article or an ID is content (owner, 2026-11-14).
+# payment secrets are refused on a page (`memory/scan.py`): an address, an article or an ID is content.
 _EMBEDDED = re.compile(r"data:([\w.+-]+/[\w.+-]+)?((?:;[\w.+-]+=[\w.+-]+)*);base64,([A-Za-z0-9+/=\s]+)", re.I)
 _TEXT_FILES = re.compile(r"text/[\w.+-]+|image/svg\+xml|application/(?:json|xml|javascript|ld\+json)", re.I)
 _INTEGRITY = re.compile(r"\bsha(?:256|384|512)-[A-Za-z0-9+/]{40,}={0,2}")
@@ -155,6 +156,19 @@ _HELPER = """<script>
     const data = event.data;
     if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
   });
+  // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own
+  // script waits. One still on its way after a few seconds stops holding the page, which draws in the fonts and styles it
+  // has, and is still applied if it comes later (R-PAGE-13).
+  setTimeout(() => {
+    if (document.readyState === 'complete') return;
+    for (const link of document.querySelectorAll('link[rel~="stylesheet" i]')) {
+      if (link.sheet || !link.isConnected) continue;
+      const late = link.cloneNode(), media = link.media || 'all';
+      late.media = 'print';
+      late.addEventListener('load', () => { late.media = media; }, {once: true});
+      link.replaceWith(late);
+    }
+  }, 3000);
   addEventListener('DOMContentLoaded', () => {
     let previous = 0, framed = innerHeight;
     const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);
@@ -484,7 +498,7 @@ class Pages:
         return await self.tool_call(page, params)
 
     async def export(self, params):
-        """Saves a page as a file the owner can pass on (owner, 2026-11-10: 存成檔案; 2026-11-14: Share on every page): a
+        """Saves a page as a file the owner can pass on: a
         report as the document the app drew of it (`html`, checked by report_page.checked_file), an HTML page as the file
         this core builds of what is stored (`page_file`: nothing the window says goes into it). Named after the page, in
         the owner's output folder, or in `downloads` (the shell's Downloads folder) when none is chosen or it takes

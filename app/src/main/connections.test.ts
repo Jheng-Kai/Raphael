@@ -186,6 +186,8 @@ describe("the one view", () => {
     const setup = dom(connectionsHTML(view({ configured: false })));
     expect(setup.querySelector(".cs-composio-setup")!.textContent).toContain(t("plugins.moreApps"));
     expect(setup.querySelector('.cs-composio-setup [data-conn="configure-composio"]')).not.toBeNull();
+    // The row ends the scrolling list, in its body: that is what lets it stay whole on the dialog's bottom edge (the look check composio-foot).
+    expect(setup.querySelector("[data-cs-scroll] > [data-cs-body]")!.lastElementChild!.classList.contains("cs-composio-setup")).toBe(true);
     expect(connectionsHTML(view({ configured: true, composioCatalog: "loading" }))).toContain("讀取中");
     const failed = dom(connectionsHTML(view({ configured: true, composioCatalog: "failed" })));
     expect(failed.querySelector('[data-conn="retry-store"]')).not.toBeNull();
@@ -437,7 +439,7 @@ describe("the search", () => {
   });
 
   test("the app whose name is what was typed comes first, then names that start with it or hold it, then the rest", () => {
-    // Owner, 2026-11-14: 「line」 listed apps whose descriptions say "timeline" or "online" before LINE itself.
+    // A search for 「line」 must not list apps whose descriptions say "timeline" or "online" before LINE itself.
     const catalog = [service("timely", "Timely"), service("onliner", "Onliner"), service("linear", "Linear"), service("line", "LINE")];
     expect(found("line", { catalog }).slice(0, 3)).toEqual(["LINE", "Linear", "Onliner"]);
     expect(found("line", { catalog })).toContain("Timely"); // its description still finds it, last
@@ -553,7 +555,7 @@ describe("the connected apps", () => {
     const d = dom(html);
     expect(d.querySelectorAll(".cs.cs-connected")).toHaveLength(1);
     expect(d.querySelector(".cs-apps")).toBeNull();
-    // The chevron and the title are one button (owner, 2026-11-14): its name is the title, its tooltip says where it goes.
+    // The chevron and the title are one button: its name is the title, its tooltip says where it goes.
     const back = d.querySelector(".cs-top-t > button")!;
     expect(back.getAttribute("data-conn")).toBe("back");
     expect(back.getAttribute("title")).toBe("返回");
@@ -690,7 +692,7 @@ describe("the connected apps", () => {
   });
 });
 
-// Owner, 2026-11-14: 「這個 dialog 應該要可以點那個已連接應該也要可以點，然後那個 button 可以設計得大一點點，不然點不到」.
+// A connected row is one button like the others, and the back chevron is big enough to hit.
 describe("a connected row and the back chevron", () => {
   const css = readFileSync(join(__dirname, "connections.css"), "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
   const rule = (selector: string): string => css.split("\n").filter((line) => line.startsWith(`${selector} {`)).pop() ?? "";
@@ -722,7 +724,7 @@ describe("a connected row and the back chevron", () => {
   });
 
   test("a row is one button: the pointer and one hover fill over the whole row, with 連結 or its switch on it, in the connected list and the main view alike", () => {
-    // One fill over the whole row (owner, 2026-11-14), 8 px of padding given back by the margin so the mark stays on the content's edge.
+    // One fill over the whole row, 8 px of padding given back by the margin so the mark stays on the content's edge.
     expect(rule(".cs-linked, .cs-card")).toMatch(/cursor:\s*pointer;\s*padding-inline:\s*var\(--sp-2\);\s*margin-inline:\s*0;\s*border-radius:\s*var\(--r-md\)/);
     expect(rule(".cs-card:hover, .cs-linked:hover")).toMatch(/background:\s*var\(--float-hover\)/);
     expect(rule(".cs-card:has(> .btn.cs-main:active), .cs-linked:has(> .btn.cs-main:active)")).toMatch(/background:\s*var\(--pressed\)/);
@@ -1804,7 +1806,7 @@ describe("what the dialog does", () => {
     } finally { vi.unstubAllGlobals(); await grid.happyDOM.abort(); }
   });
 
-  // Owner, 2026-11-09: 「一律全部都在對話中進行…除非真的是登入就結束 或是輸入金鑰匙就結束」.
+  // Everything beyond a sign-in or one key is done in the conversation.
   test("連結 on n8n, or on an app that needs a developer app, leaves for the conversation with the owner's words", async () => {
     api.integrationsCatalog.mockResolvedValue({ services: [...CATALOG, service("acme", "Acme", { needs: "own_app" })] });
     const c = createConnections(host);
@@ -1818,7 +1820,7 @@ describe("what the dialog does", () => {
     expect(api.connectorsConnect).not.toHaveBeenCalled();
   });
 
-  // Owner request (10-25, 「接上 Composio 與自己的 Google 授權」): the owner's own Google is reachable where the Google row is.
+  // The owner's own Google is reachable where the Google row is.
   test("the view offers the owner's own Google, and its 連結 leaves for the conversation where the card walks the steps", async () => {
     const c = createConnections(host);
     await c.load();
@@ -2064,6 +2066,28 @@ describe("what the dialog does", () => {
       await settle();
       expect(c.view().dialogNotice).toMatchObject({ kind: "err" });
       expect(texts(dom(connectionsHTML(c.view())), ".cs-acct .nm")).toEqual(["Work", "Me", "帳號 3"]);
+      c.reset();
+    });
+
+    test("the account a sign-in waits for is removed while that sign-in is open, and the sign-in that ended says nothing (R-ACCT-03)", async () => {
+      const c = await openGmail(TWO);
+      let ends!: (answer: unknown) => void;
+      api.connectorsConnect.mockReturnValueOnce(new Promise((resolve) => { ends = resolve; }));
+      c.click(button("add-account", { id: "composio:gmail" }));
+      await settle();
+      expect(c.view().login).toMatchObject({ target: "composio:gmail" });
+      c.click(button("account-remove", { id: "composio:gmail", account: "a3" }));
+      await settle();
+      expect(confirmDelete).not.toHaveBeenCalled();
+      expect(api.connectorsRemoveAccount).toHaveBeenCalledWith("composio:gmail", "a3");
+      api.connectorsStatus.mockResolvedValue({ connectors: [gmail(TWO.slice(0, 2))], composio_configured: true, google_configured: false });
+      ends({ connected: false, error: "cancelled" });  // the core ended the wait it was removing the account of
+      await settle();
+      const view = c.view();
+      expect(view.login).toBeNull();
+      expect(view.loginError).toBeNull();
+      expect(view.dialogNotice).toBeNull();
+      expect(texts(dom(connectionsHTML(view)), ".cs-acct .nm")).toEqual(["Work", "Me"]);
       c.reset();
     });
   });

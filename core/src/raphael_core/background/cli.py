@@ -8,7 +8,8 @@ from ..agent.cli.loop import CliLoop
 from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..worker.loop import WRAP_UP, Stop, ToolOutcome
-from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
+from ..computer.local_tools import ON_SCREEN, command_of, is_local, BACKGROUND_WAIT_S
+from ..computer.on_screen import launches_on_screen
 from .snapshot import USE_TOOL
 
 # How many calls a task that reached a ceiling may make after being asked to report, before it is ended.
@@ -110,6 +111,9 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress, sessions=No
             access = run._gate.data_floor.access(name, arguments)
             if access == "write":
                 return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
+            if launches_on_screen(command_of(arguments)):
+                # A task shows nothing on the owner's screen, 全部允許 or not (R-PC-06).
+                return ToolOutcome(False, "shows_on_screen", instruction=ON_SCREEN)
             if access == "read":
                 from .snapshot import BUILTIN, ToolRef
                 from ..agent.policy import Tier
@@ -157,7 +161,7 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress, sessions=No
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch, acted=lambda: run.acted,
         # The task's own clock of the last word to the owner: its updates are messages through `run._reply`, as an API
         # task's are (agent/progress_updates.py); a meeting's reply and a routine have none.
-        updates=getattr(run, "updates", None))
+        updates=getattr(run, "updates", None), owner_language=getattr(run, "owner_language", None))
     def listed():
         extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
         loop.tools[:] = [*run.snapshot.definitions, *extra]

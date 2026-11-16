@@ -46,6 +46,8 @@ DEFAULTS: dict[str, Any] = {
     "owner_name": "",
     "owner_about": "",
     "owner_output_folder": "",
+    # Folders on the owner's computer members may write to (R-PC-05), beside the output folder.
+    "owner_write_folders": [],
     "routine_timezone": "",
     "routine_detected_timezone": "",
     "routine_owner_seen_ms": 0,
@@ -54,7 +56,7 @@ DEFAULTS: dict[str, Any] = {
     "monthly_limit_usd": 10.0,
     "memory_threshold_tokens_cap": 24000,
     "memory_max_unused_days": 90,
-    # Chosen from the cleanup eval of 2026-10-18 for its cost and its speed (~1.25 s on average).
+    # Chosen from the cleanup eval for its cost and its speed (~1.25 s on average).
     # The cases and the prompt have changed since, so no pass rate is claimed for it: compare the
     # models again with `python -m raphael_core.evaluate.cleanup`.
     "cleanup_model": "openai/gpt-6-luna",
@@ -68,7 +70,7 @@ DEFAULTS: dict[str, Any] = {
     # Which of the catalogue's models (device/models.py) the local engine is. The one Raphael has
     # always used, so that nobody who runs locally needs a new download.
     "stt_local_model": "qwen3-asr",
-    # The most accurate on the samples tried live on 2026-10-18 (gpt-transcribe returned nothing
+    # The most accurate on the samples tried live (gpt-transcribe returned nothing
     # for an English clip and garbled Chinese).
     "stt_cloud_model": "elevenlabs/scribe-v2",
     # The voice assistant (raphael_core.agent). The model that words its answers, and that decides
@@ -97,7 +99,7 @@ DEFAULTS: dict[str, Any] = {
     "agent_city": "",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
-    # One computer for every member, a screen each, signed in once (owner, 2026-11-07 and 2026-11-12). "per-bot"
+    # One computer for every member, a screen each, signed in once. "per-bot"
     # stays a stored choice: nothing in the app sets it. On a remote host see LocalVm.mode.
     "computer_vm_mode": "shared",
     "computer_ssh_alias": "",
@@ -339,6 +341,14 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
         if value and (len(value) > 1000 or any(ord(char) < 32 for char in value)
                       or not (PureWindowsPath(value).is_absolute() or PurePosixPath(value).is_absolute())):
             raise ValueError("Output folder must be an absolute path without control characters")
+    if key == "owner_write_folders":
+        from pathlib import PureWindowsPath, PurePosixPath
+        if any(type(item) is not str for item in value):
+            raise TypeError("Setting 'owner_write_folders' must be a list of paths")
+        value = list(dict.fromkeys(item.strip() for item in value if item.strip()))
+        if len(value) > 50 or any(len(item) > 1000 or any(ord(char) < 32 for char in item)
+                                  or not (PureWindowsPath(item).is_absolute() or PurePosixPath(item).is_absolute()) for item in value):
+            raise ValueError("Write folders must be at most 50 absolute paths without control characters")
     if key == "routine_owner_seen_ms" and value < 0:
         raise ValueError("Owner activity time cannot be negative")
     if key in ("owner_name", "owner_about"):

@@ -1,4 +1,4 @@
-"""The roster names the pictures and does not carry them (owner, 2026-11-11: the list was 9.8 MB and was read about
+"""The roster names the pictures and does not carry them (the list was once 9.8 MB and was read about
 seven times while the app started). A picture is read through its own call, by the revision the roster names."""
 
 import base64

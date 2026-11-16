@@ -27,7 +27,7 @@ const refresh = async (event: MainEvent = { type: "MembersChanged" }) => { emit(
 const choose = async (member: number, conversation: number) => {
   $(`.mb-col [data-member="${member}"]`).click();
   await flush();
-  // A member has one conversation; only Raphael's panel switches between his and the quick questions.
+  // A member has one conversation; only Raphael's panel switches between its conversation and the quick questions.
   if (member !== 0) return;
   if ($<HTMLElement>(".mb-det").hidden) $(".conversation-trigger").click();
   await flush();
@@ -576,7 +576,7 @@ test("a failed typed send restores the exact draft and clears the failure on suc
  expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();
 });
 
-// One member shows at most one working slime in its conversation (owner, 2026-11-14, R-SLIME-03).
+// One member shows at most one working slime in its conversation (R-SLIME-03).
 const presences = () => [...document.querySelectorAll<HTMLElement>(".thread .live-presence")];
 const at = (id: number, more: Partial<AgentTurn> = {}) => live({ id, session_id: `slime-${id}`, created_at_ms: 1_000_000 + id * 1000, question: `Request ${id}`, ...more });
 const task = (id: number, more: Partial<NonNullable<AgentTurn["task"]>> = {}) => ({ id, state: "running", started_at_ms: 1, finished_at_ms: null, ...more }) as AgentTurn["task"];
@@ -671,4 +671,100 @@ test("the read made while Stop shows stops with it: an idle composer reads nothi
   api.agentHistoryList.mockClear();
   await vi.advanceTimersByTimeAsync(120_000); await flush();
   expect(api.agentHistoryList).not.toHaveBeenCalled();
+});
+
+// Every pairing of a turn's status and its task's state: Stop shows exactly while the turn or its task is in progress, and
+// pressing it asks the core to end the very thing shown (the task by its id, the turn by its session).
+const STATUSES = ["running", "confirm", "done", "error", "expired", "cancelled", "denied"] as const;
+const STATES = [null, "queued", "running", "waiting", "done", "failed", "limit", "cancelled", "interrupted"] as const;
+test.each(STATUSES.flatMap(status => STATES.map(state => [status, state] as const)))(
+  "a turn %s with a task %s shows Stop only while something is in progress, and Stop ends that", async (status, state) => {
+    turns = [live({ status, ...(state ? { task: seven(state, state === "queued" || state === "running" || state === "waiting" ? {} : { finished_at_ms: 2 }) } : {}) })];
+    mount(); await flush();
+    const working = status === "running" || status === "confirm" || state === "queued" || state === "running" || state === "waiting";
+    expect($(".composer").dataset.taskState !== "idle").toBe(working);
+    if (!working) return;
+    press(); await flush();
+    expect(api.agentStop).toHaveBeenCalledWith("reply-11", 0);
+    if (state === "queued" || state === "running" || state === "waiting") expect(api.workerCancel).toHaveBeenCalledWith(7);
+    else expect(api.workerCancel).not.toHaveBeenCalled();
+  });
+
+// The composer's right-hand button for every combination of turn status and task state the data model allows (R-PUMP-03): Stop only while
+// something it can stop is in progress, and the page's claim is taken back by a read whatever way the work ended.
+const TURN_STATUSES = ["queued", "running", "confirm", "done", "denied", "expired", "error", "cancelled"] as const;
+const TASK_STATES = [null, "queued", "running", "waiting", "done", "failed", "limit", "cancelled", "interrupted"] as const;
+const inProgress = (status: string, state: string | null): boolean => status === "running" || status === "confirm" || state === "queued" || state === "running" || state === "waiting";
+const taskOf = (state: string | null): AgentTurn["task"] => state === null ? null : task(7, { state, ...(["done", "failed", "limit", "cancelled", "interrupted"].includes(state) ? { finished_at_ms: 2 } : {}) });
+
+test.each(TURN_STATUSES.flatMap(status => TASK_STATES.map(state => [status, state] as const)))("a %s turn with task %s: Stop only while work is in progress", async (status, state) => {
+  turns = [live({ status, ...(state === null ? {} : { task: taskOf(state) }) })];
+  mount(); await flush();
+  if (inProgress(status, state)) expectStop();
+  else {
+    expect($(".composer").dataset.taskState).toBe("idle");
+    expect($(".cmp-voice").getAttribute("aria-label")).not.toBe("停止");
+    expect($(".cmp-voice").querySelector(".av")).not.toBeNull();
+  }
+});
+
+test("a turn of another conversation of the member never offers Stop here", async () => {
+  turns = [live({ conversation_id: 4, status: "running" })];
+  mount(); await flush(); await choose(0, 1);
+  expect($(".composer").dataset.taskState).toBe("idle");
+});
+
+const BEFORE_RESTART = [
+  ["a running turn", { status: "running" }],
+  ["a turn that waits for a yes", { status: "confirm" }],
+  ["a queued task", { status: "done", task: taskOf("queued") }],
+  ["a running task", { status: "done", task: taskOf("running") }],
+  ["a waiting task", { status: "done", task: taskOf("waiting") }],
+] as const;
+const AFTER_RESTART = [
+  ["expired", { status: "expired" }],
+  ["interrupted", { status: "error", task: taskOf("interrupted") }],
+  ["done", { status: "done", task: taskOf("done") }],
+] as const;
+
+test.each(BEFORE_RESTART.flatMap(([from, before]) => AFTER_RESTART.map(([to, after]) => [from, to, before, after] as const)))("a core that restarted while the page stayed open: %s, now %s, leaves no Stop", async (_from, _to, before, after) => {
+  turns = [live(before as Partial<AgentTurn>)];
+  mount(); await flush(); expectStop();
+  turns = [live(after as Partial<AgentTurn>)];
+  await refresh({ type: "CoreReady" });
+  expect($(".composer").dataset.taskState).toBe("idle");
+  expect($(".cmp-voice").querySelector(".av")).not.toBeNull();
+});
+
+test.each(BEFORE_RESTART)("%s ended while the window was hidden: shown again, the button is not Stop", async (_name, before) => {
+  turns = [live(before as Partial<AgentTurn>)];
+  mount(); await flush(); expectStop();
+  agent.hide();
+  turns = [live({ status: "done", text: "Finished", task: taskOf("done") })];
+  emit({ type: "CoreReady" });
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  agent.show(); await vi.advanceTimersByTimeAsync(400); await flush();
+  expect($(".composer").dataset.taskState).toBe("idle");
+});
+
+test("a recording is not Stop, and the read made while Stop shows is not made for it", async () => {
+  turns = [live({ status: "done", text: "Finished" })];
+  mount(); await flush(); await choose(0, 1);
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 0 });
+  expect($(".composer").dataset.taskState).toBe("recording");
+  api.agentHistoryList.mockClear();
+  await vi.advanceTimersByTimeAsync(120_000); await flush();
+  expect(api.agentHistoryList).not.toHaveBeenCalled();
+  expect($(".cmp-voice").getAttribute("aria-label")).toBe("送出");
+});
+
+test("the recording ended without being sent: the button is the voice emblem, not Stop", async () => {
+  turns = [];
+  mount(); await flush(); await choose(0, 1);
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 0 });
+  expect($(".composer").dataset.taskState).toBe("recording");
+  emit({ type: "Dictation", phase: "cancelled", agent: true, member_id: 0 });
+  await flush();
+  expect($(".composer").dataset.taskState).toBe("idle");
+  expect($(".cmp-voice").querySelector(".av")).not.toBeNull();
 });

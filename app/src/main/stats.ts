@@ -27,7 +27,7 @@ export function durationParts(seconds: number): [string, string][] {
   return parts;
 }
 
-/** `2026-10-05` -> `10 月 5 日` */
+/** `YYYY-MM-DD` -> `M 月 D 日` */
 export function longDate(date: string): string {
   const [, m, d] = date.split("-").map(Number);
   return t("format.003", { p0: m, p1: d });

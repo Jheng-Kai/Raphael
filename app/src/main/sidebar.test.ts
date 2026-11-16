@@ -29,7 +29,7 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
   await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
   // 連結應用程式 opens its own dialog, not a page of Settings (R-UI-111).
   expect(nav.querySelector('.side-foot .sidebar-apps')?.hasAttribute('data-connect-apps')).toBe(true);
-  // One row, as Grok Bot's (R-SIDE-01): the face (a button named by the owner's name, opening the account menu), then the pill; no page buttons.
+  // One row (R-SIDE-01): the face (a button named by the owner's name, opening the account menu), then the pill; no page buttons.
   expect([...nav.querySelector('.sidebar-foot-row')!.children].map(el => el.className.split(' ').filter(name => name.startsWith('sidebar-'))[0])).toEqual(['sidebar-account', 'sidebar-apps']);
   expect(nav.querySelectorAll('.side-foot [data-go], .sidebar-dictation, .sidebar-home')).toHaveLength(0);
   const account = nav.querySelector<HTMLElement>('.sidebar-account')!;
@@ -38,7 +38,7 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
   expect(account.getAttribute('aria-haspopup')).toBe('menu');
   expect(account.querySelector('.owner-face')).not.toBeNull();
   expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
-  // The pill says its own words: nothing more shows under the pointer (owner, 2026-11-12).
+  // The pill says its own words: nothing more shows under the pointer.
   expect(nav.querySelector('.sidebar-apps')?.hasAttribute('data-tooltip') || nav.querySelector('.sidebar-apps')?.hasAttribute('title')).toBe(false);
   // Each mark knows its place against the middle one, for the pill's hover: -1, 0 and +1 of the 3 px spread.
   expect([...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.style.getPropertyValue('--spread'))).toEqual(['-1', '0', '1']);
@@ -56,7 +56,6 @@ test("the foot is one row, the owner's face and the Connections pill, and refres
 });
 
 test("with nothing connected the pill shows Gmail, Notion and Google Calendar, then the owner's own apps once one is connected", async () => {
-  // Owner, 2026-11-15: 「如果剛進來甚麼都還沒 connect 這邊還是要顯示 default…有連結了再慢慢換成現在這樣」.
   const empty = { state: "complete", count: 0, apps: [{ name: "Slack", connected: false, last_used_at: null }] };
   const read = vi.spyOn(api, "integrationsInventory").mockResolvedValue(empty as never);
   let event!: (value: MainEvent) => void;
@@ -73,9 +72,56 @@ test("with nothing connected the pill shows Gmail, Notion and Google Calendar, t
   const logo = "https://logos.composio.dev/api/outlook";
   read.mockResolvedValue({ state: "complete", count: 3, apps: [{ name: "Slack", connected: true, last_used_at: 5 }, { name: "Outlook", connected: true, last_used_at: 4, logo }, { name: "Unknown sample", connected: true, last_used_at: 3 }] } as never);
   event({ type: 'ConnectionsChanged' });
-  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(2));
+  await vi.waitFor(() => expect(nav.querySelector('.sidebar-app-mark[data-mark="slack"]')).not.toBeNull());
+  expect(drawn()).toHaveLength(3);
   expect(drawn()[0]).toBe(mark('Slack'));
   expect(nav.querySelector<HTMLImageElement>('.sidebar-app-mark .logo-art img.logo')!.getAttribute('src')).toBe(logo);
+  // The third is the first starter: the one with no mark of its own leaves no hole.
+  expect(drawn()[2]).toBe(mark('Gmail'));
+  read.mockRestore();
+});
+
+test("the pill always shows three marks: the connected apps' own first, the starters not connected filling up the rest", async () => {
+  const app = (name: string, last: number, extra: object = {}) => ({ id: name, name, connected: true, enabled: true, state: "ready", tools: 1, last_used_at: last, ...extra });
+  const read = vi.spyOn(api, "integrationsInventory");
+  document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!;
+  const column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button data-col="add"></button></div>';
+  let event!: (value: MainEvent) => void;
+  read.mockResolvedValue({ state: "complete", count: 0, apps: [] } as never);
+  createSidebar(nav, column, { onEvent: handler => { event = handler; return () => {}; } } as AppContext);
+  const keys = (): string[] => [...nav.querySelectorAll<HTMLElement>('.sidebar-app-mark')].map(mark => mark.dataset.mark!);
+  const reads = async (apps: object[]): Promise<string[]> => {
+    read.mockClear(); read.mockResolvedValue({ state: "complete", count: apps.length, apps } as never);
+    event({ type: "ConnectionsChanged" });
+    await vi.waitFor(() => expect(read).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return keys();
+  };
+  await vi.waitFor(() => expect(keys()).toEqual(["gmail", "notion", "googlecalendar"]));
+  expect(await reads([app("Slack", 1)])).toEqual(["slack", "gmail", "notion"]);
+  expect(await reads([app("Slack", 1), app("GitHub", 2)])).toEqual(["github", "slack", "gmail"]);
+  expect(await reads([app("Slack", 3), app("GitHub", 2), app("Linear", 1)])).toEqual(["slack", "github", "linear"]);
+  expect(await reads(["Slack", "GitHub", "Linear", "Figma", "Stripe"].map((name, at) => app(name, 9 - at)))).toEqual(["slack", "github", "linear"]);
+  // A connected app that is a starter stands once, first, and the other starters follow in their own order.
+  expect(await reads([app("Notion", 1)])).toEqual(["notion", "gmail", "googlecalendar"]);
+  expect(await reads([app("google calendar", 2), app("GMAIL", 1)])).toEqual(["googlecalendar", "gmail", "notion"]);
+  // A starter is told by its mark, not by how it is written; an app that is not connected counts for nothing.
+  expect(await reads([app("Gmail (work)", 1, { connected: false }), app("Slack", 1)])).toEqual(["slack", "gmail", "notion"]);
+  // An app with no mark of its own is left out, and the row is still filled to three.
+  expect(await reads([app("Unknown sample", 5), app("Slack", 4)])).toEqual(["slack", "gmail", "notion"]);
+  // The same reading again draws the same marks and touches nothing.
+  const mutations: MutationRecord[] = [];
+  const observer = new MutationObserver(records => mutations.push(...records));
+  observer.observe(nav.querySelector('.sidebar-apps')!, { attributes: true, childList: true, subtree: true });
+  expect(await reads([app("Unknown sample", 5), app("Slack", 4)])).toEqual(["slack", "gmail", "notion"]);
+  expect(mutations).toHaveLength(0);
+  observer.disconnect();
+  // A reading that failed shows no marks at all.
+  read.mockRejectedValue(new Error("unavailable"));
+  event({ type: "ConnectionsChanged" });
+  await vi.waitFor(() => expect(keys()).toEqual([]));
   read.mockRestore();
 });
 
@@ -130,7 +176,7 @@ test("the sidebar has no brand and no fold button, names its face by the owner i
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
   expect(document.documentElement.style.getPropertyValue("--sidebar-width")).toBe("");
   expect(add.parentElement!.className).toBe("side-foot");
-  // The rail has no search (owner, 2026-11-12 23:25): only the plus stands in its foot.
+  // The rail has no search: only the plus stands in its foot.
   expect(pair()).toEqual(["add"]);
   expect(localStorage.getItem("raphael.sidebar.collapsed")).toBe("true");
   drag(72, 110);

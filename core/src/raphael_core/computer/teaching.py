@@ -1,6 +1,5 @@
 """Owner-only demonstrations.
 
-Adapted from OpenBot (MIT); see core/packaging/licenses.
 Recordings are data, never executable instructions.
 """
 import asyncio

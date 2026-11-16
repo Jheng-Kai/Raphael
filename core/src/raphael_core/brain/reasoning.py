@@ -63,12 +63,12 @@ _RUN_ON = re.compile(r"((?<=[.!?:)\]])[ \t]*(?=[\u3040-\u30ff\u3400-\u4dbf\u4e00
 _PLANNING = re.compile(
     r"\b(?:I (?:should|need to|must|will|want to) (?:respond|reply|answer|explain|confirm|ask|check|compute|calculate|say|tell|mention|"
     r"give|offer|keep|avoid|first|also|then|not)\b|(?:the|this) (?:user|owner)\b|"
-    r"(?:he|she|they|Jack) (?:says?|said|wants?|asked|answered|is asking|mentioned)\b|plan\s*:|next,? I\b)", re.I)
+    r"(?:he|she|they) (?:says?|said|wants?|asked|answered|is asking|mentioned)\b|plan\s*:|next,? I\b)", re.I)
 _NOTE_WORDS = 8
 
 
 def _latin_note(piece: str) -> bool:
-    """Whether a piece of a reply is Latin-script prose: a few words of the owner's language in it (his title, a name) are
+    """Whether a piece of a reply is Latin-script prose: a few words of the owner's language in it (a title, a name) are
     allowed, a sentence of it is not."""
     latin, owner = len(re.findall(r"[A-Za-z]", piece)), len(_OWNER_SCRIPT.findall(piece))
     return (latin >= 3 and owner * 3 <= latin and "```" not in piece

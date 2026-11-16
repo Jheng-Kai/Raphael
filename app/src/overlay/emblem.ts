@@ -161,7 +161,7 @@ function mulberry32(seed: number): () => number {
 
 // ---------- the glyph texture ----------
 
-/** How Raphael feels: calm, or angry (red) while he refuses. */
+/** How Raphael feels: calm, or angry (red) while it refuses. */
 export type Mood = "calm" | "angry";
 
 // The ring texture is app/public/brand/glyph-ring.png, the runes of the owner's own picture, kept soft as they always were
@@ -227,7 +227,7 @@ function completeGlyph(tex: HTMLImageElement): CanvasImageSource {
 /**
  * The photo's colours on the texture, made once per mood: its dark brown matte goes, and its letters, whose soft edges are
  * a little lighter than their middles, take the photo's golden yellow at the edges and its orange in the middle (red when
- * he is angry). The letters' shapes and softness are the texture's own.
+ * it is angry). The letters' shapes and softness are the texture's own.
  */
 const INK = { calm: { middle: [236, 104, 26], edge: [247, 198, 28] }, angry: { middle: [170, 18, 32], edge: [255, 96, 72] } } as const;
 function inkedGlyph(tex: HTMLImageElement, mood: Mood): CanvasImageSource {
@@ -373,6 +373,12 @@ export interface DrawOptions {
   boost?: number;
   /** Calm in gold, or angry in red: the ring, its rays and its centre. */
   mood?: Mood;
+  /**
+   * A still a few dozen pixels across (the composer's voice button): what is finer than a pixel there only smears the runes.
+   * The rays stop at the white ring, the faint circle at the letters' feet is left out, the white ring is a whole number of
+   * pixels wide and its warm edge one pixel. The anime's numbers stay those of every larger emblem (R-UI-161).
+   */
+  small?: boolean;
 }
 
 /** Draws one frame, centered on the context's origin, `R` pixels in outer radius. */
@@ -425,7 +431,7 @@ export function drawEmblem(
   }
 
   // The photo's thin faint yellow circle just inside the letters' feet.
-  if (p.glyphA > 0.003) {
+  if (p.glyphA > 0.003 && !o.small) {
     ctx.save();
     ctx.globalAlpha = base * p.glyphA * o.dim;
     ctx.strokeStyle = angry ? "rgba(255,96,70,0.4)" : "rgba(242,200,40,0.4)";
@@ -450,20 +456,21 @@ export function drawEmblem(
   }
 
   // Forty thin yellow-green rays extend from the centre, most reaching the white ring,
-  // some passing through it to the letters' feet and a few out past the letters: his light shines out.
+  // some passing through it to the letters' feet and a few out past the letters: its light shines out.
   // They go under the white ring, which hides them where they cross it.
   if (p.rays > 0.01) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     const rnd = mulberry32(5000 + Math.round(o.tq * 24));
     const n = Math.round(36 + 10 * o.lvl * o.calm);
-    // Over an unknown desktop a deeper yellow that reads on white as on black; red when he is angry.
+    // Over an unknown desktop a deeper yellow that reads on white as on black; red when it is angry.
     const rgb = angry ? (unknown ? "236,70,48" : "255,138,108") : unknown ? "222,196,24" : "228,242,96";
     for (let i = 0; i < n; i++) {
       const a = ((i + (rnd() - 0.5) * 0.9) / n) * TAU;
       const pick = rnd();
       const reach = pick < 0.55 ? 0.5 + rnd() * 0.1 : pick < 0.85 ? 0.62 + rnd() * 0.16 : 0.8 + rnd() * 0.35;
-      const len = R * p.raysScale * reach * (0.94 + 0.12 * o.lvl * o.calm);
+      const reaches = R * p.raysScale * reach * (0.94 + 0.12 * o.lvl * o.calm);
+      const len = o.small ? Math.min(reaches, R * p.ringR) : reaches;
       const al = clamp((0.5 + 0.45 * rnd()) * p.rays * (0.55 + 0.45 * o.calm) * (unknown ? 1.4 : 1));
       const half = Math.max(0.45, R * 0.0045 * (0.6 + rnd()));
       const x = Math.cos(a), y = Math.sin(a);
@@ -499,9 +506,9 @@ export function drawEmblem(
     }
     ctx.closePath();
     ctx.lineJoin = "round";
-    const w = Math.max(1, R * p.ringW);
+    const w = o.small ? Math.max(1, Math.round(R * p.ringW)) : Math.max(1, R * p.ringW);
     // Over an unknown desktop the white ring keeps a firm warm edge, so a white window behind it never swallows it.
-    ctx.lineWidth = w + (unknown ? 3 : 1.5);
+    ctx.lineWidth = w + (o.small ? 1 : unknown ? 3 : 1.5);
     ctx.strokeStyle = unknown ? "rgba(120,70,0,0.55)" : "rgba(8,14,18,0.3)";
     ctx.stroke();
     ctx.shadowColor = angry ? "rgba(255,110,90,0.8)" : "rgba(214,232,244,0.55)";

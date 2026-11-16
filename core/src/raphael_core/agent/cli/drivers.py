@@ -2,7 +2,6 @@
 
 Only public text and explicit reasoning summaries are forwarded. Raw diagnostics,
 reasoning blocks, command output and provider credentials never become UI messages.
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import asyncio
@@ -34,7 +33,7 @@ CODEX_SESSION_PREFIX = "raphael-codex-v1:"
 READ_LIMIT_S = 3 * 3600.0
 # How long a vendor CLI waits for one call to Raphael's MCP tools: the window the loops give a call in flight
 # (`loop.CLI_TOOL_S`). The vendors' own default is 60 s, and a picture that took 62 s was made and shown while Claude Code
-# had already told the member the tool timed out (owner, 2026-11-14), so the member said it had failed and drew it by hand.
+# had already told the member the tool timed out, so the member said it had failed and drew it by hand.
 MCP_TOOL_S = 7200
 
 

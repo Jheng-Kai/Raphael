@@ -1085,12 +1085,12 @@ def test_the_prompt_is_ascii_but_for_the_users_languages_and_dictionary():
 
 
 def test_the_dictionary_labels_are_in_no_one_language():
-    words = ["Raphael", "grokbot"]
-    forms = [("Rafael", "Raphael"), ("Grokbox", "grokbot")]
-    lines = dictionary_lines(build_system_prompt(words, forms, heard="ask Rafael and Grabbot"))
+    words = ["Raphael", "pinebot"]
+    forms = [("Rafael", "Raphael"), ("Pinebox", "pinebot")]
+    lines = dictionary_lines(build_system_prompt(words, forms, heard="ask Rafael and Pinebat"))
     assert lines == [
         "- Raphael (often misheard as: Rafael)",
-        "- grokbot (often misheard as: Grokbox; maybe misheard here as: Grabbot)",
+        "- pinebot (often misheard as: Pinebox; maybe misheard here as: Pinebat)",
     ]
     assert all(line.isascii() for line in lines)
     assert dictionary_lines(build_system_prompt([], [])) == ["(empty)"]
@@ -1125,8 +1125,7 @@ def test_the_dictionary_block_keeps_only_words_the_transcript_may_hold():
 
 
 def test_a_cjk_word_is_listed_for_a_chinese_transcript_only_with_a_form_it_is_heard_as():
-    # R-DICT-HINT-01: 唯讀 and 本機端 listed bare turned the speaker's 讀寫 and 本地端 into them
-    # (the owner's dictations of 2026-11-14, written again here).
+    # R-DICT-HINT-01: 唯讀 and 本機端 listed bare turned the speaker's 讀寫 and 本地端 into them.
     words = ["唯讀", "本機端", "拉斐爾"]
     heard = "這個資料夾要開讀寫，本地端的設定也不要動，拉菲爾老師說的"
     assert dictionary_lines(build_system_prompt(words, [], heard=heard)) == ["(empty)"]
@@ -1157,14 +1156,14 @@ def test_words_left_out_for_the_transcript_do_not_count_towards_the_limit():
 
 
 # --- a dictionary word the transcript may hold misheard --------------------------------------------
-# From the owner's dictation history (2026-11-13/14): his dictionary holds 「grokbot」 and 「claude」,
-# and the cleanup model kept "Grok Bus" and "Cloud" because nothing pointed it at them.
+# A dictionary that holds 「pinebot」 and 「claude」: the cleanup model kept "Pine Bus" and "Cloud"
+# because nothing pointed it at them.
 
 
 def test_a_misspelled_dictionary_word_is_named_for_the_model():
-    heard = "你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下"
-    prompt = build_system_prompt(["拉斐爾", "OpenRouter", "grokbot"], [], heard=heard)
-    assert dictionary_lines(prompt) == ["- grokbot (maybe misheard here as: Grok Bus)"]
+    heard = "你這邊的話就是跟Pine Bus一樣，設計是滑鼠滾輪往下"
+    prompt = build_system_prompt(["拉斐爾", "OpenRouter", "pinebot"], [], heard=heard)
+    assert dictionary_lines(prompt) == ["- pinebot (maybe misheard here as: Pine Bus)"]
 
 
 def test_a_learned_form_in_the_transcript_is_listed_with_the_word():
@@ -1174,9 +1173,9 @@ def test_a_learned_form_in_the_transcript_is_listed_with_the_word():
 
 
 def test_known_forms_and_new_spellings_are_listed_apart():
-    heard = "我記得 Grabbot 跟 Grokbox 都可以"
-    prompt = build_system_prompt(["grokbot"], [("Grokbox", "grokbot")], heard=heard)
-    assert dictionary_lines(prompt) == ["- grokbot (often misheard as: Grokbox; maybe misheard here as: Grabbot)"]
+    heard = "我記得 Pinebat 跟 Pinebox 都可以"
+    prompt = build_system_prompt(["pinebot"], [("Pinebox", "pinebot")], heard=heard)
+    assert dictionary_lines(prompt) == ["- pinebot (often misheard as: Pinebox; maybe misheard here as: Pinebat)"]
 
 
 def test_the_rules_tell_the_model_to_write_the_entry_for_what_is_listed_under_it():
@@ -1185,12 +1184,12 @@ def test_the_rules_tell_the_model_to_write_the_entry_for_what_is_listed_under_it
     assert "Forms listed under a dictionary entry are that entry misheard" in rule
     assert "write the entry as spelled" in rule
     names = rule
-    assert "cloud" not in names, "the owner's 「Cloud的用量」 is Claude when his dictionary says so"
+    assert "cloud" not in names, "the owner's 「Cloud的用量」 is Claude when their dictionary says so"
 
 
 def test_dictionary_spans_is_empty_for_a_transcript_that_spells_the_dictionary_right():
-    assert cleanup.dictionary_spans(["grokbot", "GitHub"], [], "像是Grokbot跟GitHub這樣子") == {}
-    assert cleanup.dictionary_spans(["grokbot"], [], "像是Grokbox這樣子") == {"grokbot": ["Grokbox"]}
+    assert cleanup.dictionary_spans(["pinebot", "GitHub"], [], "像是Pinebot跟GitHub這樣子") == {}
+    assert cleanup.dictionary_spans(["pinebot"], [], "像是Pinebox這樣子") == {"pinebot": ["Pinebox"]}
 
 
 def test_a_mac_app_is_known_by_its_bundle_identifier():

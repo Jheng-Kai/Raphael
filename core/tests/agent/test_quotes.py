@@ -39,7 +39,7 @@ async def test_stored_attachment_metadata_and_quote_survive_the_same_history_wri
 
 
 async def test_a_voice_message_from_the_composer_keeps_its_files_and_quote_with_the_words_said(make_rig, client, tmp_path):
-    """The owner (2026-11-14): one press on the composer's voice button sends everything together."""
+    """One press on the composer's voice button sends the files, the quote and the words said together."""
     store = AttachmentStore(tmp_path)
     rig = make_rig(attachment_store=store)
     quote = {"text": "Selected passage", "author": "You"}

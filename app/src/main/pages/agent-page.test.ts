@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
+import { installLinkOpener } from "../link-opener";
 import { createAgent } from "./agent";
 import { emblemTextureArrived, setAvatar } from "../avatar";
 import { getLocale, setLocale } from "../i18n";
@@ -80,6 +81,8 @@ const flush = async (): Promise<void> => {
 };
 
 beforeEach(() => {
+  // The window's one link opener (main.ts installs it at start) opens every link of the page.
+  installLinkOpener();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
   api.core.mockResolvedValue(null);
@@ -116,7 +119,7 @@ test("a sure page gesture appends a draft and sends nothing until the owner subm
 });
 
 test("a dictated correction is learned as the message goes, not when its answer ends, and once", async () => {
-  // The page waits for the whole turn; a member's answer can take minutes (native run, 2026-11-14).
+  // The page waits for the whole turn; a member's answer can take minutes.
   api.agentHistoryList.mockResolvedValue({ turns: [] });
   let answered!: () => void, failed!: (error: Error) => void;
   api.agentAskText.mockImplementationOnce(() => new Promise<void>(resolve => { answered = resolve; }));
@@ -186,7 +189,6 @@ test("message link chips use the safe opener with the full target, and no row of
   agent.hide();
 });
 
-// Owner, 2026-11-10: 「查看過程那個可以拿掉 不用有查看過程」.
 test("a reply offers no way to view its work: no control and no 查看過程 in its menu", async () => {
   api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { messages: [
     { seq: 1, kind: "progress", text: "Checking the sample.", at_ms: 1 },
@@ -498,7 +500,7 @@ describe("a continuous typed turn", () => {
     mount();
     await flush();
 
-    // The work of a done turn stays closed, with no control that opens it (owner, 2026-11-10).
+    // The work of a done turn stays closed, with no control that opens it.
     expect(document.querySelector('[data-act="thinking"]')).toBeNull();
     expect(document.querySelector<HTMLElement>(".think-body")!.hidden).toBe(true);
 
@@ -533,7 +535,7 @@ describe("a continuous typed turn", () => {
   });
 });
 
-// Owner rule: a refresh that changes nothing touches nothing. The emblem texture and the owner's picture are read at
+// A refresh that changes nothing touches nothing. The emblem texture and the owner's picture are read at
 // start-up and end after the first draw; they once cost the reader every line at the next change.
 test("pictures arriving after the first draw leave the drawn lines in place when the next turn comes", async () => {
   vi.useFakeTimers();

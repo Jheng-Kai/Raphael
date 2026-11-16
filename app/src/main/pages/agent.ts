@@ -17,9 +17,9 @@ import { composioAction } from "../composio-result";
 // The field asks Raphael in writing
 // (`agent_ask_text`, Enter sends, Shift+Enter starts a new line) and Raphael's face is the voice
 // button, which does what the question key does (the same `window_hotkey` path) and flies up while
-// he listens (voice-mode.ts). When he asks a YES/NO question, a gold card takes the composer's
+// it listens (voice-mode.ts). When it asks a YES/NO question, a gold card takes the composer's
 // place: it is the overlay's question again (`AgentQuestion`), and answering either one answers
-// both. With no turn at all the page is Raphael alone, the composer under him. A background task
+// both. With no turn at all the page is Raphael alone, the composer under it. A background task
 // that waits for the owner's yes shows its question where the thread ends, as a gold card of its own
 // (background-questions.ts), answered here only.
 //
@@ -111,7 +111,6 @@ import {
   parseMediaPayload,
   requestRerun,
   requestStop,
-  safeHttpUrl,
   safeMediaSrc,
   stepsOpen,
   turnHTML,
@@ -122,7 +121,7 @@ import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
 import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
-import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
+import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
@@ -328,7 +327,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
       // Another member's thread is switched to before the page is shown, so the page asks for that thread once,
-      // before anything else (owner, 2026-11-10: 開啟對話太慢); show() then joins the read under way.
+      // before anything else (opening a conversation was slow); show() then joins the read under way.
       if (!sameThread) { switchThread(); app.go("agent"); return; }
       app.go("agent");
       if (openingThread) openedAt = Date.now();
@@ -533,6 +532,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
+  bindComposerRow(composer);
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
@@ -633,11 +633,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (composerKey === "deleted") return;
     // A pending file is not kept: leaving the conversation ends its reading (`attachmentEpoch`).
     const draft: ComposerDraft = { text: input.value, files: files.filter(file => !file.pending), missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
-    // A message taken back to be edited is not a draft: leaving its conversation gives the edit up, and its message is as it was
-    // (owner, 2026-11-15). Nothing of it is kept, so it never comes back as a second copy of the words.
-    if (draft.replacing === undefined && (draft.text || draft.files.length || draft.missing.length || draft.quote)) restored.set(composerKey, draft);
-    else restored.delete(composerKey);
-    writeDraftWords(`member:${composerKey}`, draft.replacing === undefined ? { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId } : undefined);
+    // A message taken back to be edited is not a draft: leaving its conversation gives the edit up, and its message is as it was.
+    // Nothing of it is kept, so it never comes back as a second copy of the words; what the composer held before 編輯 is kept in its place.
+    keepDraft(composerKey, draft.replacing === undefined ? draft : editOrigin?.turnId === draft.replacing ? editOrigin.before : undefined);
+  }
+  /** What a conversation's composer comes back with when it is opened again: the draft, or nothing. */
+  function keepDraft(key: string, draft: ComposerDraft | undefined): void {
+    if (draft && (draft.text || draft.files.length || draft.missing.length || draft.quote)) restored.set(key, draft);
+    else restored.delete(key);
+    writeDraftWords(`member:${key}`, draft ? { text: wholeLinks(draft.text), quote: draft.quote, pageId: draft.pageId } : undefined);
   }
   function loadComposerDraft(): void {
     composerKey = draftKey();
@@ -750,7 +754,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function drawFaces(): void {
     drawComposerTask();
-    // Each conversation wears its member's colour, Raphael's his first blue slime's (R-UI-81).
+    // Each conversation wears its member's colour, Raphael's being the first blue slime's (R-UI-81).
     const member = members.member(), color = memberColor(member);
     patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
     const bubble = ownerBubble(color);
@@ -943,7 +947,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     commandBox.hidden = !command;
     const disclosure = askCard.querySelector<HTMLElement>(".card-disclosure")!;
     // What cannot be undone is read before it is agreed to: its lines (what is deleted, by name, one line for each change on
-    // a card of several) stand open under the heading instead of behind 顯示 (owner, 2026-11-11: 「不要分這麼多卡片」).
+    // a card of several) stand open under the heading instead of behind 顯示.
     const readable = q.text.split("\n").slice(1).join("\n").trim();
     const reads = q.tier === "T3" && !command;
     if (reads && copy.body === lead.trim() && readable !== "") askText.textContent = readable;
@@ -1121,7 +1125,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     wait.hidden = true;
     const shown = turns;
     searchButton.hidden = shown.length === 0;
-    // Raphael is the app's own: he is not shared as a template.
+    // Raphael is the app's own: it is not shared as a template.
     shareButton.hidden = inRaphael();
     if (shown.length === 0 && searching) closeSearch(false);
     if (isEmpty()) {
@@ -1206,7 +1210,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     holdOpening();
   }
   /**
-   * The first placement is the final one (owner, 2026-11-11: the conversation opened and then jumped up). While the
+   * The first placement is the final one (the conversation must not open and then jump up). While the
    * unread boundary is not known (a roster still on its way) or its history pages are still coming, the thread is drawn
    * but not shown, so it is never seen at the bottom and then moved to the line. It shows after OPEN_HOLD_MS at the latest.
    */
@@ -1357,6 +1361,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       canLoadEarlier = next.keptOlder ? canLoadEarlier : got.length === PAGE_SIZE;
       turns = next.turns;
     }
+    if (!earlier) releaseLostEdit(delta ? removed.includes(replacing ?? -1) : got.length < PAGE_SIZE || replacing !== undefined && replacing >= (oldestId(got) ?? Infinity));
     // A task that ended is no longer being stopped.
     for (const turn of turns) if (turn.task && !isLive(turn.task)) state.stopping.delete(turn.task.id);
     forgetReruns(state, turns);
@@ -1389,7 +1394,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The members asked this session to open their own conversation: once each; the core decides the rest. */
   const greetAsked = new Set<number>();
   /**
-   * A member's conversation is never an empty page (owner, 2026-11-10: 「理論上我們不應該會看到這個畫面」): a member made
+   * A member's conversation is never an empty page: a member made
    * without its greeting (by a way of making members that did not greet yet) is asked once to write it. The core starts
    * it only while the owner has written nothing there and no greeting runs (members.greet); it refuses otherwise.
    */
@@ -1500,13 +1505,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
     // A correction goes as the message goes, not when its answer ends: the page waits for the whole turn, which can take a
-    // member minutes, and the learned pill came long after the owner had moved on (native run, 2026-11-14). A draft given
+    // member minutes, and the learned pill came long after the owner had moved on. A draft given
     // back after a failure then holds no evidence, so a retry never counts the same correction twice.
     void learnComposerCorrections(corrections);
     const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
     const resume = draft.replacing !== undefined && editOrigin?.turnId === draft.replacing ? editOrigin.before : undefined;
     rememberDraft(requestId, draft);
-    clearTimeout(draftTimer); discardComposerDraft(composerKey);
+    // What the composer held before 編輯 stays the conversation's draft while the edit is on its way: leaving meanwhile loses nothing.
+    clearTimeout(draftTimer); keepDraft(composerKey, resume);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
     // The message an edit replaces comes back to its place as the edit's own bubble, and stays there until the edit has taken its place (lines).
     if (draft.replacing !== undefined) mine.replaces = turns.find(turn => turn.id === draft.replacing);
@@ -1590,7 +1596,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   async function attachAll(list: readonly File[]): Promise<void> {
     const epoch = attachmentEpoch;
-    // Every chip stands at once, as Claude's do (owner, 2026-11-15: 「才剛點下去他就在畫面裡了」); the bytes are read and
+    // Every chip stands at once; the bytes are read and
     // stored after, one file after the other, and send is offered only once they are in (R-ATTACH-03, R-ATTACH-04).
     const placed: { file: File; id: number; mime: string; name: string }[] = [];
     for (const file of list) {
@@ -1911,7 +1917,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /**
    * The questions from the background that wait in the open thread (background-mount.ts): the gold
-   * card is Raphael's own (his emblem, his 《問。》) in his thread and the member's (their face and
+   * card is Raphael's own (its emblem, its 《問。》) in its thread and the member's (their face and
    * name, plain words) in theirs. Called when the thread changes, and it reads the questions again.
    */
   function drawBackgroundQuestions(): void {
@@ -1977,8 +1983,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     sayHi(emptyLine());
     // the card of another thread's question goes, and this thread's comes
     delete askCard.dataset.id;
-    // The thread is asked for first: the core answers in order, and the rest of the page can wait for it (owner,
-    // 2026-11-10: 開啟對話太慢). A page that is not on screen reads it, and the rest, as it shows (show()).
+    // The thread is asked for first: the core answers in order, and the rest of the page can wait for it. A page that is not on screen reads it, and the rest, as it shows (show()).
     render();
     if (listening && voiceMember === memberId() && !question) drawComposerTask();
     if (visible) {
@@ -2120,7 +2125,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const items: Parameters<typeof openActions>[1][number][] = [];
     if (source) items.push({ id: "reply", label: t("chat.reply"), icon: "reply" });
     if (!source?.video) items.push({ id: "copy", label: t(source?.picture ? "chat.copyImage" : "chat.copy"), icon: "copy" });
-    // No 「查看過程」: how a reply was worked out is not shown (owner, 2026-11-10: 「不用有查看過程」).
+    // No 「查看過程」: how a reply was worked out is not shown.
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
@@ -2171,7 +2176,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const epoch = attachmentEpoch;
     const draft = await draftFor(turn);
     if (memberId() !== member || attachmentEpoch !== epoch) return;
-    if (draft.missing.length) { restoreDraft(draft); toaster.info(t("chat.reattach")); return; }
+    if (draft.missing.length) { giveBack(draft); toaster.info(t("chat.reattach")); return; }
     regenerating.add(turn.id);
     rememberDraft(requestId, draft);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text: turn.question, sentAt: Date.now(), files: draft.files.map(({ name, mime }) => ({ name, mime })), quote: draft.quote };
@@ -2238,7 +2243,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /**
-   * 編輯 takes the owner's message back into the composer (owner, 2026-11-15): its words, its files (by their stored copies, as chips) and its
+   * 編輯 takes the owner's message back into the composer: its words, its files (by their stored copies, as chips) and its
    * quote, the composer marked as replacing that turn. The message's bubble is not drawn while the composer holds it (`render`), and sending
    * replaces the turn (`send`). Giving the edit up (`abandonEdit`) draws the message again, as it was.
    */
@@ -2246,19 +2251,63 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     if (!source || source.key !== "question") return;
     if (replacing === source.turn.id) { focusComposer(); return; }
+    // A file still being read would be dropped when the composer is given the message: it is in the composer first.
+    if (attaching) await attachQueue;
     const member = memberId(), epoch = attachmentEpoch, key = draftKey(), typed = input.value, held = files.length;
     const draft = await draftFor(source.turn);
     // Words typed or a file added while the message's files were read are newer than the click: the composer keeps them.
     if (memberId() !== member || attachmentEpoch !== epoch || draftKey() !== key || input.value !== typed || files.length !== held) return;
-    // What the composer held before the edit comes back once the edit is sent or given up; it is never lost under it.
-    const before = replacing !== undefined ? editOrigin?.before
-      : input.value || files.length || missingFiles.length || composerQuote
-        ? { text: input.value, files: files.filter(file => !file.pending), missing: missingFiles.map(file => ({ ...file })), quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId }
-        : undefined;
+    // What the composer held before the edit comes back once the edit is sent or given up; it is never lost under it. Another edit
+    // taken up in its place keeps what was written in the first one, if it was changed, as one more thing that comes back.
+    const before = replacing !== undefined
+      ? editUntouched() ? editOrigin?.before : mergeDrafts(editOrigin?.before, heldDraft())
+      : heldDraft();
     const taken: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: source.turn.id };
     editOrigin = { turnId: source.turn.id, draft: taken, before };
     restoreDraft(taken);
     render();
+  }
+
+  /** What the composer holds as a draft, or nothing when it holds none: its words, files and quote (never a mark that it replaces a message). */
+  function heldDraft(): ComposerDraft | undefined {
+    if (!input.value && !files.length && !missingFiles.length && !composerQuote) return undefined;
+    return { text: input.value, files: files.filter(file => !file.pending), missing: missingFiles.map(file => ({ ...file })), quote: composerQuote, dictation: correctionLearning.snapshot(), pageId: pageDraft.pageId };
+  }
+
+  /** Two drafts as one, the first's words before the second's. */
+  function mergeDrafts(first: ComposerDraft | undefined, second: ComposerDraft | undefined): ComposerDraft | undefined {
+    if (!first || !second) return first ?? second;
+    return {
+      text: [first.text, second.text].filter(Boolean).join("\n\n"), files: [...first.files, ...second.files], missing: [...first.missing, ...second.missing],
+      quote: first.quote ?? second.quote, dictation: first.dictation, pageId: first.pageId,
+    };
+  }
+
+  /**
+   * Words and files that come back to the owner's composer from elsewhere (a message stopped, cancelled or returned from the queue). The
+   * composer that holds an edit keeps it as it is, and they wait with what it held before 編輯, to come back with it; any other
+   * composer takes them after what it holds.
+   */
+  function giveBack(draft: ComposerDraft): void {
+    if (replacing !== undefined) {
+      if (editOrigin?.turnId === replacing) editOrigin = { ...editOrigin, before: mergeDrafts(editOrigin.before, draft) };
+      return;
+    }
+    restoreDraft(mergeDrafts(heldDraft(), draft)!);
+  }
+
+  /**
+   * The message the composer holds for editing is no longer in the conversation (`gone` says the read covered it): the core would refuse
+   * to replace it, and nothing on the page shows what the composer would replace. The words stay as an ordinary draft after what the
+   * composer held before 編輯, and send as a new message.
+   */
+  function releaseLostEdit(gone: boolean): void {
+    if (replacing === undefined || !gone || turns.some(turn => turn.id === replacing)) return;
+    const before = editOrigin?.turnId === replacing ? editOrigin.before : undefined;
+    const held = heldDraft();
+    replacing = undefined; editOrigin = null;
+    restoreDraft(mergeDrafts(before, held) ?? { text: "", files: [], missing: [] }, false);
+    saveComposerDraft();
   }
 
   /** Puts back what the composer held before an edit, and keeps it as the conversation's draft again. */
@@ -2328,8 +2377,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /**
    * Stop is the page's claim that something is in progress, and the page only knows what its last read said. A turn the core
    * ended while no event reached the page (a core that restarted and swept its rows, a window that was hidden, a dropped
-   * message) would keep Stop on for ever, since nothing reads again (owner, 2026-11-15: 「明明就已經結束任務了，輸入框右下角
-   * 是暫停鍵」). So while Stop shows, the live turns are read now and then; once it does not, nothing is (R-PUMP-03).
+   * message) would keep Stop on for ever, since nothing reads again. So while Stop shows, the live turns are read now and then; once it does not, nothing is (R-PUMP-03).
    */
   function watchStop(): void {
     const task = composerTask();
@@ -2360,7 +2408,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         const sessions = new Set(result.returned.map(item => item.session_id));
         outgoing = outgoing.filter(item => !sessions.has(item.requestId));
         turns = turns.filter(item => !sessions.has(item.session_id ?? ""));
-        if (current) restoreDraft(combined); else restored.set(draftKey(member, conversation), combined);
+        if (!current) restored.set(draftKey(member, conversation), combined);
+        else if (replacing !== undefined) giveBack({ text: returned.map(draft => draft.text).filter(Boolean).join("\n\n"), files: returned.flatMap(draft => draft.files), missing: returned.flatMap(draft => draft.missing), quote: returned.find(draft => draft.quote)?.quote });
+        else restoreDraft(combined);
       }
     }
     finally { stoppingComposerTasks.delete(task.key); drawComposerTask(); }
@@ -2383,8 +2433,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       turns = turns.filter(item => item.session_id !== session && item.id !== turn?.id);
       if (questionOwner === member && (turn?.status === "confirm" || pending)) setQuestion(null);
       if (askingMember === member) askingMember = null;
-      if (memberId() === member && conversationId() === sentConversation) { render(); restoreDraft(draft); }
-      else restored.set(draftKey(member, sentConversation), draft);
+      if (memberId() === member && conversationId() === sentConversation) { render(); giveBack(draft); }
+      else restored.set(draftKey(member, sentConversation), mergeDrafts(restored.get(draftKey(member, sentConversation)), draft)!);
       members.changed();
     } catch (err) { toaster.info(describeError(err)); }
     finally { retracting.delete(session); }
@@ -2526,14 +2576,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (save && !save.disabled) save.click();
   });
 
-  el.addEventListener("auxclick", (e) => {
-    const link = (e.target as Element).closest<HTMLElement>('[data-act="open-url"]');
-    if (!link || e.button !== 1) return;
-    e.preventDefault();
-    const url = safeHttpUrl(link.dataset.url);
-    if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
-  });
-
   el.addEventListener("click", (e) => {
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
@@ -2544,7 +2586,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "open-routine":
         void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
           const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
-          // To read: its member changes it in the conversation (owner, 2026-11-09).
+          // To read: its member changes it in the conversation.
           if (routine) openRoutineView(routine, team.members);
           else toaster.info(t("members.profile.noRoutines"));
         }).catch(error => toaster.info(describeError(error)));
@@ -2555,7 +2597,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
       case "share-member": {
         const member = memberId();
-        // Its mark is the member itself, twice: the copy that is about to be made (as Grok Bot's Create a copy; owner, 2026-11-12).
+        // Its mark is the member itself, twice: the copy that is about to be made.
         // A drawing, not the member at work: it takes no presence, so it never moves with what the member does.
         // Each is drawn at a whole size of its own (a scaled slime lands on a fraction of a pixel and blurs, R-UI-63).
         const face = (size: number): string => members.faceOf(member, size).replace(/ data-presence-member="\d+"/g, "");
@@ -2572,12 +2614,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "detail":
         toggleDetail(act);
         break;
-      case "open-url": {
-        e.preventDefault();
-        const url = safeHttpUrl(act.dataset.url);
-        if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
-        break;
-      }
       case "peer-chat":
         peer?.close();
         // What this member sent colleagues, and what colleagues said to it (its exchange turns), are one conversation.
@@ -2815,7 +2851,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   /**
-   * A page of the Library opens as the page itself (R-PAGE-08; owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」):
+   * A page of the Library opens as the page itself (R-PAGE-08):
    * the details panel folds, the page's view stands at once and the page takes its place when its card is drawn in the
    * thread (its turn is read quietly, in its own conversation if that is another). The card is still the page's one home
    * (its frame, revisions and what the member is told it is called), so what stands behind the view is the thread, hidden.
@@ -2939,7 +2975,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
         listening = false;
         voiceRequested = false;
-        // The recording is over: the flyer goes back into the composer, over a page as anywhere (owner, 2026-11-15: held over a
+        // The recording is over: the flyer goes back into the composer, over a page as anywhere (held over a
         // page until the words came back, it stayed after the send). The page's own line says the member is at work (R-VC-04).
         voice.down();
         if (event.phase === "cancelled" || event.phase === "failed") takeBackVoiceDraft();
@@ -3076,7 +3112,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.
       const settingsFor = typeof arg === "string" && arg.startsWith("member-settings:") ? Number(arg.slice("member-settings:".length)) : null;
       // The settings page hides the conversation, and a hidden scroller forgets its place: it is remembered as the page
-      // opens and put back as the page is left (owner, 2026-11-11: back from the settings the thread was not at the bottom).
+      // opens and put back as the page is left (back from the settings the thread was not at the bottom).
       if (settingsFor !== null && !members.settings.isOpen() && !roomPane.active) chatPlace = wasVisible && !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
       const leavingSettings = settingsFor === null && members.settings.isOpen();
       if (settingsFor === null) members.closeSettings();
@@ -3084,7 +3120,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (!wasVisible) beginOpening();
       visible = true;
       if (arg === "computer") { if (roomPane.active) roomPane.close(); members.computer(); }
-      // The thread is asked for before anything else on the page: the core answers in order (owner, 2026-11-10).
+      // The thread is asked for before anything else on the page: the core answers in order.
       const draft = draftText(arg);
       const refocus = (): void => {
         if (!members.settings.isOpen() && (!wasVisible || draft !== null)) focusComposer();

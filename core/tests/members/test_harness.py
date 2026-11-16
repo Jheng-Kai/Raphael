@@ -51,7 +51,7 @@ async def test_ten_local_tool_calls_are_persisted_for_skill_review(setup, client
 
 async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_routine(setup, client, monkeypatch):
     rig, team = setup
-    teacher = member(team, name="紫苑", tools=[])
+    teacher = member(team, name="小葵", tools=[])
 
     async def search(*args):
         return ToolResult("web_search", True, {"text": "NHK https://news.example/article"})
@@ -74,7 +74,7 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    # The same tools as Raphael's, but nothing of the owner's PC (R-PC-01): no `open`, no desktop.
+    # The same tools as Raphael's, but nothing of the owner's screen (R-PC-01): no `open`, no desktop.
     assert {"web_search", "routine_create", "find_tools", "use_tool"} <= offered and not offered & {"open", "computer"}
 
 

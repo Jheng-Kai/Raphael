@@ -1,7 +1,7 @@
 /**
  * The pictures of the members, kept by revision. The roster names a picture by `avatar_rev` / `cover.rev` and does
  * not carry it: with the pictures inline `members.list` was ten megabytes and was read several times at start-up
- * (owner, 2026-11-11: 「第一次開 app 的速度還是非常慢，就只有第一次而已」). A picture is read once through
+ *. A picture is read once through
  * `members.picture`; the same revision is then shown from here, and a new one (the owner chose another) is read again.
  */
 import type { Member } from "./types";

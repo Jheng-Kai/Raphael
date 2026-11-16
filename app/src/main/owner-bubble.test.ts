@@ -28,9 +28,9 @@ test("every character and colour makes a bubble whose words read", () => {
   }
 });
 
-test("Raphael's colour is his first blue slime's everywhere: his bubble, his controls and his name", () => {
+test("Raphael's colour is its first blue slime's everywhere: its bubble, its controls and its name", () => {
   expect(memberColor({ id: 0 })).toBe(RAPHAEL_COLOR);
-  expect(ownerBubble(memberColor({ id: 0 }))).toEqual(ownerBubble(slimeColorOf({ id: 3, avatar: "slime:rimuru" })));
+  expect(ownerBubble(memberColor({ id: 0 }))).toEqual(ownerBubble(slimeColorOf({ id: 3, avatar: "slime:blue-plain" })));
   expect(ownerBubble(memberColor({ id: 0 })).words).toBe("light");
   expect(nameAccent({ id: 0 })).toBe(memberAccent(RAPHAEL_COLOR));
 });
@@ -75,7 +75,7 @@ test("a switch that is on wears the member's colour and its knob stands off it i
   expect(memberSwitch("#FFC83D").knob).toBe("light-dark(var(--on-tint-dark), var(--on-tint-dark))");
   expect(memberSwitch("#D5D9D6").knob).toBe("light-dark(var(--on-tint-dark), var(--on-tint-dark))");
   expect(memberSwitch("#905AFB").knob).toBe("light-dark(var(--on-tint-light), var(--on-tint-light))");
-  // Raphael's own places wear Raphael's colour: the same source as his bubble.
+  // Raphael's own places wear Raphael's colour: the same source as its bubble.
   expect(memberSwitch(memberColor({ id: 0 }))).toEqual(memberSwitch(RAPHAEL_COLOR));
 });
 

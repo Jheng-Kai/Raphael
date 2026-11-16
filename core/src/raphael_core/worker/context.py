@@ -1,7 +1,5 @@
 """A long task's conversation, kept inside its model's window, so that a job can run for hours.
 
-Adapted from NousResearch/hermes-agent and opencode (MIT); see core/packaging/licenses.
-
 Every result stays as it came while the conversation fits. What counts is what the provider said
 the last prompt came to (`saw`), plus an estimate of what was added since. When that passes the
 trigger (`fit`):

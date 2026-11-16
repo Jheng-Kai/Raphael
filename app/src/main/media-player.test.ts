@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Our own players (owner, 2026-11-15, R-MEDIA-01): what the browser never draws, and what our controls do.
+// Our own players (R-MEDIA-01): what the browser never draws, and what our controls do.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -141,7 +141,6 @@ test("full screen is the lightbox with the same video where it was, and leaving 
 });
 
 test("the sound set in full screen is the thread player's sound after it, as the thread's is the full screen's", () => {
-  // Owner, 2026-11-15: 「放大螢幕然後更換音量的話，外面的音量是不會做調整的」 (R-MEDIA-04).
   const { player, media } = mount(videoPlayerHTML(' src="http://raphael-media.localhost/clip.mp4"', "tour.mp4"));
   const slider = (root: ParentNode): HTMLInputElement => root.querySelector<HTMLInputElement>(".mp-volume")!;
   slider(player).value = "0.6"; slider(player).dispatchEvent(new Event("input"));

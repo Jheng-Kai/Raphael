@@ -33,7 +33,7 @@ async def test_the_page_reads_the_whole_document_even_of_a_skill_that_is_off(rig
     assert rig.service.skill_read(member, "writing") is None
     other = (await rig.call("members.create", {"name": "Other"}))["member"]["id"]
     assert (await refused(rig, "members.skills.read", {"member_id": other, "id": skill["id"]})).data["kind"] == "not_found"
-    # Raphael has no skills of his own to read.
+    # Raphael has no skills of its own to read.
     assert (await refused(rig, "members.skills.read", {"member_id": 0, "id": skill["id"]})).code == INVALID_PARAMS
 
 

@@ -1,4 +1,4 @@
-"""A member's tool list stays the same, byte for byte, through a conversation (owner, 2026-11-09, decision 2).
+"""A member's tool list stays the same, byte for byte, through a conversation.
 
 The list is the first block of every prompt: a list that followed the request's words, the tools
 find_tools showed or a connection that came or went started the cache again. The tools a member uses

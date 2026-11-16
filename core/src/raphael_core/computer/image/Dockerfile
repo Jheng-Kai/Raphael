@@ -1,4 +1,4 @@
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 FROM docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b
 USER root
 COPY desktop/ /opt/raphael-desktop/
@@ -125,9 +125,8 @@ RUN set -eux; \
     printf 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type"\n' > /etc/chromium.d/raphael-container; \
     chromium --version; \
     test -n "$(find /usr/lib -name 'libpixbufloader-svg.so' -print -quit)"
-# What a bot's computer has from its first start (owner, 2026-11-13, of Grok Bot's computer: 「他們會有 chrome 等等之類的
-# 我們一開始就要把環境架設好了 不會只有 cua」). The computer's user may use sudo without a password (the base image
-# allows it, and the container keeps SETUID and SETGID, which the owner chose to leave open), but a system package
+# What a bot's computer has from its first start. The computer's user may use sudo without a password (the base image
+# allows it, and the container keeps SETUID and SETGID, which are left open), but a system package
 # added by hand is lost when the computer is made again: what its work is likely to reach for is here. The base
 # already has curl, ffmpeg, node and Python 3.13.
 # The CJK and emoji fonts are Debian's: until now only the Japanese cut was there, and Chinese was drawn in its shapes.
@@ -153,7 +152,7 @@ RUN set -eux; \
 # What the members' browser keeps, and whose it is, as the browser's own policy: it holds whatever a profile says and
 # whether or not the profile could be written. Every member reads the one profile. So the browser is never signed in
 # to as a browser and never syncs: an owner who signs in to Google on a page is otherwise offered "Turn on sync",
-# and his own saved passwords, history and bookmarks would come down into a profile every member reads. And it
+# and their own saved passwords, history and bookmarks would come down into a profile every member reads. And it
 # keeps no password, card or address that is typed into it. Signing in to a site is untouched: that is a cookie.
 RUN set -eux; \
     for folder in /etc/opt/chrome/policies/managed /etc/chromium/policies/managed; do \
@@ -163,8 +162,7 @@ RUN set -eux; \
       /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$folder/raphael.json"; \
     done
 # Firefox ESR came with the base image and is no one's browser here: the members' is Google's Chrome (Chromium on
-# arm64) and the driver's is Chromium, so a second browser was only a place an owner would sign in for nobody
-# (owner, 2026-11-14: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」). Purging it also takes its
+# arm64) and the driver's is Chromium, so a second browser was only a place an owner would sign in for nobody. Purging it also takes its
 # alternatives, its menu entry and its mime registrations; what the base put beside it that no package owns (and
 # XFCE's own helper entry for it, which only lists it among the applications to prefer) is removed by name.
 # The base's own layer still holds the files, so this makes the image no smaller: it removes the browser, not the
@@ -189,8 +187,8 @@ RUN set -eux; \
     test ! -e /usr/share/applications/firefox-esr.desktop; \
     test -z "$(grep -ril firefox /usr/share/xfce4/helpers || true)"; \
     /usr/lib/chromium/chromium --version
-# The desktop says which browser it opens, and each of its ways to a browser opens the computer's own (owner,
-# 2026-11-13, of the panel: 「但看起來底下不是顯示 Chrome ㄟ?」). Measured on layer 8: the panel's launcher wore a globe
+# The desktop says which browser it opens, and each of its ways to a browser opens the computer's own.
+# Measured on layer 8: the panel's launcher wore a globe
 # named "Browser" over Google Chrome; XFCE's own "Web Browser" named a helper that does not exist and asked which
 # application to prefer; the menu's Google Chrome and x-www-browser could not start at all (Chrome's own entry makes
 # a sandbox, and nothing in a computer can); the menu's Chromium and Firefox were each a second browser with a
@@ -240,7 +238,7 @@ RUN install -m 0755 /opt/raphael-desktop/start-novnc.sh /usr/local/bin/start-nov
       'stderr_logfile=/var/log/supervisor/screens.error.log' \
       'priority=25' \
       >> /etc/supervisor/supervisord.conf
-# Layer 11 (owner, 2026-11-14: 「電腦的部分你可能要再改好一下…你就一次把所有東西都修復吧」). Two scripts of the image are
+# Layer 11. Two scripts of the image are
 # replaced by the ones in layer11/: raphael-seat-browser, which waited 15 s for a browser's first window and 5 s for it
 # to settle where a loaded PC took 13 to 41 s (it now waits a minute and 30 s, by the clock and not by a count of looks),
 # and screens.py, which now writes the panels' configuration in the order of dependence (what a panel holds before the
@@ -256,9 +254,8 @@ RUN set -eux; \
     sh -n /usr/local/bin/raphael-seat-browser; \
     /usr/bin/python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' /opt/raphael-desktop/screens.py; \
     rm -rf /opt/raphael-layer11
-# Layer 12 (owner, 2026-11-14, watching a member's screen, in translation: the members never open tabs; he only pressed
-# minimize and when it came back Chrome could not find the original page; a picture of an empty page whose tab and address
-# read data:text/html,<title>raphael-seat-...</title>). A screen is a desktop a person can use. Each panel has a button
+# Layer 12. The members never open tabs; a minimized window could not be found again, and a seat's window could show an empty page whose tab and address
+# read data:text/html,<title>raphael-seat-...</title>. A screen is a desktop a person can use. Each panel has a button
 # for each window of its own screen beside its three launchers (screens.py writes it for every screen, xfce4-panel.xml
 # for the first), so a minimized window comes back. The Browser
 # icon is a dock's (raphael-browser): it brings the screen's window of the browser back with a new tab and makes a window

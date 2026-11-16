@@ -1,7 +1,7 @@
 import { placesProblems, slimePlaces } from "./slime-places.mjs";
 
 /**
- * What a calm screen is while the core talks (R-SLIME-02; owner, 2026-11-11: 「我希望整體的畫面永遠保持正常顯示，不要有任何問題」):
+ * What a calm screen is while the core talks (R-SLIME-02):
  * no element of the member list, the header, the thread or the panel is replaced (a text node may be), no text that was
  * there is ever empty at a frame, no scroller moves, and no slime outside the two places that may move is moving.
  */

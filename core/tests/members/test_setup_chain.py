@@ -226,7 +226,7 @@ async def test_a_cli_brain_greets_with_its_line_and_the_one_card(chain, monkeypa
 
 
 # A Codex app-server as it was seen live (gpt-6-luna, low effort): the greeting turn's first act is the card, with no
-# words before it. It speaks JSON-RPC on stdin and stdout and reaches the member's MCP server over HTTP, as Codex does.
+# words before it. It speaks JSON-RPC on stdin and stdout and reaches the member's MCP server over HTTP.
 CODEX_CARD_FIRST = '''import json, os, sys, urllib.request
 from pathlib import Path
 def send(value): print(json.dumps(value), flush=True)

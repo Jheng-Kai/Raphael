@@ -16,13 +16,16 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.prompt_cache import cache_options
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
+from ..conversation_language import in_language
 from ..background.run import estimate_cost, summary_reply
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
+from ..worker.computer_verification import STOPPED as UNCHECKED_STOP, UNCHECKED
 from ..worker.tool_guardrails import ToolGuardrails
 from .answers import MESSAGE_RULES, Reply, loose_reply, parse_reply, public_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
+from .persona import phrase
 from .progress_updates import IN_MESSAGES, ProgressUpdates
 from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
@@ -135,8 +138,12 @@ class NarratedLoop:
         context_window: int | None = None,
         reply: Callable[[Reply], None] | None = None,
         updates: ProgressUpdates | None = None,
+        owner_language: str | None = None,
     ) -> None:
         self.client, self.model, self.ledger = client, model, ledger
+        # The language the owner writes in (`AgentService._words_language`), which what the model says between its tool
+        # calls is held to (R-LANG-05); None holds nothing back.
+        self.owner_language = owner_language
         # When the owner was last shown a message of this turn (agent/progress_updates.py); None owes no word.
         self.updates = updates
         self.reasoning_effort = reasoning_effort
@@ -155,6 +162,8 @@ class NarratedLoop:
         self.batch_calls = []
         self.guardrails = ToolGuardrails()
         self.last_failure = None
+        # Why the turn does not count although it answered (UNCHECKED), as a CLI loop's `failure` says it; else None.
+        self.failure = None
         self.used_tools = False
         # The conversation as the model last saw it (the loop's own list, which it goes on adding to).
         self.live: list[dict] = []
@@ -173,9 +182,9 @@ class NarratedLoop:
         try:
             # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
             # it: asking again repeats nothing, since the tools run only after a reply. Before that the owner learns in seconds.
-            # Here "done something" is still any tool, a read included (owner, 2026-10-31, "Long team work", pinned by
+            # Here "done something" is still any tool, a read included (pinned by
             # test_long_turn). A CLI turn and a background task count only what they changed outside (`acted`); whether
-            # this loop does too is the owner's open decision.
+            # this loop does too is open.
             outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.used_tools)
             while True:
                 try:
@@ -225,7 +234,7 @@ class NarratedLoop:
             usage=getattr(answer, "usage", None), prompt_tokens=answer.prompt_tokens, completion_tokens=answer.completion_tokens,
             ms=int((time.perf_counter() - began) * 1000),
         )
-        if thought := " ".join(getattr(answer, "reasoning", "").split()):
+        if (thought := " ".join(getattr(answer, "reasoning", "").split())) and self._fits(thought):
             # What the model wrote into the channel of its answer is its thinking, never its reply (brain/reasoning.py).
             self.thinking(thought[-240:])
         if answer.content.strip():
@@ -235,22 +244,30 @@ class NarratedLoop:
             for public in objects:
                 for kind, emit, limit in (("thinking", self.thinking, 120), ("progress", self.progress, 60)):
                     text = public_line(_public_text(public.get(kind), limit, sentences=2 if kind == "thinking" else None), "auto")
-                    if text:
+                    if text and self._fits(text):
                         emit(text)
             authored = public_reply(answer.content, self.language, plain=self.plain, explicit=True) if answer.calls else None
+            if authored is not None:
+                # Said while working, so shown only in the owner's language: the step it came with keeps its label.
+                lines = [line for line in (authored.messages or [authored.text]) if self._fits(line)]
+                authored = dataclasses.replace(authored, messages=lines, text="\n\n".join(lines)) if lines else None
             if authored is not None and self.publish_reply is not None:
                 self.publish_reply(authored)
                 if self.updates is not None:
                     self.updates.shown()
             if answer.calls and not objects and prose:
                 text = public_line(_public_text(prose, 60), "auto")
-                if text:
+                if text and self._fits(text):
                     self.progress(text)
         self.batch_calls = answer.calls
         return Turn(answer.content, [
             Call(call.id, call.name, call.arguments, call.raw_arguments) for call in answer.calls
         ], responses_output=getattr(answer, "responses_output", []), finish_reason=getattr(answer, "finish_reason", ""),
             prompt_tokens=answer.prompt_tokens, tools=list(tools))
+
+    def _fits(self, text: str) -> bool:
+        """Whether `text`, said between steps, is in the owner's language."""
+        return in_language(text, self.owner_language)
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)
@@ -314,6 +331,16 @@ class NarratedLoop:
         self.response = None
 
     def reply(self, outcome: Outcome) -> Reply:
+        if outcome.kind == UNCHECKED_STOP:
+            # Told once to read its last change on the screen back, the model answered again without doing so
+            # (R-COMP-PERF-09): its answer stays in front of the owner, and the turn ends on why it does not count as done.
+            if outcome.final.strip() and self.publish_reply is not None:
+                try:
+                    self.publish_reply(parse_reply(outcome.final, self.language, plain=self.plain, long=True))
+                except AgentFailure:
+                    pass  # nothing it said can be shown: the reason stands alone
+            self.failure = UNCHECKED
+            return parse_reply(phrase(self.language, UNCHECKED), self.language, plain=True, long=True)
         if outcome.status != "done":
             if self.last_failure is not None and outcome.kind == "failed":
                 raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure, model=self.model)

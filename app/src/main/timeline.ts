@@ -15,7 +15,7 @@ import { mcpProposalsHTML } from "./mcp-proposal";
 import { liveAction, pastStep, workActions } from "./work-actions";
 // Shared conversation rendering and message controls.
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
-// their actions below each bubble; Raphael on the left, with his face and each public message
+// their actions below each bubble; Raphael on the left, with its face and each public message
 // in order. Receipts fold into reply detail, questions mount inline, and pending work shares the live work line.
 // Raw steps remain available to older detail callers, outside the main conversation flow.
 //
@@ -34,7 +34,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf, type TurnPart } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
+import { fileLinkStamp, linkedText, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
@@ -104,6 +104,7 @@ const REASONS: Record<string, MessageKey> = {
   network: "agent.reason.network",
   cli_stopped: "agent.reason.cliStopped",
   not_found: "agent.reason.not_found",
+  unreadable: "agent.reason.unreadable",
   blocked: "agent.reason.blocked",
   approval_required: "agent.reason.approval_required",
   memory_refused: "agent.reason.memory_refused",
@@ -111,6 +112,9 @@ const REASONS: Record<string, MessageKey> = {
   url_not_seen: "agent.reason.url_not_seen",
   gone: "agent.reason.gone",
   tool_error: "agent.reason.tool_error",
+  computer_fault: "agent.reason.computer_fault",
+  plan_excluded: "agent.reason.plan_excluded",
+  allowance_spent: "agent.reason.allowance_spent",
   protocol: "agent.reason.protocol",
   cancelled: "agent.reason.cancelled",
   not_made: "agent.reason.not_made",
@@ -316,7 +320,7 @@ export interface TimelineState {
   nowMs: number;
   expandedMessages: Set<string>;
   /**
-   * The turn whose owner message the composer holds while it is edited (owner, 2026-11-15): that bubble is not drawn, and
+   * The turn whose owner message the composer holds while it is edited: that bubble is not drawn, and
    * comes back when the edit is given up. What the turn answered stays as it was.
    */
   editingTurnId: number | null;
@@ -387,7 +391,7 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
     stepIcon(step) +
     `<span class="step-main"><span class="step-t"${tip ? ` title="${esc(tip)}"` : ""}>${esc(stepTitle(step))}</span>` +
     mediaBillHTML(step) +
-    (step.detail && isComposioTool(step.server, step.tool) ? `<span class="step-detail">${esc(composioText(step.detail, step.tool ?? "Composio", "tool"))}</span>` : "") +
+    (step.detail && isComposioTool(step.server, step.tool) ? `<span class="step-detail">${linkedText(composioText(step.detail, step.tool ?? "Composio", "tool"))}</span>` : "") +
     (step.missing ? missingHTML(step.missing) : ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
     `</span>` +
     `<span class="step-end"><span class="step-ms num">${esc(formatDuration(step.ms))}</span>` +
@@ -658,8 +662,7 @@ export function routineLineHTML(turn: AgentTurn): string {
 }
 
 /**
- * Several pictures stand side by side as small square thumbnails, in as many rows as they need, as Claude, ChatGPT and Grok
- * show the pictures a person sent (R-ATTACH-02); one picture keeps its own size (R-UI-149). Other visual media share a grid;
+ * Several pictures stand side by side as small square thumbnails, in as many rows as they need (R-ATTACH-02); one picture keeps its own size (R-UI-149). Other visual media share a grid;
  * audio and documents stack underneath.
  */
 export function filesHTML(files: readonly TurnAttachment[] | undefined): string {
@@ -691,8 +694,8 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  * (a group's or a side thread's) keeps Copy in sight instead.
  */
 export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
-  // A message that waits its turn says so and offers 立即送出 in sight, as Claude Code does: it is the exception, not a menu item
-  // (owner, 2026-11-14: 「那個立即送出不要放在點點點裡面，你要把它放在外面，跟 Claude Code 一樣，因為它這個是例外」).
+  // A message that waits its turn says so and offers 立即送出 in sight: it is the exception, not a menu item
+  //.
   const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
   return `<div class="message-actions">${waiting}` + extra +
     (actionable ? reactionControlHTML() : "") +
@@ -864,8 +867,7 @@ function mediaMissing(text: string): Missing | null {
 }
 
 /**
- * A file a member delivered in a media message. A picture is a message of its own, as a text bubble is (owner, 2026-11-14:
- * 「要讓成員傳送的圖片也可以當作一個 message bubble 這樣我才可以複製或是回復等等的」, R-UI-156): `picture` gives it the actions
+ * A file a member delivered in a media message. A picture is a message of its own, as a text bubble is (R-UI-156): `picture` gives it the actions
  * beside it, and its reaction stands on its corner. Without `picture` it is drawn as before, with no actions.
  */
 function artifactHTML(text: string, seq: number, replied = false, picture?: { actions: string; reactions?: readonly string[] }): string {
@@ -941,7 +943,7 @@ export function latestProgress(turn: AgentTurn): string | undefined {
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: composioText(plainLine(m.text), composioAction(turn)) }));
-  // The work itself is never shown (owner, 2026-11-10: 「不用有查看過程」): what a step was missing stands in sight with its
+  // The work itself is never shown: what a step was missing stands in sight with its
   // repair, live or not, and the closed body stays only for a search that finds words in it.
   const prerequisites = prerequisitesHTML(turn);
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
@@ -1178,7 +1180,7 @@ export function presenceWant(turn: AgentTurn, look: Pick<TurnLook, "revealing" |
 }
 
 /**
- * The one turn whose line carries a member's working slime in a conversation (owner, 2026-11-14: 「理論上它不管怎麼樣都只會有一個史萊姆在運作才對」).
+ * The one turn whose line carries a member's working slime in a conversation.
  * Of the turns that want one, the newest that is at work stands (a background task's line with its progress words); a face
  * that only waits stands for nobody while another turn works. `turns` run from the oldest to the newest.
  */

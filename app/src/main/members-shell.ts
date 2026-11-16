@@ -366,7 +366,7 @@ export function createMembers(host: MembersHost): MembersShell {
     if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null, unread_kind: null } : other)) };
     column.draw();
     // Raphael's thread is told read as every member's is: the core also clears it when the viewing is told, but that is
-    // sent once per visit and only after a roster read succeeded, so his boundary could outlive the visit it was shown in.
+    // sent once per visit and only after a roster read succeeded, so its boundary could outlive the visit it was shown in.
     try {
       await api.membersRead(m.id);
     } catch {

@@ -68,7 +68,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     const face = buttonFaceHTML(look());
     const levels = model?.reasoning_efforts ?? [];
     // Drawn every time the roster or the conversation changes, and almost always the same words: then nothing is touched,
-    // so the chip does not flash and its hover stays (owner, 2026-11-11).
+    // so the chip does not flash and its hover stays.
     const stamp = JSON.stringify([face.inner, face.label, effort && levels.length > 1 ? effortText(effort) : ""]);
     if (button.dataset.painted === stamp) return;
     button.dataset.painted = stamp;

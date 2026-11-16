@@ -36,7 +36,7 @@ import {
 } from "../languages";
 import { createHotkeyRecording } from "../hotkey-recording";
 import { isTopLayer, registerDismissal } from "../dismissals";
-import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, replacementNotices, splitEffort, withFavorite } from "../model-picker";
+import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, priceHTML, replacementNotices, splitEffort, withFavorite } from "../model-picker";
 import { createServices } from "../services";
 import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
@@ -90,6 +90,7 @@ import {
   paneListHTML,
   localView,
   priceTexts,
+  priceMarkup,
   retentionChoices,
   retentionOf,
   sttEngine,
@@ -351,7 +352,7 @@ export function createSettings(app: AppContext): SettingsPage {
   function paintPrices(): void {
     const texts = priceTexts(view());
     el.querySelectorAll<HTMLElement>("[data-price]").forEach((node) => {
-      node.textContent = texts[node.dataset.price ?? ""] ?? "";
+      node.innerHTML = priceMarkup(node.dataset.price ?? "", texts[node.dataset.price ?? ""] ?? "");
     });
   }
 
@@ -379,8 +380,7 @@ export function createSettings(app: AppContext): SettingsPage {
    * Every opening of Settings, on whatever tab, reads 模型與用量 again at once and unseen, so that the allowances are
    * current when they are reached: what was last known stays on the page, and a new value replaces it in place (the
    * pieces draw only what changed). No spinner, no toast; a reading that fails leaves what is shown. An opening while
-   * one is under way joins it. The allowances are asked at every opening, however soon after the last (owner,
-   * 2026-11-11, and again 2026-11-12: a reset must show at the next opening); only the catalogue and the speech models
+   * one is under way joins it. The allowances are asked at every opening, however soon after the last (a reset must show at the next opening); only the catalogue and the speech models
    * are reused soon after a good reading. No model turn is spent: `usage.allowances` asks Codex's app-server for its
    * windows, and has Claude's and Antigravity's from what their turns reported.
    */
@@ -490,7 +490,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Goes to a tab: what the tab before it had open is dropped, and the new one comes in. */
   function openPane(next: SettingsPane, tab?: ModelsTab): void {
     closeMenu();
-    // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last (owner, 2026-11-15).
+    // 模型與用量 opens at 模型 unless the way in names 用量: it never stays on what was looked at last.
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     else if (canonicalPane(next) === "models" && canonicalPane(next) !== pane) modelsTab = "models";
@@ -711,7 +711,7 @@ export function createSettings(app: AppContext): SettingsPage {
     paintPrices();
     for (const role of ["image", "video"] as const) {
       const price = body.querySelector<HTMLElement>(`[data-media-price="${role}"]`);
-      if (price) price.textContent = mediaRowPrice(view(), role);
+      if (price) price.innerHTML = priceHTML(mediaRowPrice(view(), role));
     }
     for (const [role, picker] of pickers) picker.update(lookFor(role));
   }
@@ -1117,6 +1117,20 @@ export function createSettings(app: AppContext): SettingsPage {
 
     const act = target.closest<HTMLElement>("[data-act]")?.dataset.act;
     switch (act) {
+      case "write-folder-add": void api.pickOutputFolder().then(path => {
+        if (path === null) return;
+        const folders = brain?.owner_write_folders ?? [];
+        if (!folders.includes(path)) return changeBrain("owner_write_folders", [...folders, path]);
+      }).catch(error => toaster.info(describeError(error))); break;
+      case "write-folder-menu": {
+        const anchor = target.closest<HTMLElement>("[data-folder-index]")!, index = Number(anchor.dataset.folderIndex);
+        const folders = brain?.owner_write_folders ?? [], folder = folders[index];
+        if (folder === undefined) break;
+        const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+        openConfirmMenu(anchor, { label: t("writeFolders.remove", { p0: name }), ask: t("settings.keyRemoveConfirm"),
+          run: () => void changeBrain("owner_write_folders", (brain?.owner_write_folders ?? []).filter(item => item !== folder)) });
+        break;
+      }
       case "output-pick": void api.pickOutputFolder().then(path => { if (path !== null) return changeBrain("owner_output_folder", path); }).catch(error => toaster.info(describeError(error))); break;
       case "update-check": void checkUpdate(); break;
       case "update-install": void checkUpdate("install"); break;
@@ -1300,7 +1314,7 @@ export function createSettings(app: AppContext): SettingsPage {
         // After the first view, and one read at a time with the other optional reads (startup-reads.ts).
         const warm = (): void => {
           if (!(visible && pane === "connections")) void optionalRead(() => connections.load());
-          // The models' usage too, once after launch (owner, 2026-11-15: 「在打開 app 的時候就跑一次，之後才是每次設定的時候再跑一次」).
+          // The models' usage too, once after launch.
           if (!visible) void optionalRead(() => refreshInBackground());
         };
         if (typeof requestIdleCallback === "function") requestIdleCallback(warm, { timeout: 3000 }); else setTimeout(warm, 1500);
@@ -1323,8 +1337,7 @@ export function createSettings(app: AppContext): SettingsPage {
       limitError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
-      // Every opening starts afresh: 模型與用量 at 模型, 用量 only when the way in asks for it (owner, 2026-11-15:
-      // 「每次進到設定的時候，它的狀態要重置 他不會跳到用量 而是在最初模型的地方才對」).
+      // Every opening starts afresh: 模型與用量 at 模型, 用量 only when the way in asks for it.
       modelsTab = open === "usage" ? "usage" : "models";
       connections.reset();
       rules.reset();

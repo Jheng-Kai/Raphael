@@ -254,7 +254,7 @@ fn reveal(window: &tauri::WebviewWindow) {
 }
 
 /// Take the window away once the page has faded its pill, unless a new notice came meanwhile. A window with nothing
-/// to say is not on the screen at all: no bar, no title, nothing to click through (owner, 2026-11-15: after Undo, a
+/// to say is not on the screen at all: no bar, no title, nothing to click through (after Undo, a
 /// pale bar with the English title stayed).
 fn leave(app: &AppHandle) {
     let app = app.clone();
@@ -428,7 +428,7 @@ mod tests {
     }
     #[test]
     fn the_window_is_there_only_while_a_notice_is_and_has_no_title() {
-        // R-LEARN-WIN-02 (owner, 2026-11-15): after Undo a pale bar with the English title stayed on the screen. The
+        // R-LEARN-WIN-02: after Undo a pale bar with the English title stayed on the screen. The
         // window is made hidden and without a title, shown once a notice is placed, and taken away after its fade.
         let source = include_str!("learned.rs").replace("\r\n", "\n");
         let production = source.split("#[cfg(test)]").next().unwrap();

@@ -20,7 +20,7 @@ export function firstBelow<T extends Element>(nodes: readonly T[], y: number): T
 
 interface ReadingAnchor {
   node?: HTMLElement; scrollTop: number; queued: boolean; correction: boolean; follows: boolean;
-  /** The owner scrolled up himself: following waits until he is back at the very bottom. */
+  /** The owner scrolled up on their own: following waits until they are back at the very bottom. */
   held: boolean;
   /** The thread's height when `scrollTop` was last measured: a move up it explains (the end clamped) is not the owner's. */
   height: number;
@@ -29,7 +29,7 @@ interface ReadingAnchor {
 }
 const anchors = new WeakMap<HTMLElement, ReadingAnchor>();
 const ANCHOR_CONTENT = ".rich-block, .message-text, .message-actions";
-/** How far above its bottom a thread still follows the newest turn, unless the owner scrolled up himself. */
+/** How far above its bottom a thread still follows the newest turn, unless the owner scrolled up on their own. */
 const NEAR_BOTTOM_PX = 80;
 /** The very bottom, where a thread the owner scrolled up follows again. */
 const AT_BOTTOM_PX = 2;
@@ -49,7 +49,7 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
   root.addEventListener("conversation-near-bottom", event => {
     if (!observed || root.closest('[hidden]')) return;
     const near = (event as CustomEvent<boolean>).detail;
-    // The place the owner scrolled to is his until he is back at the bottom (selectAnchor), however near it is.
+    // The place the owner scrolled to is theirs until they are back at the bottom (selectAnchor), however near it is.
     if (near && state.held) return;
     state.follows = near;
     if (state.follows) { state.node = undefined; state.position = undefined; }
@@ -62,7 +62,7 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
     if (state.scrollTop !== root.scrollTop) schedule();
   }, { passive: true });
   // The owner's own scrolling up lets go of the bottom at once, before the scroll it starts has moved anything, so nothing that
-  // grows meanwhile pulls him back (R-FOLLOW-01). A thread that cannot scroll up is not let go: no scroll would come to take it again.
+  // grows meanwhile pulls them back (R-FOLLOW-01). A thread that cannot scroll up is not let go: no scroll would come to take it again.
   const letGo = (): void => {
     if (!state.follows) return;
     const top = root.scrollTop;
@@ -86,7 +86,7 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
   // One place keeps a following thread at its bottom, whatever changed its height or its scroller's: words drawn, a picture
   // or a card that loads late, the work line or the slime going, the composer growing or shrinking under it. A ResizeObserver is
   // told after layout and before paint, so the correction lands in the frame of the change and no frame is seen above the
-  // bottom (owner, 2026-11-14: 「成員回覆的時候，有時候畫面會從最底部往上跳一點」). A clamped write, no geometry read.
+  // bottom. A clamped write, no geometry read.
   if (typeof ResizeObserver === "function") {
     const stick = new ResizeObserver(() => {
       if (state.follows && !Number(root.dataset.windowLater) && root.isConnected && !root.closest("[hidden]")) root.scrollTop = 1e9;
@@ -102,8 +102,8 @@ function selectAnchor(root: HTMLElement, state: ReadingAnchor): void {
   const was = state.scrollTop, before = state.height;
   state.scrollTop = root.scrollTop; state.height = root.scrollHeight;
   const gap = state.height - state.scrollTop - root.clientHeight, later = Number(root.dataset.windowLater) > 0;
-  // A thread the owner scrolled up follows again only at its very bottom, and not while his scroll is still going up. A move
-  // up that a shorter thread explains (its end clamped, another room drawn in its place) is the thread's, not his.
+  // A thread the owner scrolled up follows again only at its very bottom, and not while their scroll is still going up. A move
+  // up that a shorter thread explains (its end clamped, another room drawn in its place) is the thread's, not theirs.
   const up = was - state.scrollTop;
   if (state.held) state.held = later || gap > AT_BOTTOM_PX || (up > 0.5 && before - state.height < up - 0.5);
   state.follows = !state.held && !later && gap < NEAR_BOTTOM_PX;

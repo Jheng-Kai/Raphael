@@ -105,7 +105,7 @@ def cut_note(found: dict, where: str | None = None) -> str:
             "or ask the owner.]")
 
 
-# Reading a text file in lines, as Claude Code's Read tool does: numbered like `cat -n`, 2000 lines a call, a longer
+# Reading a text file in lines: numbered like `cat -n`, 2000 lines a call, a longer
 # line cut, and the line to go on from when there is more.
 LINE_LIMIT = 2000
 LINE_CHARS = 2000
@@ -159,7 +159,7 @@ def read_window(arguments: dict) -> dict | None:
 
 def read_lines(attachment: Attachment, *, number: int | None = None, offset: int | None = None,
                limit: int | None = None) -> dict | None:
-    """A text file as Claude Code's Read gives one: the lines from line `offset` (1-based, default 1), up to `limit` of
+    """A text file in lines: the lines from line `offset` (1-based, default 1), up to `limit` of
     them (default 2000), each numbered like `cat -n` (the number is not part of the line), a line over 2000
     characters cut with a note of what was left (base64 data inside one is first shown as a marker), and when there is
     more, `next_offset` and a note naming the call that reads it. None for a file that is not text."""

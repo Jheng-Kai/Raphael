@@ -16,7 +16,7 @@ const STEPS = ["card.google.step1", "card.google.step2", "card.google.step3", "c
 export const asksGoogleClient = (card: ConnectorCard): boolean =>
   card.needs === "own_google" && ["pending", "failed", "cancelled"].includes(card.state) && !card.google?.configured;
 
-/** Text the owner copies into Google Cloud: a read-only field with its copy button beside the name. */
+/** Text to copy into Google Cloud: a read-only field with its copy button beside the name. */
 function copyRow(label: string, value: string, lines: number): string {
   const field = lines > 1
     ? `<textarea class="field code" readonly rows="${lines}" spellcheck="false" aria-label="${esc(label)}">${esc(value)}</textarea>`

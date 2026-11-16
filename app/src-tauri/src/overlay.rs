@@ -149,7 +149,7 @@ pub enum OverlayEvent {
     /// The page reports this revision after applying the preceding scene.
     Mouse { revision: u64 },
     /// The emblem appears (the appear animation) and shows `mode`. A `line` (sent only when there
-    /// is one) is Raphael's greeting to a question, written beside the emblem while he listens; a
+    /// is one) is Raphael's greeting to a question, written beside the emblem while it listens; a
     /// dictation shows the emblem alone.
     Show {
         mode: Mode,
@@ -212,15 +212,15 @@ pub trait OverlayApi: Send + Sync + 'static {
     /// The emblem appears and shows `mode`. The window is put back in its corner first (the
     /// taskbar or the screen's scale may have changed).
     fn show(&self, mode: Mode);
-    /// Raphael listens for a question: like `show(Mode::Listening)`, with `line` (his greeting, in
-    /// the interface language) beside the emblem until he has heard it. It also greets on the
+    /// Raphael listens for a question: like `show(Mode::Listening)`, with `line` (its greeting, in
+    /// the interface language) beside the emblem until it has heard it. It also greets on the
     /// emblem of a dictation that the question took over. No default: a wrapper that forgot it
     /// would show a question as a dictation.
     fn greet(&self, line: &str);
     /// Changes what the visible emblem shows.
     fn set_mode(&self, mode: Mode);
     /// The emblem thinks about a question: [`Mode::Thinking`] without the progress caption of a
-    /// dictation. In its place the page changes the `lines` (his reports on the analysis, in the
+    /// dictation. In its place the page changes the `lines` (its reports on the analysis, in the
     /// interface language) every second or so, until the answer or something else replaces them.
     /// No default, for the same reason as [`Self::greet`].
     fn think_quietly(&self, lines: &[&str]);
@@ -846,7 +846,7 @@ impl OverlayApi for Overlay {
 }
 
 /// The overlay page calls this once and receives all its events on `channel`. Only the overlay
-/// page may: the events carry Raphael's answers and his questions.
+/// page may: the events carry Raphael's answers and its questions.
 #[tauri::command]
 pub fn overlay_subscribe(
     app: AppHandle,

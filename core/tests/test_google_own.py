@@ -55,7 +55,7 @@ async def test_the_card_shows_the_steps_data_the_fields_and_asks_nothing_it_keep
     view = rig.cards.view(card)
     assert (view["needs"], view["state"], view["error"]) == ("own_google", "pending", None)
     assert [(f["name"], f["secret"], f["required"]) for f in view["fields"]] == [("client_id", False, True), ("client_secret", True, True)]
-    # The exact address and scopes the owner copies into Google Cloud.
+    # The exact address and scopes to copy into Google Cloud.
     assert view["google"] == {"redirect": LOOPBACK, "scopes": scopes_for("write", "write"), "configured": False}
     assert LOOPBACK == "http://127.0.0.1"
     guide = await rig.cards.setup_guide(OWN_GOOGLE)

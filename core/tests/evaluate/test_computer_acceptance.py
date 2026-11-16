@@ -325,7 +325,7 @@ async def test_driver_check_makes_the_products_own_connection_with_arguments_the
 
 async def test_driver_check_fails_when_the_driver_refuses_a_set_up_argument(tmp_path, monkeypatch):
     run, target = driver_run(tmp_path, monkeypatch)
-    # What the product sent until 2026-11-12: the real driver answered "unknown argument cursor_id".
+    # What the product once sent: the real driver answered "unknown argument cursor_id".
     monkeypatch.setitem(MemoryDriver.accepted, "set_agent_cursor_enabled", {"session"})
     with pytest.raises(vm.VmError, match="^driver_configuration_failed$"):
         await run.driver(target)
@@ -600,10 +600,41 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11", "12"]
 
 
+def tiny_build(context, args, steps):
+    """What the engine makes of `tiny_dockerfile`'s folder: the image (its id from its files and labels, its labels from
+    the LABEL line) and BuildKit's plain progress, where a step whose files it has built before is CACHED."""
+    folder = acceptance.Path(context)
+    text = (folder / "Dockerfile").read_text(encoding="utf-8")
+    unchanged, layer = ((folder / name).read_text(encoding="utf-8") for name in ("unchanged.txt", "layer.txt"))
+    label = next((line[len("LABEL "):] for line in text.splitlines() if line.startswith("LABEL ")), "")
+    labels = dict(part.split("=", 1) for part in label.split()) if label else {}
+    labels = {key: value.strip('"') for key, value in labels.items()}
+    log = ["#1 [internal] load build definition from Dockerfile", "#1 DONE 0.0s"]
+    if "--cache-from" in args:
+        log += [f"#2 importing cache manifest from {args[args.index('--cache-from') + 1]}", "#2 DONE 0.0s"]
+    for number, (instruction, key) in enumerate((("COPY unchanged.txt /unchanged.txt", unchanged),
+                                                 ("COPY layer.txt /layer.txt", unchanged + layer)), start=3):
+        log += [f"#{number} [{number - 2}/2] {instruction}", f"#{number} CACHED" if key in steps else f"#{number} DONE 0.0s"]
+        steps.add(key)
+    ident = "sha256:" + hashlib.sha256((text + unchanged + layer).encode()).hexdigest()
+    return {"Id": ident, "Config": {"Labels": labels}, "inline": "BUILDKIT_INLINE_CACHE=1" in args}, "\n".join(log)
+
+
 class FakeDocker:
     def __init__(self, *, engine="linux", build_failure=False):
         self.engine, self.build_failure = engine, build_failure
         self.calls, self.containers, self.images = [], {}, {}
+        self.steps = set()
+
+    @staticmethod
+    def identifier(name, raw):
+        return raw.get("Id") or hashlib.sha256(name.encode()).hexdigest()
+
+    def tagged(self, ident):
+        return [tag for tag, image in self.images.items() if image["Id"] == ident]
+
+    def used(self):
+        return {self.identifier(name, raw): raw.get("Image", "sha256:" + "0" * 64) for name, raw in self.containers.items()}
 
     async def __call__(self, args, **kwargs):
         self.calls.append(list(args))
@@ -613,12 +644,50 @@ class FakeDocker:
             if self.build_failure:
                 return vm.Result(1, stderr="synthetic build failure")
             tag = args[args.index("--tag") + 1]
+            if args[-1] != str(acceptance.IMAGE_FOLDER):
+                self.images[tag], log = tiny_build(args[-1], args, self.steps)
+                return vm.Result(0, "", log)
             self.images[tag] = {"Id": "new-image", "Config": {"Labels": vm.IMAGE_LABELS}}
             return vm.Result(0)
         if args[:2] == ["image", "inspect"]:
-            return vm.Result(0, json.dumps([self.images[args[2]]])) if args[2] in self.images else vm.Result(1)
+            found = [{**self.images[name], "RepoTags": self.tagged(self.images[name]["Id"])} for name in args[2:] if name in self.images]
+            return vm.Result(0, json.dumps(found)) if len(found) == len(args[2:]) else vm.Result(1, json.dumps(found))
         if args[:2] == ["image", "rm"]:
+            ident = self.images[args[2]]["Id"]
+            if ident in self.used().values() and len(self.tagged(ident)) == 1:
+                return vm.Result(1, stderr="conflict: unable to remove repository reference")
             self.images.pop(args[2])
+            return vm.Result(0)
+        if args[:2] == ["image", "ls"]:
+            filters = [args[index + 1] for index, part in enumerate(args) if part == "--filter"]
+            label = next((item.removeprefix("label=") for item in filters if item.startswith("label=")), None)
+            reference = next((item.removeprefix("reference=") for item in filters if item.startswith("reference=")), None)
+            shown = [(image["Id"], tag) for tag, image in self.images.items()
+                     if (label is None or image["Config"]["Labels"].get(label.split("=", 1)[0]) == label.split("=", 1)[1])
+                     and (reference is None or tag.rsplit(":", 1)[0] == reference)]
+            return vm.Result(0, "".join(f"{ident} {tag}\n" if "{{.ID}}" in args[-1] else f"{tag}\n" for ident, tag in shown))
+        if args == ["ps", "-a", "-q", "--no-trunc"]:
+            return vm.Result(0, "".join(f"{ident}\n" for ident in self.used()))
+        if args[:4] == ["container", "inspect", "--format", "{{.Image}}"]:
+            used = self.used()
+            return vm.Result(0, "".join(f"{used[ident]}\n" for ident in args[4:])) if all(ident in used for ident in args[4:]) else vm.Result(1)
+        if args[:2] == ["create", "--name"]:
+            key, value = args[4].split("=", 1)
+            self.containers[args[2]] = {"Name": "/" + args[2], "Id": hashlib.sha256(args[2].encode()).hexdigest(),
+                                        "Image": self.images[args[5]]["Id"], "Config": {"Labels": {key: value}}}
+            return vm.Result(0)
+        if args[:2] == ["save", "-o"]:
+            import io
+            import tarfile
+            image = self.images[args[3]]
+            config = {"config": {"Labels": image["Config"]["Labels"]}, **({"moby.buildkit.cache.v0": "c3ludGhldGlj"} if image.get("inline") else {})}
+            with tarfile.open(args[2], "w") as tar:
+                for name, data in (("manifest.json", [{"Config": "blobs/sha256/config", "RepoTags": [args[3]], "Layers": []}]),
+                                   ("blobs/sha256/config", config)):
+                    raw = json.dumps(data).encode()
+                    member = tarfile.TarInfo(name)
+                    member.size = len(raw)
+                    tar.addfile(member, io.BytesIO(raw))
             return vm.Result(0)
         if args[:2] == ["container", "inspect"]:
             return vm.Result(0, json.dumps([self.containers[args[2]]])) if args[2] in self.containers else vm.Result(1)
@@ -795,24 +864,30 @@ async def test_run_uses_private_tag_and_owner_and_cleans_even_after_failure(keep
     assert foreign in runner.containers
     assert len({item[2] for item in observed}) == 1
     assert all(name.startswith(f"raphael-computer-{owner}-") for _, name, owner in observed)
-    assert [args for args in runner.calls if args[0] == "build"] == [["build", "--tag", run.tag, str(acceptance.IMAGE_FOLDER)]]
+    # The computer's own image is built once, as before; the image update check builds only its throwaway image.
+    assert [args for args in runner.calls if args[0] == "build" and "raphael-acceptance-" not in args[-2]] == [["build", "--tag", run.tag, str(acceptance.IMAGE_FOLDER)]]
     assert all(args[-1] == run.tag for args in runner.calls if args[0] == "run")
     assert not any("prune" in args or args[0] == "pull" for args in runner.calls)
     report = json.loads((tmp_path / "report/computer-acceptance.json").read_text(encoding="utf-8"))
     assert all(set(row) == {"name", "result", "detail", "seconds"} for row in report["checks"])
     for layer in ("4", "5", "6", "7", "8", "9"):
         assert any(row["result"] == "skipped" and row["name"] == f"previous layer {layer}" for row in report["checks"])
+    assert [row["result"] for row in report["checks"] if row["name"].startswith("image update")] == ["ok"] * (6 if keep else 7)
     assert " ok, " in capsys.readouterr().out
+    # Only the image update check's own throwaway tags are ever removed besides the run's image.
+    removals = [args[2] for args in runner.calls if args[:2] == ["image", "rm"]]
+    assert all(tag == run.tag or tag.startswith("raphael-acceptance-") for tag in removals)
+    assert not any(tag.startswith("raphael-acceptance-") for tag in runner.images if not keep)
     if keep:
         assert run.root.exists() and run.tag in runner.images
-        assert len(runner.containers) == 3
-        assert not any(args[0] in ("rm", "stop") or args[:2] == ["image", "rm"] for args in runner.calls)
+        assert len(runner.containers) == 4  # with the image update check's stopped container
+        assert not any(args[0] in ("rm", "stop") for args in runner.calls) and run.tag not in removals
         # Test-owned temporary resources are removed without invoking acceptance cleanup.
         acceptance.shutil.rmtree(run.root)
     else:
         assert not run.root.exists() and run.tag not in runner.images
         assert set(runner.containers) == {foreign}
-        assert [args for args in runner.calls if args[:2] == ["image", "rm"]] == [["image", "rm", run.tag]]
+        assert [tag for tag in removals if not tag.startswith("raphael-acceptance-")] == [run.tag]
 
 
 @pytest.mark.parametrize("engine", ["", "windows"])
@@ -1653,7 +1728,7 @@ class PanelAcceptance:
 
 
 async def test_a_panel_that_loads_late_is_waited_for_and_one_that_stays_empty_fails_naming_what_it_holds(monkeypatch):
-    # Seat 2's panel was seen 12 px wide, holding nothing, for twenty seconds and more (2026-11-13).
+    # Seat 2's panel was seen 12 px wide, holding nothing, for twenty seconds and more.
     target = vm.Target("k", "n", None, None, screen=1, screens=4, container="shared")
     ids = {i: [*map(str, range(i * 3 - 2, i * 3 + 1)), str(18 + i)] for i in range(1, 5)}
     sleeps = []
@@ -1682,3 +1757,103 @@ async def test_a_panel_that_loads_late_is_waited_for_and_one_that_stays_empty_fa
     wrong = PanelAcceptance([[146] * 4], {**ids, 2: ["4", "5", "6"]})
     with pytest.raises(AssertionError, match="its own three launchers and window list"):
         await wrong.quiet(target)
+
+
+def test_the_cached_steps_are_read_from_buildkits_plain_progress():
+    log = "\n".join(["#1 [internal] load build definition from Dockerfile", "#1 transferring dockerfile: 210B done", "#1 DONE 0.0s",
+                     "#4 importing cache manifest from raphael-acceptance-0/cua-local-vm:driver-0.37.0-v12", "#4 DONE 0.1s",
+                     "#5 [1/2] COPY unchanged.txt /unchanged.txt", "#5 CACHED", "", "#6 [2/2] COPY layer.txt /layer.txt",
+                     "#6 DONE 0.0s", "#7 exporting to image", "#7 CACHED"])
+    assert acceptance.cached_steps(log) == {"COPY unchanged.txt /unchanged.txt"}
+    assert acceptance.cached_steps("") == set()
+
+
+def test_the_inline_cache_record_is_read_from_the_saved_configuration_alone(tmp_path):
+    engine = FakeDocker()
+    for tag, inline in (("with:record", True), ("without:record", False)):
+        engine.images[tag] = {"Id": "sha256:" + "1" * 64, "Config": {"Labels": {}}, "inline": inline}
+        asyncio.run(engine(["save", "-o", str(tmp_path / f"{inline}.tar"), tag]))
+    assert acceptance.inline_cache_record(tmp_path / "True.tar") is True
+    assert acceptance.inline_cache_record(tmp_path / "False.tar") is False
+
+
+async def test_the_image_update_commands_pass_only_while_it_runs_and_only_for_its_own_repository(tmp_path):
+    runner = FakeDocker()
+    guard = acceptance.IsolatedDocker(runner, "owner", "raphael-acceptance/cua-local-vm:test")
+    repository, folder = "raphael-acceptance-0a/cua-local-vm", (tmp_path / "image-update").resolve()
+    folder.mkdir()
+    ours, theirs = f"{repository}:driver-0.37.0-v12", "raphael/cua-local-vm:driver-0.37.0-v12"
+    allowed = [acceptance.build_command(ours, folder, f"{repository}:driver-0.37.0-v11"), acceptance.build_command(ours, folder),
+               ["image", "ls", "--filter", f"label={vm.LABEL}=1", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"],
+               ["image", "inspect", ours, f"{repository}:unlabelled"], ["image", "rm", ours], ["ps", "-a", "-q", "--no-trunc"],
+               ["container", "inspect", "--format", "{{.Image}}", "a" * 64], ["save", "-o", str(folder / "x.tar"), ours],
+               ["create", "--name", guard.prefix + "image-update-0a", "--label", guard.label, ours, "/unchanged.txt"]]
+    refused = [acceptance.build_command(theirs, folder), acceptance.build_command(ours, tmp_path),
+               acceptance.build_command(ours, folder, theirs), ["image", "rm", theirs], ["image", "rm", ours, theirs],
+               ["image", "inspect", ours, theirs], ["image", "rm", "--force", ours],
+               ["image", "ls", "--filter", f"label={vm.LABEL}=1", "--format", "{{.Repository}}:{{.Tag}}"],
+               ["container", "inspect", "--format", "{{.Config}}", "a" * 64], ["save", "-o", str(tmp_path / "x.tar"), ours],
+               ["create", "--name", "someone-else", "--label", guard.label, ours, "/unchanged.txt"], ["image", "prune", "-f"]]
+    for args in allowed + refused:
+        assert guard.image_update_command(args) is False, args  # nothing passes before the check begins
+    guard.update_repository, guard.update_folder = repository, folder
+    for args in allowed:
+        assert guard.image_update_command(args) is True, args
+    for args in refused:
+        assert guard.image_update_command(args) is False, args
+        with pytest.raises(AssertionError):
+            await guard.authorize(args)
+
+
+async def test_the_image_update_check_never_touches_an_image_outside_its_own_repository(tmp_path, monkeypatch):
+    runner = FakeDocker()
+    # The owner's own computer images, of the very repository and label the product cleans, and someone else's.
+    owners = {f"raphael/cua-local-vm:driver-0.37.0-v{layer}": {"Id": "sha256:" + str(layer % 10) * 64,
+              "Config": {"Labels": {**vm.IMAGE_LABELS, f"{vm.LABEL}.layer": str(layer)}}} for layer in (9, 11, 12)}
+    runner.images.update({**owners, "someone/else:latest": {"Id": "sha256:" + "f" * 64, "Config": {"Labels": {}}}})
+    before = {tag: dict(image) for tag, image in runner.images.items()}
+    run = acceptance.Acceptance(runner)
+    async def computer(count, largest):
+        run.record(f"{count} screens fake", "ok", "fake computer only")
+    async def no_previous():
+        pass  # the owner's layer images here are for this check alone: no previous-layer computer is made from them
+    monkeypatch.setattr(run, "computer", computer)
+    monkeypatch.setattr(run, "previous", no_previous)
+    original = vm.IMAGE, vm.REPOSITORY
+    assert await run.run([1], shared=False) == 0
+    rows = {row["name"]: row for row in run.results if row["name"].startswith("image update")}
+    assert list(rows) == ["image update fixtures", "image update record", "image update cache source",
+                          "image update press during the build", "image update cached steps", "image update old tags",
+                          "image update cleanup"]
+    assert all(row["result"] == "ok" for row in rows.values()), rows
+    assert "answered building with update" in rows["image update press during the build"]["detail"]
+    assert "names the import" in rows["image update cached steps"]["detail"]
+    removed = [args[2] for args in runner.calls if args[:2] == ["image", "rm"]]
+    previous = f"-v{int(vm.IMAGE_LABELS[vm.LABEL + '.layer']) - 1}"
+    assert [tag for tag in removed if tag.endswith(previous)] == [next(tag for tag in removed if tag.startswith("raphael-acceptance-"))]
+    assert all(tag == run.tag or tag.startswith("raphael-acceptance-") for tag in removed) and not set(removed) & set(owners)
+    assert {tag: image for tag, image in runner.images.items()} == before
+    assert (vm.IMAGE, vm.REPOSITORY) == original
+    assert not run.root.exists()
+
+
+async def test_a_failed_image_update_check_skips_the_rest_and_still_tidies_and_restores(tmp_path, monkeypatch):
+    runner = FakeDocker()
+
+    async def no_record(args, **kwargs):
+        if args[:2] == ["save", "-o"]:
+            runner.images[args[3]]["inline"] = False  # an engine whose build wrote no cache record
+        return await runner(args, **kwargs)
+
+    run = acceptance.Acceptance(no_record)
+    async def computer(count, largest):
+        run.record(f"{count} screens fake", "ok", "fake computer only")
+    monkeypatch.setattr(run, "computer", computer)
+    original = vm.IMAGE, vm.REPOSITORY
+    assert await run.run([1], shared=False) == 1
+    results = {row["name"]: row["result"] for row in run.results if row["name"].startswith("image update")}
+    assert results == {"image update fixtures": "ok", "image update record": "failed", "image update cache source": "skipped",
+                       "image update press during the build": "skipped", "image update cached steps": "skipped",
+                       "image update old tags": "skipped", "image update cleanup": "ok"}
+    assert not any(tag.startswith("raphael-acceptance-") for tag in runner.images) and not runner.containers
+    assert (vm.IMAGE, vm.REPOSITORY) == original

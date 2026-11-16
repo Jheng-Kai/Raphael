@@ -1,5 +1,5 @@
 """Routine runs take two places, behind the owner's own work, and a subscription CLI that has just refused its sign-in is not
-run into again by the routines that follow (owner's real use, 2026-11-01 to 2026-11-14: five routines due at 07:00 started
+run into again by the routines that follow (five routines due at 07:00 once started
 together, and eight turns failed for an expired Claude sign-in in three days, three of them at 07:00).
 
 Nothing here starts a CLI, signs in or reads a credential."""

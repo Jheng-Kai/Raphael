@@ -1,6 +1,6 @@
 """The waits between a failed model call and the next: jittered, as long as the provider asks, and told once.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
+Adapted from third-party code under MIT, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 import threading
@@ -145,7 +145,7 @@ class TestOutage:
         assert outage.wait(retry_after=45.0) == 45.0
         assert outage.wait() < 4
 
-    def test_the_owner_is_told_once_of_the_first_wait_he_would_feel(self):
+    def test_the_owner_is_told_once_of_the_first_wait_they_would_feel(self):
         outage = Outage((1.0, 3.0), (30.0,), patient_ok=True)
         told = []
         for _ in range(6):

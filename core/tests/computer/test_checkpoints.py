@@ -49,7 +49,7 @@ def test_a_read_only_operation_leaves_no_checkpoint_and_changes_can_be_reviewed_
 
 
 def test_each_changed_file_says_whether_it_is_new_gone_or_changed_and_counts_only_lines_it_could_compare(tmp_path):
-    # Owner, 2026-11-14: a card said 53 files with +0 -0. A picture or a file past the twentieth has no text to count, and is
+    # A card once said 53 files with +0 -0. A picture or a file past the twentieth has no text to count, and is
     # reported as new, gone or changed with no counts at all, never as zero lines.
     root = tmp_path / "workspace"; root.mkdir()
     (root / "edit.txt").write_text("one\ntwo\nthree\n")
@@ -226,7 +226,7 @@ def test_background_work_has_no_pending_state_and_later_changes_are_kept(tmp_pat
 
 
 def chrome_profile(base, files=12):
-    """What a Chrome user-data directory holds after a first run, as the owner's card showed it (2026-11-14)."""
+    """What a Chrome user-data directory holds after a first run, as the card showed it."""
     (base / "Default" / "Extensions" / "abc" / "1.0" / "_metadata").mkdir(parents=True)
     (base / "OptGuideOnDeviceModel" / "2025.1").mkdir(parents=True)
     (base / "Local State").write_text("{}")
@@ -239,7 +239,7 @@ def chrome_profile(base, files=12):
 
 
 def test_a_turn_whose_only_changes_are_a_browsers_own_files_leaves_no_work_card(tmp_path):
-    # Owner, 2026-11-14: a member read an email and its card said "Added 110 files", all of them its Chrome's profile.
+    # A member read an email and its card once said "Added 110 files", all of them its Chrome's profile.
     root = tmp_path / "workspace"; root.mkdir()
     (root / "doc.odt").write_text("kept")
     store = CheckpointStore(tmp_path / "archive", [root])
@@ -406,7 +406,7 @@ def test_the_checkpoints_marker_for_a_carried_folder_is_the_one_the_carry_over_w
 
 
 def tool_leftovers(root):
-    """What tools leave in a workspace while a member works, as the owner's card showed it (2026-11-14: thirty files named by bare
+    """What tools leave in a workspace while a member works, as the owner's card showed it (thirty files named by bare
     hashes, the content store of `npm i --cache /home/cua/workspace/.npm-cache`), with other stores, caches and temporary files."""
     digest = "acc20f9519bca6400afa6a868abca8258e7bc15ef7d0b1e2" * 2
     leftovers = [

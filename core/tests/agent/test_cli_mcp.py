@@ -85,3 +85,44 @@ async def test_a_call_waiting_at_an_owner_question_does_not_hold_the_server_open
             await asyncio.wait_for(waiting.wait(), 5)
         call.cancel()
     assert server.closed and time.monotonic() - began < 10
+
+
+async def test_a_cli_started_again_in_the_same_turn_makes_calls_of_its_own(monkeypatch, tmp_path):
+    # Each CLI process counts its requests from 1, and a turn keeps one server for all its runs: the completion check, a
+    # changed tool list or a recovery starts the CLI again. Both runs' first call came in as request 1, and the second's
+    # result was recorded over the first call's (owner's data: a command's arguments beside another command's output).
+    from types import SimpleNamespace
+    from raphael_core.agent.cli import loop as cli
+    from raphael_core.agent.cli.drivers import Event
+    from raphael_core.background.cli import RoomCliSessions
+    identifiers, runs = [], []
+
+    class Driver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, **kwargs):
+            runs.append(kwargs)
+            body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "notes_look", "arguments": {}}}
+            async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}) as client:
+                assert (await client.post(kwargs["endpoint"], json=body)).json()["result"]["isError"] is False
+            yield Event("error", "rate_limit") if len(runs) == 1 else Event("final", "Read twice.")
+
+        async def interrupt(self):
+            pass
+
+    async def execute(identifier, name, args):
+        identifiers.append(identifier)
+        return ToolOutcome(True, content="ok")
+
+    monkeypatch.setattr(cli, "Driver", Driver)
+    monkeypatch.setattr(cli, "RATE_LIMIT_WAITS_S", (0.0,))
+    tools = [{"type": "function", "function": {"name": "notes_look", "description": "Look.", "parameters": {"type": "object"}}}]
+    loop = cli.CliLoop(
+        brains=SimpleNamespace(environ={}, home=tmp_path, command=lambda name: ["fake"], available=lambda *args, **kwargs: True),
+        sessions=RoomCliSessions(), member_id=5, conversation_id=7, model="cli:codex:fake",
+        ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True, system="", user="Look twice.",
+        tools=tools, progress=lambda text: None, thinking=lambda text: None, event=lambda text: None, execute=execute)
+    assert (await loop.run()).final == "Read twice."
+    assert len(runs) == 2 and runs[0]["endpoint"] == runs[1]["endpoint"]
+    assert len(identifiers) == 2 and len(set(identifiers)) == 2

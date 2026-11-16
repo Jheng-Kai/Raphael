@@ -181,14 +181,14 @@ async def test_requests_and_history_reject_an_unknown_member(setup):
 
 
 async def test_a_member_has_no_tool_for_the_owners_desktop(setup, client):
-    # R-PC-01: the owner's PC is a quick question's alone, so a member's conversation neither lists nor finds it.
+    # R-PC-01: the owner's screen is a quick question's alone, so a member's conversation neither lists nor finds its desktop.
     rig, team = setup
     one = member(team)
     client.chats += [chat("先找工具。", ("find_tools", {"query": "operate the computer"})), live_said("我沒有可以操作電腦的工具。")]
     result = await typed(rig, "打開小算盤算 12 乘 34", one.id)
     assert (result["prefix"], result["text"]) == ("", "我沒有可以操作電腦的工具。")
     listed = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    assert not listed & {"open", "computer", "lock_screen", "local__local_exec"} and {"find_tools", "use_tool"} <= listed
+    assert not listed & {"open", "computer", "lock_screen"} and {"find_tools", "use_tool"} <= listed
     assert '"name": "computer"' not in client.chat_calls[1]["messages"][-1]["content"]
     assert rig.actions.calls == []
 
@@ -299,7 +299,7 @@ async def test_member_exchange_returns_to_the_main_conversation_that_asked(setup
     assert AgentHistory(conn).list(member_id=one.id) == []
     [theirs] = [AgentHistory(conn).get(r[0]) for r in conn.execute("SELECT id FROM agent_turns WHERE member_id=? AND scope='exchange'", (one.id,))]
     assert theirs.conversation_id == rig.service.conversations.main(one.id)
-    # Both sides keep the exchange (owner, 2026-11-14): the asked member's page holds the question it was asked.
+    # Both sides keep the exchange: the asked member's page holds the question it was asked.
     [listed] = (await rig.call("agent.history.list", {"member_id": one.id, "conversation_id": theirs.conversation_id}))["turns"]
     assert (listed["id"], listed["scope"], listed["peer_id"]) == (theirs.id, "exchange", 0)
     assert theirs.source_turn_id == selected[0]['id']
@@ -395,7 +395,7 @@ async def test_voice_picked_members_share_one_proposal(setup, client):
     assert len(team.members.store.members()) == 3
 
 
-async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):
+async def test_a_member_asks_raphael_who_answers_as_itself(setup, client, conn):
     rig, team = setup
     one = member(team)
     member(team, name="小研究")
@@ -453,7 +453,7 @@ async def test_a_consultation_is_kept_on_the_respondents_page_and_in_its_search(
     client.chats.append(live_said("上季營收兩百萬。"))
     client.chats.append(live_said("小研究說上季營收兩百萬。"))
     await typed(rig, "問小研究上季的數字", a.id)
-    # B's page holds what the owner said to B and, newest first, the colleague's question it answered (owner, 2026-11-14).
+    # B's page holds what the owner said to B and, newest first, the colleague's question it answered.
     received, own = (await rig.call("agent.history.list", {"member_id": b.id}))["turns"]
     assert own["scope"] == "private" and own["question"] == "記一下：上季營收兩百萬"
     assert received["scope"] == "exchange" and received["peer_id"] == a.id and received["question"] == "上季的數字是多少？"
@@ -549,7 +549,7 @@ async def test_raphael_is_offered_the_meeting_tool_when_asked_for_one(setup, tex
     assert "room_meeting" not in team_tools_for(team.members, team.members.speaker(0), "現在幾點")
 
 
-async def test_raphael_asked_for_the_desktop_says_the_owner_must_ask_him(setup, client, conn):
+async def test_raphael_asked_for_the_desktop_says_the_owner_must_ask_it(setup, client, conn):
     rig, team = setup
     one = member(team)
     client.decisions.append(decision("answer"))

@@ -1,9 +1,9 @@
 /**
  * The members' mascots: one low dome with two white eyes, drawn in code. A character is that same slime in a colour
- * of its own with one or two marks of who it is, so Shion is lavender with a horn and nothing more. Loop motion is
+ * of its own with one or two marks of who it is, so the lavender horn slime is lavender with a horn and nothing more. Loop motion is
  * CSS keyed on `data-state` (slime.css); finite handovers use explicit keyframes from JS pose/timing state.
  * Nothing in script runs per animation frame: it only changes state and admits deferred strips.
- * Raphael is the first blue slime (`rimuru`, members.ts `faceHTML`); the primary member wears a gold crown (crown.ts).
+ * Raphael is the first blue slime (`blue-plain`, members.ts `faceHTML`); the primary member wears a gold crown (crown.ts).
  * A member's `avatar` is `slime:<character>` or `slime:color:<color>`; one without a picture gets a colour from its id.
  */
 import "./slime.css";
@@ -11,11 +11,12 @@ import { t } from "./i18n";
 import { motionStrips } from "./slime-cels";
 import { celsOf, loopState, LOOPS, sample, easing } from "./slime-motion";
 import { crownedId } from "./crown";
+import { currentSlimeId } from "./slime-ids";
 
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
 
-/** Raphael's colour: the first blue slime's, his face (the `rimuru` character below). */
+/** Raphael's colour: the first blue slime's, its face (the `blue-plain` character below). */
 export const RAPHAEL_COLOR = "#3DB5FF";
 
 /** The plain slimes' colours, with clear, saturated swatches. */
@@ -35,11 +36,9 @@ const COLOR_NAMES = {
 } as const satisfies Record<SlimeColor, string>;
 
 /**
- * Picker sections, in the order the owner reads them. 角色 holds the characters of the story alone; the fantasy archetypes
- * that follow them (the red oni onward) have a tab of their own (owner, 2026-11-11: 「只有在動漫裡面的角色會放在角色那，如果是從
- * 赤鬼那邊開始的話，就是會另外放在另外一個 Tab 上面」). The seasons and the food stand with nature, and the jobs with the small things as 生活:
- * six tabs of two characters each make a row as wide as six slimes, so the picker is narrow and its tabs fill it (owner, the
- * same evening: 「不要設計的這麼寬 上面 tab 右邊不要有空白」).
+ * Picker sections, in the order the picker shows them. 角色 holds the first set of slimes alone; the fantasy archetypes
+ * that follow them (the red oni onward) have a tab of their own. The seasons and the food stand with nature, and the jobs with the small things as 生活:
+ * six tabs of two characters each make a row as wide as six slimes, so the picker is narrow and its tabs fill it.
  */
 const GROUP_NAMES = {
   characters: "slime.group.characters", fantasy: "slime.group.fantasy", animals: "slime.group.animals", nature: "slime.group.nature",
@@ -66,41 +65,41 @@ const SASH = "M 11 68 Q 50 82 89 68 L 91 75 Q 50 91 9 75 Z";
 
 /** Each character: its colour, and the marks on the same body. A mark is never hair unless it is all there is to tell them by. */
 const CHARACTERS = {
-  rimuru: { group: "characters", name: "slime.rimuru", color: RAPHAEL_COLOR },
-  shion: { group: "characters", name: "slime.shion", color: COLORS.lavender, marks: loose(fill(ONE_HORN, "#363140"), 49, 34) },
-  diablo: { group: "characters", name: "slime.diablo", color: COLORS.charcoal,
+  "blue-plain": { group: "characters", name: "slime.blue-plain", color: RAPHAEL_COLOR },
+  "horn-lavender": { group: "characters", name: "slime.horn-lavender", color: COLORS.lavender, marks: loose(fill(ONE_HORN, "#363140"), 49, 34) },
+  "streaks-charcoal": { group: "characters", name: "slime.streaks-charcoal", color: COLORS.charcoal,
     marks: `<path d="${COLLAR} M 48 73 L 52 73 L 53 77 L 51 83 L 49 83 L 47 77 Z" fill="#FFF6E9" fill-rule="evenodd"/>` +
       fill("M 60 31 L 64 32 L 69 42 L 65 40 Z", "#EE5A64") + fill("M 67 34 L 71 36 L 75 45 L 71 43 Z", "#F5CE55"),
   },
-  benimaru: { group: "characters", name: "slime.benimaru", color: "#F23B3B", marks: loose(fill(TWO_HORNS, "#2B2430"), 50, 34, 0.4) },
-  shuna: { group: "characters", name: "slime.shuna", color: "#FF8FC4", marks: loose(fill(SMALL_HORNS, "#FBEFE3"), 50, 33, 0.4) },
-  souei: { group: "characters", name: "slime.souei", color: "#3A62C8", marks: loose(fill(ONE_HORN, "#1B2238"), 49, 34) + fill(SASH, "#F2F2F5") },
-  hakurou: { group: "characters", name: "slime.hakurou", color: "#8E949C", marks: loose(fill("M 50 66 C 44 63 35 64 29 72 C 37 73 45 72 50 69 Z M 50 66 C 56 63 65 64 71 72 C 63 73 55 72 50 69 Z", "#FFFFFF"), 50, 67, 0.7) },
-  gobta: { group: "characters", name: "slime.gobta", color: "#4CC85A",
+  "horns-red": { group: "characters", name: "slime.horns-red", color: "#F23B3B", marks: loose(fill(TWO_HORNS, "#2B2430"), 50, 34, 0.4) },
+  "small-horns-pink": { group: "characters", name: "slime.small-horns-pink", color: "#FF8FC4", marks: loose(fill(SMALL_HORNS, "#FBEFE3"), 50, 33, 0.4) },
+  "horn-sash-blue": { group: "characters", name: "slime.horn-sash-blue", color: "#3A62C8", marks: loose(fill(ONE_HORN, "#1B2238"), 49, 34) + fill(SASH, "#F2F2F5") },
+  "mustache-gray": { group: "characters", name: "slime.mustache-gray", color: "#8E949C", marks: loose(fill("M 50 66 C 44 63 35 64 29 72 C 37 73 45 72 50 69 Z M 50 66 C 56 63 65 64 71 72 C 63 73 55 72 50 69 Z", "#FFFFFF"), 50, 67, 0.7) },
+  "goggles-green": { group: "characters", name: "slime.goggles-green", color: "#4CC85A",
     marks: fill("M 28 37 Q 50 26 72 37 L 72 40 Q 50 30 28 40 Z", "#3A3A44") +
       `<circle cx="39" cy="33" r="5.5" fill="#D9E6EA" stroke="#3A3A44" stroke-width="2.5"/><circle cx="61" cy="33" r="5.5" fill="#D9E6EA" stroke="#3A3A44" stroke-width="2.5"/>`,
   },
-  rigur: { group: "characters", name: "slime.rigur", color: COLORS.leaf, marks: fill("M 22 42 C 30 27 68 25 78 42 Q 50 31 22 42 Z", "#A8342F") },
-  rigurd: { group: "characters", name: "slime.rigurd", color: "#2FA24F", marks: loose(fill(BOW, "#1E1E24") + `<circle cx="50" cy="72" r="3" fill="#D6A14A"/>`, 50, 72, 0.8) },
-  milim: { group: "characters", name: "slime.milim", color: "#FF7AA6", marks: loose(`<path d="M 50 30 C 47 21 53 13 61 15 C 55 17 52 23 54 30 Z" fill="var(--slime-color)"/>`, 52, 30) },
-  veldora: { group: "characters", name: "slime.veldora", color: "#3463D6", marks: loose(fill(TWO_HORNS, "#C9D2E3"), 50, 34, 0.4) },
-  ranga: { group: "characters", name: "slime.ranga", color: "#6C7A9E",
+  "cap-green": { group: "characters", name: "slime.cap-green", color: COLORS.leaf, marks: fill("M 22 42 C 30 27 68 25 78 42 Q 50 31 22 42 Z", "#A8342F") },
+  "bowtie-green": { group: "characters", name: "slime.bowtie-green", color: "#2FA24F", marks: loose(fill(BOW, "#1E1E24") + `<circle cx="50" cy="72" r="3" fill="#D6A14A"/>`, 50, 72, 0.8) },
+  "tuft-pink": { group: "characters", name: "slime.tuft-pink", color: "#FF7AA6", marks: loose(`<path d="M 50 30 C 47 21 53 13 61 15 C 55 17 52 23 54 30 Z" fill="var(--slime-color)"/>`, 52, 30) },
+  "horns-blue": { group: "characters", name: "slime.horns-blue", color: "#3463D6", marks: loose(fill(TWO_HORNS, "#C9D2E3"), 50, 34, 0.4) },
+  "wolf-star": { group: "characters", name: "slime.wolf-star", color: "#6C7A9E",
     back: loose(`<path d="M 19 42 Q 15 25 20 14 Q 32 19 38 32 Z M 62 32 Q 69 19 80 14 Q 85 26 81 42 Z" fill="var(--slime-color)"/>`, 50, 38, 0.3),
     marks: fill("M 50 30 L 52 35 L 57 35 L 53 38 L 55 43 L 50 40 L 45 43 L 47 38 L 43 35 L 48 35 Z", "#F2C14E"),
   },
-  gabiru: { group: "characters", name: "slime.gabiru", color: "#8A82D6", marks: fill("M 18 78 Q 24 70 30 78 Q 36 70 42 78 Q 48 70 54 78 Q 60 70 66 78 Q 72 70 78 78 L 76 84 Q 50 90 22 84 Z", "#F2EBDD") },
-  geld: { group: "characters", name: "slime.geld", color: "#C98A45", marks: fill("M 35 80 C 33 73 34 68 38 64 C 40 69 42 74 43 81 Z M 65 80 C 67 73 66 68 62 64 C 60 69 58 74 57 81 Z", "#FBF3DC") },
-  treyni: { group: "characters", name: "slime.treyni", color: "#1FC29A",
+  "frill-periwinkle": { group: "characters", name: "slime.frill-periwinkle", color: "#8A82D6", marks: fill("M 18 78 Q 24 70 30 78 Q 36 70 42 78 Q 48 70 54 78 Q 60 70 66 78 Q 72 70 78 78 L 76 84 Q 50 90 22 84 Z", "#F2EBDD") },
+  "tusks-tan": { group: "characters", name: "slime.tusks-tan", color: "#C98A45", marks: fill("M 35 80 C 33 73 34 68 38 64 C 40 69 42 74 43 81 Z M 65 80 C 67 73 66 68 62 64 C 60 69 58 74 57 81 Z", "#FBF3DC") },
+  "sprout-mint": { group: "characters", name: "slime.sprout-mint", color: "#1FC29A",
     marks: loose(fill("M 48 32 L 48 19 Q 49 17 51 19 L 52 32 Z", "#2E7D4F") + fill("M 50 24 C 35 25 29 18 29 12 C 41 10 49 14 50 24 Z M 50 24 C 51 11 61 8 71 10 C 70 20 61 25 50 24 Z", "#8FD18A"), 50, 30),
   },
-  kurobe: { group: "characters", name: "slime.kurobe", color: "#8E7254", marks: fill("M 23 39 Q 50 26 77 39 L 80 45 Q 50 31 20 45 Z", "#EFEFEF") },
-  shizu: { group: "characters", name: "slime.shizu", color: "#6A86CC", marks: `<ellipse cx="50" cy="35" rx="15" ry="6" fill="#F4F4F7"/>` + `<path d="M 39 35 Q 44 31 50 35 T 61 35" fill="none" stroke="#C94250" stroke-width="2.5" stroke-linecap="round"/>` },
-  hinata: { group: "characters", name: "slime.hinata", color: "#5A63A3", marks: fill(COLLAR, "#F4F4F7") + fill("M 48 72 H 52 V 84 H 48 Z", "#D6A14A") },
-  guy: { group: "characters", name: "slime.guy", color: "#E0304B", marks: fill(SASH, "#2A1A1E") },
-  testarossa: { group: "characters", name: "slime.testarossa", color: "#D5D9D6", marks: loose(fill(BOW, "#3FBF94") + `<circle cx="50" cy="72" r="3" fill="#FFFFFF"/>`, 50, 72, 0.8) },
-  ultima: { group: "characters", name: "slime.ultima", color: "#C27BE6", marks: loose(fill(BOW, "#2A1A2E"), 50, 72, 0.8) },
-  carrera: { group: "characters", name: "slime.carrera", color: "#F5B417", marks: loose(fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E"), 50, 66, 0.7) },
-  ramiris: { group: "characters", name: "slime.ramiris", color: "#FFC83D", back: loose(`<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>`, 50, 44, 0.3) },
+  "headband-brown": { group: "characters", name: "slime.headband-brown", color: "#8E7254", marks: fill("M 23 39 Q 50 26 77 39 L 80 45 Q 50 31 20 45 Z", "#EFEFEF") },
+  "mask-cornflower": { group: "characters", name: "slime.mask-cornflower", color: "#6A86CC", marks: `<ellipse cx="50" cy="35" rx="15" ry="6" fill="#F4F4F7"/>` + `<path d="M 39 35 Q 44 31 50 35 T 61 35" fill="none" stroke="#C94250" stroke-width="2.5" stroke-linecap="round"/>` },
+  "collar-indigo": { group: "characters", name: "slime.collar-indigo", color: "#5A63A3", marks: fill(COLLAR, "#F4F4F7") + fill("M 48 72 H 52 V 84 H 48 Z", "#D6A14A") },
+  "sash-crimson": { group: "characters", name: "slime.sash-crimson", color: "#E0304B", marks: fill(SASH, "#2A1A1E") },
+  "bowtie-pearl": { group: "characters", name: "slime.bowtie-pearl", color: "#D5D9D6", marks: loose(fill(BOW, "#3FBF94") + `<circle cx="50" cy="72" r="3" fill="#FFFFFF"/>`, 50, 72, 0.8) },
+  "bowtie-purple": { group: "characters", name: "slime.bowtie-purple", color: "#C27BE6", marks: loose(fill(BOW, "#2A1A2E"), 50, 72, 0.8) },
+  "necktie-amber": { group: "characters", name: "slime.necktie-amber", color: "#F5B417", marks: loose(fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E"), 50, 66, 0.7) },
+  "wings-yellow": { group: "characters", name: "slime.wings-yellow", color: "#FFC83D", back: loose(`<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>`, 50, 44, 0.3) },
   // Fantasy archetypes: original silhouettes, with the shared body and face left intact.
   "oni-red": { group: "fantasy", name: "slime.oni-red", color: "#CF493B", marks: loose(fill("M 30 35 L 22 17 Q 36 19 40 31 Z", "#FFE2B3"), 35, 33, 0.4) + fill(COLLAR, "#662C37") },
   "oni-indigo": { group: "fantasy", name: "slime.oni-indigo", color: "#5256AF", marks: loose(fill("M 27 36 L 26 21 H 34 L 40 32 Z M 60 32 L 66 21 H 74 L 73 36 Z", "#ABD9DD"), 50, 34, 0.4) + fill(SASH, "#EB9D4B") },
@@ -184,13 +183,13 @@ type CrownSpot = readonly [x: number, y: number, turn: number, size: number];
  */
 const CROWN_EDGE: CrownSpot = [71.6, 33.7, 30, 0.62];
 /**
- * A character whose own marks are there gets a spot of its own: two horns hold it upright between them, Shizu's mask and Gobta's goggles push it down the edge, Diablo's streaks to the left, and the ears and
- * wings of Ranga and Ramiris to the top. One horn in the middle leaves the edge free.
+ * A character whose own marks are there gets a spot of its own: two horns hold it upright between them, the cornflower mask and the green goggles push it down the edge, the charcoal streaks to the left, and the star
+ * wolf's ears and the yellow wings to the top. One horn in the middle leaves the edge free.
  */
 const CROWN_SPOTS: Partial<Record<SlimeCharacter, CrownSpot>> = {
-  benimaru: [50, 27.8, 0, 0.55], veldora: [50, 27.8, 0, 0.55], shuna: [50, 27.9, 0, 0.5],
-  shizu: [79.5, 40.1, 46, 0.6], gobta: [81.7, 42.6, 50, 0.58], diablo: [28.4, 32.9, -32, 0.6],
-  ranga: [50, 27.6, 4, 0.6], ramiris: [57, 28.2, 12, 0.62],
+  "horns-red": [50, 27.8, 0, 0.55], "horns-blue": [50, 27.8, 0, 0.55], "small-horns-pink": [50, 27.9, 0, 0.5],
+  "mask-cornflower": [79.5, 40.1, 46, 0.6], "goggles-green": [81.7, 42.6, 50, 0.58], "streaks-charcoal": [28.4, 32.9, -32, 0.6],
+  "wolf-star": [50, 27.6, 4, 0.6], "wings-yellow": [57, 28.2, 12, 0.62],
   "oni-indigo": [50, 27.8, 0, 0.5], "kijin-ivory": [50, 27.8, 0, 0.5],
   "dragon-ice": [81.7, 42.6, 50, 0.55], "knight-helm": [81.7, 42.6, 50, 0.55],
   "archer-feather": [28.4, 32.9, -32, 0.6], "sage-scroll": [81.7, 42.6, 50, 0.55],
@@ -222,7 +221,6 @@ const DEFAULT_COLORS = COLOR_IDS.filter(color => color !== "charcoal");
 
 /** What earlier builds stored: colours of the first set, and costumes since made characters or gone. */
 const OLD_COLORS: Record<string, SlimeColor> = { azure: "sky", mint: "teal", sunny: "ochre", coral: "coral", rose: "orchid", lilac: "lavender", slate: "charcoal", fox: "tangerine", sprout: "leaf", crown: "ochre" };
-const OLD_CHARACTERS: Record<string, SlimeCharacter> = { oni: "shion", demon: "diablo" };
 
 /** Who a slime is: a character, or a plain slime of a colour. */
 export type Slime = { character: SlimeCharacter } | { color: SlimeColor };
@@ -230,7 +228,8 @@ export type Slime = { character: SlimeCharacter } | { color: SlimeColor };
 export function parseSlime(avatar: string | null | undefined): Slime | null {
   if (!avatar?.startsWith("slime:")) return null;
   const [first = "", second] = avatar.slice(6).split(":");
-  const character = OLD_CHARACTERS[first] ?? first;
+  // A face stored under an old id is the same face under its new one (slime-ids.ts).
+  const character = isCharacter(first) ? first : currentSlimeId(first);
   if (isCharacter(character)) return { character };
   // `<shape>:<color>` was the build before characters: the colour survives the shape.
   if (second !== undefined) return isColor(second) ? { color: second } : null;
@@ -276,7 +275,7 @@ function strips(state: SlimeState, drawing: {back: string; worn: string}): [stri
 }
 
 /**
- * `moving` is the one switch of motion (owner, 2026-11-11: 「只有左邊成員列表工作中、對話框思考那一行要有動畫，其他地方放史萊姆的樣子就可以了」).
+ * `moving` is the one switch of motion.
  * A slime drawn without it is a picture: the resting pose of its drawing (idle, or sleeping for a member that has been
  * silent for a day) with no strips, no clock, no motion variables and no state a handover could change, so it costs the
  * page nothing: nothing observes it and no event reaches it. Only the member list's rows and the conversation's thinking
@@ -489,7 +488,7 @@ function enter(svg: SVGElement, state: SlimeState, visible = true): void {
 
 /**
  * A strip is some thousands of nodes (a slime that thinks or searches: about 4,000), and styling them in one go held the
- * window for 100 ms and more at every change of state (owner, 2026-11-11: 「更新…畫面就會閃現」). They go in a slice
+ * window for 100 ms and more at every change of state. They go in a slice
  * of about this many nodes a frame, out of sight (`data-slime-loading`), and show together when the last one is in.
  */
 const SLICE_NODES = 200;
@@ -714,7 +713,7 @@ const tempoOf = (seed: number): number => Number((0.94 + (Math.abs(seed * 37) % 
 
 /**
  * The slime a member shows: its own choice, or a colour from its id. A picture unless `moving` (the member list's rows and
- * the conversation's thinking line): then it follows what the member is doing (owner, 2026-11-11).
+ * the conversation's thinking line): then it follows what the member is doing.
  */
 export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, size: number, cls = "", moving = false): string {
   const slime = parseSlime(member.avatar) ?? { color: defaultColor(member.id) };
@@ -769,8 +768,7 @@ export function slimeGroupOf(avatar: string | null | undefined): SlimeGroup {
 }
 
 /**
- * The picker's slimes: one panel for each group, none of them with a heading (its tab says it; owner, 2026-11-11:
- * 「要跟…Grokbot 他們的 UI 類似，就是上面會有一些 tab」). They are all drawn and stand on one another in one cell, so the
+ * The picker's slimes: one panel for each group, none of them with a heading (its tab says it). They are all drawn and stand on one another in one cell, so the
  * place is as big as the largest group and a press on a tab moves nothing; the one that is open is `data-active`, and
  * the others are `inert` (the keys and the pointer pass them by). `open` is the group that shows first.
  */

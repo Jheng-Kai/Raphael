@@ -13,6 +13,7 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.background import service as service_module
+from raphael_core.background.tasks import Question, TaskStore
 from raphael_core.members.store import MemberStore
 from .conftest import NOW_MS, Rig, report, until
 from .test_handoff import args, setup, team_of, unused
@@ -220,3 +221,41 @@ async def test_stop_ends_a_queued_task_that_nothing_carries_and_its_parent_hears
     assert rig.conn.execute("SELECT status FROM agent_turns WHERE id=?", (rig.task(child).turn_id,)).fetchone()[0] == "cancelled"
     await until(lambda: not rig.service._active)
     await rig.close()
+
+
+@pytest.mark.parametrize("left", ["running", "waiting for a yes"])
+def test_a_child_the_restart_cut_off_wakes_its_waiting_parent_once(conn, plugins, monkeypatch, left):
+    """The last run ended while a member's own work ran, or waited for the owner's yes (that wait lives in the process): the
+    child ends `interrupted` with its one line, its question closes, and the parent that waited for it is woken once, answers,
+    and holds no place after."""
+    target, [(parent, child)] = left_by_the_last_run(conn, plugins, monkeypatch)
+    with conn:
+        conn.execute("UPDATE worker_tasks SET state=?, started_at_ms=? WHERE id=?",
+                     ("running" if left == "running" else "waiting", NOW_MS, child))
+    if left != "running":
+        TaskStore(conn, lambda: NOW_MS).add_question(Question(id="q-left", task_id=child, member_id=target.id, prefix="", text="May I?",
+                                                tier="T2", created_at_ms=NOW_MS, expires_at_ms=NOW_MS + HOUR_MS,
+                                                remaining_s=60.0, state="waiting"))
+    second, nowhere = restart(conn, plugins, target)
+    try:
+        ended = second.task(child)
+        assert ended.state == "interrupted" and ended.reason == "restart" and ended.report_text
+        assert second.task(parent).state == "queued" and list(second.service._queue) == [parent]
+        if left != "running":
+            assert second.service._store.question("q-left").state == "cancelled"
+    finally:
+        asyncio.set_event_loop(None)
+        nowhere.close()
+
+    async def go():
+        second.client.replies.extend([report(JOB)])
+        second.service.start()
+        await until(lambda: second.task(parent).state == "done")
+        await until(lambda: not second.service._active)
+        assert len(second.client.chat_calls) == 1  # the parent's one answer; the child is never started again
+        assert not second.service._queue and not second.service._store.resume_from_inbox(parent)
+        assert conn.execute("SELECT COUNT(*) FROM task_inbox WHERE parent_task_id=? AND consumed_at_ms IS NOT NULL",
+                            (parent,)).fetchone()[0] == 1
+        await second.close()
+
+    asyncio.run(go())

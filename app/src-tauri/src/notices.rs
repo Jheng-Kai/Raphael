@@ -1,13 +1,13 @@
 //! Raphael's notices: the short reports the overlay shows as subtitles when a dictation could not
-//! go the usual way, the word list after learning from the user's corrections, the line that says he
-//! wrote down what he was told to remember, his greeting when a question to him begins, and the
-//! announcements beside the emblem while he thinks about it. Each one is wrapped in 《》 and starts
+//! go the usual way, the word list after learning from the user's corrections, the line that says it
+//! wrote down what it was told to remember, its greeting when a question to it begins, and the
+//! announcements beside the emblem while it thinks about it. Each one is wrapped in 《》 and starts
 //! with its prefix: 告 (report) or 否 (refusal) in Chinese and Japanese, 了 for the learned words and
 //! for a memory, and `Notice.`, `Negative.` or `Understood.` in English.
 //!
-//! They are written in his manner: calm, exact and brief. A report states what happened and what
-//! was done about it, a refusal states why, and neither apologises, jokes or exclaims. He calls the
-//! person 主人, マスター or Master only where he addresses them, which here is the greeting alone.
+//! They are written in its manner: calm, exact and brief. A report states what happened and what
+//! was done about it, a refusal states why, and neither apologises, jokes or exclaims. It calls the
+//! person 主人, マスター or Master only where it addresses them, which here is the greeting alone.
 //!
 //! A notice exists in every interface language, and the overlay is sent only the one for the
 //! language the person chose ([`Notice::text`]): never a Chinese and a Japanese line side by side.
@@ -217,7 +217,7 @@ pub const ASK_FAILED: Notice = Notice {
     ja: "《否。現在は回答できません。》",
 };
 
-/// Raphael wrote down what he was told to remember, in the same turn as his answer, which said
+/// Raphael wrote down what it was told to remember, in the same turn as its answer, which said
 /// something else (`"notice": "remembered"` in the reply of `agent.ask`). It follows the answer.
 pub const REMEMBERED: Notice = Notice {
     zh: "《了。已記下。》",
@@ -225,8 +225,8 @@ pub const REMEMBERED: Notice = Notice {
     ja: "《了。記憶しました。》",
 };
 
-/// A question to Raphael has begun: his greeting beside the emblem while he listens. A dictation
-/// shows the emblem alone, so the two are never mistaken for each other. He stands by for an
+/// A question to Raphael has begun: its greeting beside the emblem while it listens. A dictation
+/// shows the emblem alone, so the two are never mistaken for each other. It stands by for an
 /// order, as a report rather than a question (問 is for what takes a yes or a no), and it is the
 /// one notice that addresses the person.
 pub const GREETING: Notice = Notice {
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn only_the_greeting_addresses_the_person_and_in_the_word_of_its_language() {
-        // 主人 in Chinese, マスター in Japanese, Master in English: sparingly, as he does.
+        // 主人 in Chinese, マスター in Japanese, Master in English: sparingly, as it does.
         for (line, address) in [
             (GREETING.zh, "主人"),
             (GREETING.ja, "マスター"),

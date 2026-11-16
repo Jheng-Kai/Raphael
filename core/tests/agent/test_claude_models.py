@@ -1,7 +1,7 @@
 """Claude Code's models: the CLI's answer, the older models its own program file still runs, and the saved aliases.
 
 Nothing here starts the real CLI, reads the real program or spends anything: the answer is what the installed CLI
-(2.1.323) gave `initialize` on 2026-11-14, and the program is a trimmed copy of its two tables (fixtures/)."""
+(2.1.323) gave `initialize`, and the program is a trimmed copy of its two tables (fixtures/)."""
 
 import json
 import os
@@ -20,7 +20,7 @@ BUNDLE = Path(__file__).parent / "fixtures" / "claude_code_bundle.js"
 TODAY = date(2026, 11, 14)
 
 EFFORTS = ["low", "medium", "high", "xhigh", "max"]
-# What the installed CLI (2.1.323) answered `initialize` with on 2026-11-14: the models it offers, by alias.
+# What the installed CLI (2.1.323) answered `initialize` with: the models it offers, by alias.
 INITIALIZE = [
     {"value": "default", "resolvedModel": "claude-opus-5-5", "displayName": "Default (recommended)",
      "description": "Use the default model (currently Opus 5.5) \u00b7 $4/$20 per Mtok", "supportsEffort": True, "supportedEffortLevels": EFFORTS},

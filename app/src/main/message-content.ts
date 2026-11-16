@@ -45,6 +45,25 @@ function attachmentLinkHTML(target: string, label: string, files: KnownFiles | u
   if (!known) return words ? highlightHTML(label, query) : "";
   return fileChipHTML(highlightHTML(words || known.name, query), ` data-act="attachment-open" data-id="${esc(id!)}" data-attachment-link`);
 }
+/**
+ * A picture a model links by its stored id, `![words](attachment:<id>)`, is the same chip as a plain link to it (R-MSG-LINK-02):
+ * the picture itself is the message the member sent it in, so it is not drawn twice. One the conversation does not have says,
+ * in words, that it cannot be shown; a renderer that is not given the files (a group, search, copy) has only the words.
+ */
+function pictureLinkHTML(target: string, label: string, files: KnownFiles | undefined, query: string): string {
+  const id = attachmentTarget(target);
+  if (!files || (id && files.has(id))) return attachmentLinkHTML(target, label, files, query);
+  const words = label.trim();
+  return highlightHTML(words ? t("chat.pictureMissing", { p0: words }) : t("chat.pictureMissingBare"), query);
+}
+/** Where an image's markdown `![words](target)` starting at `at` ends, with its words and target; null when it is not whole. */
+function imageAt(text: string, at: number): { label: string; target: string; end: number } | null {
+  const middle = text.indexOf("](", at + 2);
+  if (middle < 0) return null;
+  let end = middle + 2, level = 1;
+  for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
+  return level ? null : { label: text.slice(at + 2, middle), target: text.slice(middle + 2, end - 1), end };
+}
 
 export function messageUrl(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > 8192 || /[\u0000-\u0020\u007f]/.test(raw)) return null;
@@ -67,13 +86,55 @@ export function shortUrl(url: string): string {
   return label.length > 32 ? label.slice(0, 31) + "…" : label;
 }
 
+/** Letters of the scripts written without spaces between words. */
+const SPACELESS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}]/u;
+/** What starts a part of an address (a path segment, a query value, a fragment, a handle): a page or a person named in Chinese starts after one. */
+const PART_START = "/=?#&@";
+
+/**
+ * Where an address that starts at the beginning of `text` ends. It stops at a space, a quote, CJK punctuation and at
+ * Chinese, Japanese or Korean words that follow it directly (`https://example.com看這裡`), unless those words start a part of
+ * the address of their own (`https://zh.wikipedia.org/wiki/臺北`). A full stop, comma or closing bracket that ends the
+ * sentence around it is not part of it; a bracket the address opened itself is.
+ */
 export function bareUrl(text: string): string {
-  let raw = /^https?:\/\/[^\s<>"'`《》「」『』【】（）。，、！？；：…]+/i.exec(text)?.[0] ?? "";
-  raw = raw.replace(/[.,;:!?*_]+$/, "");
-  for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
-    while (raw.endsWith(close) && raw.split(close).length > raw.split(open).length) raw = raw.slice(0, -1);
+  let raw = /^https?:\/\/[^\s<>"'`\u2018-\u201f\u2026\u3000-\u303f\uff00-\uffef]+/i.exec(text)?.[0] ?? "";
+  let at = 0, previous = "", inPart = false;
+  for (const char of raw) {
+    if (SPACELESS.test(char)) {
+      if (!inPart && !PART_START.includes(previous)) { raw = raw.slice(0, at); break; }
+      inPart = true;
+    } else if (PART_START.includes(char)) inPart = false;
+    previous = char; at += char.length;
+  }
+  for (let before = ""; before !== raw;) {
+    before = raw;
+    raw = raw.replace(/[.,;:!?*_]+$/, "");
+    for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
+      while (raw.endsWith(close) && raw.split(close).length > raw.split(open).length) raw = raw.slice(0, -1);
+    }
   }
   return raw;
+}
+
+/**
+ * Plain words as HTML for the places that show text which is not a message (an event's notes, a card's words, a
+ * routine's instructions): every character escaped, and each http or https address a link whose words are the address
+ * itself, as it was written, never other words, so no text can show one address and open another. It opens in the
+ * owner's browser through the window's one link opener (`link-opener.ts`); it has no tooltip, which would only repeat it.
+ */
+export function linkedText(text: string): string {
+  const start = /https?:\/\//gi;
+  let out = "", from = 0;
+  for (let found = start.exec(text); found; found = start.exec(text)) {
+    const raw = bareUrl(text.slice(found.index));
+    const url = raw ? messageUrl(raw) : null;
+    if (!url) continue;
+    out += esc(text.slice(from, found.index)) +
+      `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${esc(raw)}</a>`;
+    from = start.lastIndex = found.index + raw.length;
+  }
+  return out + esc(text.slice(from));
 }
 
 /** An address only this machine or its network can open: no public page, so no title to read and no preview. */
@@ -125,6 +186,11 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     }
     // An unfinished image must never become an automatic link preview while streaming.
     if (markdown && text.startsWith("![", at)) {
+      const image = imageAt(text, at);
+      if (image && isAttachmentLink(image.target)) { flush(); out += pictureLinkHTML(image.target, image.label, files, query); at = image.end; continue; }
+      // One to a stored file still arriving shows its words, never the part of its target that has come.
+      const middle = text.indexOf("](", at + 2);
+      if (!image && middle >= 0 && /^attachments?[:/]/i.test(text.slice(middle + 2))) { plain += text.slice(at + 2, middle); at = text.length; continue; }
       const end = text.indexOf(")", at + 2);
       plain += text.slice(at, end < 0 ? text.length : end + 1); at = end < 0 ? text.length : end + 1; continue;
     }

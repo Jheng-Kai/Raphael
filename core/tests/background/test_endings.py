@@ -307,7 +307,7 @@ async def _finish(rig, target, source, **options):
 
 
 async def test_work_file_named_by_its_computer_path_counts_when_the_browser_profile_is_newer(make_rig, tmp_path, monkeypatch):
-    """Owner 2026-11-15, task 797: the member wrote typeless-benchmark.md in the team folder and said so; the newest files of
+    """A member wrote benchmark-report.md in the team folder and said so; the newest files of
     its own folder were browser caches this PC cannot read, which took every place of the verified ones, so the work failed."""
     from raphael_core.background import tasks
     rig = make_rig()
@@ -327,14 +327,14 @@ async def test_work_file_named_by_its_computer_path_counts_when_the_browser_prof
             _fresh(rig, noise, ahead=5)
         folder = team / "projects" / "research"
         folder.mkdir(parents=True)
-        (folder / "typeless-benchmark.md").write_text("# Benchmark", encoding="utf8")
-        _fresh(rig, folder / "typeless-benchmark.md")
-        return report("Report is in /home/cua/team/projects/research/typeless-benchmark.md")
+        (folder / "benchmark-report.md").write_text("# Benchmark", encoding="utf8")
+        _fresh(rig, folder / "benchmark-report.md")
+        return report("Report is in /home/cua/team/projects/research/benchmark-report.md")
     rig.client.replies.append(saved)
-    task = await _finish(rig, target, source, done_when="typeless-benchmark.md exists with sources")
+    task = await _finish(rig, target, source, done_when="benchmark-report.md exists with sources")
     assert (task.state, task.reason) == ("done", None)
     assert [item["uri"] for item in rig.service._store.evidence(task.id) if item["kind"] == "artifact"] == [
-        "projects/research/typeless-benchmark.md"]
+        "projects/research/benchmark-report.md"]
 
 
 async def test_work_file_named_in_the_condition_fails_when_only_other_files_are_new(make_rig, tmp_path):
@@ -398,3 +398,141 @@ def test_files_named_by_their_path_in_the_computer(text, names):
     from raphael_core.background.outcomes import computer_files
     found = [item.as_posix() for item in computer_files(text)]
     assert set(names) <= set(found) and not any(".." in item for item in found)
+
+
+# --- a file that is there but cannot be read is not a missing file ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("language", ["en", "zh-TW", "ja", "de", "th"])
+async def test_a_folder_in_the_place_of_the_named_file_is_there_but_unreadable_not_missing(make_rig, tmp_path, language):
+    from raphael_core.agent.persona import phrase
+    rig = make_rig()
+    target, source = setup(rig)
+    output = tmp_path / "report.md"
+    def saved(**kwargs):
+        output.mkdir()
+        return report(f'Saved "{output}"')
+    rig.client.replies.append(saved)
+    receipt = rig.service.handoff(RAPHAEL, args(target, done_when=f'Save "{output}"', requires_artifact=True),
+                                  source_turn_id=source.id, language=language)
+    task_id = receipt.data["task_id"]
+    await until(lambda: rig.task(task_id).state in ("done", "failed"))
+    task = rig.task(task_id)
+    assert (task.state, task.reason) == ("failed", "artifact_unreadable")
+    assert task.report_text == phrase(language, "work_file_unreadable") != phrase(language, "work_file_missing")
+
+
+async def test_a_file_another_program_holds_is_there_but_unreadable_not_missing(make_rig, tmp_path, lock_file):
+    rig = make_rig()
+    target, source = setup(rig)
+    output = tmp_path / "report.md"
+    def saved(**kwargs):
+        output.write_text("The finished report", encoding="utf8")
+        lock_file(output)
+        return report(f'Saved "{output}"')
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when=f'Save "{output}"')
+    assert (task.state, task.reason) == ("failed", "artifact_unreadable")
+    evidence = rig.service._store.evidence(task.id)
+    assert not [item for item in evidence if item["kind"] == "artifact"]
+    assert [item["verdict"] for item in evidence if item["kind"] == "artifact_unreadable"] == ["unreadable"], "never a verified file"
+
+
+async def test_a_file_of_the_members_folder_that_cannot_be_read_is_not_missing(make_rig, tmp_path, lock_file):
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    def saved(**kwargs):
+        (team / "plan.md").write_text("The plan", encoding="utf8")
+        _fresh(rig, team / "plan.md")
+        lock_file(team / "plan.md")
+        return report("Done.")
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when="plan.md exists")
+    assert (task.state, task.reason) == ("failed", "artifact_unreadable")
+
+
+async def test_a_folder_of_the_named_files_name_in_the_members_folder_is_unreadable_not_missing(make_rig, tmp_path):
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    def saved(**kwargs):
+        (workspace / "out" / "plan.md").mkdir(parents=True)
+        return report("Done.")
+    rig.client.replies.append(saved)
+    task = await _finish(rig, target, source, done_when="plan.md exists")
+    assert (task.state, task.reason) == ("failed", "artifact_unreadable")
+
+
+async def test_a_file_that_was_never_made_is_still_missing(make_rig, tmp_path):
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    rig.client.replies.append(report("Done."))
+    task = await _finish(rig, target, source, done_when="plan.md exists")
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_a_folder_that_is_no_file_the_condition_names_is_never_taken_for_it(make_rig, tmp_path):
+    """The condition gives the folder in which the file is to be; that folder is not the unreadable file."""
+    rig = make_rig()
+    target, source = setup(rig)
+    folder = tmp_path / "My Documents"
+    folder.mkdir()
+    rig.client.replies.append(report("Done."))
+    task = await _finish(rig, target, source, done_when=f'Save report.md in "{folder}" folder')
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_a_file_that_was_held_a_moment_ago_and_is_free_now_counts(make_rig, tmp_path):
+    """Each look at the files starts afresh: what was found unreadable before does not stay against the task."""
+    rig = make_rig()
+    target, source = setup(rig)
+    output = tmp_path / "report.md"
+    receipt = rig.service.handoff(RAPHAEL, args(target, done_when=f'Save "{output}"', requires_artifact=True),
+                                  source_turn_id=source.id, language="en")
+    task = rig.task(receipt.data["task_id"])
+    store = rig.service._store
+    store.note_unreadable(task.id, output)
+    assert store.completion_reason(task) == "artifact_unreadable"
+    output.write_text("The finished report", encoding="utf8")
+    assert rig.service._record_artifacts(task, 0)
+    assert store.completion_reason(task, said="Saved it. " * 30) is None
+
+
+async def test_a_receipt_whose_file_cannot_be_read_when_the_work_is_judged_is_unreadable(make_rig, tmp_path, lock_file):
+    rig = make_rig()
+    target, source = setup(rig)
+    output = tmp_path / "report.md"
+    receipt = rig.service.handoff(RAPHAEL, args(target, done_when=f'Save "{output}"', requires_artifact=True),
+                                  source_turn_id=source.id, language="en")
+    task = rig.task(receipt.data["task_id"])
+    output.write_text("The finished report", encoding="utf8")
+    store = rig.service._store
+    store.verify_artifact(task.id, "artifact", output, workspace=tmp_path, mime="text/plain")
+    assert store.completion_reason(task) is None
+    lock_file(output)
+    assert store.completion_reason(task) == "artifact_unreadable"
+
+
+async def test_a_receipt_whose_file_is_gone_when_the_work_is_judged_is_missing(make_rig, tmp_path):
+    rig = make_rig()
+    target, source = setup(rig)
+    output = tmp_path / "report.md"
+    receipt = rig.service.handoff(RAPHAEL, args(target, done_when=f'Save "{output}"', requires_artifact=True),
+                                  source_turn_id=source.id, language="en")
+    task = rig.task(receipt.data["task_id"])
+    output.write_text("The finished report", encoding="utf8")
+    rig.service._store.verify_artifact(task.id, "artifact", output, workspace=tmp_path, mime="text/plain")
+    output.unlink()
+    assert rig.service._store.completion_reason(task) == "missing_artifact"
+
+
+def test_what_a_read_failure_says_of_the_file():
+    from raphael_core.background.outcomes import exists_unreadable
+    here = Path(__file__)
+    assert exists_unreadable(here, PermissionError())
+    assert exists_unreadable(here.parent, ValueError("artifact_outside_workspace")), "a folder of that name"
+    assert not exists_unreadable(here.parent / "gone.md", FileNotFoundError())
+    assert not exists_unreadable(here, ValueError("artifact_size")), "too large is no read failure"
+    assert not exists_unreadable(here.parent / "gone.md", PermissionError()), "nothing is there to be unreadable"

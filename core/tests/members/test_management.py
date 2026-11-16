@@ -101,7 +101,7 @@ async def test_every_destructive_row_shows_a_card_and_waits_for_the_exact_yes(se
     assert asked["confirm"]["tier"] == "T3"
     assert writes == []
     text = asked["confirm"]["text"]
-    # The card says the effect in words (owner, 2026-11-11: no JSON, no ID, one language), never a raw argument list.
+    # The card says the effect in words (no JSON, no ID, one language), never a raw argument list.
     action, values = resolve(name, args)
     words = title_of(name, "en") if name in team.members.TRADITIONAL else effect(team.members.management_effect(action, values), "en")
     assert words in text and "Affected target" not in text and "{" not in text and "ID" not in text

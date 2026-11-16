@@ -50,14 +50,14 @@
           },
           "avatar": {
             "enum": [
-              "rimuru",
-              "souei",
-              "shuna",
-              "diablo",
-              "benimaru",
-              "hakurou",
-              "shion",
-              "gobta"
+              "blue-plain",
+              "horn-sash-blue",
+              "small-horns-pink",
+              "streaks-charcoal",
+              "horns-red",
+              "mustache-gray",
+              "horn-lavender",
+              "goggles-green"
             ]
           },
           "featured": {

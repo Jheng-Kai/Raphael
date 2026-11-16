@@ -60,7 +60,7 @@ describe("the primary contact's window", () => {
     expect(await answer).toBe(3);
   });
 
-  test("Raphael can be chosen again, and his id 0 is an answer, not nothing", async () => {
+  test("Raphael can be chosen again, and its id 0 is an answer, not nothing", async () => {
     const answer = openPrimaryPicker({ members: MEMBERS });
     choice(0).click();
     setButton().click();

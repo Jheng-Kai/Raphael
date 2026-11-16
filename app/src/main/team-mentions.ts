@@ -55,7 +55,7 @@ export interface MentionMenuOptions {
 const waiting = (app: RosterEntry): boolean => app.state === "needs_sign_in" || app.state === "needs_secret";
 
 /**
- * The @ menu is Grok Bot's (owner, 2026-11-13, R-MENU-01): the other members, then the apps the member can use, each row a mark,
+ * The @ menu (R-MENU-01): the other members, then the apps the member can use, each row a mark,
  * the name and, quietly at the right, what it is. No groups, no one for everyone, nothing else: an address that is none of these
  * is still a chip when it is typed. Completion always keeps the focus in the field, including during input-method composition.
  */
@@ -90,7 +90,7 @@ export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allo
     input.focus(); input.setSelectionRange(prefix.length + value.length + 2, prefix.length + value.length + 2);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  // One list in a menu of a fixed height: the mouse wheel and the arrow keys take it from the first member to the last app (Grok Bot's).
+  // One list in a menu of a fixed height: the mouse wheel and the arrow keys take it from the first member to the last app.
   openMenu(input, choices, "", pick, undefined, [],
     { placement: "start", anchorRect: () => textPositionRect(input, match.index), selectionIndicator: false, focus: false, completion: true, scroll: true, className: "team-mentions-menu" });
   document.querySelector<HTMLElement>("#app-popover")!.dataset.teamMentions = "true";

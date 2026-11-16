@@ -1,20 +1,20 @@
 """Whose computer a quick question means: the member's own, or the owner's PC.
 
-A quick question (Alt+Space) is the one place the owner's own PC is in reach (R-PC-01), and the fast router can answer
+A quick question (Alt+Space) is the one place the owner's own screen is in reach (R-PC-01), and the fast router can answer
 a request to open something with a fixed command that opens it there. The owner also says 「用你的電腦開…」 to mean
-Raphael's own computer, the member's seat; read as "open", that sentence opened the page on his own PC and left him an
-empty reply (2026-11-13 and -14). So a request that names the member's computer never takes the owner-PC shortcut: it
-goes to the member's ordinary turn, which uses its own computer. The owner's PC is only ever *kept* from such a request;
-nothing here reaches it.
+Raphael's own computer, the member's seat; read as "open", that sentence opened the page on their own PC and left them an
+empty reply. So a request that names the member's computer never takes the owner-PC shortcut: it goes to the member's turn
+of the quick question, which holds both computers, and the model reads the words and picks. Nothing here takes a computer
+away or reaches one: the words only choose between the shortcut and the model.
 
-The words are matched, not guessed, and a sentence that names both computers is the member's (the safe way). A request
-to open something on "the computer" or "use a computer", with no one's name on it, could be either: that is asked once.
+The words are matched, not guessed, and a sentence that names both computers is the member's (the model reads it whole).
+A request that names no one's computer is the owner's PC's, the quick question's default: it takes the shortcut as ever.
 """
 
 import re
 import unicodedata
 
-MEMBER, OWNER, UNSURE = "member", "owner", "unsure"
+MEMBER, OWNER = "member", "owner"
 
 # A word for a computer. `pc` is cut out of a longer Latin word by lookarounds, since a Chinese character is a word
 # character and `\b` would not stand between 的 and pc.
@@ -47,48 +47,17 @@ _OWNER = re.compile("|".join([
     rf"この\s*{_MACHINE_JA}",
 ]))
 
-# A computer named with no one's name on it, and a verb that opens something: 「用電腦開 YouTube」, 「open it on the computer」.
-_BARE = re.compile("|".join([_MACHINE_ZH, r"\b(?:computer|pc|laptop)\b", _MACHINE_JA]))
-_OPENS = re.compile("|".join([
-    r"開|开|打開|打开|啟動|启动|瀏覽|浏览|前往|開い|開く|起動|立ち上げ",
-    r"\b(?:open|launch|start|visit|go to|browse|pull up|bring up)\b",
-]))
-
-# The words that answer the question (`which_computer`): a short reply that names a side, and one that only agrees.
-_SHORT = 16
-_OWN_WORD = re.compile(r"自己|本人|自身|你的|你那|妳|你這|你用|\bown\b|\byour|\byours\b|あなた|自分|そっち|そちら")
-_THIS_WORD = re.compile(r"這台|這部|这台|这部|這邊|这边|本機|本机|我的|我這|我这|我們|我们|\bthis\b|\bmy\b|\bmine\b|私|この|こっち|こちら|ここ")
-_AGREES = re.compile(r"^(?:好|好的|可以|嗯|對|对|都可以|隨便|随便|ok|okay|yes|yeah|sure|any|either|はい|うん|どちらでも)[.!。！ ]*$")
-
 
 def _plain(text: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
 
 
 def whose_computer(text: str) -> str | None:
-    """MEMBER when the request names the member's own computer, OWNER when it names the owner's PC, UNSURE when it asks to
-    open something on "the computer" with no one's name on it, and None when it is about neither."""
+    """MEMBER when the request names the member's own computer, OWNER when it names the owner's PC, and None when it
+    names no one's (the owner's PC, the quick question's default)."""
     spoken = _plain(text)
     if _MEMBER.search(spoken):
-        return MEMBER  # also when it names the owner's too: the member's computer is the one that can do no harm to his PC
+        return MEMBER  # also when it names the owner's too: the shortcut could not tell them apart, the model reads it whole
     if _OWNER.search(spoken):
         return OWNER
-    if _BARE.search(spoken) and _OPENS.search(spoken):
-        return UNSURE
     return None
-
-
-def answer_to_the_question(text: str) -> str | None:
-    """Which computer a short reply to `which_computer` chose: MEMBER, OWNER, or None when the reply is something else (a
-    longer sentence is a new request, read as any other). A reply that only agrees is the member's: it was asked once,
-    and the member's computer is the one that cannot touch the owner's PC."""
-    spoken = _plain(text)
-    if not spoken or len(spoken) > _SHORT:
-        return None
-    if _MEMBER.search(spoken):
-        return MEMBER
-    if _OWN_WORD.search(spoken) and not _THIS_WORD.search(spoken):
-        return MEMBER
-    if _OWNER.search(spoken) or _THIS_WORD.search(spoken):
-        return OWNER
-    return MEMBER if _AGREES.match(spoken) else None

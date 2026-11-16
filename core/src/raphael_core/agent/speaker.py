@@ -22,7 +22,7 @@ from dataclasses import dataclass, replace
 from .policy import PLUGIN_PREFIX
 
 RAPHAEL_ID = 0
-# Raphael's name in each language: what `ask_member` takes for him, and what the member column shows.
+# Raphael's name in each language: what `ask_member` takes for it, and what the member column shows.
 RAPHAEL_NAMES = {"zh-TW": "拉斐爾", "en": "Raphael", "ja": "ラファエル",
                  "zh-CN": "拉斐尔", "ko": "라파엘", "es": "Raphael", "fr": "Raphael",
                  "de": "Raphael", "pt-BR": "Raphael", "it": "Raphael", "ru": "Рафаэль",
@@ -91,11 +91,11 @@ class Speaker:
     def uses_plugin(self, key: str) -> bool:
         """Respect owner-selected connections without restricting built-in harness tools. A member's own computer is
         not a connection: its tools are keyed `mcp:computer-<computer>/<tool>`, so the owner's list of connections
-        never names them, and a member with a list must not lose its computer for that (owner, 2026-11-14: a member
+        never names them, and a member with a list must not lose its computer for that (a member
         with four chosen tools said it would use its own computer and could not). Every member has its computer
         (R-COMP-ACCESS-01); whether one is on offer at all is the computer's own state, never this list's."""
         server = plugin_server(key)
-        if self.tools is None or server is None or server in {"local", "computer", "media"} or server.startswith("computer-"):
+        if self.tools is None or server is None or server in {"local", "owner_files", "computer", "media"} or server.startswith("computer-"):
             return True
         allowed = {(plugin_server(item) or item).casefold() for item in self.tools}
         return server.casefold() in allowed

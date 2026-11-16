@@ -252,7 +252,7 @@ def panel_commands(count):
 
     The order is the order of dependence: what a panel will hold is defined before the panel names it, and the list of
     panels, which is what makes a panel exist, is written last. A panel that is announced first is a panel whose plugins
-    are written one process at a time behind it (measured 2026-11-14: a panel is 12 px wide until its launchers are
+    are written one process at a time behind it (measured: a panel is 12 px wide until its launchers are
     loaded, and a panel that finds a plugin id with no plugin behind it keeps nothing).
     """
     count = screen_count(count)

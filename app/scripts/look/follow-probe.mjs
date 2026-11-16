@@ -1,14 +1,13 @@
 /**
- * The owner reads a member's conversation at its bottom while the member's reply arrives as the core sends it (owner,
- * 2026-11-14: 「成員回覆的時候，有時候畫面會從最底部往上跳一點…完全不要有任何移動」, R-FOLLOW-01). Every frame is sampled at
+ * The owner reads a member's conversation at its bottom while the member's reply arrives as the core sends it (R-FOLLOW-01). Every frame is sampled at
  * the point it is painted: a ResizeObserver on a 1 px probe that changes size each animation frame is told after layout,
  * after the app's own observers (made before it) and before paint, so it reads what the owner sees, not a state the same
  * frame still corrects. Each frame records how far the thread stands above its bottom (`scrollHeight - scrollTop -
- * clientHeight`) and, when the owner reads higher up, where the line he reads stands.
+ * clientHeight`) and, when the owner reads higher up, where the line they read stands.
  *
  *  - `open`: the conversation is opened by its row with the probe already sampling (the first frame it is seen in counts);
- *  - `position`: "bottom" (the owner follows the newest turn), or "up" (he wheeled up to read, with the real mouse: `wheel` px,
- *    by default most of a screen; a few tens of px is still his own place, never pulled back to the bottom);
+ *  - `position`: "bottom" (the owner follows the newest turn), or "up" (they wheeled up to read, with the real mouse: `wheel` px,
+ *    by default most of a screen; a few tens of px is still their own place, never pulled back to the bottom);
  *  - `reply`: the reply is played as it arrives: the owner's message sent from the composer (bottom only), the turn starting,
  *    the work line and its words, a short picture strip that comes late (it grows the thread by less than the 80 px band),
  *    the reply's words growing, a large picture the core reads back late, the turn ending (the work
@@ -41,7 +40,7 @@ export async function followProbe(page, { selector = ".mb-chat:not([hidden]) .ra
     let flip = false;
     const loop = () => { flip = !flip; tick.style.width = flip ? "2px" : "1px"; seen.raf = requestAnimationFrame(loop); };
     seen.raf = requestAnimationFrame(loop);
-    // Scrolling input of the owner's own: a frame after it is his, not the thread's.
+    // Scrolling input of the owner's own: a frame after it is theirs, not the thread's.
     seen.mark = () => { seen.input++; };
     for (const type of ["wheel", "touchstart"]) document.addEventListener(type, seen.mark, { capture: true, passive: true });
   }, selector);
@@ -112,7 +111,7 @@ export async function followProbe(page, { selector = ".mb-chat:not([hidden]) .ra
 
 /**
  * Which frames the owner saw move: at the bottom, a frame above it by more than `slack`; reading higher up, a frame whose
- * read line stands elsewhere than in the first sampled frame. Frames after a scrolling input of the owner's are his own.
+ * read line stands elsewhere than in the first sampled frame. Frames after a scrolling input of the owner's are theirs.
  * Bad frames are grouped by phase, with their count, the largest distance and the first time, so a report says what moved.
  */
 export function judgeFollow(frames, { position = "bottom", slack = 1, opening = false } = {}) {

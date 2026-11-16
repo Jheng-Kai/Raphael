@@ -2,7 +2,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 const api=vi.hoisted(()=>({roomTranscribe:vi.fn(),core:vi.fn()}));
 vi.mock("./api",()=>api);
-import { createChatComposer, drawTaskSlot, wavBytes } from "./chat-composer";
+import { createChatComposer, drawTaskSlot, permissionWordFits, wavBytes } from "./chat-composer";
 import { watchChipRows } from "./chip-scroll";
 import { setLocale } from "./i18n";
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
@@ -80,7 +80,6 @@ test("attachment-only delivery uses the shared composer and keeps the file on fa
 });
 
 test("a room's chip stands the moment a file is added, busy and unsendable until its bytes are read",async()=>{
- // Owner, 2026-11-15: 「才剛點下去他就在畫面裡了」 (R-ATTACH-03).
  const {view,send}=mount();const picker=view.el.querySelector<HTMLInputElement>(".cmp-picker")!;let read!:(buffer:ArrayBuffer)=>void;
  Object.defineProperty(picker,"files",{value:[{name:"notes.txt",type:"text/plain",size:5,arrayBuffer:()=>new Promise<ArrayBuffer>(resolve=>{read=resolve;})}]});picker.dispatchEvent(new Event("change"));
  const chip=view.el.querySelector<HTMLElement>(".cmp-file .cmp-chip")!;
@@ -121,6 +120,17 @@ test("voice shows Send while recording and its next press delivers the combined 
  expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(send).toHaveBeenCalledExactlyOnceWith("Typed first Please use Sample Tool Ex", []);expect(view.input.value).toBe("");expect(api.roomTranscribe).toHaveBeenCalledOnce();
  vi.unstubAllGlobals();
 });
+test("the permission's word shows exactly while the row holds it beside the model's first letters, and does not flicker at the edge (R-UI-160)", () => {
+  // The + and the voice button (64), three gaps (12), the permission with its word (90), the model at its first letters (118).
+  const row = { fixed: 64, gaps: 12, modeWide: 90, modelNeed: 118 };
+  expect(permissionWordFits({ ...row, room: 284, shown: true })).toBe(true);
+  expect(permissionWordFits({ ...row, room: 283, shown: true })).toBe(false);
+  // Half a pixel short keeps a shown word, and a hidden one waits for a pixel to spare.
+  expect(permissionWordFits({ ...row, room: 283.6, shown: true })).toBe(true);
+  expect(permissionWordFits({ ...row, room: 284.5, shown: false })).toBe(false);
+  expect(permissionWordFits({ ...row, room: 285, shown: false })).toBe(true);
+});
+
 test("WAV encoding produces mono PCM with correct sample rate and clipping",()=>{
  const bytes=wavBytes([new Float32Array([-2,0,2])],16000),view=new DataView(bytes.buffer);expect(new TextDecoder().decode(bytes.slice(0,4))).toBe("RIFF");expect(view.getUint32(24,true)).toBe(16000);expect(view.getUint16(22,true)).toBe(1);expect(view.getInt16(44,true)).toBe(-32768);expect(view.getInt16(48,true)).toBe(32767);
 });

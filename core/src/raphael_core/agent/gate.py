@@ -186,7 +186,7 @@ class ToolGate:
         for this computer (opening anything, the volume, the lock...) or a step of a run on the
         desktop when `worker` is true: those are for the user at the keyboard, never for a task
         that runs while they are away, whatever the permission mode (R-PC-01: 全部允許 does not reopen the
-        owner's PC). A tool the owner said Always to (`waived`) needs no yes."""
+        owner's screen). A tool the owner said Always to (`waived`) needs no yes."""
         if worker and (action.tool in COMMANDS or action.tool in COMPUTER_TIERS):
             raise NotApproved(action.tool)
         self._door(action, approval)
@@ -258,7 +258,7 @@ class ToolGate:
 
     def check_management_batch(self, action: Action, approval: Approval | None) -> None:
         """One single-use approval covers exactly the listed administrative changes, as the owner read them on one card
-        (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」). A list that holds anything else is refused, and so is a
+. A list that holds anything else is refused, and so is a
         team proposal (members and folders, `BATCH_TOOLS`) unless it cannot be undone: those keep their editable card."""
         from .team_admin import BATCH_TOOLS, STAGED_TOOLS
 

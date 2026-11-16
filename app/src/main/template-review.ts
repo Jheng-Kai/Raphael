@@ -1,10 +1,11 @@
 // A template reviewed as separate pages: the face, the name and what it is for; then three rows
 // that open pages - 內容 (role, instructions, personality, how it replies and skills, each skill opening its own page),
 // 例行工作 (each routine opening its content and trigger) and 整合 (the apps it needs). Every field of a raphael-member is
-// shown here and no other (template-contract.test.ts); a template carries no memory (owner, 2026-11-11). A page has a
+// shown here and no other (template-contract.test.ts); a template carries no memory. A page has a
 // back arrow and its title in the dialog's head; the dialog's own buttons stay at its foot.
 import { t } from "./i18n";
 import type { Dialog } from "./member-dialogs";
+import { linkedText } from "./message-content";
 import { connectionName, skillContents, type MemberTemplate } from "./member-templates";
 import { routineSentenceHTML } from "./members";
 import { appMarkHTML } from "./connector-card";
@@ -19,7 +20,7 @@ export interface ReviewOptions {
 }
 
 const box = (label: string, text: string): string => text.trim()
-  ? `<section class="tpr-field"><h4>${esc(label)}</h4><div class="tpr-box">${esc(text.trim())}</div></section>` : "";
+  ? `<section class="tpr-field"><h4>${esc(label)}</h4><div class="tpr-box">${linkedText(text.trim())}</div></section>` : "";
 const row = (go: string, title: string, hint = "", attrs = ""): string =>
   `<button type="button" class="btn tpr-row" data-tpl-go="${esc(go)}"${attrs}><span class="tpr-row-t"><b>${esc(title)}</b>${hint ? `<span>${esc(hint)}</span>` : ""}</span>${ico("right")}</button>`;
 const list = (rows: string[]): string => rows.length ? `<div class="tpr-list">${rows.join("")}</div>` : "";

@@ -92,7 +92,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand) && !dataHeading;
   };
   // An IANA time-zone id ("Asia/Taipei") is an identifier, like a file name or a URL: the Chinese row names the city and
-  // then shows the id the setting stores (zoneLabel in timezones.ts, 2026-11-05), so the id is not English copy.
+  // then shows the id the setting stores (zoneLabel in timezones.ts), so the id is not English copy.
   const IANA_ZONE_ID = /\b(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific)\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)?/g;
   const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [], clippedText = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
@@ -126,7 +126,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     // R-UI-145: a control that is drawn answers a press. Something else standing on it (a panel that stayed in the layout under the
     // open one, a card that grew over its neighbour) is a defect even when every "is it hidden" question says no: it was found
-    // by a person looking at a picture (2026-11-11, the slimes of every closed tab drawn over the open tab's).
+    // by a person looking at a picture (the slimes of every closed tab drawn over the open tab's).
     // A layer that is fixed to the window (a menu, a dialog, a scrim, a toast, the window's own buttons) is meant to stand over the
     // page, so it may cover what is behind it; anything else may not stand over a control.
     if (element.matches(PRESSABLE) && box.width >= 6 && box.height >= 6 && !element.closest(NEVER_COVERED_EXEMPT)) {
@@ -145,7 +145,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // The sidebar's icons and the buttons on the window's edges are soft round buttons;
     // so is an icon that floats on a picture (the lightbox's close, a member page's way back and its cover's change), which needs its own surface,
     // and so are the guide's foot's round buttons: a step's pair, the way back on a quiet grey and
-    // the way on a circle of the accent (owner, 2026-11-11).
+    // the way on a circle of the accent.
     const sidebarAction = element.matches(".side .btn.icon, .page-agent .mb-det-head .btn.icon, .page-agent .mb-head :is(.ra-tools, .mb-head-l, .room-picker) .btn.icon, :is(.mb-dlg-head, .cs-dlg-head, .room-side-thread > header, .desktop-panel[data-expanded] .desktop-dock) .btn.icon, .btn.icon.modal-x, .ob-foot .ob-pair > .btn.icon, .media-lightbox .lb-card > .btn.icon.lb-close, .ms-cover > .btn.icon.ms-cover-btn, .ms-bar > .btn.icon.ms-back");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
@@ -175,7 +175,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
     if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
     // An overlay scrollbar takes no width, so the height says it as well: a node that escaped a thread's clip
-    // once stretched the area under a long room and the wheel scrolled the whole conversation away (owner, 2026-11-09).
+    // once stretched the area under a long room and the wheel scrolled the whole conversation away.
     else if (element.matches('.main') && element.scrollHeight > element.clientHeight + 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', `A conversation scrolls inside itself, yet the main area around it scrolls ${element.scrollHeight - element.clientHeight}px`);
     if (element.matches('.mb-av-slime') && style.overflow !== 'visible') {
       const reserve = Number(style.overflowClipMargin?.match(/([\d.]+)px/)?.[1] ?? 0);
@@ -204,7 +204,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
       }
     }
-    // R-UI-143: a title cut down to less than a letter and its ellipsis shows half a glyph (a month's chip with a Google mark, 2026-11-12).
+    // R-UI-143: a title cut down to less than a letter and its ellipsis shows half a glyph (a month's chip with a Google mark).
     if (style.textOverflow === 'ellipsis' && element.clientWidth >= 4 && element.scrollWidth > element.clientWidth + 1 && element.clientWidth < (parseFloat(style.fontSize) || 12) && /\S/.test(element.textContent ?? '')) violation('R-UI-143', `A truncated text is left ${element.clientWidth}px, less than one letter: a cut glyph`);
     // R-UI-142: a time that a chip is too narrow for is not drawn half ("11:(" in the second lane of an hour with two events); an overflow:hidden
     // box does not show up as horizontal overflow, so ask the box itself.
@@ -241,8 +241,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     if (element.matches('.modal-body .purpose')) violation('R-UI-02', 'Settings subtitle repeats the pane purpose');
     if (element.matches('.ob-col > h2') && parseFloat(style.fontSize) < 28) violation('R-UI-37', 'Onboarding needs a large headline');
-    // The welcome's one pill fills its row. A step has two round buttons together in the middle of the foot (owner,
-    // 2026-11-11 evening): the way back at the left of the primary, one size, neither at an edge of the card.
+    // The welcome's one pill fills its row. A step has two round buttons together in the middle of the foot:
+    // the way back at the left of the primary, one size, neither at an edge of the card.
     if (element.matches('.ob-actions:not(.ob-pair) > .btn.pri') && box.width < element.parentElement.getBoundingClientRect().width * .6)
       violation('R-UI-37', 'Onboarding primary action must fill the action row');
     if (element.matches('.ob-actions.ob-pair')) {
@@ -292,12 +292,12 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       const routineNavigation = element.matches('.chat-message .routine-origin > button.routine-run-link[data-act="open-routine"]');
-      // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), as Grok Bot's chips and 「Connect」 buttons are.
+      // On a floating surface (R-FLOAT-01) a control is framed by its fill (`--float-ctl`), like the chips and 「Connect」 buttons.
       const filledOnFloat = !!element.closest('.modal, .mb-dialog, .cs-dialog, .au-pop, .cb-card, .menu') && !/rgba\(0, 0, 0, 0\)|transparent/.test(style.backgroundColor);
       if (!navigation && !routineNavigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder && !filledOnFloat) violation('R-UI-18', 'Text action button has no frame');
     }
-    // The guide's row follows the rule like any other: since 2026-11-11 its round arrow (or ×) is at the left of the black
-    // primary, no longer stacked above it (owner guide), so nothing in the guide is exempt.
+    // The guide's row follows the rule like any other: its round arrow (or ×) is at the left of the black
+    // primary, not stacked above it, so nothing in the guide is exempt.
     if (element.matches('.action-row')) {
       const buttons = [...element.querySelectorAll('button')].filter(visible);
       const primary = buttons.find(button => button.matches('.pri'));
@@ -332,7 +332,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   }
   for (const orphan of overflowOrphans) productRules.push({ ...orphan, rule: 'R-UI-44', reason: 'A ⋯ button that a right click on its row does not reach' });
   // R-UI-140: the loop above skips what `hidden` hides, so it cannot see a hidden thing that is drawn anyway (a stylesheet rule that
-  // sets `display`, such as one for reduced motion, beats the hidden attribute: 2026-11-11 the slimes of every closed tab of a
+  // sets `display`, such as one for reduced motion, beats the hidden attribute: the slimes of every closed tab of a
   // picker were drawn over the open tab's). Ask the element itself, not the attribute.
   for (const element of doc.body.querySelectorAll('[hidden]')) {
     if (element.namespaceURI === 'http://www.w3.org/2000/svg' || element.getAttribute('hidden') === 'until-found') continue;
@@ -367,7 +367,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   };
   // R-UI-144: the rows of one settings card are laid out one way. A control that does not fit beside its label drops under it; when that
   // happens to one row of a card while the next keeps its control beside its label, the card reads as two layouts (the language row under the
-  // microphone row of 聽寫與快捷鍵 at 720 wide, 2026-11-12). A model row stacks by design at a narrow width and is left out.
+  // microphone row of 聽寫與快捷鍵 at 720 wide). A model row stacks by design at a narrow width and is left out.
   for (const list of doc.querySelectorAll('.slist')) {
     if (!visible(list) || !onScreen(list)) continue;
     const rows = [...list.querySelectorAll(':scope > .row:not(.row-model)')].filter(row => visible(row) && row.querySelector(':scope > .lbl') && row.querySelector(':scope > .ctl')).map(row => {
@@ -380,7 +380,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   }
   // R-UI-141: the caption strip is no block of a colour of its own. Over a conversation it is transparent so the right panel can reach the
   // window's top, and a page laid over that conversation (the new member's) that starts below the strip left a bar of the panel's colour
-  // across the top of a wide window (2026-11-11, 1920 wide, found by looking). Ask the pixels: the surface under the strip is the surface
+  // across the top of a wide window (seen at 1920 wide). Ask the pixels: the surface under the strip is the surface
   // just below it, wherever both are a large surface. A dialog's dim, a menu or the lightbox covers the strip by design.
   const chromeBar = doc.querySelector('.window-chrome');
   // A scrim the page keeps closed (a hidden settings modal) dims nothing: only a drawn one counts.
@@ -388,7 +388,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   const DIMS = '.mb-scrim:not(.cr-scrim), .modal-scrim, .cs-scrim, .sidebar-scrim, .mb-det-scrim, .menu.side-search';
   const dimmed = chromeBar && [...doc.querySelectorAll(DIMS)].some(visible);
   // Under a dialog's dim the strip is dimmed with everything else, so it has no surface of its own: a bright strip over a dimmed window
-  // (the new member's page under a template preview, 2026-11-12) reads as a broken layer. A dim that itself lies over the strip dims it
+  // (the new member's page under a template preview) reads as a broken layer. A dim that itself lies over the strip dims it
   // too, whatever the strip's own colour: only a strip that stands above the dim stays bright.
   if (chromeBar && dimmed && doc.documentElement.dataset.desktopExpanded === undefined) {
     const own = parsed(win.getComputedStyle(chromeBar).backgroundColor), bar = chromeBar.getBoundingClientRect();
@@ -405,7 +405,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       let big = null, owner = null;
       for (const element of doc.elementsFromPoint(x, y)) {
         // A picture is no surface to compare: over a member's cover picture the window buttons keep a backing of their own, so that
-        // they can be read on whatever the owner chose (member-settings.css; red on main since the audit came, 2026-11-12).
+        // they can be read on whatever the owner chose (member-settings.css).
         if (element.localName === 'img') return null;
         const style = win.getComputedStyle(element);
         if (style.backgroundImage && style.backgroundImage !== 'none') return null;
@@ -507,8 +507,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
     }
   }
-  // R-UI-157: a row that opens something and holds a switch is one control to the eye (owner, 2026-11-14, a second time
-  // after Connect Apps): under the pointer the fill is the row's and the switch stands on it. A fill on the row's button
+  // R-UI-157: a row that opens something and holds a switch is one control to the eye: under the pointer the fill is the row's and the switch stands on it. A fill on the row's button
   // alone, with the switch beside it, fails on every scene that shows such a row.
   const lit = fill => !!fill && !/^(?:transparent|none|rgba\(0, 0, 0, 0\))$/.test(fill.value.trim());
   for (const row of doc.body.querySelectorAll('*')) {

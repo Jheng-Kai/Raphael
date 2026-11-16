@@ -285,20 +285,20 @@ test("the stick to the bottom writes a clamped position and reads no container g
   expect(read).not.toHaveBeenCalled();
 });
 
-test("a thread the owner scrolled up stays where he reads, near the bottom or far from it, until he is back at its bottom", async () => {
+test("a thread the owner scrolled up stays where they read, near the bottom or far from it, until they are back at its bottom", async () => {
   const thread = stickThread();
-  // His wheel lets go of the bottom before the scroll it starts has moved anything: the growth in that frame does not pull him back.
+  // Their wheel lets go of the bottom before the scroll it starts has moved anything: the growth in that frame does not pull them back.
   thread.root.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
   thread.change({ height: 2040 });
   expect(thread.view.top).toBe(1400);
   await thread.scroll(1370);
-  // Thirty pixels up is still his place: nearer than the 80 px band, and the end observer saying "near" changes nothing.
+  // Thirty pixels up is still their place: nearer than the 80 px band, and the end observer saying "near" changes nothing.
   thread.root.dispatchEvent(new CustomEvent("conversation-near-bottom", { detail: true }));
   thread.change({ height: 2300 });
   thread.change({ client: 520 });
   expect(thread.view.top).toBe(1370);
   expect(richScrollFollows(thread.root)).toBe(false);
-  // Back at the very bottom by his own scroll down: the thread follows again.
+  // Back at the very bottom by their own scroll down: the thread follows again.
   await thread.scroll(1780);
   expect(richScrollFollows(thread.root)).toBe(true);
   thread.change({ height: 2500 });
@@ -330,7 +330,7 @@ test("a thread the owner scrolled up that comes to its bottom by getting shorter
   thread.root.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
   await thread.scroll(1300);
   expect(richScrollFollows(thread.root)).toBe(false);
-  // What stood under him went (another room drawn in its place, the end of a long card): the end clamps to the bottom.
+  // What stood under them went (another room drawn in its place, the end of a long card): the end clamps to the bottom.
   thread.change({ height: 1500 });
   thread.root.dispatchEvent(new Event("scroll"));
   await new Promise(requestAnimationFrame);

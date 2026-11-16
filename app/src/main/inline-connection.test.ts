@@ -71,7 +71,7 @@ test("conversation key setup stays inline and sends secrets only to its own conn
   controller.disconnect();
 });
 
-// Owner, 2026-11-09: a server of the owner's own (n8n) is set up in the conversation, in its card.
+// A server of the owner's own (n8n) is set up in the conversation, in its card.
 test("an own server's card asks for its address and token from the card itself and sends them only to its connection", async () => {
   const thread = document.createElement("div"); document.body.append(thread);
   thread.innerHTML = connectorCardHTML({ id: "n8n-card", app: "n8n", name: "n8n", state: "pending", needs: "own_server", error: null, reconnect: false, tool_count: null, expires_at_ms: 0, resumed: false,

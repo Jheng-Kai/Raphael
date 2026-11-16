@@ -1983,7 +1983,7 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
     await app.home._timezone_task
     assert timezone_updates == ["Asia/Taipei", "Europe/Paris"]
     assert value["today"] == value["reports"] == value["calendar"] == []
-    # Home is gone (owner, 2026-11-12): the overview serves the calendar only, with no usage or dictation figures.
+    # Home is gone: the overview serves the calendar only, with no usage or dictation figures.
     assert "usage" not in value and "dictation" not in value
 
 

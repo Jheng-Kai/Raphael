@@ -68,7 +68,7 @@ test("a press on a control outside an open popover closes it and the control's h
   expect(document.activeElement).toBe(other);
 });
 
-// Owner, 2026-11-13: 「如果點 dialog 外面就是把 dialog 關掉就好，不用可以直接點到後面的東西」: a dialog's scrim closes it and the press is spent.
+// A dialog's scrim closes it and the press is spent.
 test("a press on a scrim over a control closes the dialog and presses nothing behind it", () => {
   const button = document.createElement("button"), act = vi.fn(), close = vi.fn();
   document.body.append(button); button.addEventListener("click", act);

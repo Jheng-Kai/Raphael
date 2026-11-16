@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The viewer page the core serves into the computer's screen (`BOOTSTRAP` in core/.../computer/viewer.py): while the owner
-// holds control, his Ctrl+V is held back and his clipboard, read by the app, is put into the computer before the keys of the
+// holds control, their Ctrl+V is held back and their clipboard, read by the app, is put into the computer before the keys of the
 // paste are sent. The page's own source is run here against a stand-in for noVNC's RFB.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -41,7 +41,7 @@ const answer = (id: number | undefined, text: unknown, from: unknown = parent): 
 };
 const asked = (): { type: string; id?: number }[] => posted.filter(message => message.type === "raphael-desktop-paste-request");
 
-test("while the owner holds control Ctrl+V is held back from the computer and the app is asked for his clipboard", () => {
+test("while the owner holds control Ctrl+V is held back from the computer and the app is asked for their clipboard", () => {
   key("ControlLeft", "Control", { ctrlKey: true });
   const paste = key("KeyV", "v", { ctrlKey: true });
   expect(paste.defaultPrevented).toBe(true);
@@ -50,14 +50,14 @@ test("while the owner holds control Ctrl+V is held back from the computer and th
   expect(rfb.sent).toEqual([]);
 });
 
-test("his text is put into the computer first, then the paste's keys follow", () => {
+test("their text is put into the computer first, then the paste's keys follow", () => {
   key("ControlLeft", "Control", { ctrlKey: true });
   key("KeyV", "v", { ctrlKey: true });
   answer(asked()[0].id, "sk-or-v1-0123456789abcdef");
   expect(rfb.pasted).toEqual(["sk-or-v1-0123456789abcdef"]);
   expect(rfb.sent).toEqual([]);
   vi.advanceTimersByTime(100);
-  // His Ctrl is still down in the computer, so only the V is pressed.
+  // Their Ctrl is still down in the computer, so only the V is pressed.
   expect(rfb.sent).toEqual([[0x76, "KeyV"]]);
 });
 
@@ -69,7 +69,7 @@ test("Ctrl+Shift+V pastes the same way with its shifted key, and a released Ctrl
   expect(rfb.sent).toEqual([[0xffe3, "ControlLeft", true], [0xffe1, "ShiftLeft", true], [0x56, "KeyV"], [0xffe1, "ShiftLeft", false], [0xffe3, "ControlLeft", false]]);
 });
 
-test("on a Mac his Command+V is the paste: the computer is told Ctrl+V, with its Super let go first", () => {
+test("on a Mac their Command+V is the paste: the computer is told Ctrl+V, with its Super let go first", () => {
   key("MetaLeft", "Meta", { metaKey: true });
   const paste = key("KeyV", "v", { metaKey: true });
   expect(paste.defaultPrevented).toBe(true);
@@ -78,12 +78,12 @@ test("on a Mac his Command+V is the paste: the computer is told Ctrl+V, with its
   vi.advanceTimersByTime(100);
   expect(rfb.pasted).toEqual(["from the Mac"]);
   expect(rfb.sent).toEqual([[0xffeb, "MetaLeft", false], [0xffe3, "ControlLeft", true], [0x76, "KeyV"], [0xffe3, "ControlLeft", false]]);
-  // Ctrl and Command together are no paste of his.
+  // Ctrl and Command together are no paste of theirs.
   const both = key("KeyV", "v", { metaKey: true, ctrlKey: true });
   expect(both.defaultPrevented).toBe(false);
 });
 
-test("when he only watches, or a member works, Ctrl+V is not held back and nothing is asked", () => {
+test("when they only watch, or a member works, Ctrl+V is not held back and nothing is asked", () => {
   rfb.viewOnly = true;
   key("ControlLeft", "Control", { ctrlKey: true });
   const paste = key("KeyV", "v", { ctrlKey: true });

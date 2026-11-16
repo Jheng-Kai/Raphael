@@ -114,7 +114,7 @@ from ..agent.persona import (
     worker_system_prompt,
 )
 from ..agent.plugins import preview
-from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
+from ..computer.local_tools import is_local, card_arguments, BACKGROUND_WAIT_S
 from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending, Tier
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
@@ -138,6 +138,7 @@ from ..services.attachments import Attachment
 from ..services.video import is_video, place_videos, video_notes
 from ..agent.attachment_inputs import earlier_files, text_context
 from ..router import Router
+from ..worker.computer_verification import STOPPED as UNCHECKED_STOP, UNCHECKED
 from ..worker.guards import neutralize, wrap_untrusted
 from ..worker.loop import WAITING as PAUSED_KIND
 from .brief import BRIEF_WINDOW_MS, TaskBrief, ToolUse
@@ -145,9 +146,9 @@ from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from .routine_outcome import failure as routine_failure
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
-from .outcomes import computer_files, named_files, worker_trace
+from .outcomes import computer_files, exists_unreadable, file_named_in, named_files, worker_trace
 from .handback import title
-from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
+from .tasks import FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore, deliverable_names
 
 logger = logging.getLogger(__name__)
 
@@ -163,12 +164,12 @@ ROOM_PARALLEL = 2
 STALE_QUEUE_MS = 2 * 60 * 60 * 1000
 # How many routine runs work at once, of the MAX_PARALLEL places: the rest of what is due waits its turn, in the order it came, and
 # one place is always left for what the owner asked for. Five routines due at 07:00 used to start together on a PC that was
-# starting up (a weather check timed out); a routine's run is nobody's emergency (owner, 2026-11-14).
+# starting up (a weather check timed out); a routine's run is nobody's emergency.
 ROUTINE_PARALLEL = 2
 # Routine runs on one subscription CLI start at least this far apart (seconds): a refused sign-in shows in the first one's
 # first seconds, and the ones after it are not started into it.
 ROUTINE_CLI_GAP_S = 10.0
-# A reply in a room has no clock of its own (Hermes, tools/delegate_tool.py): it goes on while it makes progress (a word or
+# A reply in a room has no clock of its own: it goes on while it makes progress (a word or
 # a step of its CLI, a model's reply, a tool coming back, a new attempt) and ends after this long with none. A chosen wait
 # before another attempt is not a stall. A total of 60 seconds used to cut long rooms off mid-reply.
 ROOM_STALL_S = 180.0
@@ -189,9 +190,17 @@ AT_THIS_COMPUTER = "app"
 _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 # Endings that are the app's judgement of the work, not a fault of the brain: the turn's words say what was missing, and no
 # brain failure is recorded with them. Recorded as one ("unknown" on `cli:claude`), a member asked about its failed routine
-# told the owner of a Claude error of unknown cause (2026-11-16, R-ROUTINE-05).
-_JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
-                             "missing_terminal", "dangling_mention", "child_work_incomplete"))
+# told the owner of a Claude error of unknown cause (R-ROUTINE-05).
+_JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_unreadable", "artifact_changed",
+                             "work_without_action", "missing_terminal", "child_work_incomplete"))
+# Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
+# worker could not start or broke (`worker_` and the name of the error). A brain failure recorded for them says the model failed.
+_APP_ENDINGS = frozenset(("member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
+
+
+def _brainless(reason: str | None) -> bool:
+    """Whether an ending says nothing of the brain: the app judged the work, or the app itself stopped it."""
+    return reason in _JUDGED_ENDINGS or reason in _APP_ENDINGS or str(reason).startswith("worker_")
 # The most of a routine's last report that its next run is shown.
 LAST_REPORT_CHARS = 1500
 # Joins a reply's messages while its hand-back block is taken out; no model writes it.
@@ -238,7 +247,7 @@ HANDED_WORK_BACK = (
     "only the owner can settle. Then tell the owner briefly what finished and where to read each colleague's work in their private conversation. "
     "Keep the chief's conversation brief; do not copy colleagues' full work here. Include checks, artifact handles and anything unfinished."
 )
-# What a routine's last message is (owner, 2026-11-14: the report of a daily reading page was one thin line he could not act on):
+# What a routine's last message is (the report of a daily reading page was one thin line the owner could not act on):
 # the owner reads only it, so it names what the run made.
 ROUTINE_REPORT = (
     "\nThis run is a routine, and the owner reads only your last message. Do the whole of what the routine asks, then end with "
@@ -259,6 +268,8 @@ RESULTS_CHARS = 1_000_000
 # work, the most files looked at, and the most kept as evidence.
 ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs", ".browser-profiles"))
 ARTIFACT_SCAN = 20_000
+# The names a scan may list (not read) in one folder: files that are not named take none of ARTIFACT_SCAN.
+ARTIFACT_LISTING = 10 * ARTIFACT_SCAN
 ARTIFACT_KEEP = 20
 ARTIFACT_MAX_BYTES = 64 * 1024 * 1024
 
@@ -349,8 +360,7 @@ def _interrupted_report(language: str, steps: int) -> tuple[str, str]:
 
 
 # What a task is told of the language to write in, with the task (R-CACHE-02), naming no language: the owner's own words
-# say which. It took the place of the interface language the task was told before (owner, 2026-11-14: 「它的 UI 語言就是
-# 單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」).
+# say which. It took the place of the interface language the task was told before.
 TASK_LANGUAGE = ("Language: unless the owner or your own persona asks for another, write every message and the report "
                  "in the language the owner writes in, as their own messages here show it; when there are none, in the "
                  "language of this task's text.")
@@ -839,8 +849,7 @@ class BackgroundService:
         return {*snapshot.catalog(), *snapshot.refs}
 
     def _last_run(self, task: Task) -> str:
-        """When the routine of this run last ran, whether that run worked and what it reported, as data (owner, 2026-11-11:
-        「上次檢查時間無法確認」 in 16 of 66 reports, the same notices over and over): the run can say what changed since."""
+        """When the routine of this run last ran, whether that run worked and what it reported, as data (otherwise reports repeated the same notices over and over): the run can say what changed since."""
         from datetime import datetime, timezone
         from zoneinfo import ZoneInfo
         row = self._metrics_conn.execute(
@@ -1107,6 +1116,10 @@ class BackgroundService:
             for task_id in self._store.invalidate_tree(task.id):
                 if (run := self._runs.get(task_id)) is not None:
                     self._host.cancel(run)
+                elif task_id != task.id and self._waits(task_id):
+                    # It waits for the owner's yes or answer, or for its own colleagues: it ends as Stop ends it, its card or
+                    # question closed with it. Until then the generation raised above keeps it from going on.
+                    self._end_later(task_id)
                 else:
                     self._withdraw(task_id, prefix='')
             # The asker was never told to the owner: it ends without a report.
@@ -1206,14 +1219,14 @@ class BackgroundService:
     def _chat_language(task, origin, context) -> str:
         """The language the owner writes in for this task, read from the owner's own words (the request it came from,
         else their latest message in the conversation), else from the task's text: never the interface language, which
-        goes to no model (owner, 2026-11-14). It picks the per-language pieces a model is given (Raphael's name)."""
+        goes to no model. It picks the per-language pieces a model is given (Raphael's name)."""
         asked = origin.question if origin is not None and origin.source in _OWNER_WORDS else ""
         latest = next((turn.question for turn in reversed(context or ())
                        if turn.source in _OWNER_WORDS and detect_language(turn.question)), "")
         return chat_language(asked, latest, task.text)
 
     def _work_brief(self, task):
-        """Who the work is from and who reads what (owner, 2026-11-09): the work and the owner-facing result
+        """Who the work is from and who reads what: the work and the owner-facing result
         stay in the member's own conversation; only the <handback> block goes back, written to the colleague
         who asked, or for its own background work to the place it came from, never to the owner."""
         owner = neutralize(self._settings.get("owner_name") or "") or "the owner"
@@ -1788,7 +1801,7 @@ class BackgroundService:
             prepare = getattr(self._gate.plugins, 'prepare', None)
             if prepare is not None:
                 await prepare(speaker.id)
-            # The same tools for every task of this kind, whatever it asks (owner, 2026-11-09, decision 2).
+            # The same tools for every task of this kind, whatever it asks.
             snapshot = take_snapshot(self._gate.plugins,memory=memory is not None,history=private,
                 speaker=speaker,team=team,turned_off=self._tools.turned_off(),
                 max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER,
@@ -1824,10 +1837,14 @@ class BackgroundService:
             attachment_store=self._attachment_store,
             artifact=lambda payload: self._artifact(task, payload),
         )
+        # The generation the task was taken up at, not the one it has now: a Stop while it was being started (its member's
+        # computer seated, its files read) raised it, and the run then ends before it begins (R-PUMP-02).
+        run.generation = task.generation
         from ..agent.actions import action_scope
         run.tool_allowed = lambda key: bool((current := self._speaker(task.member_id)) and current.uses_plugin(key))
         snapshot.tool_allowed = run.tool_allowed
         run.room_speech = task.scope == "room"
+        run.owner_language = self._owner_words(task, speaker)
         # Work in a member's private conversation tells the owner how it goes (agent/progress_updates.py); a meeting's
         # reply is its post, a routine's owner reads only its last message, and a consultation answers a colleague.
         run.updates = (ProgressUpdates(self._clock)
@@ -1880,7 +1897,7 @@ class BackgroundService:
         from ..brain.owner import owner_context
         # The team as it is now goes with the task, not among the rules: a meeting's state changes from one
         # reply to the next, and in the system prompt each change had the provider read the member's whole
-        # prefix again at full price, where its replies would otherwise share it (owner, 2026-11-09).
+        # prefix again at full price, where its replies would otherwise share it.
         user += roster_prompt(self._team, speaker, self._chat_language(task, origin, context))
         system += owner_context(self._settings)
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
@@ -2059,6 +2076,15 @@ class BackgroundService:
         logger.info("Background task %d goes on: approved=%s", task.id, approved)
         await self._carry(task, run, spec, prepare)
 
+    def _stopped_while_starting(self, task: Task, run: TaskRun) -> bool:
+        """Whether the task was stopped between being taken up and its run beginning (R-PUMP-02): Stop raised its generation
+        then, and it ends here, cancelled and silent, before its worker or its model is asked anything."""
+        current = self._store.get(task.id)
+        if current is not None and current.state == RUNNING and current.generation == run.generation:
+            return False
+        self._conclude_run(task, run, {"status": "cancelled"})
+        return True
+
     async def _carry_cli(self, task, run, spec=None):
         """Keep the shared CLI loop alive across the worker's existing approval cards."""
         run.activity = current()
@@ -2066,6 +2092,8 @@ class BackgroundService:
         self._runs[task.id] = run
         self._changed(task.id, RUNNING)
         try:
+            if self._stopped_while_starting(task, run):
+                return
             # No clock of its own, in a room too: every word or step of the CLI is progress, and only a stall ends it.
             outcome = await run._guarded(run.watch(loop.run()))
             if self._model_observer is not None and loop.actual_model:  # a turn stopped before the CLI ran has none
@@ -2122,6 +2150,8 @@ class BackgroundService:
         self._runs[task.id] = run
         self._changed(task.id, RUNNING)
         try:
+            if self._stopped_while_starting(task, run):
+                return
             if prepare is not None:
                 spec = {**spec, "messages": await prepare()}
             try:
@@ -2282,7 +2312,7 @@ class BackgroundService:
                                        wait_s=BACKGROUND_WAIT_S if local else None)
         member_id = task.member_id
         prefix = PREFIXES[language].question
-        what = parenthesized(language, preview(waiting.arguments))
+        what = parenthesized(language, preview(card_arguments(ref.key, waiting.arguments)))
         asked = phrase(language, "confirm_plugin", server=ref.server, tool=ref.name, what=what)
         if ref.server == "computer" and ref.name == "fill_card":
             from ..computer.vault_entries import payment_question
@@ -2729,6 +2759,21 @@ class BackgroundService:
             self._history.add_message(task.turn_id, "reply", compose(reply.prefix if task.member_id == 0 else "", line, None))
             self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
 
+    def _owner_words(self, task: Task, speaker) -> str | None:
+        """The language the owner writes in the conversation a private task belongs to, which what the member says while
+        it works is held to (R-LANG-05); None for work that is no part of one (a meeting, a routine) or when no words say it."""
+        if task.scope != "private" or task.routine_id is not None:
+            return None
+        from ..agent.service import owner_words_language
+        try:
+            turn = self._history.get(task.turn_id) if task.turn_id else None
+        except sqlite3.Error:
+            return None
+        if turn is None:
+            return None
+        return owner_words_language(self._history, member_id=task.member_id, conversation_id=turn.conversation_id,
+                                    profile=" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
+
     def _take_handback(self, task: Task, lines: Sequence[str]) -> list[str]:
         """Keep a work hand-off's <handback> block out of the owner's conversation and remember its words
         for whoever handed the work over (background/handback.py)."""
@@ -2797,9 +2842,9 @@ class BackgroundService:
             if task.mode == 'work' and any(child['state']!='completed' for child in self._child_results(task.id)):
                 self._conclude(task,run,'failed','',phrase(language,'work_children_open') + '\n\n' + report.text,report.detail,'child_work_incomplete')
                 return
-            if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls)):
+            if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls, run.written)):
                 # A routine's run is done only when it did its work: it said so, but a step it needed was refused or what it was
-                # to make is not there (owner, 2026-11-11). The owner reads what was not done, and what the member said.
+                # to make is not there. The owner reads what was not done, and what the member said.
                 said = report.text if report else ''
                 self._conclude(task, run, 'failed', '', phrase(language, why) + ('\n\n' + said if said else ''),
                                report.detail if report else None, why)
@@ -2807,7 +2852,7 @@ class BackgroundService:
             if (task.mode == 'work' or task.requires_artifact) and (failure := self._store.completion_reason(
                     task, verifiable=self._record_artifacts(task, current.created_at_ms,
                         '\n'.join([report.text, report.detail or '', *report.messages])), said=report.text)):
-                said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
+                said_why = {'work_without_action': 'work_only_words', 'artifact_unreadable': 'work_file_unreadable'}.get(failure, 'work_file_missing')
                 text = phrase(language,said_why) + ('\n\n' + report.text if failure == 'work_without_action' else '')
                 self._conclude(task,run,'failed','',text,report.detail if failure == 'work_without_action' else None,failure)
                 return
@@ -2832,6 +2877,15 @@ class BackgroundService:
             else:
                 from ..agent.answers import split_messages
                 self._conclude(task, run, "limit", notice, said, None, kind, replies=split_messages(said))
+        elif status == "stopped" and kind == UNCHECKED_STOP:
+            # Told once to read its last change on the screen back, the member answered again without doing so
+            # (R-COMP-PERF-09): what it said stays in its thread, and the task ends on why it does not count as done.
+            plain = task.member_id != 0 or task.room_id is not None
+            said = report_from(str(reply.get("final") or ""), language, plain=plain, long=not plain,
+                               literal=run.model.startswith("cli:"))
+            if said:
+                self._reply(task, said, final=True)
+            self._conclude(task, run, "failed", negative, phrase(language, UNCHECKED), None, UNCHECKED)
         elif status == "stopped" and kind == "missing_terminal":
             self._conclude(task, run, "failed", negative, phrase(language, "no_answer"), None, "missing_terminal")
         elif status == "stopped" and kind == "failed":
@@ -2889,8 +2943,17 @@ class BackgroundService:
         (`/home/cua/team/...`); a missing workspace never waives the requirement."""
         if not task.requires_artifact:
             return True
+        self._store.forget_unreadable(task.id)
         # Shared mounts can round modification times down to whole seconds.
         fresh_since_ms = since_ms - 1000
+        # A condition that names a file is met by a file of that name (whatever it holds: spaces, Chinese or Japanese); when it
+        # names none, any new file is the work.
+        wants = [name.lower() for name in deliverable_names(task.done_when)]
+        named = bool(wants)
+
+        def wanted(path: Path) -> bool:
+            """Whether the condition asks for this very file: its name is one the condition names, or ends in one after a space."""
+            return any(path.name.lower() == want or path.name.lower().endswith(' ' + want) for want in wants)
         baselines = {str(Path(item['uri'])): item for item in self._store.evidence(task.id) if item['kind'] == 'file_before'}
 
         def keep(path: Path, root: Path) -> bool:
@@ -2908,7 +2971,10 @@ class BackgroundService:
                 self._store.verify_artifact(task.id, "artifact", path, workspace=root,
                     mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
                 return True
-            except (OSError, ValueError):
+            except (OSError, ValueError) as error:
+                if wanted(path) and exists_unreadable(path, error):
+                    # The file the work was to leave is there; saying it is missing would send the member looking for the wrong thing.
+                    self._store.note_unreadable(task.id, path)
                 return False
 
         for path in named_files(task.done_when + '\n' + report + '\n' + '\n'.join(baselines)):
@@ -2929,22 +2995,38 @@ class BackgroundService:
                 path = root.joinpath(*below.parts)
                 if path.is_file() and self._gate.data_floor.access('read_file', {'path': str(path)}) is None:
                     keep(path, root)
-        wanted = {name.lower() for name in FILE_NAMES.findall(task.done_when)}
         found = []
+
+        def freshest_first(base: str, folders: list[str]) -> list[str]:
+            """The folders worth a look, the one touched last first: a file made now is in one of those, and a tree of
+            thousands of files that nothing touched cannot use the budget before it is reached."""
+            def touched(folder):
+                try:
+                    return -os.stat(os.path.join(base, folder)).st_mtime
+                except OSError:
+                    return 0.0
+            return sorted((folder for folder in folders if folder not in ARTIFACT_SKIP), key=touched)
+
         for root in roots:
-            seen = 0  # each folder has its own budget: a large one never hides the other
+            seen = listed = 0  # each folder has its own budget: a large one never hides the other
             for base, folders, names in os.walk(root):
-                folders[:] = [folder for folder in folders if folder not in ARTIFACT_SKIP]
+                folders[:] = freshest_first(base, folders)
+                for folder in folders:
+                    if named and wanted(Path(base) / folder):
+                        self._store.note_unreadable(task.id, Path(base) / folder)  # a folder in the place of the file
+                listed += len(names)
                 for name in names:
+                    if named and not file_named_in(task.done_when, name):
+                        continue  # nothing is read of a file that is not the one named: it takes none of the budget
                     seen += 1
                     path = Path(base) / name
                     try:
                         info = path.stat()
                     except OSError:
                         continue
-                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES and (not wanted or name.lower() in wanted):
+                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES:
                         found.append((info.st_mtime, str(path), root))
-                if seen > ARTIFACT_SCAN:
+                if seen > ARTIFACT_SCAN or listed > ARTIFACT_LISTING:
                     break
         # The newest that can be read and are kept: a file this PC cannot read takes none of the places.
         kept = tried = 0
@@ -3032,7 +3114,7 @@ class BackgroundService:
                         model=run.ledger.model if run is not None else None,
                         failure=(failure or turn_failure(reason, run.model if run is not None else task.model_ref,
                                                          getattr(run, "model_failure", None)))
-                                if state == "failed" and (failure or reason not in _JUDGED_ENDINGS) else None,
+                                if state == "failed" and (failure or not _brainless(reason)) else None,
                         replies=pending_replies(
                             [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
                             [compose(prefix,line,None) for line in terminal_replies if line]))
@@ -3165,7 +3247,7 @@ class BackgroundService:
             work_at = max(self._now_ms(),source.created_at_ms if source else 0) + 1
             history = AgentHistory(self._metrics_conn,lambda:work_at) if old.mode == 'work' else self._history
             # A routine's run started again is still the routine's run: its words are the routine's (the member's instructions
-            # written by whoever made it), never the owner's message in the member's conversation (owner, 2026-11-11).
+            # written by whoever made it), never the owner's message in the member's conversation.
             routine_run = old.routine_id is not None and earlier is not None and earlier.route == "routine"
             turn_id = history.add(
                 session_id=f'work:{new_id}' if old.mode == 'work' else old.session_id,
@@ -3235,6 +3317,9 @@ class BackgroundService:
         if (run := self._runs.get(task_id)) is not None:
             self._host.cancel(run)
             return {"cancelled": True}
+        if task_id in self._active and getattr(self._store.get(task_id), "state", None) == RUNNING and task_id not in self._paused:
+            # Being started, before its run exists: the generation its stop raised ends it as its run begins.
+            return {"cancelled": True}
         paused = self._paused.get(task_id)
         if paused is not None:
             # A task that waits for the owner (or was answered and waits for its turn) ends here.
@@ -3252,6 +3337,26 @@ class BackgroundService:
         # Waiting for its place, or given one a moment ago and not yet begun: it ends here, and its carrier,
         # finding it ended, does nothing.
         return {"cancelled": self._withdraw(task_id)}
+
+    def _waits(self, task_id: int) -> bool:
+        """Whether a task waits, carried by nothing: for the owner's yes (`_paused`), for the owner's answer or its own
+        colleagues (a continuation). `_cancel` ends such a task, closing what it waits on."""
+        if task_id in self._paused or task_id in self._handoff_runs:
+            return True
+        task = self._store.get(task_id)
+        return task is not None and task.state == WAITING and bool(task.continuation)
+
+    def _end_later(self, task_id: int) -> None:
+        """End a waiting task as Stop does, from code that cannot wait for it (closing an owner's card is a call of its own)."""
+        try:
+            ending = asyncio.get_running_loop().create_task(self._cancel({"task_id": task_id, "_tree": True}))
+        except RuntimeError:
+            return  # no loop: its raised generation still ends it before it goes on
+        def ended(done: asyncio.Task) -> None:
+            if not done.cancelled() and (error := done.exception()) is not None:
+                logger.warning("Ending waiting task %d with its parent failed: %s", task_id, type(error).__name__)
+
+        ending.add_done_callback(ended)
 
     def _withdraw(self, task_id: int, prefix: str | None = None) -> bool:
         """End a task that has not begun: it waits for its place, was given one a moment ago, or is queued and nothing carries it

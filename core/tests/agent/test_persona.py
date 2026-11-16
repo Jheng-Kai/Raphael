@@ -178,7 +178,6 @@ _QUESTIONS = (
     "computer_confirm_click",
     "computer_confirm_keys",
     "computer_confirm_step",
-    "which_computer",
 )
 # The one fixed line that names the owner: the owner chose its words (the step is theirs).
 _ADDRESSES_THE_OWNER = ("computer_handoff",)
@@ -224,7 +223,7 @@ def test_the_hand_off_names_the_owner_in_the_word_of_its_language():
 def test_the_fixed_lines_are_brief(language):
     for name in _LINES:
         text = phrase(language, name)
-        repair = name in {"budget", "credits", "worker_model", "worker_limit_model", "worker_limit_tool", "worker_limit_time", "worker_limit_cost", "worker_limit_month", "vision_off", "pdf_off", "failed", "open_not_found", "computer_watch", "computer_unavailable", "computer_refused_app"}
+        repair = name in {"budget", "credits", "worker_model", "worker_limit_model", "worker_limit_tool", "worker_limit_time", "worker_limit_cost", "worker_limit_month", "work_file_unreadable", "vision_off", "pdf_off", "failed", "open_not_found", "computer_watch", "computer_unavailable", "computer_refused_app"}
         if language == "vi":
             # Vietnamese spaces separate syllables as well as words.
             assert len(text.split()) <= (90 if repair else 40), name
@@ -329,7 +328,7 @@ def test_the_system_prompt_names_the_reply_kinds_and_complete_reply(route):
 
 
 def test_the_prompt_offers_the_same_reply_kinds_whatever_the_interface_language():
-    # Owner, 2026-11-14: the interface language goes to no model. The kinds are fixed words; the app shows the prefix
+    # The interface language goes to no model. The kinds are fixed words; the app shows the prefix
     # of the interface language (canonical_prefix), so a kind the model names reads as that language's prefix.
     prompt = persona.system_prompt("chat")
     assert persona.REPLY_LANGUAGE in prompt

@@ -18,7 +18,7 @@ def chat(text, *calls):
 
 def use(name, arguments):
     """A call of a tool that is found, not listed (a connection's, management, the seldom ones): the list is
-    fixed (owner, 2026-11-09, decision 2), so the model calls it through use_tool."""
+    fixed, so the model calls it through use_tool."""
     return ("use_tool", {"name": name, "arguments": arguments})
 
 

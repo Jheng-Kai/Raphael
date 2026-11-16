@@ -78,7 +78,7 @@ describe("a conversation's header is the window's top row", () => {
   const source = (file: string): string => readFileSync(path.join(import.meta.dirname, file), "utf8");
   const members = sheet("members.css"), agent = sheet("agent.css"), conversations = sheet("conversations.css"), pages = sheet("page-view.css"), report = sheet("report-page.css");
 
-  test("the row is 60 px, so the pill's centre stands 30 px from the window's top as Grok Bot's, and the buttons' cells are the width the tools stay clear of", () => {
+  test("the row is 60 px, so the pill's centre stands 30 px from the window's top, and the buttons' cells are the width the tools stay clear of", () => {
     expect(agent).toMatch(/--pa-top:\s*60px;/);
     expect(conversations).toMatch(/\.mb-head-c \{[^}]*margin-top: calc\(\(var\(--pa-top\) - 40px\) \/ 2 - var\(--sp-1\) - 2px\)/);
     const width = lastOf(".window-button", "width");

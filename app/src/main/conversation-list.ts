@@ -49,7 +49,7 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     const main = newestConversation(conversations.filter(c => c.kind !== "quick"));
     const quick = conversations.find(c => c.kind === "quick");
     // Every turn of the member says the conversations changed: the rows already on screen are patched, never drawn anew,
-    // so a title and its time do not flash and a row under the pointer stays (owner, 2026-11-11: 「亂跳一通」).
+    // so a title and its time do not flash and a row under the pointer stays.
     patchHTML(rows, [main, quick].filter((c): c is ConversationInfo => !!c).map(c => `<div class="conversation-row" data-k="conversation:${c.id}">` +
       btn(`<span>${esc(conversationTitle(c))}</span><small>${esc(relativeTime(c.updated_at_ms))}</small>`, "conversation-open", ` data-conversation-open="${c.id}" aria-current="${c.id === open}"`) +
       (c.kind === "quick" ? iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") : "") + `</div>`).join(""));

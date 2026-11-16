@@ -86,7 +86,7 @@ be taken fails the request as a bad request, with its kind in the error's data):
 the vision model together, with the question, and each PDF is read by the PDF service chosen; what
 they hold is data for the call that words the answer. A request of only files (no words) asks
 「看這個」 in the language of the conversation (`ui_language` is the window's: it picks the words the app draws
-and reaches no model, owner, 2026-11-14). The files are kept in memory for the turn, and for the
+and reaches no model). The files are kept in memory for the turn, and for the
 task when the request is handed to the background worker: never in the database, on disk or in a
 log. The history keeps their names and types (`attachments: [{name, mime}]` of a turn), for the
 conversation view. A request routed to `operate` or to a command makes nothing of them.
@@ -122,7 +122,8 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import copy
 from pathlib import Path
-from ..computer.local_tools import ask_context, command_context, command_of, is_local
+from ..computer.local_tools import ON_SCREEN, ask_context, card_arguments, command_context, command_of, is_local
+from ..computer.on_screen import launches_on_screen
 import hashlib
 import json
 import logging
@@ -211,8 +212,7 @@ from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS, TEAM_READS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
-from .whose_computer import MEMBER, UNSURE, answer_to_the_question, whose_computer
-from ..ui_languages import LANGUAGES
+from .whose_computer import MEMBER, whose_computer
 from .persona import (
     DEFAULT_LANGUAGE,
     PREFIXES,
@@ -226,6 +226,7 @@ from .persona import (
 from .plugins import (
     MAX_OFFERED,
     PLAN_CONTEXT_TURNS,
+    SAID_WHOLE,
     Offer,
     PlannedCall,
     Planner,
@@ -255,7 +256,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
-from .permissions import AT_A_CHAT, message_preview, owner_pc as reaches_owner_pc, permission_identity, qualifies as permission_cards_for
+from .permissions import AT_A_CHAT, message_preview, owner_screen as reaches_owner_screen, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
@@ -324,6 +325,22 @@ _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 _OWNER_CHAT_SOURCES = _AT_THIS_COMPUTER | {"telegram", "slack", "discord", RESUMED}
 # What the owner writes in a conversation with a member: typed in the app, or sent from a messaging chat.
 _OWNER_TEXT_SOURCES = frozenset({TYPED, "telegram", "slack", "discord"})
+
+
+def owner_words_language(history, *, member_id: int, conversation_id: int | None, profile: str = "") -> str | None:
+    """The language of the owner's latest words in a conversation with a member, as the words say it firmly (a message of
+    one English word says nothing of it), else of the member's own profile; None when no words say it. What a member says
+    while it works is held to this (R-LANG-05), in a turn and in the task a turn handed on."""
+    try:
+        earlier = history.list(limit=12, member_id=member_id, conversation_id=conversation_id)
+    except sqlite3.Error:
+        earlier = []
+    for turn in earlier:
+        if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
+            return language
+    return detect_language(profile, firm=True)
+
+
 # Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
 # waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
 VOICE_TURN_TIMEOUT_S = 180.0
@@ -343,7 +360,7 @@ MAX_REQUEST_URLS = 2
 # How much of what a call is given a permission card says, in characters (the overlay's question keeps its short line).
 CARD_PREVIEW_CHARS = 240
 # What a request of only files asks, in the language of the conversation (`_chat_language`), never the interface's: it
-# is the owner's message the model reads (owner, 2026-11-14).
+# is the owner's message the model reads.
 _LOOK_AT_THIS = with_ui_words({"zh-TW": "看這個", "en": "Look at this", "ja": "これを見て"})
 # The routes that word a reply, which read the pages and the files of the request first.
 _READING_ROUTES = ("answer", "discuss", "chat")
@@ -414,11 +431,15 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     if outcome.ok:
         data = {"content": outcome.text, "cut_short": outcome.truncated}
         return ToolResult(_label(call), True, data, untrusted=True, blocks=outcome.blocks)
-    if outcome.kind == "bad_arguments" and outcome.text:
-        # The core's own words for the shape that fits (agent/plugins.py `shape_problem`): shown whole, never cut as a service's are.
-        return ToolResult(_label(call), False, None, "bad_arguments", instruction=outcome.text)
+    if outcome.kind in SAID_WHOLE and outcome.text:
+        # The core's own words (the shape that fits, `shape_problem`; a tool held, integrations/service.py): shown whole,
+        # never cut as a service's are.
+        return ToolResult(_label(call), False, None, outcome.kind, instruction=outcome.text)
     if outcome.text:
-        failure = classify({"message": outcome.text, "kind": outcome.kind if outcome.kind != "tool_error" else None})
+        # Not written down here: every loop that reads this result notes its failure once (`tool_failure`), and noting
+        # it here too made each failed call two lines of the log and two of self_check's last ten.
+        failure = classify({"message": outcome.text, "kind": outcome.kind if outcome.kind != "tool_error" else None},
+                           record=False)
         return ToolResult(
             _label(call), False, {"content": failure.reason, **failure.wire()}, outcome.kind or failure.kind, untrusted=True
         )
@@ -523,7 +544,7 @@ class _Ask:
     admin_pending: list[PlannedCall] = field(default_factory=list)
     admin_screenings: list[Screening] = field(default_factory=list)
     # The administrative changes that need a yes (the ones that cannot be undone, and any other the mode or a rule has
-    # asked), proposed in this turn, held for one card at its end (owner, 2026-11-11: 「不要分這麼多卡片，讓我去按同意」);
+    # asked), proposed in this turn, held for one card at its end;
     # each is shown to the owner exactly, and none is made before their yes.
     management_pending: list[PlannedCall] = field(default_factory=list)
     management_screenings: list[Screening] = field(default_factory=list)
@@ -555,8 +576,6 @@ class _Ask:
     floor_refusals: int = 0
     # A reaction's analysis whose member decided that no words are needed: nothing of its turn is left.
     silent: bool = False
-    # The owner answered "which computer?" with the member's own (`_which_computer`).
-    chose_own_computer: bool = False
 
     @property
     def nested(self) -> bool:
@@ -564,9 +583,10 @@ class _Ask:
 
     @property
     def own_computer(self) -> bool:
-        """A quick question that says the member's own computer is the one to use: it takes no shortcut to the owner's PC,
-        and the member's ordinary turn answers it with its own computer (`whose_computer`)."""
-        return self.quick and (self.chose_own_computer or whose_computer(self.text) == MEMBER)
+        """A quick question that may mean the member's own computer: it takes no fast-router shortcut, which can only open
+        things on the owner's PC, and goes to the member's turn (`whose_computer`). That turn holds both computers and the
+        model picks by the owner's words; nothing here takes a tool away."""
+        return self.quick and whose_computer(self.text) == MEMBER
 
 
 @dataclass(frozen=True)
@@ -662,7 +682,7 @@ DECLINED_NOTE = (
 )
 # What a new member's first turn is asked, with no word of the owner's yet. `language` there is the interface's, for the
 # turn's notices only: the greeting's language is the member's own, or the owner's as what it knows of them shows it
-# (owner, 2026-11-14: the interface language goes to no model).
+# (the interface language goes to no model).
 GREETING_NOW = ("Write your greeting now, in the language your own instructions set; when they set none, in the language "
                 "the owner's profile and your memory of them are written in, else the language of your name, role and "
                 "instructions.")
@@ -945,6 +965,8 @@ class AgentService:
         self._inbox = AgentInbox(conn, self._history, now_ms)
         self._inbox.recover()
         self._queued_asks = {}
+        # Turns of messages being handed to running work right now: theirs is the steer's answer, not `_release_steering`'s.
+        self._handing = set()
         self._drains = {}
         self._admissions = {}
         self._direct_scopes = {}
@@ -967,14 +989,14 @@ class AgentService:
     @property
     def language(self) -> str:
         """The interface language, for the fixed words of unattended and external conversations (a notice, a card).
-        Never a model's: what a member says follows the owner's words (owner, 2026-11-14)."""
+        Never a model's: what a member says follows the owner's words."""
         return normalize_language(self._owner_language() or DEFAULT_LANGUAGE)
 
     def _chat_language(self, ask: "_Ask") -> str:
         """The language the conversation of `ask` is in, read from its own words: the owner's message, else the owner's
         latest words in that conversation, else the speaker's own profile, else English. It picks what a model is given
         per language (Raphael's name in the roster, a place's name, the words of a request of only files); the interface
-        language never does (owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt」)."""
+        language never does."""
         if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text)):
             return language
         try:
@@ -993,15 +1015,9 @@ class AgentService:
         never decides it."""
         if ask.source not in ("greeting", "reaction") and (language := detect_language(ask.text, firm=True)):
             return language
-        try:
-            earlier = self._history.list(limit=12, member_id=ask.speaker.id, conversation_id=ask.conversation_id)
-        except sqlite3.Error:
-            earlier = []
-        for turn in earlier:
-            if turn.source in _OWNER_TEXT_SOURCES | set(_QUICK_SOURCES) and (language := detect_language(turn.question, firm=True)):
-                return language
         speaker = ask.speaker
-        return detect_language(" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)), firm=True)
+        return owner_words_language(self._history, member_id=speaker.id, conversation_id=ask.conversation_id,
+                                    profile=" ".join((speaker.instructions, speaker.role, speaker.personality, speaker.name)))
 
     def turn(self, turn_id: int) -> Turn | None:
         """A turn of the history, for a caller that needs the longer text of an answer."""
@@ -1465,13 +1481,19 @@ class AgentService:
         if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
             self._owner_loops.pop(scope, None)
             active = None
+        # What was left with work that has ended goes first: this message neither steers past it nor runs before it.
+        self._release_steering(scope)
         older = self._conn.execute(
             "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued' AND seq<?",
             (*scope, row['seq']),
         ).fetchone()
         if active and not older and not ask.attachments and not active.owner_input.closed:
             self._inbox.transfer(ask.turn_id)
-            accepted = await active.steer(ask.text, ticket=ask.turn_id) if isinstance(active, CliLoop) else active.owner_input.add(ask.text, ticket=ask.turn_id)
+            self._handing.add(ask.turn_id)
+            try:
+                accepted = await active.steer(ask.text, ticket=ask.turn_id) if isinstance(active, CliLoop) else active.owner_input.add(ask.text, ticket=ask.turn_id)
+            finally:
+                self._handing.discard(ask.turn_id)
             if accepted:
                 self._turn_changed(ask.turn_id, ask.speaker.id)
                 return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
@@ -1480,7 +1502,12 @@ class AgentService:
         steer = getattr(self._background, "steer", None)
         if not older and not ask.attachments and steer is not None:
             self._inbox.transfer(ask.turn_id)
-            if await steer(ask.speaker.id, ask.conversation_id, ask.text):
+            self._handing.add(ask.turn_id)
+            try:
+                steered = await steer(ask.speaker.id, ask.conversation_id, ask.text)
+            finally:
+                self._handing.discard(ask.turn_id)
+            if steered:
                 self._inbox.settle(ask.turn_id, 'steered')
                 self._queued_asks.pop(ask.turn_id, None)
                 self._turn_changed(ask.turn_id, ask.speaker.id)
@@ -1503,7 +1530,7 @@ class AgentService:
             return None
         if any(self._inflight_scopes.get(session) == scope and not task.done() for session, task in self._inflight.items()):
             return None
-        row = self._inbox.claim(scope)
+        row = self._claim(scope)
         if row is None:
             return None
         waiter = asyncio.get_running_loop().create_future()
@@ -1578,20 +1605,44 @@ class AgentService:
                     if first and not waiter.done():
                         waiter.set_exception(error)
                 first = False
-                row = self._inbox.claim(scope)
+                row = self._claim(scope)
         finally:
             self._drains.pop(scope, None)
 
-    def _settle_steering(self, scope, loop):
-        rows = self._conn.execute("SELECT turn_id FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='steering' ORDER BY seq", scope).fetchall()
+    def _claim(self, scope):
+        """The next message of `scope` to run, after what ended work left unread has gone back ahead of it."""
+        self._release_steering(scope)
+        return self._inbox.claim(scope)
+
+    def _steered(self, turn_id, member_id):
+        """The model of the work a message was handed to has just read it: it is settled now, never to run again."""
+        row = self._inbox.get(turn_id)
+        if row is None or row['state'] != 'steering':
+            return
+        self._inbox.settle(turn_id, 'steered')
+        self._queued_asks.pop(turn_id, None)
+        self._turn_changed(turn_id, member_id)
+
+    def _release_steering(self, scope):
+        """Every message of `scope` handed to running work, never read by its model and held by no work that still runs,
+        goes back to the front of the inbox in the order it was said, to be a turn of its own. The work may have answered,
+        handed off, asked the owner, failed, been stopped or lost its CLI, or wait on a card that will never be answered:
+        its loop is closed, or gone from `_owner_loops`, or its turn no longer runs. What a model read was settled as it read
+        it (`_steered`), so nothing here is read twice."""
+        loop = self._owner_loops.get(scope)
+        origin = self._history.get(loop.owner_turn_id) if loop is not None else None
+        held = (set(loop.owner_input.leftover()) if loop is not None and not loop.owner_input.closed
+                and origin is not None and origin.status in ("running", "confirm") else set())
+        rows = self._conn.execute(
+            "SELECT turn_id FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='steering' ORDER BY seq DESC", scope,
+        ).fetchall()
         for row in rows:
             turn_id = row['turn_id']
-            if loop.owner_input.consumed(turn_id):
-                self._inbox.settle(turn_id, 'steered')
-                self._queued_asks.pop(turn_id, None)
-            else:
+            if turn_id in held or turn_id in self._handing:
+                continue
+            if loop is not None:
                 loop.owner_input.withdraw(turn_id)
-                self._inbox.requeue(turn_id)
+            self._inbox.requeue(turn_id, front=True)
             self._turn_changed(turn_id, scope[0])
 
     async def _discard_inbox(self, scope=None, *, member_id=None):
@@ -1660,16 +1711,21 @@ class AgentService:
             if task.cancelled() and ask.turn_id:
                 self._finish(ask, "answer", "understood", phrase(ask.language, "denied"),
                              ask.ledger or Ledger(self._spend), status="cancelled")
-            if self._inflight.get(ask.session_id) is task:
-                del self._inflight[ask.session_id]
-                self._inflight_members.pop(ask.session_id, None)
-                self._inflight_scopes.pop(ask.session_id, None)
             if ask.quick:
                 logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
                 ask.trace_logged = True
             if ask.resumption is not None:
                 ask.resumption.made.extend(ask.made)
-            self._start_drain((ask.speaker.id, ask.conversation_id))
+            self._leave(ask.session_id, task, (ask.speaker.id, ask.conversation_id))
+
+    def _leave(self, session_id, task, scope):
+        """The work of `task` in `scope` is over, however it began (a request, an answered card, a run on the desktop that
+        went on): the conversation's inbox goes on with its next message, or with what that work left unread."""
+        if self._inflight.get(session_id) is task:
+            del self._inflight[session_id]
+            self._inflight_members.pop(session_id, None)
+            self._inflight_scopes.pop(session_id, None)
+        self._start_drain(scope)
 
     @member_turn(lambda self, ask: ask.speaker.id,
                  waiting=lambda self, ask: ask.waiting_apps or ask.waiting_secrets or ask.waiting_computer)
@@ -1697,13 +1753,10 @@ class AgentService:
             return self._finish(ask, "chat", "negative", phrase(ask.language, off), ledger)
         settings = self._read_settings(ask.speaker, ask.conversation_id)
         blocked = self._blocked(settings)
-        if ask.quick and ask.source == VOICE and ask.speaker.is_raphael and not brain_ref(settings.model):
-            if (question := self._which_computer(ask)) is not None:
-                return self._finish(ask, "answer", "question", question, ledger)
         # Only a quick question is routed by the fast router, which can pick a command for this PC or a run on its
         # desktop; a conversation, spoken into or typed, goes to the narrated harness, which has no such tool (R-PC-01).
-        # A quick question that says the member's own computer is the one to use never takes that shortcut: it goes to
-        # the member's turn, which does the work on its own computer (R-COMP-OWN-01).
+        # A quick question that names the member's own computer never takes that shortcut, which can only use the owner's
+        # PC: it goes to the member's turn, where the model reads the owner's words and picks the computer (R-COMP-OWN-01).
         if (not ask.quick or brain_ref(settings.model) or ask.source != VOICE or not ask.speaker.is_raphael
                 or ask.own_computer):
             if blocked is not None:
@@ -1837,10 +1890,10 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, owner_pc=self._owner_pc(ask)),
+                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
-                viewing=viewing_text(ask.viewing), owner_pc=self._owner_pc(ask),
+                viewing=viewing_text(ask.viewing), owner_screen=self._owner_screen(ask),
             )
             return owner_script(reply, chinese_variant(self._settings.get("languages")))
 
@@ -1970,7 +2023,7 @@ class AgentService:
         this computer: a message from a phone is a 否 reply, as is a shell that cannot be reached
         and a model that takes no tools. The reply is the run's first question or how it ended."""
         language = ask.language
-        if not self._owner_pc(ask):
+        if not self._owner_screen(ask):
             return self._finish(ask, "operate", "negative", phrase(language, "computer_away"), ledger)
         if self._computer is None:
             return self._finish(
@@ -2314,24 +2367,24 @@ class AgentService:
             # The system prompt says who the speaker is and how it works, and is the same turn after turn: a
             # change in it has the provider read the whole conversation again at full price. What holds for
             # this turn only (the team as it is now, the memory files, who is asking) goes with the turn's
-            # message (owner, 2026-11-09). The owner's permission mode stays here: it changes seldom, and
+            # message. The owner's permission mode stays here: it changes seldom, and
             # a rule the whole turn obeys belongs where the model reads its rules.
             if brain_ref(settings.model):
                 system = cli_system_prompt(
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
                     personality=ask.speaker.personality, memory=memory is not None, speaker=ask.speaker,
-                    owner_pc=self._owner_pc(ask))
+                    owner_screen=self._owner_screen(ask))
             elif ask.speaker.is_raphael:
                 system = system_prompt("answer", memory, narrated=True, speaker=ask.speaker, memory_inline=False,
-                                       owner_pc=self._owner_pc(ask))
+                                       owner_screen=self._owner_screen(ask))
             else:
                 system = member_system_prompt(
                     "answer", name=ask.speaker.name, role=ask.speaker.role,
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            system += owner_context(self._settings, owner_pc=self._owner_pc(ask))
+            system += owner_context(self._settings)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -2347,7 +2400,7 @@ class AgentService:
             management_tools = tools_for_request(ask.text, member_named=bool(
                 self._team and getattr(self._team, "named_in", lambda _: [])(ask.text)))
             # The system prompt stays the same turn after turn, or the whole conversation is cached again: the
-            # management guidance a request needs goes with that turn's message (owner, 2026-11-09).
+            # management guidance a request needs goes with that turn's message.
             leadership = self._management_chat(ask) and bool(management_tools)
             if self._management_chat(ask):
                 system += ("\nEvery member has the same owner-private management tools. Find them with find_tools when needed "
@@ -2433,11 +2486,11 @@ class AgentService:
                             user += "\n" + wrap_untrusted("read_attachment", json.dumps(
                                 result.data if result.ok else {"error": result.error}, ensure_ascii=False,
                             ), ok=result.ok)
-            # The same tools every turn of the conversation, whatever it asks (owner, 2026-11-09, decision 2).
+            # The same tools every turn of the conversation, whatever it asks.
             snapshot = take_snapshot(
                 self._plugins, memory=self._memory is not None, speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
-                interactive=True, owner_management=self._management_chat(ask), owner_pc=self._owner_pc(ask),
+                interactive=True, owner_management=self._management_chat(ask), owner_screen=self._owner_screen(ask),
             )
             urls = SeenUrls([ask.text, context.summary, *[
                 "\n".join([turn.question, turn.text, turn.detail or "", *turn.messages])
@@ -2511,7 +2564,7 @@ class AgentService:
                         raise Stop("finished")
                 if name == "computer":
                     self._gate.check(Action(name, args), None)
-                    if not self._owner_pc(ask):
+                    if not self._owner_screen(ask):
                         return ToolOutcome(False, "presence_required")
                     if ask.declined:  # the owner said no in this request: not another way to the same end
                         return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
@@ -2740,10 +2793,10 @@ class AgentService:
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
-                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
+                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), owner_language=self._words_language(ask),
                                     context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
                 # The owner waits on this conversation and comes back to it: its provider keeps it in one place,
-                # cached for an hour (owner, 2026-11-09, decisions 1 and 4).
+                # cached for an hour.
                 loop.cache_session = f"raphael-{ask.speaker.id}-{ask.conversation_id}"
                 loop.cache_ttl = "1h"
             def listed():
@@ -2766,6 +2819,7 @@ class AgentService:
         scope = (ask.speaker.id, ask.conversation_id)
         if not ask.nested and ask.source not in _NO_OWNER_WORDS:
             loop.owner_turn_id = ask.turn_id
+            loop.owner_input.on_read = lambda ticket: self._steered(ticket, scope[0])
             self._owner_loops[scope] = loop
         outcome = None
         try:
@@ -2773,15 +2827,17 @@ class AgentService:
             if isinstance(loop, CliLoop) and self._model_observer is not None:
                 self._model_observer(loop.actual_model)
         finally:
-            if outcome is None or outcome.kind != WAITING:
+            # The loop is over, however it ended, unless it waits for the owner's yes to go on from there: a question for
+            # the owner parks the turn in the background and closes this loop as well.
+            if outcome is None or outcome.kind != WAITING or ask.owner_question:
                 loop.owner_input.closed = True
                 try:
                     if isinstance(loop, CliLoop):
                         await loop.finish_steering()
                 finally:
-                    self._settle_steering(scope, loop)
                     if self._owner_loops.get(scope) is loop:
                         self._owner_loops.pop(scope, None)
+                    self._release_steering(scope)
             if isinstance(loop, CliLoop) and loop.task and loop.task.done():
                 self._cli_loops.discard(loop)
         if loop.response is not None:
@@ -2809,9 +2865,11 @@ class AgentService:
                 return self._finish(ask, "greeting", "", said, ledger)
             return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
-        if isinstance(loop, CliLoop) and loop.failure:
+        # A CLI that failed, or any loop whose answer the completion check did not count (R-COMP-PERF-09): the turn ends
+        # failed on the reason its loop gave, after whatever the loop already showed.
+        if getattr(loop, "failure", None):
             return self._finish(ask, "answer", "negative", reply.text, ledger, status="error", detail=outcome.detail,
-                                failure=turn_failure(loop.failure, settings.model, loop.failure_reason))
+                                failure=turn_failure(loop.failure, settings.model, getattr(loop, "failure_reason", None)))
         if ask.source in _NO_OWNER_WORDS:
             if not reply.text.strip():
                 raise AgentFailure("error")
@@ -3077,9 +3135,10 @@ class AgentService:
             return ToolOutcome(False, "protected_data", instruction=WRITE_REFUSAL)
         if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
-        if command_of(args) and not self._owner_pc(ask):
-            # A command of the CLI's own is a command on the owner's PC: only a quick question may ask for one (R-PC-01).
-            return ToolOutcome(False, "presence_required")
+        if (command := command_of(args)) and not self._owner_screen(ask) and launches_on_screen(command):
+            # A command of the CLI's own runs on the owner's PC, hidden and with the card, as the local commands do; one
+            # that would show something on its screen is refused outside a quick question, whatever the mode (R-PC-06).
+            return ToolOutcome(False, "shows_on_screen", instruction=ON_SCREEN)
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
             return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
         screening = await self._gate.screen(Proposed("cli_permission", "CLI native action", summarize(args)), language=ask.language, ledger=ledger)
@@ -3254,8 +3313,7 @@ class AgentService:
         if self._plugins is not None:
             try:
                 offered = getattr(self._plugins, "offered_for", lambda member: self._plugins.offered())
-                pc = ask is not None and self._owner_pc(ask)
-                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key) and (pc or not is_local(tool.key))]
+                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key)]
             except Exception as exc:  # a plugin that breaks must not break the answer
                 logger.warning("Could not list the plugins' tools: %s", type(exc).__name__)
         if ask is not None:
@@ -3263,11 +3321,12 @@ class AgentService:
         return make_offer(tools) if tools else None
 
     @staticmethod
-    def _owner_pc(ask: _Ask) -> bool:
-        """Whether the owner's own PC is in reach of this turn: only a quick question asked at this computer (the overlay's
-        Alt+Space) reaches it, never an ordinary conversation, a room, an exchange between members, a task or a phone, in any
-        permission mode (R-PC-01). Their computer work goes to the member's own computer."""
-        return reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested, own_computer=ask.own_computer)
+    def _owner_screen(ask: _Ask) -> bool:
+        """Whether this turn may show things on the owner's own screen and drive it: only a quick question asked at this
+        computer (the overlay's Alt+Space), never an ordinary conversation, a room, an exchange between members, a task or
+        a phone, in any permission mode (R-PC-01). What those show they show on the member's own computer; their hidden
+        commands on the owner's PC ask with the card (R-PC-02)."""
+        return reaches_owner_screen(source=ask.source, quick=ask.quick, nested=ask.nested)
 
     def _team_tools(self, ask: _Ask) -> list[str]:
         """The team tools the request `ask` is about. Never for a request one member handed another
@@ -3725,7 +3784,7 @@ class AgentService:
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
             elif name in COMMANDS:
-                if not self._owner_pc(ask):
+                if not self._owner_screen(ask):
                     raise HarnessToolError("presence_required")
                 values = dict(args)
                 if name == "open":
@@ -4362,7 +4421,8 @@ class AgentService:
         start of what it is given, after the rule that has it asked, if one does. The call itself
         waits in `_followups`."""
         language = ask.language
-        shown = preview(call.arguments)
+        arguments = card_arguments(call.tool.key, call.arguments)
+        shown = preview(arguments)
         question = phrase(
             language,
             "confirm_plugin",
@@ -4386,7 +4446,7 @@ class AgentService:
             # What the card of a connection's tool says: the exact action in plain words, the rule that had
             # it asked, and whether 一律允許 can take effect (not where a rule asks: Ask first wins).
             exact = phrase(language, "confirm_plugin", server=call.tool.server, tool=call.tool.name,
-                           what=parenthesized(language, preview(call.arguments, CARD_PREVIEW_CHARS)))
+                           what=parenthesized(language, preview(arguments, CARD_PREVIEW_CHARS)))
             if payment:
                 exact = question
             managed = getattr(self._plugins, "managed", None)
@@ -4646,7 +4706,7 @@ class AgentService:
             try:
                 text = file(speaker.id, arguments.get("name"), arguments.get("reference")) if file else None
             except MemberError as error:
-                return ToolResult(name, False, None, "not_found" if error.kind == "not_found" else "bad_arguments", instruction=str(error))
+                return ToolResult(name, False, None, error.kind if error.kind in ("not_found", "unreadable") else "bad_arguments", instruction=str(error))
             return ToolResult(name, text is not None, {"text": text} if text is not None else None,
                               None if text is not None else "not_found", untrusted=True)
         if name == SKILL_READ:
@@ -4775,8 +4835,12 @@ class AgentService:
         followup = self._followups.pop(pending.id, None)
         if followup is not None:
             self._gate.record_unrun(pending.action.tool, outcome=outcome)
-            if isinstance(followup.loop, CliLoop):
-                followup.loop.cancel()
+            if followup.loop is not None:
+                # The loop that waited never goes on: what the owner said to it and it did not read is a turn of its own.
+                followup.loop.owner_input.closed = True
+                if isinstance(followup.loop, CliLoop):
+                    followup.loop.cancel()
+                self._start_drain((followup.ask.speaker.id, followup.ask.conversation_id))
 
     async def _go_on_after_admin(
         self, followup: _Followup, step: Step, made: list[dict], text: str, detail: str | None, ledger: Ledger,
@@ -5001,30 +5065,6 @@ class AgentService:
 
     # --- commands -------------------------------------------------------------------------------
 
-    def _which_computer(self, ask: _Ask) -> str | None:
-        """The one question a quick request to open something "on the computer" is asked, or None when it needs none. A
-        request that names whose computer it means is never asked. Asked once: the reply to the question that says a side
-        settles it (`answer_to_the_question`: the member's own computer is `ask.chose_own_computer`, this PC is the
-        router's as ever), and an agreeing reply is the member's, which cannot touch the owner's PC."""
-        if (len(ask.text) <= 24 or whose_computer(ask.text) == UNSURE) and self._asked_which_computer(ask):
-            # Asked once: whatever the reply, it is not asked again. It names a side, or agrees, or says the request again
-            # with no side on it; only "this PC" keeps the router and the owner's PC.
-            if answer_to_the_question(ask.text) == MEMBER or whose_computer(ask.text) == UNSURE:
-                ask.chose_own_computer = True
-            return None
-        if whose_computer(ask.text) == UNSURE:
-            return self._the_question(ask.speaker, ask.language)
-        return None
-
-    @staticmethod
-    def _the_question(speaker: Speaker, language: str) -> str:
-        return phrase(language, "which_computer", who=speaker.name or RAPHAEL_NAMES.get(normalize_language(language), "Raphael"))
-
-    def _asked_which_computer(self, ask: _Ask) -> bool:
-        """Whether the last thing said in this conversation was the question (`which_computer`), in any language."""
-        last = next(iter(reversed(self._context(2, ask.speaker.id, ask.conversation_id))), None)
-        return last is not None and last.text in {self._the_question(ask.speaker, language) for language in LANGUAGES}
-
     async def _command(
         self, ask: _Ask, decision: RouteDecision, settings: _Settings, ledger: Ledger
     ) -> dict:
@@ -5032,7 +5072,7 @@ class AgentService:
         language = ask.language
         if command is None:  # none of the fixed commands covers it
             return self._finish(ask, "command", "negative", phrase(language, "cannot"), ledger)
-        if not self._owner_pc(ask):  # the router is only asked for a quick question, so this is a second lock
+        if not self._owner_screen(ask):  # the router is only asked for a quick question, so this is a second lock
             return self._finish(ask, "command", "negative", phrase(language, "computer_away"), ledger)
         args: dict[str, Any] = {}
         question = ""
@@ -5230,7 +5270,7 @@ class AgentService:
             "no": phrase(language, "no"),
             "timeout_ms": 0 if untimed else CONFIRM_TIMEOUT_MS,
         }
-        # T3 questions (and the card of several changes) are answered in the window's own card, in one press (owner, 2026-11-11), not in a permission card of the thread, except for the explicit local-command and payment permission cards.
+        # T3 questions (and the card of several changes) are answered in the window's own card, in one press, not in a permission card of the thread, except for the explicit local-command and payment permission cards.
         if (card is not None and self._permissions is not None and turn_id and (tier < Tier.T3 or local or action.tool.endswith("/fill_card"))
                 and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)):
             self._permissions.show(
@@ -5420,10 +5460,7 @@ class AgentService:
         finally:
             if task.cancelled():
                 self._finish(ask, "answer", "understood", phrase(ask.language, "denied"), run.ledger, status="cancelled")
-            if self._inflight.get(ask.session_id) is task:
-                del self._inflight[ask.session_id]
-                self._inflight_members.pop(ask.session_id, None)
-                self._inflight_scopes.pop(ask.session_id, None)
+            self._leave(ask.session_id, task, (ask.speaker.id, ask.conversation_id))
 
     async def _resume_narrated(
         self,
@@ -5464,10 +5501,7 @@ class AgentService:
             elif expired and done.exception() is not None:
                 logger.warning("An expired CLI confirmation could not resume: %s", type(done.exception()).__name__)
                 self._failed(followup.ask, "answer", "error", followup.loop.ledger)
-            if self._inflight.get(session_id) is task:
-                del self._inflight[session_id]
-                self._inflight_members.pop(session_id, None)
-                self._inflight_scopes.pop(session_id, None)
+            self._leave(session_id, task, (followup.ask.speaker.id, followup.ask.conversation_id))
         task.add_done_callback(finished)
         return task
 
@@ -5576,9 +5610,6 @@ class AgentService:
         returned = []
         if rows:
             scope = (member, rows[-1]['conversation_id'])
-            active = self._owner_loops.get(scope)
-            if active:
-                self._settle_steering(scope, active)
             for row in self._inbox.cancel_scope(scope):
                 payload = json.loads(row['payload_json'])
                 returned.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
@@ -5594,7 +5625,9 @@ class AgentService:
         work in that conversation is ended as Stop ends it (its words kept, its question denied), without the memory that
         would refuse the next request, so the drain starts the message as its own turn. A Codex turn is told to stop
         (`turn/interrupt`); a Claude Code or Antigravity child is ended and its native session is resumed by that turn; an
-        API loop's task is cancelled. Whatever the stopped work had started is never run again. Private conversations only."""
+        API loop's task is cancelled. Whatever the stopped work had started is never run again. Words that ended work left
+        unread go just ahead of it, in the order they were said (`_release_steering`): the drain takes them all. Private
+        conversations only."""
         member = self._member_param(params)
         turn_id = _opt_int(params, 'turn_id')
         session = _str(params, 'session_id')
@@ -5605,11 +5638,11 @@ class AgentService:
             raise invalid_params('send now must identify a message of this private conversation')
         scope = (member, row['conversation_id'])
         if row['state'] == 'steering':
-            # Handed to the running work but not read by its model: it is taken back and goes first as its own turn.
+            # Handed to work but not read by its model (a read one was settled as it was read): it is taken back and goes
+            # first as its own turn, whether that work still runs or has ended without it.
             active = self._owner_loops.get(scope)
-            if active is None or active.owner_input.consumed(row['turn_id']):
-                return {'sent': False}
-            active.owner_input.withdraw(row['turn_id'])
+            if active is not None:
+                active.owner_input.withdraw(row['turn_id'])
             self._inbox.requeue(row['turn_id'])
         elif row['state'] != 'queued':
             return {'sent': False}

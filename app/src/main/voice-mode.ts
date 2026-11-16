@@ -10,7 +10,7 @@
 // cubic-bezier(.4,0,.2,1). With reduced motion the flyer is simply there, and simply gone.
 //
 // A page open in the thread's place hides the thread (its own "hearing" line with it), so the flyer is the only sign left that
-// the owner is heard (owner, 2026-11-14: 「拉菲爾大師還是會顯示在最前面，他永遠是最前面的」). It stays in the stage, in front of
+// the owner is heard. It stays in the stage, in front of
 // the page (page-view.css lets it through, agent.css makes it take no pointer there), and when the recording ends it is held
 // there, turning as the corner's emblem does while words are turned into a message (`hold`), until `down` or `drop`.
 

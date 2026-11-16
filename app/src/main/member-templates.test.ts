@@ -22,7 +22,7 @@ test("the store's template button opens eight local slime recipes without instal
 
 test("preview shows skills, paused routines and a disabled card per requested connection until import", async () => {
   const create = vi.fn(async () => ({id: 9, name: "Developer", tools: []}) as unknown as Member);
-  await previewTemplate(starterTemplate(3), "slime:diablo", create, null, vi.fn());
+  await previewTemplate(starterTemplate(3), "slime:streaks-charcoal", create, null, vi.fn());
   expect(api.core).toHaveBeenCalledWith("members.template", expect.objectContaining({action: "preview"}));
   expect(document.querySelector<HTMLButtonElement>('[data-dlg="connect"]')!.disabled).toBe(true);
   const dialog = document.querySelector(".template-preview")!;
@@ -37,7 +37,7 @@ test("preview shows skills, paused routines and a disabled card per requested co
   expect(create).not.toHaveBeenCalled(); expect(api.connectorsConnect).not.toHaveBeenCalled();
   document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
   for (let i=0;i<12;i++) await Promise.resolve();
-  expect(create).toHaveBeenCalledWith(expect.objectContaining({template: starterTemplate(3), avatar:"slime:diablo"}));
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({template: starterTemplate(3), avatar:"slime:streaks-charcoal"}));
   expect(document.querySelector<HTMLButtonElement>('[data-dlg="connect"]')!.disabled).toBe(false);
   expect(api.connectorsConnect).not.toHaveBeenCalled();
   api.toolsetsList.mockResolvedValue({groups:[{id:"composio:github",name:"GitHub",enabled:true,status:"ready"}]});
@@ -52,7 +52,7 @@ test("preview shows skills, paused routines and a disabled card per requested co
 
 test("preview uses catalogue brand names and preserves unknown custom connection ids", async () => {
   const template = {...starterTemplate(0), connections:["gmail", "github", "composio:googlecalendar", "my-private-server", "constructor"]};
-  await previewTemplate(template, "slime:rimuru", vi.fn(), null, vi.fn());
+  await previewTemplate(template, "slime:blue-plain", vi.fn(), null, vi.fn());
   expect([...document.querySelectorAll('[data-template-connection] .card-title')].map(el => el.textContent)).toEqual(["Gmail", "GitHub", "Google Calendar", "my-private-server", "constructor"]);
   expect([...document.querySelectorAll('[data-dlg="connect"]')].map(el => (el as HTMLElement).dataset.app)).toEqual(template.connections);
 });
@@ -76,8 +76,8 @@ test.each(["\n", "\r\n"])("skill preview separates quoted and folded metadata fr
 });
 
 test("a skill row is [data-tpl-skill] and holds the one disclosure that opens its full text (the look scene template-skill-expanded presses it)", () => {
-  // The scene pressed `.template-skill [data-card-disclosure]`, a class the rows lost when they became Grok Bot's cards of rows,
-  // and failed on every run since; the row is now named by its own attribute.
+  // The scene pressed `.template-skill [data-card-disclosure]`, a class the rows lost when they became cards of rows,
+  // and it failed on every run after; the row is now named by its own attribute.
   document.body.innerHTML = templateContents({...starterTemplate(0),skills:[{text:["---", "name: Check sources", "description: Check", "---", "Keep this body."].join("\n")}]});
   expect(document.querySelector('.template-skill')).toBeNull();
   const disclosures = document.querySelectorAll('[data-tpl-skill] [data-card-disclosure]');
@@ -103,8 +103,8 @@ test("skill delimiters accept the whitespace allowed by the skill store", () => 
 test("store filtering stays local and install carries catalogue identity", async () => {
   const create = vi.fn(async () => null);
   api.core.mockImplementation(async (_method, p) => p.action === "catalog" ? {entries:[
-    {id:"research",name:"Research",creator:"Example",summary:"Check sources",category:"engineering",avatar:"souei",featured:true},
-    {id:"writer",name:"Writer",creator:"Example",summary:"Clear articles",category:"marketing",avatar:"shuna",featured:false},
+    {id:"research",name:"Research",creator:"Example",summary:"Check sources",category:"engineering",avatar:"horn-sash-blue",featured:true},
+    {id:"writer",name:"Writer",creator:"Example",summary:"Clear articles",category:"marketing",avatar:"small-horns-pink",featured:false},
   ],offline:false} : {template:starterTemplate(3),findings:[]});
   const store = openMemberStore({groupId:null, create});
   for (let i=0;i<6;i++) await Promise.resolve();
@@ -133,7 +133,7 @@ test("store filtering stays local and install carries catalogue identity", async
 test("scan warnings name the visible section without exposing internal translation-like paths", async () => {
   const template = starterTemplate(3);
   api.core.mockResolvedValue({template,findings:[{kind:"injection",path:"template.instructions"}]});
-  await previewTemplate(template, "slime:diablo", vi.fn(), null, vi.fn());
+  await previewTemplate(template, "slime:streaks-charcoal", vi.fn(), null, vi.fn());
   const warning = document.querySelector('.template-preview .tpl-alert[role="status"]')!;
   expect(warning).not.toBeNull();
   expect(warning.textContent).not.toContain("template.");
@@ -149,13 +149,13 @@ const BOM = String.fromCharCode(0xfeff);
 const said = (): string => document.body.textContent ?? "";
 
 test("the name field takes what a member's name can be and no more, the core's NAME_MAX", async () => {
-  await previewTemplate(starterTemplate(0), "slime:rimuru", vi.fn(), null, vi.fn());
+  await previewTemplate(starterTemplate(0), "slime:blue-plain", vi.fn(), null, vi.fn());
   expect(document.querySelector<HTMLInputElement>("[data-template-name]")!.maxLength).toBe(NAME_MAX);
 });
 
 test("an empty name is refused in the field, nothing is added, and typing again takes the complaint back", async () => {
   const create = vi.fn(async () => ({id: 9, name: "Developer", tools: []}) as unknown as Member);
-  await previewTemplate(starterTemplate(3), "slime:diablo", create, null, vi.fn());
+  await previewTemplate(starterTemplate(3), "slime:streaks-charcoal", create, null, vi.fn());
   const field = document.querySelector<HTMLInputElement>("[data-template-name]")!;
   field.value = "   ";
   document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
@@ -173,7 +173,7 @@ test("an empty name is refused in the field, nothing is added, and typing again 
 
 test("a name the owner typed stays in the field when adding it was refused", async () => {
   const create = vi.fn(async () => null);
-  await previewTemplate(starterTemplate(3), "slime:diablo", create, null, vi.fn());
+  await previewTemplate(starterTemplate(3), "slime:streaks-charcoal", create, null, vi.fn());
   document.querySelector<HTMLInputElement>("[data-template-name]")!.value = "我的開發者";
   document.querySelector<HTMLButtonElement>('[data-dlg="import"]')!.click();
   await flush();
@@ -245,11 +245,11 @@ test("a store that is not open says so plainly, asks nothing of any entry and sh
 
 test("an entry the store cannot give says so in the owner's words", async () => {
   api.core.mockRejectedValue(new Error("[-32602] Invalid params: The store is not open yet"));
-  await previewTemplate(null, "slime:souei", vi.fn(), null, vi.fn(), "research");
+  await previewTemplate(null, "slime:horn-sash-blue", vi.fn(), null, vi.fn(), "research");
   expect(said()).toContain(t("store.notOpen"));
   document.body.innerHTML = "";
   api.core.mockRejectedValue(new Error("[-32602] Invalid params: Template unavailable offline"));
-  await previewTemplate(null, "slime:souei", vi.fn(), null, vi.fn(), "research");
+  await previewTemplate(null, "slime:horn-sash-blue", vi.fn(), null, vi.fn(), "research");
   expect(said()).toContain(t("store.unavailable"));
 });
 

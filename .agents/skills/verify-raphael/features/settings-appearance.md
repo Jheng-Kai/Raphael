@@ -1,6 +1,6 @@
 # Settings and appearance
 
-## Interface locale coverage (brief 21, 2026-11-08)
+## Interface locale coverage
 
 The language data exposes native and English names for fifteen LTR interface locales: zh-TW, en, ja,
 zh-CN, ko, es, fr, de, pt-BR, it, ru, vi, th, id and tr. The original three catalogs retain their source
@@ -9,7 +9,7 @@ and Thai use script-specific installed font fallbacks. Localized date and number
 Fixed core health, error, receipt, permission, messaging, event and store copy and native notices cover
 the same locales. Unknown locales use English. Authored member speech still follows persona/owner
 instructions and the conversation; the interface language reaches no model at all, not even as metadata
-(owner, 2026-11-14, R-LANG-01 to R-LANG-04 and conversation.md R-AG-LANG-01). Switching the locale changes the
+(R-LANG-01 to R-LANG-04 and conversation.md R-AG-LANG-01). Switching the locale changes the
 words the window draws and nothing a member is sent.
 
 Use the existing appearance and appearance-menu scenes with --locale ko, th and de for representative
@@ -24,13 +24,12 @@ Korean uses a 52-character page budget so a long notice does not accumulate thre
 npm run look -- overlay-locale-ko overlay-locale-th overlay-locale-de --theme both --width 1120,720,1920x1080
 ```
 
-## Memory has no tab, and About's controls are icons (owner, 2026-11-08, 2026-11-11)
+## Memory has no tab, and About's controls are icons
 
-Settings has six flat tabs: 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. For one day (2026-11-08 to
-2026-11-11) a seventh, 記憶, held the shared owner memory; the owner then decided that no memory is shown anywhere
-(R-MEM-10, see [Members](members.md#no-memory-on-screen-owner-decision-2026-11-11)), so the tab, its lists and its
-loading are gone, and an old link or saved pane named `memory` opens 一般. There is no import from other assistants
-either (owner, 2026-11-08: 「匯入記憶不要這樣設計…沒有什麼實際的意義」); the memory lives in Raphael's data folder, and
+Settings has six flat tabs: 一般, 工具, 安全, 模型與用量, 聽寫與快捷鍵 and 關於. No memory is shown anywhere
+(R-MEM-10, see [Members](members.md#no-memory-on-screen)), so there is no memory tab, no memory list and no
+memory loading, and an old link or saved pane named `memory` opens 一般. There is no import from other assistants
+either; the memory lives in Raphael's data folder, and
 moving to another PC means keeping that folder. 一般 keeps 關於你, 外觀, 拉斐爾 and 啟動, with no memory. 關於's Help is
 an outward-arrow icon and the license a chevron; the shortcuts' and the OpenRouter key's 「變更」 is a pencil. This
 supersedes the notes below that place memory and its import in General.
@@ -44,14 +43,14 @@ The core no longer registers an owner memory-import RPC or management boundary r
 MemoryFile.apply and the four memory document/summary RPCs remain intact. Verify with
 core/tests/memory, the members management suites and architecture/test_boundaries.py.
 
-## Grok Bot's six tabs (owner, 2026-11-07, R-UI-115)
+## The six tabs (R-UI-115)
 
-Settings has six flat tabs, as Grok Bot's: 一般, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. There are no
+Settings has six flat tabs: 一般, 聽寫與快捷鍵, 工具, 安全, 模型與用量 and 關於. There are no
 group names, no search box and no line under a tab's name. Each tab is its name, then sections: a small name
 over one rounded card (`--panel`) of rows with no lines between them, the name left and the control right.
 一般 holds, in order: 關於你 (the owner's picture, name and about me), 外觀 (theme and language), 拉斐爾 (the
 routines' time zone and the output folder) and 啟動 (the guide). Telegram, Slack and Discord are no section here: each member's panel
-sets them up in its conversation (2026-11-07 evening). Links of before land on 一般: `appearance` scrolls to its section, and
+sets them up in its conversation. Older links land on 一般: `appearance` scrolls to its section, and
 `messaging` and `memory` open 一般 as it is. 連結應用程式 stays a dialog of its own from the sidebar (R-UI-111).
 This supersedes the About-you grouping and the search notes below.
 
@@ -61,9 +60,8 @@ npm run look -- profile appearance dictation tools safety models about settings-
 
 `settings-shell` refuses group names, the search and a line under a tab's name on every settings scene.
 
-## Signed updates (2026-11-05)
+## Signed updates
 
-The owner memory import of this date was removed on 2026-11-08 (see above).
 Time zone and output folder keep their regrouped owner rows; updates stay in About.
 
 ```powershell
@@ -117,7 +115,7 @@ release, using a temporary generated key and never executing the payload. MSVC e
 shared common-controls v6 manifest in both the app and library unit-test executables.
 No private key belongs in source.
 
-## Settings merge consumers (2026-11-05)
+## Settings merge consumers
 
 General keeps the owner profile, weather city and output folder
 together in About you. Tools and Safety retain their shared scope; legacy agent
@@ -129,7 +127,7 @@ commands use the location popover, never the retired settings pane.
 npm run look -- desktop-host-local desktop-host-error settings-owner --theme both --width 1120,720,1920x1080
 ```
 
-## Owner output folder in General (2026-11-05)
+## Owner output folder in General
 
 R-OUTPUT-01 adds the optional absolute delivery folder to Settings > General,
 chosen with the folder picker of R-COLLEAGUE-06 (no typed field). Changing the preference
@@ -146,7 +144,7 @@ Inspect its full-size General pane in both themes at all three sizes. Compare
 the folder row's field, spacing, help text and focus with the surrounding owner
 and General settings; judge the selected run only under authorized prerequisites.
 
-Owner decision 2026-10-30 adds the owner's avatar to the account/profile section.
+The owner's avatar is part of the account/profile section.
 Use the existing presets or file picker and drag/zoom crop dialog. A bounded 192px
 WebP is stored in the existing owner_photo setting. Sidebar account footer and all
 owner messages share the same face and owner_name, with a person-icon fallback.
@@ -157,7 +155,7 @@ Models in use includes one Quick questions row directly below Raphael's answer.
 The model uses the shared provider/model card and chooser, with the shortcut's
 purpose and price on the left, or above the picker at narrow widths. An empty quick model displays and inherits the answer
 model. Quick effort is chosen inside the chooser, in the same effort row as the answer
-model's (owner, 2026-10-27: never a separate control beside the card); a newly chosen
+model's (never a separate control beside the card); a newly chosen
 model starts at low, and under 「與回答相同」 the row is the answer model's. The core
 still saves the quick model and its effort apart (`quick_model`, `quick_effort`).
 API effort metadata and CLI effort mappings follow their existing catalogs. Every effort
@@ -209,6 +207,7 @@ says and knows: its own four first, in its order, then the older models its prog
 each name with its version and each row the exact model id (`cli:claude:claude-opus-5-5`), made
 and sized as a Codex row (`chooser-claude-style`); `chooser-claude-older` scrolls to the oldest. Inspect that every name is whole at 720 wide.
 The fixture is the shape of the core's answer, with aliases on the four current rows.
+`model-choices-answer`, `model-choices-cleanup`, `model-choices-stt` and `quick-model-menu` also run `price-parts` (R-MODEL-06): a price never breaks inside one of its parts.
 
 Keep pane/theme PNGs; inspect wrapping, focus, scroll access, active selections and
 dropdown/popover contrast. Use `--locale en` and `--locale ja` for translation work;
@@ -244,7 +243,7 @@ Settings headings omit repeated purpose subtitles (R-UI-02). Model chooser sourc
 actions retain an 8px gap below the list, including a scrolled full list. The selected
 source scrolls fully into view when opening or switching sources (R-UI-01).
 
-## Switching the whole window language (2026-10-28, R-UI-14)
+## Switching the whole window language (R-UI-14)
 
 Dictionary translates its current template, without touching the removed subtitle.
 Locale listeners are isolated so a broken surface cannot reject the device setting
@@ -265,11 +264,11 @@ three catalogues. Authored names/documents/backend prose stay in their original 
 A locale-listener warning, console error, error toast or stale interface label fails.
 Regression coverage: `i18n/i18n.test.ts` and `pages/locale-switch.test.ts`.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Owner round 4 pane alignment
+## Pane alignment
 
 Every settings pane caps its direct content, header, toolbar, lists and grids at
 the same 640px measure. Settings list padding is removed at the pane boundary,
@@ -281,15 +280,15 @@ Compact panes with header actions reserve vertical clearance below the corner
 Close button. settings-alignment compares control bounds as well as containers
 and rejects overlap with Close.
 
-## Owner round 6 contracts
+## Concise settings copy
 
-Owner round 6: profile, dictation, appearance, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
+Profile, dictation, appearance, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
 
-## Owner round 7 contracts
+## Models without a price note
 
 Models omits the reference-price helper paragraph while retaining price/subscription information on each purpose row. Catalog failure remains an essential error. settings-concise rejects the redundant price note in the normal Models fixture; models-responsive retains the stacked narrow-row contract.
 
-## Acceptance fixes (2026-10-30)
+## Acceptance fixes
 
 The quick-model-row check follows rounds 6/7 and R-UI-02: its localized row label
 says Quick questions, its shared picker shows model/source, and its price remains
@@ -297,7 +296,7 @@ visible. No helper paragraph is required or permitted. The affected matrix is
 models, quick-model-menu, quick-effort-menu and quick-model-selection, both themes
 at 1120,720,1920x1080. The audit regression rejects a generic Model label.
 
-## OpenRouter selection identity (2026-10-30)
+## OpenRouter selection identity
 
 The shared chooser can save an answer/member API reference with `?effort=`;
 quick questions retain a bare model plus separate `quick_effort`. Core validation,
@@ -315,7 +314,7 @@ save/reopen/next-turn routing for answer, quick questions and a member. Its prov
 is fake; HTTP-body tests separately assert the exact model/reasoning payload.
 Neither check is paid OpenRouter acceptance. See the shared look README for launch.
 
-## Theme and clarity (owner, 2026-10-30)
+## Theme and clarity
 
 Appearance uses the shared sel/openMenu component, with system/light/dark and
 language as two rows inside a <=640px card. Language moved from General to this pane;
@@ -333,12 +332,12 @@ representatives above.
 Native `appearance` drives all three theme choices at 1120,720,1920x1080, checks the real shared dropdown and confirms black in the production settings store.
 
 
-## Settings by purpose (2026-11-05)
+## Settings by purpose
 
 This owner decision supersedes the former Settings > Raphael pane and its earlier
 scene names. General owns the owner profile and weather city.
 Dictation & shortcuts groups dictation, paste, cancel and Ask Raphael shortcuts.
-Tools owns shared search, page reading, images, PDFs and their keys (no voice service since 2026-11-10);
+Tools owns shared search, page reading, images, PDFs and their keys (no voice service);
 Safety owns shared safety rules, local command policy and always-allowed apps.
 Navigation groups are Basics, Team, Integrations and Account. Every pane retains
 its localized purpose as explicitly requested by this brief (a scoped R-UI-02
@@ -376,8 +375,7 @@ Focused tests: settings-view.test.ts, settings-providers.test.ts,
 agent-settings.test.ts, agent-members.test.ts, member-details.test.ts, services.test.ts,
 computer-location.test.ts, desktop-viewer.test.ts,
 missing.test.ts, missing-consumers.test.ts, timeline.test.ts, group-chats.test.ts,
-mcp-proposal.test.ts, nav-history.test.ts and the shared look audit test. Per the integrator's 2026-11-05 handoff instruction,
-tsc and these targeted tests run without the waiter. The selected look matrix
+mcp-proposal.test.ts, nav-history.test.ts and the shared look audit test. tsc and these targeted tests run without the waiter. The selected look matrix
 calls the waiter once and proceeds on clear or timeout. The final frontend verify
 is deferred to the integrator at merge. Native Docker, SSH, audio and persistence
 remain separate acceptance. The unit forbids network
@@ -400,7 +398,7 @@ the host, and host errors remain contextual. The follow-up matrix is the four ho
 scenes plus desktop-panel, both themes at 1120,720,1920x1080.
 
 
-## Shared owner vault (2026-11-05)
+## Shared owner vault
 
 R-VAULT-01..05: Settings > Safety contains Vault. Entries have login, contact or
 card kinds, counted list filters, a label, one-line owner hint and all/chosen-member
@@ -451,7 +449,7 @@ their existing disclosure and policy. Vault kind filters use the same plain
 navigation tabs and inline counts as Connections; segmented filters remain exclusive to History and Dictionary.
 
 
-## Attachment root and Office expansion security (2026-11-05)
+## Attachment root and Office expansion security
 
 R-SEC-FILES-01/03: core/tests/services/test_reader_security.py verifies attachment read,
 save and chunk-upload admission against a redirected storage root and limits repeated
@@ -460,7 +458,7 @@ PDF/media, vault and memory suites in the affected core scope. Existing size lim
 opaque IDs, owner CSV preview and private-fill consent semantics are retained. No UI
 change means no local look/judge run; OS vault and native file opening are unverified.
 
-## Owner-only persistence and bounded native logs (2026-11-05 follow-up 1)
+## Owner-only persistence and bounded native logs
 
 R-SEC-DATA-01 and R-SEC-LOG-02: tests/test_storage_security.py uses temporary folders
 for owner-only DACL verification, fail-closed ACL errors and five-version migration
@@ -470,7 +468,7 @@ Rust core_stderr tests cover credential forms, overlong lines, UTF-8/EOF and ben
 diagnostics; run cargo test --locked offline with a worktree-local target directory.
 This changes no Settings markup or navigation and adds no look scope.
 
-## Settings and Connect Apps, small fixes (2026-11-14, R-UI-150 to R-UI-153)
+## Settings and Connect Apps, small fixes (R-UI-150 to R-UI-153)
 
 關於我 has no drag handle, is four lines at rest with the rest folded, and grows while written; the about tab's mark and name select nothing;
 Safety has no 電腦操作 section; a connected app's 「✓ 已連結」 is inside the row's one button in Connect Apps.

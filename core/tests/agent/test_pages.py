@@ -86,7 +86,7 @@ PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAW
 
 
 @pytest.mark.parametrize("html", [
-    # The links on the daily overview Raphael could not show on 2026-11-14.
+    # The links on a daily overview Raphael could not show.
     "<button onclick=\"window.raphael.open('https://www.accuweather.com/zh/tw/taichung-city/315040/weather-forecast/315040')\">Source</button>",
     "<a href='https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition/'>NVIDIA</a>",
     f'<img alt="dot" src="data:image/png;base64,{PNG}">',
@@ -113,7 +113,7 @@ def test_a_secret_in_a_link_or_an_embedded_text_is_still_refused(conn, html):
     assert error.value.kind == "secret"
 
 
-# The owner's study pages for the member 紫苑 were refused three times (2026-11-14): an ordinary news address, whose last
+# Study pages of a language-teaching member were refused three times: an ordinary news address, whose last
 # path piece mixes letters and digits, read as a key. Only credentials are secret; an address, an ID inside one, an article,
 # a hash, a file name and a person's ID number are content.
 NHK_LINKS = (
@@ -264,7 +264,7 @@ def test_the_base_style_is_all_low_specificity_theme_words_and_loads_nothing():
     assert THEME["light"].keys() == THEME["dark"].keys() and FONT
     # The page's policy loads nothing it names: no address, no import, no picture, no font file.
     assert not re.search(r"url\(|@import|@font-face|https?:|//", BASE, re.I)
-    # The measures the owner named (his Grok Bot picture): a 32 px title, a table with hairlines, right-aligned figures.
+    # The measures: a 32 px title, a table with hairlines, right-aligned figures.
     assert ":where(h1){margin-top:0;font-size:32px" in BASE and "line-height:1.6" in BASE
     assert ":where(.num){text-align:end" in BASE and "overflow-x:auto" in BASE
 
@@ -421,7 +421,7 @@ async def shown_page(rig, client, **arguments):
 
 
 async def test_a_member_reads_the_id_of_a_page_it_showed_in_an_earlier_turn(make_rig, client):
-    """The owner's 2026-11-11 report: asked to change a page, the member sent a new one. Its later turn read only the
+    """Asked to change a page, the member sent a new one. Its later turn read only the
     page's title and revision, never the id update_page needs, so it could not name the page it had made."""
     rig = make_rig()
     page = await shown_page(rig, client)
@@ -607,7 +607,7 @@ async def test_a_report_that_breaks_the_format_is_refused_with_what_to_fix(make_
     assert words in reply and "hunter" not in reply
 
 
-# The owner's daily overview (2026-11-14): weather, investments, projects by status and owner, members; two halves side by side.
+# A daily overview: weather, investments, projects by status and owner, members; two halves side by side.
 DASHBOARD = {"sections": [
     {"kind": "stats", "title": "Today", "tiles": [
         {"name": "Taichung", "value": "29", "unit": "°C", "note": "Storms after noon", "trend": [24, 26, 29, 27]},
@@ -668,7 +668,7 @@ def test_a_chart_or_tiles_that_break_the_format_are_refused_with_what_to_fix(rep
     assert words in str(refused.value)
 
 
-# The owner's Tokyo list on Grok Bot (2026-11-14): a summary line, a note with an icon, a dropdown over a table whose last column is links.
+# A Tokyo list: a summary line, a note with an icon, a dropdown over a table whose last column is links.
 DOCUMENT = {"summary": "46 spots, 39 restaurants: pick with the filters.", "sections": [
     {"kind": "callout", "tone": "info", "heading": "Note", "text": "Staying in Otsuka. Prices are only what the sources give."},
     {"kind": "table", "title": "Spots", "filter": "Area", "columns": ["Name", "Area", "Price", "Link"],
@@ -943,6 +943,40 @@ def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
     assert "const grown = innerHeight - framed;" in _HELPER
     assert "Math.abs(height - previous - grown) <= 1" in _HELPER
     assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")
+
+
+# A member's page shaped like a daily lesson: a Google Fonts style sheet in its head, its words built by its own script at
+# the end of its body. The words are made up.
+LESSON = ('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
+          '<link rel="preconnect" href="https://fonts.googleapis.com">'
+          '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">'
+          "<style>body{margin:0;background:var(--p-bg);font-family:'Noto Sans TC',sans-serif}</style></head>"
+          '<body class="dark"><header><h1>Daily lesson</h1></header><div id="article"></div>'
+          "<script>document.getElementById('article').textContent='A short made-up paragraph.';</script></body></html>")
+
+
+async def test_a_style_sheet_from_elsewhere_that_does_not_come_stops_holding_the_page_back(conn):
+    # R-PAGE-13: a style sheet in the head holds the whole page back while it comes (nothing is drawn, the page's script
+    # waits, no load and no height reach the card), and one whose host never answers held it back for good: the card stood
+    # as an empty box under its ready pill. Measured in Edge: with the font host silent the page stays `loading` and paints
+    # nothing; with this helper it draws within about 3.5 s and applies the style sheet if it comes later.
+    from raphael_core.agent.pages import _HELPER
+    page = stored(conn, title="Daily lesson", html=LESSON)
+    host = PageHost(PageStore(conn))
+    try:
+        body = (await fetch(await host.url(page["id"], "dark"))).split("\r\n\r\n", 1)[1]
+    finally:
+        await host.aclose()
+    # The helper runs before the page's own head, so its timer is set before the style sheet starts to hold the page.
+    assert body.index(_HELPER) < body.index('<link href="https://fonts.googleapis.com')
+    release = _HELPER[_HELPER.index("setTimeout(() => {"):]
+    release = release[:release.index("}, 3000);")]
+    # Only while the page is still loading, and only a style sheet that has not come (a loaded one has its `sheet`).
+    assert "document.readyState === 'complete'" in release and "link.sheet" in release
+    assert "querySelectorAll('link[rel~=\"stylesheet\" i]')" in release
+    # It is put back as one that holds nothing (a media no screen matches), which takes its own media once it has come.
+    assert "late.media = 'print'" in release and "late.addEventListener('load', () => { late.media = media; }" in release
+    assert "link.replaceWith(late)" in release
 
 
 async def test_a_youtube_video_plays_from_the_page_host_which_names_itself_to_youtube(conn):

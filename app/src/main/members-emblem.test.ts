@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Raphael's face on the 拉斐爾 page is his emblem exactly as it is at the bottom right: bare, with no
+// Raphael's face on the 拉斐爾 page is its emblem exactly as it is at the bottom right: bare, with no
 // background, border, ring, disc, shadow or circle crop, in the member column, the pill, the details
 // panel and the thread. These tests inspect style rules that could reach the emblem's element or
 // its drawing surface, along with the rendered HTML.
@@ -69,7 +69,7 @@ describe("Raphael's emblem stands bare", () => {
     expect(bad).toEqual([]);
   });
 
-  test("Raphael's face is the first blue slime wherever the page draws it, his emblem only in voice", () => {
+  test("Raphael's face is the first blue slime wherever the page draws it, its emblem only in voice", () => {
     const raphael = raphaelOf(null);
     for (const size of [22, 26, 30, 34, 64, 96]) {
       const html = faceHTML(raphael, size, { cls: "mb-pill-face" });
@@ -84,7 +84,7 @@ describe("Raphael's emblem stands bare", () => {
     expect(face.getAttribute("style")).toBe("--av:40px");
   });
 
-  test("on the line of what he asked a member, too", () => {
+  test("on the line of what they asked a member, too", () => {
     const line = document.createElement("ol");
     const turn: AgentTurn = { id: 5, created_at_ms: 0, question: "問", route: "exchange", prefix: "", text: "答", detail: null, status: "done", source: "member", scope: "exchange", member_id: 3, peer_id: 0 };
     line.innerHTML = receivedLineHTML(turn, { face: () => "", memberName: (id) => (id ? "小晴" : "拉斐爾"), memberFace: () => faceHTML(raphaelOf(null), 18, { cls: "sys-face" }) });

@@ -106,7 +106,7 @@ export function sentFileHTML(file: TurnAttachment, options: { open?: boolean } =
   const src = source ? ` src="${esc(source)}"` : "";
   const open = id && options.open !== false ? iconButton("external", t("agent.openFile"), ` data-act="attachment-open" data-id="${esc(id)}"`, "attachment-open") : "";
   if ((id || source) && kind === "image") return `<div class="me-file attachment-image"><button type="button" class="btn attachment-picture" data-act="attachment-image"${attrs} aria-label="${esc(file.name)}"><img${src} alt="${esc(file.name)}"${attrs}></button></div>`;
-  // Our own players, never the browser's (owner, 2026-11-15): media-player.ts.
+  // Our own players, never the browser's: media-player.ts.
   if ((id || source) && kind === "video") return videoPlayerHTML(`${src}${attrs}`, file.name, open);
   if ((id || source) && kind === "audio") return audioPlayerHTML(`${src}${attrs}`, file.name, open);
   const ext = file.name.includes(".") ? file.name.split(".").pop()!.toUpperCase() : "";

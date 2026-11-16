@@ -1,5 +1,5 @@
 // The one light of a sidebar row (a member, a group chat, a pinned face): what the owner most needs to know about
-// it, as a dot, and nothing else (R-SIDE-04, owner 2026-11-14: 「他們如果在思考的情況下，不要有提示…只有他們真正傳出訊息的時候，我左邊才會有提示」).
+// it, as a dot, and nothing else (R-SIDE-04).
 //
 //   waiting  orange  a question or an approval waits for the owner; it stays until it is answered
 //   failed   red     work went wrong and needs a look

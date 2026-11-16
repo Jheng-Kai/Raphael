@@ -7,7 +7,7 @@ vi.mock("./api", () => api);
 import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
-import { computerStateText } from './computer-state';
+import { computerStateText, computerUpdateLine } from './computer-state';
 const running: DesktopState = { state:"running", ready:true, control:"member" };
 const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
 let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false;
@@ -258,7 +258,7 @@ test('enlarging an owner-held screen disables viewer input without changing the 
   expect(api.desktopControl.mock.calls).toHaveLength(before);
 });
 
-test('watching always offers Take control, whoever the core says holds the lease: one press takes it again (owner, 2026-11-14)', async () => {
+test('watching always offers Take control, whoever the core says holds the lease: one press takes it again', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   enlarge().click(); await flush();
   const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
@@ -276,7 +276,7 @@ test('watching always offers Take control, whoever the core says holds the lease
   expect(label()).toBe(t('desktop.operating')); expect(take().hidden).toBe(true);
 });
 
-test('a take the core is still deciding reads 正在接手…, and one it refuses leaves Take control to press again (owner, 2026-11-14)', async () => {
+test('a take the core is still deciding reads 正在接手…, and one it refuses leaves Take control to press again', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   enlarge().click(); await flush();
   const label = (): string => panel().querySelector('.desktop-mode-label')!.textContent!.trim();
@@ -294,7 +294,7 @@ test('a take the core is still deciding reads 正在接手…, and one it refuse
   expect(api.desktopControl).toHaveBeenLastCalledWith('one', true); expect(label()).toBe(t('desktop.taking'));
 });
 
-test('a lease the core gave back is not kept on screen: the pill watches, input stops and Take control returns (owner, 2026-11-14)', async () => {
+test('a lease the core gave back is not kept on screen: the pill watches, input stops and Take control returns', async () => {
   panelOpen=true; mounted.show(); await flush(); message('connected');
   api.desktopControl.mockResolvedValue({ ...running, control:'owner' });
   await takeOver(); message('interactive', { held:true }); await flush();
@@ -448,12 +448,12 @@ test('a screen click changes input in place without replacing the frame, URL or 
   expect(api.desktopControl).toHaveBeenCalledWith('one',true);expect(frame()).toBe(same);expect(frame().src).toBe(url);
   expect(frame().style.pointerEvents).toBe('auto');expect(panel().dataset.interactive).toBe('true');expect(handback().textContent).toBe('停止');
   api.desktopControl.mockResolvedValue(running);handback().click();handback().click();await flush();
-  // Stop hands the computer back once and nothing else: the stream is neither closed nor reopened (owner, 2026-11-14).
+  // Stop hands the computer back once and nothing else: the stream is neither closed nor reopened.
   expect(api.desktopControl.mock.calls.filter(call=>call[1]===false)).toHaveLength(1);expect(api.desktopClose).not.toHaveBeenCalled();
   expect(api.desktopOpen).toHaveBeenCalledTimes(1);expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(frame()).toBe(same);expect(frame().src).toBe(url);
 });
-test('ending control keeps watching: the larger view, the stream and the live frame stay, the pill reads 觀看中 and 接手控制 is offered again (owner, 2026-11-14)',async()=>{
+test('ending control keeps watching: the larger view, the stream and the live frame stay, the pill reads 觀看中 and 接手控制 is offered again',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   api.desktopControl.mockResolvedValue({...running,control:'owner'});await takeOver();message('interactive',{held:true});
   expect(panel().querySelector('.desktop-mode-label')!.textContent).toBe('你正在控制');expect(handback().textContent).toBe('停止');
@@ -591,6 +591,40 @@ test.each(['starting','building','preparing'] as const)('%s shows no preparation
   // Getting ready is not pressable: there is nothing to start twice.
   expect(enlarge().hidden).toBe(true); expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
   expect(api.desktopOpen).not.toHaveBeenCalled();
+});
+
+// R-COMP-UPDATE-01: an update of the computer's image can take minutes, so it is said in one state line under the
+// screen, with how long it may take; the screen itself stays as bare as R-UI-93 has it, and nothing is a notice.
+test.each(['building','preparing','starting'] as const)('an update says so in one line under the screen while it is %s, and the line goes with it',async state=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue({state,ready:false,control:'member',update:true,progress:'#12 [12/21] RUN apt-get install'});mounted.show();await flush();
+  const caption=panel().querySelector<HTMLElement>('.desktop-caption')!;
+  expect(caption.hidden).toBe(false); expect(caption.textContent).toBe(t('desktop.updateLine')); expect(caption.getAttribute('role')).toBe('status');
+  expect(panel().hasAttribute('data-desktop-update')).toBe(true); expect(panel().dataset.desktopState).toBe(state);
+  expect(caption.closest('.desktop-screen')).toBeNull(); expectBareScreen(panel());
+  expect(panel().querySelector<HTMLElement>('.computer-lifecycle-state')!.hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(true);
+  expect(shownText(panel())).not.toContain('#12'); expect(enlarge().hidden).toBe(true); expect(api.desktopOpen).not.toHaveBeenCalled();
+  // An unchanged renewal writes nothing, the line included.
+  const observer=new MutationObserver(()=>{}); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});
+  await vi.advanceTimersByTimeAsync(2000); await flush(); expect(observer.takeRecords()).toHaveLength(0); observer.disconnect();
+  api.desktopStatus.mockResolvedValue(running); await vi.advanceTimersByTimeAsync(4000); await flush();
+  expect(caption.hidden).toBe(true); expect(panel().hasAttribute('data-desktop-update')).toBe(false);
+});
+test.each(['zh-TW','en','ja'] as const)('in %s the update line is its own sentence of the language',locale=>{
+  setLocale(locale);
+  expect(computerUpdateLine({state:'building',ready:false,control:'member',update:true})).toBe(t('desktop.updateLine'));
+  expect(t('desktop.updateLine')).not.toBe('desktop.updateLine');
+  for (const quiet of [{state:'building'},{state:'preparing'},{state:'running',update:true},{state:'stopped',update:true}] as const)
+    expect(computerUpdateLine({...quiet,ready:false,control:'member'} as DesktopState)).toBe('');
+});
+test('a maintenance press while the computer is being updated answers with the update and shows no failure',async()=>{
+  const updating: DesktopState = {...maintenanceState,state:'building',ready:false,update:true};
+  panelOpen=true;api.desktopStatus.mockResolvedValue(updating);api.desktopMaintain.mockResolvedValue(updating);mounted.show();await flush();
+  menuPick(1);await flush();
+  expect(api.desktopMaintain).toHaveBeenCalledExactlyOnceWith(1,'restart',updating,false);
+  expect(panel().querySelector<HTMLElement>('.desktop-error')!.hidden).toBe(true);
+  expect(panel().querySelector<HTMLElement>('.desktop-caption')!.textContent).toBe(t('desktop.updateLine'));
+  expect(panel().dataset.desktopState).toBe('building'); expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
 test('real build percent updates change only the state in data and an unchanged refresh writes nothing',async()=>{
@@ -818,7 +852,7 @@ test('Stop can be followed by a fresh takeover on the same stream, with no recon
  expect(api.desktopControl).toHaveBeenCalledTimes(3);
 });
 
-test("a running computer's panel streams again after a handback that leaves it open, never a black frame with only 開啟 (owner, 2026-11-14)",async()=>{
+test("a running computer's panel streams again after a handback that leaves it open, never a black frame with only 開啟",async()=>{
  const width = window.innerWidth; Object.defineProperty(window,'innerWidth',{value:1920,configurable:true});
  try {
   panelOpen=true; api.desktopStatus.mockResolvedValue({...running,works:[work]}); mounted.show(); await flush(); message('connected');
@@ -960,7 +994,7 @@ test('a stream that ends before it ever showed the screen, or says it cannot rea
 });
 
 test('a running computer is not streamed while its Computer tab is closed: Details carries no computer', async () => {
-  // Owner, 2026-11-14: the computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
+  // The computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
   api.desktopStatus.mockResolvedValue(running); mounted.show(); await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(api.desktopOpen).not.toHaveBeenCalled(); expect(host.querySelector('iframe')).toBeNull();
 });
@@ -990,7 +1024,7 @@ test('the pill reads watching with Take control, then you are in control with St
 });
 
 test("a seat's frame draws its line inside and takes no room, so the 1280:900 picture fills it", () => {
-  // R-COMP-FRAME-01 (owner, 2026-11-15): a 1 px border put the inside 2 px off the ratio and a dark sliver showed.
+  // R-COMP-FRAME-01: a 1 px border put the inside 2 px off the ratio and a dark sliver showed.
   const css = (name: string): string => readFileSync(resolve(__dirname, name), "utf8");
   const screen = /\.desktop-screen \{([^}]*)\}/.exec(css("desktop-viewer.css"))![1]!;
   expect(screen).toContain("aspect-ratio: 1280 / 900");
@@ -1001,7 +1035,7 @@ test("a seat's frame draws its line inside and takes no room, so the 1280:900 pi
 });
 
 test("another member opened while the page was away never shows the previous member's screen", async () => {
-  // owner, 2026-11-15: 「我明明打開不同的角色，結果它顯示前一個角色的畫面」. The sidebar switches the member before the page is
+  // The sidebar switches the member before the page is
   // shown (refresh() runs only for a page on screen), and the first member's stream was still lingering.
   panelOpen = true; mounted.show(); await flush(); message('connected');
   expect(frame().getAttribute('src')).toContain('/one/');
@@ -1037,7 +1071,7 @@ const wire = (): void => { peer = { postMessage: vi.fn() }; Object.definePropert
 const holdControl = async (): Promise<void> => { panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); api.desktopControl.mockResolvedValue({ ...running, control: 'owner' }); await takeOver(); message('interactive', { held: true }); await flush(); };
 const pasteReplies = (sent: { mock: { calls: unknown[][] } }): unknown[][] => sent.mock.calls.filter(([data]) => (data as { type?: string }).type === 'raphael-desktop-paste');
 
-test('the owner pasting into the screen he holds sends his clipboard text to the page, and to that page alone', async () => {
+test('the owner pasting into the screen they hold sends their clipboard text to the page, and to that page alone', async () => {
   await holdControl();
   api.ownerClipboardText.mockResolvedValue('sk-or-v1-0123456789abcdef');
   const sent = peer.postMessage;
@@ -1046,7 +1080,7 @@ test('the owner pasting into the screen he holds sends his clipboard text to the
   expect(pasteReplies(sent)).toEqual([[{ type: 'raphael-desktop-paste', id: 7, text: 'sk-or-v1-0123456789abcdef' }, 'http://127.0.0.1:5000']]);
 });
 
-test('nothing is read from his clipboard while he only watches or while a member works', async () => {
+test('nothing is read from their clipboard while they only watch or while a member works', async () => {
   panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush();
   const sent = peer.postMessage;
   askPaste(7); await flush();

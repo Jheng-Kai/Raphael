@@ -1,6 +1,5 @@
 """Guest-only file checkpoints, with hash-guarded restore preserving later edits.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 No guest dependencies are required.
 """
 
@@ -25,7 +24,7 @@ PROGRAM_FOLDERS = {".config", ".local", ".mozilla", ".pki", ".npm", ".tmp", ".th
                    "Crashpad", "BrowserMetrics"}
 UNTRACKED = EXCLUDED | PROGRAM_FOLDERS
 LOCK_FILES = {"SingletonLock", "SingletonSocket", "SingletonCookie", ".parentlock"}
-# Nor is what a tool leaves behind while the member works (owner, 2026-11-14: a card 「新增了 30 個檔案」 of bare hashes, the content store
+# Nor is what a tool leaves behind while the member works (a card of 30 added files, all bare hashes, the content store
 # `npm i --cache /home/cua/workspace/.npm-cache` writes): a hidden folder (a tool's own store: .git, .npm-cache, .next, .claude), a package
 # or build store, a cache or temporary folder, lock files, temporary and partial downloads, and a file named by a bare hash. The card lists
 # only what the owner would recognise as the work's result: documents, code, data, pictures, video, audio and pages.
@@ -41,6 +40,14 @@ MAX_ARCHIVE_BYTES = 500 * 1024 * 1024
 MAX_CHECKPOINTS = 20
 MAX_FILES = 10000
 WALK_SECONDS = 8.0
+# The whole run of this script is ended by the guest's `timeout` after GUEST_SECONDS (computer/vm.py runs it so). Reading
+# the records already took most of the ten seconds it had (listing them took 8.6 to 12.1 s, measured), so a begin whose
+# walk then ran its eight seconds was killed before it wrote anything and the run had no checkpoint at all. A begin stops
+# walking WRITE_SECONDS before the end, counted from the start of the script, and writes what it found as partial.
+GUEST_SECONDS = 25.0
+WRITE_SECONDS = 6.0
+# Only the script the guest runs has that end; a store used in place (the core's tests) has the walk's own limit alone.
+STARTED = time.monotonic() if __name__ == "__main__" else None
 # The change view reads text only: a file over this size or with a NUL byte in its first bytes is not compared.
 TEXT_DIFF_BYTES = 1024 * 1024
 SNIFF_BYTES = 8192
@@ -273,7 +280,13 @@ class CheckpointStore:
         if any(item["member"] == member and item["turn"] == turn for item in records):
             return None
         previous = records[-1]["manifest"] if records else {}
-        manifest, uncovered, partial = self._capture(previous, time.monotonic() + WALK_SECONDS, store=True)
+        deadline = time.monotonic() + WALK_SECONDS
+        if STARTED is not None:
+            deadline = min(deadline, STARTED + GUEST_SECONDS - WRITE_SECONDS)
+        if deadline <= time.monotonic():
+            # Nothing walked would be a checkpoint of no files, and every file would then read as added by this run.
+            raise TimeoutError("no time left to walk the workspace")
+        manifest, uncovered, partial = self._capture(previous, deadline, store=True)
         if records and self._same(manifest, previous) and uncovered == records[-1].get("uncovered", []) and partial == records[-1].get("partial", False):
             latest = records[-1]
             if latest["member"] != member or manifest != previous or "review" in latest or latest["state"] == "restored":

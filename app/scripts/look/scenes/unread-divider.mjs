@@ -13,7 +13,7 @@ export default [
   scene("thread-new-divider-latest", "The latest control, centred above the composer, still reaches the newest turn", [...open, check("thread-new-divider"),
     wait('.mb-chat .conversation-latest:not([hidden])'), check("conversation-up"), click('.mb-chat .conversation-latest'), { action: "wait-scroll-end", selector: ".mb-chat .ra-scroll" }, check("thread-new-divider-bottom")], { unreadDivider: "long" }),
   // Raphael's thread is the one the owner opens first (the rail's chief, from Home), with the roster still on its way: the thread's
-  // first place is its last (owner, 2026-11-11: the conversation opened and then jumped up). `scrollTimeline` keeps every place
+  // first place is its last (the conversation once opened and then jumped up). `scrollTimeline` keeps every place
   // the thread was seen at, frame by frame.
   scene("thread-new-divider-raphael-short", "Raphael with a late roster: a short unread run opens at the bottom, once, with the newest turn mounted and no latest button", [wait('.thread-new'), waitScrollEnd('.mb-chat .ra-scroll'), check("raphael-open-short")], raphael("short", { unreadSeenLong: true })),
   scene("thread-new-divider-raphael-medium", "Raphael with a late roster: sixteen unread turns keep the newest turn mounted, in one place", [wait('.thread-new'), check("raphael-open-medium")], raphael("medium")),

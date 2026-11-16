@@ -72,14 +72,22 @@ class Core:
 
     def call(self, method, params=None, *, timeout=RPC_TIMEOUT):
         """The whole reply message (`result` or `error`) to a request."""
+        return self.wait(self.send(method, params), method, timeout=timeout)
+
+    def send(self, method, params=None):
+        """Write a request and leave its reply for `wait`, as the app does while a turn runs: its id."""
         self._next_id += 1
         request = {"jsonrpc": "2.0", "id": self._next_id, "method": method, "params": params or {}}
         self.proc.stdin.write(json.dumps(request).encode("utf-8") + b"\n")
         self.proc.stdin.flush()
+        return self._next_id
+
+    def wait(self, request_id, method="", *, timeout=RPC_TIMEOUT):
+        """The whole reply message to the request `request_id`; the replies to others are kept for their own wait."""
         deadline = time.monotonic() + timeout
         while True:
-            if self._next_id in self.responses:
-                return self.responses.pop(self._next_id)
+            if request_id in self.responses:
+                return self.responses.pop(request_id)
             try:
                 line = self.lines.get(timeout=max(0.0, deadline - time.monotonic()))
             except queue.Empty:

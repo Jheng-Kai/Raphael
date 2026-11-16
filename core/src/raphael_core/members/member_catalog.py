@@ -17,9 +17,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from ..bots.homes import atomic
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
+from ..slime_ids import current_id
 from .templates import MAX_BYTES, checked, findings
 
-DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/raphael-catalog/main"
+DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/SlimesStore/main"
 # The catalogue's public keys, raw Ed25519 as 64 hex characters, one or two (a second while a key is rotated). There is none
 # until the owner has created the catalogue and its key (catalog-template/README.md): with no key the store is not open, asks
 # nothing of the network and says so. Fixture keys are supplied only by offline tests.
@@ -32,7 +33,7 @@ STALE_INDEX = with_ui_words({
     "ja": "テンプレートが取り消されていないことを確認するため、インターネットに接続してから追加してください",
 })
 CATEGORIES = ("engineering", "sales", "marketing", "design", "personal", "hr", "product", "operations")
-AVATARS = ("rimuru", "souei", "shuna", "diablo", "benimaru", "hakurou", "shion", "gobta")
+AVATARS = ("blue-plain", "horn-sash-blue", "small-horns-pink", "streaks-charcoal", "horns-red", "mustache-gray", "horn-lavender", "goggles-green")
 
 
 def schema(value):
@@ -54,6 +55,8 @@ def schema(value):
         for key, cap in (("name", 100), ("creator", 100), ("summary", 300), ("version", 40)):
             if not isinstance(entry[key], str) or not entry[key].strip() or len(entry[key]) > cap or "\n" in entry[key]:
                 raise ValueError("Invalid catalogue text")
+        # An index published before the faces were renamed still names them by the old ids.
+        entry["avatar"] = current_id(entry["avatar"]) if isinstance(entry["avatar"], str) else entry["avatar"]
         if entry["category"] not in CATEGORIES or entry["avatar"] not in AVATARS or type(entry["featured"]) is not bool:
             raise ValueError("Invalid catalogue category or avatar")
         if entry["package"] != f"packages/{entry['id']}/member.raphael-member" or not isinstance(entry["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"]):
@@ -244,4 +247,4 @@ async def handle(service, params):
     atomic(folder / "member.raphael-member", raw)
     atomic(folder / "README.md", b"Submit this recipe by pull request. No credentials or permissions are included.\n")
     query = urlencode({"quick_pull": "1", "title": f"Add member template: {value['name']}", "body": f"Package: member.raphael-member\nSHA256: {digest}\n\nFork the catalogue and add the package, README and index entry. The maintainer reviews and signs the index."})
-    return {"folder": str(folder), "folder_id": folder.name, "url": "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?" + query}
+    return {"folder": str(folder), "folder_id": folder.name, "url": "https://github.com/Jheng-Kai/SlimesStore/compare/main...main?" + query}

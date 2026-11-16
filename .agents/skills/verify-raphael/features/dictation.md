@@ -1,6 +1,6 @@
 # Dictation
 
-## macOS (2026-11-15)
+## macOS
 
 The same controller runs on a Mac (`dictation.rs` `app::spawn`, no longer Windows-only). The dictation key is Right
 Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalogs.ts`). What differs:
@@ -22,7 +22,7 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 - Verify on a Mac by hand in `npm run tauri -- dev` (the terminal is the app macOS asks permissions for); `npm run
   native` is Windows-only.
 
-## The spoken languages: one row each, written forms beside the picker; cleanup in no one language (2026-11-16)
+## The spoken languages: one row each, written forms beside the picker; cleanup in no one language
 
 Settings > Dictation > 你說的語言 opens one picker with every language on one row (checked or not, up to five). A chosen
 language with several written forms (中文: 台灣、香港、簡體、粵語; English; Español) ends its row with a chip naming the form in
@@ -39,9 +39,9 @@ character by character). After the model only the whole text's final full stop i
 npm run look -- dictation-languages dictation-language-variants --theme both --width 1120,720,1920x1080
 ```
 
-## The tidy key: Right Alt+T tidies the text that is selected (2026-11-15)
+## The tidy key: Right Alt+T tidies the text that is selected
 
-Owner, 2026-11-15 (「把一個對話或文字框起來，然後按某個鍵它可以幫我做潤稿」): in any app, select text and press Right Alt+T; the
+In any app, select text and press Right Alt+T; the
 dictation cleanup tidies it and it replaces the selection, the clipboard is what it was, and Ctrl+Z in that app undoes it as
 for any paste. R-TIDY-01. It is a dictation feature and nothing else was added to the app: one key, stored in the device
 settings as `tidy_keys` beside `paste_last_keys` (empty allowed: then there is no key), one row in Settings > 聽寫 (`settings-tidy-key`:
@@ -78,15 +78,15 @@ cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_set
 右 Alt and T, has its pencil where the question key's is, is as high and as wide as that row, has a whole name and does not make
 the page scroll sideways; `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
 selection in a real app. A test cannot press keys or use the clipboard, so the owner tries it in a chat box, a document and
-a terminal: the selection is replaced, Ctrl+Z undoes it, what he had copied is still on the clipboard, Win+V shows his copied
+a terminal: the selection is replaced, Ctrl+Z undoes it, what they had copied is still on the clipboard, Win+V shows their copied
 text once (the program's own copy is the one thing that cannot be kept out of clipboard history), nothing selected shows the
 short line, and no recording is left running behind Right Alt+T.
 
-## Automatic microphone picks the headset and stays on it (2026-11-14)
+## Automatic microphone picks the headset and stays on it
 
-Owner, 2026-11-14, with a picture of the microphone menu (自動偵測（目前：麥克風排列）, 麥克風 (3- HyperX Cloud II Core Wi…),
-立體聲混音, 麥克風排列): wearing a HyperX wireless headset, automatic kept jumping between it and the laptop's array.
-The root cause was in `core/src/raphael_core/device/audio.py`: automatic opened PortAudio's default, the Sound Mapper
+With a wireless headset on, automatic must not jump between it and the laptop's array (the microphone menu lists
+自動偵測（目前：…）, the headset as 麥克風 (3- …), 立體聲混音 and 麥克風排列).
+The risk is in `core/src/raphael_core/device/audio.py`: automatic opens PortAudio's default, the Sound Mapper
 (whichever device Windows calls the default), and when its first 0.3 s was digitally silent `_find_live_input` took the
 first live input of PortAudio's own order, Stereo Mix included (it is live whenever anything plays), with the "last good"
 microphone remembered by a name whose 「3- 」 Windows renumbers. Which of the headset, Stereo Mix and the array won
@@ -94,26 +94,26 @@ depended on what was playing and what was listed first. R-MIC-AUTO-01 and R-MIC-
 `device/mic_choice.py` (an attached microphone before a built-in array, never a loopback, the same one while it is plugged
 in, a new attached one takes over; nothing at a recording's start moves it, and only two whole silent recordings of one
 never heard pass it over), used by `audio.py`'s `_pick_device`, `MicRecorder.stop` (which tells it what the recording was)
-and `automatic_device_name` (the menu's 「目前」 label). Since 2026-11-14 evening nothing is probed: the owner's quiet
-HyperX lost to the array at every start of the first fix.
+and `automatic_device_name` (the menu's 「目前」 label). Nothing is probed at a start: a quiet headset would lose to the
+array at every one.
 
 ```powershell
 cd core; $env:PYTHONPATH="$PWD\src"; .\.venv\Scripts\python.exe -m pytest tests/device -q
 ```
 
-No scene changes: the menu's words are the same. Not proved here: the owner's real headset (no audio device is opened in a
-test); he checks that automatic shows and stays on 麥克風 (… HyperX …) with the headset on, and moves to 麥克風排列 only
+No scene changes: the menu's words are the same. Not proved here: a real headset (no audio device is opened in a
+test); check that automatic shows and stays on 麥克風 (… HyperX …) with the headset on, and moves to 麥克風排列 only
 when it is unplugged.
 
-## Raphael stays in front of an open page while he is heard (2026-11-14)
+## Raphael stays in front of an open page while the owner is heard
 
-Owner, 2026-11-14: with 每日總覽, an HTML page, open in Raphael's conversation, pressing the app's own voice button showed
-nothing (「那個拉菲爾大師會被 HTML 擋在後面，所以我們看不到我們到底有沒有在說話…他永遠是最前面的」). The indicator is the voice
-mode's flyer (`voice-mode.ts`, `.ra-flyer`), a child of the conversation's stage; `page-view.css` set every stage child but
-the thread, the page and the composer to `display: none` while a page stands (`.ra-stage.is-page`), so it was never drawn,
-and the thread's own "hearing" line is hidden with the thread. R-VC-04: the flyer is the child that stays, in front of the
+With an HTML page such as 每日總覽 open in Raphael's conversation, pressing the app's own voice button must show that the
+app is listening, so the indicator is never behind the page. The indicator is the voice
+mode's flyer (`voice-mode.ts`, `.ra-flyer`), a child of the conversation's stage; `page-view.css` sets every stage child but
+the thread, the page and the composer to `display: none` while a page stands (`.ra-stage.is-page`), so the flyer must be
+exempt, because the thread's own "hearing" line is hidden with the thread. R-VC-04: the flyer is the child that stays, in front of the
 page and above the composer, takes no pointer over a page while the owner speaks, and flies back into the composer when the
-recording ends, over a page as anywhere (owner, 2026-11-15: held over the page until the words came back, it stayed after the
+recording ends, over a page as anywhere (it does not stay held over the page until the words come back, nor after the
 send). `voice-over-page-answered` speaks over a page, sends, and has the words come back as a voice turn.
 
 ```powershell
@@ -129,12 +129,12 @@ page, and that the composer says recording, then ack; the last scene ends the di
 button its own again and the page still open. The page's own scrolling is `page-collapsed-press` and `page-inplace`'s.
 Not proved here: the real microphone, the real recognizer and the owner's page.
 
-## The dictionary on every dictation, and learning that fires (2026-11-14)
+## The dictionary on every dictation, and learning that fires
 
-Owner, 2026-11-14: 「像是 grokbot 他從來沒有根據我們的字典去做修正…自動儲存到字典的那個功能…好像一次都沒有」.
-Where the dictionary was lost, and what now carries it (R-DICT-STT-01, R-DICT-SPELL-01, R-DICT-PROMPT-01):
+Dictionary words must correct what is heard, and the automatic saving of corrections to the dictionary must fire.
+Where the dictionary could be lost, and what carries it (R-DICT-STT-01, R-DICT-SPELL-01, R-DICT-PROMPT-01):
 
-1. Speech-to-text. His MAI-Transcribe 2 got no hints; it now gets the dictionary as an Azure phrase list
+1. Speech-to-text. MAI-Transcribe 2 gets the dictionary as an Azure phrase list
    (`openrouter.transcription_body`, `provider.options.azure.phraseList.phrases`; `keyterms` is a 400). Words the
    owner chose come first, learned ones after, 50 at most. Local Qwen3-ASR keeps its hotwords; the other cloud models
    still get none (their fields are undocumented, and Azure refuses unknown ones).
@@ -142,17 +142,16 @@ Where the dictionary was lost, and what now carries it (R-DICT-STT-01, R-DICT-SP
    `mishearing.misheard_spans`: same first letter, one edit in six letters and two in more, no plural, not another
    dictionary word, or the word split apart); rule 10 says text listed under an entry is that entry misheard. The
    short-sentence shortcut runs only when no such part is found (`BrainService._needs_no_model`).
-3. Final text. His cleanup model ignored the named word five times in six, so the paste is respelled by rule inside
+3. Final text. The cleanup model often ignores the named word, so the paste is respelled by rule inside
    Chinese or Japanese text (`textnorm.respell_dictionary_words`): other letter case, a split, or a name misspelt with a
-   capital or split ("Grokbox", "Grabbot", "Grok Bus" → 「grokbot」, "Herder" → 「herdr」). English text, lower-case
+   capital or split ("Pinebox", "Pine Bus" → 「pinebot」, "Kelver" → 「kelvr」). English text, lower-case
    ordinary words and dictionary words of four letters or fewer are left alone. A dictionary entry's case wins in
-   Chinese text: his 「alt」 and 「Bots」 come out as he typed them.
+   Chinese text: an owner's 「alt」 and 「Bots」 come out as typed.
 
 Learning (R-LEARN-UIA-01, R-LEARN-TERM-01, R-LEARN-SHOW-01): in a member's conversation the composer learned only
 when `agent_ask_text` returned, which is when the whole answer ended, so a long turn hid the pill for minutes; it now
-learns as the message goes (a group composer still learns on delivery). Outside the app, 69 of his 72 pastes from
-11-11 to 11-14 never started a
-watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\logs`): Claude's desktop composer is
+learns as the message goes (a group composer still learns on delivery). Outside the app, a paste into Claude's desktop composer never started a
+watch (`probe stopped (stage: focused_ancestry)` in `%LOCALAPPDATA%\Raphael Dev\logs`): the composer is
 36 levels deep and the walk stopped at 32. The walk now allows 128 and every `Chrome_WidgetWin_*` window is Chromium
 (retries). A lower-case name corrected from a plausible mishearing is learned; rewording never is. The first correction
 makes the word a term and the pair a hint: in the phrase list and the prompt from the next dictation, shown under
@@ -162,7 +161,7 @@ Follow-up from the owner's 113 dictations of the same day (R-DICT-SPELL-02, R-DI
 R-DICT-KANA-01), all core text steps proved by pytest, none by the app:
 
 - The respelling never turns 「SpaceX」 into 「Space」 (a longer word that holds a dictionary word is right), keeps a
-  plural's ending (「grokbots」), and respells a real word such as 「Cloud」 only where a rule or a correction's form is
+  plural's ending (「pinebots」), and respells a real word such as 「Cloud」 only where a rule or a correction's form is
   on record. A form seen once is evidence for it, though it is no rule yet: the Dictionary row still shows it under
   常被聽成, and `dictionary.misheard` stays empty until the pair is seen twice.
 - The cleanup prompt lists a dictionary word with Chinese characters for a Chinese transcript only when a form it is
@@ -176,11 +175,11 @@ Proof, in this order:
 npm run look -- dictation-dictionary stable-dictionary-controls --theme both --width 1120,720,1920x1080
 ```
 
-`npm.cmd run native -- dictation-dictionary` (owner's OpenRouter key, about US$0.002 a run) synthesizes mixed speech
-(Hanhan for the Chinese, David for 「herder」 and 「grok bot」), plays it as the microphone through
-`RAPHAEL_FAKE_AUDIO`, and drives the real dictation key, MAI-Transcribe 2, his cleanup model and the paste into the
-composer: 「grokbot」 comes out as spelled; the owner's edit of "Herder" to 「herdr」 is learned with its pill and
-Dictionary row; the next dictation writes 「herdr」. The sample is a remark, never a request, the journey's agent may only
+`npm.cmd run native -- dictation-dictionary` (an OpenRouter key, about US$0.002 a run) synthesizes mixed speech
+(Hanhan for the Chinese, David for 「kelver」 and 「pine bot」), plays it as the microphone through
+`RAPHAEL_FAKE_AUDIO`, and drives the real dictation key, MAI-Transcribe 2, the cleanup model and the paste into the
+composer: 「pinebot」 comes out as spelled; the owner's edit of "Kelver" to 「kelvr」 is learned with its pill and
+Dictionary row; the next dictation writes 「kelvr」. The sample is a remark, never a request, the journey's agent may only
 plan (`action_mode` plan), and two Escapes stop the corrected message's turn once the pill is up. The journey brings its own window to the front before a recording
 stops and cancels the dictation if another window takes it, so no words are pasted anywhere else.
 
@@ -189,7 +188,7 @@ The learning watch in a Chromium window has no journey (no external window is dr
 profile) whose composer is 40 groups deep, brought to the front without a key press. With the old 32-level walk it
 logs `focused_ancestry`; with the fix it reads the field (`field probe (sources: 2)`, `fixture_found=true`).
 
-## Cleanup v3 production decision and calibrated comparison (2026-11-05)
+## Cleanup v3 production decision and calibrated comparison
 
 Follow-up 5 explicitly adopts v3 for the owner's short-prompt, clear-structure goal.
 `core/src/raphael_core/brain/prompts/cleanup_system.md` is now the exact 3026-character
@@ -273,14 +272,14 @@ Run targeted tests without the waiter. Full verify/core suites belong to the int
 at merge under the resource override. No UI boundary changed, so no look/native matrix.
 No new real model, provider, microphone/paste or release acceptance is claimed.
 
-## No voice output (owner decision, 2026-11-10)
+## No voice output
 
 Dictation is unchanged, but nothing speaks: no voice calls, no spoken Alt+Space answer and no voice service (see
-[Conversation](conversation.md#no-voice-owner-decision-2026-11-10)). The composer's voice button records a voice message
+[Conversation](conversation.md#no-voice)). The composer's voice button records a voice message
 on a click, a hold or a key (R-UI-106).
 
 
-## Owner round 10 contracts (supersedes round 9 message previews)
+## Message previews and reply bubbles
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
 the bubble. Assistant messages render fully; authored reply envelopes retain separate
@@ -312,7 +311,7 @@ Calendar, member and Plugins scene clicks inherit this check. Connections search
 below the fixed Installed/Store switch in both states. A selected look report is
 required to establish the actual covered controls and any remaining movements.
 
-Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+Scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
@@ -334,8 +333,8 @@ hotkey/transcript timing.
 npm run look -- overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
 ```
 
-The corner never writes an address and never more than about two lines at a time (owner,
-2026-10-27: 「右下角的時候並不需要有 URL」, 「要記得要做一些切分」). `overlay/caption.ts` takes
+The corner never writes an address and never more than about two lines at a time (it needs no URL,
+and the text is cut into parts). `overlay/caption.ts` takes
 addresses and link syntax out and cuts a long line into pages at sentence ends and before
 each item of a numbered list; each page runs on its own time. `overlay-long-answer` replays the answer
 the owner saw run out of the window and checks that the first page is up to two lines, has
@@ -346,7 +345,7 @@ Fake timings do not establish live speed. The owner runs without `--fake` for mo
 timings using recording execution, then compares real hotkey/STT logs. Only native logs
 prove actual transcription speed.
 
-## Keys with the app in front (owner reports 2026-10-31)
+## Keys with the app in front
 
 The global hook does not always hear the keyboard while the app's own window is in front, so everything the
 keys do must work through `window-hotkeys.ts` too (`source=Window` in the log). One Esc ends a recording or a
@@ -373,12 +372,12 @@ answer appearing after the pasted words (`npm run native -- voice-keys` covers t
 Four separate totals, activity/shortcuts, horizontal tabs, dated history, dictionary and connection notices (a notice's sentence wraps in balanced lines, CJK text breaking at its punctuation, instead of hanging 3 px past its box when the line only fits by trimming its CJK punctuation; `conversation-notice` at 720 px); native
 recording, recognition, cleanup, paste and correction learning. Conversation voice
 and Alt+Space agent questions share cleanup and cleanup spend accounting, including
-the short-clean-sentence shortcut, without a target paste. Since 2026-11-07 (owner) they are kept
+the short-clean-sentence shortcut, without a target paste. They are kept
 in the history as `kind="ask"` with the recipient's name in `target_app` (Rust sends `member_id` with
 `dictation.stop`, 0 for Raphael); the row says 「傳給 拉斐爾」 (`history-sent-to` in dictation-history).
 Paste-last, the lifetime totals and dictionary learning still use dictations only.
 
-## The owner's punctuation (2026-11-07)
+## The owner's punctuation
 
 The owner dislikes 。: every Chinese result (cleaned, cleaned in pieces, the raw fallback) goes through
 `textnorm.finish_chinese_dictation` (a line-final 。 goes, one inside a line becomes ，; kana lines and
@@ -394,8 +393,8 @@ a shorter candidate D lost paragraph breaks and a hedge and added two 嗎 on the
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen (owner, 2026-11-09: 「每一次回到聽寫的時候，它會 default 是在總覽」); nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey (owner, 2026-11-09: 「文字有點點細」). Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both (2026-11-07). At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
-pressing it does nothing, and no history opens from the grid (owner, 2026-11-07). Settings > Dictation configures recognition/shortcuts. Actual dictation
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title: the app's shared plain tabs (ui.ts `tabs`, the same as Connect apps), never a look of their own. Every return to Dictation opens on Overview, whichever tab was last chosen; nothing is kept between visits. Left/Right/Home/End change the selected tab while retaining keyboard focus; legacy history/dictionary deep links remain available. The overview's small words (card labels, the activity sum, the heatmap axis and legend, shortcut names) are medium weight in the secondary ink rather than thin grey. Four separate stat cards form a 2 by 2 left grid; shortcuts stand beside them in the right column, end with them and share the header tabs' right edge, and the activity heatmap runs under both. At 720 the order is totals, shortcuts, activity. A heatmap day says its words only in its title under the pointer;
+pressing it does nothing, and no history opens from the grid. Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
 ## Driving it with look
@@ -419,7 +418,7 @@ question delivery, cleanup spend, no dictation history and no target paste. Keep
 private field contents, keystrokes, pasted text or passwords for correction learning.
 
 The four composer-learning scenes seed synthetic dictation through the existing native event
-boundary, correct Open Mouse Bot to OpenMausBot, and send through the real composer.
+boundary, correct "Sample Too" to "SampleToolX", and send through the real composer.
 They assert exactly one dictionary.learn call with the complete correction, exactly one
 localized notice clear of the composer, and the unchanged single gold-emblem / bare-plane slot before and after send.
 Only dictation seeds learning; ordinary typing and clipboard paste do not. Native microphone,
@@ -437,13 +436,13 @@ Raphael, replies; typing must also work during dictation. Voice owns the overlay
 typed YES/NO cards remain answerable in the window and move to the overlay with their
 remaining timeout once voice ends. Two Escapes during dictation cancel only that recording.
 The existing `admin-approval` look scene now opens a second member question through the
-native event boundary, visits that member, then returns to Raphael and requires his original
+native event boundary, visits that member, then returns to Raphael and requires its original
 approval card. Window cards retain independent ids across members and conversations.
 
 Controller regressions live beside the existing fake-core/overlay Rust tests in
 `app/src-tauri/src/dictation.rs`.
 
-The fixture's populated history day is 2026-10-24; the first heatmap cell may have no
+The fixture's populated history day is 24 October 2026; the first heatmap cell may have no
 history. Mock devices/status do not prove permissions, STT or global hotkeys. Silence
 must not close recording; only explicit stop/cancel or genuine microphone/STT failure
 may stop it. Preserve password/elevated-window/field-scope/60-second learning safeguards.
@@ -455,11 +454,11 @@ shortcut labels/keys at every matrix width. Short entries add columns as space a
 they are not the two-column long choices of R-UI-30. Keyboard navigation retains its selected
 button; focus rings remain reserved for Tab navigation.
 
-## Shared content measures (2026-10-28)
+## Shared content measures
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Desktop cancellation and confirmation (owner round 3)
+## Desktop cancellation and confirmation
 
 R-UI-46 / R-AG-16: the shared 1500ms two-Escape gesture also targets the visible
 recording, question or processing Stop. First Escape arms its localized hint;
@@ -485,7 +484,7 @@ to the ordinary overlay's 14px caption and reply-prefix treatment (R-UI-40/42).
 The title and details partition the original text without copying the title back
 into details. Long fixtures use distinct paragraphs, not repeated title/body blocks.
 `overlay-confirmation-content` rejects duplicate intent or details paragraphs in
-these scenes. A desktop question shows no Stop beside it (2026-11-03: stopping is done
+these scenes. A desktop question shows no Stop beside it (stopping is done
 in the app); `overlay-confirm-without-stop` checks Stop is hidden and the answers are
 compact buttons rather than halves of the card. The card leaves the moment an answer is
 pressed and comes back only if the answer could not be sent. Two Escapes still cancel
@@ -506,7 +505,7 @@ arbitrary desktop content. Its actions fill a separate row within the narrow 540
 window rather than a wide dialog's right-aligned pill actions. These size/layout
 differences are intentional; the shared button height, palette and type remain.
 
-## Owner round 4 layout and microphone locale
+## Overview layout and microphone locale
 
 Overview totals always use a 2 by 2 grid. At the 760px dictation-container threshold,
 shortcuts occupy the right column starting beside the first total; activity follows
@@ -520,13 +519,13 @@ The left desktop track is capped at two short-card measures plus the existing
 12px grid gap, so Activity and the two stats columns share their right edge
 without stretching a stat beyond 384px. dictation-layout asserts those edges.
 
-## Owner round 6 contracts
+## The shortcut button in the overview
 
-Owner round 6: dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
+Dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
 
-## Owner round 9 regression coverage
+## The orb's Stop and two-Escape cancellation
 
-Ordinary listening/working orb states show no Stop button (owner, 2026-10-30).
+Ordinary listening/working orb states show no Stop button.
 Focused two-Escape cancellation uses the orb as its gesture target and still sends
 the existing cancellation IPC. Alt hotkeys remain in the existing Rust controller.
 Permission/question cards keep their current actions and expansion. This supersedes
@@ -536,19 +535,19 @@ any earlier ordinary-orb Stop wording; composer and permission Stop controls rem
 npm run look -- overlay-working-cancel --theme both --width 1120,720,1920x1080,1280x800
 ```
 
-## Executable round 10 matrix
+## Executable look matrix
 
 ```powershell
 npm run look -- conversation-chief-up conversation-chief-bottom conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom reply-split-bubbles overlay-learned-pill stable-connections-switch stable-dictionary-controls stable-settings-controls --theme both --width 1120,720,1920x1080
 ```
 
-## Native round 10 regression journey
+## Native regression journey
 
 ```powershell
-npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conversation
+npm.cmd run native -- conversation-and-learned-pill voice-conversation locale-sweep delete-conversation
 ```
 
-`owner-round10` uses the bundled debug shell, real Rust correction Tracker, core
+`conversation-and-learned-pill` uses the bundled debug shell, real Rust correction Tracker, core
 acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
 two Escape presses for a pending fake answer, a complete learned batch, five-second
 hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
@@ -571,7 +570,7 @@ History and Dictionary filter labels also reserve their selected weight through
 the shared segmented component. The same scene clicks every filter in both pages
 before returning to Dictionary; locale changes update both visible and reserve labels.
 
-## Dictation intent cleanup (2026-10-31)
+## Dictation intent cleanup
 
 Cleanup preserves every intended fact and qualification while removing abandoned drafting,
 resolving self-corrections and regrouping ideas. Short clear sentences retain the existing
@@ -585,7 +584,7 @@ keep item lines and numbering; explicit paragraph boundaries retain separate lis
 piece makes the whole dictation unsuccessful, with recovery text and its reason retained in
 history. The words are still pasted, so nothing is lost, and the NOT_CLEANED notice says so every time.
 
-## Passive control hit regions (2026-11-01)
+## Passive control hit regions
 
 R-UI-70: the desktop overlay and learned notice start click-through. The real pages
 report visible physical client rectangles over the shell-only floating_controls IPC,

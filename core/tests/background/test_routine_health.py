@@ -1,4 +1,4 @@
-"""A routine's run: the tools it has, how its end is judged, and what it knows of the run before (owner, 2026-11-11).
+"""A routine's run: the tools it has, how its end is judged, and what it knows of the run before.
 
 Facts from the owner's own data: a health check named `team_overview` and `team_work` and got `unknown_tool`, four times; runs
 were marked done with nothing made; a routine did not know when it last ran or what it last reported."""

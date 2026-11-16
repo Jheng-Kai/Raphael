@@ -1,4 +1,4 @@
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """Talking to an MCP server: connect when there is something to do, list its tools, call one.
 
 A connection is made for each job and closed when the job is done (a stdio server is started for

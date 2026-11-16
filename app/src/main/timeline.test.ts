@@ -45,6 +45,27 @@ test.each([
   expect(reasonText(step({ outcome: "blocked", reason }))).toBe(explanation);
 });
 
+test("a computer step that broke in the core says it was Raphael's own tool, not an unknown cause", () => {
+  setLocale("en");
+  const said = reasonText(step({ kind: "computer", outcome: "error", reason: "computer_fault" }));
+  expect(said).toContain("Raphael's own computer tool failed");
+  expect(said).not.toBe(reasonText(step({ kind: "computer", outcome: "error", reason: "error" })));
+  setLocale("zh-TW");
+  expect(reasonText(step({ kind: "computer", outcome: "error", reason: "computer_fault" }))).toContain("Raphael 自己的電腦工具出錯");
+});
+
+test("a connected tool its service will refuse for a while says why and when it is tried again", () => {
+  setLocale("en");
+  const unknown = reasonText(step({ server: "Notes", outcome: "error", reason: "error" }));
+  const plan = reasonText(step({ server: "Notes", outcome: "error", reason: "plan_excluded" }));
+  const spent = reasonText(step({ server: "Notes", outcome: "blocked", reason: "allowance_spent" }));
+  expect(plan).toContain("Not included in your plan");
+  expect(spent).toContain("allowance for this tool is used up");
+  expect([plan, spent]).not.toContain(unknown);
+  setLocale("zh-TW");
+  expect(reasonText(step({ server: "Notes", outcome: "error", reason: "plan_excluded" }))).toContain("方案不包含");
+});
+
 test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
@@ -470,6 +491,13 @@ describe("a step in words", () => {
     expect(reasonText(step())).toBe("");
   });
 
+  test("a file that is there and cannot be read is told apart from one that is not there", () => {
+    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("檔案在，但讀不了：可能是資料夾、受保護，或正被其他程式使用。");
+    expect(reasonText(step({ outcome: "error", reason: "not_found" }))).not.toBe(reasonText(step({ outcome: "error", reason: "unreadable" })));
+    setLocale("en");
+    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("The file is there but cannot be read: it may be a folder, protected, or in use by another program.");
+  });
+
   test("durations read as people say them", () => {
     expect(formatDuration(420)).toBe("0.4 秒");
     expect(formatDuration(2_340)).toBe("2.3 秒");
@@ -704,7 +732,7 @@ describe("a turn", () => {
     expect(visible(html)).not.toContain("主人");
   });
 
-  test("the person on the right without 「」 with where and when; Raphael on the left with his face and plain words", () => {
+  test("the person on the right without 「」 with where and when; Raphael on the left with its face and plain words", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
     expect(html).toContain('data-owner-act="edit"');

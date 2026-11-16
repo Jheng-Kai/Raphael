@@ -70,9 +70,12 @@ _GEOCODING_LANGUAGE = {
 }
 # The kind of failure of a tool whose capability the owner turned off.
 DISABLED = "disabled"
-# The weather, both requests together, and each stage of a request.
+# The weather, both requests together; and one try of one request, which is made a second time when it hangs or its
+# connection fails. A request that answers takes about a second and the whole lookup about two; a try that waited five
+# seconds for nothing left no time in the eight for a second one.
 WEATHER_TIMEOUT_S = 8.0
-_HTTP_STAGE_TIMEOUT_S = 5.0
+WEATHER_TRY_S = 3.0
+WEATHER_TRIES = 2
 # A search with its model's reading of the results.
 SEARCH_TIMEOUT_S = 12.0
 SEARCH_MAX_TOKENS = 500
@@ -96,8 +99,7 @@ READ_WITHOUT_BROWSER = (
     "This page was fetched without a browser. If its text stops short, asks for a consent or a click, or needs "
     "scripts, and you have a computer, open the page in its browser and read it there before saying it cannot be read."
 )
-# A page that needs a real browser, while the member's computer sleeps: reading a page never wakes it (R-COMP-WAKE-01,
-# owner, 2026-11-14). The member chooses, with its own computer tool, and the conversation then says it did.
+# A page that needs a real browser, while the member's computer sleeps: reading a page never wakes it (R-COMP-WAKE-01). The member chooses, with its own computer tool, and the conversation then says it did.
 READ_NEEDS_BROWSER = (
     "This page needs a real browser: its text stops short, asks for a consent or a click, or needs scripts. Your computer "
     "is asleep and reading a page does not wake it. If you need this page, call browser_open with its address yourself: "
@@ -259,8 +261,9 @@ class Tools:
         if not city.strip():
             return ToolResult("weather", False, None, "needs_city",
                               instruction="No city is known yet. Ask the user which city they mean, then look it up; do not guess one.")
+        deadline = asyncio.get_running_loop().time() + WEATHER_TIMEOUT_S
         try:
-            data = await asyncio.wait_for(self._weather(city, language), WEATHER_TIMEOUT_S)
+            data = await asyncio.wait_for(self._weather(city, language, deadline), WEATHER_TIMEOUT_S)
         except TimeoutError:
             return self._failed("weather", "timeout")
         except httpx.HTTPStatusError:
@@ -285,17 +288,36 @@ class Tools:
         return ToolResult(name, False, data, kind, detail=detail,
                           instruction=missing.sentence("en") if missing else None)
 
-    async def _get_json(self, url: str, params: dict[str, Any]) -> Any:
-        response = await self._http_client().get(url, params=params, timeout=_HTTP_STAGE_TIMEOUT_S)
-        response.raise_for_status()
-        return response.json()
+    async def _get_json(self, url: str, params: dict[str, Any], deadline: float, stage: str) -> Any:
+        """What Open-Meteo answers at `url`, as JSON. A try that hangs past `WEATHER_TRY_S` or loses its connection is made
+        once more while time is left before `deadline` (the loop's clock); a page that came, an error page too, is never
+        asked for again."""
+        loop = asyncio.get_running_loop()
+        tries = 0
+        while True:
+            tries += 1
+            wait = min(WEATHER_TRY_S, deadline - loop.time())
+            if wait <= 0:
+                raise TimeoutError
+            began = loop.time()
+            try:
+                response = await asyncio.wait_for(self._http_client().get(url, params=params, timeout=wait), wait)
+            except (TimeoutError, httpx.TransportError) as error:
+                # Which request failed and how, never the place: the log then says where Open-Meteo hangs.
+                logger.info("Open-Meteo's %s request failed on try %d of %d after %.1f s: %s",
+                            stage, tries, WEATHER_TRIES, loop.time() - began, type(error).__name__)
+                if tries >= WEATHER_TRIES:
+                    raise
+                continue
+            response.raise_for_status()
+            return response.json()
 
-    async def _find_place(self, city: str, language: str) -> Any:
+    async def _find_place(self, city: str, language: str, deadline: float) -> Any:
         """The first place the geocoder finds for `city`, the way `geocoding_queries` asks."""
         code = _GEOCODING_LANGUAGE.get(language, "en")
         for name, name_language in geocoding_queries(city, code):
             places = await self._get_json(
-                GEOCODING_URL, {"name": name, "count": 1, "language": name_language}
+                GEOCODING_URL, {"name": name, "count": 1, "language": name_language}, deadline, "place"
             )
             results = places.get("results") if isinstance(places, dict) else None
             if isinstance(results, list) and results:
@@ -304,8 +326,8 @@ class Tools:
                 raise ValueError("The places are not a list")
         raise _NotFound
 
-    async def _weather(self, city: str, language: str) -> dict:
-        place = await self._find_place(city, language)
+    async def _weather(self, city: str, language: str, deadline: float) -> dict:
+        place = await self._find_place(city, language, deadline)
         latitude, longitude = place["latitude"], place["longitude"]
         if _number(latitude) is None or _number(longitude) is None:
             raise ValueError("The place has no coordinates")
@@ -320,6 +342,8 @@ class Tools:
                 "timezone": "auto",
                 "forecast_days": 2,
             },
+            deadline,
+            "forecast",
         )
         named = place.get("name")
         data = _compact({"city": named if isinstance(named, str) else None})
@@ -453,8 +477,8 @@ class Tools:
     ) -> ToolResult:
         """Read a supplied file through its configured reader. `number` identifies it among the
         request's files. Paid vision calls use `ledger`; every result remains untrusted data.
-        A text file comes as numbered lines, from line `offset` (from 1), `limit` lines at most, like Claude Code's
-        Read, with where to go on when there is more. A video comes as what its frames show and what its audio says;
+        A text file comes as numbered lines, from line `offset` (from 1), `limit` lines at most,
+        with where to go on when there is more. A video comes as what its frames show and what its audio says;
         `start` and `end` (seconds) look closer at part of it."""
         video = is_video(attachment)
         kind = "pdf" if attachment.is_pdf else "image" if attachment.is_image else "video" if video else "file"

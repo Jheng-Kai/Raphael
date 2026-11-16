@@ -19,13 +19,11 @@
 .card-well { min-width: 0; border-radius: var(--r-sm); background: var(--surface-2); overflow: clip; }
 :root[data-theme="dark"] .card-well { background: var(--content); }
 .card-well > :not(:last-child) { border-bottom: 1px solid var(--edge); }
-/* A card's buttons stand at its right, the primary rightmost and the others to its left, as Grok Bot's dialogs (owner,
-   2026-11-10: 「卡片的按鈕盡量放在右側」). The primary stays first in the markup, so it is still the first one Tab reaches. */
+/* A card's buttons stand at its right, the primary rightmost and the others to its left, as in a dialog. The primary stays first in the markup, so it is still the first one Tab reaches. */
 .conversation-card .card-actions { display: flex; flex-direction: row-reverse; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; margin: 0; grid-column: auto; }
 .conversation-card .btn { transform: none; }
 .conversation-card .card-actions .pri, .conversation-card .sc-form .pri, .conversation-card .question-submit .pri { background: var(--card-primary); color: var(--card-primary-ink); border: 1px solid var(--card-primary-edge); }
-/* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit (owner,
-   2026-11-10: 「button 上下寬度太窄…可以再胖一點」): the field height. */
+/* A card's text buttons are a little taller than the compact ones, not hugging their words to the limit: the field height. */
 .conversation-card :is(.card-actions, .question-submit) .btn:not(.icon) { min-height: var(--h-field); padding-block: 0; line-height: calc(var(--h-field) - 2px); }
 /* The quiet way out stands left of the others, as Cancel does beside a dialog's action. */
 .conversation-card .card-actions > .card-quiet { background: transparent; border-color: transparent; color: var(--text-2); }
@@ -53,7 +51,7 @@
 /* The answer field and its button stand as one row at the same height (the judge: the 送出回答 button was 22 px beside a 30 px field, R-UI-17). */
 .question-submit { display: flex; align-items: stretch; gap: 8px; }
 .question-submit input { flex: 1; width: 0; }
-/* The question card, as Grok Bot draws its form of choices: rows with hairlines in a well, a square letter badge before the words (a check on a row chosen
+/* The question card, a form of choices: rows with hairlines in a well, a square letter badge before the words (a check on a row chosen
    on a several-choice card), an optional grey line under the words, and the owner's own answer as the last row, a field that grows to three lines with its
    pill at the right once something is typed. */
 .owner-question .question-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
@@ -109,7 +107,7 @@
 .card-computer-screen > .btn:hover:not(:disabled), .card-computer-screen > .btn:active:not(:disabled) { background: transparent; }
 .card-computer-screen > iframe { height: 100%; }
 /* A message that could not be sent starts where the field it came from starts, a card no wider than any other card
-   (judge R-UI-45, 2026-11-10: centred in the composer, it floated between two empty gutters). */
+   (R-UI-45: centred in the composer, it floated between two empty gutters). */
 .composer-failure { margin: 0 0 8px; }
 .conversation-card .mcp-fields { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .conversation-card .mcp-field { min-width: 0; }

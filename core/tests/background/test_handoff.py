@@ -162,6 +162,41 @@ async def test_a_refused_handoff_tells_the_model_what_to_do_instead_of_a_code(ma
     assert 'self_handoff' in caplog.text
 
 
+@pytest.mark.parametrize('who', ['Writer', '寫手', '  writer  ', 'Ｗｒｉｔｅｒ', '{id}', 1.0, True, None, [1], -1])
+async def test_a_colleague_is_named_by_id_and_a_name_or_a_look_alike_never_stands_for_one(make_rig, who):
+    """A name, a name in another case or width, a number written as text and a boolean all say no member: refused, with what to give."""
+    rig = make_rig()
+    target, source = setup(rig, room=False)
+    before = rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0]
+    who = str(target.id) if who == '{id}' else who
+    result = rig.service.handoff(RAPHAEL, args(target, member_id=who), source_turn_id=source.id, language='en')
+    assert not result.ok and result.error in ('bad_arguments', 'member_unknown_or_removed')
+    assert result.instruction and 'member_id' in result.instruction or result.error == 'member_unknown_or_removed'
+    assert rig.conn.execute('SELECT COUNT(*) FROM worker_tasks').fetchone()[0] == before
+    assert rig.conn.execute('SELECT COUNT(*) FROM task_outbox').fetchone()[0] == 0
+
+
+async def test_a_member_hands_work_to_the_lead_and_the_receipt_names_whoever_holds_the_name_now(make_rig):
+    rig = make_rig()
+    target, _ = setup(rig, room=False)
+    history = AgentHistory(rig.conn, rig.wall)
+    own = history.get(history.add(session_id='own', question='Please ask Raphael to look at this.', route='answer', source='app',
+                                  scope='private', member_id=target.id, prefix='', text='', status='running'))
+    accepted = rig.service.handoff(target, args(RAPHAEL, mode='consult', stage_id='lead'), source_turn_id=own.id, language='en')
+    assert accepted.ok and accepted.data['member_id'] == RAPHAEL.id
+    [view] = rig.service.handoff_views(source_turn_id=own.id)
+    assert view['member_id'] == RAPHAEL.id and view['from_member_id'] == target.id
+    # the colleague was renamed since: the receipt of the work it was given reads the name it has now, whoever asks
+    renamed = replace(target, name='Author')
+    rig.service.use_team(team_of(renamed), unused)
+    lead_turn = history.get(history.add(session_id='lead', question='Hand this on.', route='answer', source='app', scope='private',
+                                        member_id=0, prefix='', text='', status='running'))
+    handed = rig.service.handoff(RAPHAEL, args(renamed, stage_id='back'), source_turn_id=lead_turn.id, language='en')
+    assert handed.ok and handed.data['member_name'] == 'Author'
+    rig.service.use_team(team_of(replace(target, name='Writer Two')), unused)
+    assert [v['member_name'] for v in rig.service.handoff_views(source_turn_id=lead_turn.id)] == ['Writer Two']
+
+
 async def test_a_handoff_back_to_a_colleague_waiting_upstream_is_refused(make_rig):
     # Live, members bounced one verification request between them ten times.
     rig=make_rig()

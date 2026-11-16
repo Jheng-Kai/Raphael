@@ -1,4 +1,4 @@
-# Owner polish
+# Polish of Settings, Data and conversations
 
 ## Sub-features
 

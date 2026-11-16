@@ -487,7 +487,7 @@ async def checked_turn(monkeypatch, tmp_path, second_answer):
 
 
 async def test_a_turn_started_again_for_the_completion_check_says_its_answer_once(monkeypatch, tmp_path):
-    # Real members, 2026-11-13: the same answer stood in the conversation twice, as two bubbles.
+    # The same answer used to stand in the conversation twice, as two bubbles.
     assert await checked_turn(monkeypatch, tmp_path, "Saved.") == ["Saved."]
 
 

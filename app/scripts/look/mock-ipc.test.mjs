@@ -60,7 +60,9 @@ describe("shared look IPC boundary", () => {
     const before = await checkTimes();
     const question = before.flatMap(message => message.turn?.owner_questions ?? [])[0];
     const moved = await invoke("owner_questions.bring", {id:question.id});
-    expect((await checkTimes()).at(-1).turn_id).toBe(moved.turn_id);
+    // The room draws its messages by `created`, so the card the core brings stands newest in time, not only by id.
+    const after = await checkTimes();
+    expect(after.reduce((newest, message) => message.created > newest.created ? message : newest).turn_id).toBe(moved.turn_id);
     expect(state.errors).toEqual([]);
   });
   it("offers connected event choices and returns ordinary detected conditions without creating", async () => {
@@ -330,7 +332,7 @@ describe("shared look IPC boundary", () => {
     expect(home.today.some(item => home.reports.some(report => report.id === item.id))).toBe(false);
     expect(home.counts.today).toBe(home.today.length);
     expect(home.today.map(item => item.at_ms)).toEqual([...home.today.map(item => item.at_ms)].sort((a, b) => a - b));
-    // What only Home read is not sent any more (2026-11-12).
+    // What only Home read is not sent any more.
     expect(Object.keys(home).filter(key => ["usage", "dictation", "report", "today_plan", "health", "activity"].includes(key))).toEqual([]);
   });
   it("keeps an empty overview empty and the sidebar status consistent", async () => {

@@ -102,7 +102,7 @@ test("approval titles name the known action and localized speaker, with an expla
   setLocale("zh-TW");
 });
 
-// (owner, 2026-11-11: 「有連續兩張卡片的時候…理論上是要一張卡片顯示出來就好，然後就可以一次把三個都刪掉」, and 「長按才會繼續，點一下就可以了」)
+// Several consecutive cards show as one card that answers all of them with one press.
 describe("the card of changes that cannot be undone", () => {
   const LINES = ["永久刪除成員及其所有資料：「工程師」", "永久刪除成員及其所有資料：「架構師」", "刪除群聊及全部訊息：「Raphael macOS 版規劃」"];
   const many = { ...asked, id: "many", tier: "T3" as const, yes: "是", no: "否", always: undefined,

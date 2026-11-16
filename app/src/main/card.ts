@@ -1,16 +1,20 @@
 import "./card.css";
 import { t } from "./i18n";
 import { btn, esc, ico, iconBtn } from "./ui";
+import { linkedText } from "./message-content";
 
 export type CardStatus = "waiting" | "ready" | "done" | "failed";
 const CARD_PROMPTS = { key: "cards.inputWaiting", question: null, handover: "cards.answerWaiting", computer: "cards.needsYou", permission: "cards.waiting", draft: "cards.mailReady", connect: "cards.needsYou" } as const;
 export const cardPromptText = (kind: keyof typeof CARD_PROMPTS): string | undefined => CARD_PROMPTS[kind] ? t(CARD_PROMPTS[kind]) : undefined;
 export interface CardOptions {
   title: string;
+  /** The title is read whole (a question): an address in it is a link. Elsewhere it is one line, cut short, and stays words. */
+  linkTitle?: boolean;
   status: CardStatus;
   statusText?: string;
   hideStatus?: boolean;
   mark?: string;
+  /** Plain words, read whole: an address in them is a link (`linkedText`). */
   body?: string;
   content?: string;
   actions?: string;
@@ -30,9 +34,9 @@ export function cardHTML(card: CardOptions): string {
   const actions = card.actions ?? "";
   const close = card.close ?? (card.status === "failed" ? failedClose() : "");
   return `<section class="conversation-card connector-card ${card.cls ?? ""}"${card.attrs ?? ""} role="group" aria-label="${esc(card.title)}">` +
-    `<header class="card-head"><div class="card-heading">${card.mark ?? ""}<b class="card-title cc-name">${esc(card.title)}</b></div>` +
+    `<header class="card-head"><div class="card-heading">${card.mark ?? ""}<b class="card-title cc-name">${card.linkTitle ? linkedText(card.title) : esc(card.title)}</b></div>` +
     (card.hideStatus ? "" : cardStatusHTML(card.status, card.statusText)) + close + `</header>` +
-    (card.body ? `<p class="card-body cc-state">${esc(card.body)}</p>` : "") +
+    (card.body ? `<p class="card-body cc-state">${linkedText(card.body)}</p>` : "") +
     (card.content ?? "") + (actions ? `<footer class="card-actions cc-actions">${actions}</footer>` : "") + `</section>`;
 }
 
@@ -58,7 +62,7 @@ if (typeof document !== "undefined") document.addEventListener("click", event =>
 });
 
 /** `message` null leaves only 重試: a card whose title already says what failed and whose work is in plain sight (an
- *  unsent message is back in the field) needs no sentence repeating it (judge R-UI-02, 2026-11-10). */
+ *  unsent message is back in the field) needs no sentence repeating it (R-UI-02). */
 export function cardFailure(card: Element | null, retry: () => void, dismiss?: () => void, message: string | null = t("cards.retained")): boolean {
   if (!card) return false;
   let failure = card.querySelector<HTMLElement>(":scope > .card-failure");

@@ -204,7 +204,6 @@ describe("a member's panel", () => {
     expect(panel.el.querySelector('[data-det="close"]')?.getAttribute('aria-label')).toBe(t('members.close'));
   });
 
-  // Owner, 2026-11-09: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」.
   test("its routine row opens the routine to read, with nothing to type, save or delete, and no plus to add one", async () => {
     const panel = mount();
     await flush();
@@ -229,19 +228,19 @@ describe("a member's panel", () => {
 });
 
 describe("Raphael's panel", () => {
-  test("his picture and his name only, and his routines", async () => {
+  test("its picture and its name only, and its routines", async () => {
     current = 0;
     const panel = mount();
     await flush();
     expect(panel.el.querySelector("input, textarea")).toBeNull();
     expect(panel.el.querySelector(".mb-panel-identity > b")!.textContent).toBe("拉斐爾");
-    // The first blue slime: his emblem shows only in voice.
+    // The first blue slime: its emblem shows only in voice.
     expect(panel.el.querySelector(".mb-face-edit .av.mb-av-slime svg.slime")).not.toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 
-  test("his picture is changed here: from the PC, nothing of presets", async () => {
+  test("its picture is changed here: from the PC, nothing of presets", async () => {
     current = 0;
     const panel = mount();
     await flush();
@@ -271,7 +270,7 @@ test("a member's face picker offers the slimes alone, in tabs of their kinds, wi
   expect(picker.classList.contains("mb-avpop")).toBe(true);
   expect(picker.querySelectorAll("[data-slime-character], [data-slime-color]").length).toBeGreaterThan(0);
   expect(picker.querySelector("[data-avp-tab], [data-avp-pane], textarea, input")).toBeNull();
-  // The tabs are the kinds of slime (owner, 2026-11-11), one chosen, and none of them draws a picture.
+  // The tabs are the kinds of slime, one chosen, and none of them draws a picture.
   const tabs = [...picker.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs.map(tab => tab.dataset.slimeTab)).toEqual(["characters", "fantasy", "animals", "nature", "everyday", "colors"]);
   expect(tabs.filter(tab => tab.getAttribute("aria-selected") === "true")).toHaveLength(1);
@@ -320,7 +319,7 @@ test("routines show their own switches, on for the active one only, and no ⋯ m
 
 test("訊息平台: a bot not set up is one row whose 設定 asks the member in its conversation; a connected one is its card; Raphael's too", async () => {
   const off = { connected: false, enabled: false, running: false, error: null, bot: null, allowed: [], pending: [], member_id: current, kind: "telegram", paired: false };
-  api.memberMessagingStatus.mockImplementation(async (_id: number, platform?: string) => platform === "slack" ? { ...off, connected: true, enabled: true, running: true, bot: { username: "shion_slack" } } : off);
+  api.memberMessagingStatus.mockImplementation(async (_id: number, platform?: string) => platform === "slack" ? { ...off, connected: true, enabled: true, running: true, bot: { username: "ada_slack" } } : off);
   const panel = mount(); await flush();
   expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, undefined);
   expect(api.memberMessagingStatus).toHaveBeenCalledWith(current, "slack");
@@ -329,11 +328,11 @@ test("訊息平台: a bot not set up is one row whose 設定 asks the member in 
   // The bots are all that stands under the routines: the member's settings are a page of their own.
   expect(suggest.querySelectorAll(".mb-dh")).toHaveLength(1);
   expect(suggest.querySelector("input")).toBeNull();
-  expect(suggest.textContent).toContain("@shion_slack");
+  expect(suggest.textContent).toContain("@ada_slack");
   expect([...suggest.querySelectorAll<HTMLElement>('[data-det="setup"]')].map((button) => button.dataset.intent)).toEqual(["setup-telegram", "setup-discord"]);
   suggest.querySelector<HTMLButtonElement>('[data-intent="setup-telegram"]')!.click(); await flush();
   expect(api.agentAskText).toHaveBeenCalledWith("幫我設定 Telegram", [], current, { intent: "setup-telegram" });
-  // Raphael's own bots are in his panel now, Settings no longer holds them.
+  // Raphael's own bots are in its panel now, Settings no longer holds them.
   current = 0; panel.showMember(); await flush();
   expect(panel.el.querySelectorAll('.mb-panel-suggest [data-det="setup"]').length).toBeGreaterThan(0);
 });
@@ -363,7 +362,6 @@ describe("primary changes do not add face badges", () => {
 });
 
 describe("the computer lives in its own tab only", () => {
-  // Owner, 2026-11-14: 「右邊這邊詳細資料裡面不用有電腦…我們就固定在第三個 tab 裡面，有電腦就好了」.
   test("Details has no computer row, heading or press, for any member", async () => {
     for (const id of [3, 0]) {
       current = id; const panel = mount(); await flush();

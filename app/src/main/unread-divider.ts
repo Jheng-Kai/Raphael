@@ -20,7 +20,7 @@ export function openUnread(scroller: HTMLElement): boolean {
  * Whether the first unseen turn (at `index` of `total`, oldest first) is already inside the newest window. Then the
  * window is left as it is: it mounts the newest turn, and `openUnread` alone decides between the line and the bottom
  * by the viewport. A window centred on the line would cut the tail off whenever 14 or more turns follow it, and a
- * short run would open above the newest turn with the latest button showing (R-UI-96; the owner, 2026-11-11:
+ * short run would open above the newest turn with the latest button showing (R-UI-96:
  * a conversation opens at its newest message).
  */
 export function unreadInTail(index: number, total: number): boolean {

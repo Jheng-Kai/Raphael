@@ -14,7 +14,7 @@ fi
 # The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same, and:
 # - AutomationControlled off. A browser started with --remote-debugging-port=0 tells every page it is automated
 #   (navigator.webdriver), and Google then refuses the owner's own sign-in ("This browser or app may not be
-#   secure", owner, 2026-11-13). The owner signs in here by hand; the members use what he signed in to.
+#   secure"). The owner signs in here by hand; the members use what the owner signed in to.
 # - --test-type: without it the two flags above it each put a yellow warning bar over every window.
 # - no crash bubble: a computer is stopped by ending its processes, and the next start offered "Restore pages?".
 flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox --disable-blink-features=AutomationControlled --test-type --hide-crash-restore-bubble"
@@ -63,7 +63,7 @@ else
 fi
 new=
 attempt=0
-# A browser's first window took 13 to 41 s on a loaded PC (2026-11-13): the wait is a time, not a count of looks (each look
+# A browser's first window took 13 to 41 s on a loaded PC: the wait is a time, not a count of looks (each look
 # is several processes, slow when the PC is), and a minute is what it is given.
 deadline=$(( $(date +%s) + 60 ))
 while :; do

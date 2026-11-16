@@ -106,6 +106,11 @@ class PluginResult:
     billing: dict | None = None  # Core-owned media receipt: model and cost only, never tool content.
 
 
+# The failures whose `text` is the core's own words of what to do (the shape that fits; a tool its service will refuse
+# the same way for a while), shown to the model whole as its instruction and never cut as a service's words are.
+SAID_WHOLE = frozenset({"bad_arguments", "plan_excluded", "allowance_spent"})
+
+
 class PluginHub(Protocol):
     def offered(self) -> list[PluginTool]:
         """The tools that may be offered to a model now."""
@@ -238,9 +243,49 @@ _SHAPE_ERROR = re.compile(
     r"|(?:expected|should be) (?:an? )?(?:string|number|integer|boolean|object|array)\b", re.I)
 
 
-def argument_shape(schema: Mapping[str, Any]) -> str:
+def _resolved(root: Any, spec: Any) -> Mapping[str, Any]:
+    """`spec`, or the schema its local `$ref` points to in `root` (a few hops at most), as a mapping."""
+    for _ in range(4):
+        reference = spec.get("$ref") if isinstance(spec, Mapping) else None
+        if not isinstance(reference, str) or not reference.startswith("#/"):
+            break
+        target: Any = root
+        for part in reference[2:].split("/"):
+            part = part.replace("~1", "/").replace("~0", "~")
+            target = target.get(part) if isinstance(target, Mapping) else (
+                target[int(part)] if isinstance(target, list) and part.isdigit() and int(part) < len(target) else None)
+        spec = target
+    return spec if isinstance(spec, Mapping) else {}
+
+
+def _variants(root: Any, spec: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The shapes a union (`anyOf` or `oneOf`) lets an argument take; none for an argument that is not one."""
+    union = spec.get("anyOf") if isinstance(spec.get("anyOf"), list) else spec.get("oneOf")
+    return [_resolved(root, item) for item in union] if isinstance(union, list) else []
+
+
+def _kind(root: Any, spec: Mapping[str, Any]) -> str:
+    if "const" in spec:
+        return json.dumps(spec["const"], ensure_ascii=False)[:40]
+    options = spec.get("enum")
+    if isinstance(options, list) and options and len(options) <= 8:
+        return "one of " + "|".join(str(option) for option in options)
+    kind = spec.get("type")
+    if isinstance(kind, list):
+        return "/".join(str(item) for item in kind)
+    if kind == "array":
+        items = _resolved(root, spec.get("items"))
+        return f"array of {items['type']}" if isinstance(items.get("type"), str) else "array"
+    if isinstance(kind, str):
+        return kind
+    variants = _variants(root, spec)
+    return f"one of {len(variants)} shapes" if variants else "any"
+
+
+def argument_shape(schema: Mapping[str, Any], root: Any = None) -> str:
     """The arguments a tool takes, at the top level of the call, in one line: each name with its type and whether it is
-    required, as its schema says. Empty for a schema that lists none."""
+    required, as its schema says. Empty for a schema that lists none. `root` is the whole schema a `$ref` points into."""
+    root = schema if root is None else root
     properties = schema.get("properties") if isinstance(schema, Mapping) else None
     if not isinstance(properties, Mapping) or not properties:
         return ""
@@ -248,24 +293,38 @@ def argument_shape(schema: Mapping[str, Any]) -> str:
     required = set(required) if isinstance(required, list) else set()
     parts = []
     for name, spec in list(properties.items())[:SHAPE_NAMES]:
-        spec = spec if isinstance(spec, Mapping) else {}
-        kind = spec.get("type")
-        kind = "/".join(str(item) for item in kind) if isinstance(kind, list) else kind if isinstance(kind, str) else "any"
-        options = spec.get("enum")
-        if isinstance(options, list) and options and len(options) <= 8:
-            kind = "one of " + "|".join(str(option) for option in options)
-        if kind == "array" and isinstance(spec.get("items"), Mapping) and isinstance(spec["items"].get("type"), str):
-            kind = f"array of {spec['items']['type']}"
-        parts.append(f"{name} ({kind}{', required' if name in required else ''})")
+        parts.append(f"{name} ({_kind(root, _resolved(root, spec))}{', required' if name in required else ''})")
     more = len(properties) - SHAPE_NAMES
     text = "; ".join(parts) + (f"; and {more} more" if more > 0 else "")
     return text if len(text) <= SHAPE_CHARS else text[: SHAPE_CHARS - 1] + "…"
 
 
-def _shape_words(tool: str, schema: Mapping[str, Any], said: str) -> str:
-    shape = argument_shape(schema)
-    wrapper = "Send the arguments directly, never inside another object (such as `data`, `input` or `params`)."
-    return (f"{said} {wrapper}" + (f" The top-level arguments of {tool} are: {shape}." if shape else "")).strip()
+def inner_shape(schema: Mapping[str, Any], name: str) -> str:
+    """What the top-level argument `name` holds when it is an object or one of several: the names inside each shape with
+    their types and which are required, as `{...}` joined by `|`. Empty for an argument that holds a plain value."""
+    properties = schema.get("properties") if isinstance(schema, Mapping) else None
+    spec = _resolved(schema, properties.get(name)) if isinstance(properties, Mapping) else {}
+    shapes = [shape for shape in (argument_shape(variant, schema) for variant in (_variants(schema, spec) or [spec])) if shape]
+    text = " | ".join(f"{{{shape}}}" for shape in shapes)
+    return text if len(text) <= SHAPE_CHARS else text[: SHAPE_CHARS - 1] + "…"
+
+
+# The names a model wraps a tool's arguments in. Unwrapping is advised only to a tool that takes none of them itself: one
+# whose own argument is `data` was told to send its arguments "never inside `data`".
+_WRAPPERS = ("data", "input", "params")
+
+
+def _shape_words(tool: str, schema: Mapping[str, Any], said: str, named: Sequence[str] = ()) -> str:
+    properties = schema.get("properties") if isinstance(schema, Mapping) else None
+    words = [said]
+    if not (isinstance(properties, Mapping) and any(name in properties for name in _WRAPPERS)):
+        words.append("Send the arguments directly, never inside another object (such as `data`, `input` or `params`).")
+    if shape := argument_shape(schema):
+        words.append(f"The top-level arguments of {tool} are: {shape}.")
+    for name in named:
+        if inner := inner_shape(schema, name):
+            words.append(f"`{name}` takes {'one of these shapes' if ' | ' in inner else 'this shape'}: {inner}.")
+    return " ".join(words).strip()
 
 
 def shape_problem(tool: str, schema: Mapping[str, Any], arguments: Mapping[str, Any]) -> str | None:
@@ -285,17 +344,20 @@ def shape_problem(tool: str, schema: Mapping[str, Any], arguments: Mapping[str, 
     said = f"{tool} was not called: it needs {', '.join(missing)} at the top level of the arguments. You sent: {', '.join(sent) or 'nothing'}."
     if wrapped:
         said += f" The names it takes are inside `{str(wrapped[0])[:40]}`; they belong at the top level."
-    return _shape_words(tool, schema, said)
+    return _shape_words(tool, schema, said, missing[:2])
 
 
 def shape_advice(tool: str, schema: Mapping[str, Any], error: str) -> str | None:
     """What to add to a server's refusal of a call whose words say the arguments did not fit: what the server said, once and
-    short, and the shape that fits. None when the words are not about arguments, or the schema lists none."""
+    short, and the shape that fits, with what lies inside each argument the server names ("data: Invalid input" said
+    nothing of the three shapes `data` may take). None when the words are not about arguments, or the schema lists none."""
     if not _SHAPE_ERROR.search(error or "") or not argument_shape(schema):
         return None
     said = " ".join(error.split())
     said = said if len(said) <= 300 else said[:299] + "…"
-    return _shape_words(tool, schema, f"{tool} refused these arguments. It said: {said}")
+    properties = schema.get("properties")
+    named = [name for name in properties if re.search(rf"(?<![\w-]){re.escape(str(name))}(?![\w-])", said)][:2]
+    return _shape_words(tool, schema, f"{tool} refused these arguments. It said: {said}", named)
 
 
 def resolve_calls(offer: Offer, requested: list[tuple[str, Any]]) -> list[PlannedCall]:

@@ -4,8 +4,7 @@ The worker is offered the tools by an alias and a schema and nothing else; the t
 tool an alias is stays here in the core.
 
 The tools a member uses in most turns are listed, sorted by name, and the list stays the same, byte
-for byte, while the task runs and from one turn of a conversation to the next (owner, 2026-11-09,
-decision 2): it is the first block of every prompt, so a list that followed the request's words, the
+for byte, while the task runs and from one turn of a conversation to the next: it is the first block of every prompt, so a list that followed the request's words, the
 tools a search showed or a connection that came or went started the provider's cache again. Which
 tools are listed depends on the member and the kind of work (`take_snapshot`), never on what the task
 says. Every other tool of the task is found with `find_tools`, which returns its name, description
@@ -20,8 +19,8 @@ The task may use:
   first. A tool at T2 is offered too: its call pauses the task and asks the owner in the app (the
   waiting question, `service`), and goes on only after a yes there. A tool at T3 is left out unless
   the owner allowed everything (R-AG-35). A connection's tools are found, not listed; the core's own
-  (`PluginTool.pinned`: the member's computer, the media models and Composio's router, whose executing
-  tool shares no word with any request; and, for a quick question only, the commands for this PC) are listed.
+  (`PluginTool.pinned`: the member's computer, the hidden commands on the owner's PC and the owner's files,
+  the media models and Composio's router, whose executing tool shares no word with any request) are listed.
 - Raphael's own lookups on the web: the weather, a web search (by the search service the owner
   chose), the time, and the reading of a page (`web_read`, by the reader chosen). A page is read
   only at an address the task has seen: in its request, or in what one of its tools returned
@@ -38,10 +37,12 @@ The task may use:
 A task of a member has the same built-in abilities; connection tools follow its current
 owner-selected allowlist (`Speaker.uses_plugin`).
 
-Not the commands for this computer (open a site, the volume, lock the screen, copy), nor the local
-command tools, nor the `computer` tool that operates the owner's desktop, outside a quick question
-(`take_snapshot(owner_pc=True)`, R-PC-01): not in the background, not in the owner's own chat, a room,
-an exchange or a message from a phone either. A conversation that needs a computer uses the member's own.
+Not the commands for this computer (open a site, the volume, lock the screen, copy), nor the `computer`
+tool that operates the owner's desktop, outside a quick question (`take_snapshot(owner_screen=True)`,
+R-PC-01): not in the background, not in the owner's own chat, a room, an exchange or a message from a phone
+either. What a conversation shows on a screen it shows on the member's own computer. The local command
+tools run hidden on the owner's PC and are offered to every turn and task, with the owner's card (R-PC-02);
+one that would show something on its screen is refused outside a quick question (R-PC-06).
 Nor the tools that operate the owner's desktop step by step (`computer.tools.PRESENCE_TOOLS`, which
 `needs_presence`): no task is offered them, no plugin's tool takes one of their names, and the gate refuses
 them to the worker in any case.
@@ -69,7 +70,6 @@ from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..agent.owner_questions import BACKGROUND_TOOLS
 from ..agent.harness_tools import ROUTINE_TOOLS
 from ..agent.team_admin import TEAM_READS
-from ..computer.local_tools import is_local
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import first_sentence, scored
 
@@ -86,10 +86,10 @@ BUILTIN_SERVER = "Raphael"
 FIND_TOOLS = "find_tools"
 USE_TOOL = "use_tool"
 
-# Raphael's own tools a member seldom calls: none of these was called in the owner's 2,600 private and
-# background tool calls up to 2026-11-10. They are found, like a connection's tools, not listed. `open`
+# Raphael's own tools a member seldom calls: none of these was called in a sample of 2,600 private and
+# background tool calls. They are found, like a connection's tools, not listed. `open`
 # stays listed: live, a model asked to open an address showed it with `show` instead of looking for it
-# (Guardian's "open" cell, 2026-11-10); `update_page` stays beside `show_page`, whose description names it.
+# (Guardian's "open" cell); `update_page` stays beside `show_page`, whose description names it.
 SELDOM = frozenset({*COMMANDS, "computer"}) - {"open"}
 
 _DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -249,9 +249,9 @@ class Snapshot:
     management: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     tool_allowed: Any = field(default=lambda _key: True, repr=False)
     work: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
-    # Whether the owner's own PC is in reach (R-PC-01): only a quick question's snapshot says yes. Without it no tool of
-    # `computer.local_tools` is offered or found, now or after a refresh, whatever `tool_allowed` says.
-    owner_pc: bool = False
+    # Whether the owner's own screen is in reach (R-PC-01): only a quick question's snapshot says yes, and only it lists
+    # the run on the owner's desktop and the fixed commands.
+    owner_screen: bool = False
 
     def listed(self) -> set[str]:
         return {item["function"]["name"] for item in self.definitions}
@@ -312,7 +312,7 @@ class Snapshot:
     def nearest(self, name: Any, count: int = 5) -> list[str]:
         """The tools of the task whose names are closest to `name`, a name that is none of them: what a model that
         called a tool by a name it was given in its instructions (or made up) is told, so that the run goes on with
-        the real one (owner, 2026-11-11: `unknown_tool` four times in a health check)."""
+        the real one (`unknown_tool` four times in a health check)."""
         if not isinstance(name, str) or not name.strip():
             return []
         names = sorted({*self.catalog(), *self.refs, FIND_TOOLS, USE_TOOL})
@@ -347,7 +347,7 @@ class Snapshot:
             self._aliases.setdefault(alias, tool.key)
         try:
             tools = [tool for tool in getattr(plugins, "offered_for", lambda _: plugins.offered())(member_id)
-                     if (self.owner_pc or not is_local(tool.key)) and self.tool_allowed(tool.key)
+                     if self.tool_allowed(tool.key)
                      and (tool.tier <= self.max_tier or getattr(plugins, "is_computer_tool", lambda _: False)(tool.key))]
         except Exception:
             tools = []
@@ -447,7 +447,7 @@ def take_snapshot(
     owner_management: bool = True,
     background_management: bool = False,
     routine: bool = False,
-    owner_pc: bool = False,
+    owner_screen: bool = False,
 ) -> Snapshot:
     """The tools a task starting now may use. What is listed follows the member and the kind of work,
     never the request (decision 2, above): with `memory`, the memory's tools that read too (the
@@ -459,11 +459,11 @@ def take_snapshot(
     the enabled tools and connections; `team` are the team tools allowed by the request's depth and
     cycle guards (`agent.team`: asking another member, adding one), T1 like the plugins' tools that are
     on. `turned_off` are the tools of Raphael's own that the owner switched off (`Tools.turned_off`):
-    they are not offered, whatever the task or the speaker. `owner_pc` is true for a quick question and only for it
-    (owner, 2026-11-13: 「正常對話的時候，不會有操控我電腦的邏輯…只會在快速問答的部分」): the commands for this
-    computer, the run on the owner's desktop (`computer`) and the local command tools (`computer.local_tools`)
-    are offered to no other turn, task or routine, and the member's own computer is what serves them."""
-    snapshot = Snapshot({}, [], max_tier=max_tier, tool_allowed=speaker.uses_plugin, owner_pc=owner_pc)
+    they are not offered, whatever the task or the speaker. `owner_screen` is true for a quick question and only for it:
+    the commands for this computer and the run on the owner's desktop (`computer`) are offered to no other turn, task or
+    routine, and what those show on a screen the member's own computer shows. The hidden local commands
+    (`computer.local_tools`) are every turn's and task's."""
+    snapshot = Snapshot({}, [], max_tier=max_tier, tool_allowed=speaker.uses_plugin, owner_screen=owner_screen)
 
     def own(name: str, tier: Tier, item: dict[str, Any], kind: str = BUILTIN) -> None:
         snapshot.refs[name] = ToolRef(kind, name, BUILTIN_SERVER, name, tier)
@@ -501,8 +501,8 @@ def take_snapshot(
     for name in everywhere:
         native(name, HARNESS_DEFINITIONS[name])
     # Work that runs by itself reads the team as its member does in the conversation (`team_overview`, `team_work`: reads
-    # only, T0): a routine's run lists them, as a conversation does, because its instructions name them (owner, 2026-11-11:
-    # a health check called them and got `unknown_tool`, four times); other background work finds them.
+    # only, T0): a routine's run lists them, as a conversation does, because its instructions name them (a health check
+    # called them and got `unknown_tool`, four times); other background work finds them.
     for name in () if interactive else sorted(TEAM_READS):
         if routine:
             own(name, harness_tool(name).tier, HARNESS_DEFINITIONS[name])
@@ -517,12 +517,9 @@ def take_snapshot(
                 if owner_management:
                     snapshot.management[name] = item
                 continue
-            # These drive the owner's own PC: only a quick question has them (R-PC-01).
-            if not owner_pc and (name == "computer" or name in COMMANDS):
-                continue
-            # This tool drives the owner's own desktop. Beside a computer of the speaker's own, two tools
-            # called the computer would leave the choice of machine to the model.
-            if name == "computer" and getattr(plugins, "has_own_computer", lambda member: False)(speaker.id):
+            # These show things on the owner's own screen: only a quick question has them (R-PC-01). There they stand
+            # beside the member's own computer, and the owner's words choose (`persona._OWNER_PC_RULES`).
+            if not owner_screen and (name == "computer" or name in COMMANDS):
                 continue
             native(name, item)
     elif memory and history:
@@ -538,7 +535,7 @@ def take_snapshot(
                 tool
                 for tool in getattr(plugins, "offered_for", lambda member: plugins.offered())(speaker.id)
                 if (tool.tier <= max_tier or getattr(plugins, "is_computer_tool", lambda key: False)(tool.key))
-                and speaker.uses_plugin(tool.key) and (owner_pc or not is_local(tool.key))
+                and speaker.uses_plugin(tool.key)
             ]
         except Exception:  # a plugin that breaks leaves its tools out, not the task
             tools = []

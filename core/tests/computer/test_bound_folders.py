@@ -1,4 +1,4 @@
-"""A folder this PC binds into a member's computer stays readable to its owner (owner, 2026-11-15, task 797).
+"""A folder this PC binds into a member's computer stays readable to its owner.
 
 On Windows, Python 3.12.4 and later give a folder made with mode 0o700 a DACL of its own, closed to anyone but the
 account that made each file. The container engine makes the member's files as another account, so the owner could not read

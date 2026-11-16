@@ -1,9 +1,9 @@
 # Owner management
 
-Owner follow-up (2026-11-08): ask_member and handoff refuse operational delegated
+ask_member and handoff refuse operational delegated
 member management before another member turn/task starts, with guidance to use
-the caller's own owner-private management tools. Since the fixed tool list (2026-11-10,
-below) a find_tools result is an ordinary tool result: the CLI never restarts for it.
+the caller's own owner-private management tools. Since the fixed tool list (below)
+a find_tools result is an ordinary tool result: the CLI never restarts for it.
 team_overview defaults to a compact complete roster with role, selected model and
 skill/command/routine counts; optional member_id returns one full detail record.
 DataFloor protects both Windows Raphael and Raphael Dev data roots, configured
@@ -67,7 +67,7 @@ authenticated loopback MCP paths, the list unchanged. It also covers same-turn
 discovery/execution and non-owner refusal. Token figures use the existing
 memory.terms.estimate_tokens estimator, not provider billing or latency measurements.
 
-## Fixed tool list (owner, 2026-11-09, decision 2; built 2026-11-10)
+## Fixed tool list
 
 Every member is listed one set of tools, sorted by name, byte for byte the same through a
 conversation and from task to task of one kind (core/src/raphael_core/background/snapshot.py).
@@ -78,16 +78,16 @@ tools, management, the commands for this PC except `open`, the desktop `computer
 same gate, steps, audit and guardrails as a direct call. `open` and `update_page` stay listed: a
 model picks a listed look-alike (`show`, `show_page`) over searching for a hidden tool. The core's
 pinned tools (local commands, the member's computer, media models, Composio's router) stay listed.
-The commands for this PC, `computer` and the local command tools are in a quick question's list alone
-(R-PC-01, 2026-11-13): every other turn has none, listed or found.
+The commands for this PC and `computer` are in a quick question's list alone (R-PC-01): every other turn
+has none, listed or found. The local command tools are listed for every turn and task (R-PC-02).
 The member's computer catalog (a grant, the driver's own catalog) is the one change a task's list
 can still take. Offline: core/tests/members/test_fixed_tools.py (three turns, API and CLI MCP,
 identical lists; find and use in one turn) and core/tests/background/test_fixed_tools.py (worker,
-TaskRun, CLI member loop, connections changing mid-task). Live (Codex subscription, 2026-11-10):
+TaskRun, CLI member loop, connections changing mid-task). Live (Codex subscription):
 Guardian cells members, approval-yes, approval-no (find_tools then use_tool), open and
 routine-create pass on cli:codex:gpt-6-luna?effort=low.
 
-## Settings panel intent (2026-11-07)
+## Settings panel intent
 
 The window may send setup-telegram, setup-slack, setup-discord, share-template or settings.
 Settings is valid for member 0; share-template still requires a nonzero member. The trusted
@@ -96,7 +96,7 @@ core/tests/members/test_chat_settings.py cover API/CLI self scope, peer refusal,
 profile/command/skill/voice/memory writes and exact-action deletion approval.
 The window-owned settings button and visual/native acceptance remain an integration handoff.
 
-## One card, words and one press (2026-11-11)
+## One card, words and one press
 
 The administrative changes (and readings) that the model asks for in one turn and that need a yes - the ones that cannot be
 undone, and any other that the mode that asks first or a rule asks about - are held until its turn is in and asked on one

@@ -24,13 +24,22 @@ RPC, schema migration or alternative brain loop.
   `STALE_QUEUE_MS` (2 h) ends at the next start as `stale_queue` (report, turn closed, waiting parent woken); a
   younger one is put back. Check: after a restart a member's queued own work starts, and a stuck "working" member
   never outlives the run that left it (`core/tests/background/test_queue_pump.py`).
+  The agent's start-up sweep of turns left running (`AgentHistory.expire_pending`) leaves the turns kept work still holds (the
+  work turn, the colleague's brief it answers) to that work, and a room drive asked for before the loop runs waits for
+  `RoomsService.start`. Work the core's ordinary close cut off writes its result (`TaskStore.finish_interrupted`) as a kill
+  does, delivered at the next start. Checks: `core/tests/agent/test_restart_turns.py`, `test_room_exchanges.py`,
+  `test_rerun_and_interrupts.py`.
 - Stop can end what it shows (R-PUMP-02): `worker.cancel` of a task that is `queued` ends it `cancelled` (turn closed,
   waiting parent woken) even when it is in no queue and has no carrier; `_withdraw` no longer answers false for it.
-  Check: `test_stop_ends_a_queued_task_that_nothing_carries_and_its_parent_hears`.
+  A task being started (`running`, carried, no run yet) ends too: its run keeps the generation it was taken up at and
+  `_stopped_while_starting` ends it before the worker is asked anything.
+  Checks: `test_stop_ends_a_queued_task_that_nothing_carries_and_its_parent_hears`, `core/tests/background/test_stop_states.py`.
 - A stop says nothing (R-STOP-01): every `cancelled` ending (the owner's Stop, a member's own `stop_work`, a parent's end taking
   its children) writes no report text, no tool-call count, no `worker.report` and adds no line to the turn; a `stale_queue`
   ending is as silent (no report, `announced` 1, turn closed `cancelled` and empty). The thread draws no line for a task
   stopped before it did anything (`conversation.ts` `stoppedQuietly`). Crashes and lost workers keep their one line.
+  A turn that ends without its answer (`settle_asker`, answered false) ends the pieces it handed on that wait as Stop does
+  (`_waits`, `_end_later`), their card closed.
 - A member ends its own work by `stop_work` (R-STOP-02; `agent/team.py`, `BackgroundService.stop_own_work`): no `task_id`
   lists its unfinished tasks (it does or handed on; not another member's, a room's or the one it runs in), with one it stops
   that task and what waits on it. Checks: `core/tests/background/test_stop_work.py`.
@@ -71,10 +80,10 @@ The existing Guardian manifest now maps room_list and room_post to
 S21.meetings.list and S21.meetings.post. Those live cells remain unimplemented;
 the mapping guard is offline coverage metadata, never a live acceptance claim.
 
-## A member does what its owner asks, and says plainly what it did not (R-WORK-16 through R-WORK-20, 2026-11-14)
+## A member does what its owner asks, and says plainly what it did not (R-WORK-16 through R-WORK-20)
 
-Owner: a language-teaching member, asked for daily reading pages from real news for his own study in his own app, refused on copyright,
-delivered a headline, closed every reply with a disclaimer, and did not open a blocked page in its own computer though told to.
+A member that teaches a language, asked for daily reading pages from real news for the owner's own study in the owner's own app, must not refuse on copyright,
+deliver only a headline, close every reply with a disclaimer, or fail to open a blocked page in its own computer when told to.
 A core-only unit: prompt words and one card line, no page, RPC or schema change; every check is offline.
 
 - Prompt causes, found in `agent/persona.py`: no word of copyright anywhere (the refusals were the model's own, with nothing saying this
@@ -90,16 +99,16 @@ A core-only unit: prompt words and one card line, no page, RPC or schema change;
   still no tool that reads a page back whole; `update_page` with the id replaces it.
 - A routine's run gets `ROUTINE_REPORT` after its task (never in the system prompt, R-CACHE-02).
 - Every task, a routine's run included, gets `TASK_LANGUAGE` with its task in place of the interface language it was told
-  before (owner, 2026-11-14, R-LANG-02): the language the owner's own messages show, else the task text's, never named.
+  before (R-LANG-02): the language the owner's own messages show, else the task text's, never named.
 
 Offline: `core/tests/agent/test_member_behaviour.py`, `core/tests/agent/test_card_context.py`, `core/tests/background/test_routine_report.py`,
 and the default prompt budget (`npm run verify -- --contract`). Not covered offline, left to a live brain run: whether a given model, told
 all this, still refuses; that needs a paid run on the owner's own models.
 
-## A failure is information (R-PERSIST-01 through R-PERSIST-08, 2026-11-14)
+## A failure is information (R-PERSIST-01 through R-PERSIST-08)
 
-Owner: members give up too fast; like Hermes Agent, a member keeps trying the next plausible way and asks only for what only
-he can give. A core-only unit: harness words, the failure text, two notes, a reader fallback and a history projection. No
+A member does not give up fast: it keeps trying the next plausible way and asks only for what only
+the owner can give. A core-only unit: harness words, the failure text, two notes, a reader fallback and a history projection. No
 page, RPC, schema or stored member data (routines, skills, instructions, memory) changes; every check is offline.
 
 - The rule lives once, in `agent/self_check.DOCTRINE` (part of the shared contract every prompt reads). The caps it replaced
@@ -128,7 +137,16 @@ Offline: `core/tests/agent/test_persistence.py`, `core/tests/worker/test_persist
 owner's own models: whether a given model, told all this, now opens its browser or tries another source instead of
 stopping; a live read of a real consent page; a real reading service's fallback.
 
-## Work that was to leave a file is judged on a file that exists (R-WORK-FILE-01, R-WORK-FILE-02, 2026-11-15)
+## A weather request that hangs is asked once more (R-WEATHER-01)
+
+`agent/tools.Tools._get_json`: each Open-Meteo request (the place, then the forecast) has tries of `WEATHER_TRY_S` and a
+second try when one hangs or loses its connection, inside the one `WEATHER_TIMEOUT_S`; an error page is not asked again. A
+member still told `timeout` reads "The call failed (timeout). Another way may still work." and in every case seen took a web
+search next. Offline: `core/tests/agent/test_tools.py` (an `httpx.MockTransport` Open-Meteo, which ignores httpx's own
+timeouts, so a hang is an `asyncio.sleep` and a stage timeout a raised `httpx.ReadTimeout`). Not covered offline: whether
+Open-Meteo answers a second try when it hangs; the log line names the request, the try and the error class to tell.
+
+## Work that was to leave a file is judged on a file that exists (R-WORK-FILE-01, R-WORK-FILE-02)
 
 - `background/service.py::_record_artifacts` records as evidence the files found in the member's folders (its own, then its team's):
   the paths the condition or the report names inside the computer (`outcomes.computer_files`: `/home/cua/workspace/...`,

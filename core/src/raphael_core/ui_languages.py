@@ -1,6 +1,6 @@
 """Canonical interface locales and English fallback for unknown locale codes.
 
-The interface language picks the words the app draws and goes to no model (owner, 2026-11-14); the language a
+The interface language picks the words the app draws and goes to no model; the language a
 conversation is in is read from its own words (`conversation_language`)."""
 
 LANGUAGE_NAMES = {

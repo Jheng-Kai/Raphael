@@ -57,7 +57,7 @@ test("every button and every menu row takes its height from the shared controls,
   expect(bad).toEqual([]);
 });
 
-test("no picture can be dragged out of the window (owner, 2026-11-09: 「這個圖片放進去不要可以拖拉出來」)", () => {
+test("no picture can be dragged out of the window", () => {
   const css = (file: string): string => read(file).replace(/\/\*[\s\S]*?\*\//g, "");
   const base = [...css(join(MAIN, "styles.css")).matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selector]) => selector!.trim() === "img");
   expect(base.map(([, , body]) => body!.trim())).toEqual(["-webkit-user-drag: none;"]);
@@ -184,7 +184,7 @@ describe("buttons", () => {
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
       // The guide's foot: a step's two round buttons (the way back and the way on, a triangle in each) are filled circles
-      // in every state (owner, 2026-11-11).
+      // in every state.
       "styles.css: .ob-foot .ob-pair .btn.icon:hover:not(:disabled)", "styles.css: .ob-foot .ob-pair .btn.icon:active:not(:disabled)",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
       "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",

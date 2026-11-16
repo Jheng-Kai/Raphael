@@ -10,7 +10,7 @@ const turn = (member_id, extra = {}) => ({ id: 801 + member_id, member_id, conve
   prefix: "", text: "好的。", status: "done", cost_usd: 0, steps: [], attachments: [],
   messages: [{seq: 1, kind: "reply", text: "好的。", at_ms: 1792807160000}], ...extra });
 // A picture asked for, a message sent while the member worked on it (the core's owner_input row), and the work going on
-// after it: the picture it made and the reply that answers that message (owner, 2026-11-14).
+// after it: the picture it made and the reply that answers that message.
 const drawn = { id: `${"c".repeat(32)}.png`, name: "chart.png", mime: "image/png", size: 1727 };
 const steered = [
   turn(1, { question: "請把開放日的公告做成一張海報。", text: "海報做好了，照你說的改用生成圖片。", messages: [
@@ -32,7 +32,7 @@ export default [
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-sendnow", "「立即送出」 on a queued bubble ends the running work as Stop does and starts that message, with nothing withdrawn", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="send-now"]'), waitGone('.tn[data-id="901"] .queued-mark'), check("composer-queued-sendnow")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
-  scene("composer-queued-sendnow-menu", "A queued bubble shows 立即送出 in sight beside 排隊中, and its ⋯ menu does not repeat it (owner, 2026-11-14)", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="more-message"]'), wait('#app-popover [data-pick="cancel"]'), check("composer-queued-sendnow-menu")],
+  scene("composer-queued-sendnow-menu", "A queued bubble shows 立即送出 in sight beside 排隊中, and its ⋯ menu does not repeat it", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), click('.tn[data-id="901"] [data-act="more-message"]'), wait('#app-popover [data-pick="cancel"]'), check("composer-queued-sendnow-menu")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
   scene("composer-queued-stop", "Stop cancels the running turn and returns queued words after the existing draft", [member(1), type('.cmp-input', "第二個範例請求"), key("Enter"), wait('.tn[data-id="901"] .queued-mark'), type('.cmp-input', "第三個範例請求"), key("Enter"), wait('.tn[data-id="902"] .queued-mark'), type('.cmp-input', "目前草稿"), key("Escape"), key("Escape"), waitGone('.queued-mark'), check("composer-queued-stop")],
     {running: "fresh", runningMember: 1, queuedOwner: true}),
@@ -46,8 +46,8 @@ export default [
   scene("owner-bubble-other-member", "Another member's conversation has its own colour", [member(2), wait('.owner-message .bubble'), check("owner-bubble-tinted")],
     {turns: [turn(2, {conversation_id: 12})], conversations: [...fixture.conversations, {...fixture.conversations.find(item => item.id === 11), id: 12, member_id: 2}]}),
   scene("owner-bubble-light-character", "A light character keeps its colour and takes dark words", [member(1), wait('.owner-message .bubble'), check("owner-bubble-dark-words")],
-    {turns: [turn(1)], members: fixture.members.map(item => item.id === 1 ? {...item, avatar: "slime:testarossa"} : item)}),
+    {turns: [turn(1)], members: fixture.members.map(item => item.id === 1 ? {...item, avatar: "slime:bowtie-pearl"} : item)}),
   scene("owner-bubble-long", "A long tinted bubble keeps its link and expand control readable", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [turn(1, {question: `請看這個連結 https://example.com/a\n${"這是一段很長的需求說明，要確定展開按鈕和連結在角色顏色上都看得清楚。".repeat(14)}`})]}),
-  scene("owner-bubble-chief", "Raphael's own conversation wears his blue like any member's", [member(0), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [turn(1), turn(0)]}),
+  scene("owner-bubble-chief", "Raphael's own conversation wears its blue like any member's", [member(0), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [turn(1), turn(0)]}),
   scene("owner-bubble-room", "A group talks to everyone, so its bubbles stay neutral", [member(1), room(1), wait('.au-room-pane .owner-message .bubble, .au-room-pane .bubble'), check("owner-bubble-neutral")]),
 ];

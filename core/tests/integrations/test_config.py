@@ -169,6 +169,64 @@ def test_a_long_description_and_a_huge_schema_are_cut_down():
     assert tool.input_schema == {"type": "object", "additionalProperties": True}
 
 
+def _long_words(n):
+    return "Explains this at length. " * n
+
+
+# A query tool whose one argument, `data`, is one of three shapes told apart by `mode`, with words long enough to take the
+# whole schema over MAX_SCHEMA_CHARS: such a tool was offered as "an object" and was called by guessing its arguments.
+LONG_QUERY = {
+    "type": "object",
+    "required": ["data"],
+    "additionalProperties": False,
+    "properties": {"data": {"description": "Use the required top-level data object.", "anyOf": [
+        {"type": "object", "required": ["mode", "data_source_urls", "query"], "description": _long_words(200),
+         "properties": {"mode": {"const": "sql", "description": _long_words(60)},
+                        "data_source_urls": {"type": "array", "items": {"type": "string", "description": _long_words(60)}},
+                        "query": {"type": "string", "examples": [_long_words(60)]},
+                        "params": {"type": "array", "title": "Parameters"}}},
+        {"type": "object", "required": ["mode", "view_url"],
+         "properties": {"mode": {"const": "view"}, "view_url": {"type": "string", "description": _long_words(200)},
+                        "page_size": {"type": "integer", "default": 100}, "start_cursor": {"type": "string"}}},
+        {"type": "object", "required": ["mode", "data_source_url"],
+         "properties": {"mode": {"const": "rows"}, "data_source_url": {"type": "string"},
+                        "description": {"type": "string", "description": "A property of the tool's own named description."},
+                        "title": {"enum": ["description", "title"], "$comment": _long_words(60)}}},
+    ]}},
+}
+
+
+def test_a_schema_too_long_keeps_its_shape_and_loses_only_the_words_that_explain_it():
+    assert len(json.dumps(LONG_QUERY, ensure_ascii=False)) > config.MAX_SCHEMA_CHARS
+    kept = tool_record("query", "", LONG_QUERY).input_schema
+    assert len(json.dumps(kept, ensure_ascii=False)) <= config.MAX_SCHEMA_CHARS
+    assert (kept["type"], kept["required"], kept["additionalProperties"]) == ("object", ["data"], False)
+    data = kept["properties"]["data"]
+    assert data["description"] == "Use the required top-level data object.", "an argument keeps its own words"
+    sql, view, rows = data["anyOf"]
+    assert sql == {"type": "object", "required": ["mode", "data_source_urls", "query"],
+                   "properties": {"mode": {"const": "sql"}, "data_source_urls": {"type": "array", "items": {"type": "string"}},
+                                  "query": {"type": "string"}, "params": {"type": "array"}}}
+    assert view["required"] == ["mode", "view_url"] and view["properties"]["page_size"] == {"type": "integer", "default": 100}
+    # The tool's own names stay even where they are spelled like the words that are taken out, and values are left alone.
+    assert rows["properties"]["description"] == {"type": "string"}
+    assert rows["properties"]["title"] == {"enum": ["description", "title"]}
+
+
+def test_a_schema_that_fits_is_kept_whole_and_one_too_long_without_its_words_is_an_object():
+    fits = {"type": "object", "properties": {"q": {"type": "string", "description": "What to look up."}}}
+    assert tool_record("look", "", fits).input_schema == fits
+    names = {"type": "object", "properties": {f"{n:05d}" + "x" * 200: {"type": "string"} for n in range(100)}}
+    assert tool_record("look", "", names).input_schema == {"type": "object", "additionalProperties": True}
+
+
+def test_when_the_arguments_own_words_do_not_fit_they_go_too():
+    argument = {"type": "string", "description": _long_words(400)}
+    schema = {"type": "object", "properties": {f"a{n}": dict(argument) for n in range(3)}}
+    kept = tool_record("look", "", schema).input_schema
+    assert kept == {"type": "object", "properties": {f"a{n}": {"type": "string"} for n in range(3)}}
+
+
 def test_the_fingerprint_changes_with_anything_the_model_reads():
     base = fingerprint("look", "Look it up.", {"type": "object"})
     assert fingerprint("look", "Look it up.", {"type": "object"}) == base

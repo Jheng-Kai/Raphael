@@ -192,7 +192,7 @@ test("public turn progress replaces the previous subtitle without rotating or re
   expect(view.waiting).toBeNull();
 });
 
-test("Raphael is red while he refuses (a 否 line) and his gold again for a report or a new dictation", () => {
+test("Raphael is red while it refuses (a 否 line) and its gold again for a report or a new dictation", () => {
   send({ type: "notice", text: "《否。未偵測到麥克風。請接上裝置。》" });
   expect(emblem.mood).toBe("angry");
   vi.advanceTimersByTime(30_000);
@@ -854,7 +854,7 @@ test("NO is a click too, and it is the same for T3", () => {
   expect(view.log).toEqual(["choice:no", "ask-hide", "clear"]);
 });
 
-// (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」) The YES of a question that cannot be undone was a press
+// The YES of a question that cannot be undone was a press
 // held for 0.6 s with a line filling under it; one press answers it now, as every other.
 test("YES of a T3 question is one click too, answered once, with no hold in between", () => {
   asked({ tier: "T3" });

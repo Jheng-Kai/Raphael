@@ -1,8 +1,9 @@
 """Docker desktops on this computer or an SSH host.
 
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 The engine owns containers; only the workspace survives
 removal. Remote workspaces are engine volumes, never paths on this PC.
+
+Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 import asyncio
@@ -29,6 +30,12 @@ logger = logging.getLogger(__name__)
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
 IMAGE = "raphael/cua-local-vm:driver-0.37.0-v13"
+# Every image of ours is a tag of this repository. Only its tags that carry LABEL are ever named as a build's cache or
+# removed as an older layer; an image of any other repository is never touched.
+REPOSITORY = IMAGE.split(":", 1)[0]
+# How often an engine's older images of ours are looked at once a computer is ready on the current one (and at the first
+# ready start after the core starts).
+IMAGE_CLEAN_S = 86_400
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 3
@@ -47,8 +54,8 @@ SCREENS_READY = "/dev/shm/raphael-screens.ready"
 LABEL = "org.raphael.computer"
 IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "13"}
 MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
-# The owner's hold of a screen ends by itself after this long without a click or a key of his (a sign-in request that
-# waits for him and a recording are held until he says so): a lease nobody uses blocks every member (2026-11-14).
+# The owner's hold of a screen ends by itself after this long without a click or a key of theirs (a sign-in request that
+# waits for them and a recording are held until they say so): a lease nobody uses blocks every member.
 OWNER_IDLE_S = 300
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
@@ -65,8 +72,7 @@ WALLPAPER_FOLDER = Path(__file__).parent / "wallpaper"
 # Docker Desktop on Windows starts WSL first, so a cold start takes the better part of a minute.
 ENGINE_WAIT_S = 120
 ENGINE_POLL_S = 1.0
-# Set only while a member's own tool call prepares its computer. (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
-# 它也會自動自己打開才對」) A viewer opening or any other read never starts the engine, so the contextvar defaults off.
+# Set only while a member's own tool call prepares its computer. A viewer opening or any other read never starts the engine, so the contextvar defaults off.
 _MAY_START_ENGINE = ContextVar("computer_may_start_engine", default=False)
 # shutil.which walks PATH on the event loop, and one status poll asks many times.
 DOCKER_LOOKUP_S = 30.0
@@ -211,8 +217,8 @@ def resources(target, size=None):
 def bound_folder(path):
     """Make a folder of this PC that a computer binds. On Windows, Python 3.12.4 and later give a folder made with mode 0o700
     a DACL closed to all but its owner, and the files the engine makes in it inherit that: it makes them as another account,
-    so the owner could not read what a member made there (owner, 2026-11-15, task 797). There the folder takes the access of
-    the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is his to do."""
+    so the owner could not read what a member made there. There the folder takes the access of
+    the one it is in. A folder made closed before is left as it is: changing the access of the owner's folders is theirs to do."""
     path = Path(path)
     if os.name == "nt":
         path.mkdir(parents=True, exist_ok=True)
@@ -285,6 +291,16 @@ def run_args(target, owner, password, *, tz=None, size=None):
         "-e", f"VNC_RESOLUTION={canvas[0]}x{canvas[1]}",
         "-p", "127.0.0.1::6901", IMAGE,
     ]
+
+
+def build_args(context, previous=None):
+    """The image's build. The image carries its own cache record (`BUILDKIT_INLINE_CACHE=1`, BuildKit's inline cache),
+    and `previous`, the newest earlier image of ours on the engine, is named as a cache source: a step whose text did not
+    change is then taken from that image even when the engine's own build cache has lost it (measured: a layer that
+    changed only its last label ran the 186 s package step and the Chrome step again). An image built without the record
+    gives nothing as a source and costs nothing; one build on this code is needed before the next layer can use it."""
+    return ["build", "--progress=plain", "--build-arg", "BUILDKIT_INLINE_CACHE=1",
+            *(["--cache-from", previous] if previous else []), "--tag", IMAGE, str(context)]
 
 
 def scratch_args(target):
@@ -381,7 +397,7 @@ def known_previous(raw, target, owner):
         layer = labels.get(f"{LABEL}.layer")
         shared_upgrade = target.container == "shared" and target.screens == 6
         screens = [entry for entry in env if entry.startswith("RAPHAEL_SCREENS=")]
-        # Layer 7 is the one the computer every member shares was released on (2026-11-12): six screens, and the
+        # Layer 7 is the one the computer every member shares was released on: six screens, and the
         # owner's own computer the day layer 8 came; layers 8 to 12 kept that shape. A layer that is not named here is
         # refused as incompatible, and its computer does not start: each new layer adds the one before it. Layer 13 is
         # the first with the UTF-8 locale in its environment: every layer before it is made again once.
@@ -423,6 +439,12 @@ class LocalVm:
         self.capacity_lock = asyncio.Lock()
         self.tunnels = {}
         self.preparation, self.preparing = {}, {}
+        # The computers whose preparation now makes them again on a newer image: their state says `update` (R-COMP-UPDATE-01).
+        self.updating = set()
+        # Older images of ours are removed only by the app's own engine: a runner a test or the acceptance injects never
+        # loses an image it did not ask to lose (the acceptance reads the released layers' images).
+        self.clean_images = runner is None
+        self.images_checked, self.image_tasks = {}, {}  # host -> when its older images were last looked at, and that task
         self.wallpaper_attempted = {}  # (host, computer) -> the picture its watcher was started with
         self.sizes = {}  # host -> (when, (memory GiB, CPUs)) the shared computer takes there (`machine_size`)
         self.fitted = {}  # (host, computer) -> the size its limits were last seen or made at
@@ -570,8 +592,8 @@ class LocalVm:
             raise VmError("window_move_failed")
 
     async def restore_window(self, target, window_id):
-        """Bring a minimized window back to its screen (owner, 2026-11-14: he minimized his member's browser, and the member
-        went on working in it where nobody could see)."""
+        """Bring a minimized window back to its screen (a member went on working in a minimized
+        browser where nobody could see)."""
         if type(window_id) is not int or window_id <= 0:
             raise ValueError("Expected a positive window id")
         result = await self.run_for(target, exec_args(target, ["wmctrl", "-i", "-a", str(window_id)]))
@@ -610,7 +632,7 @@ class LocalVm:
             if result.code:
                 raise VmError("window_move_failed")
 
-    # The launcher script ends itself: 60 s for the browser's first window (a loaded PC took 13 to 41 s, 2026-11-13) and
+    # The launcher script ends itself: 60 s for the browser's first window (a loaded PC took 13 to 41 s) and
     # 30 s for the window to settle on its screen. This is only the outer bound, so that the script's own answer comes first.
     seat_browser_s = 120
 
@@ -687,7 +709,14 @@ class LocalVm:
     def _progress(self, target, state, text=""):
         # Only fixed-image pull/build output is passed here, never exec output.
         self.preparation[target.state_key] = {"state": state, "ready": False,
-                                        "progress": " ".join(text.split())[:180]}
+                                        "progress": " ".join(text.split())[:180],
+                                        **({"update": True} if target.state_key in self.updating else {})}
+
+    def preparing_now(self, target):
+        """Whether this computer is being started, built or made now: by an open viewer (`launch`) or a member's own call."""
+        task = self.preparing.get(target.state_key)
+        return (task is not None and not task.done()
+                or (self.preparation.get(target.state_key) or {}).get("state") in ("starting", "building", "preparing"))
 
     async def ensure_engine(self, target, *, start_desktop=False):
         if not self.enabled:
@@ -748,7 +777,7 @@ class LocalVm:
     def mode(self):
         """One computer for every member is the default where it has been run on real computers: this PC's Docker.
         On another host the members keep a computer each until the owner's data says otherwise: seats, the six
-        screens and the carry-over have never run on a real remote host (2026-11-12). A saved choice always wins."""
+        screens and the carry-over have never run on a real remote host. A saved choice always wins."""
         if self.settings is None:
             return "per-bot"
         chosen = getattr(self.settings, "chosen", None)
@@ -952,18 +981,149 @@ class LocalVm:
         password = next((x[7:] for x in raw["Config"].get("Env", []) if x.startswith("VNC_PW=")), "")
         return port, password
 
-    async def build(self, target=None, *, progress=None):
+    async def build(self, target=None, *, progress=None, previous=None):
+        """Build the current image. `previous` is the earlier image of ours its steps are taken from (`build_args`); None
+        looks it up, "" names none."""
         target = target or self.target()
         if not await self.available(target):
             raise VmError("unavailable")
+        if previous is None:
+            previous = await self.cache_source(target)
         result = await self.run_for(target, ["pull", BASE], timeout=1800, **({"progress": progress} if progress else {}))
         if result.code:
             raise VmError("pull_failed")
         context = Path(__file__).parent / "image"
-        result = await self.run_for(target, ["build", "--progress=plain", "--tag", IMAGE, str(context)], timeout=1800,
+        result = await self.run_for(target, build_args(context, previous), timeout=1800,
                                 **({"progress": progress} if progress else {}))
         if result.code or not await self.image(target):
             raise VmError("build_failed")
+
+    async def owned_images(self, target):
+        """The images of ours on this target's engine, newest layer first, as (layer, tag, id): tags of REPOSITORY whose
+        image carries LABEL and a layer number. Whatever cannot be read is left out; an engine that cannot list them gives none."""
+        if not IMAGE.startswith(REPOSITORY + ":"):
+            return []
+        listed = await self.run_for(target, ["image", "ls", "--filter", f"label={LABEL}=1", "--filter", f"reference={REPOSITORY}",
+                                             "--format", "{{.Repository}}:{{.Tag}}"], timeout=30, limit=20_000)
+        if listed.code or listed.truncated:
+            return []
+        pattern = re.escape(REPOSITORY) + r":[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}"
+        tags = sorted({line.strip() for line in listed.stdout.splitlines() if re.fullmatch(pattern, line.strip())})
+        if not tags:
+            return []
+        inspected = await self.run_for(target, ["image", "inspect", *tags], timeout=30, limit=2_000_000)
+        if inspected.code or inspected.truncated:
+            return []
+        try:
+            images = json.loads(inspected.stdout)
+        except ValueError:
+            return []
+        found = set()
+        for image in images if isinstance(images, list) else []:
+            try:
+                labels = image["Config"]["Labels"] or {}
+                layer, ident = labels.get(f"{LABEL}.layer"), image["Id"]
+                if labels.get(LABEL) != "1" or not isinstance(layer, str) or not layer.isdecimal() or not isinstance(ident, str):
+                    continue
+                found.update((int(layer), tag, ident) for tag in image.get("RepoTags") or [] if tag in tags)
+            except (KeyError, TypeError, AttributeError):
+                continue
+        return sorted(found, key=lambda image: (-image[0], image[1]))
+
+    async def cache_source(self, target):
+        """The newest image of ours from an earlier layer, which a build takes its unchanged steps from, or ""."""
+        layer = int(IMAGE_LABELS[f"{LABEL}.layer"])
+        try:
+            return next((tag for number, tag, _ in await self.owned_images(target) if number < layer and tag != IMAGE), "")
+        except (OSError, TimeoutError) as error:
+            logger.warning("The earlier computer images could not be listed (%s); the build names no cache source", type(error).__name__)
+            return ""
+
+    def image_work_under_way(self, *, building=True):
+        """Whether a computer is being built, made, started or maintained now, or the engine is being started: older images
+        are never removed meanwhile. `building` false leaves out the build lock, for the one who holds it."""
+        return ((building and self.build_lock.locked()) or self.engine_lock.locked() or self.capacity_lock.locked()
+                or bool(self.maintenance) or any(lock.locked() for lock in self.locks.values())
+                or any(not task.done() for task in self.preparing.values())
+                or any((entry or {}).get("state") in ("starting", "building", "preparing") for entry in self.preparation.values()))
+
+    async def images_in_use(self, target):
+        """The image id of every container on this target's engine, running or stopped, ours or anyone's; None when any of
+        it cannot be read (then nothing is removed)."""
+        listed = await self.run_for(target, ["ps", "-a", "-q", "--no-trunc"], timeout=30, limit=400_000)
+        ids = listed.stdout.split()
+        if listed.code or listed.truncated or not all(re.fullmatch(r"[0-9a-f]{64}", ident) for ident in ids):
+            return None
+        used = set()
+        # A hundred at a time keeps the command line far under what Windows allows.
+        for start in range(0, len(ids), 100):
+            batch = ids[start:start + 100]
+            inspected = await self.run_for(target, ["container", "inspect", "--format", "{{.Image}}", *batch], timeout=30, limit=200_000)
+            images = inspected.stdout.split()
+            if (inspected.code or inspected.truncated or len(images) != len(batch)
+                    or not all(re.fullmatch(r"sha256:[0-9a-f]{64}", image) for image in images)):
+                return None
+            used.update(images)
+        return used
+
+    async def remove_old_images(self, target):
+        """Remove the images of ours from earlier layers that no container on the target's engine uses, once a computer is
+        ready on the current image (R-COMP-IMAGE-02). Never an image of another repository or without LABEL, never one a
+        container (running or stopped) references, never the current one or a newer layer, never while a computer is
+        being built, made, started or maintained, and never with `--force`. A failure is logged by its kind and nothing
+        else happens; the tags removed are returned."""
+        removed = []
+        if not IMAGE.startswith(REPOSITORY + ":"):
+            return removed
+        try:
+            if self.image_work_under_way():
+                self.images_checked.pop(target.remote, None)  # looked at again at the next ready start
+                return removed
+            # Holding the build lock keeps any build, and every start's image check, out until this is done.
+            async with self.build_lock:
+                if self.image_work_under_way(building=False):
+                    self.images_checked.pop(target.remote, None)
+                    return removed
+                current = await self.image(target)
+                if not current:
+                    return removed
+                layer = int(IMAGE_LABELS[f"{LABEL}.layer"])
+                old = [(number, tag, ident) for number, tag, ident in await self.owned_images(target)
+                       if number < layer and tag != IMAGE and ident != current]
+                if not old:
+                    return removed
+                used = await self.images_in_use(target)
+                if used is None:
+                    logger.warning("Older computer images were kept: the images the containers use could not be read")
+                    return removed
+                for number, tag, ident in old:
+                    if ident in used:
+                        continue
+                    if self.image_work_under_way(building=False):
+                        self.images_checked.pop(target.remote, None)
+                        break
+                    result = await self.run_for(target, ["image", "rm", tag], timeout=120)
+                    if result.code:
+                        logger.warning("An older computer image (layer %d) could not be removed", number)
+                    else:
+                        removed.append(tag)
+        except (OSError, TimeoutError, VmError, ValueError) as error:
+            logger.warning("Older computer images were not removed (%s)", type(error).__name__)
+        if removed:
+            logger.info("Removed %d older computer image(s)", len(removed))
+        return removed
+
+    def clean_soon(self, target):
+        """A computer is ready on the current image: its engine's older images of ours are looked at in the background,
+        at the first ready start after the core starts and then at most once a day for each engine."""
+        if not self.clean_images or not IMAGE.startswith(REPOSITORY + ":"):
+            return
+        host, now = target.remote, self.clock()
+        last, task = self.images_checked.get(host), self.image_tasks.get(host)
+        if task is not None and not task.done() or last is not None and 0 <= now - last < IMAGE_CLEAN_S:
+            return
+        self.images_checked[host] = now
+        self.image_tasks[host] = asyncio.create_task(self.remove_old_images(target))
 
     async def start(self, target):
         self.validate_storage(target)
@@ -1022,6 +1182,8 @@ class LocalVm:
             state = await self._prepare_start(target)
             if state.get("ready"):
                 self.running[target.physical] = self.clock(), self._start_signature(), dict(state)
+                # Ready means running on the current image (`compatible`): older layers are no longer needed by it.
+                self.clean_soon(target)
             return state
 
     async def _prepare_start(self, target):
@@ -1030,8 +1192,13 @@ class LocalVm:
             await self.ensure_engine(target, start_desktop=_MAY_START_ENGINE.get())
             async with self.build_lock:
                 if not await self.image(target):
+                    # An earlier image of ours means this build is an update: the state says so while it lasts, and
+                    # the build takes its unchanged steps from that image.
+                    previous = await self.cache_source(target)
+                    if previous:
+                        self.updating.add(target.state_key)
                     self._progress(target, "building")
-                    await self.build(target, progress=lambda text: self._progress(target, "building", text))
+                    await self.build(target, progress=lambda text: self._progress(target, "building", text), previous=previous)
             # Every computer tool call passes here: a running desktop is not being prepared.
             if (await self.status(target, probe=False))["state"] != "running":
                 self._progress(target, "preparing")
@@ -1040,6 +1207,7 @@ class LocalVm:
             return await self._start(target)
         finally:
             self.preparation.pop(target.state_key, None)
+            self.updating.discard(target.state_key)
             self.changes += 1
 
     async def _make_room(self, target):
@@ -1155,6 +1323,11 @@ class LocalVm:
             raise VmError("incompatible")
         if self.unit_held(target) or (self.unit_active(target) > 1 or self.unit_active(target, excluding=target.key)) or self.unit_busy(target, excluding=target.key):
             raise VmError("busy")
+        if (self.preparation.get(target.state_key) or {}).get("state") in ("starting", "building", "preparing"):
+            # A computer of an earlier layer is made again on this one: part of the update the state names. Only inside a
+            # preparation (`_prepare_start`), whose end clears both.
+            self.updating.add(target.state_key)
+            self._progress(target, "preparing")
         self.rebuild_notice(target)
         if raw.get("State", {}).get("Running") and (await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)).code:
             raise VmError("stop_failed")
@@ -1452,9 +1625,11 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
     async def checkpoint(self, target, action, **metadata):
         from . import checkpoints
         source = Path(checkpoints.__file__).read_text(encoding="utf-8")
-        result = await self.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "10", "/opt/venv/bin/python", "-c", source, action, json.dumps(metadata)]), timeout=12, limit=2_000_000)
+        limit = checkpoints.GUEST_SECONDS
+        result = await self.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", f"{limit:g}", "/opt/venv/bin/python", "-c", source, action, json.dumps(metadata)]), timeout=limit + 2, limit=2_000_000)
         if result.code or result.truncated:
-            raise VmError("checkpoint_unavailable")
+            # 124 is the guest's `timeout` ending it: the store took longer than it may, which is not a broken store.
+            raise VmError("checkpoint_timeout" if result.code == 124 else "checkpoint_unavailable")
         try:
             return json.loads(result.stdout)
         except ValueError:
@@ -1622,6 +1797,11 @@ print(base64.b64encode(data).decode())
             pending.cancel()
         await asyncio.gather(*self.preparing.values(), return_exceptions=True)
         self.preparing.clear()
+        # A removal under way ends with the core; the engine finishes or refuses the one image it was asked about.
+        for pending in self.image_tasks.values():
+            pending.cancel()
+        await asyncio.gather(*self.image_tasks.values(), return_exceptions=True)
+        self.image_tasks.clear()
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)

@@ -182,7 +182,7 @@ async def test_room_usage_limit_commits_safe_failure_and_emits_it(meeting, monke
     assert "PRIVATE" not in json.dumps(failure)
     terminal = [data for method, data in rig.notifications if method == "agent.turn" and data.get("failure")]
     assert terminal[-1]["failure"] == failure
-    # The room shows it as Alice's status line, never as words in her name, and nothing private.
+    # The room shows it as Alice's status line, never as words in its name, and nothing private.
     result = await rooms._messages({"room_id": room["id"]})
     assert not [message for message in result["messages"] if message["turn_id"] == turn_id]
     [intent] = [item for item in result["exchange"]["reply_intents"] if item["recipient_id"] == alice.id]
@@ -195,7 +195,7 @@ async def test_room_usage_limit_commits_safe_failure_and_emits_it(meeting, monke
     ("signed_out", "cli_login", "Claude Code is not signed in.", "CLI sign-in needed"),
 ])
 async def test_a_room_member_whose_cli_cannot_sign_in_reports_that_cause(meeting, monkeypatch, tmp_path, cause, reason, sentence, status):
-    """Owner, 2026-11-11: the same specific cause in a room, in the room's own words, with no new button there."""
+    """The same specific cause in a room, in the room's own words, with no new button there."""
     rig, members, rooms, room, alice = meeting
     members.store.update_member(alice.id, model="cli:claude")
     rig.service.use_cli(Brains(tmp_path))
@@ -570,7 +570,7 @@ async def test_one_oversized_room_message_is_left_out_and_the_reply_still_goes_o
                                   (room["id"], "@Alice " + oversized)).lastrowid
     await rooms._exchanges.start(room, source, "en", ())
     await until(lambda: rooms._exchanges.latest(room["id"])["state"] in ("done", "stopped"))
-    # Length is never an error (owner, 2026-11-09): a message that alone is more than the window is left out and says so in
+    # Length is never an error: a message that alone is more than the window is left out and says so in
     # its place, with its length; the reply is asked all the same and nothing fails.
     [first] = played
     assert "left out because it does not fit here" in first["user"] and "oversized oversized" not in first["user"]

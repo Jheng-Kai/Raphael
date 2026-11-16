@@ -67,7 +67,7 @@ import type {
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
 /**
  * Reads that only look, and that several parts of the window ask for at once (start-up asked for the roster five
- * times, owner 2026-11-10: 開啟 app 的速度太慢). The same read asked for again while it is under way shares its answer
+ * times, which made opening the app slow). The same read asked for again while it is under way shares its answer
  * (each caller gets its own copy), unless the core was asked to change something since: it answers in order, so a
  * read asked after a change must see it. A conversation's turns and questions are never shared.
  */
@@ -291,7 +291,7 @@ export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: n
 
 // ---------- members, their groups and their routines (the 拉斐爾 page) ----------
 
-/** Raphael (member 0, his name in `uiLanguage`) and the members, and the groups. */
+/** Raphael (member 0, its name in `uiLanguage`) and the members, and the groups. */
 export const membersList = async (uiLanguage?: string): Promise<MembersList> => {
   const list = await core<MembersList>("members.list", uiLanguage ? { ui_language: uiLanguage } : {});
   crownPrimary(list);
@@ -366,13 +366,13 @@ export const calendarDelete = (id: number): Promise<{ deleted: boolean }> => cor
 
 // ---------- Raphael's picture ----------
 
-/** The person's picture for Raphael, as a data URL and its crop; null while he is his emblem. */
+/** The person's picture for Raphael, as a data URL and its crop; null while it is its emblem. */
 export const avatarGet = (): Promise<unknown> => invoke("avatar_get");
 /** Opens the file dialog of Windows; the picture chosen, as a data URL for the crop dialog, or null when none was. */
 export const avatarPick = (): Promise<string | null> => invoke("avatar_pick");
 /** Keeps the picture last picked, cut as `crop` says, as Raphael's picture. */
 export const avatarSave = (crop: AvatarCrop): Promise<void> => invoke("avatar_save", { crop });
-/** Raphael is his emblem again: the picture is deleted. */
+/** Raphael is its emblem again: the picture is deleted. */
 export const avatarClear = (): Promise<void> => invoke("avatar_clear");
 
 // ---------- dictionary ----------

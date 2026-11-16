@@ -33,7 +33,7 @@ const github = manyTools("github", "GitHub", 46, 18);
 // The accounts card of an app (R-ACCT-01): the owner's connected one, a sign-in begun a minute ago, and one that waited too long (the core gives it back).
 const accountsPage = [...open, click('[data-conn="connected"]'), click('[data-conn="open"][data-id="composio:gmail"]'), wait(".cs-accts")];
 const gmailAccounts = ({ second = false } = {}) => connector("composio:gmail", { name: "Gmail", description: "搜尋郵件、撰寫草稿與回覆", enabled_tools: ["GMAIL_FETCH_EMAILS", "GMAIL_CREATE_DRAFT"],
-  accounts: [{ id: "ca_jack", status: "ACTIVE", label: "Jack" },
+  accounts: [{ id: "ca_main", status: "ACTIVE", label: "Alex" },
     ...(second ? [{ id: "ca_me", status: "ACTIVE", label: "工作信箱" }] : [{ id: "ca_wait", status: "INITIATED" }, { id: "ca_old", status: "INITIATED", stale: true }])] });
 const appSwitch = state => wait(`[data-conn="enable"][data-id="github"][aria-checked="${state}"]`);
 
@@ -91,7 +91,7 @@ export default [
     managedConnectors: [notion({ accounts: [{ id: "ca_work", status: "ACTIVE" }, { id: "ca_old", status: "EXPIRED" }] }), google],
     pluginTools: { ...base.pluginTools, "composio:notion": notionTools },
   }),
-  // R-ACCT-01: the owner's case of 2026-11-13 (a connected account and two sign-ins that were never finished), after the core gave the old one back.
+  // R-ACCT-01: a connected account and two sign-ins that were never finished, after the core gave the old one back.
   scene("accounts-card", "An app's accounts: the connected one and the sign-in that is still young; the one that waited too long is gone. Each row has a quiet ⋯ and no 帳號名稱 button", [
     ...accountsPage, check("accounts-card"),
   ], { managedConnectors: [gmailAccounts()] }),
@@ -109,9 +109,9 @@ export default [
     ...accountsPage, click('[data-conn="account-menu"][data-account="ca_wait"]'), click('#app-popover [data-conn="account-remove"]'), waitGone('[data-account="ca_wait"]'), check("accounts-removed-waiting"),
   ], { managedConnectors: [gmailAccounts()] }),
   scene("accounts-remove-last", "The last connected account is the app: removing it asks the app's own disconnect question", [
-    ...accountsPage, click('[data-conn="account-menu"][data-account="ca_jack"]'), click('#app-popover [data-conn="account-remove"]'), wait('.menu [data-conn="disconnect"]'), check("accounts-remove-last"),
+    ...accountsPage, click('[data-conn="account-menu"][data-account="ca_main"]'), click('#app-popover [data-conn="account-remove"]'), wait('.menu [data-conn="disconnect"]'), check("accounts-remove-last"),
   ], { managedConnectors: [gmailAccounts()] }),
-  // The owner's case of 2026-11-13 (「然後為什麼大部分人都沒有辦法連結？」): a sign-in that waits holds no other app back and can be cancelled.
+  // A sign-in that waits holds no other app back and can be cancelled.
   scene("sign-in-waits", "One managed sign-in waits for the browser: its row says so and has an enabled 取消; every other 連結 stays pressable", [
     ...open, wait(".cs-card"), click('[data-conn="join"][data-id="slack"]'), wait('[data-conn="cancel-login"]'), check("sign-in-waits"),
   ], { composioConfigured: true, pluginsConnecting: true }),

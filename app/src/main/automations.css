@@ -52,17 +52,16 @@
 .au-room-thread { padding: var(--sp-3) 0; gap: var(--sp-2); }
 .au-room-thread > .handoff-row, .au-room-thread > .room-intent-blocked { margin-block: var(--sp-2); }
 /* A member that could not answer is something the owner needs to see: its line is a size larger and a step darker
-   than the quiet event lines, its name in the text's own colour (owner, 2026-11-10; the judge read it as small and
+   than the quiet event lines, its name in the text's own colour (the judge read it as small and
    faint). It stays one centred line, never a bubble. */
 .room-intent-blocked > .sys { font-size: var(--fs-sm); color: var(--text-2); }
 .room-intent-blocked > .sys b { color: var(--text); }
-/* A member's face is small and stands at the lower left of its words, as Grok Bot's group (owner, 2026-11-10: 「每一個 bots
-   都是比較小一個，然後是放在對話的左下角」). A private conversation draws no face and lays its replies in one column, so a
+/* A member's face is small and stands at the lower left of its words. A private conversation draws no face and lays its replies in one column, so a
    room's side thread sets its own (its faces stand in its column); the room itself hangs them in its gutter, below. */
 :is(.page-agent, body) .room-side-thread .tn > .ra { --pa-ra-face: 24px; grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); align-items: end; column-gap: var(--sp-2); }
 .room-side-thread .tn > .ra > .ra-face { margin: 0 0 var(--sp-1); }
 /* In the room itself the faces hang beside the column, in its gutter, so the words and cards begin and end where the composer
-   does (R-UI-45; the judge on 6e2ca315: a face's slot made every message start 32 px inside the composer). The gutter is
+   does (R-UI-45: a face's slot made every message start 32 px inside the composer). The gutter is
    `--room-pad` (the pane's own side padding) plus the composer's inset (32 px at 720 wide, 43 at 1120), and the face, which is
    smaller under 860 px, fits inside it with a gap on each side. The pane gives its side padding to its children, so the stage,
    its scroll and its dock span the pane and nothing is wider than the box it stands in: no sideways overflow. */
@@ -94,10 +93,10 @@
 .au-room-participant { position: relative; display: inline-flex; }
 .au-room-participant + .au-room-participant { margin-left: -6px; }
 .au-room-faces { overflow: visible; }
-/* The chief's crown is the gold one on its slime; this only names it for screen readers (judge, 2026-11-10: a crown icon
+/* The chief's crown is the gold one on its slime; this only names it for screen readers (a crown icon
    over the 24 px face hid Raphael). */
 .au-room-crown { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-/* Raphael's wrap-up is his ordinary message: its three parts are light headings in the body. */
+/* Raphael's wrap-up is its ordinary message: its three parts are light headings in the body. */
 .au-room-controls { display: flex; justify-content: flex-end; max-width: var(--pa-colw); margin-inline: auto; margin-bottom: var(--sp-2); }
 .au-room-controls:empty { display: none; }
 
@@ -222,8 +221,6 @@
 .is-movable .cal-chip.btn, .au-bar .cal-chip.is-own.btn { cursor: grab; }
 .btn.au-event-more { display: none; }
 .au-event.is-tight .cal-chip > .av, .au-event.is-tight .cal-chip > .cal-mark { display: none; }
-/* With its face hidden, a tight chip's run mark takes the top corner beside the time. */
-.au-event.is-tight .cal-chip > .cal-run-mark { top: 2px; bottom: auto; }
 .au-event-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .au-bar-edge { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .au-event.is-dragging { z-index: 5; opacity: 0.88; }
@@ -236,7 +233,7 @@
 /* The event whose panel is open, or that a link opened, lifts when its details are open; a ring stays keyboard focus's (R-UI-31). */
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { z-index: 2; box-shadow: var(--pop); }
 .cal-chip.is-event.is-home-focus, .cal-chip.is-event[aria-current="true"] { box-shadow: inset 0 0 0 1px var(--btn-edge), var(--pop); }
-.au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
+.au-history-mark { flex: none; width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
 .au-history-mark[data-status="done"] { background: var(--ok); }
 .au-history-mark[data-status="skipped"] { background: var(--text-3); }
 .au-hours > div { position: relative; height: var(--au-hour, 48px); }

@@ -75,7 +75,7 @@ export function composerHTML(): string {
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
     `<div class="cmp-bar"><button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
     `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
-    `<span class="cmp-bar-fill"></span><span class="cmp-model"></span>` +
+    `<span class="cmp-model"></span>` +
     `<span class="cmp-pair">` +
     iconButton("send", t("chat.send"), " disabled", "cmp-send task-action").replace('type="button"', 'type="submit"').replace(" title=", " data-tooltip=").replace(ico("send"), sendGlyph()) +
     `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><p class="cmp-page-note hint" role="status" hidden></p><input class="cmp-picker" type="file" multiple hidden>`;
@@ -126,6 +126,57 @@ export function bindActionMode(button: HTMLElement): void {
   draw(); void read();
 }
 
+/** How many letters' width of the model's name the row keeps before the permission's word gives way (R-UI-160). */
+const NAME_KEPT_EM = 6;
+
+/**
+ * Whether the permission's word fits in the composer's row: `room` holds the controls that never give way (`fixed`), the gaps
+ * between them, the permission with its word, and the model at its first letters (a shorter name whole, `modelNeed`). A word
+ * that shows keeps showing to half a pixel short and a hidden one comes back with a pixel to spare, so a measure rounded
+ * differently in the two states cannot turn it on and off.
+ */
+export function permissionWordFits(row: { room: number; fixed: number; gaps: number; modeWide: number; modelNeed: number; shown: boolean }): boolean {
+  return row.room + (row.shown ? 0.5 : -1) >= row.fixed + row.gaps + row.modeWide + row.modelNeed;
+}
+
+/**
+ * Short of room the composer's row gives way in one order (R-UI-160, agent.css): the model's name shortens first; once it would go
+ * under its first letters the permission's word hides and its shield stays, the room it gave going back to the name, so no gap
+ * stands beside a shortened name. Measured again when the row, the word or the model changes; the measure is the same whether
+ * the word shows or not, so one change settles it.
+ */
+function fitComposerRow(bar: HTMLElement): void {
+  if (typeof ResizeObserver !== "function") return;
+  const mode = bar.querySelector<HTMLElement>(".cmp-mode")!, word = mode.querySelector<HTMLElement>("span")!, model = bar.querySelector<HTMLElement>(".cmp-model")!;
+  const width = (element: Element): number => element.getBoundingClientRect().width;
+  const fit = (): void => {
+    if (!bar.isConnected || !bar.clientWidth) return;
+    const hidden = mode.hasAttribute("data-word-hidden");
+    const modeWide = width(mode) + (hidden ? (parseFloat(getComputedStyle(mode).columnGap) || 0) + width(word) : 0);
+    const trigger = model.querySelector<HTMLElement>(".mp-trigger"), name = trigger?.querySelector<HTMLElement>(".mp-tname");
+    let modelNeed = 0;
+    if (trigger && name) {
+      const whole = name.scrollWidth > name.clientWidth + 0.5 ? name.scrollWidth : width(name);
+      modelNeed = width(trigger) - width(name) + Math.min(whole, NAME_KEPT_EM * parseFloat(getComputedStyle(name).fontSize));
+    }
+    const shown = [...bar.children].filter(child => width(child) > 0);
+    const fixed = shown.filter(child => child !== mode && child !== model).reduce((sum, child) => sum + width(child), 0);
+    const gaps = (shown.length - 1) * (parseFloat(getComputedStyle(bar).columnGap) || 0);
+    const fits = permissionWordFits({ room: bar.clientWidth, fixed, gaps, modeWide, modelNeed, shown: !hidden });
+    if (fits === hidden) mode.toggleAttribute("data-word-hidden", !fits);
+  };
+  const sizes = new ResizeObserver(fit);
+  for (const element of [bar, word, model]) sizes.observe(element);
+  // Another model, depth or language changes the words without always changing a size.
+  new MutationObserver(fit).observe(mode, { childList: true, subtree: true, characterData: true });
+  new MutationObserver(fit).observe(model, { childList: true, subtree: true, characterData: true });
+}
+
+/** The row under a composer's field, wherever the composer is built: it gives way in order (R-UI-160). */
+export function bindComposerRow(form: HTMLElement): void {
+  fitComposerRow(form.querySelector<HTMLElement>(".cmp-bar")!);
+}
+
 export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8Array {
   const length = channels[0]?.length ?? 0, bytes = new Uint8Array(44 + length * 2), view = new DataView(bytes.buffer);
   const text = (at: number, value: string): void => { for (let i=0;i<value.length;i++) bytes[at+i]=value.charCodeAt(i); };
@@ -149,7 +200,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   // Drawn only when the files change: a picture is not decoded again at each keystroke.
   const drawFiles=():void=>{if(drawnFiles===files)return;drawnFiles=files;const chips=el.querySelector<HTMLElement>(".cmp-file")!;chips.hidden=!files.length;chips.replaceChildren(...files.map((f,i)=>{const chip=document.createElement("span");chip.className="cmp-chip";if(f.pending)chip.setAttribute("aria-busy","true");chip.innerHTML=draftFileHTML({name:f.name,mime:f.mime,size:f.size??Math.round(f.data.length*0.75)},`data-file="${i}" aria-label="${esc(t("agent.unattach"))}"`);const thumb=chip.querySelector<HTMLImageElement>(".cmp-thumb");if(thumb){if(f.preview)thumb.src=f.preview;else if(f.stored_id)void api.attachmentSource(f.stored_id).then(url=>{if(thumb.isConnected)thumb.src=url;}).catch(()=>{});else thumb.src=`data:${f.mime};base64,${f.data}`;}return chip;}));};
   /** 「＋」, a paste or a drop: every chip stands at once, a picture from its own file, and the bytes follow one file after the other
-   *  (owner, 2026-11-15: 「才剛點下去他就在畫面裡了」). One that cannot be taken says why and the rest are still taken, but for too many, which ends it. */
+   *. One that cannot be taken says why and the rest are still taken, but for too many, which ends it. */
   const addFiles=(list:readonly File[]):void=>{const mine=revision,placed:{draft:DraftFile;file:File}[]=[];for(const file of list){const mime=fileMime(file),name=file.name.trim()||`image.${mime.slice(mime.indexOf("/")+1)}`,refusal=attachRefusal(files.length,mime,file.size,files.reduce((n,f)=>n+(f.size??f.data.length*0.75),0));if(refusal==="count"){toaster.info(t("agent.attachTooMany",{p0:ATTACH_MAX}));break;}if(refusal==="size"){toaster.info(t("agent.attachTooBig",{p0:name,p1:attachmentLimit(mime)/1024/1024}));continue;}if(refusal==="total"){toaster.info(t("agent.attachTotal",{p0:TOTAL_MAX_BYTES/1024/1024}));continue;}if(refusal==="empty"){toaster.info(t("agent.attachUnreadable",{p0:name}));continue;}const draft:DraftFile={name,mime,data:"",size:file.size,pending:true,...(fileKind(mime)==="image"?{preview:URL.createObjectURL(file)}:{})};files=[...files,draft];placed.push({draft,file});}if(!placed.length)return;attaching++;draw();attachQueue=attachQueue.then(async()=>{for(const {draft,file} of placed){const kept=():boolean=>mine===revision&&files.includes(draft);if(!kept()){if(draft.preview)URL.revokeObjectURL(draft.preview);continue;}try{const attached=await readComposerFile(file,draft.mime,kept);if(kept()){files=files.map(f=>f===draft?{...attached,name:draft.name,mime:draft.mime}:f);draw();}}catch{if(kept()){files=files.filter(f=>f!==draft);draw();toaster.info(t("agent.attachUnreadable",{p0:draft.name}));}}finally{if(draft.preview)URL.revokeObjectURL(draft.preview);}}}).finally(()=>{attaching--;draw();});};
   // The field sizes itself to its text (`.cmp-input` in agent.css).
   const fit=():void=>{draw();};
@@ -181,7 +232,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
     }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
   });
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
-  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);
+  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);bindComposerRow(el);
   // The composer keeps its clicks (below), so a waiting picture opens large from here.
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const picture=(e.target as Element).closest<HTMLElement>(".cmp-pic"),src=picture?.querySelector("img")?.getAttribute("src");if(picture){if(src)openMediaLightbox(picture,src);return;}const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
   picker.addEventListener("change",()=>addFiles([...picker.files??[]]));bindFilePaste(input,addFiles,fit,()=>files.map(file=>file.name));

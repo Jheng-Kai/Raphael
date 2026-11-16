@@ -1,7 +1,7 @@
 import { scene, check, member, page, wait } from "./steps.mjs";
 
 // A subscription window nine-tenths used (R-QUOTA-01). Only the shell's event is synthetic; the toast is the main
-// window's own. The fixture clock is 2026-10-24 10:00 in Taipei (1792807200 s).
+// window's own. The fixture clock is 24 October 2026, 10:00 in Taipei (1792807200 s).
 const NOW_S = 1792807200;
 const warn = event => ({ action: "main-event", event: { type: "QuotaWarning", ...event } });
 

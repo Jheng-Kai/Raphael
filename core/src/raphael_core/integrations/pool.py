@@ -32,7 +32,8 @@ pool it does it once.
 - **A connection is closed** when its pool is (`aclose`: the task is over, cancelled, timed out or
   the core is closing), when it has been idle for `idle_s` (the pool of the fast tier keeps one
   for two minutes, so that a second question about the same service is quick), and when a call on
-  it failed in a way that may have broken it.
+  it failed in a way that may have broken it. Closing the pool waits for the servers to be stopped,
+  for up to `STOP_WAIT_S`, even when the close itself is cancelled.
 - **The tools** are read when the connection is opened and kept; a tool that is not in the list is
   `gone`. A server that says its tools changed is not listened to: the next job opens a new
   connection and reads them again.
@@ -56,6 +57,11 @@ from .config import ToolRecord
 # What the owner of a connection is told in its inbox besides a call.
 _IDLE = object()
 _STOP = object()
+
+# How long closing a pool waits for its servers to be stopped. The SDK bounds every step of a stdio
+# server's stop (a few seconds in all, a kill included); a stop that takes longer than this is left
+# behind, so that a server that never lets go cannot hold the core's exit.
+STOP_WAIT_S = 10.0
 
 OpenClient = Callable[[], AbstractAsyncContextManager[Any]]
 ListTools = Callable[[Any], Awaitable[list[ToolRecord]]]
@@ -272,10 +278,25 @@ class McpPool:
             raise
 
     async def aclose(self) -> None:
-        """Close every connection and wait until their servers are stopped. Safe twice."""
+        """Close every connection and wait until their servers are stopped, for up to
+        `STOP_WAIT_S`. Safe twice.
+
+        A cancel while it waits does not cut the wait short; it is raised once the wait is over.
+        The core's exit cancels the background task that is closing its pool, and an owner left
+        alone then is cancelled by the loop's last sweep with a plain `Task.cancel()`, which breaks
+        the SDK's stop off (see the module) before it closes the server's transport: an unclosed
+        transport is a traceback on the core's way out."""
         self._closed = True
         for connection in list(self._connections.values()):
             connection.close()
-        tasks = list(self._tasks)
-        if tasks:
-            await asyncio.wait(tasks)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + STOP_WAIT_S
+        pending = {task for task in self._tasks if not task.done()}
+        interrupted: asyncio.CancelledError | None = None
+        while pending and (left := deadline - loop.time()) > 0:
+            try:
+                _, pending = await asyncio.wait(pending, timeout=left)
+            except asyncio.CancelledError as cancel:
+                interrupted = cancel
+        if interrupted is not None:
+            raise interrupted

@@ -711,6 +711,8 @@ export interface BrainSettings {
   owner_name?: string;
   owner_about?: string;
   owner_output_folder?: string;
+  /** Folders on the owner's computer members may write to, beside the output folder (R-PC-05). */
+  owner_write_folders?: string[];
   routine_timezone?: string;
   routine_detected_timezone?: string;
   owner_photo?: string;
@@ -974,9 +976,9 @@ export interface GroupDraft {
 }
 
 /**
- * A member as `members.list` lists it, Raphael first as member 0 (he is no row of the core).
+ * A member as `members.list` lists it, Raphael first as member 0 (it is no row of the core).
  * `avatar_url` is a picture the page may show as it is (a `data:image/...` URL), absent for a member
- * with none; Raphael's is the owner's picture of him with its `avatar_crop`, absent while he is his
+ * with none; Raphael's is the owner's picture of it with its `avatar_crop`, absent while it is its
  * emblem. `unread`: a turn arrived while the owner was not reading its thread (until
  * `members.read`); `waiting`: a question waits for the owner there. `preview` is the last line of
  * its thread (the core cuts it to one line), `last_at` when it was said.
@@ -1003,7 +1005,7 @@ export interface Member {
   avatar_url?: string;
   /** What the picture is named by; the roster carries no picture, and `api.ts` fills `avatar_url` from `members.picture` (member-pictures.ts). */
   avatar_rev?: string;
-  /** Raphael's only: the cut of the owner's picture of him (avatar.ts `AvatarCrop`). */
+  /** Raphael's only: the cut of the owner's picture of it (avatar.ts `AvatarCrop`). */
   avatar_crop?: { x: number; y: number; zoom: number };
   /** The cover of the member settings page: one of the window's patterns or the owner's picture; none is the dotted band. */
   /** A picture's `position` is how far down it is shown, in percent (50 when the owner never moved it). */
@@ -1099,7 +1101,7 @@ export interface NewMember {
 export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">> & {
   /** `pattern:<id>` chooses a pattern; null puts the dotted band back and forgets a picture. */
   cover?: string | null;
-  /** Where a cover picture is shown, 0 (its top) to 100 (its bottom), as Notion's Reposition. */
+  /** Where a cover picture is shown, 0 (its top) to 100 (its bottom). */
   cover_position?: number;
 };
 
@@ -1223,7 +1225,7 @@ export type PageId = "agent" | "dictation" | "history" | "dictionary" | "setting
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
-/** The tabs of the settings panel. "memory" is no tab since 2026-11-11 (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
+/** The tabs of the settings panel. "memory" is no tab (R-MEM-10): it stays a name only so an old saved or linked pane opens 一般. */
 export type SettingsPane = "general" | "memory" | "appearance" | "dictation" | "agent" | "tools" | "safety" | "connections" | "messaging" | "models" | "usage" | "data" | "about";
 
 /**
@@ -1259,7 +1261,7 @@ export interface AppContext {
    * "usage"); the 拉斐爾 page takes a draft for its composer (the settings close on the way).
    */
   go(page: PageId, arg?: PageArgument): void;
-  /** Opens the history at one day, `2026-10-14`: its dictations only, with a way back to all of them. */
+  /** Opens the history at one day, `YYYY-MM-DD`: its dictations only, with a way back to all of them. */
   showDay(date: string): void;
   /** The device settings as they are now. */
   device(): DeviceSettings;

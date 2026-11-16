@@ -48,19 +48,24 @@
 .mc-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .mc-list h4 { padding: var(--sp-3) var(--sp-2) var(--sp-1); margin: 0; color: var(--text-3); font-size: var(--fs-xs); font-weight: 500; }
 .mc-item { position: relative; min-width: 0; }
-.mc-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 80px; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); color: var(--text); text-align: left; }
+.mc-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); width: 100%; min-height: 80px; padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); color: var(--text); text-align: left; }
 .mc-row:hover:not(:disabled) { background: var(--hover); }
-/* The chosen model is the selected fill with the same hairline as every row, and its radio filled: no light edge round it (owner, 2026-11-13: 「不要再有這個亮亮的顏色」). */
+/* The chosen model is the selected fill with the same hairline as every row, and its radio filled: no light edge round it. */
 .mc-row[aria-checked="true"] { background: var(--float-hover); border-color: var(--line); }
 .mc-row:disabled { color: var(--text-3); cursor: default; }
 .mc-radio { width: 15px; height: 15px; border: 1px solid var(--text-3); border-radius: var(--r-pill); flex: none; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; }
 .mc-row[aria-checked="true"] .mc-radio { border-color: var(--text-2); background: var(--text-2); }
 .mc-row[aria-checked="true"] .mc-radio:after { content: ""; width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--float); }
-.mc-model { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; flex: 1; }
+.mc-model { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; flex: 1 1 8em; }
 .mc-model-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .mc-model-line strong { font-size: var(--fs-sm); font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-description { color: var(--text-3); font-size: var(--fs-xs); line-height: 1.5; overflow-wrap: anywhere; }
-.mc-price { color: var(--text-2); font-size: var(--fs-xs); flex: none; max-width: 180px; white-space: normal; text-align: right; }
+/* The price stands at the right of the name and takes at most a share of the row, never less than its widest part; when that would leave the name less than
+   8em the price stands on a line of its own under it. A part never breaks inside: the parts go one under the other when they do not fit one line. */
+.mc-price { display: flex; flex-wrap: wrap; justify-content: flex-end; column-gap: var(--sp-1); flex: none; min-width: min-content; max-width: 45%; margin-left: auto; color: var(--text-2); font-size: var(--fs-xs); text-align: right; }
+.mc-price .price-part { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A part of a price is one box: it moves to the next line whole, or wraps only at spaces when it is longer than the whole line. */
+.price-part { display: inline-block; max-width: 100%; vertical-align: top; word-break: keep-all; overflow-wrap: break-word; }
 .mc-empty { text-align: center; margin: auto; padding: var(--sp-6) var(--sp-4); font-size: var(--fs-sm); color: var(--text-3); line-height: 1.7; }
 .mc-effort:empty { display: none; }
 .mc-effort { display: block; padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--line); flex: none; font-size: var(--fs-xs); color: var(--text-2); }
@@ -78,7 +83,6 @@
   .mc-tools input { flex-basis: 100%; }
   .mc-scroll { padding: 0 var(--sp-3) var(--sp-3); }
   .mc-row { gap: var(--sp-2); }
-  .mc-price { max-width: 105px; white-space: normal; text-align: right; }
   .mc-effort { padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); flex-wrap: wrap; }
   .mc-segments button { padding: var(--sp-1) var(--sp-2); }
   .mc-slot { font-size: var(--fs-xs); }

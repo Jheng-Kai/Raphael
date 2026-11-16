@@ -5,7 +5,7 @@ import { slimeSVG } from './slime';
 
 test('an unchanged generated face is reused before its cel markup is parsed', () => {
   const root=document.createElement('div');
-  const picture=slimeSVG({character:'shion'},{state:'thinking',member:3,moving:true});
+  const picture=slimeSVG({character:'horn-lavender'},{state:'thinking',member:3,moving:true});
   patchHTML(root,`<button data-k="3">${picture}<b>Old</b></button>`);
   const surface=root.querySelector('.slime-surface');
   const template=document.createElement('template');
@@ -116,11 +116,11 @@ test("a changed row preserves its slime clock and active transition", async () =
   expect(records).toHaveLength(0);
 });
 
-test("a face never becomes another member's: Raphael's face where Testarossa's stood is a new one, so her bow cannot move on him", () => {
+test("a face never becomes another member's: Raphael's face where the pearl bow tie's stood is a new one, so its bow cannot move on it", () => {
   const root=document.createElement('div');
-  patchHTML(root,`<button>${slimeSVG({character:'testarossa'},{state:'idle',member:7,moving:true})}</button>`);
+  patchHTML(root,`<button>${slimeSVG({character:'bowtie-pearl'},{state:'idle',member:7,moving:true})}</button>`);
   const before=root.querySelector('svg.slime');
-  patchHTML(root,`<button>${slimeSVG({character:'rimuru'},{state:'working',member:0,crown:true,moving:true})}</button>`);
+  patchHTML(root,`<button>${slimeSVG({character:'blue-plain'},{state:'working',member:0,crown:true,moving:true})}</button>`);
   const after=root.querySelector('svg.slime')!;
   expect(after).not.toBe(before);
   expect(after.getAttribute('data-slime-member')).toBe('0');
@@ -129,7 +129,7 @@ test("a face never becomes another member's: Raphael's face where Testarossa's s
 });
 
 
-test('a picture of a slime is kept as it is by a redraw, and another member takes a fresh one (owner, 2026-11-11)', () => {
+test('a picture of a slime is kept as it is by a redraw, and another member takes a fresh one', () => {
   const root = document.createElement('div');
   const picture = (id: number, color: 'sky' | 'coral' = 'sky'): string => `<button data-k="${id}">${slimeSVG({ color }, { member: id })}</button>`;
   patchHTML(root, picture(1) + picture(2, 'coral'));

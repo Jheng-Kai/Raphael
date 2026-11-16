@@ -1,4 +1,4 @@
-"""A subscription CLI that cannot take a turn is told by its true cause, not by one sentence for every cause (owner, 2026-11-11).
+"""A subscription CLI that cannot take a turn is told by its true cause, not by one sentence for every cause.
 
 The outputs below are the shapes the three CLIs print when a session ran out, when none was ever made and when an
 unrelated thing failed. Nothing here starts a real CLI, reads a credential or signs in.

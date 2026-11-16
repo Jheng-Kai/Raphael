@@ -1,11 +1,11 @@
-"""A work hand-off's words to whoever handed it over (owner, 2026-11-09: 「這邊是兩個史萊姆在溝通才對」).
+"""A work hand-off's words to whoever handed it over.
 
 The member who takes on work does it in its own conversation and speaks to the owner there. It ends its
 final reply with `<handback>…</handback>`, written to the colleague who asked, or, for its own background
 work, to the place the work came from. The block is taken out of what the owner reads and kept as the
 task's hand-back: the member-to-member view, the asker's side, a room's report line and a parent task all
-read only that, as Grok Bot's hand-off shows a member's reply to its colleague apart from what it told the
-owner (bots/research/grokbot/handoff-2026-11-08).
+read only that, so a member's reply to its colleague is shown apart from what it told the
+owner.
 """
 
 import re

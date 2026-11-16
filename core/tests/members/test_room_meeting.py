@@ -12,7 +12,7 @@ async def test_speech_cursor_sends_only_new_messages_with_the_board(rig,exchange
     await send(rig,room,'@Alice NEW-QUESTION','next')
     prompt=rig.background.submitted[-1]['text']
     assert 'NEW-QUESTION' in prompt and 'OLD-QUESTION' not in prompt
-    assert 'OLD-ANSWER' in prompt  # The previous answer arrived after her prior snapshot.
+    assert 'OLD-ANSWER' in prompt  # The previous answer arrived after its prior snapshot.
     assert 'Status board and pinned decisions' in prompt
     assert rig.conn.execute('SELECT seen_message_id FROM room_member_cursor').fetchone()[0]==1
 

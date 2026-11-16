@@ -41,14 +41,43 @@ from ..paths import local_storage_root
 from ..agent.conversations import Conversations
 from ..agent.steps import reason_of
 from ..worker.stall_guards import stalled
+from .outcomes import file_named_in
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
 # File names narrow the scan only after the caller explicitly requires an artifact.
-FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json|md|docx|pptx|png|jpe?g|gif|svg|mp4|mov|webm|mp3|wav|zip))(?!\w)')
+FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html?|xlsx?|pdf|csv|tsv|txt|jsonl?|ndjson|md|docx?|pptx?|rtf|odt|ods|odp|epub|ipynb|'
+                        r'ya?ml|toml|ini|xml|log|sql|diff|patch|png|jpe?g|gif|svg|webp|bmp|tiff?|heic|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac|ogg|'
+                        r'zip|7z|rar|tar|tgz|gz))(?!\w)')
+# What a condition says of a file it only reads: a verb of reading before the name, within the same part of the sentence.
+_PART_START = re.compile(r"[.;。,，；]|\band\b|\bthen\b|並|并|然後|然后|再")
+_READ_BEFORE = re.compile(r"(?:\b(?:read|reads|open|use|using|parse|analy[sz]e|review|check|inspect|look at|based on|from|given|using)\b|"
+                          r"讀取?|读取?|閱讀|阅读|打開|打开|開啟|使用|根據|根据|依據|依据|分析|參考|参考|檢查|检查|查看|來自|来自)[^\n]{0,40}$", re.I)
+
+
+def deliverable_names(text: str) -> list[str]:
+    """The files a condition names for the work to leave: the names in it, less the ones it only reads ("read server.log and
+    write up what failed") and so cannot ask the work to make."""
+    names = []
+    for found in FILE_NAMES.finditer(text):
+        before = _PART_START.split(text[max(0, found.start() - 60):found.start()])[-1]
+        if not _READ_BEFORE.search(before):
+            names.append(found.group(1))
+    return names
+
+
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
+# Chinese, Japanese and Korean say in one character what English says in two or three: a character of theirs counts twice, so that
+# a hundred of them (a paragraph) is as much work in the words as two hundred letters.
+_WIDE = re.compile(r"[⺀-鿿가-힯豈-﫿＀-￯]")
+
+
+def written_length(said: str) -> int:
+    """How much work a reply holds in its words, in letters; a character of Chinese, Japanese or Korean counts for two."""
+    said = said.strip()
+    return len(said) + len(_WIDE.findall(said))
 MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
 
 
@@ -277,7 +306,7 @@ class TaskStore:
             if scope_key.startswith('room:'):
                 # The same work for the same colleague under another stage_id is the same work: a refusal is not mended by a
                 # new code (live, eight refused hand-offs were sent again that way).
-                # Since the owner last wrote in the thread: a request he makes again is new work.
+                # Since the owner last wrote in the thread: a request they make again is new work.
                 _, room_id, thread_id = scope_key.split(':')
                 since = self._conn.execute("SELECT COALESCE(MAX(created),0) FROM room_messages WHERE room_id=? AND thread_id IS ? AND member_id IS NULL",
                                            (int(room_id), None if thread_id == 'None' else int(thread_id))).fetchone()[0]
@@ -458,6 +487,18 @@ class TaskStore:
             raise ValueError('artifact_size')
         self.record_evidence(task_id, 'file_before', kind='file_before', uri=str(path), digest=_artifact_digest(path), mime="application/octet-stream")
 
+    def note_unreadable(self, task_id, path):
+        """Write down that `path`, a file the task was to leave, is there but cannot be read: it is no artifact, and no missing file either."""
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO task_evidence(task_id,tool_call_id,kind,uri,digest,mime,scope,verified_at_ms,verdict) "
+                "SELECT id,'artifact_unreadable','artifact_unreadable',?,'','text/plain',scope,?,'unreadable' FROM worker_tasks WHERE id=?",
+                (str(path), self._now_ms(), task_id))
+
+    def forget_unreadable(self, task_id):
+        """Each look for the files of a task starts with what it finds now: a file that was locked a moment ago may be free."""
+        with self._conn:
+            self._conn.execute("DELETE FROM task_evidence WHERE task_id=? AND kind='artifact_unreadable'", (task_id,))
+
     def file_changed(self, item):
         path = Path(item['uri']).resolve(strict=True)
         return (path.is_file() and path.stat().st_size <= MAX_ARTIFACT_BYTES
@@ -466,17 +507,18 @@ class TaskStore:
     def completion_reason(self, task, *, verifiable=True, said=""):
         """Validate receipts and explicit file requirements, even without a member workspace."""
         receipts = self.evidence(task.id)
-        evidence = [item for item in receipts if item['kind'] not in ('file_before', 'artifact_note')]
+        evidence = [item for item in receipts if item['kind'] not in ('file_before', 'artifact_note', 'artifact_unreadable')]
         before = {item['uri']: item for item in receipts if item['kind'] == 'file_before'}
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
         waived = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_note']
-        expected = [name for name in FILE_NAMES.findall(task.done_when) if not any(
+        unreadable = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_unreadable']
+        expected = [name for name in deliverable_names(task.done_when) if not any(
             found == name.lower() or found.endswith(' ' + name.lower()) for found in waived)] if task.requires_artifact else []
         requires_artifact = task.requires_artifact and (not waived or bool(expected) or bool(before))
         if requires_artifact and not artifacts:
-            return 'missing_artifact'
+            return 'artifact_unreadable' if unreadable else 'missing_artifact'
         if not evidence:
-            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
+            return None if not requires_artifact and written_length(said) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
                 root = local_storage_root(item['workspace'])
@@ -486,13 +528,21 @@ class TaskStore:
                     return 'artifact_changed'
                 if str(path) in before and not self.file_changed(before[str(path)]):
                     return 'missing_artifact'
-            except (OSError, TypeError, ValueError):
+            except (FileNotFoundError, NotADirectoryError, TypeError, ValueError):
                 return 'missing_artifact'
+            except OSError:
+                # The file is there (the system said so, not that it is gone) and cannot be read.
+                return 'artifact_unreadable'
         names = [Path(item['uri']).name.lower() for item in artifacts]
-        # A filename extracted from prose can be the last word of a named path containing spaces.
-        if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
-                       for found in names) for name in expected):
-            return 'missing_artifact'
+
+        def is_named(name, found):
+            # A filename extracted from prose can be the last word of a named path containing spaces.
+            # Chinese and Japanese have no spaces, so a name can stand against the words around it: it is that name alone.
+            return found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower())) or file_named_in(name, found)
+
+        lacking = [name for name in expected if not any(is_named(name, found) for found in names)]
+        if lacking:
+            return 'artifact_unreadable' if any(is_named(name, found) for name in lacking for found in unreadable) else 'missing_artifact'
         return None
 
     def invalidate_tree(self, task_id):
@@ -543,7 +593,7 @@ class TaskStore:
                 (state, self._now_ms(), prefix, text, detail, reason, handback, task_id),
             )
             stage_state = 'done' if state == 'done' else 'cancelled' if state == 'cancelled' else 'incomplete' if reason in (
-                'missing_artifact','artifact_changed','work_without_action','missing_terminal','dangling_mention','child_work_incomplete') else 'blocked'
+                'missing_artifact','artifact_unreadable','artifact_changed','work_without_action','missing_terminal','child_work_incomplete') else 'blocked'
             self._conn.execute('UPDATE task_stage_owners SET state=?,reason=? WHERE owner_task_id=?',
                                (stage_state,reason or '',task_id))
             if publish is not None:
@@ -761,7 +811,9 @@ class TaskStore:
             self._conn.execute("UPDATE worker_tasks SET announced = 1 WHERE announced = 0")
 
     def finish_interrupted(self, task_id: int, *, prefix: str, text: str, reason: str) -> None:
-        """End a task that was interrupted while it ran, with a report nobody has heard yet."""
+        """End a task that was interrupted while it ran, with a report nobody has heard yet. A hand-off's result is written
+        with it, as with every other end, and is delivered at the next start: closed the ordinary way, a room never heard of
+        the work again."""
         self.settle_in_progress(task_id)
         with self._conn:
             self._conn.execute(
@@ -770,6 +822,9 @@ class TaskStore:
                 " WHERE id = ?",
                 (self._now_ms(), reason, prefix, text, task_id),
             )
+            self._conn.execute("INSERT OR IGNORE INTO task_outbox "
+                "SELECT CAST(id AS TEXT)||':result',id,'result',source_turn_id,COALESCE(report_room_id,room_id),COALESCE(report_thread_id,thread_id),?,NULL,NULL "
+                "FROM worker_tasks WHERE id=? AND source_turn_id IS NOT NULL", (self._now_ms(), task_id))
 
     def tool_steps(self, task_id: int) -> int:
         """How many tool calls the task made."""

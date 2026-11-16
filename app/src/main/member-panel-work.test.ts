@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The member panel's Library, as Grok Bot's: only what the member delivered, four chips always, the items grouped by
+// The member panel's Library: only what the member delivered, four chips always, the items grouped by
 // recency and each group one card of one-line rows (a 20 px mark and the title).
 import { expect, test } from "vitest";
 import { panelLibraryHTML, type LibraryItem } from "./member-panel-work";

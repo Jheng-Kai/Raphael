@@ -277,7 +277,7 @@ class ServiceHub:
         """(the service, the page at `url`) with the reading service chosen. When that reader fails as a whole (it timed
         out, could not be reached, answered with an error or with nothing a page is made of), the page is read once more by
         the next reader the owner set up (`backup_reader`), and the result says so (`reader_fallback`); the next read goes
-        to the chosen reader again (Hermes's rescue of a failed extract, R-PERSIST-06). A reader is a service: the model
+        to the chosen reader again (R-PERSIST-06). A reader is a service: the model
         is never switched. ServiceError of the first reader when both fail."""
         service = self.read_service()
         try:

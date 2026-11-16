@@ -207,15 +207,15 @@ elif operation == "init":
         # This journey is the computer-per-member mode's: its smoke uses that mode's own tool forms.
         settings["computer_vm_mode"] = "per-bot"
     if len(sys.argv) > 3 and sys.argv[3] == "dictation-dictionary":
-        # The owner's dictation as he has it set: MAI-Transcribe 2 in the cloud, Taiwan Chinese,
-        # his cleanup model. His dictionary holds 「grokbot」; 「herdr」 is the word he corrects.
+        # The owner's dictation as it is usually set: MAI-Transcribe 2 in the cloud, Taiwan Chinese,
+        # a cleanup model. The dictionary holds 「pinebot」; 「herdr」 is the word that gets corrected.
         # The corrected message reaches a real model: it may only plan, every step asks first (nobody
         # answers), and the journey stops the turn once the correction is learned.
         settings.update({"stt_engine": "cloud", "stt_cloud_model": "microsoft/mai-transcribe-2",
                          "languages": ["zh-TW"], "cleanup_model": "~deepseek/deepseek-v4-flash-latest",
                          "action_mode": "plan"})
         from raphael_core.brain.dictionary import DictionaryStore
-        DictionaryStore(connection).add("grokbot")
+        DictionaryStore(connection).add("pinebot")
     with connection:
         for key, value in settings.items():
             connection.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (key, json.dumps(value)))

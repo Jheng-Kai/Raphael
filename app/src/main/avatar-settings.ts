@@ -1,8 +1,8 @@
-// Changing Raphael's picture, from his details panel on the 拉斐爾 page (member-details.ts), the
+// Changing Raphael's picture, from its details panel on the 拉斐爾 page (member-details.ts), the
 // same place as every member's: 「從電腦選…」 opens the file dialog of Windows from the app
 // (`avatar_pick`: PNG, JPG, WebP or GIF; the page never learns where the file was), then a small
 // dialog with the whole picture and a square frame over it; 完成 keeps a copy of it in the app's
-// local folder with that cut (`avatar_save`). 還原 deletes the copy, and Raphael is his emblem again
+// local folder with that cut (`avatar_save`). 還原 deletes the copy, and Raphael is its emblem again
 // (`avatar_clear`). A moving picture keeps moving: the copy is the file itself, and the cut is a crop
 // drawn over it (`AvatarCrop`), not a new image. The owner's own photo uses the same dialog.
 
@@ -254,7 +254,7 @@ export async function changeRaphaelAvatar(): Promise<void> {
   await loadAvatar(api.avatarGet);
 }
 
-/** 還原: the copy is deleted and Raphael is his emblem. */
+/** 還原: the copy is deleted and Raphael is its emblem. */
 export async function resetRaphaelAvatar(): Promise<void> {
   try {
     await api.avatarClear();

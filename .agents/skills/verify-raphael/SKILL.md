@@ -24,7 +24,7 @@ loads the real `index.html`, modules and CSS, and closes both after capture. Eac
 scene has an isolated fixture and each run has its own browser profile. No running
 native app, credentials, real database or separate preview server is needed.
 Readiness means Raphael's conversation (or onboarding Next button / overlay progress)
-is visible: the app opens on it, as it does for the owner (Home was removed on 2026-11-12).
+is visible: the app opens on it, as it does for the owner.
 Every other page is reached through the real app, the account menu at the sidebar's foot,
 followed by the scene's own prerequisite and resulting-state waits.
 
@@ -182,12 +182,12 @@ From app/, the complete integration offline check is `npm run verify -- --contra
 on the exact commit: CI runs the whole core suite on every push (about a quarter of an hour over eight machines),
 so `--core`, the same suite on a developer's machine, is for when CI cannot be used. A core change runs the test
 folders it touched and `--contract` (the scenario drivers in `core/tests/evaluate` and the default prompt's size
-budget) before it is handed back: on 2026-11-11 units that ran only their own files let 5, 6 and 9 failures
-through to the merged tree, nearly all of them in those two places.
+budget) before it is handed back: units that ran only their own files let failures through to the merged
+tree, nearly all of them in those two places.
 Local changes use the affected frontend/core/Rust boundaries described above.
 
 CI deals the Python test files among eight machines by the seconds recorded in
-`core/tests/shard-durations.json` (2026-11-11). When one share runs much longer than the others,
+`core/tests/shard-durations.json`. When one share runs much longer than the others,
 refresh the record as the header of `core/tests/shard_durations.py` describes: merge the
 `python-durations-*` artifacts of one green CI run. A pull request that touches `core/packaging`,
 `core/pyproject.toml` or `core/uv.lock` also runs the frozen-core smoke test (not a required gate).

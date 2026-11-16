@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The member settings page (member-settings.ts): a cover, the face across it, the name and role in place, and one tinted
 // list per section. Every member has the same kinds, Raphael too: tools, skills and commands, personality and
-// instructions, notifications (owner, 2026-11-09). Long texts are one line until pressed, and every change is a call the
+// instructions, notifications. Long texts are one line until pressed, and every change is a call the
 // panel and the old dialog already made.
 import { type Mock, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, MemberPatch, MembersList } from "./types";
@@ -101,7 +101,7 @@ describe("the page of a member", () => {
     expect(face.querySelector('.mb-face-pencil[aria-hidden="true"] svg.i')).not.toBeNull();
     expect($<HTMLInputElement>("#ms-name").value).toBe("日文老師");
     expect($<HTMLInputElement>("#ms-role").value).toBe("N2 嚴格版");
-    // The kinds stand in a column on the left, in the owner's order (owner, 2026-11-09); the first is shown, and only it.
+    // The kinds stand in a column on the left, in the owner's order; the first is shown, and only it.
     expect(kinds()).toEqual(["tools", "skills", "soul", "notify"]);
     expect($('[data-cat="tools"]').getAttribute("aria-current")).toBe("page");
     await cat("soul");
@@ -112,7 +112,7 @@ describe("the page of a member", () => {
     expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg, [data-cat="model"], [data-cat="voice"], [data-cat="general"], [data-slot="model"]')).toBeNull();
   });
 
-  test("Raphael has the same kinds as every member, and only his name and role are not typed", async () => {
+  test("Raphael has the same kinds as every member, and only its name and role are not typed", async () => {
     await open(0);
     expect(page.el.querySelector("#ms-name, #ms-role")).toBeNull();
     expect($(".ms-name").textContent).toBe("拉斐爾");
@@ -172,7 +172,6 @@ describe("the page of a member", () => {
     expect(host.update).toHaveBeenLastCalledWith(3, { cover: null });
   });
 
-  // Owner, 2026-11-09: 「上方圖片要跟 Notion 類似 要可以上下調整圖片位置」.
   test("a cover picture is shown where the owner put it, and 調整位置 moves it with 取消 and 儲存位置", async () => {
     list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, cover: { kind: "image" as const, url: "data:image/png;base64,AAAA", position: 30 } } : m) };
     await open();
@@ -201,7 +200,7 @@ describe("the page of a member", () => {
     await open();
     await cat("soul");
     expect($('[data-ms="edit"][data-field="personality"]').textContent).toContain("嚴厲但耐心");
-    // The row says every line of the words, as they are (owner, 2026-11-12), and the two are the same kind of row.
+    // The row says every line of the words, as they are, and the two are the same kind of row.
     const instructions = $('[data-ms="edit"][data-field="instructions"]');
     expect(instructions.querySelector(".ms-label")!.textContent).toBe("每天出 10 題\n第二行");
     expect([...page.el.querySelectorAll('[data-ms="edit"]')].map(row => row.className)).toEqual(["btn ms-open ms-value", "btn ms-open ms-value"]);
@@ -362,7 +361,6 @@ describe("the page of a member", () => {
 });
 
 describe("no memory", () => {
-  // Owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」.
   test("the page draws no memory in any kind, for a member or for Raphael, and reads none", async () => {
     for (const id of [3, 0]) {
       await open(id);
@@ -462,7 +460,6 @@ describe("skills and commands", () => {
 });
 
 describe("tools and notifications", () => {
-  // Owner, 2026-11-09: 「工具的部分都要放上 Icon 比較容易一眼就看出來我們開放甚麼工具給他」.
   test("the apps that are on are rows with their own mark and a switch, and turning one off from 「all」 lists the rest", async () => {
     await open();
     await cat("tools");
@@ -473,7 +470,7 @@ describe("tools and notifications", () => {
   });
 
   test("an app we draw no mark for shows the catalogue's picture of it, the one source every place draws from", async () => {
-    // Owner, 2026-11-15, of Outlook with a plug in a member's tools: 「不是說統一來源嗎? 為甚麼這邊還是沒有 outlook 的 icon」.
+    // Outlook shows its logo, never a plug, in a member's tools.
     const logo = "https://logos.composio.dev/api/outlook";
     api.membersToolChoices.mockResolvedValue({ tools: [], connections: [{ id: "composio:outlook", name: "Outlook", enabled: true, logo }] });
     await open();
@@ -499,7 +496,6 @@ describe("tools and notifications", () => {
     expect($("[data-k='ms-tools'] .ms-empty").textContent).toBe(t("memberSettings.noTools"));
   });
 
-  // Owner, 2026-11-09: 「我們正式版是不會有語音的…語音語通知可以把語言拿掉就好 通知留著」.
   test("notifications are one switch, and no member has a voice to choose", async () => {
     await open();
     await cat("notify");

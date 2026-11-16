@@ -1,4 +1,4 @@
-# Speaker capability parity (2026-11-04)
+# Speaker capability parity
 
 R-AG-PARITY-01..03 cover the shared tool/capability contract, private long-work lane,
 Raphael owner instructions, draft preference and movable coordination. Models,
@@ -37,9 +37,9 @@ look artifacts and authorized network, so it is SKIP here. Real provider/CLI beh
 video generation, native persistence, audio and OS hotkeys remain unverified.
 
 
-## Grouped details preference (2026-11-05)
+## Grouped details preference
 
 The draft preference is now inside the shared grouped resource card. The same
 speaker-draft-chief/member/profile scenes remain; the first two additionally assert
 that the switch shares the Memory/Skills/Commands/Voice list. See the
-[Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05) matrix.
+[Settings by purpose](settings-appearance.md#settings-by-purpose) matrix.

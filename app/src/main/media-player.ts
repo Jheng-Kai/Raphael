@@ -1,5 +1,4 @@
-// Our own players for a stored video or sound (owner, 2026-11-15: 「我看到你影片好像是用系統 default 的嗎？因為它旁邊是可以下載的。
-// 那我覺得不要用系統 default 的比較好，我們就直接自己增加一些 custom 的東西」). The browser draws no control of its own: no
+// Our own players for a stored video or sound. The browser draws no control of its own: no
 // download, picture-in-picture, casting or native menu; saving a file stays where the app offers it. A video plays and pauses
 // on its picture, on Space and on its button; it has a scrubber with what is loaded and what was played, its time, sound,
 // speed and the app's own full screen (the lightbox). A sound has the same controls in one compact row.
@@ -195,7 +194,7 @@ export function bindPlayer(player: HTMLElement): void {
       case "rate": {
         // The speeds open below the whole player (above it when there is no room), at the chip's side, so they never lie over
         // the player's own words: its time, its name. In the app's full screen the player is the window and has no room on
-        // either side, so they open from the controls' bar instead, above its scrubber (owner, 2026-11-15: they fell off the screen).
+        // either side, so they open from the controls' bar instead, above its scrubber, or they would fall off the screen.
         const beside = (): DOMRect => {
           const chip = act.getBoundingClientRect();
           const box = (player.closest(".media-lightbox") ? player.querySelector(".mp-bar") ?? player : player).getBoundingClientRect();

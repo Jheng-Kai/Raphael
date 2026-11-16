@@ -3,7 +3,7 @@ answer model (`agent_model`) when that is "".
 
 `look` shows the model the images (the owner's attachments, as `data:` URLs, or the addresses of
 images on the web) with the question, in one chat call of OpenRouter with image content parts, and
-gives back what the model says they show: data for the call that words Raphael's answer, never his
+gives back what the model says they show: data for the call that words Raphael's answer, never its
 words themselves. `read_file` shows it a PDF as a `file` content part, with OpenRouter's
 `file-parser` plugin (engine `mistral-ocr`), and gives back the document's text as the model reads
 it.
@@ -31,7 +31,10 @@ from .common import ServiceError
 
 logger = logging.getLogger(__name__)
 
-VISION_TIMEOUT_S = 40.0
+# What reads a file the owner handed over has 70 s in all (`agent.tools.ATTACHMENT_TIMEOUT_S`). At 40 s here, an image
+# read was cut off at exactly 40 s twice while the whole read still had half a minute, and the slowest that answered took
+# 37.6 s (measured); the model now has nearly all of it, and the caller's limit stays the one that ends a read.
+VISION_TIMEOUT_S = 65.0
 VIDEO_TIMEOUT_S = 90.0
 FILE_TIMEOUT_S = 60.0
 VISION_MAX_TOKENS = 1500
@@ -178,7 +181,7 @@ class Vision:
                 timeout_s,
             )
         except TimeoutError:
-            logger.warning("The vision model timed out")
+            logger.warning("The vision model timed out after %.0f s", timeout_s)
             raise ServiceError("timeout") from None
         except OpenRouterError as error:
             raise _failed(error) from None

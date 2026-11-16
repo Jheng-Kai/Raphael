@@ -125,7 +125,7 @@ test.each([
   ["ssh_unreachable", "desktop.health.ssh_unreachable", "desktop.health.localTerminal", "ssh studio-mini"],
   ["docker_missing", "desktop.health.docker_missing", "desktop.health.runHere", 'ssh -t studio-mini "curl -fsSL https://get.docker.com | sh"'],
   ["docker_stopped", "desktop.health.docker_stopped", "desktop.health.runHere", 'ssh studio-mini "open -a Docker"'],
-  ["docker_access", "desktop.health.docker_access", "desktop.health.runHere", 'ssh -t studio-mini "sudo usermod -aG docker jack2"'],
+  ["docker_access", "desktop.health.docker_access", "desktop.health.runHere", 'ssh -t studio-mini "sudo usermod -aG docker tester"'],
   ["architecture", "desktop.health.architecture", "desktop.health.runHere", 'ssh studio-mini "docker image rm raphael/cua-local-vm:driver-0.37.0-v4"'],
 ] as const)("a %s failure says what is missing and shows the one command that fixes it", (kind, said, lead, command) => {
   for (const locale of ["zh-TW", "en", "ja"] as const) {

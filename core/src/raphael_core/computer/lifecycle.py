@@ -59,6 +59,12 @@ async def maintain(vm, target, action, *, confirmed=False):
         raise VmError("bad_arguments")
     if action == "reset" and confirmed is not True:
         raise VmError("confirmation_required")
+    if action != "reset" and target.state_key not in vm.maintenance and vm.preparing_now(target):
+        # The computer is being started, built or made now, which is already a fresh start on the current image: a
+        # restart, update or repair pressed meanwhile joins it and answers with its state (the panel says it is being
+        # updated), never "busy" (R-COMP-UPDATE-01). A reset still waits for it: the confirmed deletion of a workspace is
+        # never silently dropped or done in the middle of a build.
+        return dict(vm.preparation.get(target.state_key) or {"state": "preparing", "ready": False})
     if target.state_key in vm.maintenance:
         raise VmError("busy")
     vm.maintenance[target.state_key] = asyncio.current_task()
@@ -137,7 +143,7 @@ def _disk_rows(output):
 
 async def disk_pressure(vm, target):
     """Read only, once per pressure episode, with a five-minute probe interval. The disk named is the one that is at
-    90 percent: the computer's own, or the one holding its workspace (owner, 2026-11-14: a PC whose C: was at 94 percent
+    90 percent: the computer's own, or the one holding its workspace (a PC whose C: was at 94 percent
     was told the computer's few hundred MiB of folders were what filled it)."""
     now = vm.clock()
     if now - vm.disk_checked.get(target.physical, float("-inf")) < 300:

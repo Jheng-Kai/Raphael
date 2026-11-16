@@ -1,5 +1,4 @@
-/** A member working at its computer shows in the conversation as its short messages and its quiet step label, nothing more
- *  (owner, 2026-11-11, after Grok Bot). Only what the owner must act on is drawn here: the card of a handoff (a sign-in, a
+/** A member working at its computer shows in the conversation as its short messages and its quiet step label, nothing more. Only what the owner must act on is drawn here: the card of a handoff (a sign-in, a
  *  password, a payment) with the live stream, and that card folded once it is settled. */
 import type { DesktopState } from "./desktop-viewer";
 import { t } from "./i18n";
@@ -30,8 +29,8 @@ export function desktopWorkText(work: DesktopWork): string {
   return work.tool in actions ? t(actions[work.tool as keyof typeof actions]) : t("desktop.working");
 }
 
-/** What the owner did with a handoff, once it is settled (owner, 2026-11-15: the card said 「完成」 in green and, folded open, the
- *  work's live state 「正在使用電腦」 while the member still worked). A settled result carries no status pill (R-CARD-15): the
+/** What the owner did with a handoff, once it is settled. The card does not say 「完成」 in green or, folded open, the
+ *  work's live state 「正在使用電腦」 while the member still works. A settled result carries no status pill (R-CARD-15): the
  *  one line says what the owner did, and the fold says it again in full. Neither tells how the member's work goes, which the
  *  conversation's own presence line says. The member's work stopped after the owner was asked only when the owner skipped it. */
 export function settledCardHTML(work: DesktopWork): string {

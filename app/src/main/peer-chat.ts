@@ -16,13 +16,14 @@ export interface PeerLine { key: string; from: number; at: number; text: string;
 
 const STATES = { queued: "handoff.queued", running: "handoff.running", waiting: "handoff.waiting", withheld: "handoff.withheld" } as const;
 const REASONS = { missing_artifact: "handoff.missingArtifact", artifact_changed: "handoff.changedArtifact", work_without_action: "handoff.noAction",
-  missing_terminal: "handoff.invalidFinal", dangling_mention: "handoff.invalidFinal", cancelled: "handoff.cancelled" } as const;
+  artifact_unreadable: "handoff.unreadableArtifact", missing_terminal: "handoff.invalidFinal", child_work_incomplete: "handoff.childWorkOpen",
+  cancelled: "handoff.cancelled" } as const;
 
 export const peerKey = (task: HandoffView): string => String(task.task_id ?? `x${task.work_turn_id}`);
 
 /**
  * Work a member handed to itself (the core's `own_work`), as a speaker in a group chat starts tool work: there is no
- * colleague on the other side, so it is never a conversation between two members (owner, 2026-11-09).
+ * colleague on the other side, so it is never a conversation between two members.
  */
 export const ownWork = (task: HandoffView): boolean => (task as HandoffView & { own_work?: boolean }).own_work === true;
 
@@ -88,8 +89,8 @@ export function peerChatHTML(host: number, tasks: readonly HandoffView[], people
 }
 
 /**
- * How long the two members may be quiet before their next exchange is another conversation (owner, 2026-11-15: every
- * exchange stuck together hid what each one was about; a daily routine's exchange is that day's alone).
+ * How long the two members may be quiet before their next exchange is another conversation (otherwise every
+ * exchange stuck together hides what each one was about; a daily routine's exchange is that day's alone).
  */
 export const PEER_SESSION_GAP_MS = 30 * 60_000;
 

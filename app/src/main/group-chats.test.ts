@@ -445,7 +445,7 @@ test("reply controls target a member message and can be cancelled",async()=>{
  expect((document.querySelector('.cmp-quote') as HTMLElement).hidden).toBe(true);
 });
 
-test("active exchanges expose stop, and Raphael's wrap-up is his ordinary message",async()=>{
+test("active exchanges expose stop, and Raphael's wrap-up is its ordinary message",async()=>{
  api.roomStop.mockResolvedValue({stopped:true});
  api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,text:'Alice owns testing',kind:'wrapup',created:1,status:'done'}],exchange:{state:'running',stop_requested:0}});
  await pane();
@@ -499,7 +499,7 @@ test("a hand-off line names its assignee and opens their conversation with the r
 });
 
 test("a member's own work is its own line that opens its conversation, and each pair of members has its own line",async()=>{
- // Owner, 2026-11-09: 「他是在跟我說話 但是這邊是兩個史萊姆在溝通才對」. Work a member handed itself is no exchange.
+ // Work a member handed itself is no exchange.
  const base={source_turn_id:5,member_name:'Alice',stage_id:'',mode:'work' as const,reason:null,created_at_ms:2,ready_at_ms:2,dispatch_policy:'immediate' as const,request:'',result:'',evidence:[]};
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:0,text:'Team, compare the sources.',created:1,status:'done',turn_id:5}],exchange:null,handoffs:[
   {...base,task_id:41,work_turn_id:61,member_id:1,from_member_id:1,own_work:true,state:'running'},

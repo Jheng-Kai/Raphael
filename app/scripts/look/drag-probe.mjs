@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * Reordering the sidebar as the owner does (owner, 2026-11-14: 「為什麼它只是調順序而已也會卡」, R-SIDE-03): a real pointer
+ * Reordering the sidebar as the owner does (R-SIDE-03): a real pointer
  * takes a member row or a folder, carries it over the list and lets go. What the owner feels is measured, not guessed:
  *
  *  - when the row stands where it was dropped (`orderMs`, from the drop), and whether it ever stood in another place on the way

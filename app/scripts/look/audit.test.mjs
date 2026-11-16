@@ -909,7 +909,7 @@ describe("rendered look checks", () => {
     // Two circles of one size, side by side in the middle: a primary as wide as its drawing is right here, since only the
     // welcome's pill fills its row.
     expect(audit().productRules).toEqual([]);
-    // One at each end of the row is the foot of 2026-11-11 afternoon that the owner sent back.
+    // One at each end of the row is the foot layout the rule rejects.
     back.getBoundingClientRect = () => ({ left: 50, top: 12, right: 98, bottom: 60, width: 48, height: 48 });
     primary.getBoundingClientRect = () => ({ left: 902, top: 12, right: 950, bottom: 60, width: 48, height: 48 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-37']);
@@ -955,7 +955,7 @@ describe("rendered look checks", () => {
       '<div class="cs-dialog" role="dialog"><button class="btn danger">移除</button></div>',
       '<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>',
       '<div class="composer"><button class="chip-x" aria-label="移除檔案"></button></div>',
-      '<section class="draft-panel"><button class="btn icon" aria-label="移除 紫苑"></button></section>',
+      '<section class="draft-panel"><button class="btn icon" aria-label="移除 小葵"></button></section>',
       '<button class="mp-star" aria-label="Remove from favourites: Luna"></button>',
       '<div class="row"><button class="btn">從最愛移除</button></div>',
       '<div class="row"><button class="btn">Clearly a longer label</button></div>',
@@ -1092,7 +1092,7 @@ describe("rendered look checks", () => {
   });
   it("rejects interface copy left in English in a Chinese window, allowing data and product names", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<textarea placeholder="Message 紫苑"></textarea><button aria-label="問拉斐爾">Google Calendar</button><p>Finance 已建立</p><a href="#">研究訪談摘要.pdf</a>';
+    window.document.body.innerHTML = '<textarea placeholder="Message 小葵"></textarea><button aria-label="問拉斐爾">Google Calendar</button><p>Finance 已建立</p><a href="#">研究訪談摘要.pdf</a>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     const result = { ...auditDocument(window.document, { width: 1120, height: 900 }, [], ["google", "calendar", "finance"]), runtimeErrors: [] };
     expect(result.mixedLanguage.map(item => item.word)).toEqual(["Message"]);
@@ -1332,6 +1332,62 @@ it("rejects divergent store add classes, row markup and card styling", () => {
     second.getBoundingClientRect = () => new browser.DOMRect(0, 0, 320, 64);
     expect(() => checkRendered("plugins-store-rows")).toThrow("fit inside their row");
   } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
+});
+
+it("rejects a Composio row that the dialog's edge cuts, or that sinks under its list (composio-foot)", () => {
+  const browser = new Window();
+  browser.document.body.innerHTML = '<div class="modal" style="overflow:hidden"><div class="cs-results" data-cs-scroll style="overflow-y:auto"><div data-cs-body>' +
+    '<div class="cs-card"></div><div class="cs-composio-setup"><span class="cs-composio-mark"></span><span>Add a key for more apps</span><button data-conn="configure-composio">Add</button></div></div></div></div>';
+  const doc = browser.document, box = (top, bottom) => ({ left: 0, right: 600, top, bottom, width: 600, height: bottom - top });
+  const scroller = doc.querySelector('[data-cs-scroll]'), modal = doc.querySelector('.modal'), row = doc.querySelector('.cs-composio-setup'), card = doc.querySelector('.cs-card');
+  const sentence = row.children[1], button = row.querySelector('button');
+  let rowBox = box(430, 480), lineBox = box(440, 456), cardBox = box(300, 360);
+  modal.getBoundingClientRect = () => box(50, 500); scroller.getBoundingClientRect = () => box(100, 500);
+  row.getBoundingClientRect = () => rowBox; card.getBoundingClientRect = () => cardBox;
+  button.getBoundingClientRect = () => box(445, 465); sentence.getBoundingClientRect = () => box(440, 470);
+  row.checkVisibility = () => true; button.checkVisibility = () => true;
+  browser.innerHeight = 900; browser.innerWidth = 1000;
+  browser.document.createRange = () => ({ selectNodeContents() {}, getClientRects: () => [lineBox] });
+  vi.stubGlobal('document', doc); vi.stubGlobal('window', browser); vi.stubGlobal('getComputedStyle', browser.getComputedStyle.bind(browser));
+  try {
+    expect(checkRendered("composio-foot").lines).toBe(1);
+    // The dialog's edge cuts through the second line of the sentence.
+    lineBox = box(480, 504);
+    expect(() => checkRendered("composio-foot")).toThrow("no line of the sentence is cut");
+    lineBox = box(440, 456); rowBox = box(430, 540);
+    expect(() => checkRendered("composio-foot")).toThrow("the whole row is inside the dialog's visible part");
+    rowBox = box(430, 480);
+    // The list's last row is under the row at the end of the list.
+    cardBox = box(440, 500);
+    expect(() => checkRendered("composio-foot")).toThrow("last row is above the Composio row");
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+});
+
+it("rejects a price broken inside a part that a line of its row could hold, and a short name cut by its price (price-parts)", () => {
+  const browser = new Window();
+  const parts = ['輸入 $2.00 / 輸出 $12 約每百萬字', '圖片輸出 $30 每百萬單位'];
+  browser.document.body.innerHTML = '<div class="mc-row" style="padding:0"><span class="mc-model-line"><strong>Gemini</strong></span><span class="mc-price">' +
+    `<span class="price-part">${parts[0]}</span> <span class="price-part">· ${parts[1]}</span></span></div>`;
+  const doc = browser.document, row = doc.querySelector('.mc-row'), price = doc.querySelector('.mc-price'), strong = doc.querySelector('strong');
+  price.checkVisibility = () => true; price.getBoundingClientRect = () => ({ width: 200, height: 40 });
+  Object.defineProperty(row, 'clientWidth', { value: 500 });
+  let lines = 1, natural = 200, nameFits = true;
+  // A range reports as many lines as the test says, and its width when nowrap is the part's own.
+  doc.createRange = () => ({ setStart() {}, setEnd() {}, getClientRects: () => Array.from({ length: lines }, (_, line) => ({ top: line * 16, bottom: line * 16 + 14, width: 80, height: 14 })), getBoundingClientRect: () => ({ width: natural }) });
+  Object.defineProperty(strong, 'clientWidth', { get: () => 50 }); Object.defineProperty(strong, 'scrollWidth', { get: () => nameFits ? 50 : 90 });
+  strong.checkVisibility = () => true; strong.getBoundingClientRect = () => ({ width: 50, height: 16 });
+  vi.stubGlobal('document', doc); vi.stubGlobal('window', browser); vi.stubGlobal('NodeFilter', browser.NodeFilter); vi.stubGlobal('getComputedStyle', browser.getComputedStyle.bind(browser));
+  try {
+    expect(checkRendered("price-parts")).toMatchObject({ prices: 1, parts: 2, wrapped: 0 });
+    // Every part on two lines while one line of the row is wide enough for it.
+    lines = 2;
+    expect(() => checkRendered("price-parts")).toThrow("is broken across lines though a line of its row holds");
+    // A part longer than the whole line may wrap.
+    natural = 900;
+    expect(checkRendered("price-parts").wrapped).toBe(2);
+    lines = 1; natural = 200; nameFits = false;
+    expect(() => checkRendered("price-parts")).toThrow("is cut by the price beside it");
+  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
 it("allows only the shared card quiet exit to be frameless while rejecting ordinary text actions", () => {

@@ -1,4 +1,4 @@
-// A subscription window nine-tenths used (owner, 2026-11-09, R-QUOTA-01): the core tells each window once
+// A subscription window nine-tenths used (R-QUOTA-01): the core tells each window once
 // (agent/quota.py) and the window says it in one toast: which subscription, what is left, when it resets. Words only:
 // which model answers stays the owner's choice (R-MODEL-02). A hidden window keeps the toast until the owner is back,
 // so the one notice is not spent while no one looks.

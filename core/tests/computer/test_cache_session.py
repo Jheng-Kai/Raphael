@@ -1,5 +1,4 @@
-"""Every model call of a run on the owner's desktop reads the prefix the call before it cached (owner, 2026-11-09,
-decisions 1 and 4): one name for the run's cache at its provider, kept for an hour, on every step."""
+"""Every model call of a run on the owner's desktop reads the prefix the call before it cached: one name for the run's cache at its provider, kept for an hour, on every step."""
 
 import asyncio
 import json

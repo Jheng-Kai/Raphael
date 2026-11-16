@@ -1,5 +1,5 @@
 """Why a member's reply in a group did not finish, in words: each failure the owner can act on has its own
-(owner, 2026-11-09). Live, a brain that had only run out of credits, or needed a sign-in, was "an error occurred"."""
+. Live, a brain that had only run out of credits, or needed a sign-in, was "an error occurred"."""
 
 import sqlite3
 from types import SimpleNamespace
@@ -18,7 +18,7 @@ from raphael_core.ui_languages import LANGUAGES
     ("rate_limit", "rate_limit"), ("cli_rate_limited", "rate_limit"),
     # A CLI signs in on the owner's computer; an API brain needs its sign-in or key in Settings.
     ("cli_login", "login"), ("cli_auth_expired", "login"),
-    # A sign-in that ran out and a CLI that is not on this computer are told from a sign-in that never was (owner, 2026-11-11).
+    # A sign-in that ran out and a CLI that is not on this computer are told from a sign-in that never was.
     ("cli_login_expired", "login_expired"), ("cli_missing", "not_installed"),
     ("auth_expired", "sign_in"), ("chatgpt_scope", "sign_in"), ("chatgpt_plan_unavailable", "sign_in"),
     # What asking again did not mend.

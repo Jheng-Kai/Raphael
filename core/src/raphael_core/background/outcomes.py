@@ -21,6 +21,31 @@ def named_files(text):
                 yield path
 
 
+def file_named_in(text, name):
+    """Whether `text` names the file `name`: its whole name, whatever it holds (spaces, Chinese or Japanese characters), and not the
+    end of a longer one. Prose in those languages has no spaces, so a name can stand right against the words around it."""
+    text, name = text.lower(), name.lower()
+    start = text.find(name) if name else -1
+    while start != -1:
+        before = text[start - 1] if start else " "
+        after = text[start + len(name):start + len(name) + 2] + "  "
+        longer = ((before.isascii() and (before.isalnum() or before in "_-."))
+                  or (after[0].isascii() and (after[0].isalnum() or after[0] == "_"))
+                  or (after[0] == "." and after[1].isascii() and after[1].isalnum()))
+        if not longer:
+            return True
+        start = text.find(name, start + 1)
+    return False
+
+
+def exists_unreadable(path, error):
+    """Whether `error`, raised on reading the file `path`, says it is there but cannot be read (a folder of that name, no
+    permission, held open by another program), and not that it is missing, too large or outside the folder it may be in."""
+    if isinstance(error, (FileNotFoundError, NotADirectoryError)):
+        return False
+    return path.exists() if isinstance(error, OSError) else path.is_dir()
+
+
 # A member names the files it made by the path they have inside its own computer: its folder or its team's shared folder.
 COMPUTER_PATH = re.compile(r"""/home/cua/(?:workspace|team)/[^\s"'`<>|?*]+""")
 

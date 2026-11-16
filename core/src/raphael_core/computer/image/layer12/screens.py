@@ -246,7 +246,7 @@ PANEL_OPTIONS = (('position', 'string', 'p=10;x=0;y=0'), ('position-locked', 'bo
                  ('length', 'uint', '1'), ('length-adjust', 'bool', 'true'), ('autohide-behavior', 'uint', '0'))
 LAUNCHERS = ('browser.desktop', 'files.desktop', 'terminal.desktop')
 # Beside the launchers, a button for each window of this screen, icons only as the launchers are: a window that was
-# minimized comes back from it (owner, 2026-11-14: he minimized his member's browser and could not find it again; the
+# minimized comes back from it (a minimized browser could not be found again: the
 # panel had no window list). Only this screen's windows, never grouped; a scroll or a middle click does nothing.
 TASKLIST_OPTIONS = (('show-labels', 'bool', 'false'), ('include-all-monitors', 'bool', 'false'),
                     ('include-all-workspaces', 'bool', 'false'), ('grouping', 'bool', 'false'), ('flat-buttons', 'bool', 'true'),
@@ -264,7 +264,7 @@ def panel_commands(count):
 
     The order is the order of dependence: what a panel will hold is defined before the panel names it, and the list of
     panels, which is what makes a panel exist, is written last. A panel that is announced first is a panel whose plugins
-    are written one process at a time behind it (measured 2026-11-14: a panel is 12 px wide until its launchers are
+    are written one process at a time behind it (measured: a panel is 12 px wide until its launchers are
     loaded, and a panel that finds a plugin id with no plugin behind it keeps nothing).
     """
     count = screen_count(count)
@@ -399,8 +399,7 @@ def configure_compositor():
 
     With a compositor the browser gives each window a 16 px shadow (10 above, 32 below) and drops it once maximized, and
     the window manager sizes a maximized window for the shadow it had when asked: a seat's browser window was maximized
-    to 1312x893, cut on three sides with the panel over its page, in 8 launches of 8 on one screen (2026-11-14, the owner's
-    picture of that day). Without one, the same maximize gave the screen above the panel exactly, 5 times of 5. It is
+    to 1312x893, cut on three sides with the panel over its page, in 8 launches of 8 on one screen. Without one, the same maximize gave the screen above the panel exactly, 5 times of 5. It is
     also less for a computer to draw for screens nobody sees through a compositor."""
     try:
         current = command(['xfconf-query', '-c', 'xfwm4', '-p', '/general/use_compositing']).strip()
@@ -581,7 +580,7 @@ def placement(row, properties, area):
     less the shadow the browser draws round itself (_GTK_FRAME_EXTENTS, the same order). `wmctrl -lG` gives a decorated
     window's place as its frame's plus twice the decoration (measured: a terminal whose frame is at 0,0 with 5, 5, 29, 5
     is listed at 10,58), and `wmctrl -e` places the frame: the move is said in that place. A maximized browser window that
-    kept its shadow is 1312x893, 16 px left of and 10 px above its screen (measured 2026-11-14); a window dragged half
+    kept its shadow is 1312x893, 16 px left of and 10 px above its screen (measured); a window dragged half
     onto another screen shows half on each."""
     if '_NET_WM_STATE_HIDDEN' in properties or '_NET_WM_STATE_FULLSCREEN' in properties:
         return None
@@ -681,7 +680,7 @@ def serve(count, rectangles):
                             command(['xfce4-panel', '-r'])
                 except (subprocess.SubprocessError, OSError):
                     pass  # A watch that cannot look or restart must not end the screens' views.
-            # A window that leaves its screen shows on the screen beside it and is cut on its own (owner, 2026-11-14).
+            # A window that leaves its screen shows on the screen beside it and is cut on its own.
             if ticks % WINDOW_WATCH_TICKS == 0:
                 try:
                     keep_windows_inside(rectangles, looks)

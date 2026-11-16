@@ -1,6 +1,6 @@
 """Local desktops as a PluginHub adapter, under the existing gate and snapshots."""
-# Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses/NOTICES.md.
 
+# Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import base64
@@ -30,6 +30,7 @@ from .takeover import TAKEOVER
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_view
 from . import file_tools
+from . import checkpoints as checkpoint_store
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
 from ..worker.computer_verification import meaningful_expectation
 
@@ -64,16 +65,15 @@ WAITING_FOR = with_ui_words({
 })
 
 
-# The line a member shows while Docker Desktop is being started for it (owner, 2026-11-11: 「理論上就算我沒有開 Docker，
-# 它也會自動自己打開才對」); one line per start, the wait itself polls silently.
+# The line a member shows while Docker Desktop is being started for it; one line per start, the wait itself polls silently.
 ENGINE_STARTING = with_ui_words({
     "zh-TW": "正在啟動 Docker Desktop 來準備電腦，大約需要一分鐘",
     "ja": "コンピューター用に Docker Desktop を起動しています。1分ほどかかります",
     "en": "Starting Docker Desktop for the computer; this takes about a minute",
 })
 
-# The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01, owner, 2026-11-14: the
-# computer wakes when a member decides a task needs it, or when he starts it, and never silently). One quiet line in the
+# The line a member's own tool call leaves when it starts a sleeping computer (R-COMP-WAKE-01: the
+# computer wakes when a member decides a task needs it, or when they start it, and never silently). One quiet line in the
 # conversation, naming the member and why; no toast, and never a reply bubble (R-TEXT-08). The status's `woken` is no
 # longer read by the app (R-PANEL-06).
 WOKE = {reason: with_ui_words(table) for reason, table in {
@@ -101,7 +101,7 @@ def _waking(member, tool):
 
 
 # The states a computer passes through on its way up, which a member's first call waits out instead of reporting
-# (owner, 2026-11-14: the first action after a wake failed nine times with these, and "try again" made it work with
+# (the first action after a wake failed with these, and "try again" made it work with
 # nothing changed): the engine not answering yet, the container not started or not healthy yet. What is not here is a
 # real answer and is reported at once: Docker not installed (`absent`), Docker Desktop that could not be launched
 # (`docker_start_failed`) or that did not come up in its two minutes (`docker_start_timeout`), no image, an image that
@@ -117,6 +117,26 @@ DISK_FILES_EN = ("The disk the computer's files are kept on ({p0}) is {p1}% full
 
 def _size_words(kib):
     return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
+
+
+# How long a turn waits for its first file checkpoint: past the guest's own end of the store's script.
+CHECKPOINT_WAIT_S = checkpoint_store.GUEST_SECONDS + 3
+
+# A computer call that broke in the core itself, not in the computer or the page: what the member is told.
+COMPUTER_FAULT = "computer_fault"
+COMPUTER_FAULT_NOTE = ("Raphael's own computer layer failed on this call ({kind}), not the computer or the page; whether "
+                       "anything was done is unknown. Read the current window or page before the next action.")
+
+
+def _raised_at(error):
+    """`file:line in function` of the innermost frame an exception was raised in: where, never what it said."""
+    frame = error.__traceback__
+    while frame is not None and frame.tb_next is not None:
+        frame = frame.tb_next
+    if frame is None:
+        return "an unknown place"
+    code = frame.tb_frame.f_code
+    return f"{PurePosixPath(code.co_filename.replace(chr(92), '/')).name}:{frame.tb_lineno} in {code.co_name}"
 
 
 ENGINE_FAILURES = {
@@ -158,9 +178,9 @@ def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, notic
 # instructions once (agent/persona.py), not on every tool.
 # The outward-action rule is said whole once, in the shared contract every prompt carries (agent/persona.py: no
 # per-action approval in the sandbox, nothing while the owner holds control, approve or the API equivalent for the
-# exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, as Claude Code keeps
-# a tool's description about the tool and its policy in the system prompt: the 350 characters it was, on 34 listed
-# tools, were about 1,560 tokens more in every request of a member with a computer (measured 2026-11-14).
+# exact act, stop when it is unavailable, denied or expired). On each tool it is this one sentence, so that
+# a tool's description is about the tool and its policy is in the system prompt: the 350 characters it was, on 34 listed
+# tools, were about 1,560 tokens more in every request of a member with a computer (measured).
 VM_CONTRACT = ("Outward acts (send a message, post, delete outside the workspace, pay) need the owner's yes for the exact "
                "act first (approve on CLI); sandbox success is not approval.")
 # Named: "files shared" beside vm_exec's "your own files are in /home/cua/workspace" read as two things.
@@ -252,7 +272,7 @@ class VmTools:
     # of it: another may take it, and the holder looks at it again when it comes back.
     lease_idle_s = 60.0
     read_progress_s = 10.0
-    # A browser's first window took 13 to 41 s on a loaded PC (2026-11-13), so the waits for it are minutes' worth of
+    # A browser's first window took 13 to 41 s on a loaded PC, so the waits for it are minutes' worth of
     # patience, not seconds': the member's call says it is still reading after `read_progress_s` and reports its elapsed
     # time. A window is polled with a growing pause, so a long wait is not a hundred driver calls.
     browser_window_wait_s = 60.0
@@ -570,10 +590,9 @@ class VmTools:
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        # True once the member's own computer has a tool catalog. The snapshot then leaves out the owner's-desktop
-        # `computer` tool, so that two tools called computer never leave the choice of machine to the model. Without a
-        # catalog (computer tools off, no Docker on this PC) a member simply has no computer: only a quick question
-        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01, PR #78).
+        # True once the member's own computer has a tool catalog. Without one (computer tools off, no Docker on this PC)
+        # a member simply has no computer: only a quick question shows anything on the owner's screen, and an ordinary
+        # turn never falls back to it (R-PC-01, R-PC-06).
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
@@ -645,7 +664,8 @@ class VmTools:
             if notice:
                 notice.cancel()
                 await asyncio.gather(notice, return_exceptions=True)
-        if reading and result.kind not in NOTICES:
+        # A failure says why it failed; the time it took is never all it says (a bare "Elapsed" was read as its reason).
+        if reading and result.kind not in NOTICES and (result.ok or result.text):
             elapsed = round(time.monotonic() - began, 2)
             prefix, _, tail = result.text.rpartition("\n")
             try:
@@ -704,15 +724,17 @@ class VmTools:
             if ticket in self.checkpointed:
                 return
             self.checkpointed.add(ticket)
-            failures = getattr(self.vm, "checkpoint_failures", None)
-            if failures is None:
-                self.vm.checkpoint_failures = failures = {}
+            began = time.monotonic()
             try:
-                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
-                failures.pop(target.state_key, None)
+                # The guest ends the store's script itself (`GUEST_SECONDS`); this waits a little longer, so that the
+                # store's own end, with its partial checkpoint written, is what comes back.
+                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), CHECKPOINT_WAIT_S)
             except Exception as error:
-                failures[target.state_key] = True
-                logger.warning("File checkpoint skipped: %s", type(error).__name__)
+                # Without it this run's changes have no record of their own and its undo covers nothing: which kind
+                # (the store took too long, or could not be read) and after how long is written down, never a path.
+                kind = str(error) if isinstance(error, VmError) else type(error).__name__
+                logger.warning("File checkpoint skipped: %s after %.1f s (%s)", kind, time.monotonic() - began,
+                               "a command" if command is not None else "a file tool")
 
     def _observe_page(self, target, page, *, remember=True):
         from urllib.parse import urlsplit
@@ -1133,9 +1155,13 @@ class VmTools:
             self.vm.invalidate(target)
             result = PluginResult(False, "connection_error")
             return result
-        except Exception:
+        except Exception as error:
+            # Nothing the computer said: a fault of this layer, told as one to the member and the owner rather than as a
+            # cause unknown. Its type and where it was raised are written down (never its message, which can hold what
+            # the screen showed).
             self.vm.invalidate(target)
-            result = PluginResult(False, "error")
+            logger.warning("Computer tool %s failed in the core: %s at %s", tool.name, type(error).__name__, _raised_at(error))
+            result = PluginResult(False, COMPUTER_FAULT, COMPUTER_FAULT_NOTE.format(kind=type(error).__name__))
             return result
         finally:
             if self.logins and result.kind:
@@ -1305,7 +1331,7 @@ class VmTools:
             selected = tabs[0]
         else:
             # The page goes to the tab the owner sees. The driver cannot say which one that is among the browser's own pages
-            # (a new tab page), and its first tab was taken, which could be one behind the shown one (2026-11-14).
+            # (a new tab page), and its first tab was taken, which could be one behind the shown one.
             listing = None if shown_tab(tabs) else await self._tab_listing(target, window)
             selected = shown_tab(tabs, listing)
             if selected is None and listing is not None:
@@ -1578,8 +1604,8 @@ class VmTools:
         found = [row for row in own if row.get("app_name", "").lower() in BROWSER_APPS]
         if found:
             window = min(found, key=lambda row: row["window_id"])
-            # A window the owner minimized is still listed, and a member went on working in it where nobody could see
-            # (2026-11-14): it comes back to the screen first. The driver says so of a window it lists.
+            # A window the owner minimized is still listed, and a member went on working in it where nobody could see:
+            # it comes back to the screen first. The driver says so of a window it lists.
             if window.get("is_on_screen") is False:
                 await self.vm.restore_window(target, window["window_id"])
             return window
@@ -1651,7 +1677,7 @@ class VmTools:
         window = None
         if own and name == "get_browser_state" and not args.get("window_id") and (
                 "target_id" not in args or (target.key, args["target_id"]) not in self.page_windows):
-            # What real members sent at a seat (2026-11-12). The driver's reply to browser_prepare says the next call
+            # What real members sent at a seat. The driver's reply to browser_prepare says the next call
             # is get_browser_state, and a member then names the browser's process, or nothing; and a CLI turn that is
             # started again when the computer's catalog changes has only a cut record of its last reply, and names
             # ids it never had ("2"). Each was told its window was not on its screen and gave up. One browser serves

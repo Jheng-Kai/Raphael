@@ -13,13 +13,13 @@ const asked = more => [click(more), wait(item), check("confirm-menu-label"), cli
 const confirmed = more => [...asked(more), click(item), waitGone("#app-popover")];
 const usageKey = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-act="key-menu"]')];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
-// Raphael's Telegram is in his panel.
+// Raphael's Telegram is in its panel.
 const raphaelBots = [member(0), { action: "open-details" }, wait('.mb-panel-suggest [data-msg-kind="telegram"] [data-msg="expand"]')];
 const pairedUser = [...raphaelBots, click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), click('[data-msg="user-menu"]'), wait('#app-popover [data-pick="remove"]')];
 
 export default [
   scene("context-menu-member", "A right click on a member's row opens the menu of its ⋯ at the pointer", rightClicked('.mb-col [data-member-item="2"]', [column])),
-  scene("context-menu-conversation", "A right click on one of Raphael's conversations in his details opens its rename and delete menu", rightClicked(".mb-det .conversation-row:has([data-conversation-more])", [member(0), { action: "open-details" }])),
+  scene("context-menu-conversation", "A right click on one of Raphael's conversations in its details opens its rename and delete menu", rightClicked(".mb-det .conversation-row:has([data-conversation-more])", [member(0), { action: "open-details" }])),
   scene("context-menu-routine", "A direct routine row opens it to read without another menu", [...details, click(".mb-det .mb-rt"), wait(".rv-dialog"), check("level-routine")]),
   scene("context-menu-connection", "A right click on a custom server's header opens the menu of its ⋯: test, edit and delete", rightClicked(".cs-page .cs-head", [
     ...settings("connections"), click('[data-conn="connected"]'), click('[data-conn="open"][data-id="notes"]'), wait(".cs-page .cs-head"),

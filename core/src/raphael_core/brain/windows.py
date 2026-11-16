@@ -1,14 +1,13 @@
 """How much of a model's window a prompt may take: the one place that says it, for a fresh native session's first message
 (agent/cli/context.py), a room's transcript (members/rooms.py), a memory pass and a fold (memory/). Length is never an error
-(owner, 2026-11-09): what a prompt carries follows the model's window, whole items newest first.
+: what a prompt carries follows the model's window, whole items newest first.
 """
 
 DEFAULT_CONTEXT_TOKENS = 64000
 # The window of a CLI's models before one has reported its own (`context_window`): Claude Code reports 200K tokens
 # for its models, or 1M for the long-context ones, so the smaller is a safe start. Other CLIs start from the default.
 KNOWN_CONTEXT_TOKENS = {"claude": 200_000}
-# How full a native session may get before it is given up for a fresh one (owner, 2026-11-09: at 80%, as
-# OpenMausBot's context-budget.ts; it was 75%). The measure is the last call's size, not a run's sum
+# How full a native session may get before it is given up for a fresh one (80%). The measure is the last call's size, not a run's sum
 # (`context_tokens`), so the fifth left is real room for the turn's own tool work.
 CONTEXT_HEADROOM = .80
 # How much of the window a fresh session's first message may take at most; the rest is the turn's own work and the next

@@ -45,13 +45,13 @@ import languageOverlay from "./language-overlay.mjs";
 import apps from "./apps.mjs";
 import connectApps from "./connect-apps.mjs";
 import contextMenu from "./context-menu.mjs";
-import ownerRound from "./owner-round.mjs";
-import ownerRound3 from "./owner-round3.mjs";
-import ownerRound10 from "./owner-round10.mjs";
-import ownerRound9 from "./owner-round9.mjs";
-import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
+import voiceAndDetails from "./voice-and-details.mjs";
+import cancelAndDesktopConfirm from "./cancel-and-desktop-confirm.mjs";
+import conversationAndStableControls from "./conversation-and-stable-controls.mjs";
+import longMessages from "./long-messages.mjs";
+import { withStandingChecks, noNaming } from "./standing-checks.mjs";
 
-export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+export const scenes = withStandingChecks([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...voiceAndDetails, ...cancelAndDesktopConfirm, ...longMessages, ...conversationAndStableControls, noNaming]);
 scenes.push(...colleagues);
 scenes.push(...memberStore);
 scenes.push(...mediaData);
@@ -96,7 +96,7 @@ export const FLOAT_CARD_SCENES = new Set(['profile', 'appearance', 'models', 'di
   'template-preview', 'template-review-pages', 'template-export-review', 'details-routine-view', 'room-rename', 'sidebar-owner-crop', 'connections-command', 'connections-edit', 'automations-detail-routine', 'automations-create-button', 'member-template-gallery', 'missing-provider-repair', 'missing-search-repair']);
 for (const scene of scenes) if (FLOAT_CARD_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-cards" });
 for (const scene of scenes) if (FLOAT_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "float-surface" });
-// Three layers (owner, 2026-11-14): outside the dialog the window under the scrim, the dialog and its nav, then the cards on it, each lighter than the one outside it.
+// Three layers: outside the dialog the window under the scrim, the dialog and its nav, then the cards on it, each lighter than the one outside it.
 // Settings (a pane with its groups) and 連結應用程式 (its list, its connected list and an app's page with its boxes) read the computed colours of the three layers.
 export const DIALOG_LAYER_SCENES = new Set(['profile', 'appearance', 'models', 'usage', 'safety', 'connect-apps', 'connect-apps-connected', 'connect-app-oauth', 'connect-app-connected']);
 for (const scene of scenes) if (DIALOG_LAYER_SCENES.has(scene.name)) scene.steps.push({ action: "check", name: "dialog-layers" });

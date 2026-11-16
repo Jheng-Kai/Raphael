@@ -7,7 +7,7 @@ const checks = {
   "raphael-details": "details-pointer-focus",
   "plugins-installed": "settings-alignment", "plugins-store": "settings-alignment",
 };
-export function withOwnerRound4(scenes) {
+export function withStandingChecks(scenes) {
   return scenes.map(original => ({...original, steps: [
     ...original.steps.flatMap(step => original.name === "details" && step.action === "icon-interactions"
       ? [check("details-pointer-focus"), step] : [step]),
@@ -19,7 +19,7 @@ export function withOwnerRound4(scenes) {
     ...(original.name === "member-conversation-sections" ? [check("details-alignment")] : []),
     ...(["details", "raphael-details", "details-routines"].includes(original.name) ? [check("details-sheet")] : []),
     ...(["profile", "dictation", "appearance", "skins", "models", "usage"].includes(original.name) ? [check("settings-concise")] : []),
-    ...(original.name === "models" ? [check("models-responsive")] : []),
+    ...(original.name === "models" ? [check("models-responsive"), check("price-parts")] : []),
     ...(original.name === "dictation-overview" ? [check("compact-action")] : []),
     ...(["chat", "details", "details-closed", "member-text", "raphael-details"].includes(original.name) ? [check("conversation-header"), check("details-alignment")] : []),
   ]}));

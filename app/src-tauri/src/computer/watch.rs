@@ -367,7 +367,7 @@ pub mod hook {
             || source_state != i64::from(kCGEventSourceStateHIDSystemState)
     }
 
-    // The event types are the framework's constants, named as Apple names them.
+    // The event types are the framework's constants, under the framework's own names.
     #[allow(non_upper_case_globals)]
     unsafe extern "C" fn callback(
         _proxy: CGEventTapProxy,

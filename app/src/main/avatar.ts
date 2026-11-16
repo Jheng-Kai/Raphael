@@ -1,6 +1,6 @@
-// Raphael's face in the main window. By default it is his emblem, the still pictures of the
+// Raphael's face in the main window. By default it is its emblem, the still pictures of the
 // bottom-right corner (app/public/brand/app-emblem-{light,dark}-{64,128}.webp, one for each theme,
-// and the turning loop app-emblem-{light,dark}-loop.webp while he thinks or listens). The person may
+// and the turning loop app-emblem-{light,dark}-loop.webp while it thinks or listens). The person may
 // choose a picture of their own instead (Settings › 拉斐爾 › 頭像): the app keeps a copy in its local
 // folder and hands the page its bytes as a data URL (`avatar_get`), never a path. The picture is
 // shown in a circle, cut as the person chose in the crop dialog (`AvatarCrop`).
@@ -27,6 +27,24 @@ let texture: "waiting" | "ready" | "missing" = "waiting";
 let drawable: boolean | undefined;
 const canDraw = (): boolean => drawable ??= typeof document !== "undefined" && !!document.createElement("canvas").getContext?.("2d");
 
+/**
+ * The window moved to a screen of another scale, or the page was zoomed: the pixel ratio changed, so every face is drawn again
+ * for it. A still drawn for the old ratio would be resampled to its box, which is what blurs it (R-UI-161). The ratio's media
+ * query says so; a window resized by the move says so too where the query stays silent (a headless browser's emulated ratio).
+ */
+let ratioSeen = 0;
+function pixelRatioMoved(): void {
+  const ratio = window.devicePixelRatio || 1;
+  if (ratio === ratioSeen) return;
+  ratioSeen = ratio;
+  notify();
+}
+function watchPixelRatio(): void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  ratioSeen ||= window.devicePixelRatio || 1;
+  window.matchMedia(`(resolution: ${ratioSeen}dppx)`)?.addEventListener?.("change", () => { pixelRatioMoved(); watchPixelRatio(); }, { once: true });
+}
+
 /** The rune texture arrived (or could not be read): every face is drawn again. */
 export function emblemTextureArrived(ok = true): void {
   texture = ok ? "ready" : "missing";
@@ -34,11 +52,18 @@ export function emblemTextureArrived(ok = true): void {
   notify();
 }
 
+/**
+ * How many device pixels a still `px` CSS pixels square has at `ratio`: its box's, rounded. A ratio is often a float a hair off
+ * its value (1.5000000596 for 125% times 120%), where rounding up made a 48 px box a 49 px bitmap that the screen then
+ * shrank, blurring it (R-UI-161).
+ */
+export const stillSide = (px: number, ratio: number): number => Math.min(512, Math.max(1, Math.round(px * ratio)));
+
 /** The emblem standing still, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
 function emblemStill(px: number): string | null {
   if (!glyphTextureReady()) return null;
   const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const side = Math.min(512, Math.ceil(px * ratio));
+  const side = stillSide(px, ratio);
   const key = String(side);
   if (stills.has(key)) return stills.get(key)!;
   let url: string | null = null;
@@ -47,10 +72,14 @@ function emblemStill(px: number): string | null {
     canvas.width = canvas.height = side;
     const ctx = canvas.getContext("2d");
     if (ctx) {
+      // The rune texture is many times larger than the face: averaged down ("high"), its letters stay a ring of letters; sampled
+      // ("low", the default) they break into scattered dots, which is what made the composer's emblem look muddy (R-UI-161).
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.translate(side / 2, side / 2);
       // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
       // word break stands at one o'clock.
-      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent" });
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent", small: px < 48 });
       url = canvas.toDataURL("image/png");
     }
   } catch {
@@ -112,7 +141,7 @@ const notify = (): void => {
 // Under `prefers-reduced-motion: reduce` nothing of Raphael moves: the turning loop is the still
 // of the same size, and a picture of the person's own that may move (a GIF or a WebP, which CSS
 // cannot stop) is shown as its first frame, drawn once onto a canvas. The preference is followed
-// while the window is open: every place that shows him draws again when it changes.
+// while the window is open: every place that shows it draws again when it changes.
 
 const motionQuery = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
 let reduced = motionQuery?.matches ?? false;
@@ -121,6 +150,8 @@ motionQuery?.addEventListener?.("change", (e) => {
   reduced = e.matches;
   notify();
 });
+watchPixelRatio();
+if (typeof window !== "undefined") window.addEventListener?.("resize", pixelRatioMoved);
 
 /** The kinds of picture that may move. */
 const MAY_MOVE = /^data:image\/(gif|webp);/;
@@ -171,7 +202,7 @@ function shownUrl(url: string, picture = false): string | null {
   return null;
 }
 
-/** The person's picture, or null while Raphael is his emblem. */
+/** The person's picture, or null while Raphael is its emblem. */
 export const currentAvatar = (): CustomAvatar | null => custom;
 
 /** Changes the picture everywhere: every listener draws again. */
@@ -186,7 +217,7 @@ export function onAvatarChange(listener: () => void): () => void {
   return () => void listeners.delete(listener);
 }
 
-/** Reads the picture from the app; without one, or when it cannot be read, Raphael is his emblem. */
+/** Reads the picture from the app; without one, or when it cannot be read, Raphael is its emblem. */
 export async function loadAvatar(get: () => Promise<unknown>): Promise<void> {
   try {
     setAvatar(readAvatar(await get()));
@@ -207,7 +238,7 @@ export interface AvatarOptions {
   cls?: string;
   /** The picture of the person's own, if any (by default the one in force now). */
   avatar?: CustomAvatar | null;
-  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line (owner, 2026-11-11). */
+  /** A picture that may move (a GIF, a WebP) shows its first frame: Raphael's face stands still wherever it is not the member list or the thinking line. */
   still?: boolean;
 }
 
@@ -228,7 +259,7 @@ export function avatarHTML(o: AvatarOptions): string {
   }
   const drawn = emblemStill(o.size);
   if (drawn) {
-    // While he thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
+    // While it thinks or listens the drawn emblem turns slowly, as the corner's ring does (still under reduced motion).
     const turn = o.loop && !reduced ? " em-turn" : "";
     return `<span class="${cls}" ${box} aria-hidden="true"><img class="em${turn}" src="${drawn}" alt="" draggable="false"></span>`;
   }

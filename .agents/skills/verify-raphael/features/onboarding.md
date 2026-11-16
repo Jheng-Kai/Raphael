@@ -2,57 +2,52 @@
 
 ## Sub-features
 
-While the guide is up the window is the card itself (owner, 2026-11-07, as Typeless's): guide-window.ts
-sizes it to 1080 x 720 under the control strip (owner, 2026-11-09: 「導覽的頁面有一點點太小」; on a screen
+While the guide is up the window is the card itself: guide-window.ts
+sizes it to 1080 x 720 under the control strip (on a screen
 whose free area is smaller it takes that area less a 32 px edge, never below the app's 720 x 480), centres it,
 turns off resizing and maximizing (no maximize
 button, no resize edges, a double-click on the strip does nothing) and gives back the earlier size, place
 and maximized state when the guide ends; `guide-window-fixed` in the onboarding scene checks the requests.
 The welcome's language is a quiet button at the card's top left (globe, the language's own name, chevron; its
 name is its aria-label) that opens the language picker (language-picker.ts: each language in its own script, a
-search field once there are more than eight; owner, 2026-11-08).
+search field once there are more than eight).
 
 A welcome, then three steps that are each a choice, then entry into the usable app with first-run
-state saved. There are no practice lessons, no microphone step and no completion screen (owner,
-2026-11-07). Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
-the window, with no progress bar and no side, as Grok Bot's first run (owner, 2026-11-07): every
-step is one calm centred column, a title (three of the team's own characters float by it, aria-hidden,
-others on every step and in other places — Gobta, Shion, Ranga; Shuna, Diablo, Benimaru; Milim, Souei,
-Rigurd — owner 2026-11-08; gone below 640px wide), the choice, and under it two round buttons
+state saved. There are no practice lessons, no microphone step and no completion screen. Everything sits in one card of a designed size (at most 1080 x 720) in the middle of
+the window, with no progress bar and no side: every
+step is one calm centred column, a title (three of the team's slimes float by it, aria-hidden,
+others on every step and in other places; gone below 640px wide), the choice, and under it two round buttons
 together in the middle of the card: the way back at the left and the way on at the right, each a 48 px circle
 holding one filled triangle that points where it goes (the same drawing, turned round for the way back), 12 px
 apart. Neither has words: each is named for assistive tech and in its tooltip, 上一步 and 下一步 (開始使用, or 完成
 on a rerun, on the last step, whose way on holds a check instead of a triangle). The way on is a circle of the
 solid accent; the way back is on a quiet grey, one step lighter under the pointer, takes the app's focus ring
 from the keyboard and comes before the primary in the tab order; neither has an edge. The guide's own sizes are
-the one exception to the shared button height, kept by the owner on 2026-11-08. On 2026-11-11 the owner sent
-back, in turn: the two stacked pills, because the stack took room the AI tools and services steps need
-(「導覽這個 button…上下堆疊會造成我們畫面有些空間比較緊，像是選擇 AI 工具，還有連接你的服務這邊會比較需要空間。
-感覺左右放，或者左右放那個箭頭之類的，或許會比較好」); a round arrow beside one wide pill in the middle
-(「這個不是這樣做，我要的是左右 button」); and a worded pill at each end of the row (「改成集中在中間這邊好不好？
-然後 icon 改一下，可以改特別一點點，不一定要寫字，can 用兩個三角形之類的」). The pair stands in the same place on
+the one exception to the shared button height. The pair is neither two stacked pills (the stack takes room the AI tools
+and services steps need), nor a round arrow beside one wide pill, nor a worded pill at each end of the row: it is two
+triangle buttons together in the middle, without words. The pair stands in the same place on
 every step and never stacks, and the height a second pill used belongs to the step's content. The welcome keeps
 its one wide pill (360 px) in the middle and nothing else; a status in a tile
-wraps inside it in every language. There is no back arrow at the top: the welcome has the pill alone. Owner, 2026-11-14: 「第一頁應該只會有開始就好了。
-它那個叉叉現在是因為我已經導覽過了，所以才會有叉叉，那基本上一般的使用者不會看到這個」. The guide is the first run's only:
-Settings has no 導覽 entry any more (owner, 2026-11-14, once he had checked the first run: 「我剛剛確認過啟動都沒有問題，所以你可以把設定裡面的導覽拿掉 不用留著了」);
+wraps inside it in every language. There is no back arrow at the top: the welcome has the pill alone, with nothing but 開始 on the first page; a close mark shows only for someone who has been
+through the guide before, never on a first run. The guide is the first run's only:
+Settings has no 導覽 entry any more;
 `settings-owner` checks that General has no way back into it.
 
 0. **Welcome** (`onboarding`, check `onboarding-welcome`): Raphael's emblem (the voice screen's
-   canvas renderer, appearing as on the desktop), his name as one wordmark for every language,
+   canvas renderer, appearing as on the desktop), its name as one wordmark for every language,
    「智慧之王ラファエル」 (`public/brand/wordmark.svg` through a CSS mask in the text colour; a reader
-   hears `onboarding.welcomeTitle`; owner, 2026-11-08), and under it what the team can do typed
-   instead of a slogan (owner, 2026-11-08): an ask appears a letter at a time with a caret, Raphael's
-   answer in his manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
+   hears `onboarding.welcomeTitle`), and under it what the team can do typed
+   instead of a slogan: an ask appears a letter at a time with a caret, Raphael's
+   answer in its manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
-1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): a store (owner, 2026-11-08: every
+1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): a store (every
    tool equal, never ordered by what one owner set up). A search box (typos forgiven, R-FIND-01),
    then 熱門, the same for everyone (`POPULAR_TOOLS`: ChatGPT, Claude Code, Codex, OpenRouter,
    Anthropic, Google Gemini), then every other tool under its kind (subscription accounts, official,
    gateways and clouds, this computer), each kind by name. The two store steps use a 900 px column.
-   Every tile is one row, as a store's app is (owner, 2026-11-09: the tiles were too tall, an email
-   broke over two lines and OpenRouter's heavy mark sat unevenly): the mark at 20 px in a 36 px soft
+   Every tile is one row, as a store's app is (a tile is never tall, an email never
+   breaks over two lines and OpenRouter's heavy mark does not sit unevenly): the mark at 20 px in a 36 px soft
    square, the name over one quiet line that ends in … instead of wrapping (ChatGPT signed in shows
    only its account), and on the right its one button, then the check of a ready tile (black edge in
    light, lifted fill in dark; the check carries the word a reader hears). Three tiles to a row where
@@ -62,8 +57,8 @@ Settings has no 導覽 entry any more (owner, 2026-11-14, once he had checked th
    (`createCliBrains`); the key uses the same masked field, paste button and core call.
 2. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
    `onboarding-composio-key`, `onboarding-composio-saved`, `onboarding-services-n8n`): a search box,
-   then, when Composio has no key, Composio's card across the step (owner, 2026-11-09: 「要讓他們先連上
-   Composio，然後如果沒有的話，才只顯示…沒有 Composio 也可以顯示的 connectors」): 連接 opens its
+   then, when Composio has no key, Composio's card across the step (Composio is connected first, and only
+   without it are the connectors that need no Composio shown): 連接 opens its
    masked key field with 取消 and 貼上 in the card, and its line says where the project key is; a
    refused key is told beside it in the store's own words, a saved one reads the store again with
    Composio's apps and the card goes. Under it 「不用 Composio 也能連接」 (熱門 once Composio is set up)
@@ -73,13 +68,13 @@ Settings has no 導覽 entry any more (owner, 2026-11-14, once he had checked th
    an app that wants its own key or developer app has 加入, which opens the store's own form
    (connection-setup.ts); n8n, which runs on the owner's own server (connections.ts `ownServerApps`),
    has 加入, which opens its address and access token across its tile with 取消 and 連接, and Enter
-   adds it through `integrations.add` with the store's header (owner, 2026-11-09: 「搜尋 n8n 也找不到」).
+   adds it through `integrations.add` with the store's header.
    A tile that only signs in is one whole button with 登入 on its right; a connected one has the check.
    A waiting tile keeps its words inside it in every language and its 取消 stops the wait at once, even
-   when the login never answers; lists the core does not answer within 15 s turn into 重試 (owner,
-   2026-11-08: the step spun on after a cancelled Slack sign-in).
+   when the login never answers; lists the core does not answer within 15 s turn into 重試 (a cancelled
+   sign-in never leaves the step spinning).
 3. **Abilities** (`onboarding-abilities`, `onboarding-abilities-choice`): the shared abilities
-   of Settings > Tools (web search, reading web pages, images and PDFs; no speech since 2026-11-10) as the very rows and
+   of Settings > Tools (web search, reading web pages, images and PDFs; no speech) as the very rows and
    dialogs of that pane (`createServices`): each says which service it uses, keeps its switch and
    opens, inside the card, the choice of service with its key, and for images the model picker. That choice dims the whole
    window like every dialog, the caption strip included (R-UI-141); the window buttons stay on top of the dim.
@@ -148,7 +143,7 @@ on a rerun, and the way back from the first step returns to it.
 UI hand-off also runs these named scenes at 1920x1080 in both themes, as required by the shared
 guardian hand-off gate.
 
-## No conversation setup (owner round 4)
+## No conversation setup
 
 Raphael is usable immediately, including fresh installs and cleared conversations. The frontend
 no longer uses profile_ready to hide the ordinary empty thread/composer. The naming/personality/

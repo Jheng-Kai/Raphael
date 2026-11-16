@@ -210,6 +210,50 @@ def previous_args(target, owner, password, layer="4"):
     return result
 
 
+def tiny_dockerfile(layer=None):
+    """A throwaway image as small as one can be, for the image update check: two files on nothing (no download, no
+    shell), the first the same in every build and the second its layer. With `layer` it carries the computer's labels
+    at that layer, as the computer's own image does; without, none (an image of the repository that is not ours)."""
+    lines = ["FROM scratch", "COPY unchanged.txt /unchanged.txt", "COPY layer.txt /layer.txt"]
+    if layer is not None:
+        labels = {**vm.IMAGE_LABELS, f"{vm.LABEL}.layer": str(layer)}
+        lines.append("LABEL " + " ".join(f'{key}="{value}"' for key, value in labels.items()))
+    return "\n".join(lines) + "\n"
+
+
+def build_command(tag, context, previous=None):
+    """The product's own build command (`vm.build_args`) for another tag than the computer's."""
+    saved = vm.IMAGE
+    vm.IMAGE = tag
+    try:
+        return vm.build_args(context, previous)
+    finally:
+        vm.IMAGE = saved
+
+
+def cached_steps(log):
+    """The instructions BuildKit's plain progress says were taken from a cache, by their text."""
+    names, cached = {}, set()
+    for line in log.splitlines():
+        line = line.strip()
+        if match := re.fullmatch(r"#(\d+) \[[^\]]*\] (.+)", line):
+            names.setdefault(match.group(1), match.group(2).strip())
+        elif match := re.fullmatch(r"#(\d+) CACHED", line):
+            cached.add(match.group(1))
+    return {names[number] for number in cached if number in names}
+
+
+def inline_cache_record(archive):
+    """Whether the image `docker save` wrote to `archive` carries BuildKit's inline cache record in its configuration:
+    what makes it a cache source for the next build. Only the two named members are read, nothing is extracted."""
+    import tarfile
+    with tarfile.open(archive) as tar:
+        manifest = json.load(tar.extractfile("manifest.json"))
+        config = json.load(tar.extractfile(manifest[0]["Config"]))
+    record = config.get("moby.buildkit.cache.v0")
+    return isinstance(record, str) and bool(record)
+
+
 def colour_share(pixels, colour):
     return sum(all(abs(a - b) <= 40 for a, b in zip(pixel, colour)) for pixel in pixels) / len(pixels)
 
@@ -327,6 +371,8 @@ class IsolatedDocker:
         self.runner, self.owner, self.tag = runner, owner, tag
         self.label = f"{vm.LABEL}.owner={owner}"
         self.prefix = f"raphael-computer-{owner}-"
+        # Set only while the image update check runs: its throwaway repository and its own folder.
+        self.update_repository, self.update_folder = None, None
         self.after_start = None
         self.created = []
         self.carry_homes = {}
@@ -341,8 +387,41 @@ class IsolatedDocker:
                 f"Refused container {name}: expected owner {self.owner}")
         return data
 
+    def image_update_command(self, args):
+        """The image update check's own commands (`Acceptance.image_update`), only while it runs: builds, lists,
+        inspections, a save and removals of tags of its throwaway repository alone, from its own folder; one stopped
+        container of its own; and two read-only reads of which image every container on the engine was made from (the
+        product's own test before it removes an image)."""
+        repository, folder = self.update_repository, self.update_folder
+        if not repository or not folder:
+            return False
+        ours = lambda tag: isinstance(tag, str) and bool(re.fullmatch(re.escape(repository) + r":[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag))
+        inside = lambda path: Path(path).resolve().is_relative_to(folder)
+        if args[:4] == ["build", "--progress=plain", "--build-arg", "BUILDKIT_INLINE_CACHE=1"]:
+            rest = args[4:]
+            if len(rest) == 5:
+                if rest[0] != "--cache-from" or not ours(rest[1]):
+                    return False
+                rest = rest[2:]
+            return len(rest) == 3 and rest[0] == "--tag" and ours(rest[1]) and inside(rest[2])
+        if args in (["image", "ls", "--filter", f"label={vm.LABEL}=1", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"],
+                    ["image", "ls", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"],
+                    ["image", "ls", "--no-trunc", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}"],
+                    ["ps", "-a", "-q", "--no-trunc"]):
+            return True
+        if args[:2] in (["image", "inspect"], ["image", "rm"]) and len(args) > 2 and all(ours(tag) for tag in args[2:]):
+            return args[1] == "inspect" or len(args) == 3
+        if args[:4] == ["container", "inspect", "--format", "{{.Image}}"] and len(args) > 4:
+            return all(re.fullmatch(r"[0-9a-f]{64}", identifier) for identifier in args[4:])
+        if args[:2] == ["save", "-o"] and len(args) == 4:
+            return inside(args[2]) and ours(args[3])
+        return (len(args) == 7 and args[:2] == ["create", "--name"] and args[2].startswith(self.prefix)
+                and args[3:5] == ["--label", self.label] and ours(args[5]) and args[6] == "/unchanged.txt")
+
     async def authorize(self, args):
         require(bool(args), "Expected a Docker command")
+        if self.image_update_command(args):
+            return
         command = args[0]
         if command == "run":
             if args[1:6] == ['--rm', '--network', 'none', '--user', '0']:
@@ -640,7 +719,7 @@ class Acceptance:
     async def quiet(self, target):
         rectangles, _ = vm.screen_grid(target.screens)
         # A panel is 12 px wide until its launchers are loaded, and was once seen so for twenty seconds and more (seat 2 of
-        # six, 2026-11-13): give a booting computer a minute, say how long, and name what each panel holds when it fails.
+        # six): give a booting computer a minute, say how long, and name what each panel holds when it fails.
         began = time.monotonic()
         while True:
             panels, bad = [], []
@@ -693,7 +772,7 @@ class Acceptance:
     async def browser_mark(self, target):
         """The desktop says which browser it opens, and each of its own ways to a browser opens that one.
 
-        An owner, of the panel of his members' computer (2026-11-13): 「但看起來底下不是顯示 Chrome ㄟ?」. Measured then: the
+        The panel of the members' computer did not show Chrome. Measured then: the
         launcher wore a globe named "Browser" over Google Chrome; XFCE's "Web Browser" named a helper that does not
         exist and asked which application to prefer; the menu's own Chrome entry and x-www-browser could not start
         (they make a sandbox, and nothing in a computer can); the menu's Chromium and Firefox were second browsers."""
@@ -1186,6 +1265,166 @@ class Acceptance:
             return f"layer {layer} shared computer: incompatible -> ready on the new image with six screens, workspace file kept"
         await self.check(f"{name} start", exercise)
 
+    async def image_update(self):
+        """A new image layer on the real engine (R-COMP-IMAGE-01, R-COMP-IMAGE-02, R-COMP-UPDATE-01), with throwaway images
+        of two files (`tiny_dockerfile`) in a repository of this run's own, at the layers around the current one: an older
+        one a stopped container of this run uses, the previous one, a newer one, and one without the computer's labels.
+        The product's own build command makes them; its own code then names the cache source, prepares the update (its
+        preparation, its build command, its state; only the base's pull and the computer's start are left out, since this
+        image has neither), takes a maintenance press during that build, and removes the older tags. The computer's own
+        image is not built twice: a previous layer's real computer made again on the current image is the "previous layer"
+        checks. That a cache source alone gives the unchanged steps once the engine has lost its own cache is not proved
+        here, since that would mean clearing the owner's build cache."""
+        token = secrets.token_hex(6)
+        repository = f"raphael-acceptance-{token}/cua-local-vm"
+        current = int(vm.IMAGE_LABELS[f"{vm.LABEL}.layer"])
+        older, previous, newer = current - 2, current - 1, current + 1
+        tags = {layer: f"{repository}:driver-{vm.VERSION}-v{layer}" for layer in (older, previous, current, newer)}
+        unlabelled = f"{repository}:unlabelled"
+        folder = (self.root / "image-update").resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        holder = f"{self.docker.prefix}image-update-{token}"
+        target = self.machine.target(9501)
+        saved = vm.IMAGE, vm.REPOSITORY, self.machine.build, self.machine._start, self.machine._make_room
+        self.docker.update_repository, self.docker.update_folder = repository, folder
+        logs, seen = {}, {}
+
+        def context(layer):
+            path = folder / (f"layer-{layer}" if layer is not None else "unlabelled")
+            path.mkdir(exist_ok=True)
+            (path / "Dockerfile").write_text(tiny_dockerfile(layer), encoding="utf-8")
+            (path / "unchanged.txt").write_text(f"raphael acceptance {token}\n", encoding="utf-8")
+            (path / "layer.txt").write_text(f"layer {layer}\n", encoding="utf-8")
+            return path
+
+        async def images_elsewhere():
+            listed = await self.command(["image", "ls", "--no-trunc", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}"], timeout=60)
+            return {line.strip() for line in listed.splitlines() if line.strip() and not line.split()[-1].startswith(repository + ":")}
+
+        async def ours():
+            listed = await self.command(["image", "ls", "--filter", f"reference={repository}", "--format", "{{.Repository}}:{{.Tag}}"], timeout=60)
+            return {line.strip() for line in listed.splitlines() if line.strip()}
+
+        async def fixtures():
+            seen["before"] = await images_elsewhere()
+            for tag, layer in ((tags[older], older), (tags[previous], previous), (tags[newer], newer), (unlabelled, None)):
+                result = await self.docker(build_command(tag, context(layer)), timeout=300)
+                require(result.code == 0, f"Expected the build of {tag} exit 0, observed {result.code}: {result.stderr.strip()[-1000:]}")
+            await self.command(["create", "--name", holder, "--label", self.docker.label, tags[older], "/unchanged.txt"], timeout=60)
+            seen["holder"] = True
+            return (f"Built layers {older}, {previous}, {newer} and an unlabelled tag in {repository} with the product's build "
+                    f"command; a stopped container uses layer {older}")
+
+        async def record():
+            archive = folder / "previous.tar"
+            await self.command(["save", "-o", str(archive), tags[previous]], timeout=120)
+            require(inline_cache_record(archive), "Expected the product's build to write BuildKit's inline cache record into the image")
+            return f"Layer {previous}, built by the product's command, carries BuildKit's inline cache record"
+
+        async def source():
+            vm.IMAGE, vm.REPOSITORY = tags[current], repository
+            found = await self.machine.cache_source(target)
+            require(found == tags[previous], f"Expected the cache source {tags[previous]}, observed {found!r}")
+            return f"The product names {found} as the cache source, over the older, the newer and the unlabelled tags"
+
+        async def press():
+            building, pressed = asyncio.Event(), asyncio.Event()
+
+            async def build(target=None, *, progress=None, previous=None):
+                # The product's build of this image's folder, without its pull of the base (`FROM scratch` has none). It
+                # starts at once; the preparation stays in its build until the press and the panel's read are done,
+                # however fast the engine is with two files.
+                seen["previous"] = previous
+                seen["build"] = asyncio.create_task(self.docker(build_command(tags[current], context(current), previous),
+                                                                timeout=300, **({"progress": progress} if progress else {})))
+                building.set()
+                await asyncio.wait_for(pressed.wait(), 120)
+                result = await seen["build"]
+                logs["current"] = result.stdout + "\n" + result.stderr
+                if result.code or not await self.machine.image(target):
+                    raise vm.VmError("build_failed")
+
+            async def started(target):
+                return {"state": "running", "ready": True}  # this image has no desktop: no computer is made from it
+
+            async def no_room(target):
+                return None  # and so no other computer is stopped to make room for one
+
+            self.machine.build, self.machine._start, self.machine._make_room = build, started, no_room
+            self.machine.launch(target)
+            try:
+                await asyncio.wait_for(building.wait(), 120)
+                answer = await lifecycle.maintain(self.machine, target, "restart")
+                during = not seen["build"].done()
+                viewer = DesktopViewer(self.machine)
+                try:
+                    status = await viewer.status({"member_id": 9501})
+                finally:
+                    await viewer.aclose()
+            finally:
+                pressed.set()
+            await asyncio.wait_for(self.machine.preparing[target.state_key], 300)
+            require(seen["previous"] == tags[previous], f"Expected the update to build from {tags[previous]}, observed {seen['previous']!r}")
+            require(answer.get("state") == "building" and answer.get("update") is True,
+                    f"Expected the press to join the update and answer its state, observed {answer}")
+            require(status.get("state") == "building" and status.get("update") is True,
+                    f"Expected the panel's status to say the computer is being updated, observed {status}")
+            require(target.state_key not in self.machine.preparation and not self.machine.updating
+                    and not self.machine.maintenance, "Expected the preparation and the update state to end with the build")
+            return (f"A restart pressed {'while the engine built' if during else 'as the build began'} answered "
+                    f"{answer['state']} with update; the panel said the same; the preparation ended ready")
+
+        async def cache():
+            log = logs.get("current", "")
+            cached = cached_steps(log)
+            require("COPY unchanged.txt /unchanged.txt" in cached, f"Expected the unchanged step taken from a cache, observed {sorted(cached)}")
+            require("COPY layer.txt /layer.txt" not in cached, "Expected the changed step built again")
+            imported = f"importing cache manifest from {tags[previous]}" in log
+            return (f"The unchanged step was CACHED and the changed one built; the log "
+                    f"{'names' if imported else 'does not name'} the import from {tags[previous]} (the engine's own cache "
+                    "also held that step)")
+
+        async def removal():
+            removed = await self.machine.remove_old_images(target)
+            require(removed == [tags[previous]], f"Expected only layer {previous} removed, observed {removed}")
+            left = await ours()
+            require(left == {tags[older], tags[current], tags[newer], unlabelled},
+                    f"Expected the used, current, newer and unlabelled tags kept, observed {sorted(left)}")
+            require(await images_elsewhere() == seen["before"], "Expected every image outside this run's repository untouched")
+            return (f"Removed {tags[previous]}; kept layer {older} (a stopped container uses it), the current, the newer "
+                    "and the unlabelled tags; every other image on the engine is as it was")
+
+        steps = (("fixtures", fixtures), ("record", record), ("cache source", source),
+                 ("press during the build", press), ("cached steps", cache), ("old tags", removal))
+        try:
+            for index, (name, step) in enumerate(steps):
+                if not await self.check(f"image update {name}", step):
+                    for later, _ in steps[index + 1:]:
+                        self.record(f"image update {later}", "skipped", f"image update {name} failed")
+                    break
+        finally:
+            vm.IMAGE, vm.REPOSITORY, self.machine.build, self.machine._start, self.machine._make_room = saved
+            pending = self.machine.preparing.get(target.state_key)
+            if pending is not None and not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+            if seen.get("build") is not None and not seen["build"].done():
+                await asyncio.gather(seen["build"], return_exceptions=True)
+            self.machine.invalidate(target)
+            try:
+                if self.keep:
+                    print(f"Kept image update tags in {repository} and container {holder}", flush=True)
+                else:
+                    async def tidy():
+                        if seen.get("holder"):
+                            await self.command(["rm", "-f", holder], timeout=90)
+                        for tag in sorted(await ours()):
+                            await self.command(["image", "rm", tag], timeout=90)
+                        return f"Removed {repository} and its container"
+                    await self.check("image update cleanup", tidy)
+            finally:
+                self.docker.update_repository = self.docker.update_folder = None
+
     async def form(self, hub, target, member, *, peer=None):
         """Type synthetic values through the same page helper used by all saved fills."""
         from ..agent.plugins import tool_key
@@ -1318,8 +1557,8 @@ class Acceptance:
             await self.text(target, ["python3", "-c", FORM_STOP, self.machine.owner])
 
     async def seat_windows(self, tool, target, member):
-        """A seat is a desktop a person can use (owner, 2026-11-14, watching a member's screen: the members never open tabs,
-        a page he minimized could not be found again, the window showed data:text/html,<title>raphael-seat-...</title>, and
+        """A seat is a desktop a person can use (the members never open tabs,
+        a page that was minimized could not be found again, the window showed data:text/html,<title>raphael-seat-...</title>, and
         the window stood larger than the screen with the panel over its page). The seat's window fills its screen above the
         panel and shows no marker; a member's tool opens a site in a new tab and brings a tab back to the front; the
         window, minimized, comes back from the panel's button for it with its page; the Browser icon gives that window a new
@@ -1873,8 +2112,8 @@ class Acceptance:
 
             async def persons_browser():
                 """The members' browser is one a person signs in with: Google's own Chrome where there is one, a page
-                is not told it is automated, and nothing warns over the window. An owner signing in to Google for his
-                members met "This browser or app may not be secure", a yellow bar and "Restore pages?" (2026-11-13)."""
+                is not told it is automated, and nothing warns over the window. An owner signing in to Google for their
+                members met "This browser or app may not be secure", a yellow bar and "Restore pages?"."""
                 target = targets[members[0]]
                 profile = "/home/cua/workspace/.browser-profiles/driver/main"
                 line = (await self.text(target, ["pgrep", "-af", f"^[^ ]+ --remote-debugging-port=0 --user-data-dir={profile}"])).splitlines()[0]
@@ -1935,7 +2174,7 @@ class Acceptance:
                           "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
                 require(managed == wanted, f"Expected the members' browser policy {wanted}, observed {managed}")
                 # The panel of every screen names this browser under its own mark: an owner looked at a globe named
-                # "Browser" (2026-11-13).
+                # "Browser".
                 named, _ = await self.browser_named(target)
                 version = (await self.text(target, [binary, "--version"])).strip()
                 return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
@@ -2033,8 +2272,8 @@ class Acceptance:
             async def owner_input():
                 """The owner's own mouse and keys, sent as the app's page sends them (the session's relay path, on the
                 connection it made while watching), reach the seat the owner holds; before the hold and after the
-                handback they reach nothing. An owner was told "you are in control" with nothing getting in
-                (2026-11-13): until then every check of a hold looked only at what the members were refused."""
+                handback they reach nothing. An owner was told "you are in control" with nothing getting in:
+                until then every check of a hold looked only at what the members were refused."""
                 second = members[1]
                 target = targets[second]
                 rect = vm.screen_grid(target.screens)[0][target.screen - 1]
@@ -2097,7 +2336,7 @@ class Acceptance:
                     while not await made(mark):
                         require(time.monotonic() < until, "Expected the holding owner's typed line to run in the seat's terminal")
                         await asyncio.sleep(.2)
-                    # What needs Shift, typed as a person types it (2026-11-14: a script's bare "@" never reached a seat).
+                    # What needs Shift, typed as a person types it (a script's bare "@" never reached a seat).
                     await asyncio.to_thread(type_line, f"echo 'Aa@?#%&(<' > {mark}-shift")
                     until = time.monotonic() + 5
                     while not await made(mark + "-shift"):
@@ -2154,7 +2393,7 @@ class Acceptance:
                         picture = base64.b64decode(event['images'][0]['data'])
                         require(struct.unpack('>II', picture[16:24]) == (1280, 900), 'Expected seat-size teaching PNG')
                     require(not wide_calls and recording.relay is None, f'Expected zero canvas observations, observed {wide_calls}')
-                    # Measured 2026-11-12 on a Windows host: per-bot's relay capture 0.23 s; this path 1.03 s with the
+                    # Measured on a Windows host: per-bot's relay capture 0.23 s; this path 1.03 s with the
                     # per-pixel picture and 0.22 s with Rfb.frame(). A second per press is a recorder nobody can type in.
                     require(warm < .7, f'Expected an owner press observed within 0.7 s, observed {warm:.3f} s')
                     return ('Seat 2 recording: no seat 1 window ids, 1280x900 PNG, zero canvas-wide driver calls, core input/tick; '
@@ -2384,6 +2623,7 @@ class Acceptance:
                 if shared:
                     await self.check("shared computer", self.shared)
                 await self.previous()
+                await self.image_update()
         except (KeyboardInterrupt, asyncio.CancelledError):
             self.record("interrupted", "failed", "Interrupted; cleaning this run's resources")
         except Exception as error:

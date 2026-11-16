@@ -1,6 +1,5 @@
 """Durable FIFO admission. Started work is never replayed.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 Raphael deliberately has no queue limit or epochs.
 """
 
@@ -79,18 +78,35 @@ class AgentInbox:
                 (outcome, self.now_ms(), turn_id),
             )
 
-    def requeue(self, turn_id):
+    def requeue(self, turn_id, *, front=False):
+        """A message handed to running work goes back to waiting. `front` puts it before every message queued in its
+        conversation: it was said before them, and the work it was meant for ended without reading it."""
         with self.conn:
-            changed = self.conn.execute("UPDATE agent_inbox SET state='queued',boot_id=NULL WHERE turn_id=? AND state='steering'", (turn_id,))
-            if changed.rowcount:
-                self.conn.execute("UPDATE agent_turns SET status='queued',route='answer' WHERE id=?", (turn_id,))
+            self._requeue(turn_id, front)
+
+    def _requeue(self, turn_id, front):
+        row = self.get(turn_id)
+        if not row or row['state'] != 'steering':
+            return
+        seq = row['seq']
+        if front:
+            first = self.conn.execute(
+                "SELECT MIN(seq) FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued'",
+                (row['member_id'], row['conversation_id']),
+            ).fetchone()[0]
+            if first is not None and first <= seq:
+                seq = first - 1
+        self.conn.execute("UPDATE agent_inbox SET state='queued',boot_id=NULL,seq=? WHERE turn_id=? AND state='steering'", (seq, turn_id))
+        self.conn.execute("UPDATE agent_turns SET status='queued',route='answer' WHERE id=?", (turn_id,))
 
     def recover(self):
         with self.conn:
             self.conn.execute("UPDATE agent_turns SET status='expired' WHERE id IN (SELECT turn_id FROM agent_inbox WHERE state='started')")
             self.conn.execute("UPDATE agent_inbox SET state='terminal',outcome='lost',settled_at_ms=? WHERE state='started'", (self.now_ms(),))
-            self.conn.execute("UPDATE agent_turns SET status='queued',route='answer' WHERE id IN (SELECT turn_id FROM agent_inbox WHERE state='steering')")
-            self.conn.execute("UPDATE agent_inbox SET state='queued',boot_id=NULL WHERE state='steering'")
+            # Handed to work of a process that is gone, and never read by its model (a read one was settled as it was read):
+            # each goes back once, to the front of its conversation, in the order it was said.
+            for row in self.conn.execute("SELECT turn_id FROM agent_inbox WHERE state='steering' ORDER BY seq DESC").fetchall():
+                self._requeue(row['turn_id'], True)
 
     def scopes(self):
         return [tuple(row) for row in self.conn.execute("SELECT DISTINCT member_id,conversation_id FROM agent_inbox WHERE state='queued'")]

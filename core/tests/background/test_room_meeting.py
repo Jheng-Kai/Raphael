@@ -243,7 +243,7 @@ async def test_cli_members_choose_silence_on_their_own_brain(meeting,monkeypatch
         observed.append(loop)
         loop._queue.put_nowait(Outcome('done',final='(pass)'))
     monkeypatch.setattr(CliLoop,'_work',choose)
-    # Raphael, the room's default responder, passes on thanks; Alice then reads that in a speech turn of her own.
+    # Raphael, the room's default responder, passes on thanks; Alice then reads that in a speech turn of its own.
     rig.client.replies.append(report('(pass)'))
     await rooms._send({'room_id':room['id'],'text':'Thanks','request_id':'quiet'})
     await until(lambda:rooms._exchanges.latest(room['id'])['state'] in ('done','stopped'))

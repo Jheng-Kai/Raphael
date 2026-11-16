@@ -1,6 +1,6 @@
 """Owner-private management is found with find_tools and called with use_tool; it is never listed.
 
-The list stays the same whatever the owner asks (owner, 2026-11-09, decision 2): the request's words
+The list stays the same whatever the owner asks: the request's words
 choose what find_tools returns, never what the model is listed."""
 
 import json

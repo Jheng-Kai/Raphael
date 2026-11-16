@@ -30,6 +30,7 @@ import { emblemTextureArrived, loadAvatar } from "./avatar";
 import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
+import { installLinkOpener } from "./link-opener";
 import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
@@ -150,6 +151,8 @@ async function start(): Promise<void> {
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
+  // Every link opens in the owner's browser, wherever it stands.
+  installLinkOpener();
   // A title that only repeats the words under it never shows.
   dropEchoTitles(document);
   prefetchEmojiWhenIdle();
@@ -203,8 +206,7 @@ watchChipRows(document.body);
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
       // Settings and Connect apps read ahead once the first view is shown and answered, one read at a time: the core
-      // answers on one loop, so a read ahead at start-up keeps the owner waiting for the page in front of them
-      // (owner, 2026-11-10 and 2026-11-11). The time since launch plays no part: a slow core start used to let it pass.
+      // answers on one loop, so a read ahead at start-up keeps the owner waiting for the page in front of them. The time since launch plays no part: a slow core start used to let it pass.
       void optionalRead(() => settings.preload());
     } catch {
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
@@ -260,8 +262,7 @@ watchChipRows(document.body);
   }
 
   /**
-   * What the mouse's side buttons and Alt+Left / Alt+Right walk through: every view the person went into (owner,
-   * 2026-11-14), noted after each press, after each `go` and before each step; a step shows a place again and records
+   * What the mouse's side buttons and Alt+Left / Alt+Right walk through: every view the person went into, noted after each press, after each `go` and before each step; a step shows a place again and records
    * nothing.
    */
   const navigation = new Navigation({

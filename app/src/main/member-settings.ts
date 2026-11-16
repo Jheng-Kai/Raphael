@@ -4,13 +4,12 @@
 // across the cover's lower edge, the name and the role in place. Under them the settings are kinds in a column on the left,
 // as Settings' own, and only the chosen kind is shown, as
 // compact sections, each a name over one tinted list of rows. Every member has the same kinds, Raphael
-// too: tools, skills and commands, personality and instructions, notifications (owner, 2026-11-09). There is no memory
-// here, nor anywhere in the app (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後
-// 管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」): the core keeps it, the member
+// too: tools, skills and commands, personality and instructions, notifications. There is no memory
+// here, nor anywhere in the app: the core keeps it, the member
 // corrects it when told. The model is chosen at the composer alone, and members have no voice. What the panel beside it
 // already shows (routines, messaging) is not here. The personality and the instructions are one kind of thing, the words the
 // owner gives the member about how to be and what to do, so each is one quiet row of its words, whole, with a pencil: a press
-// turns the row into a field in place (owner, 2026-11-12). A skill opens in a view of its own; no row has a text button where
+// turns the row into a field in place. A skill opens in a view of its own; no row has a text button where
 // an icon says it.
 import "./member-panel.css";
 import "./member-settings.css";
@@ -62,7 +61,7 @@ type Field = "personality" | "instructions";
 type Loaded<T> = T | "loading" | "failed";
 interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean; logo?: string }[] }
 
-/** The kinds of settings in the page's left column, in the owner's order, the same for every member (owner, 2026-11-09). */
+/** The kinds of settings in the page's left column, in the owner's order, the same for every member. */
 type Category = "tools" | "skills" | "soul" | "notify";
 const CATEGORIES: readonly { id: Category; icon: IconName; label: MessageKey }[] = [
   { id: "tools", icon: "plug", label: "settings.paneTools" },
@@ -92,7 +91,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   el.hidden = true;
   el.tabIndex = -1;
   el.dataset.memberSettings = "";
-  // The way back stays at the page's top left, on the cover and over a view's heading (owner, 2026-11-11).
+  // The way back stays at the page's top left, on the cover and over a view's heading.
   el.innerHTML =
     `<div class="ms-bar">${iconButton("left", t("chooser.back"), ' data-ms="back" data-k="ms-back" data-nav-back', "ms-back")}</div>` +
     `<div class="ms-scroll"><div class="ms-cover"></div><div class="ms-body"><div class="ms-id"></div><div class="ms-main"></div></div></div>`;
@@ -104,7 +103,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   let view: View = { kind: "main" };
   let category: Category = CATEGORIES[0].id;
-  /** The cover picture being moved, as Notion's Reposition: where it was, and where it is now. */
+  /** The cover picture being moved: where it was, and where it is now. */
   let reposition: { from: number; at: number } | null = null;
   /** The long fields that are open to be typed in: closed, each is a row of its words. */
   const editing = new Set<Field>();
@@ -154,7 +153,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   function idHTML(member: Member): string {
     // A press on the face opens the picker (slimes, 生成) at once, as the panel's does; under the pointer a pencil shows on it.
     const face = `<button type="button" class="btn mb-face-edit ms-face" data-ms="avatar" data-k="ms-face" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t("members.changeAvatar"))}">${faceHTML(member, 96)}<span class="mb-face-pencil" aria-hidden="true">${ico("pencil")}</span></button>`;
-    // Raphael's name is not the owner's to change here, nor has he a role.
+    // Raphael's name is not the owner's to change here, nor has it a role.
     if (member.id === RAPHAEL_ID) return face + `<b class="ms-name ms-static">${esc(member.name)}</b>`;
     return face +
       `<input class="mb-edit ms-name" id="ms-name" data-member="${member.id}" type="text" maxlength="${NAME_MAX}" value="${esc(member.name)}" aria-label="${esc(t("members.name"))}" autocomplete="off" spellcheck="false">` +
@@ -210,7 +209,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   /**
    * The apps the owner connected, each with its own mark so what the member may use is seen at a glance, and a switch: each
-   * member has its own list (owner, 2026-11-09: 「工具的部分都要放上 Icon…可以個別開放我們已經連結好的 connectors」). Under
+   * member has its own list. Under
    * them, how it acts with mail and Slack.
    */
   function toolsHTML(member: Member): string {
@@ -251,7 +250,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   /**
    * The cover: its pattern or picture, and at its lower right the round button that changes it. While a picture is moved
-   * (Notion's Reposition) the pointer drags it up and down, and the button gives way to 取消 and 儲存位置.
+   * the pointer drags it up and down, and the button gives way to 取消 and 儲存位置.
    */
   function coverHTML(member: Member): string {
     if (member.cover?.kind !== "image") return iconButton("image", t("memberSettings.cover"), ' data-ms="cover" data-k="ms-cover" aria-haspopup="menu" aria-expanded="false"', "ms-cover-btn");
@@ -498,7 +497,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   async function saveField(input: HTMLInputElement | HTMLTextAreaElement): Promise<void> {
     const member = host.list()?.members.find(item => item.id === Number(input.dataset.member)) ?? (host.member().id === Number(input.dataset.member) ? host.member() : null);
     if (!member) return;
-    // Raphael's name and role are not the owner's to type; his personality and instructions are, as everyone's.
+    // Raphael's name and role are not the owner's to type; its personality and instructions are, as everyone's.
     if (member.id === RAPHAEL_ID && (input.id === "ms-name" || input.id === "ms-role")) return;
     if (input.id === "ms-name") {
       const value = cleanName(input.value);

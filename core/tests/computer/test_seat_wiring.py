@@ -754,7 +754,7 @@ async def test_the_desktops_own_windows_never_keep_a_screen_from_a_new_holder(sh
 
 
 async def test_a_seated_members_window_is_never_a_leftover_of_the_screen_beside_it(shared_vm):
-    # Seen in the real app (2026-11-12): member A opened its browser, member B was then given the screen beside it,
+    # Seen in the real app: member A opened its browser, member B was then given the screen beside it,
     # and A's screen showed only the wallpaper. Whatever touched the free screen was closed, and a browser's frame
     # reaches 16 px past its own screen's edge.
     from raphael_core.computer.seat_view import wmctrl_windows

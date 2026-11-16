@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test } from "vitest";
 import { handoffGroupHTML } from "./handoff-line";
-import { setLocale } from "./i18n";
+import { catalogs, LOCALES, setLocale, t } from "./i18n";
 import { openPeerChat, peerLines, peerTasks, type PeerPeople } from "./peer-chat";
 import type { HandoffView } from "./types";
 
@@ -107,4 +107,29 @@ test("Esc closes it, an answer that arrives redraws it, and leaving the conversa
   const again = openPeerChat(column, line, () => all, people)!;
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(again.el.isConnected).toBe(false);
+});
+
+test("each ending the core gives has its own line in every language, and one nothing gives has none", () => {
+  const ENDINGS = { artifact_unreadable: "handoff.unreadableArtifact", child_work_incomplete: "handoff.childWorkOpen", missing_artifact: "handoff.missingArtifact",
+    artifact_changed: "handoff.changedArtifact", work_without_action: "handoff.noAction", missing_terminal: "handoff.invalidFinal" } as const;
+  const states = (reason: string): string => peerLines([task(1, { mode: "work", state: "failed", result: "", reason })])[1]!.state!;
+  for (const locale of LOCALES) {
+    setLocale(locale.id);
+    for (const [reason, key] of Object.entries(ENDINGS)) {
+      const line = catalogs[locale.id][key];
+      expect(states(reason), `${locale.id} ${reason}`).toBe(`${t("handoff.failed")} · ${line}`);
+      if (locale.id !== "en") expect(line, `${locale.id} ${key} is not English`).not.toBe(catalogs.en[key]);
+    }
+    // A reason the app has no line for stands on the state alone, never on the code.
+    expect(states("dangling_mention")).toBe(t("handoff.failed"));
+    expect(states("something_else")).toBe(t("handoff.failed"));
+  }
+});
+
+test("a member that said it was finished while work it handed on was open says so, in words a first-time user can read", () => {
+  setLocale("en");
+  expect(peerLines([task(1, { mode: "work", state: "failed", result: "", reason: "child_work_incomplete" })])[1]!.state)
+    .toBe("Incomplete · Stopped while work it handed on was still running");
+  expect(peerLines([task(2, { mode: "work", state: "failed", result: "", reason: "artifact_unreadable" })])[1]!.state)
+    .toBe("Incomplete · The file is there but cannot be opened");
 });

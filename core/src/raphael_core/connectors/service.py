@@ -40,6 +40,8 @@ CATALOG_FILE = "connectors-catalog.json"
 # and the account Composio made for it goes with it.
 WAITING = ("INITIALIZING", "INITIATED")
 SIGN_IN_LIMIT_S = 600
+# What `_signing_in` holds while the built-in Google sign-in waits: the account ids of Composio never look like this.
+GOOGLE_SIGN_IN = "google"
 
 
 def _created_at(value) -> float | None:
@@ -148,7 +150,10 @@ class ConnectorsService:
             # A whole operation has a ceiling, including pagination, lock acquisition and browser launch.
             budget = self.poll_timeout + RPC_TIMEOUT_S if name == "connect" else 120 + RPC_TIMEOUT_S if name == "google.connect" else RPC_TIMEOUT_S
             async with asyncio.timeout(budget):
-                if name in {"catalog", "categories", "toolkit", "status", "remove_account"}:  # remove_account takes the lock itself
+                # These take the lock themselves, for the steps that need it and never for a wait: a sign-in waits in the browser
+                # for up to ten minutes, and nothing else the owner presses may queue behind it.
+                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect",
+                            "google.configure", "google.connect"}:
                     return await handler(params)
                 async with self._lock:
                     return await handler(params)
@@ -297,11 +302,12 @@ class ConnectorsService:
                 self._settle(entry)
                 self._save()
 
-    async def _end_sign_in(self, params) -> bool:
-        """Whether the account about to be removed is the one a sign-in is waiting for: that sign-in is ended first and its
-        call is waited for, so the account it made is given back by the sign-in itself (`_give_up`)."""
-        account_id, task = params.get("account_id"), self._connect_task
-        if account_id not in self._signing_in or task is None or task.done():
+    async def _end_sign_in(self, account_ids) -> bool:
+        """Whether one of these accounts is the one a sign-in is waiting for: that sign-in is ended first and its call is
+        waited for, so the account it made is given back by the sign-in itself (`_give_up`). Called before the lock is taken:
+        the sign-in needs the lock to finish."""
+        task = self._connect_task
+        if not self._signing_in.intersection(account_ids) or task is None or task.done():
             return False
         task.cancel()
         await asyncio.wait({task}, timeout=RPC_TIMEOUT_S / 2)
@@ -310,12 +316,9 @@ class ConnectorsService:
     async def remove_account(self, params):
         """Remove one account of an app. One that is waiting, expired, revoked, failed or not active goes at once; an
         ACTIVE one is revoked at Composio first. The last connected account is the app itself: that is a disconnect.
-        A sign-in waiting in the browser holds the connector lock for its whole wait: removing its account ends it, and
-        removing any other account does not queue behind it (a removal of the waiting account used to time out, and the
-        account stayed listed)."""
-        ended = await self._end_sign_in(params)
-        if self.login_pending:
-            return await self._remove_account(params, ended)
+        Removing the account a sign-in waits for ends that sign-in first (the removal used to queue behind the sign-in's
+        lock until it timed out, and the account stayed listed)."""
+        ended = await self._end_sign_in([params.get("account_id")])
         async with self._lock:
             return await self._remove_account(params, ended)
 
@@ -331,7 +334,7 @@ class ConnectorsService:
             raise invalid_params("No such connected account")
         active = account["status"] == "ACTIVE"
         if active and sum(a["status"] == "ACTIVE" for a in entry.accounts) == 1:
-            return await self.disconnect({"id": entry.id})
+            return await self._disconnect(entry)
         await self._delete_account(account, revoke=active)
         entry.accounts = [a for a in entry.accounts if a["id"] != account_id]
         self._settle(entry)
@@ -462,6 +465,8 @@ class ConnectorsService:
         if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        # A sign-in still waiting in the browser ends here, so that nothing is left half done when the core goes.
+        await self._end_sign_in(set(self._signing_in))
 
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
@@ -615,7 +620,8 @@ class ConnectorsService:
         connected = False
         try:
             if plan["needs"] == NEEDS_KEY:
-                result = await self._connect_key(slug, details, plan, values, auth_id)
+                async with self._lock:
+                    result = await self._connect_key(slug, details, plan, values, auth_id)
             else:
                 result = await self._connect_link(slug, details, params, auth_id=auth_id)
             connected = bool(result.get("connected"))
@@ -675,31 +681,35 @@ class ConnectorsService:
         body = {"toolkit": slug}
         if "alias" in params:
             body["alias"] = _text(params, "alias")
-        await self._session()
-        before = self._config()
-        pending = {**before, "toolkits": {"enable": sorted(set(before["toolkits"]["enable"]) | {slug})}}
-        if auth_id:
-            pending["auth_configs"] = {**before.get("auth_configs", {}), slug: auth_id}
-        connected = False
+        connected = permitted = False
         try:
-            # The toolkit must be permitted before the provider can issue a login link.
-            await self._patch(pending, refresh=False)
-            link = await self.composio.request("POST", "/tool_router/session/" + segment(self.store.session_id) + "/link", json=body)
-            url = trusted_url(link.get("redirect_url", ""))
-            account_id = link.get("connected_account_id")
-            if not isinstance(account_id, str) or not account_id:
-                raise ConnectorFailure("protocol")
-            ident = "composio:" + slug
-            entry = self.store.connectors.setdefault(ident, Connector(ident, "composio"))
-            entry.name = details.get("name", slug)
-            entry.description = (details.get("meta") or {}).get("description", "")
-            entry.logo = (details.get("meta") or {}).get("logo", "")
-            prior_active = entry.status == "ACTIVE"
-            entry.status = "INITIALIZING"
-            entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [
-                {"id": account_id, "status": "INITIALIZING", "since": self._wall()}]
-            self._signing_in.add(account_id)
-            self._save()
+            # The lock is taken to set the sign-in up and to finish it, never for the wait between: the owner goes on working
+            # in the apps while the browser waits, and whatever they do meanwhile is the state the sign-in leaves.
+            async with self._lock:
+                await self._session()
+                before = self._config()
+                pending = {**before, "toolkits": {"enable": sorted(set(before["toolkits"]["enable"]) | {slug})}}
+                if auth_id:
+                    pending["auth_configs"] = {**before.get("auth_configs", {}), slug: auth_id}
+                # The toolkit must be permitted before the provider can issue a login link.
+                permitted = True
+                await self._patch(pending, refresh=False)
+                link = await self.composio.request("POST", "/tool_router/session/" + segment(self.store.session_id) + "/link", json=body)
+                url = trusted_url(link.get("redirect_url", ""))
+                account_id = link.get("connected_account_id")
+                if not isinstance(account_id, str) or not account_id:
+                    raise ConnectorFailure("protocol")
+                ident = "composio:" + slug
+                entry = self.store.connectors.setdefault(ident, Connector(ident, "composio"))
+                entry.name = details.get("name", slug)
+                entry.description = (details.get("meta") or {}).get("description", "")
+                entry.logo = (details.get("meta") or {}).get("logo", "")
+                prior_active = entry.status == "ACTIVE"
+                entry.status = "INITIALIZING"
+                entry.accounts = [a for a in entry.accounts if a["id"] != account_id] + [
+                    {"id": account_id, "status": "INITIALIZING", "since": self._wall()}]
+                self._signing_in.add(account_id)
+                self._save()
             try:
                 await self._open(url)
                 deadline = self.now() + self.poll_timeout
@@ -716,11 +726,12 @@ class ConnectorsService:
                     entry.status = "ACTIVE" if prior_active else status
                     self._save()
                     if status == "ACTIVE":
-                        if auth_id:
-                            entry.auth_config_id = auth_id
-                        self._save()
-                        await self._load_tools(entry)
-                        await self._patch()
+                        async with self._lock:
+                            if auth_id:
+                                entry.auth_config_id = auth_id
+                            self._save()
+                            await self._load_tools(entry)
+                            await self._patch()
                         connected = True
                         return {"connected": True, "connector": self._view(entry)}
                     if status not in ("INITIALIZING", "INITIATED"):
@@ -728,21 +739,25 @@ class ConnectorsService:
                     await self.sleep(2)
                 entry.status = "ACTIVE" if prior_active else "EXPIRED"
                 # Nobody finished it: the account Composio made for it goes back, so none is left waiting.
-                await self._give_up(entry, account_id)
-                self._save()
+                async with self._lock:
+                    await self._give_up(entry, account_id)
+                    self._save()
                 return {"connected": False, "error": "timeout", "connector": self._view(entry)}
             except BaseException:
                 entry.status = "ACTIVE" if prior_active else "INACTIVE"
                 # Closed, cancelled or failed on the way: the same.
-                await self._give_up(entry, account_id)
-                self._save()
+                async with self._lock:
+                    await self._give_up(entry, account_id)
+                    self._save()
                 raise
             finally:
                 self._signing_in.discard(account_id)
         finally:
-            if not connected:
-                # Restore the prior toolkit permissions on refusal, timeout or cancellation.
-                await self._patch(before, refresh=False)
+            if permitted and not connected:
+                # Take the toolkit's permission back on refusal, timeout or cancellation. What the apps are now says what is
+                # permitted (an app the owner switched off or took away while the sign-in waited stays so), not what they were.
+                async with self._lock:
+                    await self._patch(self._config(), refresh=False)
 
     async def ensure_tools(self, entry):
         """Load provider classification hints once per toolkit, including after restart."""
@@ -827,7 +842,7 @@ class ConnectorsService:
         refresh = params.get("refresh", True)
         if type(refresh) is not bool:
             raise invalid_params("refresh must be boolean")
-        if refresh and self.vault.get(KEY) and not self._lock.locked():
+        if refresh and self.vault.get(KEY) and not self._lock.locked() and not self.login_pending:
             async with self._lock:
                 accounts = await self.composio.pages("/connected_accounts", {"user_ids": self.store.user_id, "limit": 500})
                 by_slug = {}
@@ -866,7 +881,13 @@ class ConnectorsService:
         self.hub._changed()
 
     async def disconnect(self, params):
+        """Take an app away with all its accounts. A sign-in that waits for one of them ends first: it has nothing left to wait for."""
         entry = self._entry(params)
+        await self._end_sign_in([entry.id, *(a["id"] for a in entry.accounts)])
+        async with self._lock:
+            return await self._disconnect(self._entry(params))  # read again: a press that waited for the lock may find it gone
+
+    async def _disconnect(self, entry):
         if entry.kind == "google":
             # Disable first even if provider revocation is temporarily unavailable; retain
             # credentials on failure so the owner can retry revocation rather than lose it.
@@ -904,6 +925,13 @@ class ConnectorsService:
         return {"disconnected": True}
 
     async def google_configure(self, params):
+        """Set the owner's Google client up. A sign-in that waits for the settings it began with has nothing left to wait for:
+        it ends first, and is waited for, because it needs the lock to finish."""
+        await self._end_sign_in([GOOGLE_SIGN_IN])
+        async with self._lock:
+            return await self._google_configure(params)
+
+    async def _google_configure(self, params):
         client_id = _text(params, "client_id")
         client_secret = _text(params, "client_secret", optional=True)
         gmail, calendar = params.get("gmail", "write"), params.get("calendar", "write")
@@ -933,22 +961,39 @@ class ConnectorsService:
                 "testing_refresh_expires_days": 7, "revocation_affects_whole_project": True}
 
     async def google_connect(self, params):
-        entry = self.store.connectors.get("google")
-        if entry is None:
-            raise ConnectorFailure("not_configured")
-        entry.status = "INITIATED"
-        self._save()
+        # As with an app of Composio: the lock is taken to set the sign-in up and to finish it, never for the wait between
+        # (up to two minutes in the browser), so nothing else the owner presses queues behind it.
+        async with self._lock:
+            entry = self.store.connectors.get("google")
+            if entry is None:
+                raise ConnectorFailure("not_configured")
+            scopes, kept = scopes_for(entry.gmail, entry.calendar), self.vault.get(PREFIX + "refresh_token")
+            entry.status = "INITIATED"
+            self._save()
+            self._signing_in.add(GOOGLE_SIGN_IN)
         try:
-            entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self._open)
-            address = await self.google.account_address()
-            entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE", "email": address}, entry.accounts)]
-            await self.sync_google()
-            self._save()
-        except BaseException:
+            granted = await self.google.connect(scopes, self._open)
+            async with self._lock:
+                entry.granted_scopes = granted
+                address = await self.google.account_address()
+                entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE", "email": address}, entry.accounts)]
+                await self.sync_google()
+                self._save()
+        except BaseException as error:
             entry.status = "INACTIVE"
-            await self.sync_google()
-            self._save()
+            if isinstance(error, asyncio.CancelledError) and self.vault.get(PREFIX + "refresh_token") != kept:
+                # Ended after Google's answer was taken and before the sign-in could finish: the grant it brought is not kept.
+                self.google.forget_access()
+                if kept:
+                    self.vault.set(PREFIX + "refresh_token", kept)
+                else:
+                    self.vault.delete(PREFIX + "refresh_token")
+            async with self._lock:
+                await self.sync_google()
+                self._save()
             raise
+        finally:
+            self._signing_in.discard(GOOGLE_SIGN_IN)
         return {"connected": True, "connector": self._view(entry)}
 
     async def sync_google(self):

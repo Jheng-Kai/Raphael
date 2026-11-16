@@ -10,7 +10,7 @@ import { followProbe } from "./follow-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 /**
- * Opening a conversation as the owner does, by its row in the sidebar (owner, 2026-11-10: 「開啟對話…太慢」): the
+ * Opening a conversation as the owner does, by its row in the sidebar: the
  * time until its newest turn is drawn and painted, and the main thread's long tasks meanwhile, `rounds` times
  * (the first open is cold, the others come back to it). `limits` fails the step past `coldMs`, `warmMs` or
  * `longTaskMs`.
@@ -41,7 +41,7 @@ async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first
     if (result[key] > limit) throw Object.assign(new Error(`Opening a conversation: ${key} ${result[key]} ms is over ${limit} ms`), { assertion: result });
   }
   // The core answers in order: the thread is asked for first (its conversations on a first open), once, and nothing
-  // the open does not need is asked for at all (owner, 2026-11-10).
+  // the open does not need is asked for at all.
   for (const [round, sample] of samples.entries()) {
     const methods = sample.calls.map(call => call.split(" [")[0]);
     const problem = first.length && !first.includes(methods[0]) ? `the first request is ${methods[0]}, not ${first.join(" or ")}`
@@ -53,7 +53,7 @@ async function openCost(page, { from, to, newest, rounds = 3, limits = {}, first
 }
 
 /**
- * Start-up asks for the first view before anything optional (owner, 2026-11-11: 「第一次開 app 的速度還是非常慢，就只有第一次而已」).
+ * Start-up asks for the first view before anything optional.
  * The core answers on one loop, so a model-catalog read that arrives with the Home overview slows the overview
  * several times over. Waits until every `heavy` read has been asked for (the window reads them ahead on its own), then
  * fails if one of them began before the `firstView` reads that began earlier were answered, if the heavy reads
@@ -376,7 +376,7 @@ export async function perform(page, step, evidenceDirectory) {
         if (!await page.$eval(selector, el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption is covered');
         await click(selector);
       }
-      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area (owner, 2026-11-08), which a modal dialog rightly covers.
+      // The caption's own strip (index.html) stands above every dialog. The sidebar's top row is a second drag area, which a modal dialog rightly covers.
       if (!await page.$eval('.window-chrome [data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
       await click('.window-chrome [data-window-drag]');
       await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
@@ -438,7 +438,15 @@ export async function perform(page, step, evidenceDirectory) {
       if (await value()!==`${step.total}/${step.total}`) throw new Error('newest word was not restored');
       break;
     }
-    case "viewport": await page.setViewport({width:step.width,height:step.height,deviceScaleFactor:1}); break;
+    case "viewport": {
+      // `scale` emulates another pixel ratio (0 keeps the browser's own); `physical`: the window moved to a screen of another scale
+      // keeps its device pixels, so its CSS size changes with the ratio.
+      const { width, height, deviceScaleFactor = 1 } = page.viewport(), ratio = await page.evaluate(() => devicePixelRatio);
+      const scale = step.scale ?? deviceScaleFactor, keep = step.physical && step.scale ? ratio / step.scale : 1;
+      await page.setViewport({ width: step.width ?? Math.round(width * keep), height: step.height ?? Math.round(height * keep), deviceScaleFactor: scale });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      break;
+    }
     case "window-control": {
       const selector = `[data-window-action="${step.control}"]`;
       if (step.restore) {
@@ -664,6 +672,59 @@ export async function perform(page, step, evidenceDirectory) {
       return await slimeSharp(page, undefined, evidenceDirectory && `${evidenceDirectory}/sharp-${revision ?? "current"}-${await page.evaluate(() => document.documentElement.dataset.theme)}-${page.viewport().width}`, revision);
     }
     case "slime-pointer": return await slimePointer(page, step.selector);
+    // The composer's idle emblem as the screen shows it, at the run's pixel ratio, kept beside the run, and compared pixel for
+    // pixel with its own bitmap laid on the composer's ground: any resampling on the way to the screen shows as a difference (R-UI-161).
+    case "emblem-picture": {
+      // The screen is read two device pixels wider on every side and the bitmap laid at each whole-pixel offset in it: a paint
+      // snapped to the pixel grid matches at one offset, a resampled one at none. The whole viewport is read: a clip is rounded
+      // to whole CSS pixels (puppeteer), which at 125% starts the capture a fraction of a device pixel in and resamples the
+      // capture itself.
+      const MARGIN = 2;
+      const place = await page.evaluate(margin => {
+        const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility()), rect = img.getBoundingClientRect(), ratio = devicePixelRatio;
+        // Under a panel's scrim (a window under 1120 px) the screen shows the emblem dimmed: nothing to compare.
+        const covered = !img.closest('.cmp-voice').contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+        return { covered, device: [rect.left * ratio, rect.top * ratio], from: [Math.round(rect.left * ratio) - margin, Math.round(rect.top * ratio) - margin], ground: getComputedStyle(img.closest('.composer')).backgroundColor };
+      }, MARGIN);
+      if (place.covered) return { check: "emblem-picture", covered: true };
+      const shot = Buffer.from(await page.screenshot({ type: "png", captureBeyondViewport: false })).toString("base64");
+      const comparison = await page.evaluate(async (shot, ground, margin, from) => {
+        const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility());
+        const read = async source => { const image = new Image(); image.src = source; await image.decode(); return image; };
+        const [screen, bitmap] = await Promise.all([read(`data:image/png;base64,${shot}`), read(img.currentSrc)]);
+        const pixels = (draw, width, height) => { const canvas = new OffscreenCanvas(width, height), context = canvas.getContext("2d", { willReadFrequently: true }); draw(context); return context.getImageData(0, 0, width, height).data; };
+        const width = bitmap.naturalWidth, height = bitmap.naturalHeight, outer = width + 2 * margin;
+        const seen = pixels(context => context.drawImage(screen, -from[0], -from[1]), outer, height + 2 * margin);
+        const own = pixels(context => { context.fillStyle = ground; context.fillRect(0, 0, width, height); context.drawImage(bitmap, 0, 0); }, width, height);
+        let best = null;
+        for (let dy = 0; dy <= 2 * margin; dy++) for (let dx = 0; dx <= 2 * margin; dx++) {
+          let worst = 0, off = 0, total = 0;
+          for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4, j = ((y + dy) * outer + x + dx) * 4;
+            const gap = Math.max(Math.abs(seen[j] - own[i]), Math.abs(seen[j + 1] - own[i + 1]), Math.abs(seen[j + 2] - own[i + 2]));
+            worst = Math.max(worst, gap); total += gap; if (gap > 16) off++;
+          }
+          if (!best || total < best.total) best = { offset: [dx - margin, dy - margin], worst, total, off };
+        }
+        return { bitmap: [width, height], offset: best.offset, worst: best.worst, mean: Math.round(best.total / (width * height) * 100) / 100, off: best.off };
+      }, shot, place.ground, MARGIN, place.from);
+      const { width } = page.viewport(), { theme, ratio } = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, ratio: devicePixelRatio }));
+      const file = `emblem-${theme}-${width}-x${ratio}.png`;
+      // The emblem's own pixels as the screen showed them, where they matched best: the picture to look at, enlarged, for sharpness.
+      if (evidenceDirectory) {
+        const crop = await page.evaluate(async (shot, offset, margin, size, from) => {
+          const image = new Image(); image.src = `data:image/png;base64,${shot}`; await image.decode();
+          const canvas = document.createElement("canvas"); canvas.width = size[0]; canvas.height = size[1];
+          canvas.getContext("2d").drawImage(image, -(from[0] + offset[0] + margin), -(from[1] + offset[1] + margin));
+          return canvas.toDataURL("image/png").split(",")[1];
+        }, shot, comparison.offset, MARGIN, comparison.bitmap, place.from);
+        await writeFile(`${evidenceDirectory}/${file}`, Buffer.from(crop, "base64"));
+      }
+      const result = { check: "emblem-picture", file, ratio, device: place.device.map(value => Math.round(value * 1000) / 1000), ...comparison };
+      // A resampled picture differs by about ten on average; one painted pixel for pixel by a hundredth.
+      if (comparison.mean > 1 || comparison.off > comparison.bitmap[0] * comparison.bitmap[1] / 100) throw Object.assign(new Error(`The emblem on the screen is not its own bitmap: something resampled it (R-UI-161): ${JSON.stringify(result)}`), { assertion: result });
+      return result;
+    }
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
     case "motion-cost": return await motionCost(page,step.revision);
     case "motion-details": return await motionDetails(page);
@@ -1163,11 +1224,11 @@ export async function perform(page, step, evidenceDirectory) {
     case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
     case "room": await click(`[data-room="${step.id}"]`); break;
     case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
-    // A room's row draws no ⋯ (owner, 2026-11-06, R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
+    // A room's row draws no ⋯ (R-UI-44): its menu opens the way the owner opens it, with a right click on the row.
     case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
-      // On the rail there is no search button (owner, 2026-11-12 23:25): the card opens by Ctrl+Shift+F, as it does for the owner.
+      // On the rail there is no search button: the card opens by Ctrl+Shift+F, as it does for the owner.
       if (!(await page.$("#app-popover .side-search-input"))) {
         if (await page.$eval('[data-col="search"]', el => el.getClientRects().length > 0)) await click('[data-col="search"]');
         else { await page.keyboard.down("Control"); await page.keyboard.down("Shift"); await page.keyboard.press("KeyF"); await page.keyboard.up("Shift"); await page.keyboard.up("Control"); }

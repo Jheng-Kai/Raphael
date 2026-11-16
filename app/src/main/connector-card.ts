@@ -8,6 +8,7 @@ import { NAME, eventLineHTML } from "./event-line";
 import { asksGoogleClient, googleSetupHTML } from "./google-card";
 import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
+import { linkedText } from "./message-content";
 import { entryIcon } from "./service-mark";
 import type { AgentTurn, ConnectorCard } from "./types";
 import { btn, esc, ico } from "./ui";
@@ -67,7 +68,7 @@ const retryOf = (card: ConnectorCard): boolean => card.retry ?? true;
 
 /**
  * The form's place in the card. A server of the owner's own (n8n) carries its fields in the card itself, as there is no
- * catalog to read them from; the member explains each in the conversation (owner, 2026-11-09).
+ * catalog to read them from; the member explains each in the conversation.
  */
 const setupSlotHTML = (card: ConnectorCard): string =>
   `<div data-inline-setup="${esc(card.id)}" data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"` +
@@ -138,7 +139,7 @@ export function connectorCardHTML(card: ConnectorCard): string {
   const note = card.missing ? (missingText(card.missing).trim() === state.trim() ? missingRepairHTML(card.missing) : missingHTML(card.missing)) : "";
   // What could not be named keeps its short technical reason, folded: never on the card's face.
   const reason = card.state === "failed" && card.error === "unknown" && card.detail
-    ? cardDisclosureHTML(`reason-${card.id}`, `<p class="card-body">${esc(card.detail)}</p>`, t("card.details"), t("card.details")) : "";
+    ? cardDisclosureHTML(`reason-${card.id}`, `<p class="card-body">${linkedText(card.detail)}</p>`, t("card.details"), t("card.details")) : "";
   const google = card.needs === "own_google";
   const asking = asksMore(card) || google;
   return cardHTML({

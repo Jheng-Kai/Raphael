@@ -79,6 +79,28 @@ def test_native_cli_permission_payloads_obey_the_same_floor(floor, arguments, ac
     assert floor.access("cli_permission", arguments) == access
 
 
+@pytest.mark.parametrize("tool,arguments", [
+    ("mcp:owner_files/grep", {"pattern": "raphael.db", "path": r"D:\Reports"}),
+    ("mcp:owner_files/grep", {"pattern": r"C:\\Users\\Owner\\.raphael", "path": r"D:\Reports", "glob": "raphael.db*"}),
+    ("mcp:owner_files/glob", {"pattern": "**/raphael.db", "path": r"D:\Reports"}),
+    ("cli_permission", {"tool_name": "Grep", "tool_input": {"pattern": "raphael.db", "path": r"D:\Reports"}}),
+    ("cli_permission", {"tool_name": "Glob", "tool_input": {"pattern": "**/raphael.db-wal", "path": r"D:\Reports"}}),
+])
+def test_a_searchs_pattern_says_what_it_looks_for_not_where(floor, tool, arguments):
+    assert floor.access(tool, arguments) is None
+
+
+@pytest.mark.parametrize("tool,arguments", [
+    ("mcp:owner_files/grep", {"pattern": "token", "path": r"%APPDATA%\Raphael"}),
+    ("mcp:owner_files/glob", {"pattern": "*", "path": r"C:\Users\Owner\.raphael"}),
+    # A glob that starts at a folder of its own names that folder.
+    ("mcp:owner_files/glob", {"pattern": r"C:\Users\Owner\AppData\Roaming\Raphael\**", "path": r"D:\Reports"}),
+    ("cli_permission", {"tool_name": "Grep", "tool_input": {"pattern": "token", "path": r"C:\elsewhere\raphael.db"}}),
+])
+def test_a_search_of_raphaels_own_folders_is_refused_as_before(floor, tool, arguments):
+    assert floor.access(tool, arguments) == "write"
+
+
 def test_quoted_paths_with_spaces_protect_the_actual_database_even_with_another_filename(tmp_path):
     import sqlite3
     folder = tmp_path / "Data With Spaces"
@@ -145,7 +167,7 @@ _ATTACHED = _DATA + r"\attachments\0123456789abcdef0123456789abcdef.html"
     "Get-Process | Where-Object {$_.MainWindowTitle -match 'NHK'} | Select-Object Id,ProcessName",
 ])
 def test_a_member_reads_the_files_the_owner_attached_in_its_conversation(floor, command):
-    """Owner, 2026-11-14: 紫苑's own attachments were refused as protected_data 5 times."""
+    """A member's own attachments were refused as protected_data 5 times."""
     assert floor.access("local__local_exec", {"command": command}) is None
     assert floor.access("read_file", {"path": _ATTACHED}) is None
 
