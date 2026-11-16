@@ -72,7 +72,7 @@ _GEOCODING_LANGUAGE = {
 DISABLED = "disabled"
 # The weather, both requests together; and one try of one request, which is made a second time when it hangs or its
 # connection fails. A request that answers takes about a second and the whole lookup about two; a try that waited five
-# seconds for nothing left no time in the eight for another, which a fresh connection often answers.
+# seconds for nothing left no time in the eight for a second one.
 WEATHER_TIMEOUT_S = 8.0
 WEATHER_TRY_S = 3.0
 WEATHER_TRIES = 2
