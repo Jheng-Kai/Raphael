@@ -331,7 +331,7 @@ class ConnectorsService:
             raise invalid_params("No such connected account")
         active = account["status"] == "ACTIVE"
         if active and sum(a["status"] == "ACTIVE" for a in entry.accounts) == 1:
-            return await self._disconnect(entry)
+            return await self._disconnect(self._entry(params))  # read again: a press that waited for the lock may find it gone
         await self._delete_account(account, revoke=active)
         entry.accounts = [a for a in entry.accounts if a["id"] != account_id]
         self._settle(entry)

@@ -420,6 +420,14 @@ async def test_removing_the_waiting_account_twice_is_one_removal(tmp_path, conn)
     assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
 
 
+async def test_disconnecting_an_app_twice_at_once_is_one_disconnect_and_one_plain_refusal(tmp_path, conn):
+    router, service, hub, entry = make(tmp_path, conn, Accounts(), [account("ca_me", "ACTIVE")])
+    first, second = await asyncio.gather(router.call("connectors.disconnect", {"id": "composio:gmail"}),
+                                         router.call("connectors.disconnect", {"id": "composio:gmail"}), return_exceptions=True)
+    assert first == {"disconnected": True}
+    assert isinstance(second, RpcError) and "no such connector" in str(second).lower()  # not an internal error
+
+
 async def test_a_waiting_account_that_composio_will_not_give_back_stays_and_says_so(tmp_path, conn):
     """Composio cannot be reached when the sign-in is ended: the row stays, the removal fails in the usual way, a later one works."""
     router, service, fake, task = await sign_in_waiting_for(tmp_path, conn)
