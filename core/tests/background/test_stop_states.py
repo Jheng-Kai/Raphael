@@ -38,3 +38,31 @@ async def test_a_task_stopped_while_it_is_being_started_ends_and_never_runs(make
     # A second press finds nothing to stop and changes nothing.
     assert await rig.rpc.call("worker.cancel", {"task_id": task_id}) == {"cancelled": False}
     assert rig.task(task_id).state == "cancelled"
+
+
+async def test_a_turn_that_ends_without_its_answer_ends_the_work_it_handed_on_that_waits_for_the_owner(make_rig, plugins, calls):
+    """A conversation turn that handed work on and then failed, or was refused, ends that work with it. A piece that waited for
+    the owner's yes used to stay waiting with its card open: a later yes was taken (`approved`) and its call made for work
+    whose turn had ended."""
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.agent.speaker import RAPHAEL
+    from .conftest import ARGUMENT, Clock, turn, use
+    from .test_handoff import args, setup
+    from .test_questions import questions
+
+    rig = make_rig(clock=Clock(5000.0))
+    await plugins.connect(note="T2")
+    writer, source = setup(rig, room=False)
+    rig.client.replies = [turn("Noting.", [use("Notes__note", {"text": ARGUMENT}, "c1")]), report(JOB)]
+    child = rig.service.handoff(RAPHAEL, args(writer), source_turn_id=source.id, language="en").data["task_id"]
+    await until(lambda: rig.task(child).state == "waiting")
+    asked = questions(rig)[-1]
+
+    AgentHistory(rig.conn, rig.wall).resolve(source.id, prefix="", text="", status="error")
+    rig.service.settle_asker(source.id, answered=False)
+    await until(lambda: rig.task(child).state == "cancelled")
+    assert questions(rig)[-1] == {**questions(rig)[-1], "question_id": asked["question_id"], "state": "cancelled"}
+    answer = {"task_id": child, "question_id": asked["question_id"], "approved": True}
+    assert await rig.rpc.call("background.answer", answer) == {"status": "cancelled"}
+    assert calls == [] and rig.reports() == []
+    assert rig.task(child).report_text == ""  # a stop says nothing (R-STOP-01)

@@ -1107,6 +1107,10 @@ class BackgroundService:
             for task_id in self._store.invalidate_tree(task.id):
                 if (run := self._runs.get(task_id)) is not None:
                     self._host.cancel(run)
+                elif task_id != task.id and self._waits(task_id):
+                    # It waits for the owner's yes or answer, or for its own colleagues: it ends as Stop ends it, its card or
+                    # question closed with it. Until then the generation raised above keeps it from going on.
+                    self._end_later(task_id)
                 else:
                     self._withdraw(task_id, prefix='')
             # The asker was never told to the owner: it ends without a report.
@@ -3271,6 +3275,22 @@ class BackgroundService:
         # Waiting for its place, or given one a moment ago and not yet begun: it ends here, and its carrier,
         # finding it ended, does nothing.
         return {"cancelled": self._withdraw(task_id)}
+
+    def _waits(self, task_id: int) -> bool:
+        """Whether a task waits, carried by nothing: for the owner's yes (`_paused`), for the owner's answer or its own
+        colleagues (a continuation). `_cancel` ends such a task, closing what it waits on."""
+        if task_id in self._paused or task_id in self._handoff_runs:
+            return True
+        task = self._store.get(task_id)
+        return task is not None and task.state == WAITING and bool(task.continuation)
+
+    def _end_later(self, task_id: int) -> None:
+        """End a waiting task as Stop does, from code that cannot wait for it (closing an owner's card is a call of its own)."""
+        try:
+            ending = asyncio.get_running_loop().create_task(self._cancel({"task_id": task_id, "_tree": True}))
+        except RuntimeError:
+            return  # no loop: its raised generation still ends it before it goes on
+        ending.add_done_callback(lambda done: done.cancelled() or done.exception())
 
     def _withdraw(self, task_id: int, prefix: str | None = None) -> bool:
         """End a task that has not begun: it waits for its place, was given one a moment ago, or is queued and nothing carries it
