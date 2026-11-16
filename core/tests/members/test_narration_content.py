@@ -104,8 +104,10 @@ async def test_public_narration_has_hard_length_and_sentence_caps(setup, client,
     final = '{"text":"Done."}'
     client.chats = ([chat(public, ("local_time", {})), chat(final)] if before_tool
                     else [chat(public + "\n" + final)])
-    # Both scripts remain bounded independently of the interface language.
-    await typed(rig, "Explain this", teacher.id, language="en" if content.isascii() else "zh-TW")
+    # Both scripts remain bounded independently of the interface language. The owner's words say their language firmly, in
+    # the language of the narration, so that what the member says while it works is shown (R-LANG-05).
+    await typed(rig, "Please explain this article to me" if content.isascii() else "請幫我解釋這段文章", teacher.id,
+                language="en" if content.isascii() else "zh-TW")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     [message] = [m for m in turn["messages"] if m["kind"] == kind]
     assert message["text"] == expected and len(message["text"]) <= limit
@@ -143,12 +145,89 @@ async def test_live_prompt_keeps_narration_and_replies_independent_of_ui_languag
     assert result["text"] == "練習しましょう。"
 
 
-async def test_authored_narration_is_not_filtered_by_the_interface_language(setup, client):
+@pytest.mark.parametrize(("words", "interface", "shown"), [
+    ("Please explain this article to me", "zh-TW", [("thinking", "Let me open the page.")]),
+    ("請幫我解釋這段文章給我聽", "en", [("progress", "我先打開頁面。")]),
+], ids=["english-owner-chinese-interface", "chinese-owner-english-interface"])
+async def test_the_interface_language_never_filters_narration_the_owners_words_do(setup, client, words, interface, shown):
+    """The interface language decides no word of what a member says: an owner who writes English sees the English line and
+    not the Chinese one with a Chinese interface, and the mirror case with firm Chinese words and an English interface."""
     rig, team = setup
     teacher = member(team)
     client.chats = [chat('{"thinking": "Let me open the page.", "progress": "我先打開頁面。"}', ("local_time", {})),
                     chat('{"text":"好了。"}')]
-    await typed(rig, "Explain this", teacher.id, language="zh-TW")
+    await typed(rig, words, teacher.id, language=interface)
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    shown = [(m["kind"], m["text"]) for m in turn["messages"] if m["kind"] in ("thinking", "progress")]
-    assert shown == [("thinking", "Let me open the page."), ("progress", "我先打開頁面。")]
+    assert [(m["kind"], m["text"]) for m in turn["messages"] if m["kind"] in ("thinking", "progress")] == shown
+
+
+@pytest.mark.parametrize("brain", ["api", "cli"])
+async def test_two_english_words_in_a_new_conversation_do_not_say_a_language_so_the_profile_does_on_both_brains(
+        setup, client, monkeypatch, brain):
+    """The owner's first message is two English words (no firm language), the member's profile is Chinese, and the model
+    narrates in English. The language is the profile's, and the English note is held back, on an API and on a CLI brain
+    alike: both read it through `AgentService._words_language`. The owner's later words in the conversation decide
+    instead (the test after this one)."""
+    rig, team = setup
+    teacher = member(team)
+    note = "I will read the notes first."
+    if brain == "api":
+        client.chats = [chat(json.dumps({"thinking": note, "progress": note}), ("local_time", {})), chat('{"text":"好了。"}')]
+    else:
+        from raphael_core.agent.cli import loop as cli
+        from raphael_core.agent.cli.drivers import Event
+        rig.settings.set("agent_model", "cli:claude:fake")
+        monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
+        monkeypatch.setattr(rig.service._cli_brains, "available", lambda *args, **kwargs: True)
+
+        async def run(driver, **kwargs):
+            [loop] = rig.service._cli_loops
+            assert loop.owner_language == "zh-TW"
+            yield Event("text_delta", note)
+            yield Event("message", note, data={"id": "said"})
+            yield Event("tool_start", data={"id": "0", "name": "local_time"})
+            await loop._tool("call-0", "local_time", {})
+            yield Event("tool_end", data={"id": "0", "ok": True})
+            yield Event("message", "好了。", data={"id": "answer", "final": True})
+            yield Event("final", "好了。")
+
+        monkeypatch.setattr(cli.Driver, "run", run)
+    await typed(rig, "Explain this", teacher.id, language="en")
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert [m["text"] for m in turn["messages"] if m["kind"] in ("thinking", "progress")] == []
+    assert turn["text"] == "好了。"  # the answer is never held back
+
+
+@pytest.mark.parametrize("brain", ["api", "cli"])
+async def test_the_owners_earlier_english_words_decide_the_language_over_a_chinese_profile_on_both_brains(
+        setup, client, monkeypatch, brain):
+    rig, team = setup
+    teacher = member(team)
+    note = "I will read the notes first."
+    rig.history.add(session_id="earlier", question="Please read my notes and tell me what they say", route="answer", prefix="",
+                    text="Sure.", status="done", source="app", member_id=teacher.id)
+    if brain == "api":
+        client.chats = [chat(json.dumps({"thinking": note}), ("local_time", {})), chat('{"text":"Done."}')]
+    else:
+        from raphael_core.agent.cli import loop as cli
+        from raphael_core.agent.cli.drivers import Event
+        rig.settings.set("agent_model", "cli:claude:fake")
+        monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
+        monkeypatch.setattr(rig.service._cli_brains, "available", lambda *args, **kwargs: True)
+
+        async def run(driver, **kwargs):
+            [loop] = rig.service._cli_loops
+            assert loop.owner_language == "en"
+            yield Event("text_delta", note)
+            yield Event("message", note, data={"id": "said"})
+            yield Event("tool_start", data={"id": "0", "name": "local_time"})
+            await loop._tool("call-0", "local_time", {})
+            yield Event("tool_end", data={"id": "0", "ok": True})
+            yield Event("message", "Done.", data={"id": "answer", "final": True})
+            yield Event("final", "Done.")
+
+        monkeypatch.setattr(cli.Driver, "run", run)
+    await typed(rig, "continue", teacher.id, language="zh-TW")
+    [turn] = [t for t in (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"] if t["question"] == "continue"]
+    shown = [m["text"] for m in turn["messages"] if m["kind"] in ("thinking", "progress")]
+    assert any(note in text for text in shown)
