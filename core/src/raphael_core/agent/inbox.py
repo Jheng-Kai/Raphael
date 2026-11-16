@@ -34,7 +34,10 @@ class AgentInbox:
     def get(self, turn_id):
         return self.conn.execute("SELECT * FROM agent_inbox WHERE turn_id=?", (turn_id,)).fetchone()
 
-    def claim(self, scope):
+    def claim(self, scope, *, aside=()):
+        """The first queued message of `scope`, started, unless work of the conversation runs or holds a message: `aside`
+        are those held by work that is not the conversation's (a background task's), which hold nothing up."""
+        aside = sorted(aside)
         with self.conn:
             row = self.conn.execute(
                 "SELECT * FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued' ORDER BY seq LIMIT 1",
@@ -42,10 +45,12 @@ class AgentInbox:
             ).fetchone()
             if not row:
                 return None
+            apart = f" AND turn_id NOT IN ({','.join('?' * len(aside))})" if aside else ""
             claimed = self.conn.execute(
                 "UPDATE agent_inbox SET state='started',boot_id=?,claimed_at_ms=? WHERE turn_id=? AND state='queued'"
-                " AND NOT EXISTS (SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state IN ('started','steering'))",
-                (self.boot_id, self.now_ms(), row['turn_id'], *scope),
+                " AND NOT EXISTS (SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=?"
+                f" AND (state='started' OR state='steering'{apart}))",
+                (self.boot_id, self.now_ms(), row['turn_id'], *scope, *aside),
             )
             return self.get(row['turn_id']) if claimed.rowcount else None
 

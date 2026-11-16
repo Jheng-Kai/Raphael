@@ -1948,7 +1948,9 @@ atomically at the final reply; a later message starts a new turn. Codex takes th
 natively (turn/steer); Claude Code and Antigravity read it with the result of their next
 call to Raphael's tools, or, when no call follows, in the next turn that resumes the
 existing native session (see Durable owner inbox). Background tasks use the same
-inbox inside the worker process, through internal task.steer admission.
+inbox inside the worker process, through internal task.steer admission; a typed message's
+turn id goes with it as its ticket, and the message is settled when the task's model reads
+it, or comes back as a turn of its own when the task stops running first (R-QUEUE-11).
 Accepted owner-only history rows use owner_input and render no empty member reply.
 Such a row stands where it was sent, inside the line of the work it joined (R-QUEUE-09,
 conversation.ts threadItems): the work's line breaks at the row's time into stretches
@@ -1979,7 +1981,8 @@ as that file (R-MSG-LINK-03).
 
 Offline contracts: core/tests/agent/test_steering.py,
 core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
-core/tests/background/test_steering.py, core/tests/messaging/test_outgoing_files.py,
+core/tests/background/test_steering.py, core/tests/agent/test_background_unread_steering.py,
+core/tests/messaging/test_outgoing_files.py,
 core/tests/agent/test_scrub.py.
 Selected real-entry scenes: owner-addition, owner-addition-answered and composer-send-while-working, both themes, 1120, 720 and 1920x1080.
 Fake Telegram and fake CLI are not live or native acceptance.
@@ -2425,6 +2428,34 @@ R-QUEUE-08: while background work runs in a conversation, a typed message with
 nothing queued ahead of it, a quick question or a messaging app's message joins
 that work when it accepts the text, as before the inbox. test_e2e_worker.py runs
 this through a real worker process.
+
+R-QUEUE-11: a typed message that joined a background task stays `steering` in the inbox until
+that task's model reads it. Its turn id is the ticket `AgentService._queue_ask` passes to
+`BackgroundService.steer`, which holds it in `_handed` (`words_held`) before handing the words
+over: a CLI task's `OwnerInput` takes it and tells `on_read`; the worker takes it with
+`task.steer {ticket}` and tells the core `host.read {task_id, ticket}` (`TaskRun.owner_read`) the
+moment the words reach its model, before the request that gives them. Either way
+`_owner_read` calls `AgentService._steered`, which settles the message then, once. A task that
+stops running with words unread gives them back (`_give_back`: the end of `_carry` and
+`_carry_cli` unless it waits for a yes, `_drop_paused`, `_conclude`), and
+`AgentService._given_back` puts them at the front of their conversation's inbox
+(`_release_steering`) and starts its drain, so each is a turn of its own. A task that waits for
+the owner's yes keeps them: its CLI loop holds them, and a worker task gets them again as
+`owner_input` in the `task.run` that goes on. Held words never hold the conversation up:
+`AgentInbox.claim(aside=words_held())` runs a message the task could not take meanwhile.
+「立即送出」 takes them back (`take_back_words`, the worker's answer to `task.withdraw` comes after
+any `host.read` it sent first, so a read message answers `sent: false`); a retract or Stop
+drops them unwaited (`drop_words`). While the core closes, a task keeps what it holds, and the
+next start puts the unread rows back (`AgentInbox.recover`). Before this, the inbox settled the
+message `steered` the moment the task accepted it, and a background Claude Code turn that made no
+further call, or any task that failed, was stopped or asked the owner, dropped it unanswered.
+Evidence: core/tests/agent/test_background_unread_steering.py (API worker and CLI, every way a
+task stops, a task waiting for a yes, 「立即送出」, a restart) and core/tests/test_e2e_steering.py
+(a real core and worker process with the fake LLM: the parked `[native-steer:ask]` work goes on
+in the worker once its card is answered; words written to it are answered as their own turn when
+it is stopped, and read there once, surviving a restart, when it is not). Not covered: a quick
+question or a messaging app's message that joins background work has no inbox row, so it carries
+no ticket and is not given back.
 
 The existing test_retry_turns.py::test_a_colleagues_question_is_answered_while_the_member_is_at_work
 also preserves the colleague bypass and verifies that an owner CLI turn waits

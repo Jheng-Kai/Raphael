@@ -531,6 +531,15 @@ class BackgroundService:
         self._cli_quota = None
         self._cli_loops = {}
         self._handoff_runs = {}
+        # turn id of an owner's message handed to a task under way (`steer` with its ticket) -> that task's run and the words,
+        # held until its model reads them (`_owner_read`), the owner takes them back (`take_back_words`, `drop_words`) or the
+        # task stops running without reading them (`_give_back`). A task that waits for the owner's yes keeps them for when
+        # it goes on (R-QUEUE-11).
+        self._handed: dict[int, tuple[TaskRun, str]] = {}
+        # Told (turn id, member id) when a task's model reads a message's words, and the turn ids of the words a task that
+        # stopped running never read, for their conversation to take back as a turn of their own (the agent service's).
+        self.owner_read: Callable[[int, int], None] | None = None
+        self.owner_unread: Callable[[list[int]], None] | None = None
         # The questions of the background: only `Confirmations.resolve` makes a yes, for one call.
         self._questions = Confirmations(clock, timeout_s=QUESTION_WAIT_S)
         # task id -> the task that waits for the owner (see the module).
@@ -568,7 +577,10 @@ class BackgroundService:
             self._history.add_message(task.turn_id, "media", json.dumps(payload, ensure_ascii=False))
             self._changed(task.id, RUNNING)
 
-    async def steer(self, member_id, conversation_id, text):
+    async def steer(self, member_id, conversation_id, text, ticket=None):
+        """Hand the owner's words to a task of `member_id` under way in `conversation_id`; whether one took them. With a
+        `ticket` (their message's turn id) the task holds them until its model reads them, and gives them back unread if it
+        stops running first (`words_held`, `_owner_read`, `_give_back`)."""
         for task_id, run in list(self._runs.items()):
             task = self._store.get(task_id)
             origin = self._history.get(task.turn_id) if task and task.turn_id else None
@@ -576,16 +588,85 @@ class BackgroundService:
                 continue
             if origin is None or origin.conversation_id != conversation_id:
                 continue
-            if await self._steer_run(run, text):
+            if await self._steer_run(run, text, ticket):
                 return True
         return False
 
-    async def _steer_run(self, run, text):
-        loop = self._cli_loops.get(run.task_id)
-        if loop is not None:
-            return await loop.steer(text)
-        steer = getattr(self._host, "steer", None)
-        return bool(steer is not None and await steer(run, text))
+    async def _steer_run(self, run, text, ticket=None):
+        if ticket is not None:
+            # Held before they are sent: a model may read them before the answer that it took them comes back.
+            self._handed[ticket] = (run, text)
+            run.owner_read = lambda read, task_id=run.task_id: self._owner_read(task_id, read)
+        accepted = False
+        try:
+            loop = self._cli_loops.get(run.task_id)
+            if loop is not None:
+                loop.owner_input.on_read = lambda read, task_id=run.task_id: self._owner_read(task_id, read)
+                accepted = await loop.steer(text, ticket=ticket)
+            else:
+                steer = getattr(self._host, "steer", None)
+                accepted = bool(steer is not None and await steer(run, text, ticket=ticket))
+        finally:
+            if not accepted and ticket is not None and self._handed.get(ticket, (None,))[0] is run:
+                del self._handed[ticket]
+        return accepted
+
+    def words_held(self) -> set[int]:
+        """The turn ids of the owner's messages that tasks were handed and have not read: still theirs, for a task under way
+        or one that waits for the owner's yes, so their conversation neither runs them nor waits behind them."""
+        return set(self._handed)
+
+    def _owner_read(self, task_id, ticket):
+        """The model of task `task_id` has just been given the owner's words of `ticket`: their message is settled now, and
+        never given back."""
+        entry = self._handed.get(ticket)
+        if entry is None or entry[0].task_id != task_id:
+            return
+        del self._handed[ticket]
+        task = self._store.get(task_id)
+        if self.owner_read is not None and task is not None:
+            self.owner_read(ticket, task.member_id)
+
+    def _give_back(self, run):
+        """The task of `run` runs no more (it ended, handed its work off, or waits on its own question to the owner): what the
+        owner handed it that its model never read goes back to its conversation, to be a turn of its own there. Kept while
+        the core closes: the next start puts those back (`AgentInbox.recover`)."""
+        if run is None or self._closing:
+            return
+        tickets = [ticket for ticket, (held, _) in self._handed.items() if held is run]
+        for ticket in tickets:
+            del self._handed[ticket]
+        if tickets and self.owner_unread is not None:
+            self.owner_unread(tickets)
+
+    def _unread_words(self, run) -> list[dict]:
+        """The owner's words `run` holds unread, for its worker to read when the task goes on after a yes."""
+        return [{"text": text, "ticket": ticket} for ticket, (held, text) in self._handed.items() if held is run]
+
+    async def take_back_words(self, ticket):
+        """The owner sends a message handed to a task now, as a turn of its own: the task lets go of the words if its model
+        has not read them. A worker that read them first has said so before it answers (`_owner_read`)."""
+        entry = self._handed.get(ticket)
+        if entry is None:
+            return
+        run = entry[0]
+        if (loop := self._cli_loops.get(run.task_id)) is not None:
+            loop.owner_input.withdraw(ticket)
+        elif (withdraw := getattr(self._host, "withdraw", None)) is not None:
+            await withdraw(run, ticket)
+        if self._handed.get(ticket) is entry:
+            del self._handed[ticket]
+
+    def drop_words(self, ticket):
+        """The owner took back (deleted, stopped) a message handed to a task: the task drops its words unread, unwaited."""
+        entry = self._handed.pop(ticket, None)
+        if entry is None:
+            return
+        run = entry[0]
+        if (loop := self._cli_loops.get(run.task_id)) is not None:
+            loop.owner_input.withdraw(ticket)
+        elif (forget := getattr(self._host, "forget", None)) is not None:
+            forget(run, ticket)
 
     async def steer_room(self, room_id, thread_id, text, recipients):
         candidates = []
@@ -2134,6 +2215,8 @@ class BackgroundService:
             if task.id not in self._paused:
                 await loop.aclose()
                 self._cli_loops.pop(task.id, None)
+                # Waiting for a yes, the loop keeps the owner's words for its next step; otherwise they go back.
+                self._give_back(run)
 
     async def _carry(
         self,
@@ -2154,6 +2237,9 @@ class BackgroundService:
                 return
             if prepare is not None:
                 spec = {**spec, "messages": await prepare()}
+            if unread := self._unread_words(run):
+                # Handed to the task before it paused for a yes, and not read yet: its model reads them as it goes on.
+                spec = {**spec, "owner_input": unread}
             try:
                 # A worker that has to be started first may take its time to say hello: the net is
                 # never shorter than that wait, so a worker still starting is not ended half-way.
@@ -2205,6 +2291,8 @@ class BackgroundService:
             self._runs.pop(task.id, None)
             # The connections to the plugins' servers end with the task, whichever way it ended.
             await run.pool.aclose()
+            if task.id not in self._paused:
+                self._give_back(run)
 
     def _team_call(
         self, speaker: Speaker, task: Task, ledger: Ledger
@@ -2579,6 +2667,7 @@ class BackgroundService:
         self._paused.pop(paused.task_id, None)
         if loop := self._cli_loops.pop(paused.task_id, None):
             loop.cancel()
+        self._give_back(paused.run)
         if paused.answer is None:
             self._questions.resolve(paused.pending.id, False)
             try:
@@ -3057,6 +3146,8 @@ class BackgroundService:
         routine's run: `Task.quiet`) is not said on the overlay: its report is in its thread. A stop somebody asked for (the
         owner's Stop, a member ending its own work, a parent's end taking its children) says nothing at all: no report, no
         line in the conversation, no count of the calls it made (R-STOP-01); the task simply ends."""
+        # Its run reads nothing more: words of the owner it never read go back (scheduled only, so they come after this end).
+        self._give_back(run)
         silent = state == "cancelled" and reason == "cancelled"
         if silent:
             prefix, text, detail, replies = "", "", None, ()

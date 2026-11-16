@@ -54,6 +54,9 @@ class OwnerInput:
         return untracked
 
     def withdraw(self, ticket):
+        """Take the words of `ticket` back before the model reads them. Whether they were still here, unread."""
         kept = [(message, key) for message, key in zip(self.pending, self._tickets) if key != ticket]
+        withdrawn = len(kept) != len(self.pending)
         self.pending = [message for message, _ in kept]
         self._tickets = [key for _, key in kept]
+        return withdrawn
