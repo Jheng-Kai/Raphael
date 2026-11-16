@@ -141,7 +141,8 @@ test("a small still keeps its rays inside the white ring and draws whole-pixel s
   // After the runes (plain strokes here, without the texture): the faint circle at the letters' feet, the white ring's warm
   // edge, the white ring; a small still leaves the circle out and draws one pixel of edge around a whole pixel of ring.
   expect(strokes(false).slice(-3)).toEqual([0.5, R * 0.075 + 3, R * 0.075]);
-  expect(strokes(true).slice(-3)).toEqual([strokes(false).at(-4), 2, 1]);
+  const plain = strokes(false);
+  expect(strokes(true).slice(-3)).toEqual([plain[plain.length - 4], 2, 1]);
 });
 
 test("hidden draws nothing at all", () => {
