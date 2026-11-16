@@ -75,7 +75,7 @@ export function composerHTML(): string {
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
     `<div class="cmp-bar"><button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
     `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
-    `<span class="cmp-bar-fill"></span><span class="cmp-model"></span>` +
+    `<span class="cmp-model"></span>` +
     `<span class="cmp-pair">` +
     iconButton("send", t("chat.send"), " disabled", "cmp-send task-action").replace('type="button"', 'type="submit"').replace(" title=", " data-tooltip=").replace(ico("send"), sendGlyph()) +
     `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><p class="cmp-page-note hint" role="status" hidden></p><input class="cmp-picker" type="file" multiple hidden>`;
