@@ -1,9 +1,9 @@
 """Cua stdio MCP client with bounded ping, schema and control handling.
 
-
-Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 The trusted caller supplies the approval gate. No standalone unauthenticated proxy
 or model loop is created here. Writes are serialized and calls refused during a hold.
+
+Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 import asyncio

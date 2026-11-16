@@ -1,7 +1,8 @@
 """Durable conversation pages and their ephemeral, isolated loopback host.
 
-Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 No page is served from the application's origin.
+
+Adapted from third-party code under Apache-2.0, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 import asyncio
