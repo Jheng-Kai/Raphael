@@ -2,21 +2,21 @@
 
 ## Housekeeping: size, scratch, locale
 
-A member inspected the shared computer and reported measured faults; the owner approved the fixes (R-COMP-SIZE-01,
+A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
 R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): the container's shape changed (the UTF-8
 locale), no file of the image did, so only the final `LABEL` step reruns on a PC that built v12. The owner's layer-12
 computer is made again once, when idle; its workspace and sign-ins are kept; hand-installed packages and `/tmp` go.
 `vm.py`: `resources`, `sized`, `machine_size`, `fit_limits`, `run_args` (locale), `scratch_args`; `carry_runtime.py` (staging
 ownership).
 
-Machine-only volumes (the browser's profiles and `~/.cache` in named volumes over their folders) were tried and taken out the
-same day: on Docker Desktop for Windows the engine makes the mountpoint `.browser-profiles` inside the bind-mounted workspace as
+Machine-only volumes (the browser's profiles and `~/.cache` in named volumes over their folders) were tried and taken out:
+on Docker Desktop for Windows the engine makes the mountpoint `.browser-profiles` inside the bind-mounted workspace as
 another account with a closed access list, so the host could not erase a computer's folder and an older layer's container
 could not write under it (`mkdir: cannot create directory '/home/cua/workspace/.browser-profiles/driver': Permission denied`).
-The owner will get a different design later: a volume at a path outside the bind mount. Until then the profiles and caches
-stay in the workspace, as every earlier layer kept them. `npm run verify -- --computer` without them (2026-11-15): 95 ok,
+A later design is a volume at a path outside the bind mount. Until then the profiles and caches
+stay in the workspace, as every earlier layer kept them. `npm run verify -- --computer` without them: 95 ok,
 4 failed, 6 skipped; the four ("previous layer 9/11/12 erase" and "cleanup") are the access-denied `.browser-profiles` folders
-that a container of an older layer leaves in the run's temporary data folder on this PC (see the note on the denied folders
+that a container of an older layer leaves in the run's temporary data folder on the PC that ran it (see the note on the denied folders
 under the layer 12 run below); no check named a volume.
 
 ```powershell
@@ -26,12 +26,12 @@ cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m p
 Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
 Docker running is that check.
 
-## A member's files, as Claude Code works on them
+## A member's files
 
-R-TOOL-03, R-FILE-01 to R-FILE-05. The owner: 「所有的 harness 都要統一 就是跟 claude 設計的一樣 或是參考 hermes agent」. A member read, searched
+R-TOOL-03, R-FILE-01 to R-FILE-05. Every brain has the same file tools. A member read, searched
 and changed the files of its computer through `vm_exec` (`cat`, `sed`, heredocs): the head of the output only, no numbers, no
 paging, nothing that checked the text it replaced, and whole files under the 16,000-character argument cap. Its computer now
-offers Claude Code's file tools beside `vm_exec`, with Claude Code's parameters and words:
+offers file tools beside `vm_exec`, with the parameters and words of the familiar read, edit, write, glob and grep tools:
 
 | Tool | Copies | What it does here |
 | --- | --- | --- |
@@ -58,14 +58,13 @@ catalog's descriptions: 17,756 characters per member before R-TOOL-03, 11,132 af
 seat 18,364, 11,740 and 14,054; ceiling 14,500).
 No UI changes, so no look run. Not run: a real computer (`verify -- --computer` was not run: no image change), ripgrep's
 own flags against the image's ripgrep, a live turn of each brain (`verify -- --live`), the providers' acceptance of the
-dashed parameter names (`-i`, `-A`) that Claude Code's Grep uses.
+dashed parameter names (`-i`, `-A`) that the Grep tool takes.
 
 ## A seat is a desktop a person can use
 
 R-COMP-SEATWIN-01, R-COMP-MARKER-01, R-COMP-TABS-01, R-COMP-FIT-01 (image `driver-0.37.0-v12`). Watching a member's screen and
-holding it, the owner (in translation): the members never open tabs; he only pressed minimize and when it came back Chrome
-could not find the original page; then the full-screen view looked strange: a Chrome window larger than the seat, cut on the
-left, top and right, with the panel over its page.
+holding it showed three faults: the members never open tabs; after a minimize, Chrome could not find the original page; and the
+full-screen view showed a Chrome window larger than the seat, cut on the left, top and right, with the panel over its page.
 
 What was measured on layer 11 (a throwaway shared computer, the worktree's real `LocalVm` and `VmTools`):
 - Minimize: the window stays in `wmctrl` and in the driver's list (`is_on_screen: false`, same geometry). A member's
@@ -97,9 +96,8 @@ Layer 12 (`image/layer12/`, one Dockerfile step after layer 11's, so a PC that b
 Offline: `core/tests/computer/test_seat_windows.py` (scripts read and run without Docker, the tools against fakes), plus the
 updated layer tests in `test_seat_tools.py`, `test_screens.py`, `tests/evaluate/test_computer_acceptance.py`.
 
-Real computer (throwaway tag `raphael-probe/seat-windows:l12`, own data folder and owner label; scripts in the session's
-scratchpad, `probe_now.py` and `probe_new.py`): pictures of seat 1 looked at one by one.
-- Layer 11, before: `04-after-launcher.png` is the owner's picture (empty page, marker in the tab and the address).
+Real computer (throwaway tag `raphael-probe/seat-windows:l12`, own data folder and owner label): pictures of seat 1 looked at one by one.
+- Layer 11, before: an empty page, with the marker in the tab and the address.
 - Layer 12: the first window shows Google's new tab page, Back greyed; `browser_open` with `new_tab` gives two tabs, "Owner page
   A" and "Task page B", B shown; `browser_tabs` `show` brings A back; minimized, the screen shows the town and the panel's
   faded window button, and a click on it through the screen's view brings the window back on page A; the Browser icon with the
@@ -118,12 +116,12 @@ $env:PYTHONPATH = "<worktree>\core\src"
 npm.cmd run verify -- --computer
 ```
 
-`npm run verify -- --computer` on the final tree (2026-11-15, 26 min, the owner's own shared computer running beside it): 88 ok,
+`npm run verify -- --computer` on the final tree (26 min, another shared computer running beside it): 88 ok,
 3 failed, 6 skipped (no images of layers 4 to 8 and 10). "shared seat windows", "shared seat displacement", "shared browser is a
 person's" and "previous layer 11 start/update" (layer 11 made again on 12, workspace kept) passed. The three failures are one
-thing: removing the run's temporary data folder, `vm-homes/<key>/.browser-profiles` is access denied to the host on this PC
+thing: removing the run's temporary data folder, `vm-homes/<key>/.browser-profiles` is access denied to the host on the PC that ran it
 (`previous layer 9 erase`, `previous layer 11 erase`, `cleanup`). The home of a throwaway layer 11 computer made before any of
-this change has the same denied folders, so it is this PC's Docker file sharing, not layer 12; the folders were removed through a
+this change has the same denied folders, so it is that PC's Docker file sharing, not layer 12; the folders were removed through a
 throwaway root container. Not run: a member's real turn with a model, and a computer of a member's own on a remote host.
 
 Stated limits: two tabs with the same address and title cannot be told apart, so which of them `show` brings forward, or which
@@ -132,9 +130,9 @@ put back; a member's typed tools still act on a background tab without bringing 
 
 ## The first call after a wake is waited for; "your computer" is the member's
 
-R-COMP-FIRST-01, R-COMP-OWN-01. From the owner's own conversations: a member's first computer action after a sleep failed with
-`docker_stopped`, `driver_configuration_failed` or `task_stopped` nine times, and he had to say 「再試一次」; and 「用你的電腦開…」,
-said into the overlay, opened the page on his own PC with an empty reply.
+R-COMP-FIRST-01, R-COMP-OWN-01. Seen in real conversations: a member's first computer action after a sleep failed with
+`docker_stopped`, `driver_configuration_failed` or `task_stopped` nine times, and the owner had to ask again; and 「用你的電腦開…」,
+said into the overlay, opened the page on the owner's own PC with an empty reply.
 
 - Start: `VmTools._call` waits through `_awake` (the start, again after a pause while it fails with `TRANSIENT_START`; at most
   `start_attempts` tries and `start_budget_s` seconds), then `_configured` (the driver's refusal of its first set-up calls,
@@ -150,9 +148,8 @@ said into the overlay, opened the page on his own PC with an empty reply.
 
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole
 
-R-COMP-WAKE-01, R-COMP-LOAD-01, R-COMP-PANEL-01, R-COMP-TYPE-01 (image `driver-0.37.0-v11`). The owner: 「電腦的部分你可能要再改好一下…
-你就一次把所有東西都修復吧」, with the wake policy asked for in his words: the computer wakes when a member decides a task needs it (its
-own computer tool) or when he starts it, never merely by opening a conversation or a panel, and not silently.
+R-COMP-WAKE-01, R-COMP-LOAD-01, R-COMP-PANEL-01, R-COMP-TYPE-01 (image `driver-0.37.0-v11`). The wake policy: the computer wakes when a member decides a task needs it (its
+own computer tool) or when the owner starts it, never merely by opening a conversation or a panel, and not silently.
 
 Wake policy (read first, then changed). Read in the code: a member's computer tool starts a sleeping computer without any question
 (`vm_tools.py::VmTools.call`, `vm.start`), which is the member's decision and stays; opening a conversation or a panel starts
@@ -170,11 +167,11 @@ computer for a page read; and nothing counted the owner's open stream as activit
   never made) has been started; `VmTools._wake_notice` writes one quiet line in that member's conversation (an event `computer_woke`, drawn like a rename and
   never a reply, R-TEXT-08; the progress line where a task has no conversation), naming the member and why in the member's language: a page (any browser tool), a
   command (`vm_exec`) or using the computer (anything else): 「小晴為了開網頁喚醒了電腦」. No toast, no card. The same record
-  (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs (the member's panel showed it in its
-  computer row until 2026-11-14; the app no longer reads it, and the line in the conversation is the one notice). It is dropped when
+  (`vm.woken`: member, name, reason) is in the viewer's status as `woken` while the computer runs (the app does not read it; the line in
+  the conversation is the one notice). It is dropped when
   the computer sleeps or when the owner starts it (a press, maintenance), so his own start leaves no line. Routines and background tasks run through the same call, so they follow the same
   rules (their line goes to their own conversation or progress). All fifteen interface languages: `_computer_words_data.py` for
-  the core (the app keeps no copy since 2026-11-14).
+  the core (the app keeps no copy).
 - The owner watching counts. `DesktopViewer._monitor` marks the computer active every second while a view of it has a connected
   socket (a preview included: an open panel with the screen showing is watching), so the idle bound does not apply to it; an
   unwatched, quiet computer still sleeps at the bound.
@@ -205,24 +202,23 @@ over), so a PC that built layer 10 reruns two steps (3.0 s measured, everything 
   keysyms (the acceptance's typing); `Rfb.type_text` holds Shift for a US keyboard and refuses other layouts. Members type through
   the driver, a person through the browser, both unaffected.
 
-Not run: `verify --computer` on the final tree is listed in the report that handed this over; item 2 under real memory starvation
+Not run: `verify --computer` on the final tree; item 2 under real memory starvation
 (stood in by a delayed browser start).
 
 ## The owner can always take the computer; a hold never outlives its use
 
-R-COMP-TAKE-01, R-COMP-HOLD-01 (main e13ff592, image layer 9, members sharing one computer). The owner's picture: the larger
-view showing a page in Chrome, the pill reading only 觀看中 and no 接手控制 (「為什麼我沒辦法接手啊 ? 理論上不管甚麼時候我都應該要可以接手 ?」).
-A member then told him that four attempts had failed together and a retry succeeded with nothing changed, and that his hold
-on the computer "could not be fully confirmed" as the cause.
+R-COMP-TAKE-01, R-COMP-HOLD-01 (image layer 9, members sharing one computer). The fault: the larger view showed a page in
+Chrome and the pill read only 觀看中 with no 接手控制, although the owner must be able to take the computer at any time.
+A member also reported that four attempts had failed together and a retry succeeded with nothing changed, naming the
+owner's hold on the computer as a cause it "could not fully confirm".
 
 What is known and what is not. Verified in the code and reproduced by tests that were red first: the pill and the button
 did not agree (`desktop-viewer.ts` drew 觀看中 whenever the view only watched, and hid 接手控制 when the core said the lease was
 the owner's), a take-over the screen never confirms is given back by a call that may fail while the view goes back to
 watching (`takeFailed`), a second view's Take control was refused for as long as a first view's hold stood, a hold whose
 view failed to close stayed for good, and the monitor that closes expired views ended at the first view it could not close.
-Not proven: which of these happened on his PC (no log of the lease exists: the core keeps no record of holds, and
-`raphael.db` was not opened). The member's four failures are unexplained; the refusal it saw was the bare identifier
-`owner_holds_control`, so what it said about a cause was a guess it admitted to.
+Not proven: which of these happened on the reporting PC (the core keeps no record of holds). The member's four failures are
+unexplained; the refusal it saw was the bare identifier `owner_holds_control`, so its statement about a cause was a guess.
 
 What the app does now.
 - A pill that reads 觀看中 always offers 接手控制 (the larger view is open, the computer runs, no recording). One press is
@@ -239,7 +235,7 @@ What the app does now.
   the next renewal (`update()` in `desktop-viewer.ts`), the pill says 觀看中 and 接手控制 returns. 釋放 / 我完成了 is shown only
   while the view holds the lease or a request waits.
 - How long a lease lives: it ends at 釋放, when the view closes (released at once) or when the app is gone (15 s after the
-  last renewal, by the core's monitor); and, new, `OWNER_IDLE_S` = 300 s after his last click or key (the relay's count of
+  last renewal, by the core's monitor); and `OWNER_IDLE_S` = 300 s after his last click or key (the relay's count of
   forwarded input) while nothing waits on him. A sign-in or payment request waiting for him and a recording are held until
   he says so.
 - A hold whose view fails to close is released anyway (`finally` in `viewer.py::_close`), and the monitor carries on past a
@@ -253,17 +249,15 @@ What the app does now.
 npm run look -- desktop-watch-retake desktop-watch desktop-watch-owner desktop-watch-collapse desktop-owner takeover-bar takeover-handback desktop-takeover-owner desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
-`desktop-watch-retake` is the owner's picture: take control, the screen never confirms (the look's `desktopUnconfirmed`),
+`desktop-watch-retake` reproduces the fault: take control, the screen never confirms (the look's `desktopUnconfirmed`),
 the give-back fails (`releaseFails`), 6 s later the view watches with the failure line under the screen, the core still
 holds the lease (`data-desktop-state="owner"`) and 接手控制 is shown and enabled. The check `desktop-watch` no longer skips
 the button when the lease is the owner's. Native, not run: the owner's own real take-over of a seat after a failed one.
 
 ## Ending control is not ending watching; a running computer's preview is never a black frame
 
-R-COMP-RELEASE-01, R-COMP-PREVIEW-01. The owner's picture: the Computer tab's preview, 執行中 above it, a black screen with only
-the 開啟 pill. His words: 「有時候畫面會變成這樣子，你可能要確定一下為什麼。就是我結束的時候，而且結束控制不代表我要結束觀看，
-所以不要跳掉。你這邊哪裡邏輯怪怪的」. (His build predates #99, which removed the Details computer row; the preview never
-depended on that row's background stream, so the fix is the same on main.)
+R-COMP-RELEASE-01, R-COMP-PREVIEW-01. The fault: after the owner ended control, the Computer tab's preview, with 執行中 above
+it, was a black screen with only the 開啟 pill. Ending control is not ending watching, so the view must stay.
 
 Two causes, both in `desktop-viewer.ts`, none in the core (`viewer.py::_control` keeps the session on release).
 - The pill's 停止 (after 接手控制) called `handback()`, the path of a sign-in request's 我完成了: it asked the core to release,
@@ -286,12 +280,12 @@ npm run look -- computer-release-keeps-watching computer-preview-running takeove
 offered and enabled, the frame is visible and connected (one `viewer_open`, no `viewer_close`, one release).
 `computer-preview-running`: a demonstration is discarded (a handback that leaves a wide panel open), the Computer tab shows the
 live stream or the last picture (the check fails on a black frame with only 開啟). `takeover-handback` and `desktop-handback`
-now end by folding back, not by the stop. Native, not run: the owner's own real take, stop and fold on his seat.
+now end by folding back, not by the stop. Native, not run: the owner's own real take, stop and fold on a seat.
 
 ## Every member's screen is its own, after a switch of members
 
-R-COMP-SWITCH-01. His words: 「我明明打開不同的角色，結果它顯示前一個角色的畫面…一定要每個角色都分開才對。應該是 cache 的問題」.
-Cause, in `desktop-viewer.ts` and not in the core: the sidebar's `onSelect` runs `switchThread()` before `app.go("agent")`,
+R-COMP-SWITCH-01. The fault: opening a different member showed the previous member's screen; every member's screen must be
+its own. Cause, in `desktop-viewer.ts` and not in the core: the sidebar's `onSelect` runs `switchThread()` before `app.go("agent")`,
 and `switchThread()` calls `desktop.refresh()` only for a page that is on screen. Coming back from another page, the viewer
 still held member 1's lingering stream (`session`), so `show()` polled `desktopRenew(member 1's session)`: its answer passed
 the `id === member()` guard (read at poll time, after the switch) and member 1's state and frame were drawn for member 2.
@@ -312,7 +306,7 @@ closed and never renewed after member 2 opened, member 2's own status read. Nati
 
 R-COMP-DISK-01. A member told the owner 電腦磁碟快滿了 and named `.browser-profiles` (326 MiB), `.raphael-checkpoints` (12 MiB)
 and a member folder (0 MiB). `docker exec ... df -Pk / /home/cua/workspace` on the running shared computer (read only):
-`/` is Docker's overlay at 2 percent; `/home/cua/workspace` and `/home/cua/team` are the bind mount of this PC's `C:\` at 94
+`/` is Docker's overlay at 2 percent; `/home/cua/workspace` and `/home/cua/team` are the bind mount of the host's `C:\` at 94
 percent (463 602 684 KiB, 29 528 756 KiB free). The reading took the larger of the two, so the notice was about C:, and the
 folders it listed were measured in the workspace only. `lifecycle.py::disk_pressure` now returns a `DiskPressure` (which
 disk, its name, percent, free, the folders, the workspace total); `vm_tools.py::_disk_notice` says the disk and its free space
@@ -368,9 +362,9 @@ picture. Offline look evidence does not prove the picture in a real computer.
 
 ## One foot under the larger view's screen
 
-R-PANEL-08. The owner's picture after a failed demonstration: the red line began at the window's edge
+R-PANEL-08. After a failed demonstration the red line began at the window's edge
 over the screen and was cut, 丟棄示範 and 審閱示範 floated in the far corner, and the file changes ran
-along the top-left (that view was removed 2026-11-15, R-COMP-UNDO-01). In the larger view (`desktop-viewer.ts`, `.desktop-shell`) the screen, the skill
+along the top-left (that view was removed, R-COMP-UNDO-01). In the larger view (`desktop-viewer.ts`, `.desktop-shell`) the screen, the skill
 review (`.desktop-review`) and one foot (`.desktop-foot`)
 share one width: `min(100cqw, (100cqh - --desktop-foot) * 1280 / 900)` of the shell, a size container.
 The foot holds `.desktop-notes` (request, failure, privacy line, missing-computer note, the trial input),
@@ -399,19 +393,19 @@ Gotchas: `--desktop-foot` is a fixed reserve (88 px: one line and the pill; a se
 shell's bottom padding); a foot taller than that aligns the block to the top (`align-content: safe center`)
 rather than overlap, so a new kind of line under the screen needs the reserve rechecked at 1920x1080 and
 720. `level-takeover` wants the screen at least the window's height less 160 px at 1920x1080 (932 px now). Long languages wrap the action pill
-inside its half instead of moving the pill. The real failure that the owner saw (the draft step after a
+inside its half instead of moving the pill. The real failure behind it (the draft step after a
 recording) is a core question; this section covers only where it is said.
 
-### The sign-in card and an honest pill (R-PANEL-09, owner, 2026-11-13)
+### The sign-in card and an honest pill (R-PANEL-09)
 
-The owner could not read a sign-in page in the card (480 px, a 16:9 frame around a 1280 x 900 screen), and the
-pill said 你正在控制 while his input reached nothing. A card that hands the computer over (`desktop-timeline.ts`
+A sign-in page could not be read in the card (480 px, a 16:9 frame around a 1280 x 900 screen), and the
+pill said 你正在控制 while the owner's input reached nothing. A card that hands the computer over (`desktop-timeline.ts`
 waiting_control, `computer-card.ts` control) is now as wide as the conversation with a screen at the computer's
 proportions (CSS in `desktop-viewer.css`, the one exception to R-CARD-01). Its screen and 接手 call `acquire()`:
 the larger view opens with the same frame and takes control; the pill offers 我完成了 (`desktop.done` while a
 request waits), which returns the nonce once. The pill reads 正在接手… (`desktop.taking`) until the frame answers
 `interactive` with held, then 你正在控制; with no answer in 6 s (`TAKE_MS`) the lease is given back without the
-request id, `desktop.takeFailed` stands under the screen and the view watches again. Watching always reads 觀看中 and, since 2026-11-14, always offers 接手控制 (the first section).
+request id, `desktop.takeFailed` stands under the screen and the view watches again. Watching always reads 觀看中 and always offers 接手控制 (the first section).
 Whether the shared computer's seat page sends `held` is the core's question (the shared-computer session).
 
 ```powershell
@@ -429,7 +423,7 @@ R-COMP-PICTURE-01, R-COMP-KEYS-01, R-COMP-XLOSS-01, R-COMP-LAYER-01 cover image
 checked on real computers by `npm run verify -- --computer`; the offline tests name the
 exact scripts and commands and prove no container.
 
-The picture. The owner saw a desktop of one flat dark blue (2026-11-12). Two causes,
+The picture. A desktop showed one flat dark blue. Two causes,
 both reproduced: the session's `prepare-desktop` started `wallpaper.py --watch` without
 the owner's picture and the core's `_wallpaper`, finding a watcher, exited, so `own.jpg`
 was in the computer and nothing showed it; and gdk-pixbuf had no SVG loader
@@ -443,8 +437,8 @@ the picture's time and size so a new, removed or restored picture is put up at t
 start of a running computer. A start confirmed within the last 45 seconds is answered
 from memory and looks at nothing, the picture included (R-COMP-PERF-01). With the loader
 installed the desktop's own default drawing renders too, so "many colours" alone does
-not prove the town: the acceptance also reads `last-image` and requires one of the five
-town files (`day.jpg` or `night.jpg` since 2026-11-14, the default picture section).
+not prove the picture: the acceptance also reads `last-image` and requires one of the
+default pictures, `day.jpg` or `night.jpg` (the default picture section).
 
 The keys. `xfconf-query -c xfce4-keyboard-shortcuts -l -v` on layer 5 listed every XFCE
 default under `/xfwm4/custom` and `/commands/custom`, with four workspaces. The session
@@ -464,7 +458,7 @@ largest computer; its "boot mark" check therefore counts only the repairs of the
 computer it looks at.
 
 Previous layers. The acceptance makes its fixtures from the released images themselves
-(`driver-0.37.0-v4`, `-v5`) when they are on this PC, under the run's own owner label,
+(`driver-0.37.0-v4`, `-v5`) when they are on the PC, under the run's own owner label,
 and only reads those images. Layer 5 start, update and erase: incompatible, then ready
 on the new image with the workspace file preserved, or absent with the workspace
 removed.
@@ -474,7 +468,7 @@ into a computer: the run's own `computer-wallpaper.jpg`, into its own computers.
 that the product's copy was refused, swallowed (decoration never fails a start), and the
 first run of the picture check showed the desktop's default drawing.
 
-Real run of 2026-11-12 (`python -m raphael_core.evaluate.computer_acceptance --screens 1,6`,
+Real run (`python -m raphael_core.evaluate.computer_acceptance --screens 1,6`,
 Docker Desktop, Linux engine): 44 ok, 0 failed, 0 skipped in 650.718 s.
 
 Not proven: a remote (SSH) host; the native app's own panel around the stream; a
@@ -544,7 +538,7 @@ even where the live page schema allows extras. Classification coverage includes
 nested properties; driver upgrades require fixture/table review. Vault fill calls
 include the current tab_id resolved from the existing page read.
 
-The maintainer runs npm run verify -- --computer on the final tree. Each per-count
+`npm run verify -- --computer` runs on the final tree. Each per-count
 block compares every DRIVER_TOOLS live parameter-name set to the pinned 0.37.0
 fixture directly after driver connection. The shared block retains the two-member
 lists/terminal/typing/browser/picture/control/disconnect/displacement journey and
@@ -565,7 +559,7 @@ accidental-input boundary. Offline
 success proves no real image, driver, XFCE geometry, native timing, remote host or
 native app panel behavior. The measured launcher panel height and result shapes,
 window mapping delay, profile attachment/lifetime and frame strip thresholds must
-be settled by the maintainer's real-container acceptance on this final tree.
+be settled by real-container acceptance on the final tree.
 
 ## Image screen plumbing, stage A
 
@@ -617,7 +611,7 @@ unable to stop programs, the neighbour's panel shadow, the tooltip on screen 5,
 the connect probe). A change to `computer/image/`, the container's shape in
 `vm.py` or the view path is not done until it has run in real containers.
 
-Container acceptance of 2026-11-12 (the owner's Docker Desktop, a throwaway image
+Container acceptance (Docker Desktop, a throwaway image
 tag and data folder, production capabilities, through the real `LocalVm`; by hand,
 now encoded in the opt-in `verify -- --computer` command described below):
 - 1, 2, 3, 4, 5 and 6 screens start ready in 24 to 33 s with no helper retry:
@@ -636,8 +630,7 @@ now encoded in the opt-in `verify -- --computer` command described below):
   and keeps its workspace and browser profile.
 - Six idle screens with no viewer: about 0 % CPU, 425 MiB.
 
-Measured again on the round 3 tree (same day, same way, after `origin/main` 704d3d74
-was merged in), because the mark's meaning changed:
+Measured again on the round 3 tree (same way), because the mark's meaning changed:
 - 1 to 6 screens start with no helper retry and no repair restart (the one-pixel
   payload limit holds against the real server). The mark is written 10.5 s (four
   screens) and 15.2 s (six) after the container starts; the driver's socket at 6.5 s.
@@ -757,18 +750,18 @@ An independent review of stage D (0 blockers, 3 major, 2 minor) found what neith
 Not covered by the run: a profile after weeks of use (its size and copy time), a remote host's named
 volumes, the app's own viewer during a shared recording.
 
-First real runs (2026-11-12, this PC's Docker Desktop): the first found three defects of the
+First real runs (Docker Desktop): the first found three defects of the
 command itself that 179 offline tests had passed (guest paths built with the host's path type
 on Windows; a terminal counted as two windows and placed by its frame-relative corner; a
 picture check that compared a black terminal with the wallpaper, which is the night picture
-at 03:00); the second found that a one-screen computer's panel names no output. The third,
-through `npm run verify -- --computer`, is the result recorded in the pull request.
+at 03:00); the second found that a one-screen computer's panel names no output. The third
+ran through `npm run verify -- --computer`.
 
 ## Deleting a member removes its computer
 
-Owner, after deleting a member in the app: the dialog asked whether to delete the member's computer too, and
-ticking it hung. The app should know and do it, show nothing when there is no computer, and keep such things
-out of the front end (R-COMP-PERF-12, R-UI-27).
+Deleting a member used to ask whether to delete the member's computer too, and ticking it hung. The app now
+knows and does it, shows nothing when there is no computer, and keeps such things out of the front end
+(R-COMP-PERF-12, R-UI-27).
 
 What blocked: the old `members.delete` awaited `LocalVm.delete_member_data` before deleting anything. That
 stopped the computer through the per-computer lock that `_prepare_start` holds while it waits for Docker
@@ -831,31 +824,26 @@ Offline checks: `tests/computer`, `tests/members/test_teaching.py`,
 `tests/evaluate/test_teaching.py` and `tests/architecture/test_boundaries.py`.
 The fake VNC and client run independently of core; a synthetic 300 ms main-loop block must leave framebuffer, owner input, per-bot teaching input and relay expiry below 200 ms. Shared teaching input awaits the core and does not inherit that responsiveness guarantee.
 Tests also cover both socket ends closing, preview/watch input denial, stale
-handshakes, privacy and the 8-session/64-connection caps. Evidence and exact exits:
-`app/.look/briefs/viewer-path-report.md`. `npm run verify -- --computer` now covers
+handshakes, privacy and the 8-session/64-connection caps. `npm run verify -- --computer` now covers
 local container layout/readiness, authenticated clipped noVNC transport, screen-local
 input/raw pixels, recovery/restart, available layer 4 migration/deletion, and the
 core's own `DesktopViewer` connection/relay path. The native app's panel around that
 relay, remote SSH hosts, native frame pacing and browser canvas performance still
 need separate acceptance.
 
-## Library: only what the member delivered, drawn as Grok Bot's (owner, 2026-11-07 night; redrawn 2026-11-12)
+## Library: only what the member delivered
 
 This supersedes the Library notes below (team-file chips, the workspace/team scan, This week / Earlier, the three-to-a-row
-picture grid, the time on each row, day-by-day groups). The owner found the Library a wall of working screenshots; it lists
-only deliverables, read from `members.library` (core brief 10: media cards and files or links its replies handed over, pages
+picture grid, the time on each row, day-by-day groups). A Library of working screenshots is noise, so it lists
+only deliverables, read from `members.library` (media cards and files or links its replies handed over, pages
 it published with their first day, verified receipts in the owner's output folder; never owner uploads, scratch files or
-undelivered screenshots). On 2026-11-12 he showed three pictures of Grok Bot's Library (「它右邊這邊真的做得還蠻不錯的，所以它會分
-all 就是所有的，然後 pages 就是內建的頁面，medias 的話就是可能一些圖片之類的……然後 files 的話就是可能一些 zip 檔等等」) and
-member-panel-work.ts now draws the same:
+undelivered screenshots), split into all, pages, media and files. member-panel-work.ts draws it:
 
-- A row of chips under the tabs, always 全部 / 頁面 / 媒體 / 檔案 in that order, as Grok Bot always shows its four tabs (owner,
-  2026-11-13, on the build of 045adbb1: 「它檔案不是我不是跟你說要像是Grokbot這樣子區分開來嗎」; before, a member with one kind
-  alone, or none yet, showed no chips): pages; pictures, videos and audio; documents, archives and other files. A chip of a kind
+- A row of chips under the tabs, always 全部 / 頁面 / 媒體 / 檔案 in that order, also for a member with one kind
+  alone, or none yet: pages; pictures, videos and audio; documents, archives and other files. A chip of a kind
   the member has not delivered shows one quiet line in the cards' place (還沒有頁面 / 還沒有媒體 / 還沒有檔案; 全部 keeps 還沒有檔案或頁面,
   loading and failed keep theirs), under the group labels' inset. The pressed chip is the light one (the accent fill with dark
-  words in the dark theme, inverted in the light), the others soft. Links are never listed (a link is no deliverable: owner,
-  2026-11-08), so there is no link chip. The kind is set by the core (`members/library.py::_kind`): the mime type decides media,
+  words in the dark theme, inverted in the light), the others soft. Links are never listed (a link is no deliverable), so there is no link chip. The kind is set by the core (`members/library.py::_kind`): the mime type decides media,
   and when the host's mime table does not know a type (Windows has none for .webp, an upload can arrive as
   application/octet-stream) the extension does, so a picture, a recording, an archive (.tgz, .zst) or a document is never filed
   under 檔案 by mistake.
@@ -868,7 +856,7 @@ member-panel-work.ts now draws the same:
   for the look audit's language check (`.lib-title`).
 - Everything at once up to the core's bound of 100, scrolling inside the panel; there is no 「顯示更多」.
   The empty and failed sentences are unchanged, and now stand under the four chips.
-- A press opens a picture in the lightbox, a page itself, whole, in the area beside the sidebar (R-PAGE-08, 2026-11-14: it was the reply that published the page, where the card still had to be pressed; see Conversation), an attachment with `open_attachment`, and a
+- A press opens a picture in the lightbox, a page itself, whole, in the area beside the sidebar (R-PAGE-08: not the reply that published the page, where the card still had to be pressed; see Conversation), an attachment with `open_attachment`, and a
   delivered file with the `open_library_file` command, which hands the member id and the Library handle to
   `members.library_file` (never a path, never `computer.team_file`).
 
@@ -876,7 +864,7 @@ Scenes: `member-panel-library` (全部), one per chip (`-pages`, `-media`, `-fil
 deliverables are all media; the four chips still show, 全部 lists the five) and `-single-pages` (its 頁面 chip: one quiet line),
 `-long` (the `long` fixture: 98 items of every kind), `-open` and `-empty` (four chips and the one sentence); the checks in
 scripts/look/checks.mjs read the chips, groups, card, row, mark and empty-line geometry.
-`-background-video` (R-PANEL-10, owner 2026-11-14: videos a member attached at the end of its background work were missing): the
+`-background-video` (R-PANEL-10: videos a member attached at the end of its background work were missing): the
 core's own `snapshot` of a synthetic database (`scripts/look/core_fixtures.py`, runner.mjs `coreFixtures`) lists the background work's video and
 page (a turn naming the member itself as `peer_id`) and a sent script, not a colleague's hand-off; 媒體 holds the video under 今天.
 
@@ -901,11 +889,11 @@ now cover the absent computer's bare screen and the header location control; no 
 
 ## Three-tab member panel and local engine recovery
 
-Owner request of 2026-11-05: use Grok Bot's clear Details / Library / Computer hierarchy and explain the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
+A clear Details / Library / Computer hierarchy that explains the actual unavailable-computer reason. This section supersedes earlier landing-panel and first-build-caption guidance for this panel.
 
 R-PANEL-01 through R-PANEL-04 govern the header, shared tabs, live controls and all offline states. Enter from the conversation title for Details; use the monitor for Computer. Gear retains identity, memory, skills, commands and voice. The panel reads the existing private worker-task lane (including delegated private work), newest first. Tasks open their existing results and stop/rerun through the row menu. Library uses the shared team-file chip; file handles are scoped to the selected member's local workspace/team folder, with recorded artifacts/pages retained even without a running computer. Remote volumes are never scanned as local paths. The current scan is capped at 500 entries, depth 3, 100 visible files and 100 task/page/artifact records; ordinary Show more advances by 12.
 
-Owner follow-up of 2026-11-05: say each thing once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (since 2026-11-11 a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
+Each thing is said once. Sleeping, starting, waking, updating, repairing, stopped Docker Desktop, missing installation, named remote failure and missing image show the full sentence only inside the screen. The header keeps a matching short state word beside location and overflow, without another face or explanation. Buttons sit after the sentence in normal flow; every offline state has the existing member slime. Only a live screen offers Enlarge and Take control underneath, with no repeated name caption. Details keeps the outer conversation heading and suppresses the list's internal heading. Owner engine recovery starts only the installed local app and reports readiness without implicitly creating a computer (a member's own tool call also starts the installed Docker Desktop and waits up to 120 s, see R-PANEL-04; reads and the viewer still never do); selecting the location recovery opens the existing control. No administrator/app-update advice is shown for a stopped engine.
 
 Consistency comparisons use the existing ui.tabs plain variant, shared fileChipHTML, btn and openMenu. The three member tabs fill the panel to keep equal navigation targets; Connections retains its compact counted tabs within Settings. Work menus have only the applicable action, while maintenance retains its wider descriptive rows and takeover retains its icons. These contextual differences reuse the existing components and tokens. Engine readiness uses the existing viewer notice with role=status and neutral text; failures retain role=alert. Offline recovery buttons retain the screen's existing dark contrast treatment over the wallpaper, while Enlarge and Take control use ordinary panel buttons below it.
 
@@ -915,7 +903,7 @@ npm run look -- member-panel-details member-panel-details-empty member-panel-lib
 
 Use synthetic zh-TW fixtures, both themes and 1120/720/1920x1080. panel-state-layout checks sentence/button containment, pairwise nonintersection, ordering, visible face, exactly one visible full sentence and the short header word's agreement with the fixture state. Member-panel checks reject duplicate conversation headings and offline Enlarge/Take control. The task-stop/task-rerun scenes open their shared contextual menus without mutations, and team-file-reply is the shared chip comparison consumer. The library scene exercises ArrowRight, Show more and shared chips; the empty-library scene covers ArrowRight/ArrowLeft; live uses the real chat monitor. Keep the pre-fix desktop-absent overlap failure as red evidence; sleeping did not overlap at the captured baseline widths.
 
-Inspect every contact sheet and full-size computer state at light 720/dark 1120 and Details/Library at 1920x1080. Compare with Grok frames f000442/f000457/f001037, shared Connections tabs, work overflow with maintenance/takeover menus and Library chips with the existing chat file chip. Judge the same selected run with those external reference frames and RAPHAEL_STAGED_DOCS=.fold. Native Windows/macOS launch, remote SSH/container operation and live brain/provider behavior remain unverified; tests never start real Docker. The initial brief overrides generic full-suite guidance: targeted tests only, one heavy waiter before look, no full verify/core suite. Follow-up 1 requires the 18 member-panel scenes above in one both-theme/three-width run, targeted tests plus ui-rules/i18n/architecture, no waiter, and inspection of every sheet, computer states at light 720/dark 1120 and Details at 1920. Exact evidence and omissions live in .fold/report.md.
+Inspect every contact sheet and full-size computer state at light 720/dark 1120 and Details/Library at 1920x1080. Compare with shared Connections tabs, work overflow with maintenance/takeover menus and Library chips with the existing chat file chip. Judge the same selected run. Native Windows/macOS launch, remote SSH/container operation and live brain/provider behavior remain unverified; tests never start real Docker. Run the 18 member-panel scenes above in one both-theme/three-width run with targeted tests plus ui-rules/i18n/architecture, not the full verify or core suite, and inspect every sheet, computer states at light 720/dark 1120 and Details at 1920.
 
 ## Settings and lifecycle merge
 
@@ -957,7 +945,7 @@ read-only. Both local and SSH computers use the existing idle-stop contract.
 
 VmTools reads bounded fake-testable df/du results at most every five minutes.
 At 90 percent use of the computer's own disk or of the disk its workspace is kept on, the current member's ordinary
-persisted conversation reply names the disk that is full (since 2026-11-14, R-COMP-DISK-01; the first sections) and, when the
+persisted conversation reply names the disk that is full (R-COMP-DISK-01; the first sections) and, when the
 computer's folders can help, its three largest workspace/cache folders, and asks before deletion. One
 notice is emitted per pressure episode in the running core; below-threshold
 readings admit a future episode. It never deletes, buys a service or calls a model.
@@ -984,12 +972,11 @@ requires a wider/taller menu; reset adds a scope paragraph to the shared dialog.
 The header face uses 28px to fit beside the existing icon buttons; its art and
 states are unchanged. Tests: test_lifecycle.py, test_vm.py, test_latency.py, test_viewer.py,
 test_smooth_computer.py, test_settings.py, desktop-viewer.test.ts and
-member-details.test.ts. Only fakes are authorized; never operate real Docker.
-The brief defers full verify/core suites and native/live acceptance to integration.
-See .fold/report.md for exact exits, visual inspection and judge prerequisites.
+member-details.test.ts. Only fakes are used; never operate real Docker.
+Full verify/core suites and native/live acceptance belong to integration.
 
 The existing read-only SSH repair consumer also remains mapped separately; it is
-not part of this brief's selected lifecycle capture:
+not part of the selected lifecycle capture:
 
 ```powershell
 npm run look -- desktop-host-repair --theme both --width 1120,720,1920x1080
@@ -1004,7 +991,7 @@ preserves the guest aspect ratio through noVNC scaleViewport and never acquires
 input. Its thin bar reuses the current public action words, Stop and collapse;
 Esc collapses with the connection intact. Explicit takeover/teaching/files keep
 their earlier behavior. The private request_takeover card now acquires input
-inside its own iframe instead of opening full-window takeover (superseded on 2026-11-13 by R-PANEL-09: the card
+inside its own iframe instead of opening full-window takeover (R-PANEL-09 supersedes this: the card
 is as wide as the conversation and its 接手 opens the larger view with control; see the first section). Its Done action
 returns the current nonce once; Stop/cancel/disconnect never count as Done.
 Owner input travels over RFB only. Held-control screenshots are not forwarded
@@ -1026,7 +1013,7 @@ the normal gate and owner-hold checks. No fallback reader/provider is purchased.
 
 Settings checks remote SSH key access, noninteractive Docker PATH, daemon and
 installed image architecture through read-only SSH commands. Fixed localized
-words replace raw diagnostics. Since 2026-11-11 (R-COMP-HOST-01) each failure class
+words replace raw diagnostics. Each failure class (R-COMP-HOST-01)
 (`ssh_unreachable`, `ssh_alias_unknown`, `ssh_hostkey`, `ssh_hostkey_changed`, `ssh_key`, `docker_missing`,
 `docker_path`, `docker_stopped`, `docker_access`, `architecture`) carries the one command or snippet that
 fixes it, built by `remote_host.repair_command` and shown as the core sent it; a host with Docker running and
@@ -1042,8 +1029,8 @@ mounts and browser profiles survive. A recognized v3/v4-to-v5 rebuild announces 
 workspace/sign-in preservation before removal, never removes a volume and refuses
 foreign or weakened containers. Files/installs outside workspace are explicitly
 ephemeral in tool/persona text. Deleting a member removes its computer data too (see
-[Deleting a member removes its computer](#deleting-a-member-removes-its-computer-2026-11-11)):
-the 2026-11-05 unchecked option that named the host is gone.
+[Deleting a member removes its computer](#deleting-a-member-removes-its-computer)):
+the unchecked option that named the host is gone.
 
 Selected future look matrix (both themes, 1120,720,1920x1080): desktop-panel,
 desktop-watch, desktop-watch-collapse,
@@ -1063,7 +1050,7 @@ two members made in the app, each at its own screen of one real computer, the se
 the Computer tab shows each a 1280x900 screen, the owner takes one and hands it back; needs Docker running and
 the Codex login); computer-speed (explicit opt-in, never --all or
 verify).
-What the first real turns at a seat showed (2026-11-12, nine runs of shared-computer on the real Codex, effort
+What the first real turns at a seat showed (nine runs of shared-computer on the real Codex, effort
 low), none of it visible to the acceptance run, which drives the tools as a careful caller would: after
 browser_prepare a member reads the page with the browser's pid alone, or with nothing, and a CLI turn that is
 started again when the computer's catalog changes names ids it never had; each was told its own window was not
@@ -1086,14 +1073,14 @@ npm.cmd run native -- computer-speed
 
 Offline evidence: test_smooth_computer.py, test_web_read_hint.py, existing VM,
 takeover and persona tests, desktop-viewer.test.ts and member-dialogs.test.ts.
-This brief prohibits look, native, judge, live, network/provider and real Docker
-acceptance. These remain SKIP; fake connection counts establish sharing, not real
-SSH/macOS/driver compatibility or latency. Check the task report for exact exits.
+These checks run no look, native, judge, live, network/provider or real Docker
+acceptance, which remain SKIP; fake connection counts establish sharing, not real
+SSH/macOS/driver compatibility or latency.
 
 ## What a computer has from its first start, and the owner at a seat
 
-Image layer 8 (R-COMP-READY-01, R-COMP-SIGNIN-01, R-COMP-OWNER-INPUT-01). Owner: 「他們會有 chrome 等等之類的 我們一開始
-就要把環境架設好了 不會只有 cua」, and, signing in to Google for his members: "This browser or app may not be secure".
+Image layer 8 (R-COMP-READY-01, R-COMP-SIGNIN-01, R-COMP-OWNER-INPUT-01). A member's computer has Chrome and the usual tools from its first start, not only the driver's browser; and signing in to
+Google for a member failed with "This browser or app may not be secure".
 
 - The members' browser is Google Chrome on amd64 (from Google's repository when the image is built), Chromium on
   arm64. It is started without the automation mark a page can read, with no warning bar and no "Restore pages?".
@@ -1116,7 +1103,7 @@ layer 7 was 2.7 GB (measured), and its first build downloads Chrome and the pack
 
 ## The desktop names its browser
 
-Image layer 9 (R-COMP-READY-02). Owner, of the panel on layer 8: 「但看起來底下不是顯示 Chrome ㄟ?」.
+Image layer 9 (R-COMP-READY-02). On layer 8 the panel did not show Chrome as the browser.
 
 - The panel's launcher on every screen, and the menu's one browser entry, are named Google Chrome under Chrome's
   mark on amd64 (Chromium under its own on arm64). Until then a globe named "Browser" opened Chrome.
@@ -1131,7 +1118,7 @@ Stated limit: a member that starts `/usr/bin/chromium` by its own path still get
 
 ## Firefox is removed
 
-Image layer 10 (R-COMP-READY-03). Owner: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」
+Image layer 10 (R-COMP-READY-03). Firefox is of no use in a computer, so the image drops it.
 
 - Firefox ESR is purged from the image: the package, its `x-www-browser` alternative, its menu entry and mime
   registrations, `/etc/firefox-esr`, `/usr/lib/mozilla`, XFCE's own Firefox entry in its list of preferred applications. `which firefox firefox-esr` finds nothing.
@@ -1152,8 +1139,8 @@ Stated limit: a `.browser-profiles/mozilla` folder that an existing workspace al
 
 R-COMP-PERF-01 through R-COMP-PERF-06 supersede the earlier full-screen bootstrap,
 mandatory desktop re-check, 2 GiB memory cap and on-call discovery notes.
-This unit changes core only; its brief forbids Docker operations, network, paid
-models, look and native runs. All current evidence uses fake Docker/driver
+This change is core only: it needs no Docker operation, network, paid
+model, look or native run. All current evidence uses fake Docker/driver
 boundaries. No measured improvement in a real member computer is claimed.
 
 LocalVm remembers a successfully prepared Target for 45 seconds, including its
@@ -1205,9 +1192,9 @@ the existing API/CLI/worker snapshot. Preparing a turn never starts or probes Do
 
 Schema provenance: driver_schemas.json holds the offered tools' schemas from the
 tools/list of cua-driver 0.37.0 in Raphael's computer image, captured from a running
-computer on 2026-11-12 (MIT, see NOTICES). Until 2026-11-13 it was a compatibility
-offer adapted from older macOS schemas with reconstructed Linux definitions, and
-every one of its 30 tools differed from the driver. `npm run verify -- --computer`
+computer (MIT, see NOTICES). It replaces a compatibility
+offer adapted from older macOS schemas with reconstructed Linux definitions, every
+one of whose 30 tools differed from the driver. `npm run verify -- --computer`
 compares a running driver's list with it, words and order included, and writes the
 list it found to driver-tools.json in its run folder;
 core/tests/computer/fixtures/generate_driver_tools.py writes both kept files (this
@@ -1217,7 +1204,7 @@ explicitly includes this JSON and audits its presence.
 What a model reads of a computer tool: Raphael's line on what the tool is for
 (vm_catalog.DRIVER_TOOLS, or the tool's own definition), then the approval rule,
 whole. The driver's own description is not offered; its parameters' words are.
-Measured 2026-11-13: 40 tools, descriptions 17.8 thousand characters (18.4 on a
+Measured: 40 tools, descriptions 17.8 thousand characters (18.4 on a
 shared computer), parameters 55.6 thousand. The parameters are the driver's
 verbatim text and are the same size a member's list already had after its first
 use of the computer; before that use the list was 9 thousand characters of
@@ -1225,10 +1212,9 @@ parameters that the driver did not accept.
 
 Offline scope: tests/computer, tests/agent/test_persona.py,
 tests/agent/test_member_computer_use.py, tests/background/test_computer_lazy.py and
-packaging tests, followed by the whole core suite once after wait-heavy.ps1.
-The task report records exact commands, exits and counts.
+packaging tests, followed by the whole core suite once.
 
-Authorized acceptance still needed (audit section 2.5): time cold/warm desktop
+Acceptance still needed: time cold/warm desktop
 capture with XFCE alone and with Chromium, bounded window reads with/without PNG,
 docker stats with the 3 GiB/no-overlay image, and host docker info/inspect/exec true.
 Also count Docker launches for a warm no-op tool, measure browser_open click-to-page
@@ -1241,11 +1227,11 @@ desktop-takeover, desktop-takeover-owner, desktop-takeover-done and
 chat-computer-takeover, both themes at 1120,720,1920x1080. Native member-computer
 and vm-smoke should exercise the same tool/lease/browser path on an explicitly
 authorized test container. Look, judge, native and live-provider checks are SKIP
-in this offline-only brief, with no UI consistency comparison implied.
+in this offline-only scope, with no UI consistency comparison implied.
 
 ## Slime town and computer preparation
 
-The town was replaced on 2026-11-14 by two pictures (the default picture section); what follows on preparation holds.
+The town was replaced by two pictures (the default picture section); what follows on preparation holds.
 R-UI-92/93/94 replace the monochrome artwork and preparation stage-list assertions
 only. The existing hour boundaries, five filenames, XFCE watcher, start/repair
 controls, leases and single carried iframe remain authoritative. The approved
@@ -1255,7 +1241,7 @@ asset folders through wallpaper.py --generate. The byte ceiling is 20,000, with
 the largest current SVG approximately 15,000 bytes. No embedded/external images,
 text, scripts, CSS or modern SVG features are shipped.
 
-Preparation keeps the running preview's aspect ratio and its picture (centred since 2026-11-14).
+Preparation keeps the running preview's aspect ratio and its picture (centred).
 The member's shared face has local working motion at 64px (96px expanded), with
 Raphael's emblem retained. The frame-token translucent pill holds only the
 current localized stage, a real percent when supplied and the first-build line
@@ -1310,7 +1296,7 @@ the owned stream, releases its current nonce once and retains the conversation
 position. Refreshes with unchanged data preserve nodes, animation, focus, menus
 and scroll (R-UI-71); action menus use ui.ts dismissal/anchor behavior (R-UI-73).
 
-The default pictures (two since 2026-11-14, R-UI-92) are shared by the guest, off preview
+The default pictures (two, R-UI-92) are shared by the guest, off preview
 and fixture RFB transport. The wallpaper tests prove each hour's selection and that the
 guest and the preview carry the same bytes. Since layer 6 the 30-second timer is the one watcher the core starts when
 the computer is ready (`LocalVm._wallpaper`), under the existing guest TZ; the session's
@@ -1424,9 +1410,9 @@ desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.p
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
 native shell, live model quality and judge remain separately unverified.
 
-## The owner's PC is for a quick question alone (2026-11-13, R-PC-01)
+## The owner's PC is for a quick question alone (R-PC-01)
 
-Owner: 「正常對話的時候，不會有操控我電腦的邏輯…操控我電腦的邏輯只會在快速問答的部分，就是我按下 Alt+Space 的時候才會有這個權限」.
+The owner's PC is controlled only from a quick question (Alt+Space), never from an ordinary conversation.
 One switch decides it, `take_snapshot(owner_pc=...)` (`ask.quick`, never nested): without it a turn is offered, finds and
 refreshes into none of `mcp:local/local_exec`, `mcp:local/local_job`, the harness `computer` tool (the guarded run on the
 owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken
@@ -1445,12 +1431,12 @@ Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, e
 own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
 members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
 
-## Owner-PC commands (2026-11-01; now a quick question's alone, see above)
+## Owner-PC commands (now a quick question's alone, see above)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
 pinned local_exec/local_job definitions on API and CLI MCP paths, no other turn does.
-Settings has no control for the mode (removed 2026-11-14 at the owner's word: 「本機指定我覺得應該可以先拿掉」),
+Settings has no control for the mode,
 and the setting itself stays: ask (default), always and never, one value for a quick question. First consent names the
 requesting member and asks for all members, with four real answers. Later command cards show Allow/Skip
 and no way into a setting. Exact multiline commands and cwd appear on the shared
@@ -1482,7 +1468,7 @@ permission-card.test.ts, pages/settings-view.test.ts, pages/agent-cards.test.ts,
 background-questions.test.ts. Full handoff core scope:
 tests/agent tests/background tests/members tests/computer tests/worker.
 
-Acceptance still requires the owner's real CPU question to member 13 on both API
+Acceptance still requires the owner's real CPU question to a member on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
 tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
@@ -1590,7 +1576,7 @@ Tests: `core/tests/computer/test_vm.py`, existing agent CLI/MCP, background and
 worker suites. Attribution: `core/packaging/licenses/NOTICES.md` and `core/packaging/licenses/Apache-2.0.txt`.
 
 
-## Live desktop (Phase B, 2026-10-30)
+## Live desktop (Phase B)
 
 Phase B uses the container's noVNC RFB library in a UI-free loopback shell. The
 standalone noVNC stylesheet, controls and disconnected curve are omitted. Native
@@ -1615,7 +1601,7 @@ npm run look -- desktop-entry desktop-viewer desktop-owner desktop-handback desk
 npm run look -- desktop-panel desktop-takeover desktop-takeover-owner desktop-takeover-done chat-computer-takeover --theme both --width 1120,720,1920x1080
 ```
 
-## Side-panel computer (owner, 2026-10-30; supersedes inline viewer/card UI)
+## Side-panel computer (supersedes inline viewer/card UI)
 
 The existing member details drawer owns one Computer section, including at 720px.
 Opening a conversation with active computer work or a new takeover nonce opens that
@@ -1647,10 +1633,10 @@ Native member-computer signs in only to the disposable local page via the real
 side-panel noVNC stream, verifies no member calls while held, then one continuation.
 Docker runs only in an exclusive heavy slot. Stop only the journey-created container by exact name afterward; never stop Docker Desktop or another member computer.
 
-## A member's computer needs no permission (owner, 2026-11-11; supersedes On-demand member permission of 2026-10-31)
+## A member's computer needs no permission (supersedes On-demand member permission)
 
-Owner: 「每個 bot 配一台電腦的功能要一模一樣」 (as Grok Bot, where nothing asks and no grant exists) and
-「要盡量減少顯示在前端的事情 不要讓使用者需要思考太多不是他們該思考的東西」. Rule: R-COMP-ACCESS-01.
+Every member's computer works the same way: nothing asks and no grant exists, and as little as possible is shown in the front
+end. Rule: R-COMP-ACCESS-01.
 
 A member uses its computer when its work needs it, as it uses any tool, under the permission mode the owner chose.
 Removed: `computer/grants.py`, the pinned `computer__request_computer` T2 request and its 「允許 {member} 使用電腦」
@@ -1667,8 +1653,8 @@ whenever computer tools are on and Docker Desktop is installed (or a remote host
 no VM tool and leaves the owner's own desktop tool on offer (`has_own_computer` is false there). The first real call
 may start Docker Desktop on this PC for any member; a remote host never does.
 
-The computer is not a connection (owner, 2026-11-14: 紫苑's `members.tools` was `["web_search","web_read","weather","local_time","50a816b0b31c"]`;
-it said it would use its own computer to read a page and could not). A computer tool's key is `mcp:computer-<id>/<tool>`, and
+The computer is not a connection (a member whose `members.tools` was `["web_search","web_read","weather","local_time","50a816b0b31c"]`
+said it would use its own computer to read a page and could not). A computer tool's key is `mcp:computer-<id>/<tool>`, and
 `Speaker.uses_plugin` read that as a connection the owner had not chosen. It now lets every computer tool through, so a member's
 list of tools, set or empty, never takes its computer: `core/tests/computer/test_member_computer_access.py`
 (`test_a_member_with_a_list_of_chosen_tools_keeps_its_own_computer`, `test_the_tools_a_member_with_a_list_sees_are_the_tools_it_can_call`).
@@ -1690,17 +1676,10 @@ Offline regressions: `core/tests/computer/test_member_computer_access.py` and
 `core/tests/agent/test_member_computer_use.py`, plus the existing computer, agent and background suites.
 The UI side is R-PANEL-06 (the computer is the third tab only; Details has no computer row) and R-COMP-QUIET-01 (nothing but handoff cards in the conversation).
 
-## The computer is the third tab only, and the quiet thread (owner, 2026-11-14; the thread 2026-11-11, after Grok Bot)
+## The computer is the third tab only, and the quiet thread
 
-Grok Bot's panel has a computer row that reads Asleep, then Connecting, then a live picture about eight seconds later and
-Awake, and Asleep again a few minutes after the last use; a press opens a full-window view whose pill reads
-Watching / Take control and then You're in control / Stop; in the thread the Bot's computer use is two short bubbles
-and a quiet label naming the step; nothing asks for permission to have a computer.
-
-Raphael followed with the same row in Details on 2026-11-11, and removed it on 2026-11-14 (R-PANEL-06). The owner sent a
-picture of Raphael's Details (the routine, 對話, a row 「拉斐爾的電腦 休眠中」 with a small screen, 訊息平台): 「右邊這邊詳細資料裡面不用有電腦，
-不用跟 grokbot 一樣，因為我們電腦已經在上面的 tab 了，我們就固定在第三個 tab 裡面，有電腦就好了，其他地方可以不用」. So the computer
-lives in the third tab (電腦) only. Details holds the routines, for Raphael his conversations, and the chat platforms, for every
+R-PANEL-06. Details once had a computer row (「拉斐爾的電腦 休眠中」 with a small screen) beside the routine, 對話 and 訊息平台;
+the computer is already a tab above, so it lives in the third tab (電腦) only. Details holds the routines, for Raphael his conversations, and the chat platforms, for every
 member and in every state of the computer; no row, heading, state word, small screen or press for the computer. What went with
 it: `computer-row.ts` (the model the viewer published and the row drew), `rowShown` (the stream the viewer opened unseen while
 Details was open, so the row had a live picture), the `member-computer-open` event and the row's 下載 / 啟動 words, the `woken`
@@ -1714,8 +1693,8 @@ menu stay as they were.
 
 The larger view's pill: watching offers Take control; in control reads 你正在控制 with a quiet 停止 that hands the
 computer back through the same takeover (the sign-in request's button stays 我完成了). The pill is the only place that
-says it: the screen has no badge of its own (owner, 2026-11-13: 「明明下方就有顯示我正在控制的，為什麼左邊還要再顯示一次？」;
-`desktop-owner` asserts 你正在控制 shows once).
+says it: the screen has no badge of its own
+(`desktop-owner` asserts 你正在控制 shows once).
 
 The conversation shows no line or card for a running, finished or stopped computer task any more
 (`desktop-timeline.ts`); only a handoff the owner must act on is a card.
@@ -1724,8 +1703,7 @@ The conversation shows no line or card for a running, finished or stopped comput
 npm run look -- member-panel-details member-panel-details-no-computer-running member-panel-details-no-computer-asleep member-panel-details-no-computer-docker-stopped member-panel-details-no-computer-raphael member-panel-library-raphael member-panel-computer-live member-panel-computer-live-raphael member-panel-computer-asleep member-panel-computer-docker-stopped desktop-watch desktop-watch-owner takeover-bar desktop-panel chat-computer-takeover --theme both --width 1120,720,1920x1080
 ```
 
-Not built, needs a real engine: one computer with a screen per member (see the unit report and
-`bots/research/shared-computer-2026-11-09.md`); the engine start on a PC with Docker Desktop stopped.
+Not covered, needs a real engine: the engine start on a PC with Docker Desktop stopped.
 
 ## Quiet, lazy startup
 
@@ -1753,7 +1731,7 @@ operation must complete without a Docker Desktop window appearing or taking focu
 and a following greeting must not start anything. Inspect the report and captures;
 CLI fakes cannot establish real Windows window/focus behavior.
 
-## Per-member hosts (2026-11-01, supersedes earlier local/shared assumptions)
+## Per-member hosts
 
 The existing Settings > Raphael computer area uses the shared dropdown for This
 computer / Another computer and shows an SSH alias input for the latter. It explains
@@ -1773,8 +1751,8 @@ image startup and resource measurements are pending the owner's build/setup.
 The frame adds the member's name and bare collapse action in a dark shell, in both
 themes. Collapse retains the stream and never completes a takeover request. Compare
 Settings dropdown/input with existing city and language fields, and frame controls
-with the member details header at the same width/theme. References were supplied
-outside git; trademarks and task teaching are excluded. The noVNC fixture proves
+with the member details header at the same width/theme. Trademarks and task
+teaching are excluded. The noVNC fixture proves
 only the frame and real app interaction, not pixels from the unbuilt desktop image.
 
 Selected scenes: desktop-host-remote, desktop-host-invalid, desktop-collapse,
@@ -1848,7 +1826,7 @@ two Vitest workers.
 ## Computer location moves to its panel
 
 The former Settings > Raphael location and Docker installation area is superseded
-by [Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05).
+by [Settings by purpose](settings-appearance.md#settings-by-purpose).
 The compact header/empty-state location popover is shared by all members. See that
 entry for scenes, existing setting/RPC contracts and offline acceptance limits.
 
@@ -1862,16 +1840,16 @@ and grant revocation, target change or owner hold during preparation/checkpointi
 The same checks apply to cached starts. Existing test_vm.py/test_takeover.py assertions
 include vault_entries/fill_contact and the firm T3 fill_card exception, without weakening
 owner-hold or single-use approval tests. No UI markup, scene or navigation changes.
-Follow-up 1 resolves the Docker forwarding and screenshot-lifetime decisions;
-see the approved hardening entry below and .fold/report.md. Do not call offline fake tests authorized SSH or native acceptance.
+The Docker forwarding and screenshot-lifetime decisions are settled in the private SSH
+entry below. Do not call offline fake tests authorized SSH or native acceptance.
 
 R-SEC-FILES-04 additionally checks artifact receipt roots and bounds bytes before
 hashing. Include background/test_tasks.py, test_handoff.py and test_team_flow.py
 alongside the security regressions and architecture suite for that consumer boundary.
 
-## Private SSH and filled-page lifetime (2026-11-05 follow-up 1)
+## Private SSH and filled-page lifetime
 
-R-SEC-SSH-01 and R-SEC-PRIVATE-01 supersede the pending D01/D02 decision above.
+R-SEC-SSH-01 and R-SEC-PRIVATE-01 settle the Docker forwarding and screenshot-lifetime decisions left open above.
 Run tests/computer/test_followup_security.py, test_smooth_computer.py,
 test_login_visibility.py and test_vault_entries.py with tests/computer,
 tests/services and tests/architecture. Fake SSH covers socket success, unsupported
@@ -1887,7 +1865,7 @@ a safe observation authorizes the next read, never earlier captured pixels. Rech
 grant/target before and after the final observation; revoked reads return no tree.
 
 
-## A key for a program in a member's computer, and paste into the computer (2026-11-15, R-KEY-01, R-KEY-02, R-KEY-03, R-PASTE-01)
+## A key for a program in a member's computer, and paste into the computer (R-KEY-01, R-KEY-02, R-KEY-03, R-PASTE-01)
 
 A member that needs the owner's key for a script in its computer calls `request_secret` with `key` (an environment
 variable name) and `purpose`; the existing secure card (`secret-card.ts`, `keyCardHTML`) is titled 「儲存 NAME」, says
