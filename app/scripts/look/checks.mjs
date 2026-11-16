@@ -8564,6 +8564,85 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, rows: rows.length };
   }
+  // The row that offers Composio ends the one view of the apps: it stands whole inside the dialog's visible part, with every line of its
+  // sentence and its button, whatever the dialog's height and the sentence's length, and the list above it still reaches its last row.
+  if (name === "composio-foot") {
+    const row = document.querySelector('.cs-composio-setup');
+    require(visible(row), "the row that offers Composio is drawn");
+    // What can clip a box: every ancestor that scrolls or hides what overflows it, and the window.
+    const clips = [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }];
+    for (let node = row.parentElement; node && node !== document.body; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.overflowY !== 'visible' || style.overflowX !== 'visible' || style.contain.includes('paint') || style.contain.includes('strict')) clips.push(node.getBoundingClientRect());
+    }
+    const room = { left: Math.max(...clips.map(box => box.left)), top: Math.max(...clips.map(box => box.top)), right: Math.min(...clips.map(box => box.right)), bottom: Math.min(...clips.map(box => box.bottom)) };
+    const inside = box => box.left >= room.left - 1 && box.right <= room.right + 1 && box.top >= room.top - 1 && box.bottom <= room.bottom + 1;
+    const where = box => `${Math.round(box.top)}-${Math.round(box.bottom)} in ${Math.round(room.top)}-${Math.round(room.bottom)}`;
+    const frame = row.getBoundingClientRect();
+    require(inside(frame), `the whole row is inside the dialog's visible part (${where(frame)})`);
+    const sentence = row.querySelector(':scope > span:not(.cs-composio-mark)'), button = row.querySelector('[data-conn="configure-composio"]');
+    require(sentence && sentence.textContent.trim() && visible(button) && inside(button.getBoundingClientRect()), "the sentence and its button are inside it");
+    const range = document.createRange();
+    range.selectNodeContents(sentence);
+    const lines = [...range.getClientRects()].filter(box => box.width > 0 && box.height > 0);
+    require(lines.length > 0 && lines.every(inside), `no line of the sentence is cut by the dialog's edge (${lines.map(where).join(', ')})`);
+    // The row stands after the list: the list's last row is never under it.
+    const scroller = row.closest('[data-cs-scroll]');
+    let reach = null;
+    if (scroller) {
+      const before = scroller.scrollTop;
+      scroller.scrollTop = scroller.scrollHeight;
+      const cards = [...scroller.querySelectorAll('.cs-card')], last = cards[cards.length - 1], now = row.getBoundingClientRect();
+      reach = last ? Math.round(now.top - last.getBoundingClientRect().bottom) : null;
+      scroller.scrollTop = before;
+      require(reach === null || reach >= -1, `at the end of the list its last row is above the Composio row (${reach}px apart)`);
+    }
+    return { check: name, row: where(frame), lines: lines.length, reach };
+  }
+  // A price is made of parts joined by 「 · 」, each one a number with its unit ("輸入 $2.00 / 輸出 $12 約每百萬字"). A part is never broken
+  // across lines while a line of the row could hold it: a line ends between parts, so no number is parted from its unit and no line
+  // holds a lone character. Measured from the client rects of each part's own text, where the price is shown in the model chooser's rows
+  // and in the rows of Settings.
+  if (name === "price-parts") {
+    const prices = [...document.querySelectorAll('.mc-price, [data-price]:not([data-price="note"]), [data-media-price]')].filter(visible);
+    require(prices.length > 0, "a price is shown");
+    const lineCount = range => {
+      const centres = [...range.getClientRects()].filter(box => box.width > 0 && box.height > 0).map(box => (box.top + box.bottom) / 2).sort((a, b) => a - b);
+      return centres.reduce((count, centre, index) => count + (index === 0 || centre - centres[index - 1] > 6 ? 1 : 0), 0);
+    };
+    const block = element => { let node = element; while (node && getComputedStyle(node).display.startsWith('inline')) node = node.parentElement; return node; };
+    let parts = 0, wrapped = 0;
+    for (const price of prices) {
+      const nodes = [], walker = document.createTreeWalker(price, NodeFilter.SHOW_TEXT);
+      let text = '';
+      while (walker.nextNode()) { nodes.push({ node: walker.currentNode, start: text.length }); text += walker.currentNode.textContent; }
+      const at = (offset, end) => {
+        const found = nodes.find(item => end ? offset > item.start && offset <= item.start + item.node.textContent.length : offset >= item.start && offset < item.start + item.node.textContent.length);
+        return found ? { node: found.node, offset: offset - found.start } : null;
+      };
+      // The room a part could have: a line of the model's row, or of the line the price is written on.
+      const owner = price.closest('.mc-row'), frame = getComputedStyle(owner ?? block(price));
+      const holder = owner ?? block(price);
+      const room = holder.clientWidth - parseFloat(frame.paddingLeft) - parseFloat(frame.paddingRight);
+      let cursor = 0;
+      for (const part of text.split(' · ')) {
+        const first = at(cursor, false), last = at(cursor + part.length, true);
+        cursor += part.length + 3;
+        if (!part.trim() || !first || !last) continue;
+        const range = document.createRange();
+        range.setStart(first.node, first.offset); range.setEnd(last.node, last.offset);
+        parts++;
+        if (lineCount(range) < 2) continue;
+        wrapped++;
+        // Broken: then it must be a part no line of the row could hold. Its width on one line, as it would be written:
+        const style = price.style.whiteSpace; price.style.setProperty('white-space', 'nowrap', 'important');
+        const natural = range.getBoundingClientRect().width;
+        price.style.whiteSpace = style;
+        require(natural > room, `the part 「${part}」 is broken across lines though a line of its row holds ${Math.round(room)}px and it needs ${Math.round(natural)}px`);
+      }
+    }
+    return { check: name, prices: prices.length, parts, wrapped };
+  }
   if (name === "typo-mention") {
     const first = document.querySelector('#app-popover[data-team-mentions] [data-value]');
     require(visible(first) && first.dataset.value === "Notion", `「@notoin」 finds Notion first (${first?.dataset.value})`);

@@ -45,7 +45,7 @@ export default [
   // The models are held back by the mock until the `codex-arrives` step, so the menu is seen in both states whatever the speed of the run:
   // first "being read" (nothing is known of them yet), then the models in its place, and a menu opened again shows them at once (R-START-05).
   scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end; once known they are there at once", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), codexArrives(), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived"), key("Escape"), waitGone('.cb-menu'), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-arrived")], { codexLate: true }),
-  scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
+  scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]'), check("price-parts")]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
     click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), wait('.model-chooser .mc-effort [data-effort="low"][data-on="true"]'), check("model-effort-order")]),
@@ -53,7 +53,7 @@ export default [
     ...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
     click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), { action: "slider-stop", selector: ".model-chooser .mc-range", level: "high" }, click('.model-chooser [data-dlg="use"]'),
     wait('[data-k="quick-model"][aria-label*="GPT-6.1"]'), check("quick-model-row"), check("quick-model-selection")]),
-  ...["answer", "cleanup", "stt"].map(role => scene(`model-choices-${role}`, `Spaced ${role} choices with separate metadata and actions`, [...modelChooser(role), check("model-choice-layout"), ...(role === "answer" ? [check("model-effort-order")] : role === "cleanup" ? [check("cleanup-no-effort")] : [])])),
+  ...["answer", "cleanup", "stt"].map(role => scene(`model-choices-${role}`, `Spaced ${role} choices with separate metadata and actions`, [...modelChooser(role), check("model-choice-layout"), check("price-parts"), ...(role === "answer" ? [check("model-effort-order")] : role === "cleanup" ? [check("cleanup-no-effort")] : [])])),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),
   scene("model-choices-local-selected", "Preview a local model without downloading and keep keyboard focus visible", [...localChooser, click('.lm-main[data-name="qwen3-asr"]'), key("Tab"), { action: "focus", selector: '.lm-main[data-name="qwen3-asr"]' }, check("model-choice-selection"), check("model-choice-layout")]),
   scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and still asks in the row", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.lm-confirm'), check("local-model-asks")], { localModels: downloaded }),
@@ -122,14 +122,14 @@ export default [
   { ...scene("plugins-store-motion", "Every row is there and nothing is still moving before the native-style capture, without a blank band", [
     ...store, { action: "settle-motion" }, check("plugins-store-settled"), check("plugins-store-groups"),
   ], { pluginsMany: true }), motion: true },
-  scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), scroll('.cs-composio-setup')], { composioConfigured: false }),
+  scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), check("composio-foot")], { composioConfigured: false }),
   scene("plugins-store-key-openrouter", "An OpenRouter key gets an actionable, value-free Composio error", [
     ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
-    type('#conn-key', 'sk-or-look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-openrouter"), check("plugins-store-rows"),
+    type('#conn-key', 'sk-or-look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-openrouter"), check("plugins-store-rows"), check("composio-foot"),
   ], { composioConfigured: false }),
   scene("plugins-store-key-consumer", "A consumer key directs the owner to a Composio project key without echoing it", [
     ...connections, wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
-    type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"),
+    type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"), check("composio-foot"),
   ], { composioConfigured: false }),
   scene("plugins-store-needs", "A row stays plain (the mark, the name, 連結) and says nothing of what the app asks for: its page does", [
     ...store, click('[data-conn="store-group"][data-id="productivity"]'), wait('[data-conn="join"][data-id="acme-ledger"]'), check("plugins-store-needs"), check("plugins-store-rows"),
@@ -161,7 +161,7 @@ export default [
   scene("plugins-setup-plan-failed", "When what the app needs cannot be read the dialog says so and offers to try again", [
     ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-dlg="retry"]'), check("setup-plan-failed"),
   ], { toolkitPlanFails: true }),
-  scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows")], { composioConfigured: false, pluginsConnecting: true }),
+  scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows"), check("composio-foot")], { composioConfigured: false, pluginsConnecting: true }),
   scene("connections-hover", "MCP server hover", [...linked, hover('[data-k="cs-open:notes"]')]),
   scene("server-menu", "MCP server detail actions", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]')]),
   scene("connections-add-menu", "Add a connection menu", add),
