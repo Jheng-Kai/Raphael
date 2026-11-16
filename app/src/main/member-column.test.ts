@@ -27,7 +27,7 @@ const LIST: MembersList = {
     { id: 20, name: "學習", position: 1, sources: [] },
   ],
 };
-const previews = new Map([[1, "PR #17 已開"], [2, "移動 12 個檔案"], [3, "今天的 10 題單字已送出"], [4, "明天 10:00 有會議"]]);
+const previews = new Map([[1, "第 17 號工單已開"], [2, "移動 12 個檔案"], [3, "今天的 10 題單字已送出"], [4, "明天 10:00 有會議"]]);
 const view = (over: Partial<Parameters<typeof columnHTML>[0]> = {}) => ({
   list: LIST, current: 0, previews, folded: new Set<number>(), fresh: new Set<number>(), ...over,
 });
@@ -123,7 +123,7 @@ describe("the column, drawn", () => {
     const row = dom(columnHTML(view())).querySelector<HTMLElement>('[data-member="1"]')!;
     expect(row.querySelector(".mb-row-t b")!.textContent).toBe("進度官");
     expect(row.querySelector(".mb-row-t i")).toBeNull();
-    expect(row.querySelector(".mb-row-p")!.textContent).toBe("PR #17 已開");
+    expect(row.querySelector(".mb-row-p")!.textContent).toBe("第 17 號工單已開");
     expect(row.querySelector(".mb-row-p")!.classList.contains("is-wait")).toBe(false);
     expect(row.querySelector(".mb-dot")).toBeNull();
     expect(row.querySelector(".mb-av-slime svg.slime")).not.toBeNull();
@@ -239,7 +239,7 @@ describe("the column, used", () => {
     expect(document.activeElement).toBe(input);
     const rows = () => [...card.querySelectorAll<HTMLElement>(".side-search-row")].map(row => row.dataset.member);
     expect(rows()).toEqual(["0", "1", "2", "3", "4"]);
-    expect(card.querySelector('[data-member="1"] .side-search-main span')!.textContent).toBe("PR #17 已開");
+    expect(card.querySelector('[data-member="1"] .side-search-main span')!.textContent).toBe("第 17 號工單已開");
     input.value = "信箱"; input.dispatchEvent(new Event("input"));
     expect(rows()).toEqual(["4"]);
     input.value = "沒有這個人"; input.dispatchEvent(new Event("input"));
@@ -348,7 +348,7 @@ describe("the column, used", () => {
     const shape = () => [...document.querySelector("#app-popover")!.children].map(node => node.matches('[role="separator"]') ? "|" : (node as HTMLElement).dataset.pick);
     const pinned = (...ids: number[]) => { host.view = () => ({ list: { ...LIST, members: LIST.members.map(m => ids.includes(m.id) ? { ...m, pinned: true } : m) }, current: 0, previews, fresh: new Set() }); };
 
-    test("reads as Grok Bot's pinned bot: 取消釘選, 標為未讀, a line, then 換成其他成員 last, each with its own icon", () => {
+    test("the pinned member's menu reads 取消釘選, 標為未讀, a line, then 換成其他成員 last, each with its own icon", () => {
       pinned(3);
       const column = mount();
       column.el.querySelector<HTMLElement>('.mb-pinned [data-member-more="3"]')!.click();

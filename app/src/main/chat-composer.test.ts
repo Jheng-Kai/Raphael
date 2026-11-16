@@ -80,7 +80,6 @@ test("attachment-only delivery uses the shared composer and keeps the file on fa
 });
 
 test("a room's chip stands the moment a file is added, busy and unsendable until its bytes are read",async()=>{
- // Owner, 2026-11-15: 「才剛點下去他就在畫面裡了」 (R-ATTACH-03).
  const {view,send}=mount();const picker=view.el.querySelector<HTMLInputElement>(".cmp-picker")!;let read!:(buffer:ArrayBuffer)=>void;
  Object.defineProperty(picker,"files",{value:[{name:"notes.txt",type:"text/plain",size:5,arrayBuffer:()=>new Promise<ArrayBuffer>(resolve=>{read=resolve;})}]});picker.dispatchEvent(new Event("change"));
  const chip=view.el.querySelector<HTMLElement>(".cmp-file .cmp-chip")!;

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
-// R-FLOAT-01: everything that floats stands on one surface with one edge (owner, 2026-11-12, after Grok Bot's measured colours).
+// R-FLOAT-01: everything that floats stands on one surface with one edge.
 const read = (file: string): string => readFileSync(join(__dirname, file), "utf8").replace(/\r\n/g, "\n");
 const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const styles = strip(read("styles.css"));
@@ -41,8 +41,8 @@ const ruleOf = (file: string, selector: string): string => {
 };
 
 describe("everything that floats", () => {
-  test("the tokens are Grok Bot's measured values in the dark theme and a white surface in the light one", () => {
-    // Settings in Grok Bot's dark theme: the dialog and its nav #121212, the cards on it #1f1f1f with a #2b2b2b edge.
+  test("the tokens are fixed greys in the dark theme and a white surface in the light one", () => {
+    // Settings in the dark theme: the dialog and its nav #121212, the cards on it #1f1f1f with a #2b2b2b edge.
     expect(token(dark, "dialog")).toBe("#121212");
     expect(token(dark, "float")).toBe("#1f1f1f");
     expect(token(dark, "float-edge")).toBe("#2b2b2b");
@@ -109,7 +109,7 @@ describe("everything that floats", () => {
   });
 });
 
-// R-FLOAT-02: inside a floating surface an inner card is the surface itself with a 1 px hairline and its radius (as Grok Bot's Skills and Information cards),
+// R-FLOAT-02: inside a floating surface an inner card is the surface itself with a 1 px hairline and its radius,
 // a control is filled with the control colour, and nothing wears a light outline but a focus ring.
 describe("inner cards on a floating surface", () => {
   const rule = (file: string, selector: string): string => ruleOf(file, selector);

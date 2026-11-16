@@ -316,8 +316,7 @@ export class OverlayController {
   }
 
   /**
-   * A click on a button: one press answers, for every tier (owner, 2026-11-11: 「長按才會繼續，點一下就可以了，不用這麼複雜」;
-   * it was a press held for 0.6 s on the YES of a T3 question until then). The `always` button exists only on a question
+   * A click on a button: one press answers, for every tier (a T3 question's YES once needed a press held for 0.6 s). The `always` button exists only on a question
    * that has the label (always T2); without it a click on it is ignored. A second press finds the question answered.
    */
   clickAsk(button: "yes" | "no" | "always"): void {

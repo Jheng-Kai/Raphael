@@ -28,7 +28,7 @@ const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Mat
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent" | "go">): void {
   nav.classList.add("sidebar");
-  // The foot is one row, as Grok Bot's (R-SIDE-01): the owner's face (it opens the account menu) and the 連結應用程式 pill, which takes
+  // The foot is one row (R-SIDE-01): the owner's face (it opens the account menu) and the 連結應用程式 pill, which takes
   // the rest of the row. On the rail the pill is the icon button of its own and the face stands under it.
   nav.innerHTML = `<div class="sidebar-conversations"></div><div class="side-foot"><div class="sidebar-update" hidden></div><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" aria-haspopup="menu" aria-expanded="false"></button><button type="button" class="nav sidebar-apps" data-connect-apps><span class="sidebar-apps-icon" aria-hidden="true">${ico("gridPlus")}</span><span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button></div></div>`;
   let inventory: InventoryView = "loading";
@@ -108,7 +108,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     const folded = rail();
     document.documentElement.toggleAttribute("data-sidebar-collapsed", folded);
     document.documentElement.toggleAttribute("data-sidebar-narrow", compactWindow.matches);
-    // The rail has no search (owner, 2026-11-12 23:25): only the plus stands in its foot; search stays in the top row, hidden there (sidebar.css).
+    // The rail has no search: only the plus stands in its foot; search stays in the top row, hidden there (sidebar.css).
     if (folded) foot.prepend(add); else header?.append(search, add);
     if (!folded) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
     placeWidth();

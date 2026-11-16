@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { buildGrid, heatmapSVG, level, monthLabels, weeksThatFit } from "./heatmap";
 
-/** `n` days up to 2026-10-14 (a Wednesday), oldest first, with words from `words(k)` for day k from today. */
+/** `n` days up to Wednesday 14 October, oldest first, with words from `words(k)` for day k from today. */
 function days(n: number, words: (back: number) => number = () => 0) {
   const out = [];
   for (let k = n - 1; k >= 0; k--) {

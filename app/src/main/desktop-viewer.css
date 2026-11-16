@@ -154,7 +154,7 @@
 :is(.desktop-mode, .desktop-actions) .btn.sm { height: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0 var(--sp-3); border: 1px solid var(--text); border-radius: var(--r-pill); background: var(--text); color: var(--content); font-size: var(--fs-sm); white-space: nowrap; }
 :is(.desktop-mode, .desktop-actions) .btn.sm:is(:hover, :active):not(:disabled) { border-color: color-mix(in srgb, var(--text) 86%, var(--content)); background: color-mix(in srgb, var(--text) 86%, var(--content)); color: var(--content); }
 :is(.desktop-mode, .desktop-actions) .btn.sm:active:not(:disabled) { border-color: color-mix(in srgb, var(--text) 76%, var(--content)); background: color-mix(in srgb, var(--text) 76%, var(--content)); }
-/* Watching offers Take control; in control offers Stop, quietly (the same two states as Grok Bot's pill). Beside it a
+/* Watching offers Take control; in control offers Stop, quietly. Beside it a
    demonstration's pill offers its review as the one filled button and Discard as quietly as Stop. */
 :is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]) { border-color: var(--line); background: color-mix(in srgb, var(--text) 10%, var(--surface-2)); color: var(--text); }
 :is(.desktop-mode, .desktop-actions) .btn.sm:is([data-desktop="return"], [data-desktop="discard-teach"]):is(:hover, :active):not(:disabled) { border-color: var(--line); background: color-mix(in srgb, var(--text) 16%, var(--surface-2)); color: var(--text); }

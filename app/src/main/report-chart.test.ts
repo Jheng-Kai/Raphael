@@ -8,10 +8,10 @@ const status = (word: string, label?: string): string => `<span class="rp-st">${
 const drawn = (html: string): HTMLElement => { const box = document.createElement("div"); box.innerHTML = html; document.body.append(box); return box; };
 afterEach(() => { document.body.innerHTML = ""; });
 
-// The owner's Notion 「目前狀態」 (2026-11-14): tasks by status, each column by owner.
+// Tasks by status, each column by owner.
 const projects: ReportChart = {
   kind: "chart", title: "專案狀態", type: "stacked", labels: ["待處理", "進行中", "等待回覆", "已完成", "已取消"], unit: "件",
-  series: [{ name: "Claude", values: [4, 3, 6, 63, 0] }, { name: "Codex", values: [1, 2, 1, 17, 0] }, { name: "Jack", values: [5, 1, 14, 12, 0] }, { name: "拉斐爾", member_id: 0, values: [4, 0, 1, 0, 0] }],
+  series: [{ name: "Claude", values: [4, 3, 6, 63, 0] }, { name: "Codex", values: [1, 2, 1, 17, 0] }, { name: "Alex", values: [5, 1, 14, 12, 0] }, { name: "拉斐爾", member_id: 0, values: [4, 0, 1, 0, 0] }],
 };
 
 test("an axis takes round steps, at most five, ending as near the values as a round number allows", () => {
@@ -25,7 +25,7 @@ test("an axis takes round steps, at most five, ending as near the values as a ro
 test("an axis writes large steps short, and whole when the short forms would repeat", () => {
   document.documentElement.lang = "zh-TW";
   const ticks = (values: number[]): string[] => [...drawn(chartHTML({ kind: "chart", type: "line", labels: values.map(String), series: [{ name: "a", values }, { name: "b", values }] }, 0, people)).querySelectorAll(".rc-tick")].map(tick => tick.textContent!);
-  // Raphael's first live overview: 22,950 to 23,412 read 2.3萬 on every step.
+  // A live overview: 22,950 to 23,412 read 2.3萬 on every step.
   const taiex = ticks([22950, 23040, 23105, 23101, 23412]);
   expect(new Set(taiex).size).toBe(taiex.length);
   expect(taiex).toContain("23,000");
@@ -86,7 +86,7 @@ test("stacked columns put each owner's part one on another, the total on top, in
   expect(plot.getAttribute("role")).toBe("img");
   expect(plot.tabIndex).toBe(0);
   expect(plot.getAttribute("aria-label")).toBe(chartLabel(projects));
-  expect(chartLabel(projects)).toContain("等待回覆 Claude 6 件, Codex 1 件, Jack 14 件, 拉斐爾 1 件");
+  expect(chartLabel(projects)).toContain("等待回覆 Claude 6 件, Codex 1 件, Alex 14 件, 拉斐爾 1 件");
   // In a file nothing takes the focus.
   expect(drawn(chartHTML(projects, 3, people, true)).querySelector(".rc-plot")!.hasAttribute("tabindex")).toBe(false);
 });

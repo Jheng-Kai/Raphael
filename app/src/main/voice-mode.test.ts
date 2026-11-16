@@ -92,7 +92,7 @@ describe("the flyer in front of a page", () => {
   });
 
   test("with a page open the flyer stands in front of it while the owner speaks and goes back when the recording ends", () => {
-    // Owner, 2026-11-15: after the send it stayed over the page until he left it. It goes back as it does without a page.
+    // After the send it must not stay over the page. It goes back as it does without a page.
     for (const page of [true, false]) {
       const { stage, button, voice } = setup(page);
       try {

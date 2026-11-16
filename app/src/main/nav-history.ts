@@ -1,8 +1,7 @@
 // The way back through the main window, as in a browser: every screen the person has been on, in the
 // order they went, and a step back or forward through them. A screen is any view the person goes into,
 // however small: another conversation, a page opened in it, a tab of the settings or of a member's
-// settings page, a skill's page, an app's page in Connect Apps (owner, 2026-11-14: 「真的是再小的進到下個畫面
-// 都要可以用側鍵返回」). The mouse's side buttons and Alt+Left / Alt+Right take the steps (nav-input.ts);
+// settings page, a skill's page, an app's page in Connect Apps. The mouse's side buttons and Alt+Left / Alt+Right take the steps (nav-input.ts);
 // main.ts says where the window is and puts it where a step lands. Nothing here reads the page, so the
 // rules can be tested without a browser.
 
@@ -27,7 +26,7 @@ export interface Place {
   pane?: SettingsPane;
   /** What that tab shows inside it (a sub-tab, a dialog, an app's page), in the panel's own words. */
   paneView?: string;
-  /** The one day, `2026-10-14`, that the history shows; absent for all days, and on any other page. */
+  /** The one day, `YYYY-MM-DD`, that the history shows; absent for all days, and on any other page. */
   day?: string;
   tab?: DictationTab;
 }

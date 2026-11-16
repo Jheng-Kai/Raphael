@@ -5,8 +5,7 @@
 // as Settings' own, and only the chosen kind is shown, as
 // compact sections, each a name over one tinted list of rows. Every member has the same kinds, Raphael
 // too: tools, skills and commands, personality and instructions, notifications. There is no memory
-// here, nor anywhere in the app (owner, 2026-11-11: 「可以像 Hermes Agent 一樣，都不要讓我們看到記憶好了，所以記憶是在背後
-// 管理的…如果使用者在使用的情況下遇到記憶有錯誤的時候，再跟他說一下，他自己去改就好了」): the core keeps it, the member
+// here, nor anywhere in the app: the core keeps it, the member
 // corrects it when told. The model is chosen at the composer alone, and members have no voice. What the panel beside it
 // already shows (routines, messaging) is not here. The personality and the instructions are one kind of thing, the words the
 // owner gives the member about how to be and what to do, so each is one quiet row of its words, whole, with a pencil: a press
@@ -104,7 +103,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   let view: View = { kind: "main" };
   let category: Category = CATEGORIES[0].id;
-  /** The cover picture being moved, as Notion's Reposition: where it was, and where it is now. */
+  /** The cover picture being moved: where it was, and where it is now. */
   let reposition: { from: number; at: number } | null = null;
   /** The long fields that are open to be typed in: closed, each is a row of its words. */
   const editing = new Set<Field>();
@@ -251,7 +250,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   /**
    * The cover: its pattern or picture, and at its lower right the round button that changes it. While a picture is moved
-   * (Notion's Reposition) the pointer drags it up and down, and the button gives way to 取消 and 儲存位置.
+   * the pointer drags it up and down, and the button gives way to 取消 and 儲存位置.
    */
   function coverHTML(member: Member): string {
     if (member.cover?.kind !== "image") return iconButton("image", t("memberSettings.cover"), ' data-ms="cover" data-k="ms-cover" aria-haspopup="menu" aria-expanded="false"', "ms-cover-btn");

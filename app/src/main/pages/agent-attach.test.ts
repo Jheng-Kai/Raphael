@@ -108,7 +108,6 @@ function drag(target: Element, type: string, files: File[] = [], relatedTarget: 
 
 describe("files dropped onto the thread", () => {
   test("send is not offered while a file is read, Enter sends nothing, and the pending image opens in the lightbox", async () => {
-    // Owner, 2026-11-15: 「還沒有正常載入完的話，不能顯示傳送的按鈕，不然傳送出去我不知道會變什麼樣子」 (R-ATTACH-04).
     let finishRead!: (buffer: ArrayBuffer) => void;
     let finishSend!: () => void;
     api.agentAskText.mockImplementation(() => new Promise<void>(resolve => { finishSend = resolve; }));
@@ -134,7 +133,6 @@ describe("files dropped onto the thread", () => {
     finishSend(); await flush(); agent.hide();
   });
   test("a chip stands the moment a file is added, busy until its bytes are read, and a file taken away meanwhile is not sent", async () => {
-    // Owner, 2026-11-15: 「理論上應該都要可以一點下去就直接放上去了 因為 claude 就是這樣 才剛點下去他就在畫面裡了」.
     const reads: ((buffer: ArrayBuffer) => void)[] = [];
     const { agent, picker, chips } = mount(); await flush();
     const slow = (file: File): File => { Object.defineProperty(file, "arrayBuffer", { value: () => new Promise<ArrayBuffer>(resolve => { reads.push(resolve); }) }); return file; };

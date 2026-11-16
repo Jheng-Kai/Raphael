@@ -328,7 +328,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
       // Another member's thread is switched to before the page is shown, so the page asks for that thread once,
-      // before anything else (owner, 2026-11-10: 開啟對話太慢); show() then joins the read under way.
+      // before anything else (opening a conversation was slow); show() then joins the read under way.
       if (!sameThread) { switchThread(); app.go("agent"); return; }
       app.go("agent");
       if (openingThread) openedAt = Date.now();
@@ -1206,7 +1206,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     holdOpening();
   }
   /**
-   * The first placement is the final one (owner, 2026-11-11: the conversation opened and then jumped up). While the
+   * The first placement is the final one (the conversation must not open and then jump up). While the
    * unread boundary is not known (a roster still on its way) or its history pages are still coming, the thread is drawn
    * but not shown, so it is never seen at the bottom and then moved to the line. It shows after OPEN_HOLD_MS at the latest.
    */
@@ -1500,7 +1500,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
     // A correction goes as the message goes, not when its answer ends: the page waits for the whole turn, which can take a
-    // member minutes, and the learned pill came long after the owner had moved on (native run, 2026-11-14). A draft given
+    // member minutes, and the learned pill came long after the owner had moved on. A draft given
     // back after a failure then holds no evidence, so a retry never counts the same correction twice.
     void learnComposerCorrections(corrections);
     const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation: corrections.length ? undefined : dictation, pageId: pageDraft.pageId };
@@ -1590,7 +1590,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   async function attachAll(list: readonly File[]): Promise<void> {
     const epoch = attachmentEpoch;
-    // Every chip stands at once, as Claude's do; the bytes are read and
+    // Every chip stands at once; the bytes are read and
     // stored after, one file after the other, and send is offered only once they are in (R-ATTACH-03, R-ATTACH-04).
     const placed: { file: File; id: number; mime: string; name: string }[] = [];
     for (const file of list) {
@@ -1977,8 +1977,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     sayHi(emptyLine());
     // the card of another thread's question goes, and this thread's comes
     delete askCard.dataset.id;
-    // The thread is asked for first: the core answers in order, and the rest of the page can wait for it (owner,
-    // 2026-11-10: 開啟對話太慢). A page that is not on screen reads it, and the rest, as it shows (show()).
+    // The thread is asked for first: the core answers in order, and the rest of the page can wait for it. A page that is not on screen reads it, and the rest, as it shows (show()).
     render();
     if (listening && voiceMember === memberId() && !question) drawComposerTask();
     if (visible) {
@@ -2328,8 +2327,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /**
    * Stop is the page's claim that something is in progress, and the page only knows what its last read said. A turn the core
    * ended while no event reached the page (a core that restarted and swept its rows, a window that was hidden, a dropped
-   * message) would keep Stop on for ever, since nothing reads again (owner, 2026-11-15: 「明明就已經結束任務了，輸入框右下角
-   * 是暫停鍵」). So while Stop shows, the live turns are read now and then; once it does not, nothing is (R-PUMP-03).
+   * message) would keep Stop on for ever, since nothing reads again. So while Stop shows, the live turns are read now and then; once it does not, nothing is (R-PUMP-03).
    */
   function watchStop(): void {
     const task = composerTask();
@@ -2555,7 +2553,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // One choice, 建立副本 with a line saying what follows (a file saved, or a publish request prepared on GitHub; never a link), and only that asks the member to package itself.
       case "share-member": {
         const member = memberId();
-        // Its mark is the member itself, twice: the copy that is about to be made (as Grok Bot's Create a copy; owner, 2026-11-12).
+        // Its mark is the member itself, twice: the copy that is about to be made.
         // A drawing, not the member at work: it takes no presence, so it never moves with what the member does.
         // Each is drawn at a whole size of its own (a scaled slime lands on a fraction of a pixel and blurs, R-UI-63).
         const face = (size: number): string => members.faceOf(member, size).replace(/ data-presence-member="\d+"/g, "");
@@ -2815,7 +2813,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   /**
-   * A page of the Library opens as the page itself (R-PAGE-08; owner, 2026-11-14: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面」):
+   * A page of the Library opens as the page itself (R-PAGE-08):
    * the details panel folds, the page's view stands at once and the page takes its place when its card is drawn in the
    * thread (its turn is read quietly, in its own conversation if that is another). The card is still the page's one home
    * (its frame, revisions and what the member is told it is called), so what stands behind the view is the thread, hidden.
@@ -2939,7 +2937,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
         listening = false;
         voiceRequested = false;
-        // The recording is over: the flyer goes back into the composer, over a page as anywhere (owner, 2026-11-15: held over a
+        // The recording is over: the flyer goes back into the composer, over a page as anywhere (held over a
         // page until the words came back, it stayed after the send). The page's own line says the member is at work (R-VC-04).
         voice.down();
         if (event.phase === "cancelled" || event.phase === "failed") takeBackVoiceDraft();
@@ -3076,7 +3074,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       // The member settings page (member-settings.ts) is asked for by the gear; any other way here is the conversation.
       const settingsFor = typeof arg === "string" && arg.startsWith("member-settings:") ? Number(arg.slice("member-settings:".length)) : null;
       // The settings page hides the conversation, and a hidden scroller forgets its place: it is remembered as the page
-      // opens and put back as the page is left (owner, 2026-11-11: back from the settings the thread was not at the bottom).
+      // opens and put back as the page is left (back from the settings the thread was not at the bottom).
       if (settingsFor !== null && !members.settings.isOpen() && !roomPane.active) chatPlace = wasVisible && !scroller.hidden ? { bottom: atBottom(), top: scroller.scrollTop } : { bottom: true, top: 0 };
       const leavingSettings = settingsFor === null && members.settings.isOpen();
       if (settingsFor === null) members.closeSettings();

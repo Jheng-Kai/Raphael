@@ -30,7 +30,7 @@ test("a member's deletion asks one sentence, Cancel and Delete, and nothing abou
   expect(await answer).toBe(true);
 });
 
-test("the delete question is Grok Bot's small box: no ×, Cancel holds the focus, Escape and a press beside it cancel", async () => {
+test("the delete question is a small box: no ×, Cancel holds the focus, Escape and a press beside it cancel", async () => {
   const escape = confirmDelete("小晴", { member: true });
   const dialog = document.querySelector<HTMLElement>(".mb-dialog")!;
   expect(dialog.classList.contains("mb-delete")).toBe(true);

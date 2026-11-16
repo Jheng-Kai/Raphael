@@ -116,7 +116,7 @@ describe("the marks of well-known programs", () => {
     expect(serviceIconOf({ name: "x", url: "https://mcp.monday.com/mcp" })).toBe("monday");
     expect(serviceIconOf({ name: "x", url: "https://huggingface.co/mcp" })).toBe("huggingface");
     expect(serviceIconOf({ name: "x", url: "https://mcp.webflow.com/mcp" })).toBe("webflow");
-    // The owner's own connector, named as Claude's connectors name it (2026-11-10).
+    // The owner's own connector, named by its connector title.
     expect(serviceIconOf({ name: "Mobbin MCP" })).toBe("mobbin");
     expect(hasLogo("mobbin")).toBe(true);
   });
@@ -219,8 +219,7 @@ describe("the marks of well-known programs", () => {
   });
 });
 
-// The colour of every one-colour mark is its owner's: on the white tile of 連結應用程式 and in its chip, as everywhere (owner, 2026-11-13: 「Spotify
-// 它不是綠色的嗎？Discord 是藍色的」). The official colours are Simple Icons' hex of each brand (https://simpleicons.org); a mark that is black
+// The colour of every one-colour mark is its owner's: on the white tile of 連結應用程式 and in its chip, as everywhere. The official colours are Simple Icons' hex of each brand (https://simpleicons.org); a mark that is black
 // in its official form takes the tile's near-black. The real browser's computed colours are the look check `icon-colours`.
 const OFFICIAL: Record<string, string> = {
   notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", linear: "#5E6AD2", figma: "multi",

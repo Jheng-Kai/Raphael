@@ -1,7 +1,7 @@
-// The account menu (R-SIDE-02, owner 2026-11-12, after Grok Bot's): the owner's face at the foot of the sidebar opens it above
+// The account menu (R-SIDE-02): the owner's face at the foot of the sidebar opens it above
 // the face, left edges together; on the rail it opens to the right of the face. 用量 opens, on a chevron alone, what the app knows of each
 // provider the owner uses: a submenu at its right edge, one block for each (Claude, Codex, Antigravity, the ChatGPT sign-in, OpenRouter:
-// its tightest window and number, or what is truthfully known instead; no reset time, owner 2026-11-14) and 管理用量. The row itself carries no number:
+// its tightest window and number, or what is truthfully known instead; no reset time) and 管理用量. The row itself carries no number:
 // one provider's figure under the bare word would read as everyone's. 聽寫, 行事曆 (the calendar, on today in a fresh session, R-CAL-04)
 // and, after a hairline, 設定 follow. What each reading means is decided in usage-blocks.ts, which Settings' usage cards use as well.
 
@@ -23,7 +23,7 @@ export function accountMenuHTML(blocks: UsageBlock[]): string {
 }
 
 /** The submenu of 用量: each provider's block (name, words at the right, and OpenRouter's balance under them), then the way to the
- *  settings' usage. No reset time: the owner (2026-11-14) wants none in this small box; Settings' usage cards keep it. */
+ *  settings' usage. No reset time in this small box; Settings' usage cards keep it. */
 export function usageSubmenuHTML(blocks: UsageBlock[]): string {
   return blocks.map(block => `<div class="account-window" data-menu-row data-provider="${esc(block.id)}" data-state="${block.state}"><span class="account-window-name">${esc(block.name)}</span><span class="account-window-used num">${esc(block.value)}</span>` +
     (block.detail ? `<span class="account-window-reset">${esc(block.detail)}</span>` : "") + `</div>`).join("") +

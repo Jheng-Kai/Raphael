@@ -960,7 +960,7 @@ test('a stream that ends before it ever showed the screen, or says it cannot rea
 });
 
 test('a running computer is not streamed while its Computer tab is closed: Details carries no computer', async () => {
-  // Owner, 2026-11-14: the computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
+  // The computer lives in the third tab only, so no stream is opened unseen for another view of the panel.
   api.desktopStatus.mockResolvedValue(running); mounted.show(); await vi.advanceTimersByTimeAsync(2000); await flush();
   expect(api.desktopOpen).not.toHaveBeenCalled(); expect(host.querySelector('iframe')).toBeNull();
 });
@@ -1001,7 +1001,7 @@ test("a seat's frame draws its line inside and takes no room, so the 1280:900 pi
 });
 
 test("another member opened while the page was away never shows the previous member's screen", async () => {
-  // owner, 2026-11-15: 「我明明打開不同的角色，結果它顯示前一個角色的畫面」. The sidebar switches the member before the page is
+  // The sidebar switches the member before the page is
   // shown (refresh() runs only for a page on screen), and the first member's stream was still lingering.
   panelOpen = true; mounted.show(); await flush(); message('connected');
   expect(frame().getAttribute('src')).toContain('/one/');

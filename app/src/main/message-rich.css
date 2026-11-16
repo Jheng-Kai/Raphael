@@ -1,7 +1,6 @@
 /* Rich reply cards share the message column and existing surface/control tokens. Every part of a reply has one measure,
    the reading column: plain words grow up to it and a part holding a table or code fills it, so a long reply's parts stand
-   equally wide, as Grok Bot's do, instead of words beside a code block running the thread's whole width (owner,
-   2026-11-09: 「為甚麼 bubble 的寬度不一樣寬啊? 可以都幫我保持跟 grok bot 設計一樣 寬度一樣」). */
+   equally wide, instead of words beside a code block running the thread's whole width. */
 .chat-message[data-reply] { grid-template-columns: fit-content(var(--layout-reading-max)) auto; }
 /* The message stays as wide as its parts and actions (R-UI-104): the card itself takes the reading measure. */
 .chat-message[data-reply]:has(> .rich-block), .chat-message:has(> .rich-block) { width: fit-content; grid-template-columns: minmax(0, max-content) auto; gap: var(--sp-3); }
@@ -67,7 +66,7 @@
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3) 0; color: var(--text-2); font-size: var(--fs-xs); overflow-wrap: anywhere; }
 .chart-key::before { content: ""; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 2px solid var(--text); vertical-align: middle; }
 .chart-key-1::before { border-color: var(--text-2); border-top-style: dashed; }
-/* A bar chart's key is the bar itself, a filled swatch in the bar's colour; a line's is a stroke, solid or dashed like the line (2026-11-11: the key of a bar chart showed dashes). */
+/* A bar chart's key is the bar itself, a filled swatch in the bar's colour; a line's is a stroke, solid or dashed like the line. */
 .chart-legend-bar .chart-key::before { height: 10px; border: 0; background: var(--text); }
 .chart-legend-bar .chart-key-1::before { background: var(--text-2); }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--accent-text); font-weight: var(--weight-semibold); }

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "vitest";
 
-/** The text of a message bubble is the normal text colour whatever its kind or its turn's state (owner, 2026-11-15: the timed
+/** The text of a message bubble is the normal text colour whatever its kind or its turn's state (the timed
  *  progress messages and the replies of a failed turn drew a step paler than an ordinary message, in the dark theme). A message
  *  is `.ans`; no rule may colour it or the text inside it with anything but `var(--text)`, or fade it. */
 const MESSAGE = /(?:^|[\s>+~])(?:\.ans|\.message-text|\.chat-message)(?:\.[\w-]+|\[[^\]]*\]|:[\w-]+(?:\([^)]*\))?)*$/;

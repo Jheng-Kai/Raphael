@@ -26,7 +26,7 @@ export interface HomeItem {
 /** What the calendar can say of Google: not connected and could-not-read are never taken for an empty calendar. */
 export type GoogleCalendarState = "connected" | "not_connected" | "unreadable";
 /** What the core's `home.overview` gives: the calendar's projection (own events, routine runs, the connected Google calendar), which
- * is all the window reads from it since Home was removed (2026-11-12). */
+ * is all the window reads from it since Home was removed. */
 export interface HomeOverview {
   generated_at_ms: number;
   today: HomeItem[];

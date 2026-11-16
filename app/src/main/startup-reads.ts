@@ -1,6 +1,5 @@
 /**
- * Start-up asks the core for the first view first and for everything optional after it (owner, 2026-11-11:
- * 「第一次開 app 的速度還是非常慢，就只有第一次而已」). The core answers on one event loop, so a catalog read that
+ * Start-up asks the core for the first view first and for everything optional after it. The core answers on one event loop, so a catalog read that
  * arrived with the Home overview made the overview take 4 s instead of 0.3 s. Optional reads (the model and app
  * catalogs, the settings read-ahead) wait here until the first view is shown and the core has gone quiet, and then
  * run one at a time.

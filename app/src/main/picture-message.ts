@@ -18,8 +18,7 @@ function mediaFile(text: string, kind: "image" | "video"): TurnAttachment | null
 export const mediaPicture = (text: string): TurnAttachment | null => mediaFile(text, "image");
 
 /**
- * The stored video a member's media message carries, or null. A video is a message of its own as a picture is (owner,
- * 2026-11-15, R-MEDIA-02): react and reply beside it, its reaction on its corner, its ⋯ with 回覆; no Copy, as no clipboard
+ * The stored video a member's media message carries, or null. A video is a message of its own as a picture is (R-MEDIA-02): react and reply beside it, its reaction on its corner, its ⋯ with 回覆; no Copy, as no clipboard
  * takes a video.
  */
 export const mediaVideo = (text: string): TurnAttachment | null => mediaFile(text, "video");

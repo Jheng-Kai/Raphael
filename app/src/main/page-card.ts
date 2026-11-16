@@ -23,13 +23,13 @@ const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 const CARD_WAIT_MS = 10000;
 const MCP_PROTOCOL = "2026-01-26";
 
-/** A report's link card, as Grok Bot's Page: the same card as a file a member made, its icon, its title and 「頁面」. */
+/** A report's link card: the same card as a file a member made, its icon, its title and 「頁面」. */
 const reportLinkHTML = (page: PageCard): string =>
   `<button type="button" class="btn attachment-file pg-link" data-page-act="report" data-page="${esc(page.id)}" data-page-rev="${page.rev}">` +
   `${ico("report")}<span class="attachment-name"><span class="me-file-t">${esc(page.title)}</span><small>${esc(t("page.kind"))}</small></span></button>`;
 
 /** A page that failed reads as a failed mail card: what failed in the card's body line, then what it knows of the page
- *  (the member's plain words) in a well where the page stood, then 再試一次 below (the judge on page-gone, 2026-11-10). */
+ *  (the member's plain words) in a well where the page stood, then 再試一次 below. */
 function failedHTML(page: PageCard): string {
   const words = page.fallback?.trim();
   return `<div class="pg-failed" hidden><p class="card-body cc-state" role="alert">${esc(t("page.failed"))}</p>` +
@@ -39,7 +39,7 @@ function failedHTML(page: PageCard): string {
 
 /** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. A report is a link card.
  *  A page is a card of one fixed height (`--h-page-peek`) whatever it holds or whether it is loading, ready or failed: its
- *  title row and, under it, only the top of the page, clipped and faded into the card (owner, 2026-11-11: a page shown
+ *  title row and, under it, only the top of the page, clipped and faded into the card (a page shown
  *  whole made one very long block). The preview is one control: pressing it, or Enter or Space on it, opens the page whole
  *  (`expand`), where it scrolls and its buttons work. It is a control only once the page is ready. */
 export function pageCardsHTML(turn: AgentTurn): string {

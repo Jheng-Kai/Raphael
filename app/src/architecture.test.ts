@@ -14,7 +14,7 @@ const sources = walk(join(root, "app/src/main")).filter(path => path.endsWith(".
 
 it("mechanical rules link existing named tests", () => {
   // The rows name the same test files hundreds of times, some of them very long: each is read once. Read once per
-  // reference, this test ran past its five seconds on a busy machine (twice on 2026-11-13).
+  // reference, this test ran past its five seconds on a busy machine.
   const kept = new Map<string, string>();
   const once = (path: string): string => { if (!kept.has(path)) kept.set(path, read(path)); return kept.get(path)!; };
   for (const name of ["RULES", "ARCHITECTURE"]) {

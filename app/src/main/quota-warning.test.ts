@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
 import { quotaWarningText, warnQuota, type QuotaWarning } from "./quota-warning";
 
-// 2026-10-24 10:00 in Taipei, the look fixture's clock.
+// 24 October, 10:00 in Taipei: the look fixture's clock.
 const NOW = 1_792_807_200_000;
 const codex: QuotaWarning = { type: "QuotaWarning", provider: "codex", period: "fiveHour", remaining_percent: 8, resets_at: NOW / 1000 + 3 * 3600 + 900 };
 const hiddenWindow = (): Document & { hidden: boolean } => Object.assign(new EventTarget(), { hidden: true }) as unknown as Document & { hidden: boolean };
