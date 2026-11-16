@@ -21,8 +21,22 @@ const SEARCH_DELAY_MS = 200;
 /** How many items one load brings. */
 const PAGE_SIZE = 50;
 
-/** `notepad.exe` is shown as `notepad`. */
-const programName = (app: string): string => app.replace(/\.exe$/i, "");
+/** Apps a Mac names by their bundle identifier (which the shell lowercases), as people know them. */
+const MAC_APPS: Record<string, string> = {
+  "com.apple.mail": "Mail", "com.apple.notes": "Notes", "com.apple.mobilesms": "Messages", "com.apple.safari": "Safari",
+  "com.apple.terminal": "Terminal", "com.apple.textedit": "TextEdit", "com.apple.iwork.pages": "Pages", "com.apple.dt.xcode": "Xcode",
+  "com.google.chrome": "Chrome", "company.thebrowser.browser": "Arc", "org.mozilla.firefox": "Firefox", "com.microsoft.edgemac": "Edge",
+  "com.tinyspeck.slackmacgap": "Slack", "com.hnc.discord": "Discord", "jp.naver.line.mac": "LINE", "ru.keepcoder.telegram": "Telegram",
+  "org.telegram.desktop": "Telegram", "net.whatsapp.whatsapp": "WhatsApp", "com.microsoft.teams2": "Teams", "com.tencent.xinwechat": "WeChat",
+  "com.facebook.archon": "Messenger", "com.microsoft.outlook": "Outlook", "com.microsoft.word": "Word", "notion.id": "Notion", "md.obsidian": "Obsidian",
+  "com.microsoft.vscode": "VS Code", "com.todesktop.230313mzl4w4u92": "Cursor", "dev.zed.zed": "Zed", "com.googlecode.iterm2": "iTerm",
+  "dev.warp.warp-stable": "Warp", "com.mitchellh.ghostty": "Ghostty", "com.openai.chat": "ChatGPT", "com.anthropic.claudefordesktop": "Claude",
+};
+
+/** `notepad.exe` is shown as `notepad`; a Mac's `com.apple.mail` as Mail, and an identifier it does not know by its last part. */
+export const programName = (app: string): string =>
+  /\.exe$/i.test(app) ? app.slice(0, -4)
+    : MAC_APPS[app] ?? (/^[a-z0-9-]+(\.[a-z0-9-]+){2,}$/.test(app) ? app.slice(app.lastIndexOf(".") + 1) : app);
 
 /**
  * What a load asks the core for: the search text, the one day if there is one (from its midnight to

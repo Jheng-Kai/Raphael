@@ -943,3 +943,25 @@ def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
     assert "const grown = innerHeight - framed;" in _HELPER
     assert "Math.abs(height - previous - grown) <= 1" in _HELPER
     assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")
+
+
+async def test_a_youtube_video_plays_from_the_page_host_which_names_itself_to_youtube(conn):
+    """WebKit sends YouTube no referrer from the app's `tauri://` page (its error 153): on a Mac the player is a page here."""
+    host = PageHost(PageStore(conn))
+    try:
+        base = await host.video_base()
+        assert base.startswith("http://127.0.0.1:") and base.endswith("/v/")
+        response = await fetch(base + "dQw4w9WgXcQ?start=42")
+        headers, body = response.split("\r\n\r\n", 1)
+        assert response.startswith("HTTP/1.1 200")
+        assert "Referrer-Policy: strict-origin-when-cross-origin" in headers
+        assert "frame-src https://www.youtube-nocookie.com" in headers and "script-src" not in headers
+        assert 'src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42"' in body
+        # Only a video id is served there, and only to this host's own address.
+        for path in ("/v/<script>", "/v/a%20b", "/v/x", "/v/" + "a" * 30):
+            assert (await fetch(base, path=path)).startswith("HTTP/1.1 404"), path
+        assert (await fetch(base + "dQw4w9WgXcQ", host="evil.example")).startswith("HTTP/1.1 403")
+        # A page keeps its own referrer policy.
+        assert base == await host.video_base()
+    finally:
+        await host.aclose()

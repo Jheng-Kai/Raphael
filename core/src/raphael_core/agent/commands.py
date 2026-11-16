@@ -21,6 +21,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from ..system_words import for_this_system
 from .device import DeviceActions, StartApp
 from .policy import Tier
 
@@ -61,8 +62,8 @@ _COMMAND_LIST = (
     Command(
         "open",
         Tier.T1,
-        "Open a website, an installed application or a Windows settings page by its name, or "
-        "search on a site.",
+        for_this_system("Open a website, an installed application or a Windows settings page by its name, or "
+                        "search on a site."),
         "open",
     ),
     _key("volume_up", "volume_up", "Raise the volume of the computer.", VOLUME_STEPS),

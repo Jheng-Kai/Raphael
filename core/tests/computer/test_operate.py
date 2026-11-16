@@ -23,6 +23,12 @@ PRESS_SEVEN = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def windows_phrases(monkeypatch):
+    """The sentences here are checked in the Windows phrases on any system (a Mac names its own settings)."""
+    monkeypatch.setattr("raphael_core.system_words.MAC", False)
+
+
 @pytest.fixture
 def shell():
     shell = FakeShell()

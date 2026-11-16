@@ -26,6 +26,9 @@ _ENV = re.compile(r"%([^%]+)%|\$\{(?:env:)?([\w]+)\}|\$(?:env:)?([\w]+)", re.I)
 _DATABASE = re.compile(r"(?:^|[\\/\s'\"])raphael\.db(?:-(?:wal|shm))?(?=$|[\s'\";,)?])", re.I)
 _PATH = re.compile(r"(?:[a-z]:[\\/]|\\\\|/mnt/[a-z]/)[^\s'\";,|<>]*", re.I)
 _QUOTED = re.compile(r'"([^"\n]+)"|\x27([^\x27\n]+)\x27')
+# An absolute path of a Mac in a command: from a slash that starts a word, with the spaces a shell escapes
+# (`Application\ Support`) kept inside it. Windows reads its own paths with `_PATH` alone.
+_POSIX_PATH = re.compile(r"(?<![\w.:/\\-])/(?:\\ |[^\s'\";,|<>])+")
 _READ_COMMANDS = frozenset({
     "get-content", "get-item", "get-childitem", "test-path", "resolve-path", "select-string",
     "cat", "type", "head", "tail", "ls", "dir", "pwd", "get-location", "select-object",
@@ -74,10 +77,13 @@ class DataFloor:
                 text = text[1:]
         if not ntpath.isabs(text):
             text = ntpath.join(self.expand(cwd or "~"), text)
-        try:
-            text = os.path.realpath(text)
-        except (OSError, ValueError, RuntimeError):
-            pass
+        # Off Windows a drive path (`C:\\app`) is no path of this computer; resolving it would put it under the
+        # current folder, where it could pass for one of Raphael's own.
+        if sys.platform == "win32" or os.path.isabs(text):
+            try:
+                text = os.path.realpath(text)
+            except (OSError, ValueError, RuntimeError):
+                pass
         return ntpath.normpath(text).casefold().rstrip("\\/")
 
     def _roots(self):
@@ -86,6 +92,9 @@ class DataFloor:
         home = env.get('userprofile') or env.get('home') or str(Path.home())
         # Native CLI environments may omit APPDATA; both Windows app names still belong to Raphael.
         roots.extend(ntpath.join(home, 'AppData', 'Roaming', name) for name in ('Raphael', 'Raphael Dev'))
+        if sys.platform == "darwin":
+            # A Mac keeps the data, the memory and the models of both builds in Application Support.
+            roots.extend(os.path.join(home, 'Library', 'Application Support', name) for name in ('Raphael', 'Raphael Dev'))
         roots.extend(env[key] for key in ("raphael_data_dir", "raphael_home") if env.get(key))
         if getattr(sys, "frozen", False):
             roots.extend([Path(sys.executable).parent, getattr(sys, "_MEIPASS", Path(sys.executable).parent)])
@@ -132,6 +141,8 @@ class DataFloor:
         for quoted in _QUOTED.finditer(expanded):
             yield next(group for group in quoted.groups() if group is not None)
         yield from (match[0] for match in _PATH.finditer(expanded))
+        if sys.platform == "darwin":
+            yield from (match[0].replace("\\ ", " ") for match in _POSIX_PATH.finditer(expanded))
 
     @staticmethod
     def _read_command(command):

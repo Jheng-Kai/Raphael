@@ -13,8 +13,14 @@
 //! overlay is still moving the hand away from it.
 //!
 //! [`Judge`] is the decision, a pure function of the events and the clock; [`hook`] holds the
-//! low-level hooks of Windows that feed it, installed only while a run is under way. Nothing here
-//! logs a key.
+//! low-level hooks of Windows (a listen-only event tap on macOS) that feed it, installed only
+//! while a run is under way. Nothing here logs a key.
+//!
+//! On macOS Raphael's own input is told apart the same way: everything it posts carries its marker
+//! in `kCGEventSourceUserData`, and an event that did not come from the keyboard or the mouse
+//! themselves (its source state is not the HID system's) counts as injected. Esc is macOS's key
+//! code 0x35, given to the judge as Windows' 0x1B; every other key code is given out of the range
+//! of Windows' virtual keys, so that none of them is ever taken for Esc.
 
 use std::time::{Duration, Instant};
 
@@ -281,6 +287,329 @@ pub mod hook {
     impl Drop for Watch {
         fn drop(&mut self) {
             self.end();
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub mod hook {
+    //! The owner's keyboard and mouse on macOS: a listen-only event tap on a thread of its own with
+    //! its run loop, put in by [`Watch::start`] and taken out by [`Watch::stop`] (or when it is
+    //! dropped). The tap only reads: every event goes on, whatever the judge says. It needs the
+    //! Input Monitoring permission (or Accessibility); without it the tap cannot be made, the watch
+    //! does not start, and the run is refused (`watch`), as on Windows.
+
+    use std::ffi::c_void;
+    use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+    use std::sync::{Arc, Mutex, mpsc};
+    use std::time::Instant;
+
+    use super::{Input, Judge, VK_ESCAPE};
+    use crate::macos::ffi::*;
+    use crate::rpc::lock;
+
+    /// macOS's key code of Esc (`kVK_Escape`).
+    const MAC_ESCAPE: i64 = 0x35;
+    /// How often the tap's thread looks whether it is to end, in seconds.
+    const STOP_CHECK_S: f64 = 0.25;
+
+    /// What the tap reports to: the judge, and who is told when the owner's input stops the run.
+    struct Watching {
+        judge: Judge,
+        told: Option<Box<dyn Fn() + Send>>,
+    }
+
+    /// One watch at a time: the tap's callback is a plain function and finds it here.
+    static WATCHING: Mutex<Option<Watching>> = Mutex::new(None);
+    /// The tap, so that the callback can turn it on again when macOS turned it off.
+    static TAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+    fn judge(input: Input) {
+        let mut watching = lock(&WATCHING);
+        let Some(watch) = watching.as_mut() else {
+            return;
+        };
+        if watch.judge.owners(input, Instant::now())
+            && let Some(told) = &watch.told
+        {
+            told();
+        }
+    }
+
+    /// The key code as the judge reads it: Esc as Windows' Esc, every other key out of the range of
+    /// Windows' virtual keys.
+    pub(crate) fn judged_key(code: i64) -> u32 {
+        if code == MAC_ESCAPE {
+            VK_ESCAPE
+        } else {
+            0x1_0000 | (code as u32 & 0xFFFF)
+        }
+    }
+
+    /// The flag of a modifier key, which says whether a `FlagsChanged` event pressed or released
+    /// it.
+    pub(crate) fn modifier_flag(code: i64) -> Option<CGEventFlags> {
+        match code {
+            0x37 | 0x36 => Some(kCGEventFlagMaskCommand),
+            0x38 | 0x3C => Some(kCGEventFlagMaskShift),
+            0x3A | 0x3D => Some(kCGEventFlagMaskAlternate),
+            0x3B | 0x3E => Some(kCGEventFlagMaskControl),
+            0x39 => Some(kCGEventFlagMaskAlphaShift),
+            0x3F => Some(kCGEventFlagMaskSecondaryFn),
+            _ => None,
+        }
+    }
+
+    /// Whether Raphael posted the event, or any program did: only the keyboard and the mouse
+    /// themselves are the owner's.
+    pub(crate) fn injected(marker: i64, source_state: i64) -> bool {
+        marker == handy_keys::RAPHAEL_INPUT_MARKER as i64
+            || source_state != i64::from(kCGEventSourceStateHIDSystemState)
+    }
+
+    // The event types are the framework's constants, named as Apple names them.
+    #[allow(non_upper_case_globals)]
+    unsafe extern "C" fn callback(
+        _proxy: CGEventTapProxy,
+        event_type: CGEventType,
+        event: CGEventRef,
+        _user_info: *mut c_void,
+    ) -> CGEventRef {
+        if matches!(
+            event_type,
+            kCGEventTapDisabledByTimeout | kCGEventTapDisabledByUserInput
+        ) {
+            let tap = TAP.load(Ordering::SeqCst);
+            if !tap.is_null() {
+                // SAFETY: the tap lives until its thread ends, which clears TAP first.
+                unsafe { CGEventTapEnable(tap, true) };
+            }
+            return event;
+        }
+        if event.is_null() {
+            return event;
+        }
+        // SAFETY: a valid event, for the duration of the callback.
+        let input = unsafe {
+            let injected = injected(
+                CGEventGetIntegerValueField(event, kCGEventSourceUserData),
+                CGEventGetIntegerValueField(event, kCGEventSourceStateID),
+            );
+            let code = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+            match event_type {
+                kCGEventKeyDown | kCGEventKeyUp => Some(Input::Key {
+                    vk: judged_key(code),
+                    down: event_type == kCGEventKeyDown,
+                    injected,
+                }),
+                kCGEventFlagsChanged => Some(Input::Key {
+                    vk: judged_key(code),
+                    down: modifier_flag(code)
+                        .is_some_and(|flag| CGEventGetFlags(event) & flag != 0),
+                    injected,
+                }),
+                kCGEventMouseMoved
+                | kCGEventLeftMouseDragged
+                | kCGEventRightMouseDragged
+                | kCGEventOtherMouseDragged => {
+                    let point = CGEventGetLocation(event);
+                    Some(Input::Move {
+                        x: point.x.round() as i32,
+                        y: point.y.round() as i32,
+                        injected,
+                    })
+                }
+                kCGEventLeftMouseDown | kCGEventRightMouseDown | kCGEventOtherMouseDown => {
+                    Some(Input::Button { injected })
+                }
+                kCGEventScrollWheel => Some(Input::Wheel { injected }),
+                _ => None,
+            }
+        };
+        if let Some(input) = input {
+            judge(input);
+        }
+        event
+    }
+
+    /// The events the tap reads.
+    fn mask() -> CGEventMask {
+        [
+            kCGEventKeyDown,
+            kCGEventKeyUp,
+            kCGEventFlagsChanged,
+            kCGEventMouseMoved,
+            kCGEventLeftMouseDragged,
+            kCGEventRightMouseDragged,
+            kCGEventOtherMouseDragged,
+            kCGEventLeftMouseDown,
+            kCGEventRightMouseDown,
+            kCGEventOtherMouseDown,
+            kCGEventScrollWheel,
+        ]
+        .into_iter()
+        .fold(0, |mask, kind| mask | event_mask(kind))
+    }
+
+    /// The tap's thread, while it is in.
+    pub struct Watch {
+        stop: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl Watch {
+        /// Puts the tap in, unarmed; `told` is called (on the tap's thread, so it must be quick)
+        /// when the owner's input stops the run.
+        pub fn start(told: Box<dyn Fn() + Send>) -> Option<Watch> {
+            // macOS asks the owner once, the first time; until then the tap cannot be made.
+            crate::macos::permissions::input_monitoring(true);
+            *lock(&WATCHING) = Some(Watching {
+                judge: Judge::new(),
+                told: Some(told),
+            });
+            let stop = Arc::new(AtomicBool::new(false));
+            let stopping = stop.clone();
+            let (ready, started) = mpsc::channel();
+            let thread = std::thread::Builder::new()
+                .name("raphael-computer-watch".into())
+                .spawn(move || {
+                    // SAFETY: the tap, its source and the run loop are this thread's; everything
+                    // made here is released here, the tap last.
+                    unsafe {
+                        let tap = CGEventTapCreate(
+                            kCGSessionEventTap,
+                            kCGHeadInsertEventTap,
+                            kCGEventTapOptionListenOnly,
+                            mask(),
+                            callback,
+                            std::ptr::null_mut(),
+                        );
+                        if tap.is_null() {
+                            let _ = ready.send(false);
+                            return;
+                        }
+                        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0);
+                        if source.is_null() {
+                            CFMachPortInvalidate(tap);
+                            CFRelease(tap.cast_const());
+                            let _ = ready.send(false);
+                            return;
+                        }
+                        let run_loop = CFRunLoopGetCurrent();
+                        CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes);
+                        TAP.store(tap, Ordering::SeqCst);
+                        CGEventTapEnable(tap, true);
+                        let _ = ready.send(true);
+                        while !stopping.load(Ordering::SeqCst) {
+                            CFRunLoopRunInMode(kCFRunLoopDefaultMode, STOP_CHECK_S, 0);
+                        }
+                        TAP.store(std::ptr::null_mut(), Ordering::SeqCst);
+                        CGEventTapEnable(tap, false);
+                        CFRunLoopRemoveSource(run_loop, source, kCFRunLoopCommonModes);
+                        CFMachPortInvalidate(tap);
+                        CFRelease(source.cast_const());
+                        CFRelease(tap.cast_const());
+                    }
+                })
+                .ok()?;
+            if started.recv().unwrap_or(false) {
+                Some(Watch {
+                    stop,
+                    thread: Some(thread),
+                })
+            } else {
+                log::warn!(
+                    "computer: the watch on the owner's input could not start \
+                     (no Input Monitoring permission)"
+                );
+                let _ = thread.join();
+                *lock(&WATCHING) = None;
+                None
+            }
+        }
+
+        /// The watch counts the owner's input from now (with the mouse's grace).
+        pub fn arm(&self) {
+            if let Some(watch) = lock(&WATCHING).as_mut() {
+                watch.judge.arm(Instant::now());
+            }
+        }
+
+        /// The owner's input does not count (a question is on screen).
+        pub fn disarm(&self) {
+            if let Some(watch) = lock(&WATCHING).as_mut() {
+                watch.judge.disarm();
+            }
+        }
+
+        /// Takes the tap out and ends its thread.
+        pub fn stop(mut self) {
+            self.end();
+        }
+
+        fn end(&mut self) {
+            *lock(&WATCHING) = None;
+            if let Some(thread) = self.thread.take() {
+                self.stop.store(true, Ordering::SeqCst);
+                let _ = thread.join();
+            }
+        }
+    }
+
+    impl Drop for Watch {
+        fn drop(&mut self) {
+            self.end();
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn esc_is_the_judges_esc_and_no_other_key_ever_is() {
+            assert_eq!(judged_key(MAC_ESCAPE), VK_ESCAPE);
+            // kVK_ANSI_Minus is 0x1B, Windows' Esc: it must not read as Esc
+            assert_ne!(judged_key(0x1B), VK_ESCAPE);
+            for code in 0..=0x7F {
+                if code != MAC_ESCAPE {
+                    assert_ne!(judged_key(code), VK_ESCAPE, "{code:#x}");
+                }
+            }
+        }
+
+        #[test]
+        fn a_modifier_key_is_down_while_its_flag_is_set() {
+            assert_eq!(modifier_flag(0x3D), Some(kCGEventFlagMaskAlternate)); // Right Option
+            assert_eq!(modifier_flag(0x37), Some(kCGEventFlagMaskCommand));
+            assert_eq!(modifier_flag(0x00), None);
+        }
+
+        #[test]
+        fn only_the_keyboard_and_the_mouse_themselves_are_the_owners() {
+            let hid = i64::from(kCGEventSourceStateHIDSystemState);
+            assert!(!injected(0, hid));
+            assert!(injected(handy_keys::RAPHAEL_INPUT_MARKER as i64, hid));
+            assert!(injected(0, i64::from(kCGEventSourceStatePrivate)));
+            assert!(injected(
+                0,
+                i64::from(kCGEventSourceStateCombinedSessionState)
+            ));
+        }
+
+        #[test]
+        fn the_tap_reads_keys_buttons_wheel_and_moves() {
+            let mask = mask();
+            for kind in [
+                kCGEventKeyDown,
+                kCGEventFlagsChanged,
+                kCGEventMouseMoved,
+                kCGEventLeftMouseDown,
+                kCGEventScrollWheel,
+            ] {
+                assert_ne!(mask & event_mask(kind), 0, "{kind}");
+            }
+            assert_eq!(mask & event_mask(kCGEventLeftMouseUp), 0);
         }
     }
 }

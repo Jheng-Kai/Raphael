@@ -32,7 +32,7 @@ async def test_start_prefers_detached_cli_without_a_window(host, monkeypatch):
     args, options = spawn.call_args
     assert args == ("docker.exe", "desktop", "start", "--detach")
     assert options == dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+                           stderr=subprocess.DEVNULL, creationflags=desktop_host.NO_WINDOW)
     assert all("Docker Desktop.exe" not in call.args for call in spawn.call_args_list)
 
 
@@ -48,7 +48,7 @@ async def test_old_cli_falls_back_only_for_missing_desktop_command(host, monkeyp
     await host.start()
     assert spawn.call_args.args == ("Docker Desktop.exe",)
     assert spawn.call_args_list[0].args == ("docker.exe", "desktop", "start", "--help")
-    assert spawn.call_args.kwargs["creationflags"] == subprocess.CREATE_NO_WINDOW
+    assert spawn.call_args.kwargs["creationflags"] == desktop_host.NO_WINDOW
     await asyncio.sleep(0)
 
 
@@ -62,6 +62,7 @@ async def test_general_cli_error_does_not_open_gui(host, monkeypatch):
 
 
 async def test_missing_cli_uses_installed_gui(host, monkeypatch):
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'win32')
     monkeypatch.setattr("raphael_core.computer.desktop_host.shutil.which", lambda name: None)
     monkeypatch.setattr(Path, "is_file", lambda path: False)
     spawn = AsyncMock(return_value=process())
@@ -73,6 +74,7 @@ async def test_missing_cli_uses_installed_gui(host, monkeypatch):
 
 
 def test_cli_installation_is_found_outside_path(host, monkeypatch, tmp_path):
+    monkeypatch.setattr('raphael_core.computer.desktop_host.sys.platform', 'win32')
     monkeypatch.setenv("ProgramFiles", str(tmp_path))
     cli = tmp_path / "Docker/Docker/resources/bin/docker.exe"
     cli.parent.mkdir(parents=True)

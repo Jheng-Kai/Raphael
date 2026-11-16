@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the app's Info.plist on macOS. The core (a child process) records the microphone
+     under this app, so the app bundle carries the reason macOS shows for it. -->
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Raphael listens while you hold the dictation key or ask a member something.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Raphael pauses and resumes the music that plays while you dictate.</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.productivity</string>
+</dict>
+</plist>

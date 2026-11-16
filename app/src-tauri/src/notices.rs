@@ -71,10 +71,21 @@ pub const ELEVATED: Notice = Notice {
 };
 
 /// Focus moved to another window after the key was released, so the text was only copied.
-pub const FOCUS_CHANGED: Notice = Notice {
+pub const FOCUS_CHANGED: Notice = if cfg!(target_os = "macos") {
+    FOCUS_CHANGED_MAC
+} else {
+    FOCUS_CHANGED_WINDOWS
+};
+const FOCUS_CHANGED_WINDOWS: Notice = Notice {
     zh: "《告。偵測到視窗切換。文字已複製，請按 Ctrl+V。》",
     en: "《Notice. The focus moved to another window. The text is copied. Press Ctrl+V.》",
     ja: "《告。ウィンドウの切り替えを検知しました。コピー済みです。Ctrl+V で貼り付けてください。》",
+};
+/// The same on macOS, where pasting is Command+V.
+const FOCUS_CHANGED_MAC: Notice = Notice {
+    zh: "《告。偵測到視窗切換。文字已複製，請按 ⌘V。》",
+    en: "《Notice. The focus moved to another window. The text is copied. Press Command+V.》",
+    ja: "《告。ウィンドウの切り替えを検知しました。コピー済みです。⌘V で貼り付けてください。》",
 };
 
 /// The monthly limit is reached: the raw text is pasted without cleanup.
@@ -131,10 +142,21 @@ pub const NO_MIC: Notice = Notice {
 
 /// The microphone is there but delivered no sound (muted, or a wireless headset asleep), and
 /// nothing came of the recording (`silent` in the result of `dictation.stop`).
-pub const NO_SOUND: Notice = Notice {
+pub const NO_SOUND: Notice = if cfg!(target_os = "macos") {
+    NO_SOUND_MAC
+} else {
+    NO_SOUND_WINDOWS
+};
+const NO_SOUND_WINDOWS: Notice = Notice {
     zh: "《否。未收到聲音。請取消麥克風靜音，並在 Windows 的麥克風隱私設定允許桌面應用程式。》",
     en: "《Negative. No sound was received. Unmute the microphone and allow desktop apps in Windows microphone privacy settings.》",
     ja: "《否。音声を受信できません。ミュートを解除し、Windows のマイク設定でデスクトップアプリを許可してください。》",
+};
+/// The same on macOS, whose privacy switch is per app.
+const NO_SOUND_MAC: Notice = Notice {
+    zh: "《否。未收到聲音。請取消麥克風靜音，並在「系統設定 › 隱私權與安全性 › 麥克風」允許拉斐爾。》",
+    en: "《Negative. No sound was received. Unmute the microphone and allow Raphael in System Settings > Privacy & Security > Microphone.》",
+    ja: "《否。音声を受信できません。ミュートを解除し、「システム設定 › プライバシーとセキュリティ › マイク」でラファエルを許可してください。》",
 };
 
 /// The cloud speech model's credentials are missing.
@@ -261,18 +283,21 @@ pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
 mod tests {
     use super::*;
 
-    const ALL: [Notice; 17] = [
+    /// Every notice, with the Windows and the macOS wording of those that differ.
+    const ALL: [Notice; 19] = [
         NOTHING_SELECTED,
         TIDY_FAILED,
         NOT_CLEANED,
         CORE_RECOVERED,
         ELEVATED,
-        FOCUS_CHANGED,
+        FOCUS_CHANGED_WINDOWS,
+        FOCUS_CHANGED_MAC,
         BUDGET,
         OFFLINE,
         NO_KEY,
         NO_MIC,
-        NO_SOUND,
+        NO_SOUND_WINDOWS,
+        NO_SOUND_MAC,
         NOT_READY,
         NO_LOCAL_MODEL,
         INCOMPLETE,

@@ -9,6 +9,7 @@ from ..failures import RECENT, classify, redact
 from ..connectors.composio import KEY
 from ..connectors.google import PREFIX
 from ..integrations.vault import secret_name
+from ..system_words import for_this_system
 
 ABOUT_INDEX = """About Raphael (read raphael_help for details):
 1. Connections: Composio managed apps, Google OAuth, and installed MCP servers.
@@ -22,6 +23,7 @@ ABOUT_INDEX = """About Raphael (read raphael_help for details):
 9. Logs: raphael.log; self_check reads only recent redacted failure diagnostics.
 10. Calendar: the app's own, on Home; read and change it with the calendar_* tools.
 """
+ABOUT_INDEX = for_this_system(ABOUT_INDEX)
 
 DOCTRINE = """
 Use prose when it fits, a table for simple comparisons, and show_page only for something to operate.

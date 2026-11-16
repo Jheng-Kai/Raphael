@@ -29,7 +29,7 @@ from .test_service import make_rig  # noqa: F401
 # Every tool by which a turn reaches the owner's PC: the local command tools, the run on the desktop, the fixed commands.
 PC_TOOLS = {"local__local_exec", "local__local_job", "computer", *COMMANDS}
 # Words that would send a model to that PC from its prompt.
-PC_WORDS = ("local_exec", "local__", "owner's PC", "owner's Windows", "Windows PC", "Windows computer", "Local commands",
+PC_WORDS = ("local_exec", "local__", "owner's PC", "owner's Windows", "owner's Mac", "Windows PC", "Windows computer", "Local commands",
             "claude -p", "codex exec", "local command tool")
 MODES = ["ask", "direct", "plan", "bypass"]
 

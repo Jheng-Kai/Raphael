@@ -1152,3 +1152,11 @@ def test_the_rules_tell_the_model_to_write_the_entry_for_what_is_listed_under_it
 def test_dictionary_spans_is_empty_for_a_transcript_that_spells_the_dictionary_right():
     assert cleanup.dictionary_spans(["grokbot", "GitHub"], [], "像是Grokbot跟GitHub這樣子") == {}
     assert cleanup.dictionary_spans(["grokbot"], [], "像是Grokbox這樣子") == {"grokbot": ["Grokbox"]}
+
+
+def test_a_mac_app_is_known_by_its_bundle_identifier():
+    from raphael_core.brain.cleanup import describe_target_app
+    assert describe_target_app("com.tinyspeck.slackmacgap") == "com.tinyspeck.slackmacgap (chat)"
+    assert describe_target_app("com.apple.mail") == "com.apple.mail (email or document)"
+    assert describe_target_app("com.microsoft.vscode") == "com.microsoft.vscode (code editor or terminal)"
+    assert describe_target_app("com.example.unknown") == "com.example.unknown"

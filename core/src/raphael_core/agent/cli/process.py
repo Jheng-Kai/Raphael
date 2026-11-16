@@ -210,7 +210,8 @@ class Child:
         elif os.name != "nt":
             try:
                 os.killpg(self.process.pid, signal.SIGKILL)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
+                # A group with nothing left in it but processes that have ended: Linux says ESRCH, macOS EPERM.
                 pass
         if self.process.returncode is None:
             self.process.kill()

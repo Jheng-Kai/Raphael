@@ -1,7 +1,9 @@
-"""The Windows command boundary; subprocess ownership stays in the core."""
+"""The command boundary of the owner's computer (PowerShell on Windows, zsh on macOS); subprocess ownership
+stays in the core."""
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 from ..agent.cli.process import Child
@@ -17,6 +19,13 @@ RUNNER = (
     "else { foreach ($raphael_statement in $raphael_ast.EndBlock.Statements) { "
     ". ([scriptblock]::Create($raphael_statement.Extent.Text)) | Out-String -Stream -Width 240 } }"
 )
+
+
+# The system the commands run on, as `LocalHost` reads it (a test replaces it, not `sys.platform`).
+PLATFORM = sys.platform
+# zsh without the person's start-up files, as PowerShell runs with -NoProfile: the command comes from the
+# environment, which is emptied of it before it runs, and a command that does not parse reports why.
+ZSH_RUNNER = 'raphael_text=$RAPHAEL_LOCAL_COMMAND; unset RAPHAEL_LOCAL_COMMAND; eval "$raphael_text"'
 
 
 class Output:
@@ -51,13 +60,19 @@ class CommandChild(Child):
 class LocalHost:
     async def execute(self, command, *, cwd=None, timeout_seconds=60, output=None, errors=None):
         from ..background.host import worker_environment
-        if os.name != "nt":
+        if PLATFORM == "darwin":
+            argv = ["/bin/zsh", "-f", "-c", ZSH_RUNNER]
+            environ = {**worker_environment(), "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8",
+                       "RAPHAEL_LOCAL_COMMAND": command}
+        elif PLATFORM != "win32":
             raise OSError("windows_required")
-        shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
-        script = ("[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
-                  "$OutputEncoding = [Console]::OutputEncoding; $PSDefaultParameterValues['*:Encoding'] = 'utf8'; " + RUNNER)
-        child = CommandChild([str(shell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
-                             environ={**worker_environment(), "RAPHAEL_LOCAL_COMMAND": command}, cwd=cwd or str(Path.home()), errors=errors)
+        else:
+            shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+            script = ("[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+                      "$OutputEncoding = [Console]::OutputEncoding; $PSDefaultParameterValues['*:Encoding'] = 'utf8'; " + RUNNER)
+            argv = [str(shell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script]
+            environ = {**worker_environment(), "RAPHAEL_LOCAL_COMMAND": command}
+        child = CommandChild(argv, environ=environ, cwd=cwd or str(Path.home()), errors=errors)
         stdout = output if output is not None else Output()
         timed_out = False
         try:

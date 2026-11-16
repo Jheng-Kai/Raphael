@@ -17,6 +17,12 @@ from raphael_core.agent.persona import (
 )
 from raphael_core.brain.textnorm import convert_leftover_simplified
 
+@pytest.fixture(autouse=True)
+def windows_phrases(monkeypatch):
+    """The sentences here are checked in the Windows phrases on any system (a Mac names its own settings)."""
+    monkeypatch.setattr("raphael_core.system_words.MAC", False)
+
+
 # --- the languages -------------------------------------------------------------------------------
 
 

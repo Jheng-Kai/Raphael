@@ -6,7 +6,9 @@ Pure logic with no audio in it; `audio.py` feeds it the microphones PortAudio li
 * A loopback ("Stereo Mix", 「立體聲混音」: what the speakers play) is never a microphone, whatever
   else is there.
 * An attached microphone (a headset, a USB or a jack microphone) comes before a laptop's built-in
-  array. Nothing here names a maker: a built-in array is recognised by what Windows calls it.
+  array. Nothing here names a maker of headsets: a built-in array is recognised by what Windows or
+  macOS calls it (「MacBook Pro Microphone」), and an iPhone that offers its microphone to the Mac
+  nearby (Continuity) counts as built in, so that it never takes over from the Mac's own.
 * The choice does not move while it stays there. It moves when the microphone it is on goes away,
   or when another external microphone is plugged in (one the previous look did not list). It never
   moves because of a sound level, the order PortAudio lists them in, or the Windows default.
@@ -26,16 +28,21 @@ import threading
 from collections.abc import Iterable
 from typing import Protocol, TypeVar
 
-# What the speakers play, in the words Windows uses around the world. Matched on the lower-cased name.
+# What the speakers play, in the words Windows uses around the world, and the virtual devices that
+# carry an app's sound on macOS (BlackHole, Soundflower, the meeting apps' own). Matched on the
+# lower-cased name.
 _LOOPBACK = re.compile(
     r"stereo[\s_-]*mix|stereomix|what[\s_-]*(u|you)[\s_-]*hear|loopback|wave[\s_-]*out[\s_-]*mix"
     r"|mixage|mezcla est|mixagem|立體聲混音|立体声混音|立體聲混合|ステレオ\s*ミキサー|스테레오\s*믹스"
     r"|стерео\s*микшер|что\s*слышит"
+    r"|blackhole|soundflower|zoomaudiodevice|microsoft teams audio|ishowu|background music"
 )
-# A laptop's own array, in the words Windows uses around the world.
+# A laptop's own array, in the words Windows and macOS use around the world, and an iPhone's
+# Continuity microphone.
 _BUILT_IN = re.compile(
     r"array|麥克風排列|麥克風陣列|麦克风阵列|マイク\s*アレイ|마이크\s*배열|matrice|matriz de micr"
     r"|mikrofonarray|built[\s-]*in|integrated|internal|內建|内置|内蔵"
+    r"|macbook|\bimac\b|iphone"
 )
 # How long a recording must be for its silence to say anything about the microphone, and how many silent
 # recordings in a row pass one over.

@@ -20,6 +20,12 @@ from .test_service import did, make_rig, site  # noqa: F401
 # --- the words -------------------------------------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def windows_phrases(monkeypatch):
+    """The questions here are checked in the Windows phrases on any system (a Mac's says "this Mac")."""
+    monkeypatch.setattr("raphael_core.system_words.MAC", False)
+
+
 @pytest.mark.parametrize("text", [
     "用你的電腦開 YouTube", "用你自己的電腦打開 github.com", "你用電腦開一下這個網頁", "你去用電腦開 Google", "請用妳的電腦開啟 Gmail",
     "用拉斐爾的電腦開 YouTube", "open YouTube on your computer", "use your own computer to open reddit", "Raphael, launch Chrome on your PC",
@@ -161,3 +167,15 @@ async def test_this_pc_as_the_answer_keeps_the_owner_pc_shortcut(make_rig, clien
     result = await rig.ask("this one", language="en")
     assert len(client.decide_calls) == 1  # the router was asked, as it is for any quick request
     assert result["status"] == "done"
+
+
+def test_a_mac_is_the_owners_computer_by_its_own_names():
+    for text in ("用我的 Mac 開 YouTube", "在我的mac上打開", "open it on my MacBook", "open it on my mac"):
+        assert whose_computer(text) == OWNER, text
+
+
+def test_on_a_mac_the_question_says_this_mac(monkeypatch):
+    from raphael_core.agent.persona import phrase
+    monkeypatch.setattr("raphael_core.system_words.MAC", True)
+    assert phrase("en", "which_computer", who="Raphael") == "Open it on this Mac, or on Raphael's own computer?"
+    assert "輸入監控" in phrase("zh-TW", "computer_watch")

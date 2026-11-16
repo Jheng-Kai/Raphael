@@ -71,8 +71,11 @@ def brain(request, setup, client, tmp_path, monkeypatch):
             client.chats = [answer] * (len(replies) + len(calls))
 
     def continued():
-        """What the brain was shown when the turn went on."""
-        return runs[-1] if request.param == "cli" else str(turn_calls()[-1]["messages"])
+        """What the brain was shown when the turn went on. The new members' greetings are runs of their own, which may
+        end after it, so the turn's run is found by what it carries, as the fake brain above tells it."""
+        if request.param == "cli":
+            return next(user for user in reversed(runs) if "team_changes" in user or "management_changes" in user)
+        return str(turn_calls()[-1]["messages"])
 
     def turn_calls():
         """The turn's own calls to the model, without the new members' greetings."""

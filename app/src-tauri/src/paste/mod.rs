@@ -13,15 +13,29 @@
 
 #[cfg(windows)]
 mod clipboard;
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(windows)]
 mod windows;
 
 #[cfg(windows)]
 pub use self::clipboard::read_text as read_clipboard_text;
+#[cfg(target_os = "macos")]
+pub use self::macos::MacPaster;
+#[cfg(target_os = "macos")]
+#[allow(unused_imports)]
+pub(crate) use self::macos::describe_process;
 #[cfg(windows)]
 pub use self::windows::WindowsPaster;
 #[cfg(windows)]
 pub(crate) use self::windows::describe_process;
+
+/// The [`Paster`] of the system the app runs on.
+#[cfg(windows)]
+pub type SystemPaster = WindowsPaster;
+/// The [`Paster`] of the system the app runs on.
+#[cfg(target_os = "macos")]
+pub type SystemPaster = MacPaster;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -51,6 +65,8 @@ pub enum Shortcut {
 /// The key chord that makes a program copy, the partner of [`Shortcut`]. A terminal copies with
 /// Ctrl+Shift+C: its Ctrl+C is an interrupt, and must never be sent to it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// Windows' copy chords: macOS copies with ⌘C everywhere (paste/macos.rs).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum CopyShortcut {
     CtrlC,
     CtrlShiftC,
@@ -58,6 +74,7 @@ pub enum CopyShortcut {
 }
 
 /// The copy chord of the program that pastes with `paste` (see [`shortcut_for`]).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn copy_shortcut_for(paste: Shortcut) -> CopyShortcut {
     match paste {
         Shortcut::CtrlV => CopyShortcut::CtrlC,
@@ -208,7 +225,7 @@ pub fn shortcut_for(process_name: &str) -> Shortcut {
     }
 }
 
-/// Puts dictated text into the focused window. [`WindowsPaster`] is the real one; the
+/// Puts dictated text into the focused window. [`SystemPaster`] is the real one; the
 /// controller's tests use a fake.
 pub trait Paster: Send + Sync + 'static {
     /// The window that has focus now, if any.

@@ -129,8 +129,8 @@ pub struct CoreCommand {
 const PYTHON_OVERRIDE: &str = "RAPHAEL_CORE_PYTHON";
 
 /// Release builds run the packaged core from Tauri's resources. Development builds run
-/// `core/.venv/Scripts/python.exe -m raphael_core` from this checkout; `RAPHAEL_CORE_PYTHON`
-/// can replace that development interpreter.
+/// `core/.venv/Scripts/python.exe -m raphael_core` (`core/.venv/bin/python` on macOS) from this
+/// checkout; `RAPHAEL_CORE_PYTHON` can replace that development interpreter.
 pub fn resolve_app_core_command(app: &tauri::AppHandle) -> Result<CoreCommand, String> {
     use tauri::Manager;
 
@@ -185,7 +185,7 @@ fn command_in(repo: &Path, python: Option<OsString>) -> Result<CoreCommand, Stri
     let program = match python.filter(|python| !python.is_empty()) {
         Some(python) => PathBuf::from(python),
         None => {
-            let venv_python = core_dir.join(".venv").join("Scripts").join("python.exe");
+            let venv_python = venv_python(&core_dir.join(".venv"));
             if !venv_python.is_file() {
                 return Err(format!(
                     "the core's Python {} does not exist: run `uv sync` in {}, or set \
@@ -214,10 +214,29 @@ fn command_in(repo: &Path, python: Option<OsString>) -> Result<CoreCommand, Stri
     })
 }
 
+/// The interpreter of a uv virtual environment: `Scripts\python.exe` on Windows, `bin/python`
+/// elsewhere.
+#[cfg(any(debug_assertions, test))]
+fn venv_python(venv: &Path) -> PathBuf {
+    if cfg!(windows) {
+        venv.join("Scripts").join("python.exe")
+    } else {
+        venv.join("bin").join("python")
+    }
+}
+
+/// The file name of the packaged core's executable.
+#[cfg(any(not(debug_assertions), test))]
+const PACKAGED_CORE: &str = if cfg!(windows) {
+    "raphael-core.exe"
+} else {
+    "raphael-core"
+};
+
 #[cfg(any(not(debug_assertions), test))]
 fn packaged_command_in(resources: &Path) -> Result<CoreCommand, String> {
     let core_dir = resources.join("core");
-    let program = core_dir.join("raphael-core.exe");
+    let program = core_dir.join(PACKAGED_CORE);
     if !program.is_file() {
         return Err(format!(
             "the packaged core executable {} does not exist: reinstall Raphael",
@@ -869,10 +888,10 @@ mod tests {
     /// A repo-shaped temp dir, with or without the core's virtual environment.
     fn fake_repo(with_venv: bool) -> tempfile::TempDir {
         let repo = tempfile::tempdir().unwrap();
-        let scripts = repo.path().join("core").join(".venv").join("Scripts");
-        std::fs::create_dir_all(&scripts).unwrap();
+        let python = venv_python(&repo.path().join("core").join(".venv"));
+        std::fs::create_dir_all(python.parent().unwrap()).unwrap();
         if with_venv {
-            std::fs::write(scripts.join("python.exe"), b"").unwrap();
+            std::fs::write(&python, b"").unwrap();
         }
         repo
     }
@@ -882,10 +901,7 @@ mod tests {
         let repo = fake_repo(true);
         let command = command_in(repo.path(), None).unwrap();
         let core_dir = repo.path().join("core");
-        assert_eq!(
-            command.program,
-            core_dir.join(".venv").join("Scripts").join("python.exe")
-        );
+        assert_eq!(command.program, venv_python(&core_dir.join(".venv")));
         assert_eq!(command.args, ["-m", "raphael_core"]);
         assert_eq!(command.cwd, core_dir);
         // Python writes its log to stderr in UTF-8 whatever the machine's code page is.
@@ -916,15 +932,18 @@ mod tests {
     fn an_empty_override_means_no_override() {
         let repo = fake_repo(true);
         let command = command_in(repo.path(), Some(OsString::new())).unwrap();
-        assert!(command.program.ends_with("python.exe"));
-        assert!(command.program.starts_with(repo.path()));
+        assert_eq!(
+            command.program,
+            venv_python(&repo.path().join("core").join(".venv"))
+        );
     }
 
     #[test]
     fn a_missing_venv_is_reported_with_the_way_out() {
         let repo = fake_repo(false);
         let err = command_in(repo.path(), None).unwrap_err();
-        assert!(err.contains("python.exe"), "{err}");
+        let python = venv_python(&repo.path().join("core").join(".venv"));
+        assert!(err.contains(&python.display().to_string()), "{err}");
         assert!(err.contains("uv sync"), "{err}");
         assert!(err.contains("RAPHAEL_CORE_PYTHON"), "{err}");
     }
@@ -942,10 +961,10 @@ mod tests {
         let resources = dir.path().join("Raphael install resources");
         let core_dir = resources.join("core");
         std::fs::create_dir_all(core_dir.join("_internal")).unwrap();
-        std::fs::write(core_dir.join("raphael-core.exe"), b"").unwrap();
+        std::fs::write(core_dir.join(PACKAGED_CORE), b"").unwrap();
 
         let command = packaged_command_in(&resources).unwrap();
-        assert_eq!(command.program, core_dir.join("raphael-core.exe"));
+        assert_eq!(command.program, core_dir.join(PACKAGED_CORE));
         assert_eq!(command.cwd, core_dir);
         assert!(command.args.is_empty());
         assert!(
@@ -964,7 +983,7 @@ mod tests {
                 &resources
                     .path()
                     .join("core")
-                    .join("raphael-core.exe")
+                    .join(PACKAGED_CORE)
                     .display()
                     .to_string()
             ),
@@ -979,7 +998,7 @@ mod tests {
         let resources = tempfile::tempdir().unwrap();
         let core_dir = resources.path().join("core");
         std::fs::create_dir_all(&core_dir).unwrap();
-        std::fs::write(core_dir.join("raphael-core.exe"), b"").unwrap();
+        std::fs::write(core_dir.join(PACKAGED_CORE), b"").unwrap();
 
         let err = packaged_command_in(resources.path()).unwrap_err();
         assert!(

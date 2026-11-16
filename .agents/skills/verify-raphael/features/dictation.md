@@ -1,5 +1,27 @@
 # Dictation
 
+## macOS (2026-11-15)
+
+The same controller runs on a Mac (`dictation.rs` `app::spawn`, no longer Windows-only). The dictation key is Right
+Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalogs.ts`). What differs:
+
+- Hotkeys: the event tap of `vendor/handy-keys/src/platform/macos/listener.rs`, with the four Raphael patches of the
+  Windows hook (swallowed modifier releases, injected input ignored, Esc and other input reported to the cancel gesture,
+  Space before its modifier). Without Accessibility the service waits (`hotkey.rs` `late`) and starts when it is given.
+- Paste: `paste/macos.rs` puts the text on the pasteboard with nspasteboard.org's transient markers, sends ⌘V (the key
+  that types "v" on the layout), and puts the clipboard back after `pasteboard::READ_WAIT`. A target is the focused
+  window's window-server number, its process and its app's bundle identifier (lowercased).
+- Learning from corrections: `learn/ax.rs` reads the focused text element through the accessibility API; terminals are
+  not watched on macOS.
+- Media: `media/macos.rs`, MediaRemote where macOS answers, else Music, Spotify, TV and VLC through `osascript`.
+- The tidy key is Right Option+T: `paste/macos.rs` `copy` sends ⌘C (every app copies with it, terminals included), waits
+  for the pasteboard's change count as Windows waits for the clipboard's sequence number, reads the text and puts the
+  person's pasteboard back. The posted chord carries ⌘ alone, so the Right Option still held is not seen with it.
+- Microphone choice: `mic_choice.py` knows a Mac's own microphone (and a nearby iPhone's) as built in and BlackHole,
+  Soundflower and the meeting apps' virtual devices as loopbacks.
+- Verify on a Mac by hand in `npm run tauri -- dev` (the terminal is the app macOS asks permissions for); `npm run
+  native` is Windows-only.
+
 ## The tidy key: Right Alt+T tidies the text that is selected (2026-11-15)
 
 Owner, 2026-11-15 (「把一個對話或文字框起來，然後按某個鍵它可以幫我做潤稿」): in any app, select text and press Right Alt+T; the

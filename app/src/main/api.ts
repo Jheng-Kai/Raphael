@@ -4,6 +4,7 @@
 
 import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
+import { IS_MAC } from "../shared/platform";
 import { crownPrimary } from "./crown";
 import { fillPictures } from "./member-pictures";
 import { optionalReadsOpen, trackCoreCall } from "./startup-reads";
@@ -565,9 +566,13 @@ export const modelsEnsure = (names: string[]): Promise<{ ok: boolean }> => core(
 export const openLink = (url: string): Promise<void> => invoke("open_link", { url });
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
+/** What the clipboard holds, for a paste button: WKWebView (macOS) does not let the page read it, so the shell does there. */
+export const clipboardText = (): Promise<string> => IS_MAC ? invoke<string>("clipboard_text") : navigator.clipboard.readText();
 /** A sign-in in the browser has finished: the owner's way back is this window coming to the front. */
 export const mainWindowForward = (): Promise<void> => invoke("main_window_forward");
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
+/** Where a YouTube video plays inside the window on a Mac: a page of the core's own host (`/v/<id>`). */
+export const pagesVideoBase = (): Promise<{ base: string }> => core("pages.video_base", {});
 /**
  * Which page stands open beside the composer (null: none), told to the core just before a message is sent, so the member
  * that answers knows what "here" and "this" mean and changes that page in place (core agent/pages.py `viewing`).

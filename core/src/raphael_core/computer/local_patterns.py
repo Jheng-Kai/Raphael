@@ -117,3 +117,28 @@ DANGEROUS_PATTERNS = [
     ('\\breg(?:\\.exe)?\\s+delete\\b', 'Windows registry deletion'),
     ('\\b(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\\b[^\\n]*\\|\\s*(?:sh|bash|pwsh|powershell|iex|Invoke-Expression)\\b', 'Download and execute'),
 ]
+
+# The same protections for the commands of a Mac (zsh), which the list above, written for PowerShell and
+# Linux, does not name: erasing disks, turning off the system's protections, the boot settings, the backups,
+# the SSH keys of the home folder and the browsers' profiles. Added to the list on macOS only.
+MAC_DANGEROUS_PATTERNS = [
+    ('\\bdiskutil\\s+(?:erase\\w*|zerodisk|secureerase|randomdisk|reformat|partitiondisk|apfs\\s+(?:delete\\w*|erase\\w*))\\b', 'erase a disk (diskutil)'),
+    ('\\bcsrutil\\s+(?:disable|clear|authenticated-root\\s+disable)\\b', 'turn off System Integrity Protection (csrutil)'),
+    ('\\bspctl\\s+--?(?:master-disable|global-disable|disable)\\b', 'turn off Gatekeeper (spctl)'),
+    ('\\bnvram\\b[^\\n;|&]*(?:\\s-[cd]\\b|=)', 'change the boot settings (nvram)'),
+    ('\\bbless\\b', 'change the startup disk (bless)'),
+    ('\\btmutil\\s+(?:delete\\w*|disable|thinlocalsnapshots)\\b', 'delete Time Machine backups (tmutil)'),
+    ('\\bsrm\\b', 'secure delete (srm)'),
+    ('\\bdefaults\\s+delete\\b', 'delete app preferences (defaults delete)'),
+    ('\\blaunchctl\\s+(?:unload|bootout|remove|disable|kill)\\b', 'stop or remove a launchd service (launchctl)'),
+    ('\\b(?:reboot|halt|shutdown)\\b', 'restart or shut down the Mac'),
+    ('\\bpmset\\b[^\\n;|&]*\\s(?:-a|-b|-c|disablesleep|sleepnow|restoredefaults)\\b', 'change power settings (pmset)'),
+    ('\\bdscl\\b[^\\n;|&]*\\s-(?:create|delete|passwd|append|change)\\b', 'change user accounts (dscl)'),
+    ('\\bsysadminctl\\b', 'change user accounts (sysadminctl)'),
+    ('\\bosascript\\b[^\\n]*\\badministrator\\s+privileges\\b', 'run as administrator through AppleScript'),
+    ('\\bsudo\\b', 'run as administrator (sudo)'),
+    ('\\bchflags\\b[^\\n;|&]*\\b(?:schg|uchg|noschg|nouchg)\\b', 'change immutable file flags (chflags)'),
+    ('\\bxattr\\b[^\\n;|&]*\\s-(?:[a-z]*d|c)[a-z]*\\b[^\\n;|&]*com\\.apple\\.quarantine', 'remove the quarantine of a download (xattr)'),
+    ('(?:~|\\$home|\\$\\{home\\}|/users/[^/\\s]+)/\\.ssh\\b', 'access to SSH keys (home path)'),
+    ('(?:~|\\$home|\\$\\{home\\}|/users/[^/\\s]+)/library/(?:application\\\\?\\s+support/(?:google/chrome|bravesoftware|microsoft\\\\?\\s+edge|firefox|arc)|cookies|safari|containers/com\\.apple\\.safari)\\b', 'access to browser profiles'),
+]

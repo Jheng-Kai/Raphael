@@ -44,10 +44,11 @@ import re
 import secrets
 import sqlite3
 from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..clock import wall_clock_ms
 from ..protocol import RpcError, invalid_params
+from ..system_words import for_this_system
 from .apps import APPS, OWN_GOOGLE, SERVER_APPS, App, catalog_apps
 from .composio import KEY
 from .google import LOOPBACK, PREFIX, TOOLS, scopes_for
@@ -125,6 +126,8 @@ CAUSES: dict[str, Cause] = {cause.name: cause for cause in (
     Cause("interrupted", True, "cli_stopped", "The sign-in was cut off before it finished. Try again."),
     Cause("unknown", True, "unknown", "Raphael could not tell why it did not connect."),
 )}
+# A Mac says its own words for its key store and itself (`system_words`).
+CAUSES = {name: replace(cause, said=for_this_system(cause.said)) for name, cause in CAUSES.items()}
 # What a provider calls a failure, as the cause the owner is told. The few that depend on more than their name (a status,
 # where it happened, a message) are decided in `_cause_of`.
 _RAW = {

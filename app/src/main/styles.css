@@ -44,7 +44,7 @@
   --ui: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
   --display: var(--ui);
   /* Windows' own fixed-width faces for Latin, the UI face for Chinese: the generic family is MingLiU on zh-TW Windows. */
-  --mono: "Cascadia Mono", Consolas, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", monospace;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", monospace;
   --ja: "Yu Gothic UI", "Yu Gothic", "Meiryo UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
   --zh-sub: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
 
@@ -217,6 +217,11 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Windows' own caption buttons, 46 px cells the strip's full height with square
    corners; under the pointer the whole cell fills, and close turns red with a white cross. */
 .window-controls { display: flex; flex: none; gap: 0; padding: 0; }
+/* macOS draws its own traffic lights at the top left of the frame (tauri.macos.conf.json: 20 px in, their middle
+   25 px down, level with the sidebar's round buttons), so the page's Windows-style controls are not drawn there,
+   and the drag strip starts after the lights. */
+:root[data-platform="macos"] .window-controls { display: none; }
+:root[data-platform="macos"] .window-chrome { padding-left: 92px; }
 .window-button { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); cursor: default; transition: background-color 120ms ease, color 120ms ease; }
 .window-button svg { grid-area: 1 / 1; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; }
 .window-button svg.window-line-glyph { shape-rendering: crispEdges; }
@@ -243,6 +248,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
 .resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 :root[data-window-maximized="true"] .window-resize { display: none; }
+/* macOS resizes the window by its own edges (tao has no resize drag there): the strips would only take the clicks at the edges. */
+:root[data-platform="macos"] .window-resize { display: none; }
 .wbody { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); height: 100%; min-height: 0; }
 
 .side { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-2) var(--sp-3); min-height: 0; overflow-x: hidden; overflow-y: auto; }

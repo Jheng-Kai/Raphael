@@ -59,13 +59,24 @@ pub mod policy;
 pub mod tree;
 pub mod watch;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod app;
+#[cfg(target_os = "macos")]
+mod ax;
 #[cfg(windows)]
 mod uia;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub use app::spawn;
+
+/// The [`Desktop`] of the system the app runs on: UI Automation on Windows, the accessibility API
+/// on macOS.
+#[cfg(windows)]
+type SystemDesktop = uia::UiaDesktop;
+/// The [`Desktop`] of the system the app runs on: UI Automation on Windows, the accessibility API
+/// on macOS.
+#[cfg(target_os = "macos")]
+type SystemDesktop = ax::AxDesktop;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};

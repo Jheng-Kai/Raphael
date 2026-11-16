@@ -399,6 +399,13 @@ pub struct DeskHandle(pub Arc<dyn Desk>);
 /// must be quick and must not wait for the main thread.
 pub type AppFront = Arc<dyn Fn() -> bool + Send + Sync>;
 
+/// Whether this app may record, asked before each recording starts: `None` when it may, or the
+/// notice that says why not. macOS asks the person once and then gives an app it was refused
+/// nothing but silence, so a refused microphone is said at once instead of after a recording of
+/// nothing, which the automatic microphone choice would also count against the microphone. It may
+/// block while the person answers macOS's question (`macos_microphone_gate`).
+pub type MicrophoneGate = Arc<dyn Fn() -> Option<Notice> + Send + Sync>;
+
 /// How often the controller looks at the window while a YES/NO question waits, to show it on the
 /// overlay once the person leaves the window and to hide it there once they come back.
 const FRONT_POLL: Duration = Duration::from_millis(250);
@@ -554,6 +561,8 @@ pub struct DictationController<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSw
     front: Option<AppFront>,
     /// The order of the quick questions, shared by the voice slot and every turn.
     quick: Arc<QuickLedger>,
+    /// Asked before each recording (see [`MicrophoneGate`]); none lets every recording start.
+    microphone: Option<MicrophoneGate>,
 }
 
 impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> Clone
@@ -578,6 +587,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> Clone
             voice_level: self.voice_level.clone(),
             front: self.front.clone(),
             quick: self.quick.clone(),
+            microphone: self.microphone.clone(),
         }
     }
 }
@@ -630,7 +640,14 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             voice_level: None,
             front: None,
             quick: Arc::new(QuickLedger::default()),
+            microphone: None,
         }
+    }
+
+    /// The controller, asking `gate` before each recording whether the app may record.
+    pub fn with_microphone_gate(mut self, gate: MicrophoneGate) -> Self {
+        self.microphone = Some(gate);
+        self
     }
 
     /// The controller, asking `front` whether the main window shows a question to Raphael itself
@@ -1285,6 +1302,24 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 // is not asked to open the microphone for it.
                 if !this.is_current(&id) {
                     log::info!("the question was cancelled before it started; no dictation.start");
+                    answered.send_replace(Started::Failed);
+                    return;
+                }
+            }
+            if let Some(gate) = this.microphone.clone() {
+                let refused = tokio::task::spawn_blocking(move || gate())
+                    .await
+                    .unwrap_or(None);
+                if let Some(notice) = refused {
+                    log::info!("the microphone is not allowed for this app; no dictation.start");
+                    this.finish(&id, |this| {
+                        this.tell(DictationPhase::Failed, kind == Kind::Agent);
+                        this.show(notice);
+                    });
+                    answered.send_replace(Started::Failed);
+                    return;
+                }
+                if !this.is_current(&id) {
                     answered.send_replace(Started::Failed);
                     return;
                 }
@@ -3181,10 +3216,10 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
 
 // ---------- in the app ----------
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub use app::spawn;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod app {
     use std::future::pending;
     use std::sync::Arc;
@@ -3197,13 +3232,13 @@ mod app {
     use super::{AppFront, DeskHandle, DictationController, ModeCell};
     use crate::core_process::CoreProcess;
     use crate::hotkey::{CancelSwitch, HotkeyEvent, HotkeyService};
-    use crate::learn::{Learner, UiaProbe};
-    use crate::media::WindowsMedia;
+    use crate::learn::Learner;
+    use crate::media::SystemMedia;
     use crate::notices::{self, LanguageCell};
     use crate::overlay::{
         AskPrompt, ConfirmSender, Confirmation, Mode, Overlay, OverlayApi, Progress,
     };
-    use crate::paste::WindowsPaster;
+    use crate::paste::SystemPaster;
     use crate::rpc::Notification;
 
     /// The overlay, if it could be created. Without it dictation works, unseen.
@@ -3308,7 +3343,7 @@ mod app {
         }
     }
 
-    type Controller = DictationController<CoreProcess, MaybeOverlay, WindowsPaster, MaybeHotkeys>;
+    type Controller = DictationController<CoreProcess, MaybeOverlay, SystemPaster, MaybeHotkeys>;
 
     /// What the controller's task listens to. A source that is missing or gone is `None`.
     struct Inputs {
@@ -3352,12 +3387,13 @@ mod app {
         let controller = match core {
             Some(core) => {
                 // Learns from the user's corrections after a paste (`learn`).
-                let learner = Learner::new(core.clone(), overlay.clone(), Arc::new(UiaProbe))
+                let probe = Arc::new(crate::learn::SystemProbe {});
+                let learner = Learner::new(core.clone(), overlay.clone(), probe)
                     .with_language(language.clone());
                 let controller = DictationController::new(
                     core,
                     overlay.clone(),
-                    Arc::new(WindowsPaster::new()),
+                    Arc::new(SystemPaster::new()),
                     Arc::new(MaybeHotkeys(hotkeys)),
                     mode,
                 )
@@ -3378,7 +3414,10 @@ mod app {
                     });
                 }))
                 .with_after_paste(Arc::new(learner))
-                .with_media(Arc::new(WindowsMedia::start()));
+                .with_media(Arc::new(SystemMedia::start()));
+                #[cfg(target_os = "macos")]
+                let controller =
+                    controller.with_microphone_gate(Arc::new(super::macos_microphone_gate));
                 // A question asked while the 拉斐爾 page is in front is shown by the page alone.
                 Some(match app_front(app) {
                     Some(front) => controller.with_app_front(front),
@@ -3413,9 +3452,22 @@ mod app {
 
     /// Whether the main window shows the 拉斐爾 page in front ([`AppFront`]): the page says it is
     /// on screen (`agent_page_shown`), and the window is the foreground window, visible and not
+    /// minimised. On macOS the window's key status is kept by its focus events
+    /// (`crate::main_window_focused`), which never waits for the main thread either.
+    #[cfg(target_os = "macos")]
+    fn app_front(app: &AppHandle) -> Option<AppFront> {
+        app.get_webview_window(crate::MAIN_WINDOW)?;
+        Some(Arc::new(|| {
+            crate::commands::agent_page_on_screen() && crate::main_window_focused()
+        }))
+    }
+
+    /// Whether the main window shows the 拉斐爾 page in front ([`AppFront`]): the page says it is
+    /// on screen (`agent_page_shown`), and the window is the foreground window, visible and not
     /// minimised. The handle of the window is taken once, here on the main thread; the closure then
     /// makes only Win32 calls that never wait for the main thread, as it is called with the
     /// controller's transitions held. Without a main window every question goes to the overlay.
+    #[cfg(windows)]
     fn app_front(app: &AppHandle) -> Option<AppFront> {
         let window = app.get_webview_window(crate::MAIN_WINDOW)?;
         let hwnd = match window.hwnd() {
@@ -3431,6 +3483,7 @@ mod app {
     }
 
     /// Whether the window `hwnd` is the foreground window, visible and not minimised.
+    #[cfg(windows)]
     fn main_window_in_front(hwnd: isize) -> bool {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::{
@@ -3547,6 +3600,19 @@ mod app {
             Some(receiver) => receiver.recv().await,
             None => pending().await,
         }
+    }
+}
+
+/// macOS's answer for this app's microphone: allowed, or the notice that says where to allow it.
+/// A question not answered yet is asked now, and the recording waits for the answer (at most two
+/// minutes), so the first dictation records once it is allowed.
+#[cfg(target_os = "macos")]
+fn macos_microphone_gate() -> Option<Notice> {
+    use crate::macos::permissions::request_microphone;
+    if request_microphone(std::time::Duration::from_secs(120)) {
+        None
+    } else {
+        Some(notices::NO_SOUND)
     }
 }
 
@@ -4633,6 +4699,31 @@ mod tests {
             "the old dictation's notice must not wipe the new one's emblem"
         );
         assert_eq!(c.phase(), Phase::Recording);
+    }
+
+    #[tokio::test]
+    async fn a_microphone_the_app_may_not_use_is_said_at_once_and_nothing_is_recorded() {
+        let c = controller(FakeCore::default(), FakePaster::pasting("notepad.exe"))
+            .with_microphone_gate(Arc::new(|| Some(NO_SOUND)));
+        run(&c, HotkeyEvent::DictationDown, 0).await;
+        run(&c, HotkeyEvent::DictationUp, 900).await;
+        assert_eq!(c.core().count("dictation.start"), 0);
+        assert_eq!(c.core().count("dictation.stop"), 0);
+        ends_with_notice(&c, NO_SOUND.zh);
+        assert_eq!(c.phase(), Phase::Idle);
+    }
+
+    #[tokio::test]
+    async fn an_allowed_microphone_records_as_before() {
+        let c = controller(
+            FakeCore::with("dictation.stop", stop_result("文字", None)),
+            FakePaster::pasting("notepad.exe"),
+        )
+        .with_microphone_gate(Arc::new(|| None));
+        run(&c, HotkeyEvent::DictationDown, 0).await;
+        run(&c, HotkeyEvent::DictationUp, 900).await;
+        assert_eq!(c.core().count("dictation.start"), 1);
+        assert_eq!(c.paster().delivered(), vec!["文字"]);
     }
 
     #[tokio::test]

@@ -106,16 +106,19 @@ addEventListener('message', event => {
   }).catch(() => {});
 });
 // Paste from the owner's PC. While he holds control (rfb.viewOnly is false) Ctrl+V and Ctrl+Shift+V are held back here, because
-// the computer would paste its own clipboard. The app, which alone reads his clipboard, is asked for its text; it goes to the
-// computer's clipboard and only then are the keys of the paste sent. Watching, or a member at work, never asks.
-const PASTE_WAIT_MS = 1500, PASTE_MAX = 1000000, mods = {ctrl:false, shift:false};
+// the computer would paste its own clipboard; on a Mac his paste is Command+V, and the computer is told Ctrl+V with its Super
+// (his Command, which noVNC sends as one) let go first. The app, which alone reads his clipboard, is asked for its text; it goes
+// to the computer's clipboard and only then are the keys of the paste sent. Watching, or a member at work, never asks.
+const PASTE_WAIT_MS = 1500, PASTE_MAX = 1000000, mods = {ctrl:false, shift:false, meta:false};
 let pasteAsks = 0, pasting = null;
 function track(event) {
   if (event.key === 'Control') mods.ctrl = event.type === 'keydown';
   else if (event.key === 'Shift') mods.shift = event.type === 'keydown';
+  else if (event.key === 'Meta') mods.meta = event.type === 'keydown';
 }
 function chord(shift) {
   if (!rfb || rfb.viewOnly) return;
+  if (mods.meta) { rfb.sendKey(0xFFEB, 'MetaLeft', false); mods.meta = false; }
   if (!mods.ctrl) rfb.sendKey(0xFFE3, 'ControlLeft', true);
   if (shift && !mods.shift) rfb.sendKey(0xFFE1, 'ShiftLeft', true);
   rfb.sendKey(shift ? 0x56 : 0x76, 'KeyV');
@@ -125,7 +128,8 @@ function chord(shift) {
 screen.addEventListener('keyup', track, true);
 screen.addEventListener('keydown', event => {
   track(event);
-  if (!rfb || rfb.viewOnly || event.code !== 'KeyV' || !event.ctrlKey || event.altKey || event.metaKey) return;
+  // The owner's paste: Ctrl+V, or Command+V on a Mac; one of the two, never both.
+  if (!rfb || rfb.viewOnly || event.code !== 'KeyV' || event.ctrlKey === event.metaKey || event.altKey) return;
   event.preventDefault(); event.stopImmediatePropagation();
   if (event.repeat || pasting) return;
   const id = ++pasteAsks, shift = event.shiftKey;
@@ -134,7 +138,7 @@ screen.addEventListener('keydown', event => {
   // An app that does not answer leaves the paste as it was: the computer's own clipboard.
   setTimeout(() => { if (pasting?.id === id) { pasting = null; chord(shift); } }, PASTE_WAIT_MS);
 }, true);
-addEventListener('blur', () => { mods.ctrl = mods.shift = false; });
+addEventListener('blur', () => { mods.ctrl = mods.shift = mods.meta = false; });
 screen.addEventListener('mousedown', () => {
   if (rfb && !rfb.viewOnly && controlAt) {
     parent.postMessage({type:'raphael-desktop', state:'input', latencyMs:performance.now()-controlAt}, '*');

@@ -944,7 +944,7 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
     try {
-      void submitKey(await navigator.clipboard.readText());
+      void submitKey(await api.clipboardText());
     } catch {
       // the webview does not let the page read the clipboard: the field takes Ctrl+V
       input?.focus();

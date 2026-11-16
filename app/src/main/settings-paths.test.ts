@@ -19,6 +19,9 @@ const messagesOf = (locale: Locale): Messages => catalogs[locale] as unknown as 
 const OLD_WORDS: Partial<Record<Locale, string[]>> = { es: ["Ajustes"], fr: ["Paramètres"], th: ["ตั้งค่า"] };
 /** Composio's own page, which is in English: 「Settings › Project Settings › API Keys」 is a place on its site. */
 const EXTERNAL = /^Project Settings/;
+/** macOS's own System Settings (「系統設定 › 隱私權與安全性 › 輔助使用」, "System Settings > Privacy & Security"), which a Mac's
+ *  words send people to for a permission: a place of the system, not of Raphael's Settings. */
+const SYSTEM = String.raw`(?<!System |系統|系统|システム|시스템 )`;
 const SEPARATOR = /^\s*(?:›|>|→)\s*/;
 
 const branch = (...names: string[]): Branch => new Map(names.map((name) => [name, new Map()]));
@@ -71,7 +74,7 @@ function readPlaces(locale: Locale, text: string): Reading[] {
   const readings: Reading[] = [];
   for (const word of [canonicalWord, ...(OLD_WORDS[locale] ?? [])]) {
     const start = CJK_LOCALES.includes(locale) ? "" : String.raw`(?<![\p{L}\p{N}])`;
-    const opening = new RegExp(String.raw`${start}(?<!Project )${escape(word)}\s*(?:›|>|→)\s*`, "gu");
+    const opening = new RegExp(String.raw`${start}(?<!Project )${SYSTEM}${escape(word)}\s*(?:›|>|→)\s*`, "gu");
     const canonical = word === canonicalWord ? [] : [...text.matchAll(new RegExp(escape(canonicalWord), "gu"))].map((m) => [m.index, m.index + m[0].length]);
     for (const hit of text.matchAll(opening)) {
       // The old word may be the end of the name now in use (ตั้งค่า in การตั้งค่า).
@@ -129,6 +132,8 @@ describe("a path into Settings names a place Settings has", () => {
     expect(missingPlaces("zh-TW", "請到「設定 › 聽寫與快捷鍵 › 麥克風」選擇。")).toEqual([]);
     expect(missingPlaces("en", "Check it in Settings > Models & usage > Models > Subscription accounts, then refresh.")).toEqual([]);
     expect(missingPlaces("en", "from Settings > Project Settings > API Keys on the Composio website")).toEqual([]);
+    expect(missingPlaces("zh-TW", "請到「系統設定 › 隱私權與安全性 › 輔助使用」允許拉斐爾。")).toEqual([]);
+    expect(missingPlaces("en", "Allow Raphael in System Settings > Privacy & Security > Accessibility.")).toEqual([]);
     expect(missingPlaces("fr", "dans Paramètres > Outils")).toHaveLength(1);
   });
 

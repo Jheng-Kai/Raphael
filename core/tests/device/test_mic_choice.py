@@ -100,6 +100,24 @@ def test_an_attached_microphone_is_neither_a_loopback_nor_built_in(name):
     assert not is_built_in(name)
 
 
+@pytest.mark.parametrize("name", ["BlackHole 2ch", "Soundflower (2ch)", "ZoomAudioDevice", "Microsoft Teams Audio", "Loopback Audio"])
+def test_the_virtual_devices_of_macos_that_carry_an_apps_sound_are_loopbacks(name):
+    assert is_loopback(name)
+    assert not is_built_in(name)
+
+
+@pytest.mark.parametrize("name", ["MacBook Pro Microphone", "MacBook Air Microphone", "iMac Microphone", "Jack’s iPhone Microphone"])
+def test_a_macs_own_microphone_and_a_nearby_iphone_count_as_built_in(name):
+    assert is_built_in(name)
+    assert not is_loopback(name)
+
+
+@pytest.mark.parametrize("name", ["AirPods Pro", "Shure MV7", "Studio Display Microphone", "External Microphone"])
+def test_an_attached_microphone_on_a_mac_is_neither(name):
+    assert not is_loopback(name)
+    assert not is_built_in(name)
+
+
 def test_a_microphone_is_known_by_its_name_without_the_number_windows_adds():
     assert device_key("麥克風 (3- HyperX Cloud II Core Wi") == device_key("麥克風 (5- HyperX Cloud II Core Wi")
     assert device_key("麥克風 (HyperX Cloud II Core Wi") == device_key(HEADSET)

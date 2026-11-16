@@ -50,6 +50,7 @@ import { followSlimeRoster, setSlimeState } from "./slime";
 import { lightClass, lightName, lightOf, strongest } from "./sidebar-light";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList, NewMember } from "./types";
 import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
+import { shortcutText } from "./keys";
 
 /** Below this width details start closed to leave a readable conversation column. */
 export const DETAILS_COLUMN_MIN_PX = 1440;
@@ -540,16 +541,16 @@ export function createMembers(host: MembersHost): MembersShell {
     event.preventDefault();
     if (id !== "palette") { command(id); return; }
     const commands: Command[] = [
-      { id: "search", label: t("chat.searchAll"), keys: "Ctrl+Shift+F", run: () => command("search") },
-      { id: "sidebar", label: t("shortcuts.sidebar"), keys: "Ctrl+B", run: () => command("sidebar") },
+      { id: "search", label: t("chat.searchAll"), keys: shortcutText(["Primary", "Shift", "F"]), run: () => command("search") },
+      { id: "sidebar", label: t("shortcuts.sidebar"), keys: shortcutText(["Primary", "B"]), run: () => command("sidebar") },
       { id: "settings", label: t("nav.settings"), run: () => host.app.go("settings", "general") },
-      ...orderedMembers(list).map((member, index) => ({ id: "person:" + member.id, label: member.name, keys: index < 9 ? "Ctrl+" + (index + 1) : undefined, run: () => select(member.id) })),
+      ...orderedMembers(list).map((member, index) => ({ id: "person:" + member.id, label: member.name, keys: index < 9 ? shortcutText(["Primary", String(index + 1)]) : undefined, run: () => select(member.id) })),
     ];
     if (host.visible()) commands.unshift(
-      { id: "find", label: t("agent.search"), keys: "Ctrl+F", run: () => command("find") },
-      { id: "previous", label: t("shortcuts.previous"), keys: "Alt+↑", run: () => command("previous") },
-      { id: "next", label: t("shortcuts.next"), keys: "Alt+↓", run: () => command("next") },
-      { id: "new", label: t("members.newMember"), keys: "Ctrl+N", run: () => command("new") },
+      { id: "find", label: t("agent.search"), keys: shortcutText(["Primary", "F"]), run: () => command("find") },
+      { id: "previous", label: t("shortcuts.previous"), keys: shortcutText(["Alt", "↑"]), run: () => command("previous") },
+      { id: "next", label: t("shortcuts.next"), keys: shortcutText(["Alt", "↓"]), run: () => command("next") },
+      { id: "new", label: t("members.newMember"), keys: shortcutText(["Primary", "N"]), run: () => command("new") },
     );
     openCommandPalette(picker, commands);
   });

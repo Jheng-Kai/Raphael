@@ -148,8 +148,9 @@ _HELPER = """<script>
   // Where the owner is reading: the window keeps it, so a page changed while open comes back to the same place.
   let scrolling = 0;
   addEventListener('scroll', () => { if (!scrolling) scrolling = requestAnimationFrame(() => { scrolling = 0; post('scroll', {y: Math.round(scrollY)}); }); }, {passive: true});
-  // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside.
-  addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) post('escape', {}); });
+  // The page has the keys once the owner pressed in it: Escape there goes back to the conversation as it does outside,
+  // unless it only drops an input method's candidate (WebKit, on macOS, marks that Escape with keyCode 229 alone).
+  addEventListener('keydown', event => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) post('escape', {}); });
   addEventListener('message', event => {
     const data = event.data;
     if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
@@ -306,6 +307,21 @@ def card(page):
             "kind": "report" if is_report(page) else "page"}
 
 
+# A YouTube video's id, the only thing `/v/` serves (PageHost.video_base).
+_VIDEO_PATH = re.compile(r"/v/([A-Za-z0-9_-]{6,20})")
+_VIDEO_CSP = "default-src 'none'; style-src 'unsafe-inline'; frame-src https://www.youtube-nocookie.com"
+
+
+def video_player(video_id, start=0):
+    """The page that holds YouTube's player for `video_id`, filling its frame, from `start` seconds."""
+    query = f"?start={start}" if start else ""
+    return ("<!doctype html><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">"
+            "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{display:block;border:0;width:100%;height:100%}</style>"
+            f"<iframe src=\"https://www.youtube-nocookie.com/embed/{video_id}{query}\" title=\"YouTube\" "
+            "allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen\" "
+            "allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe>")
+
+
 class PageHost:
     """One host per core; bearer tokens exist only in memory and are never page ids."""
 
@@ -315,13 +331,24 @@ class PageHost:
         self.lock = asyncio.Lock()
         self.clients = set()
 
+    async def _port(self):
+        if self.server is None:
+            self.server = await asyncio.start_server(self._serve, "127.0.0.1", 0, limit=8192)
+        return self.server.sockets[0].getsockname()[1]
+
     async def url(self, page_id, theme):
         async with self.lock:
-            if self.server is None:
-                self.server = await asyncio.start_server(self._serve, "127.0.0.1", 0, limit=8192)
+            port = await self._port()
             token = self.tokens.setdefault(page_id, secrets.token_urlsafe(32))
-            port = self.server.sockets[0].getsockname()[1]
         return f"http://127.0.0.1:{port}/p/{token}?theme={theme}"
+
+    async def video_base(self):
+        """Where a YouTube video plays inside the window on a Mac (`/v/<id>`): WebKit sends YouTube no referrer from the
+        app's own `tauri://` page, and YouTube then refuses to play (its error 153), so the player is put in a page of this
+        host, which names itself to YouTube. Only a video id is ever served there, and nothing of the owner's."""
+        async with self.lock:
+            port = await self._port()
+        return f"http://127.0.0.1:{port}/v/"
 
     async def aclose(self):
         async with self.lock:
@@ -344,8 +371,13 @@ class PageHost:
                 hosts = [value.strip() for name, value in headers if name.lower() == "host"]
                 port = writer.get_extra_info("sockname")[1]
                 status, body, csp = 404, b"Not found", "default-src 'none'; sandbox"
+                referrer = "no-referrer"
                 if hosts != [f"127.0.0.1:{port}"]:
                     status, body = 403, b"Forbidden"
+                elif method == "GET" and version in ("HTTP/1.0", "HTTP/1.1") and (video := _VIDEO_PATH.fullmatch(urlsplit(target).path)):
+                    start = parse_qs(urlsplit(target).query).get("start", [""])[0]
+                    status, body, csp = 200, video_player(video[1], int(start) if start.isdigit() else 0).encode("utf-8"), _VIDEO_CSP
+                    referrer = "strict-origin-when-cross-origin"
                 elif method == "GET" and version in ("HTTP/1.0", "HTTP/1.1"):
                     url = urlsplit(target)
                     token = url.path.removeprefix("/p/") if url.path.startswith("/p/") else ""
@@ -357,7 +389,7 @@ class PageHost:
                         status, body, csp = 200, document(page, theme).encode("utf-8"), page_csp(page)
                 response = (f"HTTP/1.1 {status} { {200:'OK', 403:'Forbidden', 404:'Not Found'}[status]}\r\n"
                             "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n"
-                            "Referrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\n"
+                            f"Referrer-Policy: {referrer}\r\nX-Content-Type-Options: nosniff\r\n"
                             f"Content-Security-Policy: {csp}\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n")
                 writer.write(response.encode("ascii") + body)
                 await writer.drain()
@@ -384,10 +416,14 @@ class Pages:
 
     def register(self, router):
         router.register("pages.open", self.open)
+        router.register("pages.video_base", self.video_base)
         router.register("pages.viewing", self.viewing)
         router.register("pages.tool_call", self.call)
         # The shell's alone (`report_save`): the window may not call it, so it never names a folder.
         router.register("pages.export", self.export)
+
+    async def video_base(self, _params=None):
+        return {"base": await self.host.video_base()}
 
     def changed(self, page):
         if self.notify is not None:

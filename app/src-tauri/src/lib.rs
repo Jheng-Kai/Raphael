@@ -16,9 +16,12 @@ mod hotkey;
 mod identity;
 mod learn;
 mod learned;
+#[cfg(target_os = "macos")]
+mod macos;
 mod media;
 mod media_protocol;
 mod member_notifications;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod mic_access;
 mod notices;
 mod overlay;
@@ -105,7 +108,13 @@ pub fn run() {
     let caller_data_dir = std::env::var_os("RAPHAEL_DATA_DIR");
     // SAFETY: no other thread runs yet.
     unsafe { identity::use_own_data(identity) };
-    let local_dir = identity.local_dir(caller_data_dir, std::env::var_os("LOCALAPPDATA"));
+    // An app opened from Finder has launchd's PATH; the core runs the CLIs from the shell's.
+    // SAFETY: no other thread runs yet.
+    #[cfg(target_os = "macos")]
+    unsafe {
+        macos::shell_path::adopt_login_path()
+    };
+    let local_dir = identity.local_dir(caller_data_dir, identity::user_folders().1);
     let mut context = tauri::generate_context!();
     identity.apply(context.config_mut());
     if native_journey() {
@@ -177,7 +186,13 @@ pub fn run() {
                     log::warn!("could not hide the main window: {err}");
                 } else if let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW) {
                     webview_power::main_active(&webview, false);
+                    dock_icon(window.app_handle(), false);
                 }
+            }
+            if window.label() == MAIN_WINDOW
+                && let WindowEvent::Focused(focused) = event
+            {
+                MAIN_FOCUSED.store(*focused, std::sync::atomic::Ordering::SeqCst);
             }
             if window.label() == MAIN_WINDOW
                 && matches!(event, WindowEvent::Resized(_))
@@ -217,6 +232,7 @@ pub fn run() {
             commands::owner_clipboard_text,
             commands::open_link,
             commands::open_external_url,
+            commands::clipboard_text,
             commands::open_attachment,
             commands::attachment_source,
             updates::update_control,
@@ -241,6 +257,9 @@ pub fn run() {
             avatar::avatar_clear,
         ])
         .setup(move |app| {
+            // A menu bar extra until the main window opens (`dock_icon`).
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             if let Err(error) = schedule_awake::get() {
                 log::warn!("could not restore scheduler awake setting: {error}");
             }
@@ -374,11 +393,11 @@ pub fn run() {
             // ---- Dictation controller ----
             // Ties the hotkeys, the core, the overlay and pasting together. It takes whatever of
             // them started; without the core, dictation is off.
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             dictation::spawn(app.handle(), hotkey_event_rx);
-            #[cfg(not(windows))]
+            #[cfg(not(any(windows, target_os = "macos")))]
             {
-                log::error!("dictation needs Windows");
+                log::error!("dictation needs Windows or macOS");
                 drop(hotkey_event_rx);
             }
 
@@ -386,7 +405,7 @@ pub fn run() {
             // The shell's half of a run on the owner's desktop: the core's requests answered with
             // UI Automation, the 「操作中」 overlay, the watch on the owner's own input. It takes
             // the core and the overlay from the app state; without the core there is no run.
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             if !native_journey() {
                 computer::spawn(app.handle());
             }
@@ -417,8 +436,45 @@ pub fn run() {
 
             Ok(())
         })
-        .run(context)
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Finder hands a double-clicked template file to the app with an event, not on the
+            // command line as Windows does: the running app shows its import review the same way.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                let mut args = vec![String::new()];
+                args.extend(
+                    urls.iter()
+                        .filter_map(|url| url.to_file_path().ok())
+                        .map(|path| path.display().to_string()),
+                );
+                if template_file::offer(&args) {
+                    log::info!("a member template file was handed over");
+                    commands::tell_main_window(commands::MainEvent::TemplateFile);
+                    show_main_window(app);
+                }
+            }
+            // Opening the app again from Finder, Launchpad or Spotlight while it runs does not
+            // start a second copy on macOS: the running one is told to reopen, and shows its main
+            // window, as a second launch does on Windows.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                show_main_window(app);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
+}
+
+/// Whether the main window has the keyboard focus, as its focus events last said. Read without
+/// waiting for the main thread (the dictation controller asks while it holds its state).
+static MAIN_FOCUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the main window has the keyboard focus (see [`MAIN_FOCUSED`]).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn main_window_focused() -> bool {
+    MAIN_FOCUSED.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// What the data migration did, from its plugin to `setup`, which logs it and starts the copy.
@@ -542,6 +598,7 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         log::warn!("the main window does not exist");
         return;
     };
+    dock_icon(app, true);
     webview_power::main_active(&window, true);
     let shown = window
         .unminimize()
@@ -553,6 +610,24 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Err(err) = shown {
         log::warn!("could not show the main window: {err}");
     }
+}
+
+/// Whether Raphael shows in the Dock and the app switcher: only while its main window is open, as
+/// it shows on the taskbar of Windows only then. The rest of the time it is a menu bar extra.
+fn dock_icon<R: Runtime>(app: &AppHandle<R>, shown: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if shown {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        if let Err(err) = app.set_activation_policy(policy) {
+            log::warn!("could not change the Dock icon: {err}");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, shown);
 }
 
 /// Logging to stdout (visible in `tauri dev`) and to `raphael.log` in the app log directory

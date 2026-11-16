@@ -48,6 +48,13 @@ class Folder:
                     raise
                 os.mkdir(part, 0o755, dir_fd=self.ref)
                 child = os.open(part, flags, dir_fd=self.ref)
+            except NotADirectoryError:
+                # Linux says ELOOP for a link opened without following it; macOS says ENOTDIR, as the link is no folder.
+                if nofollow and stat.S_ISLNK(os.lstat(part, dir_fd=self.ref).st_mode):
+                    self.close()
+                    raise OSError(errno.ELOOP, "link") from None
+                self.close()
+                raise
             os.close(self.ref)
             self.ref = child
 

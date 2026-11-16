@@ -18,7 +18,7 @@ import pytest
 CORE = Path(__file__).resolve().parents[1]
 
 pytestmark = pytest.mark.skipif(
-    sys.platform != "win32", reason="the smoke test starts the Windows executable"
+    sys.platform not in {"win32", "darwin"}, reason="the smoke test starts the Windows or macOS executable"
 )
 
 
@@ -36,9 +36,15 @@ def smoke():
 def launcher(tmp_path_factory):
     if not sys.executable.isascii():
         pytest.skip("a batch file cannot name a Python in a non-ASCII path")
-    path = tmp_path_factory.mktemp("launcher") / "raphael-core.cmd"
-    # %* passes on what the smoke test gives the executable (--worker).
-    path.write_text(f'@echo off\r\n"{sys.executable}" -m raphael_core %*\r\n', encoding="ascii")
+    folder = tmp_path_factory.mktemp("launcher")
+    if sys.platform == "win32":
+        path = folder / "raphael-core.cmd"
+        # %* passes on what the smoke test gives the executable (--worker).
+        path.write_text(f'@echo off\r\n"{sys.executable}" -m raphael_core %*\r\n', encoding="ascii")
+    else:
+        path = folder / "raphael-core"
+        path.write_text(f'#!/bin/sh\nexec "{sys.executable}" -m raphael_core "$@"\n', encoding="ascii")
+        path.chmod(0o755)
     return path
 
 
@@ -142,7 +148,12 @@ def test_the_voice_pass_decodes_an_opus_clip(report):
 
 
 def test_the_voice_pass_fails_when_the_decoder_does_not_work(smoke, tmp_path):
-    broken = tmp_path / "broken-core.cmd"
-    broken.write_text("@echo off\r\necho voice decoder failed\r\nexit /b 1\r\n", encoding="ascii")
+    if sys.platform == "win32":
+        broken = tmp_path / "broken-core.cmd"
+        broken.write_text("@echo off\r\necho voice decoder failed\r\nexit /b 1\r\n", encoding="ascii")
+    else:
+        broken = tmp_path / "broken-core"
+        broken.write_text("#!/bin/sh\necho voice decoder failed\nexit 1\n", encoding="ascii")
+        broken.chmod(0o755)
     with pytest.raises(RuntimeError, match="audio decoder"):
         smoke.smoke_the_voice_decoder(broken)

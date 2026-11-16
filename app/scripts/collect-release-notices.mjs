@@ -8,7 +8,15 @@ import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(import.meta.url);
 const defaultAppDirectory = resolve(dirname(script), "..");
-const RUST_TARGET = "x86_64-pc-windows-msvc";
+// The platform whose release is described: Windows x64 unless RAPHAEL_RELEASE_PLATFORM names
+// macOS on Apple silicon (the macOS release job does).
+const RELEASE_TARGETS = {
+  "windows-x64": { rust: "x86_64-pc-windows-msvc", os: "win32", cpu: "x64", label: "Windows x64" },
+  "macos-arm64": { rust: "aarch64-apple-darwin", os: "darwin", cpu: "arm64", label: "macOS arm64" },
+};
+const RELEASE_TARGET = RELEASE_TARGETS[process.env.RAPHAEL_RELEASE_PLATFORM || "windows-x64"];
+if (!RELEASE_TARGET) throw new Error(`Unknown RAPHAEL_RELEASE_PLATFORM: ${process.env.RAPHAEL_RELEASE_PLATFORM}`);
+const RUST_TARGET = RELEASE_TARGET.rust;
 // Build-time npm packages whose code is emitted into the shipped bundle, so their notices ship too.
 // Vite 8.3.4 writes its modulepreload polyfill (a port of Vite's own, injected by Rolldown) into
 // dist/assets/*.js; no other Vite or Rolldown code is in the output. Check any addition against a real build.
@@ -378,8 +386,8 @@ export function collectDependencyNotices({
     const directory = resolve(appDirectory, location);
     const manifest = join(directory, "package.json");
     if (!existsSync(manifest)) {
-      if (entry.optional && (!platformMatches(entry.os, "win32") || !platformMatches(entry.cpu, "x64"))) continue;
-      gaps.push(`Frontend ${name}@${entry.version}: locked Windows x64 package is not installed; run npm ci`);
+      if (entry.optional && (!platformMatches(entry.os, RELEASE_TARGET.os) || !platformMatches(entry.cpu, RELEASE_TARGET.cpu))) continue;
+      gaps.push(`Frontend ${name}@${entry.version}: locked ${RELEASE_TARGET.label} package is not installed; run npm ci`);
       continue;
     }
     const pkg = readJson(manifest);

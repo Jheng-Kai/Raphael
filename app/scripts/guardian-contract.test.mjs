@@ -20,7 +20,7 @@ it("CI enforces the offline layers on every PR, and the rendered matrix stays lo
   expect(ci).not.toContain("npm run look");
   expect(ci).not.toContain("npm run judge");
   expect(ci).not.toContain("secrets.OPENROUTER_API_KEY");
-  expect(ci).toContain("needs: [changes, frontend, python, windows-shell]");
+  expect(ci).toContain("needs: [changes, frontend, python, windows-shell, macos-shell]");
   const nightly = read(".github/workflows/guardian-live.yml");
   expect(nightly).toContain("--api-only");
   expect(nightly).toContain("--max-turns 120");
@@ -38,7 +38,7 @@ it("a release asks CI for a green run on its commit and does not repeat the suit
   // The suites take longer than a release job may run; CI runs them.
   for (const repeated of ["npm test", "pytest", "cargo test", "cargo clippy"]) expect(release).not.toContain(repeated);
   // Every job has a time limit.
-  expect(release.match(/^ {4}timeout-minutes:/gm)).toHaveLength(4);
+  expect(release.match(/^ {4}timeout-minutes:/gm)).toHaveLength(5);
 });
 
 it("CI deals the Python shards by recorded seconds and runs the packaging smoke test only when it can matter", () => {
@@ -49,7 +49,7 @@ it("CI deals the Python shards by recorded seconds and runs the packaging smoke 
   expect(ci).toContain("packaging: ${{ steps.packaging.outputs.packaging }}");
   expect(ci).toContain("needs.changes.outputs.packaging == 'true'");
   // The smoke test is informational: the required gates stay the three layers.
-  expect(ci).toContain("needs: [changes, frontend, python, windows-shell]");
+  expect(ci).toContain("needs: [changes, frontend, python, windows-shell, macos-shell]");
   expect(ci).not.toMatch(/needs: [[^]]*packaging/);
 });
 

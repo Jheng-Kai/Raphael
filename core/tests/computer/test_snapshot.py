@@ -99,3 +99,16 @@ def test_windows_of_the_wrong_shape_are_left_out():
     listed = parse_windows(rows)
     assert [(w.id, w.app.name) for w in listed] == [(2, "notepad")]
     assert parse_windows({"windows": "x"}) == [] and parse_windows(None) == []
+
+
+def test_a_mac_names_its_apps_by_bundle_identifier(monkeypatch):
+    from raphael_core.computer import snapshot
+    monkeypatch.setattr(snapshot.sys, "platform", "darwin")
+    rows = {"windows": [
+        {"id": 3, "exe": "com.apple.calculator", "name": "Calculator"},
+        {"id": 4, "exe": "com.microsoft.excel"},
+        {"id": 5, "exe": "Com.Apple.Notes"},
+        {"id": 6, "exe": "x"},
+    ]}  # fmt: skip
+    assert [(w.id, w.app.exe, w.app.name) for w in parse_windows(rows)] == [
+        (3, "com.apple.calculator", "Calculator"), (4, "com.microsoft.excel", "excel")]

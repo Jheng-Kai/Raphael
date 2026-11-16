@@ -19,6 +19,13 @@ LOOK_AND_PRESS_SEVEN = (
 )
 
 
+@pytest.fixture(autouse=True)
+def windows_chord_words(monkeypatch):
+    """The run's lines are checked in Windows' key names and phrases on any system; the Mac's are tested on their own."""
+    monkeypatch.setattr("raphael_core.computer.safety.MAC", False)
+    monkeypatch.setattr("raphael_core.system_words.MAC", False)
+
+
 def answering(shell, *, always=False, act=None, look=None):
     shell.handlers.update(
         apps=windows(always=always),

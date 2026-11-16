@@ -809,6 +809,23 @@ export function safeMediaSrc(raw: unknown, allowDataImage = false): string | nul
   return null;
 }
 
+/** On a Mac, where YouTube's player plays inside the window (`api.pagesVideoBase`); null on Windows or until the core says. */
+let videoBase: string | null = null;
+export function setVideoBase(base: string | null): void { videoBase = base; }
+
+/**
+ * What the window's frame loads for a YouTube embed: the embed itself, or on a Mac the core's page that holds it. WebKit
+ * sends YouTube no referrer from the app's `tauri://` page, and YouTube then refuses to play (its error 153).
+ */
+export function youtubeFrameUrl(embed: string, base: string | null = videoBase): string {
+  if (!base) return embed;
+  const url = new URL(embed);
+  const id = url.pathname.split("/")[2];
+  if (!id || !/^[\w-]{6,20}$/.test(id)) return embed;
+  const start = url.searchParams.get("start");
+  return base + id + (start && /^\d+$/.test(start) ? `?start=${start}` : "");
+}
+
 /** Extracts or validates a YouTube embed URL for an inline iframe player. */
 export function safeYoutubeEmbedUrl(embed: unknown, fallbackUrl?: unknown): string | null {
   for (const candidate of [embed, fallbackUrl]) {
@@ -991,7 +1008,7 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
   if (payload.type === "video") {
     const ytEmbed = safeYoutubeEmbedUrl(payload.embed, payload.url);
     const player = ytEmbed
-      ? `<div class="media-player"><iframe class="media-iframe" src="${esc(ytEmbed)}" title="${esc(title || site || "Video")}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
+      ? `<div class="media-player"><iframe class="media-iframe" src="${esc(youtubeFrameUrl(ytEmbed))}" title="${esc(title || site || "Video")}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
       : safeUrl
         // Our own player here too (R-MEDIA-01); its thumbnail stands in for the first frame until it plays.
         ? `<div class="media-player">${videoPlayerHTML(` class="media-video" preload="${thumb ? "none" : "metadata"}"${thumb ? ` poster="${esc(thumb)}"` : ""} src="${esc(safeUrl)}"`, title || site || t("chat.video"))}</div>`

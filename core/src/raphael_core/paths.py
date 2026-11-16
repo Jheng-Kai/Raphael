@@ -3,8 +3,10 @@
 The small user data (database, settings) lives in the data directory: Raphael's folder in the
 platform's per-user application data, which on Windows is Roaming and may follow a profile from
 one PC to another. The speech models are large and can be downloaded again, so they live in the
-machine-local folder instead (`%LOCALAPPDATA%\\Raphael` on Windows, `~/Library/Caches/Raphael` on
-macOS). `RAPHAEL_DATA_DIR` overrides the data directory and, with it, puts the models in its
+machine-local folder instead (`%LOCALAPPDATA%\\Raphael` on Windows). macOS has no roaming profile:
+both are `~/Library/Application Support/Raphael`, where the shell keeps its own files too (Tauri's
+`$DATA` and `$LOCALDATA`). Never `~/Library/Caches`, which the system may empty, and which would take
+Raphael's long-term memory with it. `RAPHAEL_DATA_DIR` overrides the data directory and, with it, puts the models in its
 `models` folder (the tests and the end-to-end runs set it). `RAPHAEL_MODELS_DIR` puts the models
 somewhere else: an end-to-end run uses an empty data directory but the models that are already
 downloaded.
@@ -58,7 +60,7 @@ def local_dir() -> Path:
     if sys.platform == "win32":
         return Path(os.environ["LOCALAPPDATA"]) / "Raphael"
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Caches" / "Raphael"
+        return Path.home() / "Library" / "Application Support" / "Raphael"
     raise RuntimeError(f"No default local directory on {sys.platform}: set RAPHAEL_DATA_DIR")
 
 

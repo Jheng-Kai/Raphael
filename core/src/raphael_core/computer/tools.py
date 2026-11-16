@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..agent.policy import Tier
+from ..system_words import for_this_system
 
 FAST = "fast"
 
@@ -64,8 +65,8 @@ APPS = ToolSpec(
 )
 OPEN = ToolSpec(
     "computer_open",
-    "Open an installed app from the Start menu by its name (for example Calculator, Excel). Then "
-    "call computer_apps to find its window.",
+    for_this_system("Open an installed app from the Start menu by its name (for example Calculator, Excel). Then "
+                    "call computer_apps to find its window."),
     {
         "type": "object",
         "properties": {"name": {"type": "string", "description": "The app's name."}},
@@ -86,11 +87,12 @@ LOOK = ToolSpec(
 )
 ACT = ToolSpec(
     "computer_act",
-    "Do one step in a window, then see the window again. click: press, toggle, select or expand "
-    "the element. type: put text into the element (or the focused field). keys: press a key or a "
-    "shortcut such as ctrl+s, tab, enter (no Windows key, no alt+tab). scroll: scroll the element. "
-    "focus: give the element the keyboard focus. Set final to true when the step sends, submits, "
-    "posts, publishes, deletes, buys, orders or pays — pressing Enter to send a message included.",
+    for_this_system(
+        "Do one step in a window, then see the window again. click: press, toggle, select or expand "
+        "the element. type: put text into the element (or the focused field). keys: press a key or a "
+        "shortcut such as ctrl+s, tab, enter (no Windows key, no alt+tab). scroll: scroll the element. "
+        "focus: give the element the keyboard focus. Set final to true when the step sends, submits, "
+        "posts, publishes, deletes, buys, orders or pays — pressing Enter to send a message included."),
     {
         "type": "object",
         "properties": {

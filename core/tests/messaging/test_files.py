@@ -241,7 +241,9 @@ async def test_two_albums_are_two_requests(files, files_http):
     files.message(OWNER, None, photo=photo_sizes("a"), media_group_id="one")
     files.message(OWNER, None, photo=photo_sizes("b"), media_group_id="two")
     gateway = gateway_for(files, files_http)
-    await run_until(gateway, lambda: len(files.sent) == 2)
+    # Two answers, whatever else is said meanwhile: the second album may come while the first is answered, and then a
+    # "queued" line is sent between them, which a count of everything sent could jump over.
+    await run_until(gateway, lambda: sum(text == "《答》好" for _, text in files.sent) == 2)
     assert [len(r["files"]) for r in gateway.asked] == [1, 1]
 
 

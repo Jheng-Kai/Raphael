@@ -6,17 +6,23 @@ import { requestDisposition } from "./requests.mjs";
 describe("look browser interaction contracts", () => {
   it("holds and releases Control around a real shortcut, including a failed key press", async () => {
     const calls = [];
+    let mac = false;
     const page = { keyboard: {
       down: async key => { calls.push(`down:${key}`); },
       press: async key => { calls.push(`press:${key}`); },
       up: async key => { calls.push(`up:${key}`); },
-    } };
+    }, evaluate: async () => mac };
     await perform(page, { action: "key", key: "n", ctrl: true });
     expect(calls).toEqual(["down:Control", "press:n", "up:Control"]);
     calls.length = 0;
     page.keyboard.press = async () => { throw new Error("press failed"); };
     await expect(perform(page, { action: "key", key: "n", ctrl: true })).rejects.toThrow("press failed");
     expect(calls).toEqual(["down:Control", "up:Control"]);
+    // A page that runs as on a Mac takes ⌘ for the window's command key.
+    calls.length = 0; mac = true;
+    page.keyboard.press = async key => { calls.push(`press:${key}`); };
+    await perform(page, { action: "key", key: "n", ctrl: true });
+    expect(calls).toEqual(["down:Meta", "press:n", "up:Meta"]);
   });
   it("waits through delayed row entrances but never waits for an infinite activity indicator", () => {
     const running = { playState: "running", effect: { getTiming: () => ({ iterations: 1 }) } };

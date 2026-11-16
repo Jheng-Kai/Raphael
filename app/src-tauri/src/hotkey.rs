@@ -242,6 +242,26 @@ impl HotkeyService {
         if crate::native_journey() {
             return Self::start_with(WindowOnlyBackend::default(), wanted, events);
         }
+        // macOS lets an app watch and swallow keys only once the person has allowed it under
+        // Accessibility. Until then the service runs and waits: macOS shows its question once, and
+        // the keys work from the moment the person says yes, without a restart.
+        #[cfg(target_os = "macos")]
+        if !handy_keys::check_accessibility() {
+            crate::macos::permissions::accessibility(true);
+            let service = Self::start_with(late::LateManager::default(), wanted, events)?;
+            log::info!("global hotkeys wait for the accessibility permission: {bindings:?}");
+            // The window says so once, with the way to the setting: macOS asks only once, and a
+            // rebuilt app (a new signature) is a new app to it, whose permission is gone.
+            static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !TOLD.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
+                    missing: serde_json::json!({
+                        "resource": "hotkeys", "requirement": "accessibility", "state": "missing", "repair": null,
+                    }),
+                });
+            }
+            return Ok(service);
+        }
         // Blocking mode: a plain `HotkeyManager::new()` would watch the keys without swallowing
         // them.
         let manager = HotkeyManager::new_with_blocking()
@@ -508,6 +528,135 @@ impl Backend for WindowOnlyBackend {
     }
     fn try_recv(&self) -> Option<(u64, HotkeyState)> {
         None
+    }
+}
+
+/// The hotkeys of a Mac that has not allowed Raphael under Accessibility yet: the bindings are
+/// kept, and the real keyboard listener starts (and takes them) the first time the permission is
+/// there. A thread wakes the worker every [`late::POLL`] until then, so that it looks again.
+#[cfg(target_os = "macos")]
+mod late {
+    use std::cell::{Cell, RefCell};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    use handy_keys::{Hotkey, HotkeyId, HotkeyManager, HotkeyState};
+
+    use super::Backend;
+
+    /// How often the permission is looked at while it is missing.
+    pub const POLL: Duration = Duration::from_secs(2);
+
+    type Waker = Arc<dyn Fn() + Send + Sync>;
+
+    #[derive(Default)]
+    pub struct LateManager {
+        manager: RefCell<Option<HotkeyManager>>,
+        /// Each binding with its own id and, once the listener runs, the listener's id.
+        hotkeys: RefCell<Vec<(u64, Hotkey, Option<HotkeyId>)>>,
+        next: Cell<u64>,
+        waker: RefCell<Option<Waker>>,
+        ready: Arc<AtomicBool>,
+    }
+
+    impl LateManager {
+        /// Starts the listener if the permission is there now, and gives it the bindings.
+        fn ensure(&self) {
+            if self.manager.borrow().is_some() || !handy_keys::check_accessibility() {
+                return;
+            }
+            let manager = match HotkeyManager::new_with_blocking() {
+                Ok(manager) => manager,
+                Err(err) => {
+                    log::warn!("could not install the keyboard hook yet: {err}");
+                    return;
+                }
+            };
+            for (_, hotkey, listener_id) in self.hotkeys.borrow_mut().iter_mut() {
+                *listener_id = manager.register(*hotkey).ok();
+            }
+            if let Some(wake) = self.waker.borrow().clone() {
+                handy_keys::set_event_waker(Some(wake));
+            }
+            *self.manager.borrow_mut() = Some(manager);
+            self.ready.store(true, Ordering::SeqCst);
+            log::info!("global hotkeys are on: the accessibility permission was given");
+        }
+    }
+
+    impl Backend for LateManager {
+        type Id = u64;
+
+        fn set_waker(&self, wake: Option<Waker>) {
+            *self.waker.borrow_mut() = wake.clone();
+            if self.manager.borrow().is_some() {
+                handy_keys::set_event_waker(wake);
+                return;
+            }
+            let Some(wake) = wake else {
+                self.ready.store(true, Ordering::SeqCst);
+                return;
+            };
+            let ready = self.ready.clone();
+            let spawned = std::thread::Builder::new()
+                .name("raphael-hotkeys-permission".to_owned())
+                .spawn(move || {
+                    while !ready.load(Ordering::SeqCst) {
+                        std::thread::sleep(POLL);
+                        wake();
+                    }
+                });
+            if let Err(err) = spawned {
+                log::warn!("could not watch for the accessibility permission: {err}");
+            }
+        }
+
+        fn uses_cancel_input_stream(&self) -> bool {
+            true
+        }
+
+        fn take_cancel_input(&self) -> Option<bool> {
+            handy_keys::take_cancel_input()
+        }
+
+        fn register(&self, hotkey: Hotkey) -> Result<u64, String> {
+            self.ensure();
+            let id = self.next.get() + 1;
+            self.next.set(id);
+            let listener_id = match self.manager.borrow().as_ref() {
+                Some(manager) => Some(manager.register(hotkey).map_err(|err| err.to_string())?),
+                None => None,
+            };
+            self.hotkeys.borrow_mut().push((id, hotkey, listener_id));
+            Ok(id)
+        }
+
+        fn unregister(&self, id: u64) -> Result<(), String> {
+            let mut hotkeys = self.hotkeys.borrow_mut();
+            let Some(index) = hotkeys.iter().position(|(own, _, _)| *own == id) else {
+                return Err(format!("no hotkey {id}"));
+            };
+            let (_, _, listener_id) = hotkeys.remove(index);
+            if let (Some(manager), Some(listener_id)) =
+                (self.manager.borrow().as_ref(), listener_id)
+            {
+                manager
+                    .unregister(listener_id)
+                    .map_err(|err| err.to_string())?;
+            }
+            Ok(())
+        }
+
+        fn try_recv(&self) -> Option<(u64, HotkeyState)> {
+            self.ensure();
+            let event = self.manager.borrow().as_ref()?.try_recv()?;
+            self.hotkeys
+                .borrow()
+                .iter()
+                .find(|(_, _, listener_id)| *listener_id == Some(event.id))
+                .map(|(own, _, _)| (*own, event.state))
+        }
     }
 }
 

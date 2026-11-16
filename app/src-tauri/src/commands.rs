@@ -449,6 +449,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.lifecycle",
     "computer.wallpaper",
     "pages.open",
+    // Where a YouTube video plays inside the window on a Mac (the core's page host, `/v/<id>`).
+    "pages.video_base",
     "pages.viewing",
     "owner_questions.answer",
     "owner_questions.bring",
@@ -1864,7 +1866,9 @@ pub fn hotkeys_practice(webview: Webview, on: bool) -> Result<(), String> {
 }
 
 /// Whether the privacy settings of Windows let desktop apps use the microphone, and if not, which
-/// switch is off (`system`, `user` or `desktop_apps`). Always allowed off Windows.
+/// switch is off (`system`, `user` or `desktop_apps`). On macOS, whether the person allowed this
+/// app the microphone: `user` when they said no, `system` when a profile forbids it; a question
+/// not answered yet is asked now (the answer counts from the next recording).
 #[tauri::command]
 pub fn mic_access(webview: Webview) -> Result<MicAccess, String> {
     require_main(&webview)?;
@@ -1872,7 +1876,26 @@ pub fn mic_access(webview: Webview) -> Result<MicAccess, String> {
     {
         Ok(mic_access::microphone_access(&mic_access::WindowsConsent))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        use crate::macos::permissions::{self, Microphone};
+        let blocked_by = match permissions::microphone() {
+            Microphone::Denied => Some(mic_access::Blocker::User),
+            Microphone::Restricted => Some(mic_access::Blocker::System),
+            Microphone::Authorized => None,
+            Microphone::NotDetermined => {
+                std::thread::spawn(|| {
+                    permissions::request_microphone(std::time::Duration::from_secs(120));
+                });
+                None
+            }
+        };
+        Ok(MicAccess {
+            allowed: blocked_by.is_none(),
+            blocked_by,
+        })
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Ok(MicAccess {
             allowed: true,
@@ -1882,14 +1905,19 @@ pub fn mic_access(webview: Webview) -> Result<MicAccess, String> {
 }
 
 /// The few addresses the main window may open in the browser: the page is not trusted with a
-/// general "open this link". The last is the microphone page of the privacy settings.
-const OPENABLE_LINKS: [&str; 6] = [
+/// general "open this link". The last ones are the privacy settings' pages: Windows' microphone
+/// page, and macOS's microphone, accessibility, input monitoring and screen recording panes.
+const OPENABLE_LINKS: [&str; 10] = [
     "https://t.me/BotFather",
     "https://api.slack.com/apps",
     "https://discord.com/developers/applications",
     "https://github.com/login/device",
     "https://github.com/settings/applications",
     "ms-settings:privacy-microphone",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
 ];
 
 fn is_openable_link(url: &str) -> bool {
@@ -2100,10 +2128,20 @@ fn show_in_folder(path: &str) -> Result<(), String> {
             .map(|_| ())
             .map_err(|err| err.to_string())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // Finder opens the folder with the file selected.
+        std::process::Command::new("/usr/bin/open")
+            .arg("-R")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = path;
-        Err("showing a file is only available on Windows".to_owned())
+        Err("showing a file is only available on Windows and macOS".to_owned())
     }
 }
 
@@ -2126,6 +2164,21 @@ pub fn main_window_forward(webview: Webview) -> Result<(), String> {
     Ok(())
 }
 
+/// The text on the clipboard, for a paste button of the main window. WKWebView does not let the
+/// page read the clipboard, so on macOS the page asks the shell; WebView2 lets it read it itself.
+#[tauri::command]
+pub fn clipboard_text(webview: Webview) -> Result<String, String> {
+    require_main(&webview)?;
+    #[cfg(target_os = "macos")]
+    {
+        Ok(crate::macos::pasteboard::text().unwrap_or_default())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("the page reads the clipboard itself on this system".to_owned())
+    }
+}
+
 #[tauri::command]
 pub fn open_external_url(webview: Webview, url: String) -> Result<(), String> {
     require_main(&webview)?;
@@ -2144,14 +2197,27 @@ fn launch_link(url: &str) -> Result<(), String> {
             .map(|_| ())
             .map_err(|err| err.to_string())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        Err("opening links is only available on Windows".to_owned())
+        // `--` keeps an address or a file name from ever being read as an option of `open`.
+        std::process::Command::new("/usr/bin/open")
+            .arg("--")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = url;
+        Err("opening links is only available on Windows and macOS".to_owned())
     }
 }
 
 /// Whether the keyboard layout in use has an AltGr key, which is the Right Alt key. A hotkey on
-/// Right Alt then gets in the way of typing some characters. Always false off Windows.
+/// Right Alt then gets in the way of typing some characters. On macOS, whether the layout needs
+/// Option to type plain characters it has on no other key (`@` on a German keyboard), which a
+/// hotkey on Right Option gets in the way of in the same way.
 #[tauri::command]
 pub fn keyboard_has_altgr(webview: Webview) -> Result<bool, String> {
     require_main(&webview)?;
@@ -2159,7 +2225,11 @@ pub fn keyboard_has_altgr(webview: Webview) -> Result<bool, String> {
     {
         Ok(layout_has_altgr(foreground_layout()))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        Ok(crate::macos::keys::layout_needs_option())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Ok(false)
     }
@@ -2170,7 +2240,7 @@ const PASTE_MAX_CHARS: usize = 1_000_000;
 
 /// The text on the owner's clipboard, for the viewer's paste into a member's computer. The page asks only while the owner
 /// holds the screen's control; the text goes back to that page and is neither logged nor kept. `None` when it holds no
-/// text, too much of it, or on another system.
+/// text, too much of it, or on a system other than Windows and macOS.
 #[tauri::command]
 pub fn owner_clipboard_text(webview: Webview) -> Result<Option<String>, String> {
     require_main(&webview)?;
@@ -2178,7 +2248,13 @@ pub fn owner_clipboard_text(webview: Webview) -> Result<Option<String>, String> 
     {
         crate::paste::read_clipboard_text(PASTE_MAX_CHARS)
     }
-    #[cfg(not(windows))]
+    // The Mac's general pasteboard, read as text; as on Windows, none when it holds too much.
+    #[cfg(target_os = "macos")]
+    {
+        Ok(crate::macos::pasteboard::text()
+            .filter(|text| !text.is_empty() && text.chars().count() <= PASTE_MAX_CHARS))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Ok(None)
     }
@@ -2510,6 +2586,7 @@ mod tests {
                 "agent_retract",
                 "agent_voice_composed",
                 "attachment_source",
+                "clipboard_text",
                 "core_call",
                 "device_computer_app_remove",
                 "device_settings_get",
@@ -2563,6 +2640,7 @@ mod tests {
         // folder of its own.
         assert!(!is_allowed_method("pages.export"));
         assert!(is_allowed_method("pages.open"));
+        assert!(is_allowed_method("pages.video_base"));
         // The window tells the core which page stands open beside the composer before it sends (a page the member may then change).
         assert!(is_allowed_method("pages.viewing"));
     }
@@ -3086,7 +3164,19 @@ mod tests {
         assert!(is_openable_link("https://github.com/login/device"));
         assert!(is_openable_link("https://github.com/settings/applications"));
         assert!(is_openable_link("ms-settings:privacy-microphone"));
+        for pane in [
+            "Privacy_Microphone",
+            "Privacy_Accessibility",
+            "Privacy_ListenEvent",
+            "Privacy_ScreenCapture",
+        ] {
+            let url = format!("x-apple.systempreferences:com.apple.preference.security?{pane}");
+            assert!(is_openable_link(&url), "{url}");
+        }
         for url in [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+            "x-apple.systempreferences:com.apple.preference.security",
+            "x-apple.systempreferences:",
             "https://api.slack.com/apps/",
             "https://api.slack.com.evil.example/apps",
             "https://discord.com/developers/applications?redirect=evil",

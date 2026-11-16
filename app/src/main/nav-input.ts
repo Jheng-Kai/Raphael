@@ -1,9 +1,10 @@
-// The mouse's side buttons and Alt+Left / Alt+Right as back and forward in the main window. The
-// steps themselves are in nav-history.ts. This file hears the buttons and keys, and keeps WebView2
+// The mouse's side buttons and Alt+Left / Alt+Right (⌘[ / ⌘] on a Mac) as back and forward in the main
+// window. The steps themselves are in nav-history.ts. This file hears the buttons and keys, and keeps WebView2
 // from acting on them: it would go back or forward in its own history, which holds no page of ours.
 // It also hears every other press and key, so the history can see each view the person goes into.
 
 import type { NavStep } from "./nav-history";
+import { IS_MAC } from "../shared/platform";
 
 /** The side buttons of a mouse as `MouseEvent.button` numbers them: the back one and the forward one. */
 const BACK_BUTTON = 3;
@@ -45,11 +46,18 @@ export const emptyNavKeyState = (): NavKeyState => ({ altLeft: false, altRight: 
  * else took first (a menu, the key recorder) is not a step, nor is one pressed with Ctrl, Shift or
  * the Windows key as well.
  */
-export function reduceNavKey(previous: NavKeyState, event: NavKeyInput): {
+export function reduceNavKey(previous: NavKeyState, event: NavKeyInput, mac = IS_MAC): {
   state: NavKeyState; step: NavStep | null; preventDefault: boolean;
 } {
   const state = { ...previous };
   const down = event.type === "keydown";
+  // On a Mac Option+Left / Option+Right move the caret a word in a text field, so they stay there: back and forward
+  // are ⌘[ and ⌘], as in Safari and Finder.
+  if (mac) {
+    const bracket = event.code === "BracketLeft" || event.code === "BracketRight";
+    if (!down || event.handled || !bracket || !event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return { state, step: null, preventDefault: false };
+    return { state, step: event.repeat ? null : event.code === "BracketLeft" ? "back" : "forward", preventDefault: true };
+  }
   // `altKey` is true while either Alt is down: it puts right an Alt release this window never heard.
   if (!event.altKey) {
     state.altLeft = false;

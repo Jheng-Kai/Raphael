@@ -450,3 +450,10 @@ html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window
   from { transform: translateY(0%); }
   to { transform: translateY(-100%); }
 }
+
+/* WebKit (macOS) has no overflow-clip-margin, and paint containment clips at the box there: the room around the box is
+   kept by a clip path instead, so horns, wings, hats and their motion are not cut at the face's edge. */
+@supports not (overflow-clip-margin: 1px) {
+  .av.mb-av.mb-av-slime { contain: none; overflow: visible; clip-path: inset(-120px); }
+  .slime-surface { contain: layout; overflow: visible; clip-path: inset(-100cqw); }
+}

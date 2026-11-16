@@ -1,8 +1,8 @@
 //! The shell's half of a run in the app: the core's requests answered, its states shown, the
 //! owner's input watched.
 //!
-//! [`spawn`] starts the desktop's thread ([`super::uia`]) and a task that listens to the core's
-//! notifications:
+//! [`spawn`] starts the desktop's thread (`uia` on Windows, `ax` on macOS) and a task that
+//! listens to the core's notifications:
 //!
 //! - `computer.request`: checked ([`super::parse_request`]) and given its [`Ticket`] at once, in
 //!   the order the core's notifications come in, then done on a blocking thread (the desktop's
@@ -32,17 +32,18 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc;
 
-use super::uia::UiaDesktop;
+use super::SystemDesktop;
 use super::watch::hook::Watch;
 use super::{Failure, Phase, Request, Runs, Service, Ticket, parse_request, parse_state, reply};
 use crate::core_process::{CORE_DOWN, CORE_GONE, CORE_RESTARTED, CoreProcess};
 use crate::device_settings::DeviceStore;
 use crate::overlay::{Overlay, OverlayApi};
 
-type DesktopService = Service<UiaDesktop>;
+type DesktopService = Service<SystemDesktop>;
 
-/// Starts the shell's half of a run, if the core is running. Without a UI Automation client the
-/// requests are answered with a failure, and the core says it cannot operate the computer.
+/// Starts the shell's half of a run, if the core is running. Without a UI Automation client (on
+/// macOS, without the desktop's thread) the requests are answered with a failure, and the core
+/// says it cannot operate the computer.
 pub fn spawn(app: &AppHandle) {
     let Some(core) = app
         .try_state::<Arc<CoreProcess>>()
@@ -51,7 +52,7 @@ pub fn spawn(app: &AppHandle) {
         return;
     };
     let service =
-        UiaDesktop::start().map(|desktop| Arc::new(Service::new(desktop, std::process::id())));
+        SystemDesktop::start().map(|desktop| Arc::new(Service::new(desktop, std::process::id())));
     let overlay = app
         .try_state::<Arc<Overlay>>()
         .map(|overlay| overlay.inner().clone());

@@ -1,10 +1,12 @@
 """What the assistant does to this computer, behind an interface a test can replace.
 
-`DeviceActions` is everything the assistant does that only Windows can do: open a page or a page of
-the settings, press a media key, lock the screen, list and start the apps of the Start menu, and put
-text on the clipboard. `WindowsActions` does them with ctypes, `os.startfile` and PowerShell, and imports
-nothing of Windows at import time; the tests give it fakes for all of it. `NullActions` does
-nothing, for a core that runs without a device (the fake LLM of the end-to-end runs).
+`DeviceActions` is everything the assistant does that only the system can do: open a page or a page
+of the settings, press a media key, lock the screen, list and start the apps of the Start menu (the
+Applications folders on a Mac), and put text on the clipboard. `WindowsActions` does them with
+ctypes, `os.startfile` and PowerShell, and imports nothing of Windows at import time; `MacActions`
+does them with `open`, `osascript` and `pbcopy`; the tests give both fakes for all of it.
+`NullActions` does nothing, for a core that runs without a device (the fake LLM of the end-to-end
+runs). `system_actions` is the one of the system the core runs on.
 
 Every method blocks for a moment or more (PowerShell takes seconds), so the assistant calls them
 on a worker thread, never on the event loop.
@@ -15,8 +17,10 @@ import binascii
 import ctypes
 import json
 import os
+import plistlib
 import re
 import subprocess
+import sys
 import time
 import unicodedata
 from collections.abc import Callable, Iterable
@@ -365,3 +369,279 @@ class WindowsActions:
             if attempt < CLIPBOARD_ATTEMPTS - 1:
                 self._sleep(CLIPBOARD_RETRY_S)
         raise OSError("The clipboard is busy")
+
+
+# ---------- macOS ----------
+
+# The pane of System Settings that does on a Mac what each page of the Windows settings does. The
+# model names the pages as on Windows (`opening.SETTINGS_PAGES`); a page with no pane of its own opens
+# the nearest one (proxies and the data used are in Network, the night light is in Displays). An entry
+# that is a path is an app (fonts are Font Book's).
+_PANE = "x-apple.systempreferences:"
+MAC_SETTINGS = {
+    "ms-settings:about": _PANE + "com.apple.SystemProfiler.AboutExtension",
+    "ms-settings:activation": _PANE + "com.apple.SystemProfiler.AboutExtension",
+    "ms-settings:appsfeatures": _PANE + "com.apple.settings.Storage",
+    "ms-settings:backup": _PANE + "com.apple.Time-Machine-Settings.extension",
+    "ms-settings:batterysaver": _PANE + "com.apple.Battery-Settings.extension",
+    "ms-settings:bluetooth": _PANE + "com.apple.BluetoothSettings",
+    "ms-settings:clipboard": _PANE + "com.apple.Keyboard-Settings.extension",
+    "ms-settings:colors": _PANE + "com.apple.Appearance-Settings.extension",
+    "ms-settings:connecteddevices": _PANE + "com.apple.BluetoothSettings",
+    "ms-settings:datausage": _PANE + "com.apple.Network-Settings.extension",
+    "ms-settings:dateandtime": _PANE + "com.apple.Date-Time-Settings.extension",
+    "ms-settings:defaultapps": _PANE + "com.apple.Desktop-Settings.extension",
+    "ms-settings:developers": _PANE + "com.apple.settings.PrivacySecurity.extension",
+    "ms-settings:devices-touchpad": _PANE + "com.apple.Trackpad-Settings.extension",
+    "ms-settings:display": _PANE + "com.apple.Displays-Settings.extension",
+    "ms-settings:easeofaccess": _PANE + "com.apple.Accessibility-Settings.extension",
+    "ms-settings:easeofaccess-display": _PANE + "com.apple.Accessibility-Settings.extension",
+    "ms-settings:easeofaccess-keyboard": _PANE + "com.apple.Accessibility-Settings.extension",
+    "ms-settings:easeofaccess-magnifier": _PANE + "com.apple.Accessibility-Settings.extension",
+    "ms-settings:easeofaccess-narrator": _PANE + "com.apple.Accessibility-Settings.extension",
+    "ms-settings:fonts": "/System/Applications/Font Book.app",
+    "ms-settings:gaming-gamebar": _PANE + "com.apple.Game-Center-Settings.extension",
+    "ms-settings:lockscreen": _PANE + "com.apple.Lock-Screen-Settings.extension",
+    "ms-settings:mousetouchpad": _PANE + "com.apple.Mouse-Settings.extension",
+    "ms-settings:multitasking": _PANE + "com.apple.Desktop-Settings.extension",
+    "ms-settings:network": _PANE + "com.apple.Network-Settings.extension",
+    "ms-settings:network-airplanemode": _PANE + "com.apple.Network-Settings.extension",
+    "ms-settings:network-ethernet": _PANE + "com.apple.Network-Settings.extension",
+    "ms-settings:network-mobilehotspot": _PANE + "com.apple.Sharing-Settings.extension",
+    "ms-settings:network-proxy": _PANE + "com.apple.Network-Settings.extension",
+    "ms-settings:network-vpn": _PANE + "com.apple.NetworkExtensionSettingsUI.NESettingsUIExtension",
+    "ms-settings:network-wifi": _PANE + "com.apple.wifi-settings-extension",
+    "ms-settings:nightlight": _PANE + "com.apple.Displays-Settings.extension",
+    "ms-settings:notifications": _PANE + "com.apple.Notifications-Settings.extension",
+    "ms-settings:optionalfeatures": _PANE + "com.apple.systempreferences.GeneralSettings",
+    "ms-settings:otherusers": _PANE + "com.apple.Users-Groups-Settings.extension",
+    "ms-settings:personalization": _PANE + "com.apple.Appearance-Settings.extension",
+    "ms-settings:personalization-background": _PANE + "com.apple.Wallpaper-Settings.extension",
+    "ms-settings:personalization-start": _PANE + "com.apple.Desktop-Settings.extension",
+    "ms-settings:powersleep": _PANE + "com.apple.Battery-Settings.extension",
+    "ms-settings:printers": _PANE + "com.apple.Print-Scan-Settings.extension",
+    "ms-settings:privacy": _PANE + "com.apple.settings.PrivacySecurity.extension",
+    "ms-settings:privacy-location": _PANE + "com.apple.preference.security?Privacy_LocationServices",
+    "ms-settings:privacy-microphone": _PANE + "com.apple.preference.security?Privacy_Microphone",
+    "ms-settings:project": _PANE + "com.apple.Displays-Settings.extension",
+    "ms-settings:quiethours": _PANE + "com.apple.Focus-Settings.extension",
+    "ms-settings:recovery": _PANE + "com.apple.Transfer-Reset-Settings.extension",
+    "ms-settings:regionlanguage": _PANE + "com.apple.Localization-Settings.extension",
+    "ms-settings:remotedesktop": _PANE + "com.apple.Sharing-Settings.extension",
+    "ms-settings:signinoptions": _PANE + "com.apple.Touch-ID-Settings.extension",
+    "ms-settings:sound": _PANE + "com.apple.Sound-Settings.extension",
+    "ms-settings:speech": _PANE + "com.apple.Keyboard-Settings.extension",
+    "ms-settings:startupapps": _PANE + "com.apple.LoginItems-Settings.extension",
+    "ms-settings:storagesense": _PANE + "com.apple.settings.Storage",
+    "ms-settings:taskbar": _PANE + "com.apple.Desktop-Settings.extension",
+    "ms-settings:themes": _PANE + "com.apple.Appearance-Settings.extension",
+    "ms-settings:troubleshoot": _PANE + "com.apple.systempreferences.GeneralSettings",
+    "ms-settings:typing": _PANE + "com.apple.Keyboard-Settings.extension",
+    "ms-settings:usb": _PANE + "com.apple.settings.PrivacySecurity.extension",
+    "ms-settings:windowsdefender": _PANE + "com.apple.settings.PrivacySecurity.extension",
+    "ms-settings:windowsupdate": _PANE + "com.apple.Software-Update-Settings.extension",
+    "ms-settings:yourinfo": _PANE + "com.apple.systempreferences.AppleIDSettings",
+}
+# How far one press of a volume key moves the output volume (of 100): a sixteenth, as the Mac's own
+# keys do.
+MAC_VOLUME_STEP = 6.25
+# NX_KEYTYPE_PLAY, NX_KEYTYPE_NEXT, NX_KEYTYPE_PREVIOUS: the media keys of a Mac keyboard, which go to
+# the app that plays now as they do on the keyboard.
+MAC_MEDIA_KEYS = {"play_pause": 16, "next_track": 17, "previous_track": 18}
+# A media key as the keyboard sends it: a system-defined event (14) of subtype 8, down then up.
+_MEDIA_KEY_SCRIPT = (
+    "ObjC.import('AppKit'); ObjC.import('CoreGraphics');"
+    "function key(code, down) {"
+    " var ev = $.NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2("
+    "14, $.NSZeroPoint, down ? 0xa00 : 0xb00, 0, 0, $(), 8, (code << 16) | ((down ? 0xa : 0xb) << 8), -1);"
+    " $.CGEventPost(0, ev.CGEvent); }"
+    "for (var i = 0; i < TIMES; i++) { key(CODE, true); key(CODE, false); }"
+)
+# The players told directly when the media key cannot be sent; one that does not run is never started.
+_MAC_PLAYERS = ("com.apple.Music", "com.spotify.client")
+_MAC_PLAYER_COMMANDS = {"play_pause": "playpause", "next_track": "next track", "previous_track": "previous track"}
+# The folders whose apps are the Mac's Start menu, each with its subfolders one level down.
+MAC_APP_FOLDERS = (
+    Path("/Applications"),
+    Path("/Applications/Utilities"),
+    Path("/System/Applications"),
+    Path("/System/Applications/Utilities"),
+    Path.home() / "Applications",
+)
+_BUNDLE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]*")
+MAC_HELPER_TIMEOUT_S = 10.0
+_LOGIN_FRAMEWORK = "/System/Library/PrivateFrameworks/login.framework/Versions/Current/login"
+
+
+def _lock_with_login_framework() -> None:
+    """Locks the screen at once, as Control-Command-Q does, with the login framework's own call."""
+    login = ctypes.CDLL(_LOGIN_FRAMEWORK)
+    login.SACLockScreenImmediate.restype = ctypes.c_int
+    if login.SACLockScreenImmediate() != 0:
+        raise OSError("The screen could not be locked")
+
+
+class MacActions:
+    """`DeviceActions` on macOS. The processes it starts (`run`), the lock (`lock`) and the folders of
+    apps (`app_folders`) can be given instead, so that a test opens, presses and locks nothing."""
+
+    def __init__(
+        self,
+        *,
+        run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+        lock: Callable[[], None] | None = None,
+        app_folders: Iterable[Path] | None = None,
+    ) -> None:
+        self._run = run
+        self._lock = lock or _lock_with_login_framework
+        self._folders = list(MAC_APP_FOLDERS if app_folders is None else app_folders)
+
+    def _helper(self, args: list[str], *, input: bytes | None = None) -> subprocess.CompletedProcess:
+        completed = self._run(
+            args, input=input, capture_output=True, timeout=MAC_HELPER_TIMEOUT_S, check=False,
+            env={**os.environ, "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"},
+        )
+        if completed.returncode != 0:
+            raise OSError(f"{Path(args[0]).name} ended with {completed.returncode}")
+        return completed
+
+    def open_url(self, url: str) -> None:
+        # `open` opens whatever it is given (an app, a file, any scheme), so nothing but a page of the
+        # public web goes to it.
+        if validate_url(url, allow_http=True) is None:
+            raise ValueError("Only a page of the public web can be opened")
+        self._helper(["/usr/bin/open", "--", url])
+
+    def open_settings(self, uri: str) -> None:
+        if uri not in SETTINGS_URIS or uri not in MAC_SETTINGS:
+            raise ValueError("Only a page of the settings can be opened")
+        target = MAC_SETTINGS[uri]
+        if target.startswith("/"):
+            self._helper(["/usr/bin/open", "-a", target])
+        else:
+            self._helper(["/usr/bin/open", "--", target])
+
+    def press_key(self, name: str, times: int = 1) -> None:
+        if name not in VIRTUAL_KEYS:
+            raise ValueError(f"Unknown key {name!r}")
+        if not 1 <= times <= _MAX_KEY_PRESSES:
+            raise ValueError(f"A key is pressed between 1 and {_MAX_KEY_PRESSES} times")
+        if name in ("volume_up", "volume_down"):
+            step = MAC_VOLUME_STEP * times * (1 if name == "volume_up" else -1)
+            self._helper(["/usr/bin/osascript", "-e",
+                          f"set volume output volume ((output volume of (get volume settings)) + {step:g})"])
+        elif name == "volume_mute":
+            # A press turns the sound off or back on: an even number of presses changes nothing.
+            if times % 2:
+                self._helper(["/usr/bin/osascript", "-e",
+                              "set volume output muted (not (output muted of (get volume settings)))"])
+        else:
+            self._media_key(name, times)
+
+    def _media_key(self, name: str, times: int) -> None:
+        script = _MEDIA_KEY_SCRIPT.replace("TIMES", str(times)).replace("CODE", str(MAC_MEDIA_KEYS[name]))
+        try:
+            self._helper(["/usr/bin/osascript", "-l", "JavaScript", "-e", script])
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass
+        told = False
+        for bundle in _MAC_PLAYERS:
+            script = (f'if application id "{bundle}" is running then '
+                      f'tell application id "{bundle}" to {_MAC_PLAYER_COMMANDS[name]}')
+            for _ in range(times):
+                try:
+                    self._helper(["/usr/bin/osascript", "-e", script])
+                    told = True
+                except (OSError, subprocess.SubprocessError):
+                    break
+        if not told:
+            raise OSError("The media key could not be sent")
+
+    def lock_screen(self) -> None:
+        try:
+            self._lock()
+            return
+        except (OSError, AttributeError):
+            pass
+        self._helper(["/usr/bin/osascript", "-e",
+                      'tell application "System Events" to keystroke "q" using {control down, command down}'])
+
+    def list_start_apps(self) -> list[StartApp]:
+        """The apps of the Applications folders (the system's, the person's), each named as Finder
+        names it and known by its bundle identifier."""
+        apps: list[StartApp] = []
+        seen: set[str] = set()
+        for bundle in self._bundles():
+            app = self._describe(bundle)
+            if app is None or _name_key(app.name) in seen:
+                continue
+            seen.add(_name_key(app.name))
+            apps.append(app)
+            if len(apps) >= _MAX_SHORTCUTS:
+                break
+        return apps
+
+    def _bundles(self) -> list[Path]:
+        found: list[Path] = []
+        for folder in self._folders:
+            try:
+                entries = sorted(folder.iterdir())
+            except OSError:
+                continue
+            for entry in entries:
+                if entry.suffix == ".app":
+                    found.append(entry)
+                elif entry.is_dir() and not entry.name.startswith("."):
+                    try:
+                        found.extend(sorted(child for child in entry.iterdir() if child.suffix == ".app"))
+                    except OSError:
+                        continue
+        return found
+
+    @staticmethod
+    def _describe(bundle: Path) -> StartApp | None:
+        try:
+            with open(bundle / "Contents" / "Info.plist", "rb") as file:
+                info = plistlib.load(file)
+        except (OSError, plistlib.InvalidFileException, ValueError):
+            info = {}
+        if not isinstance(info, dict):
+            info = {}
+        name = info.get("CFBundleDisplayName") or info.get("CFBundleName") or bundle.stem
+        identifier = info.get("CFBundleIdentifier")
+        if not isinstance(name, str) or not name.strip():
+            name = bundle.stem
+        app_id = identifier if isinstance(identifier, str) and _BUNDLE_ID.fullmatch(identifier) else str(bundle)
+        return StartApp(name.strip(), app_id)
+
+    def launch_app(self, app_id: str) -> None:
+        if not app_id.strip() or _NOT_AN_ID.search(app_id):
+            raise ValueError("Not an app id")
+        app_id = app_id.strip()
+        if _BUNDLE_ID.fullmatch(app_id) and not app_id.endswith(".app"):
+            self._helper(["/usr/bin/open", "-b", app_id])
+            return
+        self._helper(["/usr/bin/open", "-a", str(self._bundle(app_id))])
+
+    def _bundle(self, path: str) -> Path:
+        """`path` if it is an app in one of the Applications folders: nothing else is started by its
+        path. ValueError if it is not."""
+        resolved = Path(path).resolve()
+        if resolved.suffix == ".app" and resolved.is_dir():
+            for folder in self._folders:
+                if folder.resolve() in resolved.parents:
+                    return resolved
+        raise ValueError("Not an app of the Applications folders")
+
+    def copy_to_clipboard(self, text: str) -> None:
+        self._helper(["/usr/bin/pbcopy"], input=text.encode("utf-8"))
+
+
+# The system the core runs on, as `system_actions` reads it (a test replaces it, not `sys.platform`).
+PLATFORM = sys.platform
+
+
+def system_actions() -> DeviceActions:
+    """The actions of the system the core runs on."""
+    return MacActions() if PLATFORM == "darwin" else WindowsActions()

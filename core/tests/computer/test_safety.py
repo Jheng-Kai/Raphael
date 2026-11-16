@@ -334,3 +334,14 @@ def test_a_button_that_closes_a_window_a_tab_or_the_app_is_never_pressed(name):
 def test_names_that_only_look_like_closing_are_not_refused(name):
     verdict = judge(action="click", declared_final=False, name=name, role="Button")
     assert verdict != REFUSE, name
+
+
+def test_the_owner_reads_a_chord_as_the_mac_presses_it_and_the_shell_always_gets_windows_names():
+    from raphael_core.computer.safety import chord_label, chord_text
+    assert chord_label(("ctrl", "enter"), mac=True) == "⌘Return"
+    assert chord_label(("ctrl", "shift", "s"), mac=True) == "⇧⌘S"
+    assert chord_label(("ctrl", "left"), mac=True) == "⌥←"
+    assert chord_label(("ctrl", "backspace"), mac=True) == "⌥Delete"
+    assert chord_label(("ctrl", "home"), mac=True) == "⌘↑"
+    assert chord_label(("ctrl", "tab"), mac=True) == "⌃Tab"
+    assert chord_label(("ctrl", "enter"), mac=False) == chord_text(("ctrl", "enter")) == "Ctrl+Enter"

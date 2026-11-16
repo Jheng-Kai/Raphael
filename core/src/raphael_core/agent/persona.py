@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 from ..memory.store import UNCONFIRMED, MemorySnapshot
+from .. import system_words
+from ..system_words import for_this_system
 from ..memory.doctrine import DOCTRINE as MEMORY_DOCTRINE, SKILL_DOCTRINE
 from .capabilities import SHARED_CAPABILITIES
 from .speaker import Speaker
@@ -476,10 +478,32 @@ def monthly_budget_notice(language: str, limit: float) -> str:
     return _MONTHLY_BUDGET[fixed_language(language)].format(limit=f"{limit:g}")
 
 
+# The phrases a Mac words its own way: the owner's computer is a Mac, and what stops a run on the owner's desktop is a
+# permission macOS asks for (Input Monitoring for the watch on the owner's keys and mouse, Accessibility for the windows),
+# allowed in System Settings and taken up when Raphael starts again.
+_MAC_PHRASES = {
+    "zh-TW": {
+        "computer_unavailable": "現在無法操作電腦。請先親自完成這一步；若一直如此，請到「系統設定 › 隱私權與安全性 › 輔助使用」允許拉斐爾。",
+        "computer_watch": "無法監看鍵盤與滑鼠，為安全起見不操作電腦。請先親自完成這一步，再到「系統設定 › 隱私權與安全性 › 輸入監控」允許拉斐爾，然後重新啟動拉斐爾。",
+    },
+    "en": {
+        "which_computer": "Open it on this Mac, or on {who}'s own computer?",
+        "computer_unavailable": "The computer cannot be operated at this time. Complete this step yourself; if it keeps happening, allow Raphael in System Settings > Privacy & Security > Accessibility.",
+        "computer_watch": "The keyboard and the mouse cannot be watched, so the computer is not operated. Complete this step yourself, then allow Raphael in System Settings > Privacy & Security > Input Monitoring and restart Raphael.",
+    },
+    "ja": {
+        "which_computer": "この Mac で開きますか？それとも{who}自身のコンピューターで開きますか？",
+        "computer_unavailable": "現在コンピューターを操作できません。この操作はご自身で行い、続く場合は「システム設定 › プライバシーとセキュリティ › アクセシビリティ」でラファエルを許可してください。",
+        "computer_watch": "キーボードとマウスを監視できないため、コンピューターを操作しません。この操作はご自身で行い、「システム設定 › プライバシーとセキュリティ › 入力監視」でラファエルを許可してから再起動してください。",
+    },
+}
+
+
 def phrase(language: str, name: str, **fields: str) -> str:
     """The fixed phrase `name` in `language`, with its `{fields}` filled in (the ones that have
-    fields; the fields' own text is never read as a template)."""
-    text = getattr(PHRASES[fixed_language(language)], name)
+    fields; the fields' own text is never read as a template). A Mac's own wording comes first there."""
+    fixed = fixed_language(language)
+    text = (_MAC_PHRASES.get(fixed, {}).get(name) if system_words.MAC else None) or getattr(PHRASES[fixed], name)
     return text.format(**fields) if fields else text
 
 
@@ -667,6 +691,7 @@ Long work may use an installed claude -p or codex exec as a local background com
 same card and the owner's subscription. Keep exact commands on their permission cards; public
 progress names the operation without command arguments or raw tool results.
 """
+_OWNER_PC_RULES = for_this_system(_OWNER_PC_RULES)
 
 
 def _contract(owner_pc: bool = False) -> str:

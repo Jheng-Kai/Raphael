@@ -24,11 +24,22 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(windows)]
 mod windows;
 
+#[cfg(target_os = "macos")]
+pub use self::macos::MacMedia;
 #[cfg(windows)]
 pub use self::windows::WindowsMedia;
+
+/// The [`MediaPauser`] of the system the app runs on.
+#[cfg(windows)]
+pub type SystemMedia = WindowsMedia;
+/// The [`MediaPauser`] of the system the app runs on.
+#[cfg(target_os = "macos")]
+pub type SystemMedia = MacMedia;
 
 /// How long a pause waits for the recording to be cancelled before it acts. Right Alt+V (paste the
 /// last dictation) starts a dictation with its first key and drops it with its second a moment

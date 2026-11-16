@@ -105,9 +105,9 @@ def test_the_database_stays_in_the_roaming_data_dir_on_windows(fake_home, monkey
     assert paths.db_path() == fake_home / "AppData" / "Roaming" / "Raphael" / "raphael.db"
 
 
-def test_macos_models_default_to_the_caches_folder(fake_home, monkeypatch):
+def test_macos_models_default_to_application_support_never_the_purgeable_caches(fake_home, monkeypatch):
     on_platform(monkeypatch, "darwin")
-    assert paths.models_dir() == fake_home / "Library" / "Caches" / "Raphael" / "models"
+    assert paths.models_dir() == fake_home / "Library" / "Application Support" / "Raphael" / "models"
 
 
 def test_an_explicit_base_still_holds_the_models_beside_it(fake_home, monkeypatch, tmp_path):

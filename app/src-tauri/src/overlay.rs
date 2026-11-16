@@ -28,7 +28,10 @@
 
 mod frame;
 pub(crate) mod mouse;
+// The screen and sight diagnostics read Windows' own state.
+#[cfg_attr(not(windows), allow(dead_code))]
 mod screen;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod sight;
 
 use std::{
@@ -712,6 +715,8 @@ impl Overlay {
         if let Some(hwnd) = self.hwnd {
             sight::check(&self.window, hwnd, placement);
         }
+        #[cfg(target_os = "macos")]
+        crate::macos::window::keep_in_front(&self.window);
     }
 
     /// [`Self::keep_in_sight`], at most every [`SIGHT_EVERY_MS`]: for the events that keep coming
@@ -1014,7 +1019,14 @@ pub(crate) fn apply_passive_style(window: &WebviewWindow) {
     }
 }
 
-#[cfg(not(windows))]
+/// On macOS the window is turned into a non-activating panel that floats on every Space (see
+/// `macos::window`), which is what the extended style does on Windows.
+#[cfg(target_os = "macos")]
+pub(crate) fn apply_passive_style(window: &WebviewWindow) {
+    crate::macos::window::make_passive(window);
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub(crate) fn apply_passive_style(_window: &WebviewWindow) {}
 
 /// Gives the window [`passive_ex_style`] if it lost it, and says whether it had.

@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { catalogs, getLocale, isUiLocale, LOCALES, onLocaleChange, setLocale, t, translatedMessage } from "./index";
+import { catalogs, getLocale, isUiLocale, LOCALES, onLocaleChange, setLocale, systemMessage, t, translatedMessage, type UiLocale } from "./index";
+import type { MessageKey } from "./zh-TW";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 // TypeScript 7 (the build) ships no compiler API; parsing uses the 6.x compatibility package it recommends for tools.
@@ -246,5 +247,32 @@ describe("main window translations", () => {
     expect(cjkLiterals(files)).toEqual([]);
     const page = readFileSync(path.resolve(overlay, "..", "..", "overlay.html"), "utf8").replace(/<!--[\s\S]*?-->/g, "");
     expect(page.split("\n").filter((line) => CJK.test(line))).toEqual([]);
+  });
+});
+
+describe("on a Mac", () => {
+  // What only Windows has, or calls so: its keys, its programs, its credential store, and the owner's computer as a PC.
+  const WINDOWS = /Windows|\bCtrl\b|\bWin\b|PowerShell|Credential|\bPCs?\b|\bAlt\b(?![ıi])|檔案總管|工作管理員|资源管理器|任务管理器|エクスプローラー/;
+  // A member's own computer is a PC whatever the owner runs.
+  const MEMBER_PC: ReadonlySet<string> = new Set(["ja:desktop.incompatible", "ja:missing.docker"]);
+
+  test("no message names a Windows key, program or store, or calls the owner's Mac a PC", () => {
+    const found: string[] = [];
+    for (const locale of Object.keys(catalogs) as UiLocale[]) {
+      for (const key of Object.keys(catalogs[locale]) as MessageKey[]) {
+        const text = systemMessage(key, locale, true);
+        if (WINDOWS.test(text) && !MEMBER_PC.has(`${locale}:${key}`)) found.push(`${locale}:${key}: ${text.slice(0, 80)}`);
+      }
+    }
+    expect(found, "add the Mac's words to mac-catalogs.ts (macCatalogs, or macRenames for one word)").toEqual([]);
+  });
+
+  test("a word changes in each language's own sentence, and Windows keeps its words", () => {
+    expect(systemMessage("agent.thisPc", "en", true)).toBe("This Mac");
+    expect(systemMessage("agent.thisPc", "ja", true)).toBe("この Mac");
+    expect(systemMessage("agent.thisPc", "en", false)).toBe("This PC");
+    expect(systemMessage("settings.039", "en", true)).toContain("press Return to test");
+    expect(systemMessage("settings.039", "tr", true)).toContain("Return’e basın");
+    expect(systemMessage("common.keyPasteHint", "en", true)).toContain("⌘V");
   });
 });

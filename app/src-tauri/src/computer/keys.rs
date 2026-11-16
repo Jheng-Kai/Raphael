@@ -74,6 +74,7 @@ impl Key {
     }
 
     /// The Windows virtual-key code, and whether it is an extended key.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn virtual_key(self) -> (u16, bool) {
         match self {
             Key::Enter => (0x0D, false),

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { avatarHTML, cleanCrop, cropStyle, currentAvatar, loadAvatar, onAvatarChange, readAvatar, setAvatar } from "./avatar";
-import { cropDialog, frameCrop, moveCrop, resizeCrop, startView, zoomCrop } from "./avatar-settings";
+import { cropDialog, frameCrop, moveCrop, resizeCrop, startView, wheelZoom, zoomCrop } from "./avatar-settings";
 import { openDialog } from "./member-dialogs";
 import { pictureRect } from "../overlay/emblem";
 import { setLocale, t } from "./i18n";
@@ -211,4 +211,13 @@ describe("the crop dialog", () => {
     expect(under.el.isConnected).toBe(true); expect(document.activeElement).toBe(under.el.querySelector("input"));
     under.close();
   });
+});
+
+test("a wheel's notch zooms 1.08 times, and a trackpad's small deltas add up to the same for the same distance", () => {
+  expect(wheelZoom(-100, 0)).toBeCloseTo(1.08, 5);
+  expect(wheelZoom(100, 0)).toBeCloseTo(1 / 1.08, 5);
+  const swipe = Array.from({ length: 25 }, () => wheelZoom(-4, 0)).reduce((zoom, step) => zoom * step, 1);
+  expect(swipe).toBeCloseTo(1.08, 5);
+  expect(wheelZoom(-3, 1)).toBeCloseTo(1.08, 5); // three lines are a notch too
+  expect(wheelZoom(-5000, 0)).toBe(1.08); // never more than a notch at once
 });

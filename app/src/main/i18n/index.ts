@@ -13,6 +13,8 @@ import { vi } from "./vi";
 import { th } from "./th";
 import { id } from "./id";
 import { tr } from "./tr";
+import { macCatalogs, macRenames } from "./mac-catalogs";
+import { IS_MAC } from "../../shared/platform";
 import "./fonts.css";
 
 export const LOCALES = [
@@ -62,14 +64,20 @@ export function onLocaleChange(listener: () => void): () => void {
 type Slots<S extends string> = S extends `${string}{${infer P}}${infer Rest}` ? P | Slots<Rest> : never;
 type Values<K extends MessageKey> = Record<Slots<(typeof zhTW)[K]>, MessageValue>;
 
+/** A message as this system reads it: the Mac's own words first (mac-catalogs.ts), then the language's. */
+export function systemMessage(key: MessageKey, at: UiLocale = locale, mac = IS_MAC): string {
+  const own = catalogs[at][key];
+  if (!mac) return own;
+  return macCatalogs[at][key] ?? (macRenames[key] ?? []).reduce((text, [word, name]) => text.replace(word, name), own);
+}
+
 /** Interpolates once, so braces in a user's text are never interpreted as a second message. */
 export function t<K extends MessageKey>(
   key: K,
   ...args: [Slots<(typeof zhTW)[K]>] extends [never] ? [values?: Values<K>] : [values: Values<K>]
 ): string {
-  const message: string = catalogs[locale][key];
   const values = args[0] as Record<string, MessageValue> | undefined;
-  const result = interpolate(message, values);
+  const result = interpolate(systemMessage(key), values);
   rendered.set(result, { key, values });
   if (rendered.size > 512) rendered.delete(rendered.keys().next().value!);
   return result;
@@ -86,7 +94,7 @@ function interpolate(message: string, values?: Record<string, MessageValue>): st
 export function translatedMessage(message: string): () => string {
   const reference = rendered.get(message);
   return reference ? () => {
-    const result = interpolate(catalogs[locale][reference.key], reference.values);
+    const result = interpolate(systemMessage(reference.key), reference.values);
     rendered.set(result, reference);
     if (rendered.size > 512) rendered.delete(rendered.keys().next().value!);
     return result;

@@ -326,7 +326,24 @@ fn foreground_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
             x >= p.x && y >= p.y && x < p.x + s.width as i32 && y < p.y + s.height as i32
         })
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // The focused window's frame from the accessibility API is in points from the top left
+        // of the main display; each monitor is compared in its own points.
+        let pid = crate::macos::workspace::frontmost_pid()?;
+        let frame = crate::macos::ax::focused_window(pid)?.frame()?;
+        let (x, y) = (
+            frame.origin.x + frame.size.width / 2.0,
+            frame.origin.y + frame.size.height / 2.0,
+        );
+        app.available_monitors().ok()?.into_iter().find(|monitor| {
+            let scale = monitor.scale_factor();
+            let p = monitor.position().to_logical::<f64>(scale);
+            let s = monitor.size().to_logical::<f64>(scale);
+            x >= p.x && y >= p.y && x < p.x + s.width && y < p.y + s.height
+        })
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = app;
         None
@@ -361,7 +378,15 @@ fn round_region(window: &tauri::WebviewWindow, width: u32, height: u32) {
             }
         });
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // The panel has no shadow and a transparent background, so only the page's pill is
+        // seen; its corners are rounded all the same, so that nothing square ever shows.
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let _ = width;
+        crate::macos::window::round_corners(window, f64::from(height) / scale / 2.0);
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (window, width, height);
     }

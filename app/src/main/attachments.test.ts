@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { expect, test, vi } from "vitest";
-import { bindFilePaste } from "./attachments";
+import { bindFilePaste, fileKind } from "./attachments";
 import { t } from "./i18n";
 
 test.each(['x'.repeat(2000), Array(40).fill('line').join('\n'), 'https://sample.invalid/'.repeat(200)])("long clipboard text becomes a numbered ordinary attachment before earlier paste listeners", text => {
@@ -25,4 +25,17 @@ test("short text retains native paste and a clipboard with files attaches both i
   expect(paste('short').defaultPrevented).toBe(false);expect(add).not.toHaveBeenCalled();
   const image=new File(['sample'],'sample.png',{type:'image/png'});
   paste('x'.repeat(200_000),[image]);expect(input.value).toBe('');expect(add.mock.calls[0][0]).toHaveLength(2);expect(add.mock.calls[0][0][0]).toBe(image);
+});
+
+test("on a Mac a video or sound the webview cannot play is a file to open, not a player that stays at 0:00", () => {
+  const original = HTMLMediaElement.prototype.canPlayType;
+  HTMLMediaElement.prototype.canPlayType = (type: string) => (type === "video/x-matroska" ? "" : "maybe");
+  try {
+    expect(fileKind("video/x-matroska", true)).toBe("file");
+    expect(fileKind("video/mp4", true)).toBe("video");
+    expect(fileKind("audio/ogg", true)).toBe("audio");
+    expect(fileKind("video/x-matroska", false)).toBe("video");
+  } finally {
+    HTMLMediaElement.prototype.canPlayType = original;
+  }
 });

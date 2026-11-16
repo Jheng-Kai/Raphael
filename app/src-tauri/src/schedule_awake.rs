@@ -2,6 +2,8 @@
 //! request with the calling thread, so applying it on arbitrary async pool threads is incorrect.
 //! The worker acknowledges changes after Windows accepts them and the preference is saved. The
 //! OS clears the request when this process exits; turning it off explicitly restores ES_CONTINUOUS.
+//! On macOS the same worker holds an IOKit power assertion that prevents idle system sleep (the
+//! display may still sleep), released when it is turned off or the process exits.
 use std::sync::{OnceLock, mpsc};
 use std::time::Duration;
 
@@ -12,6 +14,7 @@ enum Request {
 }
 static WORKER: OnceLock<Result<mpsc::Sender<Request>, String>> = OnceLock::new();
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn flags(enabled: bool) -> u32 {
     0x80000000 | if enabled { 1 } else { 0 }
 }
@@ -26,10 +29,29 @@ fn apply(enabled: bool) -> Result<(), String> {
         Ok(())
     }
 }
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn apply(enabled: bool) -> Result<(), String> {
+    use std::sync::Mutex;
+    // Only the worker thread calls this; the assertion lives here while it is held.
+    static HELD: Mutex<Option<crate::macos::power::Awake>> = Mutex::new(None);
+    let mut held = HELD
+        .lock()
+        .map_err(|_| "the awake request is unusable".to_owned())?;
+    if !enabled {
+        held.take();
+        return Ok(());
+    }
+    if held.is_none() {
+        *held = Some(crate::macos::power::Awake::take(
+            "Raphael keeps scheduled tasks running",
+        )?);
+    }
+    Ok(())
+}
+#[cfg(not(any(windows, target_os = "macos")))]
 fn apply(enabled: bool) -> Result<(), String> {
     if enabled {
-        Err("keeping the system awake is supported on Windows".into())
+        Err("keeping the system awake is supported on Windows and macOS".into())
     } else {
         Ok(())
     }
@@ -117,7 +139,7 @@ mod tests {
         assert_eq!(super::flags(false), 0x80000000);
         assert_eq!(super::flags(true) & 2, 0);
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     #[test]
     fn windows_accepts_and_releases_the_request_on_its_owner_thread() {
         std::thread::spawn(|| {

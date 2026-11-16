@@ -1,6 +1,7 @@
 import { t } from "./i18n";
 import { closeMenu, esc, openPopover } from "./ui";
 import { findsName } from "./find-match";
+import { IS_MAC, primaryKey } from "../shared/platform";
 
 function shortcutOverlayOpen(allowPalette = false): boolean {
   return Array.from(document.querySelectorAll('.mb-scrim, [role="dialog"], #app-popover')).some(element =>
@@ -9,22 +10,30 @@ function shortcutOverlayOpen(allowPalette = false): boolean {
   );
 }
 
-export function shortcut(event: KeyboardEvent): string | null {
-  if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.repeat || event.metaKey) return null;
-  const key = event.key.toLowerCase();
-  if (event.ctrlKey && !event.altKey && !event.shiftKey && key === "k") return shortcutOverlayOpen(true) ? null : "palette";
+export function shortcut(event: KeyboardEvent, mac = IS_MAC): string | null {
+  // The system's other key is never the window's: the Windows key, or on a Mac Control, whose combinations are a
+  // text field's own editing keys (⌃K deletes to the end of the line, ⌃F and ⌃B move the caret).
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.repeat || (mac ? event.ctrlKey : event.metaKey)) return null;
+  const primary = primaryKey(event, mac);
+  // The letter or digit the key types (so Dvorak and Colemak keep theirs); a layout that types neither there (Russian,
+  // Thai, Korean) is read by the key's place on the keyboard.
+  const typed = event.key.toLowerCase();
+  const letter = /^[a-z0-9]$/.test(typed) ? typed
+    : /^Key[A-Z]$/.test(event.code) ? event.code.slice(3).toLowerCase() : /^Digit[0-9]$/.test(event.code) ? event.code.slice(5) : typed;
+  if (primary && !event.altKey && !event.shiftKey && letter === "k") return shortcutOverlayOpen(true) ? null : "palette";
   if (shortcutOverlayOpen()) return null;
-  // Ctrl+F, Ctrl+Shift+F, Ctrl+B, Ctrl+N and Ctrl+1..9 type nothing, so they also work while a text field has the focus.
+  // ⌘/Ctrl+F, +Shift+F, +B, +N and +1..9 type nothing, so they also work while a text field has the focus.
   // Every combination a field uses itself (A, C, V, X, Z, Y, Enter, the arrows) is not in this list and stays with the field.
-  if (event.ctrlKey && !event.altKey) {
-    if (key === "f") return event.shiftKey ? "search" : "find";
-    if (!event.shiftKey && ["b", "n"].includes(key)) return key === "b" ? "sidebar" : "new";
-    if (!event.shiftKey && /^[1-9]$/.test(key)) return `member:${key}`;
+  if (primary && !event.altKey) {
+    if (letter === "f") return event.shiftKey ? "search" : "find";
+    if (!event.shiftKey && ["b", "n"].includes(letter)) return letter === "b" ? "sidebar" : "new";
+    if (!event.shiftKey && /^[1-9]$/.test(letter)) return `member:${letter}`;
   }
-  // Alt+arrows move the caret by a paragraph on some systems, so a text field keeps them.
+  // Alt (Option) + arrows move the caret by a paragraph or a word, so a text field keeps them.
+  const key = event.key.toLowerCase();
   const target = event.target instanceof Element ? event.target : document.activeElement;
   if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return null;
-  if (event.altKey && !event.ctrlKey && !event.shiftKey && ["arrowup", "arrowdown"].includes(key)) return key === "arrowup" ? "previous" : "next";
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && ["arrowup", "arrowdown"].includes(key)) return key === "arrowup" ? "previous" : "next";
   return null;
 }
 

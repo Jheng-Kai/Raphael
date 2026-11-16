@@ -114,6 +114,7 @@ impl Tracker {
     /// `span` in characters of `field` (line breaks counted as `\n`). `None` if the span is empty
     /// or reaches past the text. [`Tracker::new`] would take the last occurrence, which is not
     /// always the one that was found.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub(super) fn with_span(field: &str, span: Range<usize>) -> Option<Self> {
         let before = chars_of(field);
         if span.start >= span.end || span.end > before.len() {
@@ -170,6 +171,7 @@ impl Tracker {
 
     /// Whether anything inside the pasted text was changed since the paste: not what stands
     /// before or after it, and not the typing of more text after its last character.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub(super) fn edited(&self) -> bool {
         !self.edits_in_span().is_empty()
     }

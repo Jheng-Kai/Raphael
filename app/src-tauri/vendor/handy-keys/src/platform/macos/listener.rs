@@ -1,12 +1,38 @@
 //! macOS keyboard listener using CGEventTap
+//!
+//! RAPHAEL PATCH. The four changes of the Windows hook (see the note at the top of
+//! `platform/windows/listener.rs`), made here for the event tap:
+//!
+//! First change: a modifier key whose press a hotkey swallowed (a modifier-only hotkey such as
+//! Right Option) has its release swallowed too (`Patch::swallowed_modifiers`); a release whose
+//! press reached the app always reaches it as well. macOS does not repeat modifier keys, so there
+//! are no auto-repeats to swallow; the held key keeps its bit in the flags of every later event,
+//! so chord detection needs no extra guard.
+//!
+//! Second change: injected keyboard events (Raphael's own ⌘V, marked with
+//! `RAPHAEL_INPUT_MARKER` in `kCGEventSourceUserData`, and any event that did not come from the
+//! HID system) pass the tap untouched and never count for hotkeys, unless the program calls
+//! `accept_injected_input(true)` (only tests that drive the tap with posted events do).
+//!
+//! Third change: the physical Escape and every other physical key or button press are reported
+//! to the cancel gesture (`note_escape`, `note_cancel_interruption`), as the Windows hook does.
+//!
+//! Fourth change: Space may go down before the modifier of its chord. When a modifier goes down
+//! while Space is held, went down at most `SPACE_FIRST_WITHIN_MS` ago and reached the app, and a
+//! blocking hotkey is those modifiers plus Space, the modifier is swallowed and a Space key-down
+//! is reported after it, as if Space had come second. A non-modifier key keeps the decision of its
+//! first key-down: its auto-repeats and its key-up are swallowed exactly when that key-down was
+//! (`Patch::key_decisions`).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::Instant;
 
 use objc2_core_foundation::{CFMachPort, CFRetained, CFRunLoop, CFRunLoopSource};
 use objc2_core_graphics::{
@@ -147,6 +173,59 @@ fn reconcile_modifiers(current: &mut Modifiers, flags: CGEventFlags) {
     }
 }
 
+// Raphael patch: injected keyboard events are ignored unless this is turned on.
+static ACCEPT_INJECTED: AtomicBool = AtomicBool::new(false);
+
+/// Sets whether injected keyboard events count for hotkeys (default: they do not). The setting
+/// is process-wide and takes effect on the next key event.
+pub fn accept_injected_input(accept: bool) {
+    ACCEPT_INJECTED.store(accept, Ordering::Relaxed);
+}
+
+/// `kCGEventSourceUserData`: where Raphael's own events carry `RAPHAEL_INPUT_MARKER`.
+const FIELD_SOURCE_USER_DATA: u32 = 42;
+/// `kCGEventSourceStateID`: which event source state an event came from.
+const FIELD_SOURCE_STATE_ID: u32 = 45;
+/// `kCGEventSourceStateHIDSystemState`: the keyboard and the mouse themselves.
+const HID_SYSTEM_STATE: i64 = 1;
+/// `kCGKeyboardEventAutorepeat`.
+const FIELD_AUTOREPEAT: u32 = 8;
+/// The Escape key's virtual key code.
+const ESCAPE: u16 = 0x35;
+/// How long before its modifier a Space may go down and still be the chord's (fourth change).
+const SPACE_FIRST_WITHIN_MS: u128 = 1000;
+
+/// Whether the event was posted by a program (Raphael's own paste above all) rather than typed.
+fn is_injected(event: &CGEvent) -> bool {
+    let marker = CGEvent::integer_value_field(Some(event), CGEventField(FIELD_SOURCE_USER_DATA));
+    if marker == crate::observation::RAPHAEL_INPUT_MARKER as i64 {
+        return true;
+    }
+    CGEvent::integer_value_field(Some(event), CGEventField(FIELD_SOURCE_STATE_ID))
+        != HID_SYSTEM_STATE
+}
+
+/// What the Raphael patch remembers between events. Only the tap's thread touches it.
+struct Patch {
+    /// Modifier bits whose press was swallowed: their release is swallowed too.
+    swallowed_modifiers: Modifiers,
+    /// The decision of each non-modifier key that is down, by key code: its repeats and its
+    /// release follow it.
+    key_decisions: HashMap<u16, bool>,
+    /// The last Space key-down that reached the app, and when.
+    space_down: Option<Instant>,
+}
+
+impl Default for Patch {
+    fn default() -> Self {
+        Self {
+            swallowed_modifiers: Modifiers::empty(),
+            key_decisions: HashMap::new(),
+            space_down: None,
+        }
+    }
+}
+
 /// Context handed to the event tap callback through the refcon pointer.
 ///
 /// `tap` is filled in right after `CGEventTapCreate` returns. The callback and
@@ -155,6 +234,7 @@ fn reconcile_modifiers(current: &mut Modifiers, flags: CGEventFlags) {
 struct CallbackCtx {
     state: Arc<Mutex<ListenerState>>,
     tap: Cell<Option<NonNull<CFMachPort>>>,
+    patch: RefCell<Patch>,
 }
 
 /// The callback function for the event tap
@@ -196,6 +276,32 @@ unsafe extern "C-unwind" fn event_tap_callback(
     let cg_event = event.as_ref();
     let flags = CGEvent::flags(Some(cg_event));
 
+    // Raphael patch (second change): injected input passes untouched.
+    if is_injected(cg_event) && !ACCEPT_INJECTED.load(Ordering::Relaxed) {
+        return event.as_ptr();
+    }
+
+    // Raphael patch (third change): the cancel gesture hears the physical keys and buttons.
+    match event_type {
+        CGEventType::KeyDown | CGEventType::KeyUp => {
+            let keycode =
+                CGEvent::integer_value_field(Some(cg_event), CGEventField::KeyboardEventKeycode)
+                    as u16;
+            let down = event_type == CGEventType::KeyDown;
+            if keycode == ESCAPE {
+                crate::observation::note_escape(down);
+            } else if down {
+                crate::observation::note_cancel_interruption();
+            }
+        }
+        CGEventType::FlagsChanged
+        | CGEventType::LeftMouseDown
+        | CGEventType::RightMouseDown
+        | CGEventType::OtherMouseDown => crate::observation::note_cancel_interruption(),
+        _ => {}
+    }
+
+    let mut patch = ctx.patch.borrow_mut();
     let mut should_block = false;
 
     if let Ok(mut state) = ctx.state.lock() {
@@ -230,8 +336,21 @@ unsafe extern "C-unwind" fn event_tap_callback(
                     return event.as_ptr();
                 }
 
-                // Check if this should be blocked
-                should_block = state.should_block(modifiers, key);
+                // Raphael patch (fourth change): a key keeps the decision of its first key-down.
+                let repeat =
+                    CGEvent::integer_value_field(Some(cg_event), CGEventField(FIELD_AUTOREPEAT))
+                        != 0;
+                should_block = match (repeat, patch.key_decisions.get(&keycode)) {
+                    (true, Some(&decided)) => decided,
+                    _ => {
+                        let decided = state.should_block(modifiers, key);
+                        patch.key_decisions.insert(keycode, decided);
+                        decided
+                    }
+                };
+                if key == Some(Key::Space) && !repeat {
+                    patch.space_down = (!should_block).then(Instant::now);
+                }
 
                 let _ = state.event_sender.send(KeyEvent {
                     modifiers,
@@ -253,8 +372,15 @@ unsafe extern "C-unwind" fn event_tap_callback(
                     return event.as_ptr();
                 }
 
-                // Block key up if we blocked key down (to be consistent)
-                should_block = state.should_block(modifiers, key);
+                // Block key up if we blocked key down (to be consistent). Raphael patch: by the
+                // key-down's own decision, not by what the table says now.
+                should_block = patch
+                    .key_decisions
+                    .remove(&keycode)
+                    .unwrap_or_else(|| state.should_block(modifiers, key));
+                if key == Some(Key::Space) {
+                    patch.space_down = None;
+                }
 
                 let _ = state.event_sender.send(KeyEvent {
                     modifiers,
@@ -307,8 +433,23 @@ unsafe extern "C-unwind" fn event_tap_callback(
                     };
 
                     // Check if this modifier-only combo should be blocked
+                    let mut space_first = false;
                     if is_key_down {
                         should_block = state.should_block(new_modifiers, None);
+                        // Raphael patch (fourth change): the press completes a chord that a
+                        // Space began; the Space is reported again after it.
+                        space_first = patch
+                            .space_down
+                            .is_some_and(|at| at.elapsed().as_millis() <= SPACE_FIRST_WITHIN_MS)
+                            && state.should_block(new_modifiers, Some(Key::Space));
+                        should_block |= space_first;
+                        if should_block {
+                            patch.swallowed_modifiers |= modifier_bit;
+                        }
+                    } else if patch.swallowed_modifiers.contains(modifier_bit) {
+                        // Raphael patch (first change): the release of a swallowed press.
+                        patch.swallowed_modifiers &= !modifier_bit;
+                        should_block = true;
                     }
 
                     let _ = state.event_sender.send(KeyEvent {
@@ -317,6 +458,20 @@ unsafe extern "C-unwind" fn event_tap_callback(
                         is_key_down,
                         changed_modifier,
                     });
+                    if space_first {
+                        patch.space_down = None;
+                        // The Space that is still down now belongs to the chord: its repeats and
+                        // its release are swallowed from here on.
+                        patch
+                            .key_decisions
+                            .insert(super::keycode::keycodes::SPACE, true);
+                        let _ = state.event_sender.send(KeyEvent {
+                            modifiers: new_modifiers,
+                            key: Some(Key::Space),
+                            is_key_down: true,
+                            changed_modifier: None,
+                        });
+                    }
                 } else if keycode == 0x3F {
                     // FN key itself — tracked via flags, not keycode state
                     let had_fn = modifiers.contains(Modifiers::FN);
@@ -457,6 +612,7 @@ fn run_event_tap(
     let ctx_ptr = Box::into_raw(Box::new(CallbackCtx {
         state: Arc::clone(&state),
         tap: Cell::new(None),
+        patch: RefCell::new(Patch::default()),
     }));
 
     let callback: CGEventTapCallBack = Some(event_tap_callback);
@@ -661,6 +817,7 @@ mod tests {
         CallbackCtx {
             state: Arc::new(Mutex::new(ListenerState::new(tx, None))),
             tap: Cell::new(Some(NonNull::from(&**tap))),
+            patch: RefCell::new(Patch::default()),
         }
     }
 

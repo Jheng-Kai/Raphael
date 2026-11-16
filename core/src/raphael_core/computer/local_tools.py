@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import sys
 import uuid
 from contextvars import ContextVar
 from functools import wraps
@@ -17,7 +18,7 @@ from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
-from .local_patterns import DANGEROUS_PATTERNS
+from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
@@ -25,16 +26,40 @@ FOREGROUND_TIMEOUT_S = 120
 _CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", False))
 OUT_OF_REACH = ("The owner's own PC is out of reach here: it is only for a quick question asked through the overlay. "
                 "Do the work on your own computer, or say plainly that it cannot be done.")
-_DANGEROUS = [re.compile(pattern, re.I | re.S) for pattern, _ in DANGEROUS_PATTERNS]
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
-_SECRET = re.compile(r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\/]channels|\b(?:cmdkey|vaultcmd|mimikatz|Get-StoredCredential|CredEnumerate|CredRead)\b", re.I)
-_OPAQUE = re.compile(r"-(?:enc(?:odedcommand)?|file)\b|\b(?:iex|invoke-expression|Start-Process|Invoke-Command)\b|\b(?:claude|codex|python|node|ruby|perl|powershell|pwsh)(?:\.exe)?\b|\.(?:ps1|cmd|bat|exe)\b", re.I)
+_SECRET_WINDOWS = r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\/]channels|\b(?:cmdkey|vaultcmd|mimikatz|Get-StoredCredential|CredEnumerate|CredRead)\b"
+# A Mac's secret store is the Keychain: its command-line reads and exports, and its files.
+_SECRET_MAC = (r"|\bsecurity\s+(?:find-(?:generic|internet)-password|find-certificate|find-identity|dump-keychain|"
+               r"export|unlock-keychain|show-keychain-info)\b|library[\\/]keychains\b|\bkeychain-db\b")
+_OPAQUE_WINDOWS = r"-(?:enc(?:odedcommand)?|file)\b|\b(?:iex|invoke-expression|Start-Process|Invoke-Command)\b|\b(?:claude|codex|python|node|ruby|perl|powershell|pwsh)(?:\.exe)?\b|\.(?:ps1|cmd|bat|exe)\b"
+# On a Mac a script or an AppleScript runs what nobody reads in the command itself.
+_OPAQUE_MAC = r"|\b(?:osascript|bash|zsh|sh|swift)\b|\.(?:sh|command|scpt|zsh)\b"
+
+
+def safety_patterns(platform):
+    """The patterns that ask the owner first, that refuse secret stores and that see an opaque command, for the
+    system `platform` (`sys.platform`): Windows' and Linux's, and on macOS also the Mac's own."""
+    mac = platform == "darwin"
+    dangerous = [re.compile(pattern, re.I | re.S)
+                 for pattern, _ in [*DANGEROUS_PATTERNS, *(MAC_DANGEROUS_PATTERNS if mac else [])]]
+    secret = re.compile(_SECRET_WINDOWS + (_SECRET_MAC if mac else ""), re.I)
+    opaque = re.compile(_OPAQUE_WINDOWS + (_OPAQUE_MAC if mac else ""), re.I)
+    return dangerous, secret, opaque
+
+
+_DANGEROUS, _SECRET, _OPAQUE = safety_patterns(sys.platform)
 
 EXEC_DESCRIPTION = (
     "Run one command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs. "
     "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
     "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
 )
+if sys.platform == "darwin":
+    EXEC_DESCRIPTION = (
+        "Run one zsh command on the owner's Mac for CPU, memory, disk, processes, network, files and logs. "
+        "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
+        "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+    )
 EXEC_SCHEMA = {"type": "object", "properties": {
     "command": {"type": "string", "minLength": 1, "maxLength": 16000},
     "cwd": {"type": "string", "minLength": 1, "description": "Working folder; defaults to the owner's home."},

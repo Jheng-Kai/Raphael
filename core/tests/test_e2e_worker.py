@@ -106,6 +106,20 @@ def worker_pids(core):
 
 def is_alive(pid):
     """Inspect only this test's child, without requiring system-wide WMI process access."""
+    if os.name != "nt":
+        # A child of this process that ended is reaped here; any other ended process is gone from the table.
+        try:
+            if os.waitpid(pid, os.WNOHANG)[0] == pid:
+                return False
+        except ChildProcessError:
+            pass
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
     from ctypes import wintypes
 
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)

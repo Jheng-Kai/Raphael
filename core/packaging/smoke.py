@@ -23,10 +23,26 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
+
+WINDOWS = sys.platform == "win32"
+
+
+def isolated_environment(root: Path, home: Path) -> dict[str, str]:
+    """An environment with nothing of the caller's: only the system's own folders, and the temporary
+    and home folders in `root` and `home`. No credentials, Python paths, proxies or Raphael overrides."""
+    if WINDOWS:
+        environment = {name: value for name, value in os.environ.items()
+                       if name.upper() in {"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"}}
+        environment["PATH"] = str(Path(os.environ["SYSTEMROOT"]) / "System32")
+    else:
+        environment = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR": str(root)}
+    environment.update({"TEMP": str(root), "TMP": str(root), "HOME": str(home), "USERPROFILE": str(home)})
+    return environment
 
 
 class RpcProcess:
@@ -34,12 +50,9 @@ class RpcProcess:
         self, executable: Path, root: Path, extra_environment: dict[str, str] | None = None
     ) -> None:
         # Deliberately omit inherited credentials, Python paths, proxies and Raphael overrides.
-        environment = {name: value for name, value in os.environ.items()
-                       if name.upper() in {"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"}}
+        environment = isolated_environment(root, root / "home")
         environment.update({
-            "PATH": str(Path(os.environ["SYSTEMROOT"]) / "System32"),
-            "TEMP": str(root), "TMP": str(root), "HOME": str(root / "home"),
-            "USERPROFILE": str(root / "home"), "APPDATA": str(root / "appdata"),
+            "APPDATA": str(root / "appdata"),
             "LOCALAPPDATA": str(root / "localappdata"),
             "RAPHAEL_DATA_DIR": str(root / "data"),
             "RAPHAEL_MODELS_DIR": str(root / "empty-models"),
@@ -181,7 +194,7 @@ def smoke_without_a_key(executable: Path) -> dict:
     """The first pass: a core that cannot read a credential, so cleanup stops before the model."""
     began = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="raphael-frozen-smoke-") as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()  # macOS: /var is a link to /private/var
         rpc = RpcProcess(executable, root)
         try:
             hello = rpc.call("core.hello")
@@ -256,7 +269,7 @@ def smoke_with_the_fake_llm(executable: Path) -> dict:
     """
     began = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="raphael-frozen-smoke-llm-") as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()  # macOS: /var is a link to /private/var
         rpc = RpcProcess(executable, root, {"RAPHAEL_FAKE_LLM": "1"})
         try:
             require(rpc.call("core.hello").get("protocol") == 1, "Incompatible JSON-RPC protocol")
@@ -317,12 +330,9 @@ def smoke_the_worker(executable: Path, extra_environment: dict[str, str] | None 
     """The third pass: `raphael-core.exe --worker` on its own, as the core starts it."""
     began = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="raphael-frozen-smoke-worker-") as temporary:
-        root = Path(temporary)
-        environment = {name: value for name, value in os.environ.items()
-                       if name.upper() in {"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"}}
+        root = Path(temporary).resolve()  # macOS: /var is a link to /private/var
+        environment = isolated_environment(root, root)
         environment.update({
-            "PATH": str(Path(os.environ["SYSTEMROOT"]) / "System32"),
-            "TEMP": str(root), "TMP": str(root), "HOME": str(root), "USERPROFILE": str(root),
             "APPDATA": str(root), "LOCALAPPDATA": str(root),
             "PYTHON_KEYRING_BACKEND": "keyring.backends.fail.Keyring", "RAPHAEL_WORKER": "1",
         })
@@ -394,7 +404,8 @@ def smoke(executable: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--core", required=True, type=Path, help="Installed or relocated raphael-core.exe")
+    parser.add_argument("--core", required=True, type=Path,
+                        help="Installed or relocated raphael-core.exe (raphael-core on macOS)")
     parser.add_argument("--report", type=Path, help="Optional JSON evidence file")
     args = parser.parse_args()
     executable = args.core.resolve(strict=True)
