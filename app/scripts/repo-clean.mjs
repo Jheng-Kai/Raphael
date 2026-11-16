@@ -118,11 +118,21 @@ export function hitsOf(path, text) {
   const prose = PROSE_SUFFIXES.has(suffix);
   const hits = [];
   let inDocstring = false;
+  let inBlock = false;
+  const markup = MARKUP_COMMENT.has(suffix);
+  const [opener, closer] = markup ? ["<!--", "-->"] : ["/*", "*/"];
   linesOf(text).forEach((line, index) => {
+    // A line inside a docstring or a block comment is comment text, however it begins.
     let inDocLine = inDocstring;
     if (suffix === ".py" && (line.split('"""').length - 1) % 2 === 1) {
       inDocstring = !inDocstring;
       inDocLine = true;
+    } else if (SLASH_COMMENT.has(suffix) || markup) {
+      inDocLine = inBlock;
+      const opened = line.lastIndexOf(opener);
+      const closed = line.lastIndexOf(closer);
+      if (opened > closed) inBlock = true;
+      else if (closed >= 0) inBlock = false;
     }
     const found = [];
     if (OWNER.test(line)) found.push("owner");

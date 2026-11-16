@@ -94,6 +94,13 @@ describe("dated", () => {
     expect(hitsOf("a.py", sample(docstring)).map((hit) => [hit.line, hit.rule])).toEqual([[2, "dated"]]);
   });
 
+  it("a line inside a block comment hits, and the code after its end does not", () => {
+    const css = ["/* a rule that stays", `   measured on ${day}); the thread passes. */`, `.a { content: "${day}"; }`].join("\n");
+    expect(hitsOf("a.css", sample(css)).map((hit) => [hit.line, hit.rule])).toEqual([[2, "dated"]]);
+    const markup = ["<!-- one", `  of ${day} -->`, `<p>${day}</p>`].join("\n");
+    expect(hitsOf("a.html", sample(markup)).map((hit) => [hit.line, hit.rule])).toEqual([[2, "dated"]]);
+  });
+
   it.each([
     ["a.ts", `const day = "${day}";`],
     ["a.py", `DAY = "${day}"`],
