@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1029,10 +1030,20 @@ class SimpleRecordingClient:
         return {}
 
 
-@pytest.mark.parametrize("case,moved", [("peer", [40]), ("helper", [51]), ("ambiguous", []), ("launcher", [51])])
-async def test_launch_only_moves_its_reply_pids_or_a_single_unattributed_window(seat_tools, case, moved):
+def tag_of(args):
+    match = re.search(r"DESKTOP_STARTUP_ID=(raphael-launch-[0-9a-f]{16}) ", args.get("launch_path", ""))
+    return match and match[1]
+
+
+# "stray" is a lone new window of another process with nothing tying it to the launch: it used to be moved as a
+# helper's, and so could be another member's.
+@pytest.mark.parametrize("case,moved", [("peer", [40]), ("helper", [51]), ("ambiguous", []), ("launcher", [51]), ("stray", [])])
+async def test_launch_moves_only_the_windows_tied_to_it(seat_tools, case, moved):
     hub, vm, _ = seat_tools
     client, session = hub.connections[vm.target(2).key]
+    hub.launch_window_wait_s = .2
+    vm.command_path = AsyncMock(return_value="/usr/bin/xfce4-terminal")
+    environ = {}
     original = client.request
     async def request(method, params):
         reply = await original(method, params)
@@ -1040,6 +1051,9 @@ async def test_launch_only_moves_its_reply_pids_or_a_single_unattributed_window(
             if case != "peer":
                 client.rows[:] = [row for row in client.rows if row["window_id"] != 40]
             client.rows.append(window(51, 2600, pid=51))
+            if case == "helper":
+                # A helper the launched program started carries the launch's tag in its environment.
+                environ[51] = tag_of(params["arguments"])
             if case == "ambiguous":
                 client.rows.append(window(52, 2600, pid=52))
             if case == "launcher":
@@ -1047,6 +1061,226 @@ async def test_launch_only_moves_its_reply_pids_or_a_single_unattributed_window(
                 client.rows.append(window(52, 2600, pid=52))
         return reply
     client.request = request
+    async def launch_marks(target, rows):
+        return {row["window_id"]: dict(own=None, leader=None, environ=environ.get(row["window_id"])) for row in rows}
+    vm.launch_marks = launch_marks
     vm.move_window = AsyncMock()
     await hub._driver_call(vm.target(2), client, "launch_app", dict(name="xfce4-terminal", session=session))
     assert [call.args[1] for call in vm.move_window.await_args_list] == moved
+
+
+class OneCopyTerminal:
+    """xfce4-terminal as the shared computer runs it: one copy (pid 500) opens every launch's window, `late` looks of
+    the canvas after the driver answered, where the window manager puts it (the pointer's screen, 3), with the
+    launch's startup id on it when `carries_id`. With `echo`, every launch after the first also brings a second window
+    of the first launch's program (its tag) into view."""
+
+    def __init__(self, vm, clients, *, late=2, carries_id=True, echo=False):
+        self.late, self.carries_id, self.echo = late, carries_id, echo
+        self.rows = clients[0].rows
+        self.pending, self.marks, self.tags, self.next_id = [], {}, [], 600
+        for client in clients:
+            client.rows = self.rows
+            self.wrap(client)
+        vm.launch_marks = self.launch_marks
+        vm.move_window = self.move
+
+    def wrap(self, client):
+        original = client.request
+        async def request(method, params, **kwargs):
+            name, args = params["name"], params["arguments"]
+            if name == "launch_app":
+                validate_call(method, params)
+                client.calls.append((name, deepcopy(args)))
+                tag = tag_of(args)
+                title = re.search(r"--title=(\w+)", args.get("launch_path", "")) if args.get("launch_path") else None
+                self.pending.append([self.late, tag, title[1] if title else "Terminal"])
+                if self.echo and self.tags:
+                    self.pending.append([self.late, self.tags[0], "echo"])
+                self.tags.append(tag)
+                pid = 40 + len(self.tags)
+                command = args.get("launch_path") or args.get("name")
+                return dict(content=[dict(type="text", text=f"Launched {command} (pid {pid}) in background.")],
+                            structuredContent=dict(pid=pid))
+            if name == "list_windows":
+                for item in self.pending:
+                    item[0] -= 1
+                    if item[0] == 0:
+                        row = window(self.next_id, 2600, pid=500)
+                        row["title"] = item[2]
+                        self.rows.append(row)
+                        self.marks[self.next_id] = dict(own=item[1] if self.carries_id else None, leader=None, environ=None)
+                        self.next_id += 1
+            return await original(method, params, **kwargs)
+        client.request = request
+
+    async def launch_marks(self, target, rows):
+        return {row["window_id"]: self.marks[row["window_id"]] for row in rows if row["window_id"] in self.marks}
+
+    async def move(self, target, identifier):
+        row = next(row for row in self.rows if row["window_id"] == identifier)
+        row["bounds"].update(x=(target.screen - 1) * 1280 + 20, y=20)
+
+    def titled(self, title):
+        return next(row for row in self.rows if row["title"] == title)
+
+
+async def test_a_launch_brings_its_window_that_another_process_opens_late_to_the_members_screen(seat_tools):
+    # Seen on a real shared computer: a terminal launched at seat 5 opened on seat 1's screen. xfce4-terminal opens a
+    # later launch's window in the copy already running, so its process is not the launch's, and it mapped after the
+    # one look the launch took.
+    from raphael_core.computer import seat_view
+    hub, vm, _ = seat_tools
+    client, _ = hub.connections[vm.target(2).key]
+    terminal = OneCopyTerminal(vm, [client])
+    result = await call(hub, 2, "launch_app", dict(launch_path="xfce4-terminal --title=progress --geometry=150x45"))
+    assert result.ok
+    row = terminal.titled("progress")
+    assert seat_view.holder(row["bounds"], 6) == 2 and row["pid"] == 500
+    # The member reads its own command and its window's id, never the tag the core put in front of it.
+    assert "Launched xfce4-terminal --title=progress --geometry=150x45 (pid 41)" in result.text
+    assert f"window_id={row['window_id']} pid=500" in result.text and "DESKTOP_STARTUP_ID" not in result.text
+    sent = next(args for name, args in client.calls if name == "launch_app")
+    assert sent["launch_path"] == (f"env DESKTOP_STARTUP_ID={terminal.tags[0]} RAPHAEL_LAUNCH={terminal.tags[0]} "
+                                   "sh -c 'xfce4-terminal --title=progress --geometry=150x45'")
+
+
+async def test_two_members_launching_at_once_each_get_their_own_window(seat_tools):
+    from raphael_core.computer import seat_view
+    hub, vm, _ = seat_tools
+    clients = [hub.connections[vm.target(member).key][0] for member in (1, 2)]
+    terminal = OneCopyTerminal(vm, clients, echo=True)
+    first, second = await asyncio.gather(call(hub, 1, "launch_app", dict(launch_path="xfce4-terminal --title=one")),
+                                         call(hub, 2, "launch_app", dict(launch_path="xfce4-terminal --title=two")))
+    assert first.ok and second.ok
+    one, two, echo = terminal.titled("one"), terminal.titled("two"), terminal.titled("echo")
+    assert seat_view.holder(one["bounds"], 6) == 1 and seat_view.holder(two["bounds"], 6) == 2
+    # A window of the first launch's program that opens during the second launch is neither launch's to move.
+    assert echo["bounds"]["x"] == 2600
+    assert f"window_id={one['window_id']} " in first.text and f"window_id={two['window_id']} " not in first.text
+    assert f"window_id={two['window_id']} " in second.text and f"window_id={one['window_id']} " not in second.text
+    assert f"window_id={echo['window_id']} " not in first.text + second.text
+
+
+async def test_a_window_nothing_ties_to_the_launch_stays_where_it_opened_and_the_reply_says_so(seat_tools):
+    hub, vm, _ = seat_tools
+    client, _ = hub.connections[vm.target(2).key]
+    terminal = OneCopyTerminal(vm, [client], late=1, carries_id=False)
+    vm.command_path = AsyncMock(return_value="/usr/bin/xfce4-terminal")
+    hub.launch_window_wait_s = .3
+    result = await call(hub, 2, "launch_app", dict(name="xfce4-terminal", additional_arguments=["--title=plain"]))
+    assert result.ok
+    assert terminal.titled("plain")["bounds"]["x"] == 2600
+    assert "nothing ties to it" in result.text and "--disable-server" in result.text and "browser_open" in result.text
+    # A name the computer's shell finds as a program is launched by its path, tagged.
+    sent = next(args for name, args in client.calls if name == "launch_app")
+    assert sent == dict(launch_path=f"env DESKTOP_STARTUP_ID={terminal.tags[0]} RAPHAEL_LAUNCH={terminal.tags[0]} "
+                                    "sh -c '/usr/bin/xfce4-terminal --title=plain'", session="session-2")
+
+
+async def test_a_launch_with_no_window_says_so_after_its_bounded_wait(seat_tools):
+    hub, vm, _ = seat_tools
+    client, session = hub.connections[vm.target(2).key]
+    original = client.request
+    async def request(method, params, **kwargs):
+        if params["name"] == "launch_app":
+            return dict(content=[dict(type="text", text="Launched true (pid 70) in background.")], structuredContent=dict(pid=70))
+        return await original(method, params, **kwargs)
+    client.request = request
+    hub.launch_window_wait_s = .3
+    began = time.monotonic()
+    reply = await hub._driver_call(vm.target(2), client, "launch_app", dict(launch_path="true", session=session))
+    assert .3 <= time.monotonic() - began < 5
+    assert reply["content"][-1]["text"] == "No window of this launch appeared within 0.3 s; call list_windows before launching it again."
+
+
+def test_a_launch_is_tagged_so_that_its_windows_can_be_told_from_every_other_launchs():
+    from raphael_core.computer import seat_launch
+    tag = seat_launch.token()
+    assert re.fullmatch(r"raphael-launch-[0-9a-f]{16}", tag) and tag != seat_launch.token()
+    # A compound command stays one, and the additional arguments follow it.
+    sent = seat_launch.tagged(dict(launch_path="cd /tmp && ./show.sh", additional_arguments=["a b"], session="s"), tag)
+    assert sent == dict(launch_path=f"env DESKTOP_STARTUP_ID={tag} RAPHAEL_LAUNCH={tag} sh -c 'cd /tmp && ./show.sh '\"'\"'a b'\"'\"''",
+                        session="s")
+    assert shlex.split(sent["launch_path"])[-1] == "cd /tmp && ./show.sh 'a b'"
+    # A name is tagged only when the shell finds it; a URL launch never is (the driver hands it to xdg-open).
+    assert seat_launch.tagged(dict(name="Terminal Emulator"), tag) is None
+    assert seat_launch.tagged(dict(name="thunar"), tag, "/usr/bin/thunar")["launch_path"].endswith("sh -c /usr/bin/thunar")
+    assert seat_launch.tagged(dict(name="x", urls=["https://example.com"]), tag, "/usr/bin/x") is None
+    # The driver's line copied back into a launch is unwrapped: one tag, this launch's.
+    copied = seat_launch.tagged(dict(launch_path="xfce4-terminal --title=a"), seat_launch.token())["launch_path"]
+    again = seat_launch.tagged(dict(launch_path=copied), tag)["launch_path"]
+    assert again == f"env DESKTOP_STARTUP_ID={tag} RAPHAEL_LAUNCH={tag} sh -c 'xfce4-terminal --title=a'"
+    reply = dict(content=[dict(type="text", text=f"Launched {again} (pid 5) in background.")], structuredContent=dict(pid=5, command=again))
+    asked = seat_launch.as_asked(reply, dict(launch_path=again), dict(launch_path="xfce4-terminal --title=a"))
+    assert asked["content"][0]["text"] == "Launched xfce4-terminal --title=a (pid 5) in background."
+    assert asked["structuredContent"]["command"] == "xfce4-terminal --title=a" and reply["structuredContent"]["command"] == again
+
+
+@pytest.mark.parametrize("mark,pid,expected", [
+    (dict(own="T"), 500, True),                    # a copy already running opened it for this launch
+    (dict(own="other", leader="T"), 41, False),    # opened for another launch, by this launch's own program
+    (dict(leader="T"), 500, True),                 # this launch's program's own window (GTK: on the client leader)
+    (dict(leader="other"), 41, False),             # a program another launch started
+    (dict(environ="T"), 500, True),                # a process this launch's program started
+    (dict(environ="other"), 500, False),
+    (dict(), 41, True),                            # the process the driver started
+    (None, 500, False),
+])
+def test_a_window_is_a_launchs_by_its_startup_id_first_then_its_process(mark, pid, expected):
+    from raphael_core.computer import seat_launch
+    assert seat_launch.tied(mark, "T", pid, {41}) is expected
+    # A launch that could not be tagged has only its process.
+    assert seat_launch.tied(mark, None, pid, {41}) is (pid == 41 and not (mark or {}).get("own") and not (mark or {}).get("leader"))
+
+
+def test_the_marks_command_reads_the_window_its_leader_and_its_process(tmp_path):
+    from raphael_core.computer import seat_launch
+    shell = shutil.which("sh")
+    if shell is None:
+        pytest.skip("An installed POSIX shell is required for the marks command")
+    proc = tmp_path / "proc"
+    for pid, environ in ((500, b"HOME=/home/cua\0RAPHAEL_LAUNCH=raphael-launch-00000000000000aa\0"), (77, b"HOME=/home/cua\0")):
+        (proc / str(pid)).mkdir(parents=True)
+        (proc / str(pid) / "environ").write_bytes(environ)
+    # xprop as the image's prints it, for a window with its own id (600), one whose leader has it (601), and none (602).
+    doubles = r'''xprop() {
+  case "$2 $3" in
+    "600 _NET_STARTUP_ID") echo '_NET_STARTUP_ID(UTF8_STRING) = "raphael-launch-00000000000000bb"' ;;
+    "601 WM_CLIENT_LEADER") echo 'WM_CLIENT_LEADER(WINDOW): window id # 0x2600001' ;;
+    "0x2600001 _NET_STARTUP_ID") echo '_NET_STARTUP_ID(UTF8_STRING) = "raphael-launch-00000000000000cc"' ;;
+    *) echo "$3:  not found." ;;
+  esac
+}
+'''
+    script = doubles + seat_launch.MARKS.replace("/proc/", proc.as_posix() + "/")
+    result = subprocess.run([shell, "-c", script, "sh", "600:500", "601:77", "602:0"], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert seat_launch.marks(result.stdout) == {
+        600: dict(own="raphael-launch-00000000000000bb", leader=None, environ="raphael-launch-00000000000000aa"),
+        601: dict(own=None, leader="raphael-launch-00000000000000cc", environ=None),
+        602: dict(own=None, leader=None, environ=None)}
+
+
+async def test_the_computer_answers_where_a_name_is_a_program_and_what_ties_windows_in_one_command(shared_vm):
+    from raphael_core.computer import seat_launch
+    from raphael_core.computer.vm import Result
+    vm, _ = shared_vm
+    target = await vm.seat(2)
+    sent = []
+    answers = iter([Result(0, "/usr/bin/xfce4-terminal\n"), Result(0, "ok"), Result(1, ""),
+                    Result(0, 'window 600\n_NET_STARTUP_ID(UTF8_STRING) = "raphael-launch-00000000000000bb"\n'), Result(1, "", "gone")])
+    async def run_for(target, args, **kwargs):
+        sent.append(args)
+        return next(answers)
+    vm.run_for = run_for
+    assert await vm.command_path(target, "xfce4-terminal") == "/usr/bin/xfce4-terminal"
+    assert sent[-1][-5:] == ["sh", "-c", 'command -v "$1"', "sh", "xfce4-terminal"]
+    assert await vm.command_path(target, "echo") is None           # a shell builtin is no program
+    assert await vm.command_path(target, "Terminal Emulator") is None
+    assert await vm.command_path(target, "--help") is None and len(sent) == 3
+    rows = [dict(window_id=600, pid=500), dict(window_id=601, pid=None), dict(window_id=0, pid=1)]
+    assert await vm.launch_marks(target, rows) == {600: dict(own="raphael-launch-00000000000000bb", leader=None, environ=None)}
+    assert sent[-1][-5:] == ["-c", seat_launch.MARKS, "sh", "600:500", "601:0"]
+    assert await vm.launch_marks(target, rows) == {}               # unreadable: nothing ties but the process
+    assert await vm.launch_marks(target, []) == {} and len(sent) == 5

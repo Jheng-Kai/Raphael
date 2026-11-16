@@ -569,6 +569,27 @@ class LocalVm:
         if result.code:
             raise VmError("window_move_failed")
 
+    async def command_path(self, target, name):
+        """Where the computer's shell finds `name` as a program, or None: then the driver matches a desktop entry."""
+        if not isinstance(name, str) or not name or name.startswith("-") or any(char in name for char in "\0\n"):
+            return None
+        result = await self.run_for(target, exec_args(target, ["sh", "-c", 'command -v "$1"', "sh", name]))
+        path = result.stdout.strip()
+        return path if not result.code and not result.truncated and path.startswith("/") and "\n" not in path else None
+
+    async def launch_marks(self, target, rows):
+        """What ties each listed window to a launch (seat_launch.marks), in one command; nothing for what cannot be read."""
+        from .seat_launch import MARKS, marks
+        given = [f"{row['window_id']}:{row['pid'] if type(row.get('pid')) is int and row['pid'] > 0 else 0}"
+                 for row in rows if type(row.get("window_id")) is int and row["window_id"] > 0]
+        if not given:
+            return {}
+        result = await self.run_for(target, exec_args(target, ["sh", "-c", MARKS, "sh", *given]))
+        if result.code or result.truncated:
+            logger.info("Launch marks unreadable: %s", (result.stderr or "").strip()[-300:])
+            return {}
+        return marks(result.stdout)
+
     async def restore_window(self, target, window_id):
         """Bring a minimized window back to its screen (a member went on working in a minimized
         browser where nobody could see)."""
@@ -622,6 +643,9 @@ class LocalVm:
             *map(str, rectangle(target.screen, target.screens))]), timeout=self.seat_browser_s)
         match = re.fullmatch(r"pid=([1-9][0-9]*) window_id=([1-9][0-9]*)", result.stdout.strip())
         if result.code or result.truncated or not match:
+            # The launcher says which of its waits ran out (the window's, or its settling on the screen); the member's
+            # answer is one code for both, so the log is where the two are told apart.
+            logger.info("raphael-seat-browser failed (exit %s): %s", result.code, (result.stderr or "").strip()[-300:])
             raise VmError("browser_window_missing")
         return dict(zip(("pid", "window_id"), map(int, match.groups())))
 
