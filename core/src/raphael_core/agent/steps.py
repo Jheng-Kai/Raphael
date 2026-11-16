@@ -78,6 +78,7 @@ _ALIASES = {
     "elevated": "handoff",
     "own_window": "blocked",
     "keys_not_allowed": "blocked",
+    "shows_on_screen": "blocked",  # a command that would open something on the owner's screen (R-PC-06)
     "failed": "error",
 }
 

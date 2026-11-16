@@ -1901,7 +1901,7 @@ class MembersService:
                 capabilities = getattr(self._background, "capabilities_for", lambda speaker: {"tools": [], "brain": {"model": model}})(speaker)
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
                                 **capabilities,
-                                "computer": {},  # nothing of the owner's PC: its commands are a quick question's alone (R-PC-01)
+                                "computer": {"local_commands": self._settings.get("local_commands_mode")},
                                 "group": groups.get(item["group_id"]),
                                 **counts, "model":model, "routines": routines})
             rooms = getattr(self, "rooms", None)

@@ -30,7 +30,7 @@ import {
 
 afterEach(() => setLocale("zh-TW"));
 
-test("Safety has no setting for local commands: only a quick question reaches this PC", () => {
+test("Safety has no setting for local commands: the stored mode applies", () => {
   const html = tab("safety");
   expect(html).not.toContain('data-k="local-commands"');
   expect(html).not.toContain("本機指令");
@@ -328,6 +328,18 @@ describe("一般", () => {
     // The folder is changed, never cleared with a button standing open (R-UI-56); no title repeats the path.
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
+  });
+  test("the folders members may write to are added with the picker and each is removed from its own ⋯", () => {
+    const none = tab("general");
+    expect(rowOf(none, "成員可以寫入的資料夾")).toContain('data-act="write-folder-add"');
+    expect(none).not.toContain('data-row="write-folder"');
+    const two = tab("general", { brain: { ...brain, owner_write_folders: ["/Users/owner/Notes", "C:\\Owner\\工作\\"] } });
+    expect(two).not.toMatch(/<input[^>]*write-folder/);
+    expect(two.match(/data-row="write-folder"/g)).toHaveLength(2);
+    expect(two).toContain('<span class="output-path">/Users/owner/Notes</span>');
+    // Removing one waits in its ⋯ (R-UI-56).
+    expect(two).toContain('data-act="write-folder-menu" data-folder-index="1"');
+    expect(two).not.toContain("write-folder-remove");
   });
   test("General groups its sections: you, appearance and Raphael, the bots live elsewhere, and no way back into the guide", () => {
     const html = tab("general");

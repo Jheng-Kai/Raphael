@@ -6,6 +6,7 @@ import { describeError, formatClock } from "./format";
 import { isTopLayer, pressWentThrough, registerDismissal } from "./dismissals";
 import { getLocale, t } from "./i18n";
 import { faceHTML, routineSentenceHTML } from "./members";
+import { linkedText } from "./message-content";
 import { ownerFaceHTML } from "./owner-avatar";
 import { dateKey, localDay, openDatePicker } from "./schedule-picker";
 import type { RoutineRun } from "./types";
@@ -237,7 +238,8 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     (o.onMore ? iconButton("more", t("members.more", { p0: entry.title }), ' data-pop="more" aria-haspopup="menu" aria-expanded="false"') : "") +
     iconButton("x", t("common.close"), ' data-pop="close"') + `</header>` +
     `<h2>${esc(entry.title)}</h2>${entry.rhythm && entry.routine ? "" : `<p class="au-pop-time">${esc(when)}</p>`}` +
-    (entry.notes ? `<p class="au-pop-notes">${esc(entry.notes)}</p>` : "") +
+    // Notes are read whole here, so an address in them is a link (the editor's field keeps them as words to type in).
+    (entry.notes ? `<p class="au-pop-notes">${linkedText(entry.notes)}</p>` : "") +
     `<p class="au-pop-from">${from}</p>` +
     runsHTML +
     (o.runStatus ? `<p class="au-pop-status">${esc(o.runStatus)}</p>` : "") +

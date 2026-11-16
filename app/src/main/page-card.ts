@@ -21,6 +21,10 @@ const FULL_MAX_HEIGHT = 20000;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
 /** How long a page asked for by its id waits for its card to be in the thread and ready. */
 const CARD_WAIT_MS = 10000;
+/** How long a page has, once its address is set, to load or say anything (its helper's first height) before its card says it
+ *  could not be shown, rather than stand as an empty box. A style sheet from elsewhere holds a page back for at most a few
+ *  seconds (core agent/pages.py `_HELPER`), so a page still silent after this is stuck. */
+const DRAW_MS = 15000;
 const MCP_PROTOCOL = "2026-01-26";
 
 /** A report's link card: the same card as a file a member made, its icon, its title and 「頁面」. */
@@ -28,11 +32,15 @@ const reportLinkHTML = (page: PageCard): string =>
   `<button type="button" class="btn attachment-file pg-link" data-page-act="report" data-page="${esc(page.id)}" data-page-rev="${page.rev}">` +
   `${ico("report")}<span class="attachment-name"><span class="me-file-t">${esc(page.title)}</span><small>${esc(t("page.kind"))}</small></span></button>`;
 
+/** What a failed page's card says: it could not open (its address could not be read), or it opened and drew nothing. */
+type Failure = "open" | "draw";
+const failureWords = (why: Failure): string => t(why === "draw" ? "page.notDrawn" : "page.failed");
+
 /** A page that failed reads as a failed mail card: what failed in the card's body line, then what it knows of the page
  *  (the member's plain words) in a well where the page stood, then 再試一次 below. */
 function failedHTML(page: PageCard): string {
   const words = page.fallback?.trim();
-  return `<div class="pg-failed" hidden><p class="card-body cc-state" role="alert">${esc(t("page.failed"))}</p>` +
+  return `<div class="pg-failed" hidden><p class="card-body cc-state" role="alert">${esc(failureWords("open"))}</p>` +
     (words ? `<p class="card-well pg-fallback">${esc(words)}</p>` : "") +
     `<div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}</div></div>`;
 }
@@ -96,9 +104,13 @@ interface Live {
   full: number | null;
   box: HTMLElement | null;
   opened: PageOpened | null;
+  /** It has drawn: its frame loaded, or the page said something (its helper speaks once it is parsed). Only then is its
+   *  preview shown and pressable; a redraw of its line while it is still on its way keeps it loading. */
   ready: boolean;
-  /** It could not open: a redraw of its line shows that again, not an empty box that never loads. */
-  failed: boolean;
+  /** It could not open, or opened and drew nothing in time: a redraw of its line shows that again, not an empty box. */
+  failed: Failure | null;
+  /** Ends its wait to draw (`DRAW_MS`). */
+  drawTimer: ReturnType<typeof setTimeout> | undefined;
   /** It stands in the conversation's place (page-view.ts), not in its card. */
   expanded: boolean;
   /** Where the owner was reading it there (how far the area is scrolled), kept for the next time it opens. */
@@ -164,7 +176,9 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     // The preview is a control only once there is a page to open.
     if (state === "ready") { body.tabIndex = 0; body.removeAttribute("aria-disabled"); }
     else { body.removeAttribute("tabindex"); body.setAttribute("aria-disabled", "true"); }
-    card.querySelector<HTMLElement>(".pg-failed")!.hidden = state !== "failed";
+    const failed = card.querySelector<HTMLElement>(".pg-failed")!;
+    failed.hidden = state !== "failed";
+    if (state === "failed") failed.querySelector(":scope > .card-body")!.textContent = failureWords(live.failed ?? "open");
     // The × that puts a failed page away (R-UI-117) is in the heading only while it failed: a hidden one was taken by the
     // shared failure of a link the page could not open, which was then left with no × to put it away.
     const head = card.querySelector<HTMLElement>(":scope > .card-head")!, close = head.querySelector(":scope > [data-card-failed-close]");
@@ -182,7 +196,8 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
 
   async function open(live: Live): Promise<void> {
     live.ready = false;
-    live.failed = false;
+    live.failed = null;
+    clearTimeout(live.drawTimer);
     setBodyState(live, "loading");
     try {
       const opened = await api.pagesOpen(live.id, themeNow());
@@ -190,11 +205,25 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       live.opened = opened;
       live.frame.title = opened.title;
       live.frame.src = opened.url;
+      live.drawTimer = setTimeout(() => {
+        if (frames.get(live.id) !== live || live.ready || live.failed) return;
+        live.failed = "draw";
+        setBodyState(live, "failed");
+      }, DRAW_MS);
     } catch {
       if (frames.get(live.id) !== live) return;
-      live.failed = true;
+      live.failed = "open";
       setBodyState(live, "failed");
     }
+  }
+
+  /** The page has drawn after all, even after its card said it drew nothing: its preview stands. */
+  function drawn(live: Live): void {
+    if (!live.opened || live.ready || live.failed === "open") return;
+    clearTimeout(live.drawTimer);
+    live.ready = true;
+    live.failed = null;
+    setBodyState(live, "ready");
   }
 
   function newFrame(live: Live): HTMLIFrameElement {
@@ -203,12 +232,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
     frame.setAttribute("inert", "");
-    frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
+    frame.addEventListener("load", () => drawn(live));
     return frame;
   }
 
   function make(id: string, rev: number): Live {
-    const live = { id, rev, height: null, full: null, box: null, opened: null, ready: false, failed: false, expanded: false, reading: 0, next: null, nextFull: null, refused: false } as unknown as Live;
+    const live = { id, rev, height: null, full: null, box: null, opened: null, ready: false, failed: null, drawTimer: undefined, expanded: false, reading: 0, next: null, nextFull: null, refused: false } as unknown as Live;
     live.frame = newFrame(live);
     frames.set(id, live);
     return live;
@@ -267,11 +296,12 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
       }
       if (!live.expanded && live.frame.parentElement !== body) body.append(live.frame);
       applyHeight(live);
+      // A line drawn again while its page is still on its way stays loading: its address alone is not a page that drew.
       if (live.failed) setBodyState(live, "failed");
-      else if (live.ready || live.opened) setBodyState(live, "ready");
+      else if (live.ready) setBodyState(live, "ready");
       if (live.rev !== rev) { live.rev = rev; void (live.expanded ? replaceInPlace(live) : open(live)); }
     }
-    for (const id of [...frames.keys()]) if (!seen.has(id)) frames.delete(id);
+    for (const [id, live] of [...frames]) if (!seen.has(id)) { clearTimeout(live.drawTimer); frames.delete(id); }
     followPage();
   }
 
@@ -390,6 +420,9 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     const loading = live.next !== null && live.next.contentWindow === event.source;
     // A changed page still loading says how tall it is before it takes its place.
     if (loading && data.raphaelPage === 1 && data.type === "height") live.nextFull = clampHeight(data.height, FULL_MAX_HEIGHT);
+    // A page that speaks has been read and laid out, though its load may wait on a font or a picture from elsewhere that
+    // never comes: its preview stands now, not when that load ends.
+    if (!loading && (data.raphaelPage === 1 || data.jsonrpc === "2.0")) drawn(live);
     if (data.jsonrpc === "2.0") {
       if (live.opened?.source === "mcp" && !loading) void rpc(live, data as Parameters<typeof rpc>[1]);
       return;

@@ -536,7 +536,8 @@ export function checkRendered(name, context = {}) {
       // The whole screen is the one press: it opens the larger view while the computer runs and starts it in every other state but getting ready.
       require(!!visible(cover) === !preparing && (!asleep || phase === 'stopped'), 'the screen is the one press that opens or starts the computer, except while it is getting ready');
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
-      require(!visible(panel.querySelector('.desktop-caption')), 'no caption stands under the screen');
+      // R-COMP-UPDATE-01: the one line under the screen is an update of the computer's image, said while it lasts.
+      require(!visible(panel.querySelector('.desktop-caption')) || preparing && !!panel.querySelector('.desktop-panel[data-desktop-update]'), 'no caption stands under the screen but the line of an update');
       require(!!visible(panel.querySelector('.computer-lifecycle-state')) === runs, 'the header names the state only once the computer runs');
       if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
       if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
@@ -721,6 +722,19 @@ export function checkRendered(name, context = {}) {
     require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
     if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === 'desktop-updating') {
+    // R-COMP-UPDATE-01: an update of the computer's image says so in one line under the screen, with how long it may
+    // take; the screen stays bare (R-UI-93), cannot be pressed, and nothing is a notice or a toast.
+    const panel = document.querySelector('.desktop-panel'), screen = panel?.querySelector('.desktop-screen'), caption = panel?.querySelector('.desktop-caption');
+    require(panel?.hasAttribute('data-desktop-update') && ['starting', 'building', 'preparing'].includes(panel.dataset.desktopState), 'the panel is in an update');
+    require(visible(caption) && caption.textContent === '正在更新電腦。更新後第一次開啟可能需要幾分鐘。', `the update line is shown (${caption?.textContent})`);
+    require(caption.getBoundingClientRect().top >= screen.getBoundingClientRect().bottom - 1, 'the line stands under the screen, never over it');
+    require(caption.getBoundingClientRect().right <= screen.getBoundingClientRect().right + 1 && caption.getBoundingClientRect().left >= screen.getBoundingClientRect().left - 1, 'the line is no wider than the screen');
+    requireBareScreen(screen);
+    require(!visible(panel.querySelector('[data-desktop="enlarge"]')), 'a computer being updated is not pressable');
+    require(!visible(panel.querySelector('.desktop-error')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no notice and no header word');
     return {check:name};
   }
   if (name === "app-attachment-count") {
@@ -1053,6 +1067,20 @@ export function checkRendered(name, context = {}) {
       }
       const frame = panel.querySelector('iframe');
       if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
+    }
+    return {check:name};
+  }
+  if (name === "owner-write-folders") {
+    const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
+    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "owner_write_folders").map(call => call.params.value);
+    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "R-PC-05: the picker adds a folder and its ⋯ removes one");
+    require(sets[0].length === 3 && sets[0][2] === sample && JSON.stringify(sets[1]) === JSON.stringify(sets[0].slice(1)), "the first folder is the one removed, the picked one kept");
+    const head = document.querySelector('[data-row="write-folders"]'), rows = [...document.querySelectorAll('[data-row="write-folder"]')];
+    require(visible(head) && !document.querySelector('[data-row^="write-folder"] input, [data-row^="write-folder"] textarea'), "folders are picked, never typed");
+    require(rows.length === 2 && rows.every(row => visible(row)), "each folder is a row of its own");
+    for (const row of rows) {
+      const path = row.querySelector('.output-path'), more = row.querySelector('[data-act="write-folder-menu"]');
+      require(visible(path) && visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
     }
     return {check:name};
   }
@@ -6059,6 +6087,31 @@ export function checkRendered(name, context = {}) {
     require([...document.querySelectorAll('.cal-chip.is-own b')].some(node => node.textContent === "拜訪客戶"), "the event is drawn at once");
     require(!document.querySelector('.au-pop-editor') && !document.querySelector('.au-draft'), "the form and its placeholder are gone");
     return { check: name };
+  }
+  // R-LINK-01: an address in words read whole (an event's notes, a card's words, a routine's instructions) is a link whose words
+  // are the address, ending where the punctuation or the Chinese words after it begin; every line of it stays inside its words
+  // and what holds them at this width; the scene's real press opened it once, in the browser, and pressed nothing around it.
+  if (name === "urls-are-links") {
+    const words = [...document.querySelectorAll(".au-pop-notes, .conversation-card .card-body, .rv-prompt")].filter(box => visible(box) && box.querySelector("a.message-link"));
+    require(words.length === 1, "one surface shows words with a link");
+    const box = words[0], link = box.querySelector("a.message-link"), holder = box.closest(".au-pop, .conversation-card, .mb-dialog");
+    require(visible(link) && visible(holder), "the link and what holds it are on screen");
+    require(new URL(link.textContent).href === link.dataset.url && link.getAttribute("href") === link.dataset.url, "its words are the address it opens");
+    require(!link.hasAttribute("title") && !link.hasAttribute("aria-label"), "no tooltip repeats it");
+    const after = link.nextSibling?.textContent ?? "";
+    require(!after || /^[^\x00-\x7f]/.test(after), `the address ends where the words after it begin (after it: ${after.slice(0, 4)})`);
+    const inside = (inner, outer) => inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
+    const within = box.getBoundingClientRect(), held = holder.getBoundingClientRect();
+    for (const line of link.getClientRects()) require(inside(line, within) && inside(line, held), `every line of the link stays inside its words and what holds them at ${innerWidth}px`);
+    require(held.left >= 0 && held.right <= innerWidth && holder.scrollWidth <= holder.clientWidth + 1 && box.scrollWidth <= box.clientWidth + 1, "nothing is widened or scrolls sideways");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--link)"; document.body.append(probe);
+    const blue = getComputedStyle(probe).color; probe.remove();
+    require(getComputedStyle(link).color === blue, "it wears the app's one link colour");
+    const opened = window.__look.calls.filter(call => call.command === "open_external_url");
+    require(opened.length === 1 && opened[0].url === link.dataset.url && window.__look.urls.at(-1) === link.dataset.url, "the press opened the address once, in the browser");
+    require(!window.__look.calls.some(call => call.command === "agent_question_answer" || ["calendar.update", "calendar.delete", "routines.update"].includes(call.method)), "nothing around the link was pressed");
+    return { check: name, url: link.dataset.url, lines: link.getClientRects().length };
   }
   if (name === "calendar-detail-own" || name === "calendar-detail-read") {
     const panel = document.querySelector('.au-pop-detail');

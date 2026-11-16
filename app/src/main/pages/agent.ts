@@ -111,7 +111,6 @@ import {
   parseMediaPayload,
   requestRerun,
   requestStop,
-  safeHttpUrl,
   safeMediaSrc,
   stepsOpen,
   turnHTML,
@@ -2576,14 +2575,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (save && !save.disabled) save.click();
   });
 
-  el.addEventListener("auxclick", (e) => {
-    const link = (e.target as Element).closest<HTMLElement>('[data-act="open-url"]');
-    if (!link || e.button !== 1) return;
-    e.preventDefault();
-    const url = safeHttpUrl(link.dataset.url);
-    if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
-  });
-
   el.addEventListener("click", (e) => {
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
@@ -2622,12 +2613,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "detail":
         toggleDetail(act);
         break;
-      case "open-url": {
-        e.preventDefault();
-        const url = safeHttpUrl(act.dataset.url);
-        if (url) void api.openExternalUrl(url).catch(err => toaster.info(describeError(err)));
-        break;
-      }
       case "peer-chat":
         peer?.close();
         // What this member sent colleagues, and what colleagues said to it (its exchange turns), are one conversation.

@@ -375,6 +375,11 @@ code, pre, samp { font-family: var(--mono); }
 [data-chip-row][data-more-before] > .chip-step[data-chip-step="-1"], [data-chip-row][data-more-after] > .chip-step[data-chip-step="1"] { display: inline-flex; align-items: center; justify-content: center; }
 kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--key); border: 1px solid var(--key-edge); border-bottom-width: 2px; font: 500 var(--fs-xs)/1 var(--ui); color: var(--text); }
 .rec-hint { color: var(--accent-text); font-size: var(--fs-xs); }
+/* The one link of the window's words, in a reply, a card, the calendar or a dialog: blue, underlined only under the pointer
+   (an underline takes no room, so nothing moves), and a long address breaks anywhere instead of widening what holds it. */
+.message-link { overflow-wrap: anywhere; color: var(--link); text-decoration: none; cursor: pointer; }
+.message-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+:root[data-keys] .message-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-sm); }
 .st { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }
 .dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--text-3); flex: none; }
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }

@@ -5,6 +5,7 @@
 import { t } from "./i18n";
 import { openDialog, type Dialog } from "./member-dialogs";
 import { faceHTML, routineSentenceHTML, routineStatus } from "./members";
+import { linkedText } from "./message-content";
 import type { Member, Routine } from "./types";
 import { esc, st } from "./ui";
 
@@ -17,7 +18,7 @@ export function routineViewHTML(routine: Routine, members: readonly Member[]): s
   return `<div class="rv">` +
     part(t("auto.when"), `<p>${routineSentenceHTML(routine)}</p>${status ? `<p class="rv-status${failed ? " is-failed" : ""}">${failed ? st("err", status) : esc(status)}</p>` : ""}`, "rv-when") +
     (member ? `<p class="rv-who">${faceHTML(member, 20)}<span>${esc(member.name)}</span></p>` : "") +
-    part(t("members.instructions"), `<p class="rv-prompt">${esc(routine.prompt)}</p>`, "rv-instructions") +
+    part(t("members.instructions"), `<p class="rv-prompt">${linkedText(routine.prompt)}</p>`, "rv-instructions") +
     `</div>`;
 }
 

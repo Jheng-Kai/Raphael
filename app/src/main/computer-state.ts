@@ -17,6 +17,12 @@ export function computerStateText(state: DesktopState | undefined): string {
   return t(state?.error === 'build_failed' || state?.error === 'pull_failed' ? 'desktop.buildFailed' : 'desktop.unavailable');
 }
 
+/** R-COMP-UPDATE-01: the one line under the screen while the computer is made again on a newer image (the core marks that
+ *  preparation `update`), with how long it can take. A wake, a start or a first build still says nothing (R-UI-93). */
+export function computerUpdateLine(state: DesktopState | undefined): string {
+  return state?.update === true && ['starting', 'building', 'preparing'].includes(state.state) ? t('desktop.updateLine') : '';
+}
+
 /** A short header word agrees with the screen without repeating its explanation. */
 export function computerStateLabel(state: DesktopState | undefined): string {
   const phase = state?.lifecycle ?? (state?.error === 'docker_stopped' || state?.error === 'remote_unavailable' || !state || ['absent', 'unavailable', 'incompatible'].includes(state.state) || state.state === 'missing' && state.image === false ? 'unavailable'

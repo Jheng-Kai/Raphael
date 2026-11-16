@@ -145,6 +145,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.persona) Object.assign(data.members.find(member => member.id === 1), variant.persona);
 
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
+  if (variant.ownerWriteFolders) data.settings.owner_write_folders = ["C:\\Owner\\Notes", "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"];
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
@@ -647,6 +648,8 @@ export function installMock(fixture, config = {}, target = window) {
       Object.assign(made.turn, { question: "幫我填入出差住宿的付款資料。", text: "", messages: [] });
     }
     if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
+    // The member's reason in the card's words holds a long address in brackets, with Chinese words right after it (R-LINK-01).
+    if (variant.linkedReason) made.turn.permissions[0].reason = data.linkSample.reason;
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
   }
@@ -817,6 +820,8 @@ export function installMock(fixture, config = {}, target = window) {
     own(2, "供應商會議", octoberAt(23, 13), octoberAt(23, 14, 30), { ...addedBy(1), notes: "從今天的信件整理：對方想確認交期。" }),
     own(3, "交付截止日", octoberAt(22, 0), octoberAt(23, 0), { all_day: true }),
   ];
+  // An all-day item a member synced from another app, its notes a Chinese sentence holding the page's address with a full stop right after it (R-LINK-01).
+  if (variant.linkedNotes) data.home.calendar_events.push(own(4, "專案週報", octoberAt(24, 0), octoberAt(25, 0), { all_day: true, ...addedBy(1), notes: data.linkSample.notes }));
   if (variant.presence === "calendar") data.home.calendar_events.find(item => item.id === "own:1").title = data.presenceSample.calendar;
   if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
   if (variant.calendarBusy) data.home.calendar_events.push(

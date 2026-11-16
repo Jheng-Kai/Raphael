@@ -156,6 +156,19 @@ _HELPER = """<script>
     const data = event.data;
     if (event.source === parent && data && data.raphaelPage === 1 && data.type === 'scroll-to' && Number.isFinite(data.y)) scrollTo(0, Math.max(0, data.y));
   });
+  // A style sheet the page loads from another host holds all of it back while it comes: nothing is drawn and the page's own
+  // script waits. One still on its way after a few seconds stops holding the page, which draws in the fonts and styles it
+  // has, and is still applied if it comes later (R-PAGE-13).
+  setTimeout(() => {
+    if (document.readyState === 'complete') return;
+    for (const link of document.querySelectorAll('link[rel~="stylesheet" i]')) {
+      if (link.sheet || !link.isConnected) continue;
+      const late = link.cloneNode(), media = link.media || 'all';
+      late.media = 'print';
+      late.addEventListener('load', () => { late.media = media; }, {once: true});
+      link.replaceWith(late);
+    }
+  }, 3000);
   addEventListener('DOMContentLoaded', () => {
     let previous = 0, framed = innerHeight;
     const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);

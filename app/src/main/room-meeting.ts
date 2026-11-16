@@ -1,5 +1,5 @@
 import { cardHTML, cardStatusHTML } from "./card";
-import { fileChipHTML } from "./message-content";
+import { fileChipHTML, linkedText } from "./message-content";
 import { t } from "./i18n";
 import type { HandoffView, RoomDecision, RoomMessage } from "./types";
 import { btn, esc } from "./ui";
@@ -19,7 +19,7 @@ export function roomBoardHTML(tasks: readonly HandoffView[], decisions: readonly
   const rows = [...latest.values()].map(task => `<div class="room-board-member">${face(task.member_id, task.member_name)}` +
     `<div class="room-board-stage"><b>${esc(task.member_name)}</b><span>${esc(task.title ?? "")}</span></div>` +
     cardStatusHTML(task.state === "done" ? "done" : ["queued","running","waiting"].includes(task.state) ? "waiting" : "failed", stateLabel(task)) + `</div>`).join("");
-  return `<div data-room-board>${rows}` + (decisions.length ? `<div class="room-board-decisions"><b>${esc(t("rooms.decisions"))}</b>${decisions.map(decision => `<p>${esc(decision.text)}</p>`).join("")}</div>` : "") + `</div>`;
+  return `<div data-room-board>${rows}` + (decisions.length ? `<div class="room-board-decisions"><b>${esc(t("rooms.decisions"))}</b>${decisions.map(decision => `<p>${linkedText(decision.text)}</p>`).join("")}</div>` : "") + `</div>`;
 }
 
 export function roomReportHTML(message: RoomMessage): string {

@@ -237,6 +237,33 @@ python -m pytest tests/computer/test_checkpoints.py tests/computer/test_checkpoi
 npm run verify -- --contract                                                                      # from app/
 ```
 
+## An address in words read whole is a link (R-LINK-01)
+
+Outside a message an address was dead text: the calendar's detail card drew an all-day item's notes, synced from another app, with
+its page's address as plain words. Now `linkedText` (`message-content.ts`, sharing `bareUrl` with the message renderer) draws plain
+words with each `http(s)` address as a link whose words are the address itself, and `installLinkOpener` (`link-opener.ts`, started in
+`main.ts`) is the window's one listener for every `[data-act="open-url"]`: a click, Ctrl or Shift click and middle click open it
+through `open_external_url`, taken before the row, card or panel around it hears the press (the conversation page no longer has a
+handler of its own; a message's link chip opens the same way). Linked: the calendar's detail card notes, a conversation card's
+words (`cardHTML` body) and a question card's title, a permission card's message and step, a sent mail, a connection's technical
+reason, a room's decisions, a routine's instructions (the view opened from the member panel), a template's words, a connected step's
+result, the release notes and a connected app's description. Plain on purpose: fields being edited (the calendar form's notes, mail
+drafts), one-line previews cut short (sidebar rows, chips, quotes, search snippets, card titles other than a question's), words
+inside a button (a routine row, a question's options, member settings' personality and instructions), code and file contents, and
+the page card's "open this?" dialog, whose address must not open without its Yes.
+
+`urls-calendar-detail` (fixture `linkedNotes`: an all-day item of a member on today, its notes a Chinese sentence with the address
+and a full stop right after it), `urls-card` (fixture `linkedReason`: a long address in full-width brackets in a permission card's
+words) and `urls-member-routine` (a routine read from the member panel, its instructions with Chinese words right after the address)
+press the link with the real mouse and run `urls-are-links`: the link's words are the address it opens, it ends before the
+punctuation or words after it, every line of it is inside its words and what holds them at that width, it is the `--link` colour, and
+exactly one `open_external_url` with that address was made while nothing around it was answered or changed. Not covered here: the
+native shell opening the browser.
+
+```powershell
+npm run look -- urls-calendar-detail urls-card urls-member-routine automations-detail-own automations-detail-member automations-edit-own card-permission-waiting card-question-waiting card-message-waiting card-connect-failed card-sheet details-routine-view routine-view-failed room-status-board template-review-pages update-found link-chips --theme both --width 1120,720,1920x1080
+```
+
 ## A model's link to a file it delivered is that file's chip (R-MSG-LINK-01)
 
 A routine's message once ended with
@@ -253,6 +280,14 @@ file card above, and one `open_attachment` call with that id. Not covered: the n
 ```powershell
 npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
 ```
+
+An image link to a stored file is its chip too (R-MSG-LINK-02). A member's reply ended with
+`![影片中的反向金字塔截圖](attachment:<id>.png)` under the picture it had just sent as a media message, and the renderer showed that
+markdown raw: `parseMessageBlocks` takes only `http(s)` images and `inline` kept any other `![` as text. Now `inline` reads an
+image whose target is of the `attachment:` kind as R-MSG-LINK-01 reads a link: a file of the conversation is its chip (the picture
+itself stays the media message above, not drawn twice), any other target says 「圖片「<words>」無法顯示」 (`chat.pictureMissing`,
+`chat.pictureMissingBare`, all 15 locales), a renderer given no files shows the words alone, and one still arriving shows its words.
+attachment-links.test.ts holds it with a turn of the real shape; `message-attachment-link` does not draw an image link yet.
 
 ## One member, one working slime (R-SLIME-03)
 
@@ -1199,9 +1234,9 @@ turns keep no native session, and each turn records the model that actually answ
 face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
 quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
 progress has no reply message: the thread shows its text after the work line. A quick question is the one
-turn that reaches the owner's own PC (R-PC-01): the fast router, the commands to open, lock or
-copy, the desktop run and the local command tools are its alone, and a spoken or typed turn of a formal
-conversation goes to the narrated harness with none of them.
+turn that reaches the owner's own screen (R-PC-01): the fast router, the commands to open, lock or
+copy and the desktop run are its alone, and a spoken or typed turn of a formal conversation goes to the
+narrated harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
 
 ```powershell
 npm run look -- quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080
@@ -2312,6 +2347,21 @@ records), and withdrawing it first removes it from the pending note. A turn that
 makes no further call before it ends leaves the message unread; it then starts the
 next turn in FIFO order, as before.
 
+R-QUEUE-10: words handed to running work that its model never read are never left behind, however the work ends:
+answered, failed, stopped, its CLI gone, handed off to a colleague (a Claude Code turn that hands off sets them aside
+unread, `OwnerInput.set_aside`), ended on a question for the owner (the loop parks in the background and is closed), or
+waiting on a card that is refused or runs out (`_drop_followup`). They go back to the front of the inbox in the order
+they were said and are each answered as a turn of their own, before anything queued after them. One step does it,
+`AgentService._release_steering`, wherever the inbox is read (`_claim` before every drain step, every admission,
+「立即送出」, the end of every loop): a steering row stays only while a live loop (its turn running or waiting on a card,
+its input open) still holds it unread. What a model reads is settled at that moment (`OwnerInput.on_read`, `_steered`),
+so start-up (`AgentInbox.recover`) puts back only unread steering rows, once, at the front. 「立即送出」 on a steering row
+that no work holds takes it back; on a queued row behind one, the drain takes both in order. The app is unchanged: its
+button was never disabled; the core answered `sent: true` while its claim refused every row behind the left steering
+row. Evidence: core/tests/agent/test_unread_steering.py, core/tests/agent/test_owner_questions.py (asks the owner, API
+and CLI) and core/tests/test_e2e_steering.py (a real core over stdio, the fake LLM and the `[native-steer:ask]` journey
+script of native_journeys.py).
+
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
 queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
@@ -2323,7 +2373,8 @@ started as its own turn this way too (it never steers). Rooms keep a new exchang
 A message already steered and read, or already started, is not sent again (`sent: false`).
 Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read
 shows as sent, not queued, so it has no 「立即送出」; Stop returns it to the field, and the
-messages with files or behind another queued one show 「排隊中」 and offer it.
+messages with files or behind another queued one show 「排隊中」 and offer it. Once that
+work ends without reading it, it runs at once or waits as 「排隊中」 again (R-QUEUE-10).
 ```powershell
 npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
@@ -2576,6 +2627,18 @@ the theme they are opened in (as the core's helper tells a real page), so the da
 embed: only a page's frame is shown at any height; a PDF keeps its fixed height with its own 展開, the YouTube player is 16:9,
 pictures and videos are at most 300 px, diagrams, tables and code blocks keep their own size rules, a report is a link card, and the
 computer's screen card is 16:9 with no pointer: none of these changed.
+
+A page that cannot draw says so (R-PAGE-13). A member's daily page loaded a Google Fonts style sheet in its head and stood as an
+empty grey box under 準備就緒: with the font host silent the page painted nothing and its frame never fired `load`, the only thing
+that took the card out of its placeholder (reproduced in Edge with that page's shape served by the core's own host and the font
+host mapped to a local port that never answers: `loading`, no paint, no height). The helper (`_HELPER` in core agent/pages.py)
+now lets a style sheet hold the page back for three seconds, then puts it back with a media no screen matches, which takes its own
+media once it has come (measured: the page drew at about 3.5 s; with a host that answers after 5 s the style sheet applied then).
+The card (`page-card.ts`) is ready on the page's first message or its `load`, whichever is first; a line drawn again while the page
+is on its way stays the placeholder; and a page silent for 15 seconds (`DRAW_MS`) shows 「這個頁面顯示不出來。」 (`page.notDrawn`, all
+15 locales) with 再試一次 and a failed pill, and stands after all if it draws later. page-card.test.ts and core
+tests/agent/test_pages.py hold it; no look scene covers a silent host yet (the look fixture's pages are `data:` documents that
+load nothing from elsewhere), and the real app with a silent font host was not run.
 
 The matrix below covers both themes at 1120, 720 and 1920x1080:
 

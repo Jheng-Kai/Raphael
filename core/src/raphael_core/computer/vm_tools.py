@@ -30,6 +30,7 @@ from .takeover import TAKEOVER
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
 from . import seat_view
 from . import file_tools
+from . import checkpoints as checkpoint_store
 from .file_tools import FILE_READS, FILE_TOOLS, FileReads
 from ..worker.computer_verification import meaningful_expectation
 
@@ -116,6 +117,26 @@ DISK_FILES_EN = ("The disk the computer's files are kept on ({p0}) is {p1}% full
 
 def _size_words(kib):
     return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
+
+
+# How long a turn waits for its first file checkpoint: past the guest's own end of the store's script.
+CHECKPOINT_WAIT_S = checkpoint_store.GUEST_SECONDS + 3
+
+# A computer call that broke in the core itself, not in the computer or the page: what the member is told.
+COMPUTER_FAULT = "computer_fault"
+COMPUTER_FAULT_NOTE = ("Raphael's own computer layer failed on this call ({kind}), not the computer or the page; whether "
+                       "anything was done is unknown. Read the current window or page before the next action.")
+
+
+def _raised_at(error):
+    """`file:line in function` of the innermost frame an exception was raised in: where, never what it said."""
+    frame = error.__traceback__
+    while frame is not None and frame.tb_next is not None:
+        frame = frame.tb_next
+    if frame is None:
+        return "an unknown place"
+    code = frame.tb_frame.f_code
+    return f"{PurePosixPath(code.co_filename.replace(chr(92), '/')).name}:{frame.tb_lineno} in {code.co_name}"
 
 
 ENGINE_FAILURES = {
@@ -569,10 +590,9 @@ class VmTools:
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        # True once the member's own computer has a tool catalog. The snapshot then leaves out the owner's-desktop
-        # `computer` tool, so that two tools called computer never leave the choice of machine to the model. Without a
-        # catalog (computer tools off, no Docker on this PC) a member simply has no computer: only a quick question
-        # reaches the owner's PC at all, and an ordinary turn never falls back to it (R-PC-01).
+        # True once the member's own computer has a tool catalog. Without one (computer tools off, no Docker on this PC)
+        # a member simply has no computer: only a quick question shows anything on the owner's screen, and an ordinary
+        # turn never falls back to it (R-PC-01, R-PC-06).
         return self.vm.enabled and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
@@ -644,7 +664,8 @@ class VmTools:
             if notice:
                 notice.cancel()
                 await asyncio.gather(notice, return_exceptions=True)
-        if reading and result.kind not in NOTICES:
+        # A failure says why it failed; the time it took is never all it says (a bare "Elapsed" was read as its reason).
+        if reading and result.kind not in NOTICES and (result.ok or result.text):
             elapsed = round(time.monotonic() - began, 2)
             prefix, _, tail = result.text.rpartition("\n")
             try:
@@ -703,15 +724,17 @@ class VmTools:
             if ticket in self.checkpointed:
                 return
             self.checkpointed.add(ticket)
-            failures = getattr(self.vm, "checkpoint_failures", None)
-            if failures is None:
-                self.vm.checkpoint_failures = failures = {}
+            began = time.monotonic()
             try:
-                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
-                failures.pop(target.state_key, None)
+                # The guest ends the store's script itself (`GUEST_SECONDS`); this waits a little longer, so that the
+                # store's own end, with its partial checkpoint written, is what comes back.
+                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), CHECKPOINT_WAIT_S)
             except Exception as error:
-                failures[target.state_key] = True
-                logger.warning("File checkpoint skipped: %s", type(error).__name__)
+                # Without it this run's changes have no record of their own and its undo covers nothing: which kind
+                # (the store took too long, or could not be read) and after how long is written down, never a path.
+                kind = str(error) if isinstance(error, VmError) else type(error).__name__
+                logger.warning("File checkpoint skipped: %s after %.1f s (%s)", kind, time.monotonic() - began,
+                               "a command" if command is not None else "a file tool")
 
     def _observe_page(self, target, page, *, remember=True):
         from urllib.parse import urlsplit
@@ -1132,9 +1155,13 @@ class VmTools:
             self.vm.invalidate(target)
             result = PluginResult(False, "connection_error")
             return result
-        except Exception:
+        except Exception as error:
+            # Nothing the computer said: a fault of this layer, told as one to the member and the owner rather than as a
+            # cause unknown. Its type and where it was raised are written down (never its message, which can hold what
+            # the screen showed).
             self.vm.invalidate(target)
-            result = PluginResult(False, "error")
+            logger.warning("Computer tool %s failed in the core: %s at %s", tool.name, type(error).__name__, _raised_at(error))
+            result = PluginResult(False, COMPUTER_FAULT, COMPUTER_FAULT_NOTE.format(kind=type(error).__name__))
             return result
         finally:
             if self.logins and result.kind:

@@ -306,6 +306,35 @@ async def test_auxiliary_failure_falls_back_once_and_keeps_memory_spend(conn, hi
     assert conn.execute('SELECT purpose FROM spend').fetchone()[0] == 'memory'
 
 
+async def test_a_timed_out_auxiliary_summariser_is_not_paid_for_again_on_the_member_brain(conn, history, clock, caplog):
+    # The app's log: the auxiliary summariser cut off at its limit, then the member's own brain asked the same and cut
+    # off at the same limit, seventeen times; each pass paid twice and folded nothing.
+    from raphael_core.memory.brain import MemoryBrainError
+    for failure in (TimeoutError(), MemoryBrainError(0, 'timeout', 'Memory brain timed out')):
+        model = FakeModel()
+        conversation = Conversation(conn, model, now_ms=clock.ms)
+        conversation.context_window = 200
+        conversation.summary_model = lambda member: 'auxiliary-model'
+        for n in range(35):
+            add_turn(history, f'A synthetic fact {n}')
+        model.replies.append(failure)
+        assert not await conversation.fold('member-model', Ledger(SpendTracker(conn, clock.ms), 'memory'))
+        assert [call['model'] for call in model.calls] == ['auxiliary-model']
+    assert 'after' in caplog.text and 'tokens' in caplog.text
+
+
+async def test_a_fold_has_the_time_a_summary_takes(conn, history, clock):
+    # Folds that worked took 20 to 30 s, and every slower one was cut off at 30 s (the app's log).
+    from raphael_core.memory.conversation import FOLD_TIMEOUT_S
+    model = FakeModel({'summary': 'Context:\nSynthetic.'})
+    conversation = Conversation(conn, model, now_ms=clock.ms)
+    conversation.context_window = 200
+    for n in range(35):
+        add_turn(history, f'A synthetic fact {n}')
+    assert await conversation.fold('member-model', Ledger(SpendTracker(conn, clock.ms), 'memory'))
+    assert FOLD_TIMEOUT_S >= 120 and model.calls[0]['timeout_s'] == FOLD_TIMEOUT_S
+
+
 async def test_tool_payload_is_pruned_before_summary(conn, history, clock):
     model = FakeModel()
     conversation = Conversation(conn, model, now_ms=clock.ms)

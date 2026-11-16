@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // A model writes a markdown link to a file it delivered, by stored id: `[words](attachment:<id>)` (R-MSG-LINK-01).
 import { expect, test } from "vitest";
+import { t } from "./i18n";
 import { attachmentTarget, messageHTML, replyContentHTML } from "./message-content";
 import { emptyTimelineState, fileLinks, knownFiles, turnHTML } from "./timeline";
 import type { AgentTurn } from "./types";
@@ -103,6 +104,54 @@ test("what the owner attached with a message is known too, a malformed id is not
   expect([...knownFiles([sent]).keys()]).toEqual([ID]);
   const badMedia = turn({ messages: [{ seq: 1, kind: "media", at_ms: 1, text: JSON.stringify({ attachment: { id: "a/b.md", name: "x", mime: "text/plain" } }) }, { seq: 2, kind: "media", at_ms: 1, text: "not json" }] });
   expect(knownFiles([badMedia]).size).toBe(0);
+});
+
+// A picture a model links by its stored id, `![words](attachment:<id>)` (R-MSG-LINK-02).
+const PICTURE = "5b6f0c2d9e8a4b71a3c2d1e0f9a8b7c6.png", OTHER_PICTURE = "fedcba9876543210fedcba9876543210.png";
+const pictures = new Map([[PICTURE, { name: "pyramid.png" }]]);
+
+test("a picture linked by its stored id is the chip of the conversation's file, never its markdown", () => {
+  const root = dom(messageHTML(`這是那一段的截圖。\n\n![影片中的截圖](attachment:${PICTURE})`, "", true, [], pictures));
+  const chip = root.querySelector<HTMLElement>("button[data-attachment-link]")!;
+  expect(chip.dataset.act).toBe("attachment-open");
+  expect(chip.dataset.id).toBe(PICTURE);
+  expect(chip.textContent).toBe("影片中的截圖");
+  expect(root.textContent).not.toContain("![");
+  expect(root.innerHTML).not.toContain("attachment:");
+  expect(dom(messageHTML(`![](attachment:${PICTURE})`, "", true, [], pictures)).querySelector("button")!.textContent).toBe("pyramid.png");
+});
+
+test("a picture the conversation does not have says so in words, with no button and no raw target", () => {
+  for (const target of [`attachment:${OTHER_PICTURE}`, `attachments/${OTHER_PICTURE}`, "attachment:../secret.png", "attachment:"]) {
+    const root = dom(messageHTML(`![截圖](${target})`, "", true, [], pictures));
+    expect(root.textContent, target).toBe(t("chat.pictureMissing", { p0: "截圖" }));
+    expect(root.querySelector("button, a, img, [data-id], [data-act]"), target).toBeNull();
+    expect(root.innerHTML, target).not.toContain("attachment");
+  }
+  expect(dom(messageHTML(`![](attachment:${OTHER_PICTURE})`, "", true, [], pictures)).textContent).toBe(t("chat.pictureMissingBare"));
+  // A renderer given no files (a group, search, copy) has only the words.
+  const bare = dom(messageHTML(`![截圖](attachment:${PICTURE})`, "", true));
+  expect(bare.textContent).toBe("截圖");
+  expect(bare.querySelector("button")).toBeNull();
+});
+
+test("a picture link still arriving shows its words, never the part of its target that has come", () => {
+  const root = dom(replyContentHTML(`看這張 ![截圖](attachment:5b6f0c`, "", true, undefined, pictures));
+  expect(root.textContent).toBe("看這張 截圖");
+});
+
+test("a reply that links the picture its turn just delivered shows the picture once and the link as its chip", () => {
+  // A real turn's shape: the picture as a media message, then the reply whose last line links it as an image.
+  const sent = { seq: 1, kind: "media" as const, at_ms: 1000, text: JSON.stringify({ attachment: { id: PICTURE, name: "pyramid.png", mime: "image/png", size: 82_845 } }) };
+  const delivered = turn({ messages: [sent, reply(`找到那一段了。\n\n![影片中的截圖](attachment:${PICTURE})`)] });
+  const state = emptyTimelineState();
+  state.files = knownFiles([delivered]);
+  const root = dom(turnHTML(delivered, state, false, look));
+  const words = root.querySelector("[data-message='2']")!;
+  expect(words.textContent).not.toContain("![");
+  expect(words.textContent).not.toContain("attachment:");
+  expect(words.querySelector<HTMLElement>("button[data-attachment-link]")!.dataset.id).toBe(PICTURE);
+  expect(root.querySelectorAll(".chat-message[data-picture]")).toHaveLength(1);
 });
 
 test("a turn's drawing changes with the files its words link to, and only those", () => {

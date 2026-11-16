@@ -84,8 +84,8 @@ class FakeProvider:
 
 
 def owner_tools():
-    """The tools of a quick question to Raphael, listed and found (the owner's PC is in reach of it alone, R-PC-01)."""
-    return take_snapshot(None, memory=True, interactive=True, max_tier=Tier.T3, owner_pc=True)
+    """The tools of a quick question to Raphael, listed and found (the owner's screen is in reach of it alone, R-PC-01)."""
+    return take_snapshot(None, memory=True, interactive=True, max_tier=Tier.T3, owner_screen=True)
 
 
 class RecordingLoop(NarratedLoop):

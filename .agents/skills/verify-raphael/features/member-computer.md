@@ -53,7 +53,8 @@ folder and owner label; `ok folders move: ...` then the cleanup lines). No scene
 
 A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
 R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): the container's shape changed (the UTF-8
-locale), no file of the image did, so only the final `LABEL` step reruns on a PC that built v12. The owner's layer-12
+locale), no file of the image did, so only the final `LABEL` step should rerun on a PC that built v12 (on the owner's PC
+it did not: steps 12 to 21 ran again, see "A new image layer" below). The owner's layer-12
 computer is made again once, when idle; its workspace and sign-ins are kept; hand-installed packages and `/tmp` go.
 `vm.py`: `resources`, `sized`, `machine_size`, `fit_limits`, `run_args` (locale), `scratch_args`; `carry_runtime.py` (staging
 ownership).
@@ -74,6 +75,62 @@ cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m p
 
 Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
 Docker running is that check.
+
+## A new image layer: its cache source, the old images, the update line
+
+R-COMP-IMAGE-01, R-COMP-IMAGE-02, R-COMP-UPDATE-01. Measured on the owner's PC at the switch to layer 13: Docker Desktop
+started by the app (51 s), then the image built in 4 min 31 s, its package step (`[12/21]`, 186 s) and Chrome (37 s) run
+again although layer 13 changed only comments and the last `LABEL`; the steps before were CACHED. Inferred, not proved:
+the engine's build cache had dropped those records, and the build named no cache source. A restart pressed meanwhile
+answered `busy`, the panel said nothing, and the images of layers 9, 11 and 12 all stayed.
+
+What is true now (`vm.py`, `lifecycle.py`, `viewer.py`, `computer-state.ts`, `desktop-viewer.ts`):
+- The build (`build_args`) writes BuildKit's inline cache record into the image and names the newest earlier image of
+  ours as `--cache-from` (`cache_source`, from `owned_images`: tags of `raphael/cua-local-vm` that carry
+  `org.raphael.computer=1` and a lower layer). Relied on: Docker's documentation of the inline cache
+  (docs.docker.com/build/cache/backends/inline/: `BUILDKIT_INLINE_CACHE=1` instead of `--cache-to type=inline`, imported
+  with `--cache-from`) and of the `docker` driver (Docker Desktop's default builder), which exports the inline cache; and
+  that the daemon's BuildKit reads `--cache-from` from a local image before any registry (moby's local inline-cache
+  importer), which was not checked against this PC's Docker. Images built before carry no record: on the owner's PC the
+  first build to gain is layer 14 built from a layer 13 that this code built, so at the earliest the layer after next.
+- Once a computer is ready on the current image, `clean_soon` looks (first ready start of the core, then once a day per
+  engine) and `remove_old_images` removes the older tags of ours that no container references, under the build lock,
+  never forced. The acceptance's and the tests' injected runners never remove (`clean_images`). The acceptance's
+  previous-layer checks need those old images: once the app has removed them they are skipped.
+- A preparation that builds with an earlier image, or makes a computer of an earlier layer again, is marked `update`
+  (`LocalVm.updating`, `_progress`); `computer.viewer_status` passes it on and the Computer tab shows
+  `desktop.updateLine` in `.desktop-caption` under the bare screen (`data-desktop-update` on the panel). A restart,
+  update or repair pressed during any preparation (`preparing_now`) returns its state instead of `busy`; reset still
+  waits.
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_image_workflow.py tests/computer/test_lifecycle.py tests/computer/test_viewer.py tests/evaluate/test_computer_acceptance.py -q
+cd app; node node_modules/vitest/vitest.mjs run src/main/desktop-viewer.test.ts src/main/i18n/i18n.test.ts
+```
+
+The look scene of the update line (not yet run when it was added):
+
+```powershell
+npm run look -- desktop-updating desktop-building desktop-preparing computer-state-updating --theme both --width 1120,720,1920x1080
+```
+
+On a real engine, with Docker already running and the owner's say (it never starts Docker): `npm run verify -- --computer`
+runs `image update` after the previous-layer checks, with throwaway images of two files (`tiny_dockerfile`) in a repository
+of the run's own; the computer's own image is never built twice for it. Expected lines, in order:
+
+```text
+ok image update fixtures: Built layers 11, 12, 14 and an unlabelled tag in raphael-acceptance-<token>/cua-local-vm with the product's build command; a stopped container uses layer 11
+ok image update record: Layer 12, built by the product's command, carries BuildKit's inline cache record
+ok image update cache source: The product names raphael-acceptance-<token>/cua-local-vm:driver-0.37.0-v12 as the cache source, over the older, the newer and the unlabelled tags
+ok image update press during the build: A restart pressed while the engine built answered building with update; the panel said the same; the preparation ended ready
+ok image update cached steps: The unchanged step was CACHED and the changed one built; the log names the import from ... (the engine's own cache also held that step)
+ok image update old tags: Removed ...-v12; kept layer 11 (a stopped container uses it), the current, the newer and the unlabelled tags; every other image on the engine is as it was
+ok image update cleanup: Removed raphael-acceptance-<token>/cua-local-vm and its container
+```
+
+"as the build began" instead of "while the engine built", or "does not name the import", is still a pass and says what
+was seen. Not proved anywhere: that a cache source alone gives the unchanged heavy steps once the engine has lost its
+own cache (that would mean clearing the owner's build cache), and how much faster the next real layer builds.
 
 ## A member's files
 
@@ -99,7 +156,8 @@ id) or a task; what it read is the file's sha256. Paths are absolute or taken fr
 the team folder the guest opens each component without following a link. Searches skip `.git`, `.browser-profiles`,
 `.raphael-checkpoints` and `.raphael-jobs` and honour `.gitignore`; they search hidden files. Results pass the same login
 redaction as every computer tool. No card asks for any of these in the member's own computer; the CLI vendors' own Read,
-Write, Edit, Glob, Grep and shell stay off (R-PC-01): a CLI brain gets these through the `computer` MCP server.
+Write, Edit, Glob, Grep and shell stay off (they would act on the owner's PC outside Raphael's card, R-PC-02): a CLI brain
+gets these through the `computer` MCP server.
 
 Offline evidence (fake docker `Runtime`; the guest helper itself runs on a folder of the test; ripgrep's answers are scripted):
 `core/tests/computer/test_file_read.py`, `test_file_tools.py`, `test_file_search.py`, and `test_catalog_stays.py` (the
@@ -190,10 +248,12 @@ said into the overlay, opened the page on the owner's own PC with an empty reply
   is the answer at once. `ComputerWork.begin` revives a work item whose stop was only inferred from a cancelled first call.
   Offline: core/tests/computer/test_first_call.py (fakes for each transient kind, the bound, each real failure, the cut-short call
   and the owner's own stop).
-- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's goes to the member's turn
-  with the owner's PC out of reach; the owner's keeps the router and the shortcut; an unsure open request is asked once
-  (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py. The quick overlay's own look
-  scenes are unchanged (no UI change), so no look run.
+- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's skips the fast
+  router's shortcut (which can only use the owner's PC) and goes to the member's turn of the quick question, which holds both
+  computers: the model reads the owner's words and picks (R-PC-01); the owner's, and a request that names no one's computer
+  (the owner's PC is the default), keep the router and the shortcut, and nothing asks which computer; the shortcut says
+  `opened`. Offline: core/tests/agent/test_whose_computer.py.
+  The quick overlay's own look scenes are unchanged (no UI change), so no look run.
 
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole
 
@@ -1459,28 +1519,76 @@ desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.p
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
 native shell, live model quality and judge remain separately unverified.
 
-## The owner's PC is for a quick question alone (R-PC-01)
+## The owner's screen is a quick question's; hidden commands are every turn's (R-PC-01, R-PC-02, R-PC-06)
 
-The owner's PC is controlled only from a quick question (Alt+Space), never from an ordinary conversation.
-One switch decides it, `take_snapshot(owner_pc=...)` (`ask.quick`, never nested): without it a turn is offered, finds and
-refreshes into none of `mcp:local/local_exec`, `mcp:local/local_job`, the harness `computer` tool (the guarded run on the
-owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken
-conversation, Raphael's or a member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event
-runs, on API and CLI brains, in every permission mode. The fast router (Jev) is asked about a quick question alone, so a
-conversation never routes to a command or a desktop run. The prompt of such a turn carries no owner's-PC words
-(`persona._OWNER_PC_RULES` and the owner-context output-folder sentence are added to a quick question only); it says
-that anything needing a computer is done on the member's own computer and, when that is not available, to say so.
-`LocalTools.call` refuses a call whose context is not a quick question (`presence_required`, even under 全部允許), and
-the harness `computer`, command and CLI native-command paths repeat the check (`AgentService._owner_pc`). A quick
-question is unchanged, including that it can show no card, so a local command runs there only where nothing waits for a
-yes. The consent card, the Settings mode and the background approvals below are kept in the code, with no door
-until the owner decides whether a quick question asks at the overlay.
+What shows on the owner's screen is driven only from a quick question (Alt+Space). One switch decides it,
+`take_snapshot(owner_screen=...)` (`permissions.owner_screen`: a quick question asked at this computer, never nested):
+without it a turn is offered and finds none of the harness `computer` tool (the guarded run on the owner's desktop) or the
+fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken conversation, Raphael's or a
+member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event runs, on API and CLI brains, in
+every permission mode. The fast router (Jev) is asked about a quick question alone. What such a turn shows on a screen
+(a website, YouTube, a program, clicks, typing) it shows on the member's own computer; with none it says so.
 
-Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question, the member's
-own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
-members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
+The local commands (`mcp:local/local_exec`, `mcp:local/local_job`, its background jobs, and a CLI brain's own command)
+run hidden on the owner's PC from every turn and task again, through the approval machinery they always had: the
+first-consent card and the chat approvals without a timer in a private conversation at this computer, the 30-minute
+background approvals of a task or a routine, in the stored mode (ask, always, never; 全部允許 runs without a card).
+Settings has no control for the mode. Where no card can be shown (a phone, an exchange, a quick question) a command runs
+only under 全部允許; a room's speaking turn has its speaking tools alone, as before. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
+seen is done on the member's own computer (`agent/capabilities.py`, `persona._SHARED_CONTRACT`).
 
-## Owner-PC commands (now a quick question's alone, see above)
+The safety net (R-PC-06): outside a quick question a command whose purpose is to show something on the owner's screen
+(Start-Process, saps, start, cmd /c start, explorer, Invoke-Item, ii, rundll32 url.dll, Process.Start, a URL, a shortcut
+or a document typed as the command, a windowed program, `open` on a Mac) is refused in every mode without a card, and the
+member is told to open it on its own computer (`computer/on_screen.py`, checked in `LocalTools.tier_for_call` and `call`,
+`AgentService._cli_permission` and the background CLI loop). It stops a model that picked the wrong computer; it is no
+defence against someone set on getting round it.
+
+A quick question keeps the owner's PC as its default for everything, commands and what is seen alike, and also holds the
+member's own computer for a request whose words name it (`persona._OWNER_PC_RULES` says which is the default and how the
+owner names the other; the desktop `computer` stays beside the member's computer tools). The model picks; no word matched in
+code takes either computer away. A quick question can show no card, so a local command runs there only under 全部允許.
+
+Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question beside the
+member's own computer), computer/test_local_commands.py (contexts, the table of commands that show something and of those
+that do not, every mode), agent/test_local_commands.py and agent/test_local_command_flow.py (cards in a conversation, the
+CLI's own command), background/test_local_commands.py (30-minute approvals, a task's refused opener),
+members/test_local_commands.py, members/test_cli_brains.py, members/test_connection_floor.py, agent/test_computer_choice.py
+and agent/test_whose_computer.py. No look scene changes: nothing rendered changed (the cards are the existing ones).
+
+## The owner's files: read everywhere, write in the owner's folders (R-PC-04, R-PC-05)
+
+Members read every file of the owner's computer from every turn, task and source, and write only in folders the owner chose; its screen stays a quick question's. Modelled on Claude Code (its file tools read the whole computer; Write and Edit only the
+working and added directories). `computer/owner_files.py` adds five pinned plugin tools under the `owner_files` server,
+offered by `LocalTools.offered_for` beside the local commands but not keyed `mcp:local/`, so `take_snapshot` never drops them:
+every turn and task, every source and brain (API, and CLI through its MCP list) and every permission mode has them.
+
+- Reads (T0, kind read, no card): `read_file` (Claude Code's Read through `file_tools.Files` and the guest helper
+  `files_guest.handle` run on this computer: numbered lines, pictures as images, PDFs by pages), `glob` and `grep` (Python
+  walks, as ripgrep is not on the owner's computer; newest first, Claude Code's output modes and paging, 30 s bound).
+- Kept from every read and write, through links too (`owner_files.kept`): SSH, GPG and cloud keys, the keychain and
+  Windows' credential stores, browsers' profiles, password managers, `.env` files (not `.env.example`) and private keys.
+  Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
+  start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
+  Privacy & Security › Files and Folders or Full Disk Access.
+- Writes (T2, kind write): `write_file`, `edit_file`, only inside `owner_output_folder` and `owner_write_folders`
+  (Settings › General, 成員可以寫入的資料夾: picked, never typed, removed one by one; owner-only, never a management tool).
+  Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write that cannot happen.
+- The owner context names the output folder and the write folders for every turn (`brain/owner.py`).
+
+Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
+places and links, glob and grep, writes inside and outside, an unapproved write), brain/test_owner.py, and
+settings-view.test.ts. Look: `owner-write-folders` (adds with the picker, removes the first) beside the output folder
+scenes:
+
+```powershell
+npm run look -- owner-write-folders owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+```
+
+Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a
+real Windows disk (CI runs the offline suite there).
+
+## Owner-PC commands (hidden, every turn's, with the card; see above)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
@@ -1521,7 +1629,7 @@ Acceptance still requires the owner's real CPU question to a member on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
 tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
-journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
+journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03/06 and R-AG-13.
 
 The optional Docker desktop defaults to one shared computer on this PC (a seat per member, section
 "Shared computer seats" above; 6 GiB and four CPUs) and, on a remote host or when `computer_vm_mode=per-bot`

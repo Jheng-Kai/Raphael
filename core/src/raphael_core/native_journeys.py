@@ -524,6 +524,22 @@ def native_consult(messages: list[dict], offered: set[str], seen: int) -> dict |
     return {"member": targets[-1], "request": "NATIVE-AUDIT-EXCHANGE: give a short report for the owner."}
 
 
+def native_steering(messages, offered, seen):
+    """Script only the provider's choice: a member still at work when the owner writes ends its turn with a question for the
+    owner, so that turn never reads the words written meanwhile. The inbox, the card and the turn those words become are
+    production code."""
+    if not native_enabled(True):
+        return None
+    latest = next((str(message.get("content", "")) for message in reversed(messages)
+                   if message.get("role") == "user"), "")
+    questions = re.findall(r"<question>\s*(.*?)\s*</question>", latest, re.S)
+    if seen or "[native-steer:ask]" not in (questions[-1] if questions else latest):
+        return None
+    if "ask_owner" not in offered:
+        raise ValueError("Native steering question tool is absent")
+    return "ask_owner", {"question": "Which day suits you?", "options": ["Monday", "Tuesday"]}
+
+
 def native_diagnosis(messages, offered, seen):
     """Script only the fake provider; cards, vault checks and continuation stay production code."""
     if not native_enabled(True):

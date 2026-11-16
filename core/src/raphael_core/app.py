@@ -316,8 +316,8 @@ class EchoClient:
             return ChatTurn(json.dumps({"text": "\n\n".join(parts), "messages": parts}), [], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer
-        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen) or native_calendar(messages, offered, seen)
+        from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer, native_steering
+        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen) or native_calendar(messages, offered, seen) or native_steering(messages, offered, seen)
         if diagnosis is not None:
             name, value = diagnosis
             if name == "reply":
