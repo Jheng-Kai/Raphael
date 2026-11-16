@@ -119,10 +119,15 @@ def _made(part: str, negated_before: bool) -> str | None:
     return None
 
 
+# What a trigger adds after the routine's own words (an email, a webhook's body): data from outside, never what the routine is for.
+_OUTSIDE = '<tool_result untrusted="true"'
+
+
 def expected(prompt: str) -> str | None:
     """What a routine with these instructions is set to make: "page", "draft", or None when its purpose is no
-    artefact (a check, a summary said in the conversation). Words a prompt negates ("do not make a page") do not count."""
-    kinds = {_made(part, listed) for part, listed in _parts(prompt or "")}
+    artefact (a check, a summary said in the conversation). Words a prompt negates ("do not make a page") do not count,
+    and nor do the words of the item that started the run: anyone who can send one must not decide what the run is for."""
+    kinds = {_made(part, listed) for part, listed in _parts((prompt or "").split(_OUTSIDE, 1)[0])}
     return "page" if "page" in kinds else "draft" if "draft" in kinds else None
 
 
