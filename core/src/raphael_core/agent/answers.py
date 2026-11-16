@@ -443,9 +443,11 @@ def _read_envelope(text: str, *, edges: bool = True, strict: bool = False) -> di
         return _run_reply(objects, after=after, strict=strict)
     if not edges:
         return None
+    fences, counted = 0, 0
     for match in _LINE_OBJECT.finditer(text):
         start = match.end() - 1
-        if text.count("```", 0, start) % 2:
+        fences, counted = fences + text.count("```", counted, start), start
+        if fences % 2:
             continue  # inside a block of code, which is a member's example
         objects, end, cut = _object_run(text, start)
         if cut:
