@@ -4,7 +4,7 @@ from raphael_core.brain import db
 from raphael_core.brain.db import connect
 
 
-async def test_a_new_member_holds_raphaels_model_and_his_next_change_moves_no_one(rig):
+async def test_a_new_member_holds_raphaels_model_and_its_next_change_moves_no_one(rig):
     rig.service._settings.set("agent_model", "cli:codex:one?effort=high")
     first = (await rig.call("members.create", {"name": "Alice"}))["member"]
     assert first["model"] == "cli:codex:one?effort=high"

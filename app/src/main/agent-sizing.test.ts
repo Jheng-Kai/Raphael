@@ -90,7 +90,7 @@ describe("the page's responsive sizes", () => {
     expect(agent).not.toMatch(/@media \(min-width: 1440px\)/);
   });
 
-  test("Raphael's thread keeps its bare style: no frame, background, border or shadow on his lines or his face", () => {
+  test("Raphael's thread keeps its bare style: no frame, background, border or shadow on its lines or its face", () => {
     for (const selector of [".ra", ".ra-face", ".ra-body", ".ans"]) {
       const rule = new RegExp(`(^|\\n)${selector.replace(".", "\\.")} \\{([^}]*)\\}`).exec(agent);
       expect(rule, selector).not.toBeNull();

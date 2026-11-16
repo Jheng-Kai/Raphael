@@ -11399,7 +11399,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn coming_back_while_raphael_thinks_hides_his_reports_and_the_window_has_the_answer() {
+    async fn coming_back_while_raphael_thinks_hides_its_reports_and_the_window_has_the_answer() {
         let (core, gate) = agent_core(answer("答", "好")).gated("agent.ask");
         let (c, front) = with_front(controller(core, FakePaster::pasting("chrome.exe")), false);
         let turn = start_turn(&c).await;

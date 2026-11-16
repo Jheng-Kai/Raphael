@@ -90,7 +90,7 @@ describe("Raphael's face", () => {
     expect(cropStyle({ x: 1 / 3, y: 0, zoom: 1.23456 })).toBe("object-position:33.3% 0%;transform-origin:33.3% 0%;transform:scale(1.235)");
   });
 
-  test("every place that shows him hears the change; a picture that cannot be read is the emblem", async () => {
+  test("every place that shows it hears the change; a picture that cannot be read is the emblem", async () => {
     const heard = vi.fn();
     const stop = onAvatarChange(heard);
     await loadAvatar(async () => ({ url: PNG, crop: { x: 0.5, y: 0.5, zoom: 1 } }));

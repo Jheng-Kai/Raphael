@@ -1145,7 +1145,7 @@ def test_the_rules_tell_the_model_to_write_the_entry_for_what_is_listed_under_it
     assert "Text listed under a dictionary entry is that entry misheard" in rule
     assert "write the entry as spelled" in rule
     names = next(line for line in text.splitlines() if line.startswith("5. "))
-    assert "cloud" not in names, "the owner's 「Cloud的用量」 is Claude when his dictionary says so"
+    assert "cloud" not in names, "the owner's 「Cloud的用量」 is Claude when their dictionary says so"
 
 
 def test_dictionary_spans_is_empty_for_a_transcript_that_spells_the_dictionary_right():

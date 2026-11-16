@@ -56,7 +56,7 @@ async def test_a_member_is_told_nothing_of_a_japanese_interface_when_the_owner_w
     assert prompts["ja"][2] == prompts["zh-TW"][2] == prompts["en"][2]
 
 
-async def test_a_japanese_teachers_own_instructions_still_decide_her_language(setup, client):
+async def test_a_japanese_teachers_own_instructions_still_decide_its_language(setup, client):
     rig, team = setup
     rule = "You are a Japanese teacher. Always answer in Japanese, whatever language the owner writes in."
     teacher = member(team, name="Ada", role="日本語の先生", instructions=rule)
@@ -64,7 +64,7 @@ async def test_a_japanese_teachers_own_instructions_still_decide_her_language(se
     chinese = await asked(rig, client, "今天教我一個 N2 文法", teacher.id, "zh-TW", session="b")
     system, user, _ = english
     assert rule in system
-    # Her own instructions come first; the owner's words decide only where they say nothing.
+    # Its own instructions come first; the owner's words decide only where they say nothing.
     assert "Use the language specified in your own persona and the owner's instructions" in system
     assert_no_interface_language(system, user)
     assert english[0] == chinese[0]

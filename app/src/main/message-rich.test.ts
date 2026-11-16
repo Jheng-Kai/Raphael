@@ -285,7 +285,7 @@ test("the stick to the bottom writes a clamped position and reads no container g
   expect(read).not.toHaveBeenCalled();
 });
 
-test("a thread the owner scrolled up stays where he reads, near the bottom or far from it, until he is back at its bottom", async () => {
+test("a thread the owner scrolled up stays where they read, near the bottom or far from it, until they are back at its bottom", async () => {
   const thread = stickThread();
   // Their wheel lets go of the bottom before the scroll it starts has moved anything: the growth in that frame does not pull them back.
   thread.root.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));

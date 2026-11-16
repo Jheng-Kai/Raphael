@@ -395,7 +395,7 @@ async def test_voice_picked_members_share_one_proposal(setup, client):
     assert len(team.members.store.members()) == 3
 
 
-async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn):
+async def test_a_member_asks_raphael_who_answers_as_itself(setup, client, conn):
     rig, team = setup
     one = member(team)
     member(team, name="小研究")
@@ -549,7 +549,7 @@ async def test_raphael_is_offered_the_meeting_tool_when_asked_for_one(setup, tex
     assert "room_meeting" not in team_tools_for(team.members, team.members.speaker(0), "現在幾點")
 
 
-async def test_raphael_asked_for_the_desktop_says_the_owner_must_ask_him(setup, client, conn):
+async def test_raphael_asked_for_the_desktop_says_the_owner_must_ask_it(setup, client, conn):
     rig, team = setup
     one = member(team)
     client.decisions.append(decision("answer"))

@@ -466,7 +466,7 @@ describe("拉斐爾", () => {
     expect(rowOf(html, "問拉斐爾")).toContain("尚未設定");
   });
 
-  test("warns about Right Alt under her key only when the keyboard uses it as AltGr", () => {
+  test("warns about Right Alt under their key only when the keyboard uses it as AltGr", () => {
     const html = tab("dictation", { altgr: true });
     expect(html).toContain("AltGr");
     expect(html.indexOf("AltGr")).toBeGreaterThan(html.indexOf('data-row="agent-hotkey"'));

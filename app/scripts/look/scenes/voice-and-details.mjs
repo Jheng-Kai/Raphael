@@ -23,7 +23,7 @@ export default [
     page("settings"), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...settings("general"), check(`locale-${locale}`),
   ])),
-  scene("conversation-sections", "Raphael's panel switches between his one conversation and his quick questions", [...details, check("conversation-sections")]),
+  scene("conversation-sections", "Raphael's panel switches between its one conversation and its quick questions", [...details, check("conversation-sections")]),
   scene("member-conversation-sections", "A member has one conversation and no conversation list", [member(1), ...details, check("member-no-conversations")]),
   scene("quick-clear-confirm", "Quick history uses the shared compact destructive confirmation", [...open(4), ...details, click('[data-conversation-more="4"]'), click('[data-pick="clear"]'), check("quick-clear-confirm")]),
   scene("quick-cleared", "Quick history is empty but keeps its conversation identity", [...open(4), ...details, click('[data-conversation-more="4"]'), click('[data-pick="clear"]'), click('[data-dlg="delete"]'), wait('.ra-empty:not([hidden])'), check("quick-cleared")]),

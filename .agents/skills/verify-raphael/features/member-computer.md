@@ -473,7 +473,7 @@ Docker Desktop, Linux engine): 44 ok, 0 failed, 0 skipped in 650.718 s.
 
 Not proven: a remote (SSH) host; the native app's own panel around the stream; a
 member's real turn at the desktop.
-## Shared seats, stages B2 and C
+## Shared seats
 
 R-COMP-SEAT-01 replaces shared mode's old one-screen rotation with one six-screen
 container and durable first-use seats. Per-bot remains the default. target() does
@@ -499,7 +499,7 @@ shared containers rebuild while keeping home and team mounts. Deletion releases
 all hosts' seats without erasing shared storage and retains historic per-bot cleanup.
 Dataset and teaching are available in shared mode: datasets use .raphael-data/members/<core member key>/ with a common venv/install lock, and teaching records only the member's current seat through core input/tick, the member window projection and a clipped RFB capture. Private-page marks and PRIVATE titles withhold text and images. Historical homes are carried before the shared browser starts by the read-only Linux helper and the core's record, sign-ins first, as a background task the browser waits for only within a budget, with busy-source deferral, next-start retry and three attempts. Offline evidence: computer/test_shared_datasets.py, computer/test_shared_teaching.py and computer/test_carry.py; the shared --computer block checks namespaces, a seat-2 recording (with what a press waits for) and persistent-cookie/file/dataset carry on this run's own homes.
 
-Stage C2: SHARED_ARGUMENTS classifies every offered driver's top-level and nested
+SHARED_ARGUMENTS classifies every offered driver's top-level and nested
 property. Unreviewed parameters, target/from_zoom/capture_id/screenshot_out_file,
 caller desktop scope and desktop coordinate_frame are refused. Fresh same-session
 canvas rows check every window/pid and every page target's recorded native window,
@@ -561,7 +561,7 @@ native app panel behavior. The measured launcher panel height and result shapes,
 window mapping delay, profile attachment/lifetime and frame strip thresholds must
 be settled by real-container acceptance on the final tree.
 
-## Image screen plumbing, stage A
+## Image screen plumbing
 
 R-COMP-SCREEN-01 covers image `driver-0.37.0-v5` (layer 5). RAPHAEL_SCREENS
 selects 1..6 real VNC outputs in 1280x900 cells, with one panel per output.
@@ -630,7 +630,7 @@ now encoded in the opt-in `verify -- --computer` command described below):
   and keeps its workspace and browser profile.
 - Six idle screens with no viewer: about 0 % CPU, 425 MiB.
 
-Measured again on the round 3 tree (same way), because the mark's meaning changed:
+Measured again, the same way, after the mark's meaning changed:
 - 1 to 6 screens start with no helper retry and no repair restart (the one-pixel
   payload limit holds against the real server). The mark is written 10.5 s (four
   screens) and 15.2 s (six) after the container starts; the driver's socket at 6.5 s.
@@ -649,11 +649,11 @@ Measured again on the round 3 tree (same way), because the mark's meaning change
   removes its container and its folder.
 Not covered: the app's own window around that viewer page, a remote (SSH) host, a
 viewer that stays connected while its clipped server dies, and everything about
-members sharing one container (later stages).
-`wmctrl` is in the image for those stages: Chromium opens every new window beside
+members sharing one container (the seat sections below).
+`wmctrl` is in the image for the seat work: Chromium opens every new window beside
 its first and the driver has no tool that moves one.
 
-Round 2 offline evidence:
+Offline evidence for the screen helper and the view processes:
 `core/tests/computer/test_screens.py::test_clipped_server_runs_the_foreground_binary_with_real_parameter_names`,
 `core/tests/computer/test_screens.py::test_tcp_listener_parser_requires_the_loopback_port_and_listen_state`,
 `core/tests/computer/test_screens.py::test_leftover_cleanup_kills_exact_binary_and_waits_for_every_view_port`,
@@ -666,8 +666,8 @@ Round 2 offline evidence:
 `core/tests/computer/test_screens.py::test_image_installs_screen_views_and_preserves_the_single_token_port`,
 `core/tests/computer/test_screens.py::test_image_build_context_has_no_bytecode`.
 
-Round 3 (an independent review of the first commit proved six defects the offline
-tests and the container run had both missed; each has a test that was red first):
+Offline evidence for six defects that neither the first offline tests nor the container run had
+shown (each has a test that was red first):
 `core/tests/computer/test_lifecycle.py::test_previous_computer_maintenance_rebuilds_without_starting_old_image`,
 `core/tests/computer/test_lifecycle.py::test_previous_member_data_deletion_needs_no_new_image_or_start`,
 `core/tests/computer/test_remote_viewer.py::test_old_remote_computer_of_a_previous_layer_still_upgrades`,
@@ -705,9 +705,9 @@ Offline framing, authentication, parser and isolation tests live in
 `core/tests/evaluate/test_computer_acceptance.py`; no Docker or network is used by
 those tests. They establish contracts only. This command exercises the core relay;
 the native app's own panel, remote SSH host, a viewer retained across a clipped
-server death, and member seat/lease stages remain outside its acceptance scope.
+server death, and the member seat and lease paths remain outside its acceptance scope.
 
-The form check (round 5, per-bot and shared, through product calls and the common fill helper): a
+The form check (per-bot and shared, through product calls and the common fill helper): a
 main-document Name field that starts with a value, a same-origin frame holding a field of the same name,
 and a second loopback origin. It proves replacement, refusal of the frame's field, window and desktop
 pictures withheld after a private fill and after same-origin navigation, the another-origin read timing,
@@ -715,8 +715,8 @@ and a closed tab (a real ctrl+w with a spare tab open) retiring its mark so pict
 block also moves the marked window onto the peer's screen (the peer's desktop and window pictures come
 back empty), refuses a hand-over when one window list fails at the IsolatedDocker boundary (exact holder
 restored, `computer_busy`), and shows a free screen's leftover window gone before its new holder.
-Offline fakes do not prove driver or X11 behaviour: round 5 passed 1205 offline tests and thirteen
-rule-removal mutations and still could not seat anyone on a real computer (the desktop window spans every
+Offline fakes do not prove driver or X11 behaviour: the whole offline suite and thirteen
+rule-removal mutations passed and still could not seat anyone on a real computer (the desktop window spans every
 screen), knew only one of the driver's two closed-tab replies, and displaced the wrong member on a retry.
 Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
 `test_login_visibility.py::test_private_marks_follow_windows_on_the_same_shared_computer`,
@@ -730,7 +730,7 @@ Regressions: `test_login_vault.py::test_saved_field_selection_and_replacement`,
 `::test_failed_restore_cannot_give_leftover_windows_to_the_next_holder`,
 `test_seat_view.py::test_cleanup_window_lists_retain_unknown_classes_and_reject_incomplete_geometry`.
 
-The shared block's three stage D checks (all through product tools, on this run's own homes): two seats
+The shared block's three checks of datasets, recording and carry-over (all through product tools, on this run's own homes): two seats
 import a dataset of the same name and each answers and lists only its own; a recording started on seat 2
 holds no window of seat 1, a 1280x900 picture and no canvas-wide driver call, and says what an owner's
 press waits for; a per-bot computer of the run makes a persistent cookie (kept 40 s so the browser writes
@@ -746,7 +746,7 @@ said so: 113 test files were green. Regressions:
 `test_carry.py::test_large_home_keeps_only_its_files_in_place_and_an_unknown_folder_is_never_merged`,
 `::test_a_copy_that_keeps_failing_is_paid_for_three_times_and_then_left_in_place`,
 `::test_the_browser_waits_only_its_budget_and_a_slow_copy_keeps_the_old_homes_guard`.
-An independent review of stage D (0 blockers, 3 major, 2 minor) found what neither the tests nor the real run had: the helper's ownership pass walked `.browser-profiles` even when a member had made it a link; the budget ended the carry's task and with it the old home's guard while the copy's container went on; a recording that could not be written kept its event in memory and could end the viewer's monitor; a framebuffer update's rectangles were all held at once. All four are fixed with regressions (`test_carry.py::test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared`, `::test_a_hung_helper_is_killed_by_name_before_its_error_is_raised`, `members/test_teaching.py::test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event`, `test_rfb_view.py::test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end`); the fifth, a member swapping its own dataset folder for a link mid-call, is stated in R-COMP-SEAT-01 as outside what the folders are for. A second review of those fixes (0 blockers, 2 major, 4 minor) found that a failed or unfinished profile copy left `.browser-profiles/driver` root-owned, so on a host with real ownership the launcher could not make its profile (`::test_folders_made_on_the_way_are_handed_over_before_a_copy_that_may_fail`); that a kill whose answer was not awaited, or a helper left by a core that died, still released a home being read (`::test_a_closing_core_leaves_its_copy_to_finish_but_sees_a_kill_through`, `::test_a_helper_an_earlier_core_left_running_is_waited_for_and_then_asked_once_more`); that the write at a recording's end could still raise into the viewer's close (`members/test_teaching.py::test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer`); and that the carry's lock was held for the whole wait (`::test_every_browser_of_a_computer_waits_until_the_same_moment_and_another_computer_does_not_queue`). A third, narrow check found one more: a kill that failed was taken for an ended helper (`::test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to_its_old_computer`). Stated in R-COMP-SEAT-01, not changed: the helper's staging names can be swapped by a member, inside a throwaway container whose one writable mount is the members' own workspace; POSIX rename puts the carried profile in place of a folder the launcher has only just made. The same hand-over had two failures only this machine's whole run showed, in files the author could not run (loopback sockets), and one only the contract showed (a rule naming a renamed test).
+Reading the shared block against the paths it touches found what neither the tests nor the real run had: the helper's ownership pass walked `.browser-profiles` even when a member had made it a link; the budget ended the carry's task and with it the old home's guard while the copy's container went on; a recording that could not be written kept its event in memory and could end the viewer's monitor; a framebuffer update's rectangles were all held at once. All four are fixed with regressions (`test_carry.py::test_a_copy_without_a_profile_hands_over_nothing_a_member_prepared`, `::test_a_hung_helper_is_killed_by_name_before_its_error_is_raised`, `members/test_teaching.py::test_a_recording_that_cannot_be_written_ends_as_full_and_keeps_no_unwritten_event`, `test_rfb_view.py::test_one_rectangle_is_held_at_a_time_and_a_picture_is_whole_only_at_an_updates_end`); the fifth, a member swapping its own dataset folder for a link mid-call, is stated in R-COMP-SEAT-01 as outside what the folders are for. Reading those fixes again found that a failed or unfinished profile copy left `.browser-profiles/driver` root-owned, so on a host with real ownership the launcher could not make its profile (`::test_folders_made_on_the_way_are_handed_over_before_a_copy_that_may_fail`); that a kill whose answer was not awaited, or a helper left by a core that died, still released a home being read (`::test_a_closing_core_leaves_its_copy_to_finish_but_sees_a_kill_through`, `::test_a_helper_an_earlier_core_left_running_is_waited_for_and_then_asked_once_more`); that the write at a recording's end could still raise into the viewer's close (`members/test_teaching.py::test_a_recording_that_ends_on_a_full_disk_still_lets_go_of_the_computer`); and that the carry's lock was held for the whole wait (`::test_every_browser_of_a_computer_waits_until_the_same_moment_and_another_computer_does_not_queue`). A third, narrow read found one more: a kill that failed was taken for an ended helper (`::test_a_hung_helper_that_cannot_be_seen_to_end_keeps_its_home_closed_to_its_old_computer`). Stated in R-COMP-SEAT-01, not changed: the helper's staging names can be swapped by a member, inside a throwaway container whose one writable mount is the members' own workspace; POSIX rename puts the carried profile in place of a folder the launcher has only just made. The same hand-over had two failures only this machine's whole run showed, in files the author could not run (loopback sockets), and one only the contract showed (a rule naming a renamed test).
 Not covered by the run: a profile after weeks of use (its size and copy time), a remote host's named
 volumes, the app's own viewer during a shared recording.
 
@@ -1817,8 +1817,9 @@ and full-size changed controls. Extend scripts/look rather than adding a harness
 Focused tests: messaging/test_work_channels.py, computer/test_checkpoints.py,
 computer/test_checkpoint_revision.py, computer/test_login_visibility.py,
 computer/test_login_vault.py, agent/test_private_login.py, brain/test_db.py,
-work-channels.test.ts and scripts/look/audit.test.mjs. The review follow-up runs
-computer, messaging, agent and background in full once, then targets any fixes.
+work-channels.test.ts and scripts/look/audit.test.mjs. After a change here run the
+computer, messaging, agent and background folders in full once (each through the place-keeper on a
+shared PC), then only the files a later fix touches.
 Report explicitly if that full run preceded the last change. Frontend verify uses
 two Vitest workers.
 

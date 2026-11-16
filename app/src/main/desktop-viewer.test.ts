@@ -1037,7 +1037,7 @@ const wire = (): void => { peer = { postMessage: vi.fn() }; Object.definePropert
 const holdControl = async (): Promise<void> => { panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); api.desktopControl.mockResolvedValue({ ...running, control: 'owner' }); await takeOver(); message('interactive', { held: true }); await flush(); };
 const pasteReplies = (sent: { mock: { calls: unknown[][] } }): unknown[][] => sent.mock.calls.filter(([data]) => (data as { type?: string }).type === 'raphael-desktop-paste');
 
-test('the owner pasting into the screen he holds sends his clipboard text to the page, and to that page alone', async () => {
+test('the owner pasting into the screen they hold sends their clipboard text to the page, and to that page alone', async () => {
   await holdControl();
   api.ownerClipboardText.mockResolvedValue('sk-or-v1-0123456789abcdef');
   const sent = peer.postMessage;
@@ -1046,7 +1046,7 @@ test('the owner pasting into the screen he holds sends his clipboard text to the
   expect(pasteReplies(sent)).toEqual([[{ type: 'raphael-desktop-paste', id: 7, text: 'sk-or-v1-0123456789abcdef' }, 'http://127.0.0.1:5000']]);
 });
 
-test('nothing is read from his clipboard while he only watches or while a member works', async () => {
+test('nothing is read from their clipboard while they only watch or while a member works', async () => {
   panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush();
   const sent = peer.postMessage;
   askPaste(7); await flush();

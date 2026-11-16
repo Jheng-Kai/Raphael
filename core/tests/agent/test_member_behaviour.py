@@ -48,7 +48,7 @@ def prompts(language="en"):
 
 @pytest.mark.parametrize("language", ["en", "zh-TW", "ja"])
 @pytest.mark.parametrize("path", list(prompts()))
-def test_every_member_prompt_says_to_do_what_the_owner_asks_in_full_in_his_own_app(path, language):
+def test_every_member_prompt_says_to_do_what_the_owner_asks_in_full_in_their_own_app(path, language):
     prompt = prompts(language)[path]
     for words in (
         "the owner's own private app, and what they ask for is for their own use",

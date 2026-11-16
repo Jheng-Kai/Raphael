@@ -704,7 +704,7 @@ describe("a turn", () => {
     expect(visible(html)).not.toContain("主人");
   });
 
-  test("the person on the right without 「」 with where and when; Raphael on the left with his face and plain words", () => {
+  test("the person on the right without 「」 with where and when; Raphael on the left with its face and plain words", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
     expect(html).toContain('data-owner-act="edit"');
