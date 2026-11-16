@@ -3,8 +3,7 @@ the reflection pass, the weekly consolidation, or the user in the settings. The 
 off a member's page (`agent/pages.py`) and out of its notes, skills and private tool transcripts (`bots/homes.py`).
 
 A model is told never to keep a password, and usually does not, but the code is the guarantee (the
-advice of Anthropic's own documentation for its memory tool). What is secret is what the owner named on
-2026-11-14 (R-SECRET-01: "除非是什麼密碼啊、金鑰啊，不然是什麼 credit cards 的密碼什麼的，那個才是機密啊"): credentials and
+advice of Anthropic's own documentation for its memory tool). What is secret is what the rule R-SECRET-01 names: credentials and
 payment secrets, and nothing else. Raphael is open source, so an address, an ID inside an address, an article, a
 hash, a file name or a fact about a person (a national ID number too) is never a secret. A memory is refused when it
 holds:
@@ -220,10 +219,9 @@ _INJECTION = (
     re.compile(r"(?:忽略|無視|无视|不要理會|別理)[^。\n]{0,12}(?:指示|指令|規則|规则|提示|設定)"),
     re.compile(r"(?:指示|命令|ルール|プロンプト)[^。\n]{0,10}(?:無視|忘れ)"),
     # A Markdown image whose address carries a query: a way to send what it is given away. A picture at a plain address
-    # is a fact, and so is a link with a query string (owner, 2026-11-14: only credentials are secret).
+    # is a fact, and so is a link with a query string (only credentials are secret).
     re.compile(r"!\[[^\]]*\]\(\s*<?(?:https?:)?//[^)\s>]*\?[^)\s>]*="),
     *(re.compile(pattern, re.I) for pattern in (
-        # Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
         # Offensive tool names are excluded: they are ordinary words too, and a fact here is about a person.
         rf"disregard\s+{_FILLER}(your|all|any)\s+{_FILLER}(instructions|rules|guidelines)",
         rf"act\s+as\s+(if|though)\s+{_FILLER}you\s+{_FILLER}(have\s+no|don't\s+have)\s+{_FILLER}(restrictions|limits|rules)",

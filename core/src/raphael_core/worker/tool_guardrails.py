@@ -1,6 +1,5 @@
 """Notes to a model that repeats itself or keeps failing, and the end of a task nobody is in.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
 A call is judged by what came of it, never by its arguments alone: the tests run again after an edit, or a
 log polled while it grows, are not repeats. A repeat is the same tool with the same arguments and the same
@@ -61,7 +60,7 @@ EXACT = (
     "the error and change the approach instead of trying it unchanged.</harness_note>"
 )
 # Calls of different tools that failed one after another (R-PERSIST-04): web_read, then show_page, then a command is
-# the usual way a model gives up, and no one tool's count sees it. Hermes's words: keep using tools, diagnose first.
+# the usual way a model gives up, and no one tool's count sees it.
 STREAK_NOTE_AT = 3
 STREAK = (
     "<harness_note>The last {count} calls failed ({tools}). Do not switch to text-only replies; keep using tools, "

@@ -52,7 +52,7 @@ def _role_part(role):
 _OWNER_STOPS = ('owner', 'interjection')
 # An unfinished reply in words, by the reason its intent was blocked for (`RoomExchanges.failure`): the kind of
 # the closed set (`failures.KINDS`), which a CLI's loop names with `cli_` before it. Each kind the owner can act on
-# has its own words (owner, 2026-11-09: no more "an error occurred" for a brain that only ran out of credits); a
+# has its own words (never "an error occurred" for a brain that only ran out of credits); a
 # kind whose cause is not known stays an error.
 _UNFINISHED = {'rate_limit':'rate_limit', 'rate_limited':'rate_limit', 'usage_limit':'quota', 'quota':'quota', 'credits':'credits',
                'context_overflow':'context_overflow', 'cost':'budget', 'reply_budget':'reply_cap', 'revoked':'removed', 'restart':'restart',
@@ -893,7 +893,7 @@ class RoomsService:
             "A stage_id is only a key for the system: never say it, a task number or any id to anyone; name work by its title and colleagues by name. "
             "After handoff, say briefly what you started. Work runs privately and reports back as a short card. "
             "Approval and sign-in cards stay private. Source document dates are never schedule authorization. ")
-        # Whether this turn may pass, as Hermes's hosted_room_discussion tells each turn: never when the owner named you.
+        # Whether this turn may pass: never when the owner named you.
         if target.get('reaction'):
             about = self._conn.execute('SELECT * FROM room_messages WHERE id=?', (target['about'],)).fetchone()
             prompt += ("Internal note from the app, not from the owner: the owner reacted " + target['reaction'] + " to this message of "

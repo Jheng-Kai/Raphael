@@ -1,6 +1,5 @@
 """A model that stops short: it says what it will do and makes no call, or the output limit cuts its reply off.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 The continuation checks recognize English, Chinese and Japanese endings.
 
 A false alarm costs one more model call that sends the same answer again, so the nudges are few and bounded.
@@ -33,7 +32,7 @@ LOOPED = (
 # Only the tail of a reply that announces the next step counts, so "I will" in the middle of a sentence never
 # does. A longer reply is an answer, not a dangling "let me".
 _MAX_CHARS = 400
-# A step announced with a verb of looking or doing counts too (R-PERSIST-04, owner, 2026-11-14: 「我先去看看今天的新聞。」
+# A step announced with a verb of looking or doing counts too (R-PERSIST-04: 「我先去看看今天的新聞。」
 # ended a turn with nothing done): "I'll first check", 「我先查」, 「先看一下」, 「接著打開」, 「まず確認します」.
 _STEP = r"(?:看|查|找|讀|读|開|开|打開|打开|搜|試|试|確認|确认|檢查|检查|讀取|读取|下載|下载|整理|處理|处理|做)"
 _INTENT = re.compile(

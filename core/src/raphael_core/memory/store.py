@@ -1,6 +1,5 @@
 """A member's memory: living Markdown files that keep being edited, never a pile of notes.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
     bots/<id>/SOUL.md     who the member is, written by the core from its details (`bots.homes.soul`)
     bots/<id>/MEMORY.md   what the member has learned; no other member reads it (`<name> 的記憶`)

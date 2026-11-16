@@ -27,7 +27,7 @@ def unfinished_note(turn: Turn) -> str:
 
 def from_colleague(turn: Turn) -> bool:
     """Whether another member handed this turn's words to the member (a question, a hand-off): they are that member's,
-    never the owner's, whichever way the turn was written down (owner, 2026-11-11: Raphael's brief to a member stood in its
+    never the owner's, whichever way the turn was written down (Raphael's brief to a member stood in its
     conversation as the owner's own message). A hand-off into the member's own work (`worker`, `delegate`) names who handed
     it over in `peer_id`; the owner's own requests name nobody."""
     return turn.source == "member" or (turn.route in ("worker", "delegate") and turn.peer_id is not None

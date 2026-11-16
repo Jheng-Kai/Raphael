@@ -1,6 +1,5 @@
 """Named DuckDB work through vm_exec.
 
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 Only the member workspace is used; no host data engine.
 """
 

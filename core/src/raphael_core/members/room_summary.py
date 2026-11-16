@@ -1,6 +1,6 @@
 """The rolling summary of a room thread: decisions and progress, so that a member whose session is renewed (or whose
 reply is the first it ever made there) is given "summary + recent window" of the discussion, not a transcript cut at
-some character (owner, 2026-11-11, from the harness plan of 2026-11-09, section A).
+some character.
 
 The messages after the summary's last one that are older than the recent window (`KEEP_CHARS`, what a reply carries
 whole, `exchanges.ROOM_CONTEXT_CHARS`) are folded into it when they come to `MIN_FOLD_CHARS`, with the owner's auxiliary

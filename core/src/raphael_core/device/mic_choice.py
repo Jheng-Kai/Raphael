@@ -5,7 +5,7 @@ Pure logic with no audio in it; `audio.py` feeds it the microphones PortAudio li
 
 * A loopback ("Stereo Mix", 「立體聲混音」: what the speakers play) is never a microphone, whatever
   else is there.
-* An attached microphone (a headset, a USB or a jack microphone) comes before a laptop's built-in
+* An attached microphone (a headset, a USB or a 3.5 mm microphone) comes before a laptop's built-in
   array. Nothing here names a maker of headsets: a built-in array is recognised by what Windows or
   macOS calls it (「MacBook Pro Microphone」), and an iPhone that offers its microphone to the Mac
   nearby (Continuity) counts as built in, so that it never takes over from the Mac's own.
@@ -14,7 +14,7 @@ Pure logic with no audio in it; `audio.py` feeds it the microphones PortAudio li
   moves because of a sound level, the order PortAudio lists them in, or the Windows default.
 * Nothing that happens at the start of a recording moves it: a headset with a noise gate or a muted
   boom returns digital silence until someone speaks, and nobody speaks in the first moment
-  (owner, 2026-11-14: the start of every recording sent automatic from his quiet headset to the
+  (the start of every recording sent automatic from a quiet headset to the
   laptop's array, and it jumped between the two). Only a microphone that gave digital silence for two
   whole recordings in a row (each of `SILENT_RECORDING_S` or more) and was never heard is tried after
   the others, until it is heard or plugged in again.

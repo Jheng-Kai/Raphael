@@ -8,7 +8,7 @@ NOTE = ("Before finishing computer work, check the result with verify_state and 
 READS = {"get_window_state", "get_browser_state", "get_desktop_state", "verify_state"}
 # browser_open answers with the page it opened (its references and text): the change and its read in one call. Asked
 # to read that page again before answering, every "open this page and tell me" turn was started again and said its
-# answer twice (real members, 2026-11-13).
+# answer twice (seen with real members).
 OPENED = {"browser_open"}
 CHANGES = {"click", "double_click", "right_click", "type_text", "press_key", "hotkey", "scroll", "drag",
            "launch_app", "bring_to_front", "clipboard_write", "browser_open", "browser_navigate", "browser_click",

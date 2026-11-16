@@ -25,7 +25,7 @@ from ..paths import local_storage_root
 LEASE_SECONDS = 15
 # The owner's press on Take control gives an action a member already has under way this long to end (the member's
 # next action is refused from the moment the press lands): a press that fell between two of a working member's
-# actions used to be answered "desktop busy" and leave him with no way to try again (2026-11-14).
+# actions used to be answered "desktop busy" and leave him with no way to try again.
 TAKE_WAIT_S = 10
 # An open page polls every two seconds and each answer starts several Docker processes.
 UNWATCHED_STATUS_S = 10
@@ -508,7 +508,7 @@ class DesktopViewer:
         if pending and (pending.member_id != session.member_id or pending.conversation_id != session.conversation_id):
             raise invalid_params("private conversation required")
         if held:
-            # The owner can take over whenever he asks (2026-11-14): another view of his own that still holds the
+            # The owner can take over whenever he asks: another view of his own that still holds the
             # computer, or a hold nobody keeps and nobody waits on, is his to take. Only a recording in the old
             # holder's view, which a take-over would cut, refuses.
             if owner not in (None, token) and self.teaching and self.teaching.active(owner):

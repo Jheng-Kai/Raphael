@@ -1,6 +1,5 @@
 """Durable conversation pages and their ephemeral, isolated loopback host.
 
-Adapted from OpenMausBot (Apache-2.0); see core/packaging/licenses.
 No page is served from the application's origin.
 """
 
@@ -484,7 +483,7 @@ class Pages:
         return await self.tool_call(page, params)
 
     async def export(self, params):
-        """Saves a page as a file the owner can pass on (owner, 2026-11-10: 存成檔案; 2026-11-14: Share on every page): a
+        """Saves a page as a file the owner can pass on: a
         report as the document the app drew of it (`html`, checked by report_page.checked_file), an HTML page as the file
         this core builds of what is stored (`page_file`: nothing the window says goes into it). Named after the page, in
         the owner's output folder, or in `downloads` (the shell's Downloads folder) when none is chosen or it takes

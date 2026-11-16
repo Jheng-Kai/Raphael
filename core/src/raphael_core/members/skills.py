@@ -50,7 +50,7 @@ def slash_skills(skills, commands):
     return result
 
 
-# At most this many NEW learned skills a member gets in this window (owner, 2026-11-11: "他現在一直建立 skills").
+# At most this many NEW learned skills a member gets in this window, since a member kept creating them.
 # Changes to an existing skill are not counted.
 NEW_SKILL_CAP = 1
 NEW_SKILL_WINDOW = timedelta(hours=24)

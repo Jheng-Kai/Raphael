@@ -1,6 +1,6 @@
 """The tabs of a member's own browser window, as the members' tools offer them.
 
-Owner, 2026-11-14, watching a member's screen: the members never open tabs, and every new site replaced what was on it.
+The members never opened tabs, and every new site replaced what was on the screen.
 The driver binds a window and lists its tabs, but opens and brings to the front none, and cannot say which tab a window
 shows when the tabs are the browser's own pages (it answers `active: null` for a new tab page; measured on 0.37.0). The
 computer's image does both through the browser's own DevTools port (`raphael-browser-tabs`, image layer 12). Which tab a

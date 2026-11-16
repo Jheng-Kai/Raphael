@@ -173,9 +173,9 @@ class NarratedLoop:
         try:
             # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
             # it: asking again repeats nothing, since the tools run only after a reply. Before that the owner learns in seconds.
-            # Here "done something" is still any tool, a read included (owner, 2026-10-31, "Long team work", pinned by
+            # Here "done something" is still any tool, a read included (pinned by
             # test_long_turn). A CLI turn and a background task count only what they changed outside (`acted`); whether
-            # this loop does too is the owner's open decision.
+            # this loop does too is open.
             outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.used_tools)
             while True:
                 try:

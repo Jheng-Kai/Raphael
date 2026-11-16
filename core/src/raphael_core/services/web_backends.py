@@ -1,6 +1,5 @@
 """Explicit web routes with bounded provider protocols.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
 Public routes have separate ids; an authentication or quota failure never changes
 the route. Calls use web's shared throttle, response bound and turn deadline.

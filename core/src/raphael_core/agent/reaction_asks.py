@@ -1,4 +1,4 @@
-"""What a reaction of the owner's asks of the member whose reply it was (owner, 2026-11-14, after Grok Bot).
+"""What a reaction of the owner's asks of the member whose reply it was.
 
 Every reaction is analysed, at once: no wait and no list of emoji that count. The member's own model reads the emoji,
 its reply and the recent conversation, all as data, and decides whether to say something (ask what was wrong, a few

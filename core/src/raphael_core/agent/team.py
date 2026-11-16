@@ -340,7 +340,7 @@ def team_tools_for(
     `always` (the voice fast tier) only the ones the request is about: it names someone it may ask,
     or asks for a new member."""
     # skill_manage is offered for a request about skills, and on the CLI brains' and the workers' fixed tool set
-    # (`always`); an enabled skill alone offers only reading (owner, 2026-11-11: a member kept creating skills).
+    # (`always`); an enabled skill alone offers only reading (a member kept creating skills).
     tools = []
     if team is not None:
         has_skills = getattr(team, "enabled_skills", lambda member_id: [])(speaker.id)

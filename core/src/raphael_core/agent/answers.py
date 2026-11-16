@@ -108,7 +108,7 @@ _NEED = {
 
 def reply_schema(memory: bool = False, *, plain: bool = False) -> dict:
     """The JSON the model must return: the kind of the reply is one of `REPLY_KINDS`, the same words whatever the
-    interface language (owner, 2026-11-14: it goes to no model; `parse_reply` turns the kind into the prefix the app
+    interface language (it goes to no model; `parse_reply` turns the kind into the prefix the app
     shows). With a `memory`, the fields `memory` and `need` too. A `plain` reply (a member's) has no prefix."""
     properties: dict[str, Any] = {
         "prefix": {"type": "string", "enum": list(REPLY_KINDS)},
@@ -175,7 +175,7 @@ def build_user_message(
     """What the model is shown: the summary of the earlier conversation, the latest turns
     (oldest first), the date and time, the results of the tools, the question in tags, which mark it
     as the user's words, and last the rule of the language to reply in, which names no language: the owner's words
-    say which (owner, 2026-11-14: the interface language goes to no model). What changes least comes first.
+    say which (the interface language goes to no model). What changes least comes first.
     `looked_up` says that the lookups the model asked for were made (their results are among the
     tools) and that it is to answer now. `narrated` and `member` retain call compatibility; all authored speech follows the speaker,
     never the interface language. `standing` is what holds for the turn and may differ at the next: the team as it
@@ -357,7 +357,7 @@ def _unpointed(text: str) -> tuple[str, bool]:
 
 def _joined_reply(text: str) -> dict | None:
     """A reply written as objects one after another, nothing but space between them, the last one the reply object.
-    Live (2026-11-16, a ChatGPT sign-in model): the final answer was its last progress object followed by the reply,
+    Seen live with a ChatGPT sign-in model: the final answer was its last progress object followed by the reply,
     `{"thinking":…,"progress":…,"messages":[…]}{"text":…,"messages":[…],"memory":[],"need":{}}`, and the conversation
     showed both objects whole, line breaks as `nn`. The messages an earlier object wrote for the owner come first."""
     decoder, objects, at = json.JSONDecoder(), [], 0
@@ -431,7 +431,7 @@ _OBJECT_OPEN = re.compile(r'\{\s*"(?:' + "|".join(sorted(_PROTOCOL_KEYS)) + r')"
 
 
 def _without_protocol_tail(text: str) -> str:
-    """Words without the rest of the reply object that a model wrote into them. Live (2026-11-14, a ChatGPT sign-in model):
+    """Words without the rest of the reply object that a model wrote into them. Seen live with a ChatGPT sign-in model:
     a valid reply whose `text` ended `…畫面？","messages":["…"],"memory":[],"need":""}`, and the conversation showed the
     fields, its escaped line breaks as `nn`. Only a tail that is itself the rest of a reply object, of the reply's own
     fields and nothing after it, whose opening brace is not in the words, is taken off: an object written whole in the

@@ -1,6 +1,5 @@
 """How long to wait before a failed model call is made again.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 
 Jittered delays (vs. fixed ones) keep many sessions that meet the same throttled provider from retrying in step.
 Standard library only: the worker process imports `failures`, which imports this.

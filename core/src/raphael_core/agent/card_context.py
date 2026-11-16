@@ -3,8 +3,7 @@
 Card stores remain the authority. No credentials, pairing codes, raw HTML, tool arguments or
 raw errors are projected. Display strings and owner answers are untrusted data. The one place a
 card carries content is a page the member itself wrote (source html): its title, when it was made
-and the start of its visible text, so that a later turn can say what it made and update it (owner,
-2026-11-14: a member asked for the title of the page it had made that morning answered that it had no record).
+and the start of its visible text, so that a later turn can say what it made and update it (otherwise a member asked for the title of the page it had made that morning would answer that it has no record).
 """
 
 import html as html_lib

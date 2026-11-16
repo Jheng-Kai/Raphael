@@ -296,7 +296,7 @@ async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str
 # --- reading a page -------------------------------------------------------------------------------
 
 
-# A consent or terms step that stands in front of a page (R-PERSIST-06, owner, 2026-11-14: a news site's 「ご利用にあたって」
+# A consent or terms step that stands in front of a page (R-PERSIST-06: a news site's 「ご利用にあたって」
 # page came back with its navigation, well over the short-text mark, and the member read only the lead). The button words
 # count anywhere; the title of such a page only on a page short enough to be little more than it.
 _GATE_WORDS = (

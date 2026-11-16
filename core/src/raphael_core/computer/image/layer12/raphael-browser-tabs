@@ -10,7 +10,7 @@ usage:
   raphael-browser-tabs fit WINDOW X Y WIDTH HEIGHT the window fills that screen above its panel, maximized by the browser
 WINDOW is the X window id (decimal or 0x hex). One JSON object on stdout; on failure exit 1 with one line on stderr.
 
-Owner, 2026-11-14, watching a member's screen: the members never open tabs, a page he minimized could not be found again,
+The members never open tabs, a page that was minimized could not be found again,
 and the seat's window showed an empty page whose tab and address read data:text/html,<title>raphael-seat-...</title>.
 The browser can say which tabs a window has and which one is shown, open a tab in a window and bring one to the front;
 its X window cannot, and the driver's tools neither open nor switch a tab. Standard library only: Debian's Python runs it.

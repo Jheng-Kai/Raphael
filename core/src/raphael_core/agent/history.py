@@ -113,7 +113,7 @@ def is_unfinished(turn: Turn) -> bool:
     )
 
 
-# What a reply says when it could not do what was asked (R-PERSIST-05, owner, 2026-11-14: a member's 「我無法讀到」 of one
+# What a reply says when it could not do what was asked (R-PERSIST-05: a member's 「我無法讀到」 of one
 # day was read back every later day as a fact, and it stopped trying). Only a short reply counts, and only with the turn's
 # last call failed (`with_work`): a delivered answer that mentions a limit is an answer.
 _COULD_NOT = re.compile(

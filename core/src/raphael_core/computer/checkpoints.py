@@ -1,6 +1,5 @@
 """Guest-only file checkpoints, with hash-guarded restore preserving later edits.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 No guest dependencies are required.
 """
 
@@ -25,7 +24,7 @@ PROGRAM_FOLDERS = {".config", ".local", ".mozilla", ".pki", ".npm", ".tmp", ".th
                    "Crashpad", "BrowserMetrics"}
 UNTRACKED = EXCLUDED | PROGRAM_FOLDERS
 LOCK_FILES = {"SingletonLock", "SingletonSocket", "SingletonCookie", ".parentlock"}
-# Nor is what a tool leaves behind while the member works (owner, 2026-11-14: a card 「新增了 30 個檔案」 of bare hashes, the content store
+# Nor is what a tool leaves behind while the member works (a card of 30 added files, all bare hashes, the content store
 # `npm i --cache /home/cua/workspace/.npm-cache` writes): a hidden folder (a tool's own store: .git, .npm-cache, .next, .claude), a package
 # or build store, a cache or temporary folder, lock files, temporary and partial downloads, and a file named by a bare hash. The card lists
 # only what the owner would recognise as the work's result: documents, code, data, pictures, video, audio and pages.

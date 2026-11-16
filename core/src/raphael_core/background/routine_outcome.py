@@ -1,4 +1,4 @@
-"""Whether a routine's run did its work (owner, 2026-11-11: runs ended "done" with nothing made, and the owner could not tell a
+"""Whether a routine's run did its work (runs ended "done" with nothing made, and the owner could not tell a
 failed run from a good one).
 
 A run is done only when its turn ended without an error AND the work was not refused on the way AND, for a routine whose purpose

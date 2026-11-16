@@ -1,6 +1,5 @@
 """Discord DMs, with pairing and approvals owned by the existing switchboard.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
 """
 
 import asyncio

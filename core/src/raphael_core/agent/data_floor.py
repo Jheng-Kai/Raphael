@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlparse
 
 
 # What a run is told to use in place of a command: the floor keeps commands and file tools off Raphael's own folders, and
-# the tools meant for what a run needs there read it (owner, 2026-11-11: a routine could not read its page template or the log).
+# the tools meant for what a run needs there read it, so that a routine can read its page template and the log.
 READ_INSTEAD = (" To read a skill's own files (a page template, data) use skill_read with its name and reference; "
                 "to see the app's state, its log and recent failures use self_check.")
 # What the model is told. The owner reads other words (`persona.PHRASES.protected_data`), never this sentence.

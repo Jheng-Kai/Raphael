@@ -14,7 +14,7 @@ fi
 # The flags the driver itself starts its isolated browser with (measured), so the profile behaves the same, and:
 # - AutomationControlled off. A browser started with --remote-debugging-port=0 tells every page it is automated
 #   (navigator.webdriver), and Google then refuses the owner's own sign-in ("This browser or app may not be
-#   secure", owner, 2026-11-13). The owner signs in here by hand; the members use what he signed in to.
+#   secure"). The owner signs in here by hand; the members use what the owner signed in to.
 # - --test-type: without it the two flags above it each put a yellow warning bar over every window.
 # - no crash bubble: a computer is stopped by ending its processes, and the next start offered "Restore pages?".
 flags="--user-data-dir=$profile --no-first-run --no-default-browser-check --disable-background-networking --disable-component-update --disable-default-apps --disable-extensions --password-store=basic --no-sandbox --disable-blink-features=AutomationControlled --test-type --hide-crash-restore-bubble"

@@ -164,8 +164,7 @@ class ChatGPTProvider:
 
     async def chat_tools(self, *, model, messages, tools, timeout_s, max_tokens, fallbacks=(), reasoning_effort="none",
                          _retain_reasoning=True, _cache_key=None, session=None, cache_ttl=None):
-        """One turn of a conversation. `session` names the conversation: as Codex does (core/src/client.rs,
-        requests/headers.rs), it is the prompt cache key and the `session-id` header, from which ChatGPT
+        """One turn of a conversation. `session` names the conversation: it is the prompt cache key and the `session-id` header, from which ChatGPT
         derives cache affinity, so every turn of it lands where its prefix is cached. The cache's lifetime
         is the service's own (`cache_ttl` is for Anthropic prompts)."""
         token = await self.auth.access_token()

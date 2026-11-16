@@ -91,7 +91,7 @@ class Speaker:
     def uses_plugin(self, key: str) -> bool:
         """Respect owner-selected connections without restricting built-in harness tools. A member's own computer is
         not a connection: its tools are keyed `mcp:computer-<computer>/<tool>`, so the owner's list of connections
-        never names them, and a member with a list must not lose its computer for that (owner, 2026-11-14: a member
+        never names them, and a member with a list must not lose its computer for that (a member
         with four chosen tools said it would use its own computer and could not). Every member has its computer
         (R-COMP-ACCESS-01); whether one is on offer at all is the computer's own state, never this list's."""
         server = plugin_server(key)

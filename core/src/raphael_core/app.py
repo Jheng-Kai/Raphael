@@ -205,7 +205,7 @@ class EchoClient:
 
     One scripted exception, for the tests of the background worker: a request that begins with
     `[delegate]` is routed to the worker, and `chat_tools` then plays a fixed task. A connection's
-    tools are found, never listed (owner, 2026-11-09, decision 2), so a task that says "look" or
+    tools are found, never listed, so a task that says "look" or
     "slow" first finds them with find_tools. It then calls the tool named `look` of a connected
     service twice (topics "alpha" and "beta"; or the time, when the service is not there), a tool
     named `slow` once if the request says "slow", each found one through use_tool, and reports in

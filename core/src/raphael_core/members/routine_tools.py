@@ -2,7 +2,7 @@
 
 A routine runs without the owner at the keyboard (`background.snapshot.take_snapshot`): the commands for
 this computer, the desktop and a few of the conversation's tools do not exist there. An instruction that
-tells the run to call one of them (owner, 2026-11-11: `team_overview` and `team_work` in a health check,
+tells the run to call one of them (`team_overview` and `team_work` in a health check,
 `unknown_tool` four times) can never be followed, so it is refused when it is written, with the tools that
 exist, and the member rewrites it.
 """
