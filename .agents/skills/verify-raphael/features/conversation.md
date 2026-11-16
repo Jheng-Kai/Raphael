@@ -289,6 +289,28 @@ itself stays the media message above, not drawn twice), any other target says ã€
 `chat.pictureMissingBare`, all 15 locales), a renderer given no files shows the words alone, and one still arriving shows its words.
 attachment-links.test.ts holds it with a turn of the real shape; `message-attachment-link` does not draw an image link yet.
 
+## A link a phone cannot open goes as the file, or in words (R-MSG-LINK-03)
+
+The owner reads members on Telegram on his phone and could not open links they sent: in his database, three replies of 43
+Telegram turns (and 22 tasks) named a file by its path in the member's computer (`/home/cua/team/...`), next to six with
+public links that open. Every message to an outside chat (Telegram, Slack, Discord; Raphael's bot and a member's own; a reply,
+a task's report, a routine's) leaves through `Switchboard.tell`, and there it passes `messaging/links.py deliverable`. The one
+judgement is `unreachable(target)`: a path of a computer (POSIX under a system top folder, `~/`, a drive letter, a share,
+`file:`, `sandbox:`), an `attachment:` link, this PC's page host (`http://127.0.0.1:<port>/p/<token>`) and any other local
+address (loopback, private, link-local and shared ranges, a one-label name, `.local`/`.internal`/â€¦ and `localhost:<port>`
+without a scheme). A public link, `mailto:`, `tg:` and an API path like `/api/users` are none. The app's `LinkedFiles`
+finds the file: a path under the member's `/home/cua/workspace` or `/home/cua/team`, read from the folder this PC keeps for it
+(the reach of its `attach_file`; a computer on another host has none here), a stored `attachment:` id, or a page as the HTML
+file `pages.export` saves (`Pages.file_at`; a report or a plugin's page is none). A found file goes after the messages through
+the channel's own document/photo upload, once (a file the turn already delivered is not sent again), and its link becomes its
+name; anything else becomes its name or words and a note in the interface language (`link_file`, `link_local`, all 15 locales),
+never the dead link. A path of this PC is never uploaded for a link (R-BATCH-02). A link in a fenced code block is code.
+The member is told twice: the turn being answered from a chat carries `PHONE_LINKS` with its source line (attach the file with
+`attach_file`), and a turn of the conversation so far that went over a chat says how many of its links a phone cannot open.
+Offline contracts: core/tests/messaging/test_links.py (the judgement table, words in five languages, the folders, a fake Bot API
+receiving the document and no dead link, a report naming the member whose work it was) and
+core/tests/agent/test_card_context.py (the note in the next actual prompt). Not covered: a real Telegram chat on a phone.
+
 ## One member, one working slime (R-SLIME-03)
 
 A reply that queued research in the background once drew two working slimes (an empty slime under the reply, a task line with the
@@ -1951,7 +1973,9 @@ Telegram returns only attachments from the completed turn's stored tool receipts
 to the paired chat. PNG/JPEG up to 10 MiB use sendPhoto; MP3/M4A use sendAudio;
 other files use sendDocument, with a 50 MiB maximum. An oversized file names the
 original Raphael conversation as the place to open it. Revocation is checked again
-before delivery. Paths supplied by a model are never uploaded.
+before delivery. A path of this PC supplied by a model is never uploaded; a link in the
+words that names a file of the member's computer folders, a stored file or a page goes
+as that file (R-MSG-LINK-03).
 
 Offline contracts: core/tests/agent/test_steering.py,
 core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,

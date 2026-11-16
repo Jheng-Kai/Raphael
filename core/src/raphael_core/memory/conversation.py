@@ -219,8 +219,10 @@ def turn_text(turn: Turn, *, detail: bool, untrusted: bool = False) -> str:
             cut = answer if len(answer) <= 600 else answer[:600].rstrip() + "…"
             lines += "\n" + labelled_lines("Other member's answer", cut)
     from ..agent.reactions import reaction_context
-    from ..agent.card_context import outcomes_text, source_text
-    return source_text(turn.source) + lines + reaction_context(turn.reactions) + outcomes_text(turn.card_outcomes)
+    from ..agent.card_context import outcomes_text, source_text, unreachable_note
+    if not unfinished:
+        lines += unreachable_note(turn.source, said)
+    return source_text(turn.source, now=False) + lines + reaction_context(turn.reactions) + outcomes_text(turn.card_outcomes)
 
 
 def _turn_tokens(turn: Turn) -> int:

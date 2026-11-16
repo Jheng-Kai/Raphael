@@ -1084,6 +1084,21 @@ class App(Router):
         self.register("messaging.pairing.answer", self.messaging.cards.answer)
         self.messaging.register(self)
         self.members.remove_messaging = self.messaging.remove_member
+        # A link in a message to a chat that the owner's phone cannot open goes as the file it names (R-MSG-LINK-03): a
+        # file of the member's computer folders this PC keeps (none for a computer on another host; the same two folders
+        # its `attach_file` takes from, which lie in Raphael's data folder and so are no case for the data floor), of the
+        # attachment store, or a page of the app as the file the app saves of it.
+        from .computer.vm import GUEST as VM_GUEST
+        from .messaging.links import LinkedFiles
+
+        def computer_folders(member):
+            if self.vm.remote:
+                return {}
+            target = self.vm.target(member)
+            return {VM_GUEST: target.workspace, VM_SHARED: target.shared}
+        self.messaging.linked_files = LinkedFiles(
+            folders=computer_folders, home=VM_GUEST.rsplit("/", 1)[0], attachments=self.attachment_store,
+            page=self.agent.pages.file_at)
 
         self._speech = SpeechModels(
             self.manager, make_segmenter=self._make_segmenter, make_engine=self._make_engine
@@ -1572,9 +1587,14 @@ class App(Router):
         except RuntimeError:
             return
         from .services.artifacts import turn_files
+        from .messaging.core import session_target
         files = list(turn_files(self.agent._history, task.turn_id or 0, self.attachment_store))
-        sent = loop.create_task(self.messaging.report(
-            task.session_id, text[0] if len(text) == 1 else text, **({"files": files} if files else {})))
+        options: dict[str, Any] = {"files": files} if files else {}
+        chat = session_target(task.session_id)
+        if chat is not None and type(task.member_id) is int and task.member_id != chat[0]:
+            # A member's work handed over in another bot's chat: the links of its report name that member's computer.
+            options["member"] = task.member_id
+        sent = loop.create_task(self.messaging.report(task.session_id, text[0] if len(text) == 1 else text, **options))
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _tell_chat_to_answer_here(self, task_id: object) -> None:
