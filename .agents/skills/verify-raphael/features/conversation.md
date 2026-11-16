@@ -2109,6 +2109,7 @@ The group summary chooses one state in every locale: waiting for the owner, othe
 
 ```powershell
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal centred-system-events --theme both --width 1120,720,1920x1080
+```
 
 ## Shared conversation card shell
 
@@ -2134,15 +2135,15 @@ Inspect every contact sheet and relevant full-size images. Fixture success does 
 network, cargo or real-provider acceptance.
 
 
-`````sh
+```sh
 npm run look -- card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-connect-expired card-connect-cancelled card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-sheet --theme both --width 1120,720,1920x1080
 ```
 
-`````sh
+```sh
 npm run look -- card-page-ready card-page-failed card-background --theme both --width 1120,720,1920x1080
 ```
 
-`````sh
+```sh
 npm run look -- card-task-no-file-card --theme both --width 1120,720,1920x1080
 ```
 
