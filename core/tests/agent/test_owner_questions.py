@@ -540,7 +540,7 @@ async def test_allow_all_still_asks_what_only_the_owner_knows(wired, client):
 @pytest.mark.parametrize("brain", ["api", "cli"])
 async def test_words_sent_while_the_member_works_are_answered_after_it_asks_the_owner(wired, client, monkeypatch, tmp_path, brain):
     """The member's turn ends with a question for the owner, its loop parked in the background, and never read what the owner
-    wrote meanwhile: those words are a turn of their own at once, and the card still waits (R-QUEUE-08)."""
+    wrote meanwhile: those words are a turn of their own at once, and the card still waits (R-QUEUE-10)."""
     from .test_unread_steering import working_cli
     agent, background = wired
     if brain == "cli":

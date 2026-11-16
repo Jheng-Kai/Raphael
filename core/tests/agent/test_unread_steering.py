@@ -1,4 +1,4 @@
-"""Words the owner sent while a member worked, that the member's model never read, are never left behind (R-QUEUE-08).
+"""Words the owner sent while a member worked, that the member's model never read, are never left behind (R-QUEUE-10).
 However that work ends they come back as a turn of their own, ahead of what was queued after them; what a model read is
 settled the moment it reads it, so a core that died runs only the unread words again, once; and 「立即送出」 on any waiting
 message ends in that message being read."""

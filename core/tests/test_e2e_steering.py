@@ -3,7 +3,7 @@
 The core is a child process speaking JSON-RPC on stdio, with the fake LLM (a native journey's script decides only what the
 model chooses), a data directory of its own and a keyring that fails on every use. No key, no network, no cost. The
 member's turn ends with a question for the owner and never reads the words written meanwhile: they are answered next, as a
-turn of their own (R-QUEUE-08).
+turn of their own (R-QUEUE-10).
 """
 
 import time

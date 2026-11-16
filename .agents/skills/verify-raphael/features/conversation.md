@@ -2312,6 +2312,21 @@ records), and withdrawing it first removes it from the pending note. A turn that
 makes no further call before it ends leaves the message unread; it then starts the
 next turn in FIFO order, as before.
 
+R-QUEUE-10: words handed to running work that its model never read are never left behind, however the work ends:
+answered, failed, stopped, its CLI gone, handed off to a colleague (a Claude Code turn that hands off sets them aside
+unread, `OwnerInput.set_aside`), ended on a question for the owner (the loop parks in the background and is closed), or
+waiting on a card that is refused or runs out (`_drop_followup`). They go back to the front of the inbox in the order
+they were said and are each answered as a turn of their own, before anything queued after them. One step does it,
+`AgentService._release_steering`, wherever the inbox is read (`_claim` before every drain step, every admission,
+「立即送出」, the end of every loop): a steering row stays only while a live loop (its turn running or waiting on a card,
+its input open) still holds it unread. What a model reads is settled at that moment (`OwnerInput.on_read`, `_steered`),
+so start-up (`AgentInbox.recover`) puts back only unread steering rows, once, at the front. 「立即送出」 on a steering row
+that no work holds takes it back; on a queued row behind one, the drain takes both in order. The app is unchanged: its
+button was never disabled; the core answered `sent: true` while its claim refused every row behind the left steering
+row. Evidence: core/tests/agent/test_unread_steering.py, core/tests/agent/test_owner_questions.py (asks the owner, API
+and CLI) and core/tests/test_e2e_steering.py (a real core over stdio, the fake LLM and the `[native-steer:ask]` journey
+script of native_journeys.py).
+
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
 queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
@@ -2323,7 +2338,8 @@ started as its own turn this way too (it never steers). Rooms keep a new exchang
 A message already steered and read, or already started, is not sent again (`sent: false`).
 Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read
 shows as sent, not queued, so it has no 「立即送出」; Stop returns it to the field, and the
-messages with files or behind another queued one show 「排隊中」 and offer it.
+messages with files or behind another queued one show 「排隊中」 and offer it. Once that
+work ends without reading it, it runs at once or waits as 「排隊中」 again (R-QUEUE-10).
 ```powershell
 npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
