@@ -259,7 +259,13 @@ class RoomExchanges:
     def schedule(self, room_id):
         if self.closed:
             return
-        task = asyncio.create_task(self.drive(room_id))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Start-up delivers what the last run left (`BackgroundService.use_team`) before the loop runs: a drive asked for
+            # then broke that delivery off and was never run. `RoomsService.start` drives every queued exchange once the loop runs.
+            return
+        task = loop.create_task(self.drive(room_id))
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
 
