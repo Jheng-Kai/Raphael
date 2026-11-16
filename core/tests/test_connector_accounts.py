@@ -3,11 +3,14 @@ Every request stops at an HTTP double of Composio."""
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import httpx
 import pytest
 
+from raphael_core.connectors.cards import CAUSES, _cause_of
+from raphael_core.connectors.google import scopes_for
 from raphael_core.connectors.http import ConnectorFailure
 from raphael_core.connectors.service import SIGN_IN_LIMIT_S
 from raphael_core.connectors.store import Connector, ConnectorStore
@@ -441,3 +444,202 @@ async def test_a_waiting_account_that_composio_will_not_give_back_stays_and_says
     fake.delete_status = 200
     result = await router.call("connectors.remove_account", {"id": "composio:gmail", "account_id": "ca_test"})
     assert result["connector"]["accounts"] == [] and fake.deleted == [("ca_test", False)]
+
+
+# ---- The built-in Google sign-in waits in the browser too (R-ACCT-03): it takes the lock to set up and to finish, never for the wait.
+
+class GoogleBrowser:
+    """The two outside parties of the Google sign-in, without a browser or a socket: the page the owner is sent to and the
+    loopback address the answer comes back to. `answer` is what the owner does in the browser."""
+
+    def __init__(self):
+        self.opened, self.listeners, self.closed = [], 0, 0
+        self.again()
+
+    def again(self):
+        self.entered = asyncio.Event()
+        self.answer = asyncio.get_running_loop().create_future()
+
+    async def open(self, url):
+        self.opened.append(url)
+
+    def listener(self, state, timeout):
+        browser = self
+
+        class Callback:
+            redirect_uri = "http://127.0.0.1:1/callback"
+
+            async def wait(self):
+                browser.entered.set()
+                return await browser.answer
+
+        @asynccontextmanager
+        async def loopback():
+            browser.listeners += 1
+            try:
+                yield Callback()
+            finally:
+                browser.closed += 1
+        return loopback()
+
+
+class GoogleWorld(Accounts):
+    """Composio, and Google's token, profile and revocation, as HTTP doubles."""
+
+    def __call__(self, request):
+        if request.url.host == "oauth2.googleapis.com":
+            if request.url.path == "/revoke":
+                return httpx.Response(200, json={})
+            return httpx.Response(200, json={"access_token": "access-private", "expires_in": 3600, "token_type": "Bearer",
+                                             "refresh_token": "refresh-private", "scope": " ".join(scopes_for("write", "write"))})
+        if request.url.host == "gmail.googleapis.com":
+            return httpx.Response(200, json={"emailAddress": "me@example.com"})
+        return super().__call__(request)
+
+
+REFRESH = "connectors:google:refresh_token"
+
+
+async def google_sign_in_waiting(tmp_path, conn):
+    """The owner's own Google, signing in (the answer not yet given), with GitHub connected beside it."""
+    browser = GoogleBrowser()
+    router, service, hub, vault = setup_service(tmp_path, conn, GoogleWorld(statuses=("ACTIVE",)), open_browser=browser.open,
+                                                google_listener=browser.listener, sleep=no_wait, wall=lambda: NOW)
+    await router.call("connectors.set_key", {"key": "ak_private"})
+    await router.call("connectors.google.configure", {"client_id": "desktop"})
+    github = Connector("composio:github", "composio", status="ACTIVE", name="GitHub", accounts=[account("ca_gh", "ACTIVE", label="Me")])
+    github.enabled_tools = ["GITHUB_A"]
+    service.store.connectors[github.id] = github
+    task = asyncio.create_task(router.call("connectors.google.connect"))
+    await asyncio.wait_for(browser.entered.wait(), 2)
+    return router, service, browser, vault, task
+
+
+def nothing_half_written(tmp_path, service, browser, vault, *, token=None):
+    """What an ended sign-in leaves: the app not connected (on disk too), no waiting marker, the lock free, the callback closed."""
+    assert service.store.connectors["google"].status == "INACTIVE" and ConnectorStore(tmp_path).connectors["google"].status == "INACTIVE"
+    assert service._signing_in == set() and not service.login_pending and not service._lock.locked()
+    assert browser.closed == browser.listeners
+    assert vault.get(REFRESH) == token
+    assert not service.hub._config.get("connectors_google").enabled
+
+
+@pytest.mark.parametrize("method,params", [
+    ("connectors.disconnect", {"id": "composio:github"}),
+    ("connectors.label", {"id": "composio:github", "account_id": "ca_gh", "label": "Work"}),
+    ("connectors.set_tools", {"id": "composio:github", "enabled": False}),
+    ("connectors.tools", {"id": "composio:github"}),
+    ("connectors.set_tools", {"id": "google", "enabled": False}),
+    ("connectors.tools", {"id": "google"}),
+], ids=["disconnect", "rename", "switch", "tools", "google-switch", "google-tools"])
+async def test_nothing_else_of_the_connections_waits_behind_a_google_sign_in_that_waits(tmp_path, conn, method, params):
+    """The Google sign-in waits two minutes for the browser; what the owner presses meanwhile is done, not queued behind the
+    lock until it runs out its 30 seconds and fails."""
+    router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    try:
+        result = await asyncio.wait_for(router.call(method, params), 2)
+        assert not (isinstance(result, dict) and result.get("ok") is False), result
+        assert service.login_pending and not task.done()  # and the sign-in goes on
+    finally:
+        await router.call("integrations.connect_cancel")
+        assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+
+
+async def test_a_second_sign_in_asked_for_while_a_google_sign_in_waits_starts_no_second_browser_flow(tmp_path, conn):
+    """The same answer as for an app of Composio: busy, and the sign-in that waits is the only one (one page, one callback)."""
+    router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    try:
+        again = await asyncio.wait_for(router.call("connectors.google.connect"), 2)
+        other = await asyncio.wait_for(router.call("connectors.connect", {"toolkit": "gmail"}), 2)
+        assert again["ok"] is False and again["error"] == "busy" and other["ok"] is False and other["error"] == "busy"
+        assert len(browser.opened) == 1 and browser.listeners == 1
+        assert service.login_pending and not task.done()
+    finally:
+        await router.call("integrations.connect_cancel")
+        assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+
+
+async def test_cancelling_a_google_sign_in_ends_it_and_leaves_nothing_half_written(tmp_path, conn):
+    """Cancelled while it waits for the browser, and again after the answer came back but before it could finish (another
+    request had the lock): no grant is kept, the app is not connected, and the next sign-in starts clean."""
+    router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    assert service.store.connectors["google"].status == "INITIATED" and service._signing_in == {"google"}
+    await router.call("integrations.connect_cancel")
+    assert (await asyncio.wait_for(task, 2)) == {"connected": False, "error": "cancelled"}
+    nothing_half_written(tmp_path, service, browser, vault)
+    browser.again()
+    task = asyncio.create_task(router.call("connectors.google.connect"))
+    await asyncio.wait_for(browser.entered.wait(), 2)
+    await service._lock.acquire()  # another request is in the middle of its work when the answer comes back
+    try:
+        browser.answer.set_result("code-private")
+        for _ in range(300):
+            if vault.get(REFRESH):
+                break
+            await asyncio.sleep(0.01)
+        assert vault.get(REFRESH) == "refresh-private"  # the answer was taken; the sign-in waits for its turn to finish
+        await router.call("integrations.connect_cancel")
+    finally:
+        service._lock.release()
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+    nothing_half_written(tmp_path, service, browser, vault)
+    assert service.store.connectors["google"].accounts == [] and service.google._access == ""
+
+
+@pytest.mark.parametrize("kind", ["google", "composio"])
+async def test_closing_the_core_ends_a_sign_in_that_waits_and_leaves_nothing_half_written(tmp_path, conn, kind):
+    if kind == "google":
+        router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    else:
+        router, service, fake, task = await sign_in_waiting_for(tmp_path, conn)
+    await asyncio.wait_for(service.aclose(), 5)
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"
+    assert not service.login_pending and service._signing_in == set() and not service._lock.locked()
+    if kind == "google":
+        nothing_half_written(tmp_path, service, browser, vault)
+    else:
+        assert fake.deleted == [("ca_test", False)]  # the account Composio made for it goes back
+        assert [a["id"] for a in ConnectorStore(tmp_path).connectors["composio:gmail"].accounts] == []
+
+
+async def test_a_google_sign_in_that_runs_out_of_time_says_so_and_keeps_what_was_pressed_meanwhile(tmp_path, conn):
+    """The wait ends without an answer: the same sentence as any sign-in that was not finished in time, the app is not
+    connected, and the switch the owner pressed while it waited stays as pressed."""
+    router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    switched = await asyncio.wait_for(router.call("connectors.set_tools", {"id": "google", "enabled": False}), 2)
+    assert switched["connector"]["enabled"] is False
+    browser.answer.set_exception(ConnectorFailure("timeout"))
+    result = await asyncio.wait_for(task, 2)
+    assert result == {"ok": False, "error": "timeout", "http_status": None}
+    cause, _ = _cause_of(result["error"], stage=str(result.get("stage") or ""), via="google")
+    assert cause == "timeout" and CAUSES[cause].said
+    nothing_half_written(tmp_path, service, browser, vault)
+    assert service.store.connectors["google"].enabled is False
+
+
+@pytest.mark.parametrize("method,params,after", [
+    ("connectors.disconnect", {"id": "google"}, "gone"),
+    ("connectors.google.configure", {"client_id": "another"}, "configured"),
+], ids=["disconnect", "configure"])
+async def test_changing_or_taking_away_the_google_app_ends_the_sign_in_that_waits_for_it(tmp_path, conn, method, params, after):
+    router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    result = await asyncio.wait_for(router.call(method, params), 5)
+    assert not (isinstance(result, dict) and result.get("ok") is False), result
+    assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"  # no failure shown for a wait that was ended on purpose
+    assert not service.login_pending and service._signing_in == set() and browser.closed == browser.listeners
+    if after == "gone":
+        assert "google" not in service.store.connectors and vault.get("connectors:google:client_id") is None
+    else:
+        assert service.store.connectors["google"].status == "INACTIVE" and vault.get("connectors:google:client_id") == "another"
+
+
+async def test_a_google_sign_in_finishes_and_keeps_the_switch_pressed_while_it_waited(tmp_path, conn):
+    router, service, browser, vault, task = await google_sign_in_waiting(tmp_path, conn)
+    await asyncio.wait_for(router.call("connectors.set_tools", {"id": "google", "enabled": False}), 2)
+    browser.answer.set_result("code-private")
+    result = await asyncio.wait_for(task, 2)
+    assert result["connected"] is True and result["connector"]["status"] == "ACTIVE"
+    entry = service.store.connectors["google"]
+    assert entry.enabled is False and [a["label"] for a in entry.accounts] == ["me@example.com"]  # not undone by the finish
+    assert vault.get(REFRESH) == "refresh-private" and service._signing_in == set() and not service._lock.locked()
+    assert ConnectorStore(tmp_path).connectors["google"].status == "ACTIVE"
