@@ -29,7 +29,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from importlib import resources
 
-from ..languages import DEFAULT_LANGUAGES, display_name
+from ..languages import DEFAULT_LANGUAGES, LANGUAGE_IDS, display_name
 from .dictionary import DictionaryStore
 from .mishearing import may_be_heard_in, misheard_spans
 from .openrouter import CLEANUP_FALLBACKS, Completion, OpenRouterError
@@ -49,24 +49,10 @@ CLEANUP_SCHEMA = {
 }
 
 
-def already_clean_short(text: str) -> bool:
-    """Conservative fast path: one punctuated sentence, at most 80 characters/16 words.
-
-    Do not guess punctuation, remove fillers, repair repetition, format lists, or interpret code.
-    Dictionary replacement and script selection still happen in Brain before and after this.
-    """
-    if not text or len(text) > 80 or len(text.split()) > 16 or "\n" in text or "\r" in text:
-        return False
-    if text[-1] not in ".!?。！？" or any(c in ".!?。！？" for c in text[:-1]):
-        return False
-    if any(not (c.isalpha() or c in " ,，、'’。！？.!?") for c in text):
-        return False
-    if re.search(r"\b(?:um|uh|er|actually|first|second|third)\b|\bI mean\b|\b(\w+)\s+\1\b",
-                 text, re.IGNORECASE):
-        return False
-    if any(word in text for word in ("嗯", "呃", "那個", "就是", "不對", "應該說", "第一", "第二")):
-        return False
-    return True
+# Every dictation is cleaned by the model, however short. Which word is a filler or a correction
+# cue depends on the language spoken, so nothing short of the model can tell that a sentence is
+# already clean: a test of length and marks pasted "Um I think so." as it was heard, and a list of
+# words would be a rule of one language.
 
 
 def timeout_for(audio_seconds: float) -> float:
@@ -382,7 +368,7 @@ def describe_target_app(target_app: str | None) -> str:
 
 
 # How each language's text is written, for the languages whose variants differ in script, usage or
-# spelling. One sentence each, put into rule 6 of the prompt in the order of the user's languages.
+# spelling. One sentence each, put after the prompt's rule on names, in the order of the languages.
 _SCRIPT_RULES = {
     "zh-TW": (
         "Write Chinese in Traditional characters with Taiwan usage (軟體, 程式, 資料, 視窗),"
@@ -396,8 +382,7 @@ _SCRIPT_RULES = {
     "zh-CN": (
         "Write Chinese in Simplified characters with Mainland usage (软件, 程序, 数据),"
         " also when the transcript is in Traditional characters: 設定軟體 → 设定软件;"
-        " use “” for quotation marks. The examples below are in Traditional characters: write"
-        " your Chinese in Simplified characters all the same."
+        " use “” for quotation marks."
     ),
     "yue-HK": (
         "Write Chinese as written Cantonese in Traditional characters with Hong Kong usage"
@@ -419,12 +404,55 @@ def describe_languages(languages: Sequence[str]) -> str:
 
 
 def script_rules(languages: Sequence[str]) -> str:
-    """The sentences of rule 6 that say how the chosen variants are written, each after a space;
-    empty when no chosen language has such a rule."""
+    """The sentences that say how the chosen variants are written, each after a space, put after the
+    prompt's rule on names and spelling; empty when no chosen language has such a rule."""
     return "".join(f" {_SCRIPT_RULES[item]}" for item in languages if item in _SCRIPT_RULES)
 
 
-_PLACEHOLDER = re.compile(r"\{(dictionary|target_app|languages|script_rules)\}")
+# Worked examples in the speaker's own languages. The template itself is in no one language; a
+# small model still learns what a filler or a list looks like in a language best from that
+# language's own examples, so each chosen language adds its file, cleanup_examples.<subtag>.md.
+# They are data: a language is supported by adding its file, never by a rule in code. Every
+# language the settings offer has one, and a missing one is an error (`_examples_for`), as a
+# missing prompt is. Mainland Chinese takes the Chinese examples in Simplified characters,
+# character by character, so those examples use words both regions write alike.
+_EXAMPLES_FILE = "cleanup_examples.{}.md"
+_SETTINGS_SUBTAGS = frozenset(code.split("-", 1)[0].lower() for code in LANGUAGE_IDS)
+# How many of the chosen languages bring their examples, in the order of the setting, which is the
+# order of priority. A language past them still has its name and how it is written in the prompt.
+# With this, the prompt before the dictionary stays under PROMPT_MAX_BASE_CHARS for every choice the
+# settings allow (up to five languages).
+EXAMPLE_LANGUAGES = 3
+PROMPT_MAX_BASE_CHARS = 5_000
+
+
+@functools.cache
+def _examples_for(subtag: str) -> str:
+    """The example lines of one language subtag ("zh", "en", "ja"). FileNotFoundError when its file
+    is missing: a cleanup without the examples it was written with fails, and says why."""
+    path = resources.files("raphael_core.brain.prompts").joinpath(_EXAMPLES_FILE.format(subtag))
+    return path.read_text(encoding="utf-8").strip()
+
+
+def language_examples(languages: Sequence[str]) -> str:
+    """The example lines for the first EXAMPLE_LANGUAGES of the chosen languages, in their order,
+    each language once. A code the settings do not offer (a comparison case may name one) has
+    none."""
+    blocks: list[str] = []
+    seen: set[str] = set()
+    for code in languages:
+        subtag = code.split("-", 1)[0].lower()
+        if subtag in seen or subtag not in _SETTINGS_SUBTAGS:
+            continue
+        seen.add(subtag)
+        if len(seen) > EXAMPLE_LANGUAGES:
+            break
+        text = _examples_for(subtag)
+        blocks.append(to_simplified(text) if code == "zh-CN" else text)
+    return "\n".join(blocks)
+
+
+_PLACEHOLDER = re.compile(r"\{(dictionary|target_app|languages|script_rules|language_examples)\}")
 
 # The dictionary in the prompt is cut off, so that a dictionary of hundreds of words (learned ones
 # pile up, up to three a dictation) cannot make each cleanup slower and dearer, or bury the rules
@@ -453,8 +481,7 @@ def dictionary_spans(
     """The dictionary words that `heard` may hold misheard, each with those parts of it
     (`mishearing.misheard_spans`), in the order of `words`. `words` and `replacements` are what
     `DictionaryStore.hint_words()` and `hint_forms()` return. Empty when the transcript writes every
-    word of the dictionary as the dictionary does: then the cleanup has nothing to correct for it,
-    and a short clear sentence may skip the model."""
+    word of the dictionary as the dictionary does: then the cleanup has nothing to correct for it."""
     forms = _forms_by_word(replacements)
     lines = [_one_line(word) for word in words]
     found: dict[str, list[str]] = {}
@@ -495,7 +522,7 @@ def build_system_prompt(
     forms the brain has only seen in corrections so far, which the model reads in context. There
     is one line per word, in the order of `words`, and a word that speech-to-text tends to get
     wrong also lists how it comes out, in the order of `replacements`. An empty dictionary is
-    written as （空）. A line break inside a word becomes a space, and a blank word or form is left
+    written as (empty). A line break inside a word becomes a space, and a blank word or form is left
     out. The block is cut off at the end of `words` (PROMPT_MAX_WORDS, PROMPT_MAX_FORMS and
     PROMPT_MAX_CHARS above).
 
@@ -503,7 +530,10 @@ def build_system_prompt(
     hold (`mishearing.may_be_heard_in`): a Latin word with nothing like it in a Chinese or Japanese
     transcript only invites the model to translate what was said into it. Those words do not count
     towards the cut-off. A word that the transcript may hold misheard (`dictionary_spans`) also
-    names those parts of the transcript ("這次可能是").
+    names those parts of the transcript ("maybe misheard here as").
+
+    The labels of the block are plain English and ASCII punctuation, the language of the rules,
+    so that the block reads the same whichever languages the user speaks.
     """
     misheard_forms = _forms_by_word(replacements)
     spans = {} if heard is None else dictionary_spans(words, replacements, heard)
@@ -519,21 +549,22 @@ def build_system_prompt(
             continue
         notes = []
         if forms:
-            notes.append(f"常被聽成：{'、'.join(forms[:PROMPT_MAX_FORMS])}")
+            notes.append(f"often misheard as: {', '.join(forms[:PROMPT_MAX_FORMS])}")
         named = {form.casefold() for form in forms or ()}
         fresh = [span for span in spans.get(word, ()) if span.casefold() not in named]
         if fresh:
-            notes.append(f"這次可能是：{'、'.join(fresh[:PROMPT_MAX_FORMS])}")
-        line = f"- {word}（{'；'.join(notes)}）" if notes else f"- {word}"
+            notes.append(f"maybe misheard here as: {', '.join(fresh[:PROMPT_MAX_FORMS])}")
+        line = f"- {word} ({'; '.join(notes)})" if notes else f"- {word}"
         if size + len(line) + 1 > PROMPT_MAX_CHARS:
             continue
         lines.append(line)
         size += len(line) + 1
     values = {
-        "dictionary": "\n".join(lines) or "（空）",
+        "dictionary": "\n".join(lines) or "(empty)",
         "target_app": describe_target_app(target_app),
         "languages": describe_languages(languages),
         "script_rules": script_rules(languages),
+        "language_examples": language_examples(languages),
     }
     # One pass of re.sub, not str.format or one str.replace after another: the prompt has braces
     # of its own (the JSON of the reply), and a word or an app name may look like a placeholder.

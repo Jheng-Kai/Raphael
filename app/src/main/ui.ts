@@ -415,6 +415,11 @@ export function pressOverflow(button: HTMLElement, at?: { x: number; y: number }
 export function closeMenu(): void {
   while (menu) closeMenuLevel();
 }
+
+/** Closes the submenus of the open menu and keeps the menu itself (a pick in a submenu that only changes a row). */
+export function closeSubmenus(): void {
+  while (menu?.parent) closeMenuLevel();
+}
 onLocaleChange(closeMenu);
 
 function closeMenuLevel(): void {

@@ -1442,7 +1442,7 @@ export const vi = {
   "settings.groupListen": "Cách nghe",
   "settings.searchingMicrophones": "Đang tìm…",
   "mic.automaticShort": "Tự động ({p0})",
-  "languages.variantsOf": "Cách viết {p0}",
+  "languages.variantsOf": "Cách viết {p0}: {p1}",
   "settings.agentKeys": "Hỏi Raphael",
   "settings.tidyKeys": "Chỉnh sửa văn bản đã chọn",
   "home.askRaphael": "Hỏi Raphael",

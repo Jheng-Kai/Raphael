@@ -74,14 +74,19 @@ async def test_incomplete_transcript_keeps_gap_marker_in_paste_and_history(
     router, fake_client, keys, language, marker,
 ):
     keys.set(KEY)
+    echo(fake_client)
     await router.call("settings.set", {"key": "languages", "value": ["zh-CN"]})
     await router.call("dictionary.add", {"word": "replacement", "misheard": [marker]})
     result = await finalize(
         router, raw_text=f"Before. {marker} After.", incomplete=True, ui_language=language,
     )
+    # A Latin full stop may close an abbreviation, so it is the model's to leave out (R-DICT-STOP-01).
     assert result["text"] == f"Before. {marker} After."
     assert result["fallback_reason"] == "incomplete_stt"
-    assert fake_client.calls == []
+    # Each heard region is cleaned on its own, however short; the marker never reaches the model.
+    assert [call["user"] for call in fake_client.calls] == [
+        "<transcript>\nBefore.\n</transcript>", "<transcript>\nAfter.\n</transcript>",
+    ]
     latest = await router.call("history.latest", {})
     assert latest["item"]["text"] == result["text"]
 
@@ -118,14 +123,21 @@ async def test_incomplete_speech_cleans_heard_regions_without_showing_a_gap_to_t
     assert latest["fallback_reason"] == "incomplete_stt" and latest["cost_usd"] > 0
 
 
-@pytest.mark.parametrize("text", ["Hello world.", "明天見。", "Is this ready?", "準備好了！"])
-async def test_short_punctuated_sentence_needs_no_model(router, fake_client, keys, text):
+# R-DICT-CLEAN-01: which word is a filler or a correction cue depends on the language, so nothing
+# but the model decides that a dictation is clean: no sentence is short enough to skip it.
+@pytest.mark.parametrize("text", [
+    "Hello world.", "明天見。", "Is this ready?", "準備好了！",
+    "Um I think so.", "Uh yes.", "嗯我覺得可以。", "呃好啊。", "那個我覺得可以。",
+    "Send it Monday I mean Tuesday.", "明天開會不對後天開會。", "First do this second do that.",
+])
+async def test_every_dictation_however_short_goes_to_the_model(router, fake_client, keys, text):
     keys.set(KEY)
+    echo(fake_client)
     result = await finalize(router, raw_text=text)
-    assert result["text"] == text.removesuffix("。")
+    [call] = fake_client.calls
+    assert call["user"] == f"<transcript>\n{text}\n</transcript>"
     assert result["cleaned"]
-    assert result["llm_ms"] == 0
-    assert fake_client.calls == []
+    assert (await router.call("history.latest", {}))["item"]["model"] == "google/gemini-3.1-flash-lite"
 
 
 # What speech-to-text wrote for the dictionary word 「pinebot」,
@@ -143,18 +155,20 @@ async def test_a_short_sentence_with_a_dictionary_word_misheard_goes_to_the_mode
     fake_client.next_completion = completion({"text": "像是pinebot這樣子區分開來嗎？"})
     await finalize(router, raw_text=text)
     [call] = fake_client.calls
-    assert "- pinebot（這次可能是：" in call["system"]
+    assert "- pinebot (maybe misheard here as: " in call["system"]
 
 
-async def test_a_short_sentence_that_spells_the_dictionary_right_keeps_the_shortcut(
+async def test_a_short_sentence_that_spells_the_dictionary_right_names_no_mishearing(
     router, fake_client, keys
 ):
     keys.set(KEY)
+    echo(fake_client)
     await router.call("dictionary.add", {"word": "pinebot"})
     for text in ("像是pinebot這樣子區分開來嗎？", "像是Pinebot這樣子區分開來嗎？", "我的電腦好了。"):
         result = await finalize(router, raw_text=text)
-        assert result["cleaned"] and result["llm_ms"] == 0
-    assert fake_client.calls == []
+        assert result["cleaned"]
+    assert len(fake_client.calls) == 3
+    assert not any("maybe misheard here as" in call["system"] for call in fake_client.calls)
 
 
 async def test_a_correction_is_kept_as_a_form_and_the_next_dictation_respells_it(
@@ -199,6 +213,18 @@ def completion(data, cost=0.0002, model="google/gemini-3.1-flash-lite"):
         completion_tokens=30,
         latency_ms=250,
     )
+
+
+def echo(fake_client):
+    """Make the cleanup model of `fake_client` hand back each transcript as it was sent, so that a
+    test sees what reached the model and what the brain did with the reply."""
+
+    async def complete_json(**kwargs):
+        fake_client.calls.append(kwargs)
+        heard = kwargs["user"].removeprefix("<transcript>\n").removesuffix("\n</transcript>")
+        return completion({"text": heard})
+
+    fake_client.complete_json = complete_json
 
 
 class FakeClient:
@@ -527,11 +553,11 @@ async def test_a_fallback_after_the_call_pastes_the_converted_raw_text(router, f
         "我們只要有一個干擾，就會停下來。",
     ],
 )
-async def test_short_clean_text_pastes_and_saves_traditional_speech_as_it_is(router, spoken):
+async def test_a_short_text_without_a_key_pastes_and_saves_traditional_speech_as_it_is(router, spoken):
     # No key: the text that is pasted is the speech-to-text result. It is Traditional Chinese
     # already, and OpenCC over the whole sentence would write 隻要, 幹擾 and 釋出 into it.
     r = await finalize(router, spoken)
-    assert (r["cleaned"], r["fallback_reason"]) == (True, None)
+    assert (r["cleaned"], r["fallback_reason"]) == (False, "no_key")
     assert r["text"] == spoken.removesuffix("。")
     assert r["raw_text"] == spoken
     row = (await router.call("history.latest", {}))["item"]
@@ -637,7 +663,7 @@ async def test_replacements_apply_to_cleaned_text_that_has_hiragana(router, fake
     fake_client.next_completion = completion({"text": "ラファエロさんに会います。"})
     r = await finalize(router, "ラファエロさんに会います")
     assert r["raw_text"] == "ラファエルさんに会います"
-    assert r["text"] == "ラファエルさんに会います。"
+    assert r["text"] == "ラファエルさんに会います"
 
 
 async def test_fallback_text_is_not_normalized_a_second_time(router):
@@ -1078,8 +1104,8 @@ async def test_the_hints_of_the_dictionary_reach_the_cleanup_prompt(router, fake
     system = fake_client.calls[0]["system"]
     # A rule has written the word already, and no form of it is left in the transcript to name.
     assert "- 拉斐爾" not in system
-    assert "- Claude（常被聽成：cloud）" in system, "a hint is told to the model like a rule"
-    assert "- 手機（常被聽成：首機）" in system
+    assert "- Claude (often misheard as: cloud)" in system, "a hint is told to the model like a rule"
+    assert "- 手機 (often misheard as: 首機)" in system
     # The words learned come newest first.
     assert system.index("- 手機") < system.index("- Claude")
 
@@ -1942,13 +1968,14 @@ async def test_cleanup_contract_and_cost_are_shared_and_agent_keeps_paste_last(
         assert latest["text"] == result["text"]
 
 
-async def test_agent_cleanup_retains_the_short_sentence_shortcut(router, fake_client, keys, conn):
+async def test_agent_speech_is_cleaned_by_the_model_however_short(router, fake_client, keys, conn):
     keys.set(KEY)
+    echo(fake_client)
     result = await finalize(router, "Hello world.", purpose="agent")
     assert result["text"] == "Hello world." and result["cleaned"]
-    assert result["llm_ms"] == 0 and isinstance(result["id"], int)
-    assert fake_client.calls == []
-    assert conn.execute("SELECT COUNT(*) FROM spend").fetchone()[0] == 0
+    assert isinstance(result["id"], int)
+    assert len(fake_client.calls) == 1
+    assert conn.execute("SELECT COUNT(*) FROM spend").fetchone()[0] == 1
     assert (await router.call("history.latest", {}))["item"] is None
 
 
@@ -2016,7 +2043,7 @@ async def test_a_dictation_is_given_no_addendum_about_typed_text(router, fake_cl
 
 
 async def test_tidy_asks_the_model_even_for_a_short_clean_sentence(router, fake_client, keys):
-    # A dictation skips the model for "Hello world."; written text is tidied however short.
+    # Written text is tidied however short, as a dictation is cleaned however short.
     keys.set(KEY)
     fake_client.next_completion = completion({"text": "Hello, world."})
     result = await tidy(router, "Hello world.")

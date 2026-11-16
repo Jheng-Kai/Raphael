@@ -1442,7 +1442,7 @@ export const ko = {
   "settings.groupListen": "듣는 방식",
   "settings.searchingMicrophones": "검색 중…",
   "mic.automaticShort": "자동 ({p0})",
-  "languages.variantsOf": "{p0} 표기 방식",
+  "languages.variantsOf": "{p0} 표기 방식: {p1}",
   "settings.agentKeys": "Raphael에게 질문",
   "settings.tidyKeys": "선택한 텍스트 다듬기",
   "home.askRaphael": "Raphael에게 질문",

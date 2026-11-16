@@ -656,6 +656,15 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], null, ['Save', 'Cancel', 'Raphael']);
     expect(result.productRules.map(item => item.rule)).toEqual(['R-UI-14']);
   });
+  it("takes a language's own name, marked with its lang, for that language and not for English interface copy", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<button><span class="mt" lang="en">English</span></button><button><span lang="zh-TW">English</span></button><button>English</button>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, [], null, ['English']);
+    // Only the unmarked label and the one marked as the window's own language are interface copy.
+    expect(result.productRules.map(item => item.rule)).toEqual(['R-UI-14', 'R-UI-14']);
+    expect(result.productRules.map(item => item.tag)).toEqual(['span', 'button']);
+  });
   it("keeps an authored conversation title even when it matches an English interface label", () => {
     const window = new Window();
     window.document.body.innerHTML = '<button class="conversation-trigger" aria-label="Project"><span class="conversation-caption">Project</span></button><button class="conversation-open"><span>Project</span></button><button>Save</button>';

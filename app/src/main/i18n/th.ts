@@ -1442,7 +1442,7 @@ export const th = {
   "settings.groupListen": "วิธีฟัง",
   "settings.searchingMicrophones": "กำลังค้นหา…",
   "mic.automaticShort": "อัตโนมัติ ({p0})",
-  "languages.variantsOf": "วิธีเขียน {p0}",
+  "languages.variantsOf": "วิธีเขียน {p0}: {p1}",
   "settings.agentKeys": "ถาม Raphael",
   "settings.tidyKeys": "เกลาข้อความที่เลือก",
   "home.askRaphael": "ถาม Raphael",

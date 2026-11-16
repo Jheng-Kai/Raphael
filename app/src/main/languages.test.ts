@@ -7,6 +7,7 @@ import {
   chooseLanguageVariant,
   dictationLanguagesFor,
   languagePanelHTML,
+  variantMenuHTML,
   languageSelectHTML,
   languageSummary,
   normalizeLanguages,
@@ -119,24 +120,47 @@ describe("the language picker", () => {
     expect(html).toContain("已選 2／5");
   });
 
-  test("puts the variants of a chosen language right under it, as one radio group", () => {
+  test("ends the row of a chosen language with several variants with a chip naming the one in use", () => {
     const html = languagePanelHTML(GROUPS, ["en-GB", "zh-HK", "ja-JP"]);
     const zh = html.indexOf('data-language="zh"');
-    const group = html.indexOf('data-variant-group="zh"');
-    expect(zh).toBeLessThan(group);
-    expect(group).toBeLessThan(html.indexOf('data-language="en"'));
-    expect(html).toContain('role="radiogroup" aria-label="中文的寫法"');
-    expect(html).toContain('data-variant="zh-HK" aria-checked="true"');
+    const chip = html.indexOf('data-variant-menu="zh"');
+    expect(zh).toBeLessThan(chip);
+    expect(chip).toBeLessThan(html.indexOf('data-language="en"'));
+    // One translated name for the chip, and no tooltip repeating the form it shows.
+    expect(html).toContain('data-variant-menu="zh" aria-haspopup="menu" aria-expanded="false" aria-label="中文的寫法：繁體中文（香港）"><span>繁體中文（香港）</span>');
+    expect(html).not.toMatch(/class="btn lang-variant-chip"[^>]*title=/);
+    expect(html).toContain('data-variant-menu="en"');
+    // The variants themselves are not in the list: they open beside it, so the list never grows.
+    expect(html).not.toContain("data-variant=");
+    expect(html).not.toContain('role="radiogroup"');
+  });
+
+  test("opens the variants of a language as a submenu, the one in use checked, each with how it is written", () => {
+    const html = variantMenuHTML(GROUPS, ["en-GB", "zh-HK", "ja-JP"], "zh");
+    expect(html).toContain('role="menuitemradio" tabindex="-1" class="lang-variant" data-variant="zh-HK" aria-checked="true"');
     expect(html).toContain('data-variant="zh-TW" aria-checked="false"');
-    expect(html).toContain('data-variant="en-GB" aria-checked="true"');
     expect(html).toContain("台灣用語，例如 軟體、視窗");
+    expect(variantMenuHTML(GROUPS, ["zh-TW"], "nope")).toBe("");
+  });
+
+  test("marks a language's own name with its lang, and a name written in the window's language with none", () => {
+    // A screen reader says "English" as English, and the look audit does not take it for English interface copy.
+    const html = languagePanelHTML(GROUPS, ["en-GB", "zh-HK", "ja-JP"]);
+    expect(html).toContain('<span class="mt" lang="en">English</span>');
+    expect(html).toContain('<span class="mt" lang="ja">日本語</span>');
+    expect(html).toContain('<span class="mt">中文</span>');
+    expect(html).toContain('<span lang="en-GB">English (UK)</span>');
+    expect(html).toContain('aria-label="中文的寫法：繁體中文（香港）"><span>繁體中文（香港）</span>');
+    const english = variantMenuHTML(GROUPS, ["en-GB"], "en");
+    expect(english).toContain('<span class="mt" lang="en-US">English (US)</span>');
+    expect(variantMenuHTML(GROUPS, ["zh-HK"], "zh")).not.toContain("lang=");
   });
 
   test("shows no variants for a language that is not chosen, only how many it has, and none for a language with one", () => {
     const html = languagePanelHTML(GROUPS, ["ja-JP"]);
-    expect(html).not.toContain("data-variant=");
+    expect(html).not.toContain("data-variant-menu=");
     expect(html).toContain('data-language="zh" aria-pressed="false"><span class="ck"></span><span class="mt">中文</span><span class="md">4 種寫法</span>');
-    expect(html).not.toContain('data-variant-group="ja"');
+    expect(html).not.toContain('data-variant-menu="ja"');
   });
 
   test("marks the languages that cannot be added at five, while the chosen ones can still be dropped", () => {

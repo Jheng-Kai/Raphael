@@ -42,7 +42,7 @@ import hashlib
 import logging
 import sqlite3
 import time
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, replace
 from datetime import tzinfo
 from typing import Any
@@ -62,7 +62,7 @@ from .catalog import (
     choice_problem,
     find,
 )
-from .cleanup import CleanedPart, CleanupResult, CleanupService, already_clean_short, dictionary_spans, join_parts, split_for_cleanup
+from .cleanup import CleanedPart, CleanupResult, CleanupService, join_parts, split_for_cleanup
 from .cloud_stt import CloudTranscriber
 from .dictionary import DictionaryStore, Learned
 from .history import HistoryItem, HistoryStore
@@ -78,11 +78,9 @@ from .stats import StatsStore
 from .usage import UsageAnalytics
 from .textnorm import (
     apply_replacements,
+    drop_final_full_stop,
     finish_cleaned_text,
-    finish_chinese_dictation,
     guard_cleanup_text,
-    remove_dictation_fillers,
-    remove_unspoken_ma,
     normalize_transcript,
     remove_stutters,
     respell_dictionary_words,
@@ -421,9 +419,9 @@ class Brain:
                     raw_text, marker, rules, chinese, audio_seconds, target_app,
                     lambda: self._cleaning.get(session_id, False),
                 )
-            elif self._needs_no_model(raw_text, normalized, rules):
-                result = CleanupResult(normalized, True, None, None, 0, 0)
             else:
+                # Every dictation, however short: only the model can tell, in every language, that
+                # a sentence holds no filler or correction (cleanup.py, above `timeout_for`).
                 result = await self._cleanup.clean(
                     normalized,
                     audio_seconds=audio_seconds,
@@ -468,8 +466,7 @@ class Brain:
             def finish_part(index, part):
                 if not part.cleaned:
                     return remove_stutters(part.text)
-                finished = finish_cleaned_text(part.text, rules, chinese=chinese)
-                return remove_unspoken_ma(chunks[index][0] if chunks else normalized, finished) if chinese is not None else finished
+                return finish_cleaned_text(part.text, rules, chinese=chinese)
 
             text = join_parts(
                 [
@@ -479,8 +476,6 @@ class Brain:
             )
         elif result.cleaned:
             text = finish_cleaned_text(result.text, rules, chinese=chinese)
-            if chinese is not None:
-                text = remove_unspoken_ma(normalized, text)
         else:
             # A fallback is the normalized text already; doing it twice could repeat a replacement.
             # Nobody has tidied it, so its obvious stutters go; the history keeps it as it was.
@@ -489,9 +484,10 @@ class Brain:
         # An English name inside Chinese as the dictionary spells it: in its letter case, joined, or
         # spelled right where speech-to-text wrote it as a name it did not know (`respell_dictionary_words`).
         text = respell_dictionary_words(text, self._dictionary.hint_words(), self._dictionary.hint_forms())
-        text = remove_dictation_fillers(text)
-        if chinese is not None:
-            text = finish_chinese_dictation(text)
+        # The words are the model's to clean (fillers, particles, punctuation inside the text): no
+        # rule of one language edits them here. Only a closing full stop that can end nothing but a
+        # sentence goes, whatever the language (`drop_final_full_stop`, R-DICT-STOP-01).
+        text = drop_final_full_stop(text)
 
         item = HistoryItem(
             id=None,
@@ -523,18 +519,6 @@ class Brain:
             "llm_ms": result.llm_ms,
         }
 
-    def _needs_no_model(self, raw: str, normalized: str, rules: Sequence[tuple[str, str]]) -> bool:
-        """Whether a dictation may skip the cleanup model: a short clear sentence
-        (`already_clean_short`) that writes every word of the dictionary as the dictionary does.
-        One that may hold a dictionary word misheard (`cleanup.dictionary_spans`) goes to the
-        model, which corrects it in context; the shortcut would paste it as it was heard."""
-        if not (already_clean_short(raw.strip()) and already_clean_short(normalized)):
-            return False
-        heard = apply_replacements(raw, rules)
-        return not dictionary_spans(
-            self._dictionary.hint_words(), self._dictionary.hint_forms(), heard
-        )
-
     async def _clean_incomplete_dictation(self, raw, marker, rules, chinese, seconds, target_app, is_cancelled):
         """Clean isolated heard regions without giving a model a gap or context across one."""
         regions = raw.split(marker)
@@ -546,14 +530,11 @@ class Brain:
                 pieces = split_for_cleanup(body)
                 aligned = [(normalize_transcript(piece, rules, chinese=chinese), apply_replacements(piece, rules)) for piece in pieces]
                 normalized = normalize_transcript(body, rules, chinese=chinese)
-                if self._needs_no_model(body, normalized, rules):
-                    result = CleanupResult(normalized, True, None, None, 0, 0)
-                else:
-                    result = await self._cleanup.clean(
-                        normalized, heard=apply_replacements(body, rules),
-                        audio_seconds=seconds * len(body) / total, target_app=target_app,
-                        chunks=aligned if len(aligned) > 1 else None, is_cancelled=is_cancelled,
-                    )
+                result = await self._cleanup.clean(
+                    normalized, heard=apply_replacements(body, rules),
+                    audio_seconds=seconds * len(body) / total, target_app=target_app,
+                    chunks=aligned if len(aligned) > 1 else None, is_cancelled=is_cancelled,
+                )
                 results.append(result)
                 if result.parts:
                     parts.extend(result.parts)
@@ -578,9 +559,9 @@ class Brain:
         text, tidied by the dictation cleanup (same model, dictionary, languages, tone, chunking,
         guards and spend) with the addition that it was typed, not spoken (`tidy.TIDY_ADDENDUM`).
 
-        The text the app selected is not speech, so it is not run through the shortcuts of a
-        dictation: the model is always asked, nothing is removed as a filler or a stutter, and a
-        final full stop stays. The spaces and line breaks around the text stay as they were. Nothing
+        The text the app selected is not speech, so it is not finished as a dictation is: the
+        model is asked as for every dictation, nothing is removed as a stutter, and a final full
+        stop stays. The spaces and line breaks around the text stay as they were. Nothing
         is saved to the history (it would become what "paste last" pastes) or counted.
 
         The answer carries `text` only when `cleaned` is true. A failure (no key or model, no

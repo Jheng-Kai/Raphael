@@ -217,6 +217,18 @@ def test_the_audit_requires_every_adapted_code_notice(build, bundle, name):
         build.audit_bundle(bundle)
 
 
+def test_the_audit_requires_the_cleanup_prompt_and_every_language_of_examples(build, bundle):
+    # The cleanup reads these at each dictation: the prompt, and the examples of each language the
+    # settings offer (a bundle without one would clean that language with an error, not silently).
+    prompts = PACKAGING.parent / "src" / "raphael_core" / "brain" / "prompts"
+    required = {name.rsplit("/", 1)[1] for name in build.required_files() if "/brain/prompts/" in name}
+    assert required == {path.name for path in prompts.glob("*.md")}
+    assert {"cleanup_system.md", "cleanup_examples.ja.md", "cleanup_examples.zh.md"} <= required
+    (bundle / "_internal" / "raphael_core" / "brain" / "prompts" / "cleanup_examples.ja.md").unlink()
+    with pytest.raises(RuntimeError, match=re.escape("cleanup_examples.ja.md")):
+        build.audit_bundle(bundle)
+
+
 @pytest.fixture
 def generated(notices, system, manifest, monkeypatch, tmp_path):
     """The notices write_notices generates for a platform, from fake distributions and a fake runtime."""

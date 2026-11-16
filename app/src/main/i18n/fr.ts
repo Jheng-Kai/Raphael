@@ -1442,7 +1442,7 @@ export const fr = {
   "settings.groupListen": "Comment il écoute",
   "settings.searchingMicrophones": "Recherche…",
   "mic.automaticShort": "Automatique ({p0})",
-  "languages.variantsOf": "Comment s’écrit {p0}",
+  "languages.variantsOf": "Comment s’écrit {p0} : {p1}",
   "settings.agentKeys": "Interroger Raphael",
   "settings.tidyKeys": "Mettre au propre le texte sélectionné",
   "home.askRaphael": "Interroger Raphael",

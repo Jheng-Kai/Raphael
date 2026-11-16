@@ -271,7 +271,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (footer && visible(footer) && footer.getBoundingClientRect().top - box.bottom < 7)
         violation('R-UI-17', 'Model source action touches the final source row');
     }
-    if (englishUI.length && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt, .conversation-caption, .conversation-open') && !element.matches('.conversation-trigger')) {
+    // A language's own name marked with its lang ("English" among the spoken languages) is that language's text, not English
+    // interface copy; text marked as the window's own language is checked like any other.
+    const marked = englishUI.length ? element.closest('[lang]') : null;
+    const ownLanguage = Boolean(marked && marked !== doc.documentElement && !/^zh(?:-|$)/i.test(marked.getAttribute('lang') ?? ''));
+    if (englishUI.length && !ownLanguage && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt, .conversation-caption, .conversation-open') && !element.matches('.conversation-trigger')) {
       const copy = [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent.trim());
       for (const attribute of ['aria-label', 'placeholder', 'title']) if (element.hasAttribute(attribute)) copy.push(element.getAttribute(attribute).trim());
       const productOrKeyName = /^(?:Raphael|OpenRouter|OpenAI|ChatGPT|Codex|Claude|Gemini|Antigravity|GitHub|Telegram|Google|Google Calendar|Notion|MCP|PDF|CLI|Right Alt|Alt|Ctrl|Esc)$/;

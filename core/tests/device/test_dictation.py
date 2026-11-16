@@ -1750,6 +1750,7 @@ async def test_rate_limited_middle_audio_is_retained_through_final_retry_and_hea
         await router.call("dictation.start", {"session_id": "s1", "ui_language": "en"})
         await rig.recorder.fed(3)
         result = await stop(router)
+        # A Latin full stop may close an abbreviation: it is the model's to leave out (R-DICT-STOP-01).
         assert result["text"] == "Schedule the review for tomorrow at four. (this part was not heard) Send the summary to the review team."
         assert result["incomplete"] and not result["cleaned"]
         assert result["fallback_reason"] == "incomplete_stt"

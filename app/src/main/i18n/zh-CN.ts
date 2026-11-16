@@ -1442,7 +1442,7 @@ export const zhCN = {
   "settings.groupListen": "聆听方式",
   "settings.searchingMicrophones": "搜索中…",
   "mic.automaticShort": "自动（{p0}）",
-  "languages.variantsOf": "{p0}的写法",
+  "languages.variantsOf": "{p0}的写法：{p1}",
   "settings.agentKeys": "问拉斐尔",
   "settings.tidyKeys": "整理所选文字",
   "home.askRaphael": "问拉斐尔",

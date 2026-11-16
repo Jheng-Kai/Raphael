@@ -1442,7 +1442,7 @@ export const id = {
   "settings.groupListen": "Cara mendengarkan",
   "settings.searchingMicrophones": "Mencari…",
   "mic.automaticShort": "Otomatis ({p0})",
-  "languages.variantsOf": "Cara penulisan {p0}",
+  "languages.variantsOf": "Cara penulisan {p0}: {p1}",
   "settings.agentKeys": "Tanya Raphael",
   "settings.tidyKeys": "Rapikan teks yang dipilih",
   "home.askRaphael": "Tanya Raphael",

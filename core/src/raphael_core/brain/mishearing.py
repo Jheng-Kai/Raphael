@@ -403,8 +403,8 @@ def misheard_spans(
     word: str, text: str, forms: Sequence[str] = (), others: Sequence[str] = ()
 ) -> list[str]:
     """The parts of `text`, a transcript, that may be the dictionary's `word` misheard, as written
-    in the text, each once: for the cleanup prompt to name ("這次可能是"), so the model corrects
-    them in context, and for the short-sentence shortcut to step aside.
+    in the text, each once: for the cleanup prompt to name ("maybe misheard here as"), so the model
+    corrects them in context.
 
     A known misheard form of the word (`forms`, a rule or a hint) counts wherever the text has it.
     A Latin word of four letters or more also counts a run of up to three Latin words of the text

@@ -56,10 +56,18 @@ def platform_machine() -> str:
     return platform.machine().lower()
 
 
+def prompt_files() -> list[str]:
+    """The cleanup prompt and the worked examples of each language, which the core reads at every
+    dictation: every Markdown file of the prompts package. A bundle without one would clean that
+    language with an error."""
+    prompts = CORE / "src" / "raphael_core" / "brain" / "prompts"
+    return [f"_internal/raphael_core/brain/prompts/{path.name}" for path in sorted(prompts.glob("*.md"))]
+
+
 def required_files(platform: str | None = None) -> list[str]:
     return [
         executable(platform), *native_files(platform),
-        "_internal/raphael_core/brain/prompts/cleanup_system.md",
+        *prompt_files(),
         "_internal/raphael_core/connectors/finder-data.json",
         "_internal/raphael_core/computer/driver_schemas.json",
         "_internal/licenses/python/LICENSE.txt",
