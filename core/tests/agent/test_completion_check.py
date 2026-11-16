@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from raphael_core.agent.answers import parse_reply
+from raphael_core.agent.answers import parse_reply, public_reply
 from raphael_core.agent.cli import loop as cli
 from raphael_core.agent.cli.drivers import Driver, Event
 from raphael_core.agent.failure import AgentFailure
@@ -284,6 +284,15 @@ async def test_an_api_turn_keeps_the_answer_the_completion_check_does_not_count(
     assert status == "error" and text == phrase("en", "computer_unchecked")
     assert phrase("en", "error") not in said
 
+
+
+def test_asking_whether_speech_is_a_reply_logs_nothing(caplog):
+    # A probe of every message the CLI wrote while working logged "said nothing" on turns that ended well, so the line
+    # could not tell a lost answer from an ordinary note.
+    with caplog.at_level("WARNING", logger="raphael_core.agent.answers"):
+        assert public_reply('{"messages": []}', "en", explicit=True) is None
+        assert public_reply('{"text": ""}', "en") is None
+    assert not caplog.records
 
 # --- a final answer with no words in it ---------------------------------------------------------------------------
 

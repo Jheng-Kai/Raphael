@@ -475,9 +475,11 @@ def _shape(data: Any) -> str:
     return type(data).__name__
 
 
-def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None, literal: bool = False) -> Reply:
+def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None,
+                literal: bool = False, quiet: bool = False) -> Reply:
     """Keep every authored message and the full durable text; normalize persona frames only
-    on the corresponding display path. Empty answers require memory edits or a lookup.
+    on the corresponding display path. Empty answers require memory edits or a lookup. A `quiet` caller only asks whether
+    there is a reply (`public_reply`): an empty one is no failure of its, and is not logged as one.
     """
     received = data
     if isinstance(data, str):
@@ -524,8 +526,9 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     if messages:
         full = "\n\n".join(messages)
     if not full and not (memory or search):
-        # What came, never its words: an empty text, or an object whose fields the rules above emptied.
-        logger.warning("The model's reply said nothing: %s literal=%s", _shape(received), literal)
+        if not quiet:
+            # What came, never its words: an empty text, or an object whose fields the rules above emptied.
+            logger.warning("The model's reply said nothing: %s literal=%s", _shape(received), literal)
         raise AgentFailure("error")
     if plain:
         return Reply(
@@ -572,7 +575,7 @@ def public_reply(content: str, language: str, *, plain: bool = False, explicit: 
         elif not isinstance(value, str) or len(message_parts(value)) < 2:
             return None
     try:
-        reply = parse_reply(value, language, plain=plain, long=True)
+        reply = parse_reply(value, language, plain=plain, long=True, quiet=True)
     except AgentFailure:
         return None
     return reply if reply.text else None
