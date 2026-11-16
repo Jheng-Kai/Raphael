@@ -4,6 +4,7 @@ import { cardDisclosureHTML, cardHTML } from "./card";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
+import { linkedText } from "./message-content";
 import { parseTemplateFile, templateErrorText } from "./template-file";
 import { slimeFaceHTML } from "./slime";
 import { NAME_MAX, cleanName, routineSentenceHTML } from "./members";
@@ -123,7 +124,7 @@ export function templateContents(template: MemberTemplate, warnings: ScanFinding
   const notes = [...(o.thirdParty ? [t("store.thirdParty")] : []), ...risks];
   const alert = notes.length ? `<div class="tpl-alert${risks.length ? " is-risk" : ""}" role="status">${ico("shield")}<div>${notes.map(text => `<p>${esc(text)}</p>`).join("")}</div></div>` : "";
   const text = (label: string, value: string): string => value.trim()
-    ? `<section class="tpl-sec"><h4>${esc(label)}</h4><div class="tpl-card"><p class="tpl-quote" data-tpl-text>${esc(value.trim())}</p>` +
+    ? `<section class="tpl-sec"><h4>${esc(label)}</h4><div class="tpl-card"><p class="tpl-quote" data-tpl-text>${linkedText(value.trim())}</p>` +
       (value.trim().split(/\n/).length > 4 || value.trim().length > 220 ? btn(esc(t("chat.showAll")), "tpl-more", ' data-tpl-more aria-expanded="false"') : "") + `</div></section>`
     : "";
   const count = (label: string, n: number): string => `<h4>${esc(label)}<span class="tpl-count num">${n}</span></h4>`;

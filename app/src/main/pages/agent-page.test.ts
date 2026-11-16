@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
+import { installLinkOpener } from "../link-opener";
 import { createAgent } from "./agent";
 import { emblemTextureArrived, setAvatar } from "../avatar";
 import { getLocale, setLocale } from "../i18n";
@@ -80,6 +81,8 @@ const flush = async (): Promise<void> => {
 };
 
 beforeEach(() => {
+  // The window's one link opener (main.ts installs it at start) opens every link of the page.
+  installLinkOpener();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
   api.core.mockResolvedValue(null);

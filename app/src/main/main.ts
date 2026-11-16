@@ -30,6 +30,7 @@ import { emblemTextureArrived, loadAvatar } from "./avatar";
 import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
+import { installLinkOpener } from "./link-opener";
 import { prefetchEmojiWhenIdle } from "./emoji-data";
 import { fixedDevicePatch } from "./device-fixed";
 import { followTray } from "./tray-open";
@@ -150,6 +151,8 @@ async function start(): Promise<void> {
 
   // A right click presses the ⋯ of the row under it; elsewhere the browser's own menu has no place in an app. Text fields keep theirs.
   installContextMenus(document);
+  // Every link opens in the owner's browser, wherever it stands.
+  installLinkOpener();
   // A title that only repeats the words under it never shows.
   dropEchoTitles(document);
   prefetchEmojiWhenIdle();

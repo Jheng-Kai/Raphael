@@ -5,6 +5,7 @@
 // back arrow and its title in the dialog's head; the dialog's own buttons stay at its foot.
 import { t } from "./i18n";
 import type { Dialog } from "./member-dialogs";
+import { linkedText } from "./message-content";
 import { connectionName, skillContents, type MemberTemplate } from "./member-templates";
 import { routineSentenceHTML } from "./members";
 import { appMarkHTML } from "./connector-card";
@@ -19,7 +20,7 @@ export interface ReviewOptions {
 }
 
 const box = (label: string, text: string): string => text.trim()
-  ? `<section class="tpr-field"><h4>${esc(label)}</h4><div class="tpr-box">${esc(text.trim())}</div></section>` : "";
+  ? `<section class="tpr-field"><h4>${esc(label)}</h4><div class="tpr-box">${linkedText(text.trim())}</div></section>` : "";
 const row = (go: string, title: string, hint = "", attrs = ""): string =>
   `<button type="button" class="btn tpr-row" data-tpl-go="${esc(go)}"${attrs}><span class="tpr-row-t"><b>${esc(title)}</b>${hint ? `<span>${esc(hint)}</span>` : ""}</span>${ico("right")}</button>`;
 const list = (rows: string[]): string => rows.length ? `<div class="tpr-list">${rows.join("")}</div>` : "";

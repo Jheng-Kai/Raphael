@@ -34,7 +34,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, hasDetail, highlightHTML, sourceOf, type TurnPart } from "./conversation";
 import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { fileLinkStamp, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
+import { fileLinkStamp, linkedText, messageHTML, replyContentHTML, type KnownFiles } from "./message-content";
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
@@ -388,7 +388,7 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
     stepIcon(step) +
     `<span class="step-main"><span class="step-t"${tip ? ` title="${esc(tip)}"` : ""}>${esc(stepTitle(step))}</span>` +
     mediaBillHTML(step) +
-    (step.detail && isComposioTool(step.server, step.tool) ? `<span class="step-detail">${esc(composioText(step.detail, step.tool ?? "Composio", "tool"))}</span>` : "") +
+    (step.detail && isComposioTool(step.server, step.tool) ? `<span class="step-detail">${linkedText(composioText(step.detail, step.tool ?? "Composio", "tool"))}</span>` : "") +
     (step.missing ? missingHTML(step.missing) : ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
     `</span>` +
     `<span class="step-end"><span class="step-ms num">${esc(formatDuration(step.ms))}</span>` +
