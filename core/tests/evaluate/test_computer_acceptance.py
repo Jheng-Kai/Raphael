@@ -1038,16 +1038,18 @@ async def test_guard_authorizes_real_bridge_exec_without_running_it_and_keeps_ow
         await guard.authorize(vm.exec_args(target, ["wmctrl", "-lG"]))
 
 
-# launch_failure: the launches' windows carry no startup id, as a product that does not tag its launches would leave them.
-@pytest.mark.parametrize("browser_failure,stop_failure,launch_failure", [(False, False, False), (True, False, False),
-                                                                         (False, True, False), (False, False, True)])
+# launch_failure: "unrunnable" sends each launch as `env ... sh -c '<command>'`, which the real driver split apart and
+# refused on its first real-engine run (launch_handoff_timeout); "untied" is a product that ties no window to its launch, so every
+# window stays where the window manager opened it.
+@pytest.mark.parametrize("browser_failure,stop_failure,launch_failure", [(False, False, None), (True, False, None),
+                                                                         (False, True, None), (False, False, "unrunnable"),
+                                                                         (False, False, "untied")])
 async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(tmp_path, monkeypatch, browser_failure, stop_failure,
                                                                                 launch_failure):
     """Fake only transport, guest programs and the viewer listener; product seat/tool logic runs."""
-    import re
     from copy import deepcopy
     from types import SimpleNamespace
-    from computer.test_seat_tools import window
+    from computer.test_seat_tools import driver_launched, driver_matches, driver_refusal, driver_runs, window
     from computer.test_vm import Runtime, container
     from raphael_core.computer import rfb_view, seat_launch
     from raphael_core.computer.vm_bridge import CuaBridge
@@ -1073,8 +1075,9 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     launches, attachments = [], []
     viewers, owner_files, owner_text = [], set(), {}
     launchers = []
-    # A terminal launched by its path: one copy (the first window's process) opens it late, with the launch's startup id.
-    copied, copy_pid, startup_ids = [], {}, {}
+    # xfce4-terminal as the real driver launches it (computer.test_seat_tools.OneCopyTerminal): with --disable-server, or
+    # with no copy running, its own process opens its window; else the copy does. Each window carries its launch's startup id.
+    copy_pid, startup_ids = [], {}
     original_runtime = runtime.__call__
 
     async def runner(args, **kwargs):
@@ -1082,7 +1085,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             given = args[args.index(seat_launch.MARKS) + 2:]
             return vm.Result(0, "".join(f"window {row.split(':')[0]}\n" + (
                 f'_NET_STARTUP_ID(UTF8_STRING) = "{startup_ids[int(row.split(":")[0])]}"\n'
-                if startup_ids.get(int(row.split(":")[0])) and not launch_failure else "") for row in given))
+                if startup_ids.get(int(row.split(":")[0])) else "") for row in given))
         if acceptance.FORM_START in args:
             return vm.Result(0, '{"port": 18765, "other_port": 18766}')
         if acceptance.FORM_STOP in args:
@@ -1122,6 +1125,8 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                                  "--test-type --hide-crash-restore-bubble\n")
             return vm.Result(0, "99\n")
         guest = args[args.index(machine.shared_target("", 9201, 1).name) + 1:] if args[0] == "exec" else []
+        if guest[:3] == ["sh", "-c", 'command -v "$1"']:
+            return vm.Result(0, "/usr/bin/xfce4-terminal\n") if guest[4] == "xfce4-terminal" else vm.Result(1, "")
         if guest[:2] == ["test", "-x"]:
             return vm.Result(1, "")
         if guest[:2] == ["test", "-e"] and guest[2].startswith("/usr/share/icons/"):
@@ -1188,24 +1193,25 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         state = {}
         text = "Action completed."
         if name == "list_windows":
-            for item in list(copied):
-                # As xfce4-terminal opens a launch's window: in the copy already running, two looks after the driver answered.
-                item[0] -= 1
-                if not item[0]:
-                    copied.remove(item)
-                    rows.append(window(len(rows) + 200, 2600, pid=copy_pid.setdefault(0, len(rows) + 200)))
-                    rows[-1]["title"], startup_ids[rows[-1]["window_id"]] = item[1], item[2]
             state = {"windows": deepcopy(rows)}
-        elif name == "launch_app" and "--title=lands-" in args.get("launch_path", ""):
-            launches.append(self.target.screen)
-            tag = re.search(r"DESKTOP_STARTUP_ID=(raphael-launch-[0-9a-f]{16}) ", args["launch_path"])
-            copied.append([2, re.search(r"--title=([\w-]+)", args["launch_path"])[1], tag and tag[1]])
-            pid = 9000 + len(launches)
-            text, state = f"Launched {args['launch_path']} (pid {pid}) in background.", dict(pid=pid)
         elif name == "launch_app":
-            rows.append(window(len(rows) + 200, 2600))
-            state = dict(pid=rows[-1]["pid"], windows=[deepcopy(rows[-1])])
+            # As the real driver runs it and answers (computer.test_seat_tools.driver_runs and its answers); the window
+            # opens where the window manager puts it, screen 3.
             launches.append(self.target.screen)
+            command, launcher = args.get("launch_path") or args.get("name"), 9000 + len(launches)
+            run_words = driver_runs(args)
+            if run_words is None or run_words[0][0].rsplit("/", 1)[-1] != "xfce4-terminal":
+                return driver_refusal(command, launcher)
+            words, environment = run_words
+            own = "--disable-server" in words or not copy_pid
+            if own and "--disable-server" not in words:
+                copy_pid.append(launcher)
+            rows.append(window(len(rows) + 200, 2600, pid=launcher if own else copy_pid[0]))
+            rows[-1]["title"] = next((word.removeprefix("--title=") for word in words if word.startswith("--title=")), rows[-1]["title"])
+            startup_ids[rows[-1]["window_id"]] = environment.get("DESKTOP_STARTUP_ID")
+            if not own and not driver_matches(rows[-1]["app_name"], command):
+                return driver_refusal(command, launcher)
+            return driver_launched(command, launcher, rows[-1]["pid"], [rows[-1]])
         elif name == "get_window_state":
             state = deepcopy(next(row for row in rows if row["window_id"] == args["window_id"]))
             text = f"window_id={args['window_id']}\n[1] terminal\nelement_token for row [1] = s00000001:1"
@@ -1423,13 +1429,29 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         assert any(row["name"] == "shared stop" and row["result"] == "failed" for row in run.results)
         return
     if launch_failure:
+        import shlex
         monkeypatch.setattr("raphael_core.computer.vm_tools.VmTools.launch_window_wait_s", .5)
+        if launch_failure == "unrunnable":
+            def tagged(args, tag, path=None):
+                command = " ".join([args.get("launch_path") or shlex.quote(path), *map(shlex.quote, args.get("additional_arguments") or [])])
+                sent = {key: value for key, value in args.items() if key not in ("launch_path", "name", "additional_arguments")}
+                return {**sent, "launch_path": f"env DESKTOP_STARTUP_ID={tag} RAPHAEL_LAUNCH={tag} sh -c {shlex.quote(command)}"}
+            monkeypatch.setattr(seat_launch, "tagged", tagged)
+        else:
+            monkeypatch.setattr(seat_launch, "tied", lambda *args: False)
         with pytest.raises(AssertionError, match="One or more shared checks failed"):
             await run.shared()
-        landed = next(row for row in run.results if row["name"] == "shared launches land on their own screens")
-        assert landed["result"] == "failed" and "to name its window on its own screen" in landed["detail"]
-        assert "nothing ties to it" in landed["detail"]
-        assert [row["name"] for row in run.results if row["result"] == "failed"] == [landed["name"]]
+        wall, landed = (next(row for row in run.results if row["name"] == name)
+                        for name in ("shared terminal wall", "shared launches land on their own screens"))
+        assert [row["name"] for row in run.results if row["result"] == "failed"] == [wall["name"], landed["name"]]
+        if launch_failure == "unrunnable":
+            # As the real engine answered.
+            for row in (wall, landed):
+                assert "was handed off for D-Bus activation but no new window appeared within 8s" in row["detail"], row
+        else:
+            assert "Expected one terminal on member 9201's screen" in wall["detail"]
+            assert "to name its window on its own screen" in landed["detail"] and "nothing ties to it" in landed["detail"]
+        assert next(row for row in run.results if row["name"] == "shared pointer wall")["result"] == "skipped"
         return
     if browser_failure:
         with pytest.raises(AssertionError, match="One or more shared checks failed"):
@@ -1453,6 +1475,9 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     landed = next(row for row in run.results if row["name"] == "shared launches land on their own screens")
     # Each launch's window was brought from where this world's window manager opens it (screen 3) to its own seat.
     assert "wholly inside screen 1" in landed["detail"] and landed["detail"].count("wholly inside screen 2") == 2
+    # The first launch is the copy the other two hand their windows to, and each window carries its own launch's id.
+    assert landed["detail"].count("(launch pid 900") == 3 and "the second seat's second window is in the copy" in landed["detail"]
+    assert "a startup id on the window itself on 3 of 3 (3 different), on its leader on 0" in landed["detail"]
     # The shared computer's panel on each of its six screens is read for the browser's name and mark.
     assert launchers == [f"/home/cua/.config/xfce4/panel/launcher-{number}/browser.desktop" for number in (1, 4, 7, 10, 13, 16)]
     assert len(attachments) == 3 and len({session for session, _ in attachments}) == 2

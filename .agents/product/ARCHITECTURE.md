@@ -71,7 +71,7 @@ profile. A title-only data page carries a unique launch marker. The launcher sel
 now-minus-before windows and matches both marker and browser main pid, then moves,
 maximizes and waits for settled seat geometry. Each seat attaches its own window
 using existing_profile, binds and navigates in its own session. Per-bot computers
-retain driver-owned browser launch. launch_app, under the unit lock, tags the launch (DESKTOP_STARTUP_ID and RAPHAEL_LAUNCH in front of its command, `seat_launch.py`), waits up to 10 s for its windows and moves to the seat only those tied to it by their startup id, else by the tag in their process's environment or the launch's pid (R-COMP-SEAT-02); every other window stays. windows[] is filtered and projected after movement. Owner takeover checks its
+retain driver-owned browser launch. launch_app, under the unit lock, tags the launch (`env` sets DESKTOP_STARTUP_ID and RAPHAEL_LAUNCH in front of the program's path; the driver runs launch_path split on white space, without a shell; `seat_launch.py`), waits up to 10 s for its windows and moves to the seat only those tied to it by their startup id, else by the tag in their process's environment or the launch's pid (R-COMP-SEAT-02); every other window stays. windows[] is filtered and projected after movement. Owner takeover checks its
 own non-command activity and the unit native lock before and after a status await;
 other seats' background page/read/command activity is allowed.
 

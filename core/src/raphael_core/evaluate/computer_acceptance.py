@@ -2040,12 +2040,19 @@ class Acceptance:
                     handed = [window["title"] for window in opened.values()
                               if window["launch_pid"] is not None and window["pid"] != window["launch_pid"]]
                     again = next(window for window in opened.values() if "-again-" in window["title"])
+                    # What tied each window, as the core read it (seat_launch.MARKS): a startup id on the window itself
+                    # (xfce4-terminal's --startup-id), on its client leader (GTK at display open), or neither.
+                    marks = await machine.launch_marks(target, [dict(window_id=identifier, pid=window["pid"])
+                                                                for identifier, window in opened.items()])
+                    ids = {kind: [mark[kind] for mark in marks.values() if mark.get(kind)] for kind in ("own", "leader")}
                     return (f"pointer on screen {target.screens}, nobody's; two seats launched together in {together:.1f} s and one again: "
                             + "; ".join(f"{window['title']} window {identifier} pid {window['pid']} (launch pid {window['launch_pid']}) "
                                         f"wholly inside screen {screens[window['member']]}" for identifier, window in opened.items())
                             + f"; opened by another process than its launch's: {', '.join(handed) or 'none (each its own process)'}"
                             + f"; the second seat's second window {'is' if again['pid'] == first_copy else 'is not'} in the copy "
-                              f"that holds the first seat's window; each seat's list and desktop show only its own")
+                              f"that holds the first seat's window; a startup id on the window itself on {len(ids['own'])} of "
+                              f"{len(opened)} ({len(set(ids['own']))} different), on its leader on {len(ids['leader'])}"
+                            + "; each seat's list and desktop show only its own")
                 finally:
                     left = []
                     for row in (await machine.seat_windows(target))["windows"]:

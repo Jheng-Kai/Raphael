@@ -11,9 +11,27 @@ running (another pid), and a window often maps after that one look.
 
 Now (`computer/seat_launch.py`, `VmTools._seat_launch`, `LocalVm.command_path` and `launch_marks`):
 - Each launch at a seat is tagged as a desktop launcher tags one (freedesktop startup notification): the driver gets
-  `launch_path = env DESKTOP_STARTUP_ID=<tag> RAPHAEL_LAUNCH=<tag> sh -c '<the member's command and arguments>'`. A `name` the
-  computer's shell finds as a program (`command -v`) is launched by its path the same way; a desktop-entry name or `urls` stay
-  the driver's own and are untagged. The reply shows the member's own command, never the tag.
+  `launch_path = env DESKTOP_STARTUP_ID=<tag> RAPHAEL_LAUNCH=<tag> <the program's path> <the launch's other words>` and the
+  member's `additional_arguments` as they were. The program is the first word of `launch_path` (else `name`), tagged only
+  when the computer's shell finds it (`command -v`, an absolute path); any other (a desktop-entry name, a shell builtin such
+  as `cd`) and `urls` stay the driver's own and are untagged. The reply, and the driver's refusal, show the member's own
+  command, never the tag. A Chromium-family program gets `--force-renderer-accessibility`, which the driver adds only to a
+  program it runs itself.
+- The driver runs `launch_path` without a shell (cua-driver 0.37.0's source, `spawn_launch_command` in
+  `platform-linux/src/tools/impl_.rs`, tag `cua-driver-rs-v0.37.0`): it splits it on white space and runs the first word
+  with the rest and then `additional_arguments`, though its definition says "spawned directly via the system shell". It
+  then waits for a new window of the process it started (20 s while the process runs), else a new window whose class
+  matches the command (`window_matches_launch_key`: the class against the command after its last `/`), which is how a
+  window handed to a copy already running is found; when the process has ended and no such window appeared within 8 s
+  it refuses: `launch_handoff_timeout`, "handed off for D-Bus activation but no new window appeared within 8s". It reads
+  every window on the canvas (`list_windows_dispatch(None)`), never a seat's, so a window outside the seat never fails a
+  launch. The program goes by its absolute path so that this match reads what it reads untagged (`env ... xfce4-terminal
+  --title=a.b` would not match: its first word is `env`).
+- The first real-engine run (72 ok, 3 failed): the tag was sent as `env ... sh -c '<command>'`; the driver split the quoted
+  command apart, sh got `'/usr/bin/xfce4-terminal` (an unterminated quote) and exited, nothing opened, and both seat
+  checks got that refusal. The unit tests and the acceptance's offline world had answered every launch themselves; they
+  now run each launch through a model of the driver's own code (`test_seat_tools.driver_runs`, `driver_matches`,
+  `driver_refusal`, `driver_launched`), which refuses that form as the real driver did.
 - The windows are waited for up to `launch_window_wait_s` (10 s, under the unit native lock; it ends at the first tied
   window). Each new window is judged once by one `docker exec` (`seat_launch.MARKS`: xprop of `_NET_STARTUP_ID` on the window
   and on its `WM_CLIENT_LEADER`, and `RAPHAEL_LAUNCH` in `/proc/<pid>/environ`): the window's own startup id, else its
@@ -31,15 +49,20 @@ Now (`computer/seat_launch.py`, `VmTools._seat_launch`, `LocalVm.command_path` a
   window. The code is one for both of its waits (60 s for the window, 30 s to settle); `LocalVm.seat_browser` now logs the
   launcher's own line, which tells them apart next time.
 
-Offline (`core/tests/computer/test_seat_tools.py`): `test_launch_moves_only_the_windows_tied_to_it`,
-`test_a_launch_brings_its_window_that_another_process_opens_late_to_the_members_screen`,
+Offline (`core/tests/computer/test_seat_tools.py`, launches through the driver model): `test_launch_moves_only_the_windows_tied_to_it`,
+`test_a_launch_handed_to_the_copy_already_running_brings_its_window_to_the_members_screen`,
+`test_a_launch_that_runs_its_own_copy_brings_its_window_to_the_members_screen` (the terminal wall's launch),
 `test_two_members_launching_at_once_each_get_their_own_window`,
+`test_a_window_that_maps_after_the_driver_answered_is_waited_for_and_brought`,
+`test_a_launch_that_opens_nothing_is_the_drivers_refusal_in_the_members_words`,
 `test_a_window_nothing_ties_to_the_launch_stays_where_it_opened_and_the_reply_says_so`,
 `test_a_launch_with_no_window_says_so_after_its_bounded_wait`, `test_a_launch_is_tagged_so_that_its_windows_can_be_told_from_every_other_launchs`,
+`test_the_driver_reads_a_tagged_launch_as_it_reads_the_launch_untagged`,
 `test_a_window_is_a_launchs_by_its_startup_id_first_then_its_process`, `test_the_marks_command_reads_the_window_its_leader_and_its_process`
 (runs the shipped script with an `xprop` double; needs a POSIX `sh`), `test_the_computer_answers_where_a_name_is_a_program_and_what_ties_windows_in_one_command`;
 `tests/evaluate/test_computer_acceptance.py::test_shared_acceptance_drives_real_tools_through_every_numbered_check` (a world
-where one terminal copy opens every launch's window late; the `launch_failure` case shows the check fails when nothing ties).
+whose driver runs and answers launches as the real one; `launch_failure="unrunnable"` sends that first form and fails the
+terminal wall and the launch check with the driver's refusal, `"untied"` ties nothing and fails both by place).
 
 Real computer: "shared launches land on their own screens" in `npm run verify -- --computer` (Docker already running; it
 never starts Docker). The pointer is put on screen 6 (nobody's); seats 1 and 2 launch `xfce4-terminal --title=lands-<member>-<hex>`

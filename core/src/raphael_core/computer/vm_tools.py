@@ -1812,16 +1812,18 @@ class VmTools:
         """The windows a launch at a seat opened are brought to this member's screen, and no other window is
         (seat_launch). The caller holds the unit native lock: no other member's launch runs meanwhile."""
         tag = seat_launch.token()
-        name = args.get("name") if not args.get("urls") and not args.get("launch_path") else None
-        sent = seat_launch.tagged(args, tag, name and await self.vm.command_path(target, name))
+        program = seat_launch.program(args)
+        sent = seat_launch.tagged(args, tag, program and await self.vm.command_path(target, program))
         if sent is None:
             tag, sent = None, args
         before = await self._canvas_windows(client, session)
         reply = await client.request("tools/call", {"name": "launch_app", "arguments": sent})
-        if reply.get("isError"):
-            return reply
         if tag is not None:
             reply = seat_launch.as_asked(reply, sent, args)
+        # A refusal stands, in the member's words. The driver refuses when the process it started ended and no new
+        # window of the launch appeared within 8 s anywhere on the canvas (launch_handoff_timeout), not by a seat.
+        if reply.get("isError"):
+            return reply
         launched = reply.get("structuredContent") or {}
         pids = {launched.get("pid"), launched.get("launcher_pid")} - {None, 0}
         existing = {row["window_id"] for row in before["windows"]}
