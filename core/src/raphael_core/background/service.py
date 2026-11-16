@@ -145,9 +145,9 @@ from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from .routine_outcome import failure as routine_failure
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
-from .outcomes import computer_files, named_files, worker_trace
+from .outcomes import computer_files, file_named_in, named_files, worker_trace
 from .handback import title
-from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
+from .tasks import FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore, deliverable_names
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +192,14 @@ _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 # told the owner of a Claude error of unknown cause (R-ROUTINE-05).
 _JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
                              "missing_terminal", "dangling_mention", "child_work_incomplete"))
+# Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
+# worker could not start or broke (`worker_` and the name of the error). A brain failure recorded for them says the model failed.
+_APP_ENDINGS = frozenset(("member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
+
+
+def _brainless(reason: str | None) -> bool:
+    """Whether an ending says nothing of the brain: the app judged the work, or the app itself stopped it."""
+    return reason in _JUDGED_ENDINGS or reason in _APP_ENDINGS or str(reason).startswith("worker_")
 # The most of a routine's last report that its next run is shown.
 LAST_REPORT_CHARS = 1500
 # Joins a reply's messages while its hand-back block is taken out; no model writes it.
@@ -259,6 +267,8 @@ RESULTS_CHARS = 1_000_000
 # work, the most files looked at, and the most kept as evidence.
 ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs", ".browser-profiles"))
 ARTIFACT_SCAN = 20_000
+# The names a scan may list (not read) in one folder: files that are not named take none of ARTIFACT_SCAN.
+ARTIFACT_LISTING = 10 * ARTIFACT_SCAN
 ARTIFACT_KEEP = 20
 ARTIFACT_MAX_BYTES = 64 * 1024 * 1024
 
@@ -2795,7 +2805,7 @@ class BackgroundService:
             if task.mode == 'work' and any(child['state']!='completed' for child in self._child_results(task.id)):
                 self._conclude(task,run,'failed','',phrase(language,'work_children_open') + '\n\n' + report.text,report.detail,'child_work_incomplete')
                 return
-            if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls)):
+            if task.routine_id is not None and (why := routine_failure(task.text, run.succeeded, run.last_refused, run.tool_calls, run.written)):
                 # A routine's run is done only when it did its work: it said so, but a step it needed was refused or what it was
                 # to make is not there. The owner reads what was not done, and what the member said.
                 said = report.text if report else ''
@@ -2927,22 +2937,38 @@ class BackgroundService:
                 path = root.joinpath(*below.parts)
                 if path.is_file() and self._gate.data_floor.access('read_file', {'path': str(path)}) is None:
                     keep(path, root)
-        wanted = {name.lower() for name in FILE_NAMES.findall(task.done_when)}
+        # A condition that names a file is met by a file of that name (whatever it holds: spaces, Chinese or Japanese); when it
+        # names none, any new file is the work.
+        named = bool(deliverable_names(task.done_when))
         found = []
+
+        def freshest_first(base: str, folders: list[str]) -> list[str]:
+            """The folders worth a look, the one touched last first: a file made now is in one of those, and a tree of
+            thousands of files that nothing touched cannot use the budget before it is reached."""
+            def touched(folder):
+                try:
+                    return -os.stat(os.path.join(base, folder)).st_mtime
+                except OSError:
+                    return 0.0
+            return sorted((folder for folder in folders if folder not in ARTIFACT_SKIP), key=touched)
+
         for root in roots:
-            seen = 0  # each folder has its own budget: a large one never hides the other
+            seen = listed = 0  # each folder has its own budget: a large one never hides the other
             for base, folders, names in os.walk(root):
-                folders[:] = [folder for folder in folders if folder not in ARTIFACT_SKIP]
+                folders[:] = freshest_first(base, folders)
+                listed += len(names)
                 for name in names:
+                    if named and not file_named_in(task.done_when, name):
+                        continue  # nothing is read of a file that is not the one named: it takes none of the budget
                     seen += 1
                     path = Path(base) / name
                     try:
                         info = path.stat()
                     except OSError:
                         continue
-                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES and (not wanted or name.lower() in wanted):
+                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES:
                         found.append((info.st_mtime, str(path), root))
-                if seen > ARTIFACT_SCAN:
+                if seen > ARTIFACT_SCAN or listed > ARTIFACT_LISTING:
                     break
         # The newest that can be read and are kept: a file this PC cannot read takes none of the places.
         kept = tried = 0
@@ -3030,7 +3056,7 @@ class BackgroundService:
                         model=run.ledger.model if run is not None else None,
                         failure=(failure or turn_failure(reason, run.model if run is not None else task.model_ref,
                                                          getattr(run, "model_failure", None)))
-                                if state == "failed" and (failure or reason not in _JUDGED_ENDINGS) else None,
+                                if state == "failed" and (failure or not _brainless(reason)) else None,
                         replies=pending_replies(
                             [item["text"] for item in self._history.messages([task.turn_id]).get(task.turn_id, []) if item["kind"] == "reply"],
                             [compose(prefix,line,None) for line in terminal_replies if line]))

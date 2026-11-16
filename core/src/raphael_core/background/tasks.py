@@ -41,14 +41,43 @@ from ..paths import local_storage_root
 from ..agent.conversations import Conversations
 from ..agent.steps import reason_of
 from ..worker.stall_guards import stalled
+from .outcomes import file_named_in
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
 # File names narrow the scan only after the caller explicitly requires an artifact.
-FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json|md|docx|pptx|png|jpe?g|gif|svg|mp4|mov|webm|mp3|wav|zip))(?!\w)')
+FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html?|xlsx?|pdf|csv|tsv|txt|jsonl?|ndjson|md|docx?|pptx?|rtf|odt|ods|odp|epub|ipynb|'
+                        r'ya?ml|toml|ini|xml|log|sql|diff|patch|png|jpe?g|gif|svg|webp|bmp|tiff?|heic|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac|ogg|'
+                        r'zip|7z|rar|tar|tgz|gz))(?!\w)')
+# What a condition says of a file it only reads: a verb of reading before the name, within the same part of the sentence.
+_PART_START = re.compile(r"[.;。,，；]|\band\b|\bthen\b|並|并|然後|然后|再")
+_READ_BEFORE = re.compile(r"(?:\b(?:read|reads|open|use|using|parse|analy[sz]e|review|check|inspect|look at|based on|from|given|using)\b|"
+                          r"讀取?|读取?|閱讀|阅读|打開|打开|開啟|使用|根據|根据|依據|依据|分析|參考|参考|檢查|检查|查看|來自|来自)[^\n]{0,40}$", re.I)
+
+
+def deliverable_names(text: str) -> list[str]:
+    """The files a condition names for the work to leave: the names in it, less the ones it only reads ("read server.log and
+    write up what failed") and so cannot ask the work to make."""
+    names = []
+    for found in FILE_NAMES.finditer(text):
+        before = _PART_START.split(text[max(0, found.start() - 60):found.start()])[-1]
+        if not _READ_BEFORE.search(before):
+            names.append(found.group(1))
+    return names
+
+
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
+# Chinese, Japanese and Korean say in one character what English says in two or three: a character of theirs counts twice, so that
+# a hundred of them (a paragraph) is as much work in the words as two hundred letters.
+_WIDE = re.compile(r"[⺀-鿿가-힯豈-﫿＀-￯]")
+
+
+def written_length(said: str) -> int:
+    """How much work a reply holds in its words, in letters; a character of Chinese, Japanese or Korean counts for two."""
+    said = said.strip()
+    return len(said) + len(_WIDE.findall(said))
 MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
 
 
@@ -470,13 +499,13 @@ class TaskStore:
         before = {item['uri']: item for item in receipts if item['kind'] == 'file_before'}
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
         waived = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_note']
-        expected = [name for name in FILE_NAMES.findall(task.done_when) if not any(
+        expected = [name for name in deliverable_names(task.done_when) if not any(
             found == name.lower() or found.endswith(' ' + name.lower()) for found in waived)] if task.requires_artifact else []
         requires_artifact = task.requires_artifact and (not waived or bool(expected) or bool(before))
         if requires_artifact and not artifacts:
             return 'missing_artifact'
         if not evidence:
-            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
+            return None if not requires_artifact and written_length(said) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
                 root = local_storage_root(item['workspace'])
@@ -490,8 +519,9 @@ class TaskStore:
                 return 'missing_artifact'
         names = [Path(item['uri']).name.lower() for item in artifacts]
         # A filename extracted from prose can be the last word of a named path containing spaces.
+        # Chinese and Japanese have no spaces, so a name can stand against the words around it: it is that name alone.
         if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
-                       for found in names) for name in expected):
+                       or file_named_in(name, found) for found in names) for name in expected):
             return 'missing_artifact'
         return None
 
