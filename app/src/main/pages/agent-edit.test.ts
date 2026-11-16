@@ -106,7 +106,7 @@ beforeEach(() => {
     return { questions: [] };
   });
   // The core's edit: the replaced message goes and the edit takes its id and its place, written with the request's id.
-  api.agentAskText.mockImplementation(async (text: string, files: { name: string; mime: string }[], memberId: number, options: { requestId: string; replaceTurnId?: number }) => {
+  api.agentAskText.mockImplementation(async (text: string, files: { name: string; mime: string }[], _member: number, options: { requestId: string; replaceTurnId?: number }) => {
     if (options.replaceTurnId === undefined) { rows = [turn(rows.length ? Math.max(...rows.map(item => item.id)) + 1 : 1, { question: text, session_id: options.requestId, text: "" }), ...rows]; return; }
     rows = rows.map(item => item.id === options.replaceTurnId ? { ...item, question: text, session_id: options.requestId, attachments: files.map(file => ({ name: file.name, mime: file.mime })) } : item);
   });
