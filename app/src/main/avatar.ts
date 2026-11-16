@@ -56,10 +56,14 @@ function emblemStill(px: number): string | null {
     canvas.width = canvas.height = side;
     const ctx = canvas.getContext("2d");
     if (ctx) {
+      // The rune texture is many times larger than the face: averaged down ("high"), its letters stay a ring of letters; sampled
+      // ("low", the default) they break into scattered dots, which is what made the composer's emblem look muddy (R-UI-161).
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.translate(side / 2, side / 2);
       // The letters' rim reaches a little past the outer radius; a small face keeps its white ring visible. Unturned, the
       // word break stands at one o'clock.
-      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent" });
+      drawEmblem(ctx, side / 2 / 1.04, params("steady", 0, px < 48 ? 0.3 : 0.15), { tq: 0, rot: 0, dim: 1, calm: 0.7, lvl: 0.15, surface: "transparent", small: px < 48 });
       url = canvas.toDataURL("image/png");
     }
   } catch {
