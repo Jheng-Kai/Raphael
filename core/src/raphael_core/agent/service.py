@@ -961,6 +961,8 @@ class AgentService:
         self._inbox = AgentInbox(conn, self._history, now_ms)
         self._inbox.recover()
         self._queued_asks = {}
+        # Turns of messages being handed to running work right now: theirs is the steer's answer, not `_release_steering`'s.
+        self._handing = set()
         self._drains = {}
         self._admissions = {}
         self._direct_scopes = {}
@@ -1475,13 +1477,19 @@ class AgentService:
         if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
             self._owner_loops.pop(scope, None)
             active = None
+        # What was left with work that has ended goes first: this message neither steers past it nor runs before it.
+        self._release_steering(scope)
         older = self._conn.execute(
             "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued' AND seq<?",
             (*scope, row['seq']),
         ).fetchone()
         if active and not older and not ask.attachments and not active.owner_input.closed:
             self._inbox.transfer(ask.turn_id)
-            accepted = await active.steer(ask.text, ticket=ask.turn_id) if isinstance(active, CliLoop) else active.owner_input.add(ask.text, ticket=ask.turn_id)
+            self._handing.add(ask.turn_id)
+            try:
+                accepted = await active.steer(ask.text, ticket=ask.turn_id) if isinstance(active, CliLoop) else active.owner_input.add(ask.text, ticket=ask.turn_id)
+            finally:
+                self._handing.discard(ask.turn_id)
             if accepted:
                 self._turn_changed(ask.turn_id, ask.speaker.id)
                 return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
@@ -1490,7 +1498,12 @@ class AgentService:
         steer = getattr(self._background, "steer", None)
         if not older and not ask.attachments and steer is not None:
             self._inbox.transfer(ask.turn_id)
-            if await steer(ask.speaker.id, ask.conversation_id, ask.text):
+            self._handing.add(ask.turn_id)
+            try:
+                steered = await steer(ask.speaker.id, ask.conversation_id, ask.text)
+            finally:
+                self._handing.discard(ask.turn_id)
+            if steered:
                 self._inbox.settle(ask.turn_id, 'steered')
                 self._queued_asks.pop(ask.turn_id, None)
                 self._turn_changed(ask.turn_id, ask.speaker.id)
@@ -1513,7 +1526,7 @@ class AgentService:
             return None
         if any(self._inflight_scopes.get(session) == scope and not task.done() for session, task in self._inflight.items()):
             return None
-        row = self._inbox.claim(scope)
+        row = self._claim(scope)
         if row is None:
             return None
         waiter = asyncio.get_running_loop().create_future()
@@ -1588,20 +1601,44 @@ class AgentService:
                     if first and not waiter.done():
                         waiter.set_exception(error)
                 first = False
-                row = self._inbox.claim(scope)
+                row = self._claim(scope)
         finally:
             self._drains.pop(scope, None)
 
-    def _settle_steering(self, scope, loop):
-        rows = self._conn.execute("SELECT turn_id FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='steering' ORDER BY seq", scope).fetchall()
+    def _claim(self, scope):
+        """The next message of `scope` to run, after what ended work left unread has gone back ahead of it."""
+        self._release_steering(scope)
+        return self._inbox.claim(scope)
+
+    def _steered(self, turn_id, member_id):
+        """The model of the work a message was handed to has just read it: it is settled now, never to run again."""
+        row = self._inbox.get(turn_id)
+        if row is None or row['state'] != 'steering':
+            return
+        self._inbox.settle(turn_id, 'steered')
+        self._queued_asks.pop(turn_id, None)
+        self._turn_changed(turn_id, member_id)
+
+    def _release_steering(self, scope):
+        """Every message of `scope` handed to running work, never read by its model and held by no work that still runs,
+        goes back to the front of the inbox in the order it was said, to be a turn of its own. The work may have answered,
+        handed off, asked the owner, failed, been stopped or lost its CLI, or wait on a card that will never be answered:
+        its loop is closed, or gone from `_owner_loops`, or its turn no longer runs. What a model read was settled as it read
+        it (`_steered`), so nothing here is read twice."""
+        loop = self._owner_loops.get(scope)
+        origin = self._history.get(loop.owner_turn_id) if loop is not None else None
+        held = (set(loop.owner_input.leftover()) if loop is not None and not loop.owner_input.closed
+                and origin is not None and origin.status in ("running", "confirm") else set())
+        rows = self._conn.execute(
+            "SELECT turn_id FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='steering' ORDER BY seq DESC", scope,
+        ).fetchall()
         for row in rows:
             turn_id = row['turn_id']
-            if loop.owner_input.consumed(turn_id):
-                self._inbox.settle(turn_id, 'steered')
-                self._queued_asks.pop(turn_id, None)
-            else:
+            if turn_id in held or turn_id in self._handing:
+                continue
+            if loop is not None:
                 loop.owner_input.withdraw(turn_id)
-                self._inbox.requeue(turn_id)
+            self._inbox.requeue(turn_id, front=True)
             self._turn_changed(turn_id, scope[0])
 
     async def _discard_inbox(self, scope=None, *, member_id=None):
@@ -1670,16 +1707,21 @@ class AgentService:
             if task.cancelled() and ask.turn_id:
                 self._finish(ask, "answer", "understood", phrase(ask.language, "denied"),
                              ask.ledger or Ledger(self._spend), status="cancelled")
-            if self._inflight.get(ask.session_id) is task:
-                del self._inflight[ask.session_id]
-                self._inflight_members.pop(ask.session_id, None)
-                self._inflight_scopes.pop(ask.session_id, None)
             if ask.quick:
                 logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
                 ask.trace_logged = True
             if ask.resumption is not None:
                 ask.resumption.made.extend(ask.made)
-            self._start_drain((ask.speaker.id, ask.conversation_id))
+            self._leave(ask.session_id, task, (ask.speaker.id, ask.conversation_id))
+
+    def _leave(self, session_id, task, scope):
+        """The work of `task` in `scope` is over, however it began (a request, an answered card, a run on the desktop that
+        went on): the conversation's inbox goes on with its next message, or with what that work left unread."""
+        if self._inflight.get(session_id) is task:
+            del self._inflight[session_id]
+            self._inflight_members.pop(session_id, None)
+            self._inflight_scopes.pop(session_id, None)
+        self._start_drain(scope)
 
     @member_turn(lambda self, ask: ask.speaker.id,
                  waiting=lambda self, ask: ask.waiting_apps or ask.waiting_secrets or ask.waiting_computer)
@@ -2776,6 +2818,7 @@ class AgentService:
         scope = (ask.speaker.id, ask.conversation_id)
         if not ask.nested and ask.source not in _NO_OWNER_WORDS:
             loop.owner_turn_id = ask.turn_id
+            loop.owner_input.on_read = lambda ticket: self._steered(ticket, scope[0])
             self._owner_loops[scope] = loop
         outcome = None
         try:
@@ -2783,15 +2826,17 @@ class AgentService:
             if isinstance(loop, CliLoop) and self._model_observer is not None:
                 self._model_observer(loop.actual_model)
         finally:
-            if outcome is None or outcome.kind != WAITING:
+            # The loop is over, however it ended, unless it waits for the owner's yes to go on from there: a question for
+            # the owner parks the turn in the background and closes this loop as well.
+            if outcome is None or outcome.kind != WAITING or ask.owner_question:
                 loop.owner_input.closed = True
                 try:
                     if isinstance(loop, CliLoop):
                         await loop.finish_steering()
                 finally:
-                    self._settle_steering(scope, loop)
                     if self._owner_loops.get(scope) is loop:
                         self._owner_loops.pop(scope, None)
+                    self._release_steering(scope)
             if isinstance(loop, CliLoop) and loop.task and loop.task.done():
                 self._cli_loops.discard(loop)
         if loop.response is not None:
@@ -4787,8 +4832,12 @@ class AgentService:
         followup = self._followups.pop(pending.id, None)
         if followup is not None:
             self._gate.record_unrun(pending.action.tool, outcome=outcome)
-            if isinstance(followup.loop, CliLoop):
-                followup.loop.cancel()
+            if followup.loop is not None:
+                # The loop that waited never goes on: what the owner said to it and it did not read is a turn of its own.
+                followup.loop.owner_input.closed = True
+                if isinstance(followup.loop, CliLoop):
+                    followup.loop.cancel()
+                self._start_drain((followup.ask.speaker.id, followup.ask.conversation_id))
 
     async def _go_on_after_admin(
         self, followup: _Followup, step: Step, made: list[dict], text: str, detail: str | None, ledger: Ledger,
@@ -5432,10 +5481,7 @@ class AgentService:
         finally:
             if task.cancelled():
                 self._finish(ask, "answer", "understood", phrase(ask.language, "denied"), run.ledger, status="cancelled")
-            if self._inflight.get(ask.session_id) is task:
-                del self._inflight[ask.session_id]
-                self._inflight_members.pop(ask.session_id, None)
-                self._inflight_scopes.pop(ask.session_id, None)
+            self._leave(ask.session_id, task, (ask.speaker.id, ask.conversation_id))
 
     async def _resume_narrated(
         self,
@@ -5476,10 +5522,7 @@ class AgentService:
             elif expired and done.exception() is not None:
                 logger.warning("An expired CLI confirmation could not resume: %s", type(done.exception()).__name__)
                 self._failed(followup.ask, "answer", "error", followup.loop.ledger)
-            if self._inflight.get(session_id) is task:
-                del self._inflight[session_id]
-                self._inflight_members.pop(session_id, None)
-                self._inflight_scopes.pop(session_id, None)
+            self._leave(session_id, task, (followup.ask.speaker.id, followup.ask.conversation_id))
         task.add_done_callback(finished)
         return task
 
@@ -5588,9 +5631,6 @@ class AgentService:
         returned = []
         if rows:
             scope = (member, rows[-1]['conversation_id'])
-            active = self._owner_loops.get(scope)
-            if active:
-                self._settle_steering(scope, active)
             for row in self._inbox.cancel_scope(scope):
                 payload = json.loads(row['payload_json'])
                 returned.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
@@ -5606,7 +5646,9 @@ class AgentService:
         work in that conversation is ended as Stop ends it (its words kept, its question denied), without the memory that
         would refuse the next request, so the drain starts the message as its own turn. A Codex turn is told to stop
         (`turn/interrupt`); a Claude Code or Antigravity child is ended and its native session is resumed by that turn; an
-        API loop's task is cancelled. Whatever the stopped work had started is never run again. Private conversations only."""
+        API loop's task is cancelled. Whatever the stopped work had started is never run again. Words that ended work left
+        unread go just ahead of it, in the order they were said (`_release_steering`): the drain takes them all. Private
+        conversations only."""
         member = self._member_param(params)
         turn_id = _opt_int(params, 'turn_id')
         session = _str(params, 'session_id')
@@ -5617,11 +5659,11 @@ class AgentService:
             raise invalid_params('send now must identify a message of this private conversation')
         scope = (member, row['conversation_id'])
         if row['state'] == 'steering':
-            # Handed to the running work but not read by its model: it is taken back and goes first as its own turn.
+            # Handed to work but not read by its model (a read one was settled as it was read): it is taken back and goes
+            # first as its own turn, whether that work still runs or has ended without it.
             active = self._owner_loops.get(scope)
-            if active is None or active.owner_input.consumed(row['turn_id']):
-                return {'sent': False}
-            active.owner_input.withdraw(row['turn_id'])
+            if active is not None:
+                active.owner_input.withdraw(row['turn_id'])
             self._inbox.requeue(row['turn_id'])
         elif row['state'] != 'queued':
             return {'sent': False}
