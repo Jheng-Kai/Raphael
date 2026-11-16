@@ -26,12 +26,12 @@ cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m p
 Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
 Docker running is that check.
 
-## A member's files, as Claude Code works on them
+## A member's files
 
-R-TOOL-03, R-FILE-01 to R-FILE-05. Every brain has the same file tools, designed as Claude Code's are. A member read, searched
+R-TOOL-03, R-FILE-01 to R-FILE-05. Every brain has the same file tools. A member read, searched
 and changed the files of its computer through `vm_exec` (`cat`, `sed`, heredocs): the head of the output only, no numbers, no
 paging, nothing that checked the text it replaced, and whole files under the 16,000-character argument cap. Its computer now
-offers Claude Code's file tools beside `vm_exec`, with Claude Code's parameters and words:
+offers file tools beside `vm_exec`, with the parameters and words of the familiar read, edit, write, glob and grep tools:
 
 | Tool | Copies | What it does here |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ catalog's descriptions: 17,756 characters per member before R-TOOL-03, 11,132 af
 seat 18,364, 11,740 and 14,054; ceiling 14,500).
 No UI changes, so no look run. Not run: a real computer (`verify -- --computer` was not run: no image change), ripgrep's
 own flags against the image's ripgrep, a live turn of each brain (`verify -- --live`), the providers' acceptance of the
-dashed parameter names (`-i`, `-A`) that Claude Code's Grep uses.
+dashed parameter names (`-i`, `-A`) that the Grep tool takes.
 
 ## A seat is a desktop a person can use
 

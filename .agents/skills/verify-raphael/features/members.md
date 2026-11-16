@@ -496,7 +496,7 @@ a fake brain; it does not prove a physical microphone or live-provider behavior.
 
 ## Owner round 6 contracts
 
-Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain owner-approved.
+Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain as approved.
 
 
 ## Bot homes, phase 1
