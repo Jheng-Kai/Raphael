@@ -230,7 +230,7 @@ class DataFloor:
             # credentials included, where a card for a read names one file; and the owner's file tools do not search
             # those folders whatever the answer (`owner_files.PROTECTED`), so a yes would lead nowhere.
             return "write"
-        operation =str(arguments.get("operation", arguments.get("mode", "")))
+        operation = str(arguments.get("operation", arguments.get("mode", "")))
         if _WRITE.search(name + " " + operation) or operation.casefold() in {"w", "a", "r+", "w+", "a+"}:
             return "write"
         if _READ_TOOL.search(name) or operation.casefold() in {"read", "r", "list", "stat"}:
