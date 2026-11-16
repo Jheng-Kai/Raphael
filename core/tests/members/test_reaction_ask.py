@@ -1,5 +1,5 @@
 """Every reaction of the owner's to a member's reply is analysed at once by that member, on its own model, and the member
-decides whether to say something or nothing (owner, 2026-11-14, after Grok Bot). The analysis is a turn of the member's
+decides whether to say something or nothing. The analysis is a turn of the member's
 own: never approval, never the owner's words, and nothing of it is left when no words are needed."""
 import asyncio
 import json
@@ -126,7 +126,7 @@ async def test_a_negative_reaction_gets_words_in_the_members_own_voice_and_model
 
 @pytest.mark.parametrize('window,named', [('zh-TW', 'Traditional Chinese as written in Taiwan'), ('en', 'English'), ('ja', 'Japanese')])
 async def test_the_question_about_a_reaction_is_in_the_owners_language_whatever_the_member_teaches(setup, client, window, named):
-    # Owner, 2026-11-14: 紫苑, a Japanese teacher, asked what was wrong in Japanese because her conversation is full of it.
+    # A Japanese teacher asked what was wrong in Japanese because her conversation is full of it.
     rig, team_ = setup
     one = member(team_, name='紫苑', role='日本語の先生', instructions='日本語を教える。例文と練習問題は日本語で。')
     client.chats.append(live_said('日本語の例文です。'))

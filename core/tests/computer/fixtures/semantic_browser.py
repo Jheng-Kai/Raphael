@@ -68,7 +68,7 @@ def measured(fields=("username", "password")):
                 value=("••••" if field in ("password", "Secret") and self.semantic_values.get((key, field)) else self.semantic_values.get((key, field))))
                 for i, field in enumerate(order, 1)]
             self.semantic_pages[key] = rows
-            # The snapshot block as the driver answers it (0.37.0, measured on 2026-11-12).
+            # The snapshot block as the driver answers it (0.37.0, measured).
             page.update(refs=rows, snapshot={"id": f"p{generation}", "complete": True, "continuation": None,
                 "format": "semantic_v2", "scope": "viewport", "selected_nodes": len(rows), "total_nodes": len(rows)})
             return reply

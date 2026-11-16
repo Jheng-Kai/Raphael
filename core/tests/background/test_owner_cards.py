@@ -121,7 +121,7 @@ async def test_private_lane_question_never_projects_into_the_room(make_rig):
     from raphael_core.agent.speaker import RAPHAEL
     rig = make_rig()
     target, source = setup(rig)
-    rig.client.replies = [turn("Owner decision needed.", [call("ask_owner", {"question": "Which day?"}, "room-q")])]
+    rig.client.replies = [turn("A decision is needed.", [call("ask_owner", {"question": "Which day?"}, "room-q")])]
     accepted = rig.service.handoff(RAPHAEL, args(target, mode="consult"), source_turn_id=source.id, language="en")
     task_id = accepted.data["task_id"]
     await until(lambda: rig.task(task_id).state == "waiting")

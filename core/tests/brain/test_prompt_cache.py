@@ -1,4 +1,4 @@
-"""A conversation's prefix stays cached where its next turn goes (owner, 2026-11-09, decisions 1, 3 and 4)."""
+"""A conversation's prefix stays cached where its next turn goes."""
 
 import json
 

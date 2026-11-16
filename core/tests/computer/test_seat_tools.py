@@ -152,7 +152,7 @@ async def test_ambient_native_input_is_refused(seat_tools, name, args):
 @pytest.mark.parametrize("named", [dict(), dict(pid=99), dict(include_screenshot=False),
                                    dict(target_id="2", tab_id="2"), dict(target_id="peer-target")])
 async def test_a_page_read_that_names_the_browser_or_nothing_reads_the_seats_own_browser_window(seat_tools, named):
-    # A real member's turn at a seat (2026-11-12): browser_prepare, then get_browser_state with the browser's pid
+    # A real member's turn at a seat: browser_prepare, then get_browser_state with the browser's pid
     # only, was told "the window is not on this member's screen" about its own window, and gave up.
     hub, vm, _ = seat_tools
     client, session = hub.connections[vm.target(1).key]
@@ -474,7 +474,7 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
 
 
 def test_a_loaded_pc_gets_a_minute_for_the_browsers_window_and_every_outer_bound_outlasts_it():
-    # Owner, 2026-11-14: 「你就一次把所有東西都修復吧」. On a loaded PC (2026-11-13) a browser's first window took 13 to 41 s
+    # On a loaded PC a browser's first window took 13 to 41 s
     # and members saw browser_window_missing: the launcher waited 15 s (150 looks of 0.1 s, each look several processes,
     # so a loaded PC counted fewer seconds still), the settle wait 5 s, the driver's own launch 5 s.
     from raphael_core.computer import carry
@@ -552,7 +552,7 @@ async def test_a_window_the_manager_moves_slowly_is_waited_for_before_it_is_call
 
 
 def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
-    # Owner, 2026-11-13, of Grok Bot's computer: 「他們會有 chrome 等等之類的 我們一開始就要把環境架設好了 不會只有 cua」.
+    # The environment is set up from the start: Chrome and the like come with the image, not only the driver.
     # Nothing in a computer is root: what is not in the image a member cannot add.
     image = Path(module.__file__).parent / "image"
     dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
@@ -568,7 +568,7 @@ def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
 
 
 def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens_it():
-    # Owner, 2026-11-13, of the panel of his members' computer: 「但看起來底下不是顯示 Chrome ㄟ?」. Measured on layer 8:
+    # The panel did not show Chrome. Measured on layer 8:
     # the launcher wore a globe named "Browser" over Google Chrome; XFCE's "Web Browser" named a helper that does
     # not exist and asked which application to prefer; the menu's own Chrome entry and x-www-browser could not
     # start (they make a sandbox); the menu's Chromium and Firefox were second browsers with profiles of their own.
@@ -604,7 +604,7 @@ def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens
 
 
 def test_firefox_esr_is_purged_and_nothing_that_opens_it_is_left():
-    # Owner, 2026-11-14: 「Firefox 應該是沒有用了，你可以幫我把它從印象檔中移除，沒有關係。」 The members' browser is Google's
+    # Firefox is no use and leaves the image. The members' browser is Google's
     # Chrome (Chromium on arm64) and the driver's is Chromium, so a browser the base image brought was only a place an
     # owner would sign in for nobody. Layer 9 had hidden its menu entry and kept the package.
     image = Path(module.__file__).parent / "image"
@@ -682,7 +682,7 @@ def test_the_shared_computers_browser_icon_opens_the_members_own_browser():
 
 
 def test_the_members_browser_is_one_a_person_signs_in_with():
-    # An owner signing in to Google for his members (2026-11-13): "This browser or app may not be secure", a yellow
+    # An owner signing in to Google for the members: "This browser or app may not be secure", a yellow
     # bar about --no-sandbox, and "Restore pages?". A browser started with --remote-debugging-port=0 tells every
     # page it is automated; --test-type keeps the unsupported-flag bars away; a computer is stopped by ending its
     # processes, so the profile is marked as closed before the browser is started.
@@ -712,7 +712,7 @@ KEEPS_NOTHING = {"credentials_enable_service": False, "credentials_enable_autosi
     ("not json", None), ('["a list"]', None), ('{"profile":"odd"}', None), ('{"autofill":7}', None),
 ])
 def test_a_profile_whose_browser_was_ended_is_marked_closed_and_any_other_file_is_left(tmp_path, before, after):
-    # The same step keeps passwords, cards and addresses out of the profile every member reads (2026-11-13: an owner
+    # The same step keeps passwords, cards and addresses out of the profile every member reads (an owner
     # signing in at a seat was offered "Save password?").
     launcher = (Path(module.__file__).parent / "image/layer12/raphael-seat-browser").read_text(encoding="utf-8")
     source = launcher[launcher.index("<<'PY' || true\n") + len("<<'PY' || true\n"):launcher.index("\nPY\n")]
@@ -758,7 +758,7 @@ window_class=PREFIX
 class='WINDOW_CLASS'
 wmctrl() { printf '%s\\n' "0x2  0 99   $class  host old - Chromium" "0x3  0 99   $class  host peer-popup - Chromium" "0x4  0 100  $class  host raphael-seat-test - Chromium" "0x5  0 99   $class  host raphael-seat-test - Chromium" '0x6  0 99   chromium-browser.Chromium-browser  host raphael-seat-testing - Chromium'; }
 '''
-    # The rows are `wmctrl -lpx` as a real computer printed them on 2026-11-12: the class has a space in it, which
+    # The rows are `wmctrl -lpx` as a real computer printed them: the class has a space in it, which
     # is where a title looked for at a fixed column was never found and no seat got a browser.
     script = script.replace("PREFIX", prefix).replace("WINDOW_CLASS", window_class)
     result = subprocess.run([shell], input=script + selection + '\nprintf "%s\\n" "$new"\n',
@@ -768,7 +768,7 @@ wmctrl() { printf '%s\\n' "0x2  0 99   $class  host old - Chromium" "0x3  0 99  
 
 
 @pytest.mark.parametrize("state,geometry,x,settled", [
-    # Measured on 2026-11-12: maximized, the content filling screen 6, the browser's own frame reaching past it.
+    # Measured: maximized, the content filling screen 6, the browser's own frame reaching past it.
     ("_NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT", "2544 890 1312 893", 2560, True),
     ("_NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT", "2544 890 1312 893", 1280, False),  # the next screen's
     ("_NET_WM_STATE_FOCUSED", "2544 890 1312 893", 2560, False),                                        # not maximized

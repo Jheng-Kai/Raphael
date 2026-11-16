@@ -202,7 +202,7 @@ async def test_the_pass_runs_after_ten_turns_and_moves_its_watermark(memory, his
 
 
 async def test_a_long_backlog_is_read_newest_first_within_one_pass_and_the_watermark_moves(memory, history, model):
-    # 2026-11-09: a pass shown more than a CLI brain's fresh context failed, kept its watermark and stopped learning.
+    # A pass shown more than a CLI brain's fresh context failed, kept its watermark and stopped learning.
     from raphael_core.memory.reflection import REFLECTION_CHARS
     model.replies.append(PLAN)
     ids = [add_turn(history, f"q{n} " + "long words " * 300) for n in range(REFLECT_AFTER_TURNS * 3)]

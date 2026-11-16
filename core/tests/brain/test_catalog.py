@@ -2,8 +2,7 @@
 use, and how the list is kept (test_model_choice.py has `models.catalog` and choosing a model).
 
 No test touches the network: the client is a FakeModelsClient that answers with the recorded
-response in fixtures/openrouter_catalog.json (a trimmed copy of GET /models?output_modalities=all of
-2026-10-20 with a model of each sort the catalog tells apart: language models with and without
+response in fixtures/openrouter_catalog.json (a trimmed copy of GET /models?output_modalities=all with a model of each sort the catalog tells apart: language models with and without
 tool calling, one that always reasons, one without the reasoning parameter, one without
 structured output, a router priced at -1, a free model, an alias, a name without its maker;
 speech-to-text priced per second, per hour (Microsoft's MAI) and per token; and a batch variant, an

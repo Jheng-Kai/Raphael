@@ -1,5 +1,4 @@
-"""A page the chosen reader could not read is read once more by the next reader the owner set up (R-PERSIST-06, after
-Hermes Agent's rescue of a failed extract). A reader is a service: the model never changes. No request leaves the test."""
+"""A page the chosen reader could not read is read once more by the next reader the owner set up (R-PERSIST-06). A reader is a service: the model never changes. No request leaves the test."""
 
 import pytest
 

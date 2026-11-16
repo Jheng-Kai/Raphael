@@ -1,4 +1,4 @@
-"""Length is never an error in a memory pass or a fold (owner, 2026-11-09 to 11-11, when 17 passes and 5 folds failed
+"""Length is never an error in a memory pass or a fold (17 passes and 5 folds once failed
 for it): a call whose input is more than the model reads is made again with less, whole turns newest first; an item that
 alone is more is skipped and said so; the watermark always moves; and a fold that cannot be written by a model is
 covered without one, so that a failed call never blocks the conversation."""

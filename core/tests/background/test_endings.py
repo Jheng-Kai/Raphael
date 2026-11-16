@@ -307,7 +307,7 @@ async def _finish(rig, target, source, **options):
 
 
 async def test_work_file_named_by_its_computer_path_counts_when_the_browser_profile_is_newer(make_rig, tmp_path, monkeypatch):
-    """Owner 2026-11-15, task 797: the member wrote typeless-benchmark.md in the team folder and said so; the newest files of
+    """A member wrote benchmark-report.md in the team folder and said so; the newest files of
     its own folder were browser caches this PC cannot read, which took every place of the verified ones, so the work failed."""
     from raphael_core.background import tasks
     rig = make_rig()
@@ -327,14 +327,14 @@ async def test_work_file_named_by_its_computer_path_counts_when_the_browser_prof
             _fresh(rig, noise, ahead=5)
         folder = team / "projects" / "research"
         folder.mkdir(parents=True)
-        (folder / "typeless-benchmark.md").write_text("# Benchmark", encoding="utf8")
-        _fresh(rig, folder / "typeless-benchmark.md")
-        return report("Report is in /home/cua/team/projects/research/typeless-benchmark.md")
+        (folder / "benchmark-report.md").write_text("# Benchmark", encoding="utf8")
+        _fresh(rig, folder / "benchmark-report.md")
+        return report("Report is in /home/cua/team/projects/research/benchmark-report.md")
     rig.client.replies.append(saved)
-    task = await _finish(rig, target, source, done_when="typeless-benchmark.md exists with sources")
+    task = await _finish(rig, target, source, done_when="benchmark-report.md exists with sources")
     assert (task.state, task.reason) == ("done", None)
     assert [item["uri"] for item in rig.service._store.evidence(task.id) if item["kind"] == "artifact"] == [
-        "projects/research/typeless-benchmark.md"]
+        "projects/research/benchmark-report.md"]
 
 
 async def test_work_file_named_in_the_condition_fails_when_only_other_files_are_new(make_rig, tmp_path):

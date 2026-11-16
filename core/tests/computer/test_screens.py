@@ -326,7 +326,7 @@ def test_helper_start_preserves_boot_mark_and_skips_matching_layout(monkeypatch,
     assert [call[0] for call in calls[-2:]] == ['keys', 'serve'] and calls[-2][1] == (4 if value == '4' else 1)
 
 
-# `xfconf-query -c xfce4-keyboard-shortcuts -l -v` as a real computer printed it on 2026-11-12 (an excerpt).
+# `xfconf-query -c xfce4-keyboard-shortcuts -l -v` as a real computer printed it (an excerpt).
 SHORTCUTS = '''\
 /commands/custom/<Alt>F2                   xfce4-appfinder --collapsed
 /commands/custom/<Alt>F2/startup-notify    true
@@ -651,11 +651,11 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
     ('4', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
     ('6', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),
     ('6', ['VNC_PW=private'], False),
-    ('7', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # released 2026-11-12; every computer was on it when 8 came
+    ('7', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # every computer was on it when 8 came
     ('7', ['VNC_PW=private'], False),
-    ('8', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # released 2026-11-13; the owner's computers were on it when 9 came
+    ('8', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # the owner's computers were on it when 9 came
     ('8', ['VNC_PW=private'], False),
-    ('9', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # released 2026-11-13; the owner's computers were on it when 10 came
+    ('9', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),      # the owner's computers were on it when 10 came
     ('9', ['VNC_PW=private'], False),
     ('10', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),     # released with 11: the computer without Firefox ESR
     ('10', ['VNC_PW=private'], False),

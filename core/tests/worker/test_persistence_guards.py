@@ -1,4 +1,4 @@
-"""The guards that keep a model on its tools (R-PERSIST-04, owner, 2026-11-14).
+"""The guards that keep a model on its tools (R-PERSIST-04).
 
 A member said 「我先去看看今天的新聞。」 and the turn ended with nothing done; another had a page read, a page shown and a
 command fail one after the other and stopped, where no one tool's count had reached its note. Fakes only."""

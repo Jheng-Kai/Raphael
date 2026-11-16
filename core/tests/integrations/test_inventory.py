@@ -303,7 +303,7 @@ async def test_a_connectors_ready_tools_are_exactly_the_ones_the_gate_lets_throu
 
 
 def test_a_connections_mark_is_its_public_https_logo_and_nothing_else():
-    # Owner, 2026-11-14: one source for an app's mark, so the @ menu draws the logo the connected list draws.
+    # One source for an app's mark, so the @ menu draws the logo the connected list draws.
     from raphael_core.integrations.inventory import public_app
     base = {"id": "composio:outlook", "name": "Outlook", "enabled": True, "state": "ready", "tools": 3}
     assert public_app({**base, "logo": "https://logos.composio.dev/api/outlook"})["logo"] == "https://logos.composio.dev/api/outlook"

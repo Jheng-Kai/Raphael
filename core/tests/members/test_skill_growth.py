@@ -40,7 +40,7 @@ async def test_member_learns_and_updates_without_read_notifications(rig):
 
 
 async def test_a_skill_has_no_undo_anywhere_and_a_delete_is_final(rig):
-    # Owner, 2026-11-14: the "undo last change" of skills is gone from every place (R-SKILL-01).
+    # The "undo last change" of skills is gone from every place (R-SKILL-01).
     from raphael_core.management import REGISTRY
     cap = rig.service.capabilities
     skill = cap.manage_skill(0, {"text": DOCUMENT})
@@ -86,7 +86,7 @@ async def test_learning_distinguishes_creation_content_and_reference_updates_fro
 
 
 async def test_a_skill_learned_hours_after_its_turn_is_a_line_in_it_and_not_that_turn_arriving_again(rig):
-    """R-SKILL-12: five turns of 2026-11-06 to 11-09 were answered in seconds to a minute, and 5 to 35 hours later a review
+    """R-SKILL-12: five turns were answered in seconds to a minute, and 5 to 35 hours later a review
     wrote a skill line into them; the line told the app the turn had arrived (a "finished" notice and an unread light)."""
     from types import SimpleNamespace
     from unittest.mock import Mock
@@ -130,9 +130,7 @@ async def test_learning_an_imported_skill_preserves_its_source(rig):
     assert learned["learned_at"]
 
 
-# Skill learning follows Hermes Agent's nudge (R-SKILL-09, R-SKILL-10): real work counts, a review is rare, and a skill is not a diary.
-# 
-# Owner, 2026-11-11: "他現在一直建立 skills，我覺得可能不太好…參考一下 Hermes agents，然後把他們的邏輯行為拿過來".
+# Skill learning follows a nudge (R-SKILL-09, R-SKILL-10): real work counts, a review is rare, and a skill is not a diary.
 
 import logging
 
@@ -358,7 +356,7 @@ async def test_the_review_sees_every_skill_and_may_update_one_whose_text_did_not
     assert "Verify the sources." in rig.service.skill_read(desk.member, "research-summary")
 
 
-async def test_the_review_prompt_is_hermes_discipline_without_its_eagerness():
+async def test_the_review_prompt_is_disciplined_without_eagerness():
     from raphael_core.members.skill_review import NUDGE_INTERVAL, SYSTEM
     assert NUDGE_INTERVAL == 10
     assert "default answer is no change" in SYSTEM and 'return {"changes": []}' in SYSTEM

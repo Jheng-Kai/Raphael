@@ -34,7 +34,7 @@ def test_locale_aliases(value, expected):
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_every_locale_has_fixed_copy_and_no_brain_path_names_it(language):
-    # Owner, 2026-11-14: 「它的 UI 語言就是單純 UI 語言而已，它也不會去到 system prompt，什麼事都不會發生」. The prompts take no
+    # The interface language is only the interface's: it never reaches a system prompt. The prompts take no
     # language at all; the locale keeps its fixed copy (names, labels, prefixes) for the window.
     member = dict(name="Test assistant", role="Assistant", instructions="Answer in the owner's language.")
     prompts = [

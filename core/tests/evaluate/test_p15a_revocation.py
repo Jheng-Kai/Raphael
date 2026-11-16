@@ -2,7 +2,7 @@
 again, through the production loops of both brains (the API loop and the authenticated MCP of a CLI), and
 whatever the owner said before: their 一律允許 on that tool waives its questions and nothing more. The brains here
 are stubborn: they remember the tool from earlier in the conversation and call it by its name through use_tool,
-findable or not. A connection's tools are never listed (owner, 2026-11-09, decision 2)."""
+findable or not. A connection's tools are never listed."""
 import pytest
 
 from raphael_core.brain.settings import SettingsStore

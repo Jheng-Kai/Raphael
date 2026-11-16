@@ -148,7 +148,7 @@ def test_opening_a_page_is_its_own_read_and_a_click_after_it_still_needs_one():
 IMAGE_NAME = "raphael/cua-local-vm:driver-0.37.0-v13"
 
 
-def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.168.8.178\n"):
+def answer(code, out="", err="", config="host studio\nuser alex\nhostname 192.168.8.178\n"):
     calls = []
 
     async def fake(args):
@@ -173,7 +173,7 @@ def answer(code, out="", err="", config="host studio\nuser jack2\nhostname 192.1
     (44, "Linux\n", "Cannot connect to the Docker daemon", "docker_stopped", "ssh -t studio-mini \"sudo systemctl start docker\""),
     (44, "Darwin\n", "Cannot connect to the Docker daemon", "docker_stopped", "ssh studio-mini \"open -a Docker\""),
     (44, "Linux\n", "permission denied while trying to connect to the Docker daemon socket", "docker_access",
-     "ssh -t studio-mini \"sudo usermod -aG docker jack2\""),
+     "ssh -t studio-mini \"sudo usermod -aG docker alex\""),
     (0, "Linux\naarch64\namd64\n", "", "architecture", f"ssh studio-mini \"docker image rm {IMAGE_NAME}\""),
 ])
 async def test_remote_health_classifies_each_failure_with_the_command_that_fixes_it(monkeypatch, code, out, err, kind, command):
@@ -209,7 +209,7 @@ async def test_every_command_shown_reaches_the_host_or_sets_up_this_computers_ss
              "docker_missing", "docker_stopped", "docker_access", "architecture")
     for os_name in ("linux", "darwin", ""):
         for kind in kinds:
-            command = repair_command(kind, "studio-mini", os_name=os_name, user="jack2", hostname="192.168.8.178")
+            command = repair_command(kind, "studio-mini", os_name=os_name, user="alex", hostname="192.168.8.178")
             for line in command.splitlines():
                 assert line.startswith(("ssh ", "ssh-", "Host ", "  ", "Get-Content")), (kind, line)
                 assert "core/src" not in line and "docker build" not in line

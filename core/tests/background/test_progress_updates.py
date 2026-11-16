@@ -1,7 +1,7 @@
 """A task in a member's private conversation tells the owner how it goes (R-PROGRESS-01).
 
-The owner's data, 2026-11-14: a hand-off task of 37 minutes and 71 calls on Claude Code wrote 142 steps and not one
-message until he stopped it. Two minutes into a task with no message, then five minutes after the last, the next tool
+A hand-off task of 37 minutes and 71 calls on Claude Code once wrote 142 steps and not one
+message until the owner stopped it. Two minutes into a task with no message, then five minutes after the last, the next tool
 result asks for a two-sentence update, and what the member writes next reaches the owner as a message through the task's
 `_reply`, on an API brain and on a CLI brain. A routine (its owner reads only its last message) is asked for nothing.
 """

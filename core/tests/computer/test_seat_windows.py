@@ -1,4 +1,4 @@
-"""A seat is a desktop a person can use (owner, 2026-11-14, watching a member's screen): its windows come back from the
+"""A seat is a desktop a person can use (watching a member's screen): its windows come back from the
 panel, the Browser icon is a dock's, no marker page stays on screen, members use tabs, and a window stays inside its
 screen above the panel. The image's scripts are read and run here without Docker; the members' tools against fakes."""
 
@@ -53,7 +53,7 @@ def test_layer_twelve_is_the_last_step_and_writes_over_what_earlier_steps_instal
 
 
 def test_every_panel_lists_its_own_screens_windows_with_icons_only():
-    # Owner, 2026-11-14: he minimized his member's browser and could not find it again; the panel had no window list.
+    # An owner minimized a member's browser and could not find it again; the panel had no window list.
     options = dict((name, value) for name, _, value in screens.TASKLIST_OPTIONS)
     assert options["show-labels"] == "false" and options["include-all-monitors"] == "false"
     assert options["grouping"] == "false" and options["window-scrolling"] == "false" and options["middle-click"] == "0"
@@ -94,7 +94,7 @@ DECORATED = "_NET_WM_STATE(ATOM) = \n_NET_FRAME_EXTENTS(CARDINAL) = 5, 5, 29, 5\
 
 
 @pytest.mark.parametrize("place,properties,expected", [
-    # The owner's picture of 2026-11-14, measured: maximized with the shadow's size kept, cut on three sides.
+    # Measured: maximized with the shadow's size kept, cut on three sides.
     ((2544, 890, 1312, 893), STUCK, "fill"),
     ((2560, 900, 1280, 851), STUCK, None),
     # Restored and dragged half onto the screen beside: what is seen of it is put back inside, its shadow aside.

@@ -1,4 +1,4 @@
-"""A task's tools are one fixed list, sorted by name, whatever the task says (owner, 2026-11-09, decision 2).
+"""A task's tools are one fixed list, sorted by name, whatever the task says.
 
 Any other tool of the task is found with find_tools, which returns its name, description and input
 schema, and called with use_tool, through the same gate as a direct call. Neither changes the list:

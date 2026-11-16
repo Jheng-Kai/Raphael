@@ -1,4 +1,4 @@
-"""A room reply has no clock of its own (Hermes, tools/delegate_tool.py: progress, not total seconds): each attempt has
+"""A room reply has no clock of its own (progress counts, not total seconds): each attempt has
 the whole no-progress window, a chosen wait before the next attempt is not a stall, and only silence ends a reply. A total
 of 60 seconds used to end long rooms as 「未能回覆：發生錯誤」."""
 import asyncio

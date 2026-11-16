@@ -1,5 +1,4 @@
-"""Several changes that cannot be undone, asked for in one turn, are one card with one yes (owner, 2026-11-11:
-「不要分這麼多卡片，讓我去按同意」).
+"""Several changes that cannot be undone, asked for in one turn, are one card with one yes.
 
 Before, each change was a question of its own and the model could propose the second only once the first was answered,
 so the owner met one card at a time and a card nobody saw ran out. Now they are held until the model's turn is in, shown

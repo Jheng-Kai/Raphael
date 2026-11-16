@@ -2,8 +2,7 @@
 for `models.catalog`, a day-long cache, and the builtin table when the list cannot be had.
 
 No test touches the network: the client is a FakeModelsClient that answers with the recorded
-response in fixtures/openrouter_models.json (a trimmed copy of GET /models?output_modalities=all
-of 2026-10-18), or fails as told. The cache lives in an in-memory database.
+response in fixtures/openrouter_models.json (a trimmed copy of GET /models?output_modalities=all), or fails as told. The cache lives in an in-memory database.
 """
 
 import asyncio

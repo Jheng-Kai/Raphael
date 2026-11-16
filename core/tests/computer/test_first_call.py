@@ -1,6 +1,6 @@
 """R-COMP-FIRST-01: the first call after a wake waits for the computer to be ready.
 
-Owner, 2026-11-14: a member's first action at its computer failed nine times with `docker_stopped`,
+A member's first action at its computer once failed nine times with `docker_stopped`,
 `driver_configuration_failed` or `task_stopped` and 「再試一次」 made it work with nothing changed. A computer on its way up
 (the engine not answering, the container not healthy, the driver not configured, a call that was cut short) is waited for
 inside the one tool call, a bounded number of times; a real failure is still reported at once and never tried again. Docker

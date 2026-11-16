@@ -130,7 +130,7 @@ async def test_a_cli_brain_hears_the_no_was_the_owners_and_has_no_tool_to_ask_fo
         assert offered and not any("approve" in tools for tools in offered)
         # The connection's tool is called through use_tool (decision 2): its refusals are use_tool's results.
         refused = [text for text in seen if text.startswith("<tool_result") and 'tool="use_tool"' in text and 'status="error"' in text
-                   and EXPIRED_NOTE not in text]  # a question that ran out is nobody's no (its fixed words, owner, 2026-11-14)
+                   and EXPIRED_NOTE not in text]  # a question that ran out is nobody's no (its fixed words)
         assert refused and all("because the owner said no" in text for text in refused), refused
     finally:
         await driver.aclose()

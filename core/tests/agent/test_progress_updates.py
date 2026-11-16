@@ -1,6 +1,6 @@
 """Long work tells the owner how it goes (R-PROGRESS-01).
 
-Owner, 2026-11-14: 「他現在又開始不講任何進度了…不然我其實不太知道它目前的進度，我可能會覺得它是不是當機了」. A member's task of
+Without a word of progress the owner cannot tell a long task from a crash. A member's task of
 37 minutes and 71 calls wrote 142 steps and not one message. Two minutes into a run with no message, then five minutes
 after the last, the next tool result asks for a two-sentence update, and what the member says next is a message, not
 progress in the folded work. The clock is the test's: no test waits.

@@ -195,7 +195,7 @@ async def test_room_usage_limit_commits_safe_failure_and_emits_it(meeting, monke
     ("signed_out", "cli_login", "Claude Code is not signed in.", "CLI sign-in needed"),
 ])
 async def test_a_room_member_whose_cli_cannot_sign_in_reports_that_cause(meeting, monkeypatch, tmp_path, cause, reason, sentence, status):
-    """Owner, 2026-11-11: the same specific cause in a room, in the room's own words, with no new button there."""
+    """The same specific cause in a room, in the room's own words, with no new button there."""
     rig, members, rooms, room, alice = meeting
     members.store.update_member(alice.id, model="cli:claude")
     rig.service.use_cli(Brains(tmp_path))

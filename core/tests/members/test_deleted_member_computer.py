@@ -1,5 +1,5 @@
-﻿"""Deleting a member removes its computer too, by itself (owner, 2026-11-11: 「理論上不會問這個問題，應該是知道他可能有這個東西
-會自動刪掉；如果還沒開起就不用顯示」). The deletion never waits for an engine and never fails for one: the computer is owed,
+﻿"""Deleting a member removes its computer too, by itself (no question is asked, and nothing is shown when the
+computer was never started). The deletion never waits for an engine and never fails for one: the computer is owed,
 and paid when its engine can be reached. A fake engine stands in for Docker; nothing here starts or contacts a real one."""
 
 import asyncio

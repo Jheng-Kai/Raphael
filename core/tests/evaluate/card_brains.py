@@ -30,7 +30,7 @@ def worked(results):
 
 def found(tools, results, suffix):
     """The name of the tool ending with `suffix`: listed, or among the definitions find_tools returned (a connection's
-    tools are found, never listed: owner, 2026-11-09, decision 2)."""
+    tools are found, never listed)."""
     for name in tools:
         if name.endswith(suffix):
             return name
@@ -75,7 +75,7 @@ class Brain(FakeClient):
 
 
 def cli_brain(monkeypatch, seen, act, **behaviour):
-    """A Codex-like CLI whose child speaks MCP to Raphael's one server with the token it was given."""
+    """A CLI whose child speaks MCP to Raphael's one server with the token it was given."""
     class Driver:
         def __init__(self, name, command, *, model, **kwargs):
             self.model = model
