@@ -389,13 +389,13 @@ async def test_a_switch_pressed_while_a_sign_in_waits_is_not_undone_when_the_sig
 
 @pytest.mark.parametrize("stage", ["browser", "polling"])
 async def test_disconnecting_the_app_a_sign_in_waits_for_ends_that_sign_in_too(tmp_path, conn, stage):
-    """Jack is connected and a second account waits: disconnecting the app is the owner's last word on all of it."""
-    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn, stage=stage, accounts=[account("ca_jack", "ACTIVE", label="Jack")])
+    """Alex is connected and a second account waits: disconnecting the app is the owner's last word on all of it."""
+    router, service, fake, task = await sign_in_waiting_for(tmp_path, conn, stage=stage, accounts=[account("ca_main", "ACTIVE", label="Alex")])
     result = await asyncio.wait_for(router.call("connectors.disconnect", {"id": "composio:gmail"}), 2)
     assert result == {"disconnected": True}
     assert (await asyncio.wait_for(task, 2))["error"] == "cancelled"  # no failure shown for a wait that was ended on purpose
     assert "composio:gmail" not in service.store.connectors and not service.login_pending and service._signing_in == set()
-    assert sorted(a for a, _ in fake.deleted) == ["ca_jack", "ca_test"]
+    assert sorted(a for a, _ in fake.deleted) == ["ca_main", "ca_test"]
     assert "composio:gmail" not in ConnectorStore(tmp_path).connectors
 
 

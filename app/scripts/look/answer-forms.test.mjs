@@ -108,7 +108,7 @@ it("a question's answer button stands at the field height and shares the field's
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("a page open in the conversation's place is the whole area: the panel folded, the page's pill, Share, no dialog (2026-11-11, 2026-11-14)", () => {
+it("a page open in the conversation's place is the whole area: the panel folded, the page's pill, Share, no dialog", () => {
   // The × once stood outside a dialog's page; the page now replaces the conversation, the header's arrow goes back, and (R-PAGE-08)
   // it takes the whole area beside the sidebar with the page's own pill in the header's centre and Share at its right.
   const browser = new Window(), doc = browser.document;
