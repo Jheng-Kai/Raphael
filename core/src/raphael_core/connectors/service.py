@@ -40,6 +40,8 @@ CATALOG_FILE = "connectors-catalog.json"
 # and the account Composio made for it goes with it.
 WAITING = ("INITIALIZING", "INITIATED")
 SIGN_IN_LIMIT_S = 600
+# What `_signing_in` holds while the built-in Google sign-in waits: the account ids of Composio never look like this.
+GOOGLE_SIGN_IN = "google"
 
 
 def _created_at(value) -> float | None:
@@ -150,7 +152,8 @@ class ConnectorsService:
             async with asyncio.timeout(budget):
                 # These take the lock themselves, for the steps that need it and never for a wait: a sign-in waits in the browser
                 # for up to ten minutes, and nothing else the owner presses may queue behind it.
-                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect"}:
+                if name in {"catalog", "categories", "toolkit", "status", "remove_account", "connect", "disconnect",
+                            "google.configure", "google.connect"}:
                     return await handler(params)
                 async with self._lock:
                     return await handler(params)
@@ -462,6 +465,8 @@ class ConnectorsService:
         if task is not None and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        # A sign-in still waiting in the browser ends here, so it gives back what it made before the core is gone.
+        await self._end_sign_in(set(self._signing_in))
 
     async def categories(self, params):
         return await self.composio.page("/toolkits/categories", cache=True)
@@ -878,7 +883,7 @@ class ConnectorsService:
     async def disconnect(self, params):
         """Take an app away with all its accounts. A sign-in that waits for one of them ends first: it has nothing left to wait for."""
         entry = self._entry(params)
-        await self._end_sign_in([a["id"] for a in entry.accounts])
+        await self._end_sign_in([entry.id, *(a["id"] for a in entry.accounts)])
         async with self._lock:
             return await self._disconnect(self._entry(params))  # read again: a press that waited for the lock may find it gone
 
@@ -920,6 +925,13 @@ class ConnectorsService:
         return {"disconnected": True}
 
     async def google_configure(self, params):
+        """Set the owner's Google client up. A sign-in that waits for the settings it began with has nothing left to wait for:
+        it ends first, and is waited for, because it needs the lock to finish."""
+        await self._end_sign_in([GOOGLE_SIGN_IN])
+        async with self._lock:
+            return await self._google_configure(params)
+
+    async def _google_configure(self, params):
         client_id = _text(params, "client_id")
         client_secret = _text(params, "client_secret", optional=True)
         gmail, calendar = params.get("gmail", "write"), params.get("calendar", "write")
@@ -949,22 +961,39 @@ class ConnectorsService:
                 "testing_refresh_expires_days": 7, "revocation_affects_whole_project": True}
 
     async def google_connect(self, params):
-        entry = self.store.connectors.get("google")
-        if entry is None:
-            raise ConnectorFailure("not_configured")
-        entry.status = "INITIATED"
-        self._save()
+        # As with an app of Composio: the lock is taken to set the sign-in up and to finish it, never for the wait between
+        # (up to two minutes in the browser), so nothing else the owner presses queues behind it.
+        async with self._lock:
+            entry = self.store.connectors.get("google")
+            if entry is None:
+                raise ConnectorFailure("not_configured")
+            scopes, kept = scopes_for(entry.gmail, entry.calendar), self.vault.get(PREFIX + "refresh_token")
+            entry.status = "INITIATED"
+            self._signing_in.add(GOOGLE_SIGN_IN)
+            self._save()
         try:
-            entry.granted_scopes = await self.google.connect(scopes_for(entry.gmail, entry.calendar), self._open)
-            address = await self.google.account_address()
-            entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE", "email": address}, entry.accounts)]
-            await self.sync_google()
-            self._save()
-        except BaseException:
+            granted = await self.google.connect(scopes, self._open)
+            async with self._lock:
+                entry.granted_scopes = granted
+                address = await self.google.account_address()
+                entry.status, entry.accounts = "ACTIVE", [self.account_view({"id": "me", "status": "ACTIVE", "email": address}, entry.accounts)]
+                await self.sync_google()
+                self._save()
+        except BaseException as error:
             entry.status = "INACTIVE"
-            await self.sync_google()
-            self._save()
+            if isinstance(error, asyncio.CancelledError) and self.vault.get(PREFIX + "refresh_token") != kept:
+                # Ended after Google's answer was taken and before the sign-in could finish: the grant it brought is not kept.
+                self.google.forget_access()
+                if kept:
+                    self.vault.set(PREFIX + "refresh_token", kept)
+                else:
+                    self.vault.delete(PREFIX + "refresh_token")
+            async with self._lock:
+                await self.sync_google()
+                self._save()
             raise
+        finally:
+            self._signing_in.discard(GOOGLE_SIGN_IN)
         return {"connected": True, "connector": self._view(entry)}
 
     async def sync_google(self):
