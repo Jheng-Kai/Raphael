@@ -442,11 +442,9 @@ def _read_envelope(text: str, *, edges: bool = True, strict: bool = False) -> di
     if cut and not edges:
         return None  # authored words, for a path that reads whole objects only
     if cut:
-        # An object cut off after objects that said something: what they said is the reply, and the tail goes.
-        if lead and all(item.keys() <= _KNOWN_KEYS for item in lead):
-            reply = _compose(lead, "", [])
-            return reply if reply["messages"] else _CUT
-        return None if lead else _CUT
+        # An object cut off straight after objects, with no words between: the objects were progress and the answer is
+        # missing, whatever they said. Only words written outside any object forgive a cut object (below).
+        return None if lead and not all(item.keys() <= _KNOWN_KEYS for item in lead) else _CUT
     if not edges:
         return _single_or_run(lead, strict) if lead and not text[end:].strip() else None
     if lead and not (_protocol_objects(lead) or all(item.keys() <= _KNOWN_KEYS for item in lead)):
@@ -462,9 +460,10 @@ def _read_envelope(text: str, *, edges: bool = True, strict: bool = False) -> di
         trailing, stop, cut = _object_run(text, start)
         words = text[end:start].strip()
         if cut:
-            # Words, then an object that stops before it is closed: the words are the answer with a broken tail.
-            reply = _compose(lead, words, []) if lead else {"messages": [words] if words else [], "_objects": []}
-            return reply if reply["messages"] else _CUT
+            # Words, then an object that stops before it is closed: the words are the answer with a broken tail. With no
+            # words before it, the answer is missing.
+            return _compose(lead, words, []) if words and lead else (
+                {"messages": [words], "_objects": []} if words else _CUT)
         if trailing and not text[stop:].strip() and _protocol_objects([*lead, *trailing]):
             return _compose(lead, words, trailing)
     if lead and _protocol_objects(lead):
