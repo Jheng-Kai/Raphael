@@ -6,6 +6,7 @@ there); the brain is a fake.
 """
 
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -138,6 +139,47 @@ async def test_a_search_judges_a_linked_file_where_it_leads(home, files):
     assert "readme.txt" not in listed.text
 
 
+@pytest.fixture
+def linked_home(tmp_path, monkeypatch):
+    """The owner's home reached through a folder link, as a home moved to another drive is: `_home` gives the link, and
+    every path a tool resolves lands in the folder it leads to."""
+    real = tmp_path / "real-home"
+    (real / ".ssh").mkdir(parents=True)
+    (real / ".ssh" / "config").write_text("Host PRIVATE\n", encoding="utf-8")
+    (real / "Documents").mkdir()
+    (real / "Documents" / "plan.md").write_text("ship\n", encoding="utf-8")
+    home = tmp_path / "home"
+    _link_folder(home, real)
+    monkeypatch.setattr(owner_files, "_home", lambda: home)
+    return home
+
+
+async def test_a_home_reached_through_a_link_keeps_its_places_of_keys(conn, linked_home, files):
+    # The file has an ordinary name, so only where it stands keeps it.
+    for name, arguments in (("read_file", {"path": "~/.ssh/config"}), ("glob", {"pattern": "*", "path": "~/.ssh"}),
+                            ("grep", {"pattern": "PRIVATE", "path": "~/.ssh"})):
+        result = await call(files, name, arguments)
+        assert not result.ok and result.kind == "kept", name
+    matched = await call(files, "grep", {"pattern": "PRIVATE|ship", "output_mode": "content"})
+    assert "plan.md" in matched.text and "PRIVATE" not in matched.text
+    SettingsStore(conn).set("owner_write_folders", [str(linked_home)])
+    written = await call(files, "write_file", {"path": "~/.ssh/config", "content": "Host leak\n"})
+    assert not written.ok and written.kind == "not_writable"
+
+
+async def test_a_place_of_keys_reached_through_a_link_is_kept_as_asked_and_where_it_leads(home, files, tmp_path):
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    (keys / "config").write_text("Host PRIVATE\n", encoding="utf-8")
+    (home / ".ssh" / "id_ed25519").unlink()
+    (home / ".ssh").rmdir()
+    _link_folder(home / ".ssh", keys)
+    result = await call(files, "read_file", {"path": "~/.ssh/config"})
+    assert not result.ok and result.kind == "kept"
+    found = await call(files, "grep", {"pattern": "PRIVATE", "path": "~/.ssh"})
+    assert not found.ok and found.kind == "kept"
+
+
 def test_a_walk_keeps_raphaels_own_data_behind_a_link(home, tmp_path):
     data = tmp_path / "raphael-data"
     data.mkdir()
@@ -173,6 +215,26 @@ async def test_glob_and_grep_walk_the_home_but_not_packages_or_kept_places(home,
     assert "Found 1 file" in inside.text
     bad = await call(files, "grep", {"pattern": "("})
     assert not bad.ok and bad.kind == "bad_pattern"
+
+
+async def test_a_search_for_raphaels_database_by_name_is_made_and_finds_none_of_its_data(conn, home, files, monkeypatch):
+    # Through the gate: the data floor reads a search's path as its place, never its pattern.
+    data = home / "Raphael Data"
+    data.mkdir()
+    (data / "raphael.db").write_text("raphael.db SECRET ROW\n", encoding="utf-8")
+    monkeypatch.setenv("RAPHAEL_DATA_DIR", str(data))
+    (home / "Documents" / "setup.md").write_text("The app keeps raphael.db in its data folder.\n", encoding="utf-8")
+    gate = ToolGate(files, conn=conn)
+    found = await gate.call_plugin("mcp:owner_files/grep", {"pattern": "raphael.db", "path": "~", "output_mode": "content"})
+    assert found.ok and "setup.md" in found.text and "SECRET" not in found.text
+    named = await gate.call_plugin("mcp:owner_files/glob", {"pattern": "**/raphael.db", "path": "~"})
+    assert named.ok and "No files found" in named.text
+    # Where Raphael's data is the place asked for, it is refused as before: a read waits for the owner's consent, a search
+    # is refused.
+    read = await gate.call_plugin("mcp:owner_files/read_file", {"path": str(data / "raphael.db")})
+    assert not read.ok and read.kind == "approval_required" and "SECRET" not in read.text
+    searched = await gate.call_plugin("mcp:owner_files/grep", {"pattern": "SECRET", "path": str(data)})
+    assert not searched.ok and searched.kind == "protected_data"
 
 
 # --- writing ---------------------------------------------------------------------------------------------------------
@@ -227,6 +289,48 @@ async def test_a_turn_from_anywhere_reads_the_owners_file(make_rig, client, conn
     assert any("ship the Mac build" in text for text in results)
 
 
+async def test_a_search_for_every_match_reaches_the_model_cut_to_its_result_limit(make_rig, client, conn, home):
+    # head_limit 0 asks for every match, and the tool gives them all; what the model reads of any tool's result is held to
+    # the harness's result limit, its head and its tail kept, and says it was cut.
+    from raphael_core.worker.guards import MAX_RESULT_CHARS
+    (home / "Documents" / "log.txt").write_text("".join(f"ship entry {index:05d} {'x' * 60}\n" for index in range(2000)),
+                                                encoding="utf-8")
+    rig = rig_with_files(make_rig, conn)
+    client.chats = [chat("Searching.", ("owner_files__grep", {"pattern": "ship entry", "path": "~/Documents",
+                                                               "output_mode": "content", "head_limit": 0})),
+                    chat('{"text":"There are many entries."}')]
+    result = await rig.call("agent.ask", {"session_id": "files-all", "text": "List every ship entry in my log",
+                                          "ui_language": "en", "member_id": 0, "source": "app"})
+    assert result["status"] == "done"
+    [text] = [message["content"] for message in client.chat_calls[-1]["messages"] if message["role"] == "tool"]
+    assert len(text) <= MAX_RESULT_CHARS + 500 and "cut_short=true" in text and "characters left out" in text
+    assert "ship entry 00000" in text and "ship entry 01999" in text
+
+
+async def test_the_card_for_a_write_names_the_file_that_will_be_written(make_rig, client, conn, home):
+    # The member wrote a path through a folder link; the owner approves the place the write lands, where `writable` judged.
+    rig = rig_with_files(make_rig, conn)
+    rig.settings.set("owner_write_folders", [str(home / "Documents")])
+    _link_folder(home / "Desk", home / "Documents")
+    landing = os.path.realpath(home / "Documents" / "new.md")
+    client.chats = [chat("Saving.", ("owner_files__write_file", {"path": "~/Desk/new.md", "content": "hello\n"}))]
+    asked = await rig.call("agent.ask", {"session_id": "files-card", "text": "Save a note on my desk",
+                                         "ui_language": "en", "member_id": 0, "source": "app"})
+    assert asked["status"] == "confirm"
+    card = PermissionCards(conn).get(asked["confirm"]["id"])
+    assert landing in card.summary and "~/Desk" not in card.summary
+    assert "~/Desk" not in asked["confirm"]["text"]
+    assert not (home / "Documents" / "new.md").exists()
+
+
+def test_a_card_shows_the_resolved_path_only_for_the_owners_file_writes(home):
+    from raphael_core.computer.local_tools import card_arguments
+    written = card_arguments("mcp:owner_files/edit_file", {"path": "~/Documents/budget.csv", "old_string": "a", "new_string": "b"})
+    assert written["path"] == os.path.realpath(home / "Documents" / "budget.csv") and written["old_string"] == "a"
+    for key in ("mcp:owner_files/read_file", "mcp:computer/write_file", "mcp:Notes/note"):
+        assert card_arguments(key, {"path": "~/Documents/budget.csv"}) == {"path": "~/Documents/budget.csv"}
+
+
 async def test_a_cli_brain_has_the_owners_file_tools(make_rig, conn, home, monkeypatch):
     rig = rig_with_files(make_rig, conn)
     rig.settings.set("agent_model", "cli:claude")
@@ -239,6 +343,46 @@ async def test_a_cli_brain_has_the_owners_file_tools(make_rig, conn, home, monke
     assert (await typed(rig, "What does my plan say?"))["status"] == "done"
     [tools] = seen
     assert READS <= tools and not tools & PC_TOOLS
+
+
+def _clock(ticks):
+    """A clock for the walk that stands still for `ticks` looks and then is long past any deadline."""
+    looks = iter(range(10 ** 9))
+    return SimpleNamespace(monotonic=lambda: 0 if next(looks) < ticks else 10 ** 6)
+
+
+def test_a_slow_search_of_a_large_file_stops_with_the_walk_and_says_so(home, monkeypatch):
+    # Python's regular expressions cannot be stopped from outside, so the search itself looks at the clock as it goes.
+    big = home / "Documents" / "big.log"
+    big.write_text("".join(f"ship line {index}\n" for index in range(5000)), encoding="utf-8")
+    monkeypatch.setattr(owner_files, "time", _clock(20))
+    monkeypatch.setattr(owner_files, "LINE_CHECK", 10, raising=False)
+    result = owner_files.grep_files({"pattern": "ship line", "path": str(big), "output_mode": "content",
+                                     "head_limit": 0}, lambda path: False)
+    rows = [line for line in result.text.split("\n") if "ship line" in line]
+    assert 0 < len(rows) < 5000
+    assert f"stopped after {owner_files.WALK_SECONDS} seconds" in result.text
+
+
+def test_a_walk_through_folders_without_files_stops_in_time(home, monkeypatch):
+    for index in range(30):
+        (home / "empty" / f"folder{index}" / "deeper").mkdir(parents=True)
+    monkeypatch.setattr(owner_files, "time", _clock(2))
+    walk = owner_files.Walk(os.path.realpath(home / "empty"), lambda path: False, home=home)
+    assert list(walk.files()) == [] and walk.cut
+    monkeypatch.setattr(owner_files, "time", _clock(2))
+    listed = owner_files.glob_files({"pattern": "*.md", "path": "~/empty"}, lambda path: False)
+    assert "No files found" in listed.text and f"stopped after {owner_files.WALK_SECONDS} seconds" in listed.text
+
+
+def test_a_search_across_lines_takes_only_smaller_files_and_says_so(home, monkeypatch):
+    (home / "Documents" / "long.md").write_bytes(b"ship\nit\n" + b"x" * 2000)
+    (home / "Documents" / "short.md").write_bytes(b"ship\nit\n")
+    monkeypatch.setattr(owner_files, "WHOLE_FILE_BYTES", 1000, raising=False)
+    result = owner_files.grep_files({"pattern": "ship.it", "path": "~/Documents", "multiline": True},
+                                    lambda path: False)
+    assert "short.md" in result.text and "long.md" not in result.text
+    assert "1 file was larger than" in result.text
 
 
 def test_the_walk_skips_app_data_unless_it_starts_there(home):

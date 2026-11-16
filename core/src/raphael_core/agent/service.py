@@ -122,7 +122,7 @@ from raphael_core.ui_words import ui_word, with_ui_words
 import asyncio
 import copy
 from pathlib import Path
-from ..computer.local_tools import ON_SCREEN, ask_context, command_context, command_of, is_local
+from ..computer.local_tools import ON_SCREEN, ask_context, card_arguments, command_context, command_of, is_local
 from ..computer.on_screen import launches_on_screen
 import hashlib
 import json
@@ -4376,7 +4376,8 @@ class AgentService:
         start of what it is given, after the rule that has it asked, if one does. The call itself
         waits in `_followups`."""
         language = ask.language
-        shown = preview(call.arguments)
+        arguments = card_arguments(call.tool.key, call.arguments)
+        shown = preview(arguments)
         question = phrase(
             language,
             "confirm_plugin",
@@ -4400,7 +4401,7 @@ class AgentService:
             # What the card of a connection's tool says: the exact action in plain words, the rule that had
             # it asked, and whether 一律允許 can take effect (not where a rule asks: Ask first wins).
             exact = phrase(language, "confirm_plugin", server=call.tool.server, tool=call.tool.name,
-                           what=parenthesized(language, preview(call.arguments, CARD_PREVIEW_CHARS)))
+                           what=parenthesized(language, preview(arguments, CARD_PREVIEW_CHARS)))
             if payment:
                 exact = question
             managed = getattr(self._plugins, "managed", None)
