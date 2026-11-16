@@ -43,7 +43,8 @@ MAX_URL_CHARS = 2048
 # What is kept of a tool's description: it is read by the user and by a model, and no more than
 # this is worth either's time.
 MAX_DESCRIPTION_CHARS = 1000
-# A schema longer than this (as JSON) is kept as "an object" only: it would fill a prompt.
+# The most of a schema (as JSON) that is kept: more would fill a prompt. A longer one loses the words that only explain it
+# first (`kept_schema`), and only one too long even without them is kept as "an object".
 MAX_SCHEMA_CHARS = 16000
 # What is kept of the title a server gives a tool (for the screen only).
 MAX_TITLE_CHARS = 80
@@ -59,6 +60,13 @@ _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 _HEADER_NAME = re.compile(r"[A-Za-z0-9\-]{1,64}")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
+# The keywords of a schema that explain it and that no call needs to be right.
+_EXPLAINING = frozenset(("description", "examples", "example", "title", "$comment", "markdownDescription"))
+# Where a schema holds other schemas: under names that are the tool's own (kept as they are), in a list, or as one value.
+_NAMED_SCHEMAS = frozenset(("properties", "patternProperties", "$defs", "definitions", "dependentSchemas"))
+_LISTED_SCHEMAS = frozenset(("anyOf", "oneOf", "allOf", "prefixItems"))
+_ONE_SCHEMA = frozenset(("items", "additionalProperties", "additionalItems", "unevaluatedProperties", "not", "if", "then",
+                         "else", "contains", "propertyNames"))
 
 
 def _current_size(limit: int) -> int:
@@ -122,6 +130,51 @@ def fingerprint(name: str, description: str, schema: Any) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
+def _without_words(schema: Any) -> Any:
+    """`schema` without the keywords that only explain it, at every depth. The names of its properties are the tool's own
+    and stay, a property called `description` or `title` too; values (an enum, a default) are never looked into."""
+    if isinstance(schema, list):
+        return [_without_words(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    kept: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in _EXPLAINING:
+            continue
+        if key in _NAMED_SCHEMAS and isinstance(value, dict):
+            kept[key] = {name: _without_words(item) for name, item in value.items()}
+        elif key in _LISTED_SCHEMAS and isinstance(value, list) or key in _ONE_SCHEMA:
+            kept[key] = _without_words(value)
+        else:
+            kept[key] = value
+    return kept
+
+
+def _fits(schema: dict[str, Any]) -> bool:
+    return len(json.dumps(schema, ensure_ascii=False)) <= MAX_SCHEMA_CHARS
+
+
+def kept_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """`schema` as it is kept: whole when it fits in MAX_SCHEMA_CHARS; else without the words that explain what lies
+    inside its arguments, each argument keeping its own; else without any of those words; else "an object". A tool shown
+    as "an object" is called by guessing its arguments, so its shape is the last thing given up."""
+    if _fits(schema):
+        return schema
+    plain = _without_words(schema)
+    own, arguments = schema.get("properties"), plain.get("properties")
+    if isinstance(own, dict) and isinstance(arguments, dict):
+        described = dict(plain)
+        described["properties"] = {
+            name: {**spec, "description": own[name]["description"]}
+            if isinstance(spec, dict) and isinstance(own.get(name), dict) and isinstance(own[name].get("description"), str)
+            else spec
+            for name, spec in arguments.items()
+        }
+        if _fits(described):
+            return described
+    return plain if _fits(plain) else dict(_OPEN_SCHEMA)
+
+
 def tool_record(
     name: Any,
     description: Any,
@@ -137,10 +190,7 @@ def tool_record(
         return None
     text = description.strip() if isinstance(description, str) else ""
     text = text[:MAX_DESCRIPTION_CHARS]
-    if not isinstance(schema, dict):
-        schema = dict(_OPEN_SCHEMA)
-    elif len(json.dumps(schema, ensure_ascii=False)) > MAX_SCHEMA_CHARS:
-        schema = dict(_OPEN_SCHEMA)
+    schema = kept_schema(schema) if isinstance(schema, dict) else dict(_OPEN_SCHEMA)
     ui = meta.get("ui", {}) if isinstance(meta, dict) else {}
     ui = ui if isinstance(ui, dict) and len(json.dumps(ui)) <= 8000 else {}
     if "visibility" in ui:
