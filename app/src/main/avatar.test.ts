@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { avatarHTML, cleanCrop, cropStyle, currentAvatar, loadAvatar, onAvatarChange, readAvatar, setAvatar } from "./avatar";
+import { avatarHTML, cleanCrop, cropStyle, currentAvatar, loadAvatar, onAvatarChange, readAvatar, setAvatar, stillSide } from "./avatar";
 import { cropDialog, frameCrop, moveCrop, resizeCrop, startView, wheelZoom, zoomCrop } from "./avatar-settings";
 import { openDialog } from "./member-dialogs";
 import { pictureRect } from "../overlay/emblem";
@@ -220,4 +220,11 @@ test("a wheel's notch zooms 1.08 times, and a trackpad's small deltas add up to 
   expect(swipe).toBeCloseTo(1.08, 5);
   expect(wheelZoom(-3, 1)).toBeCloseTo(1.08, 5); // three lines are a notch too
   expect(wheelZoom(-5000, 0)).toBe(1.08); // never more than a notch at once
+});
+
+test("a still has its box's device pixels, also at a pixel ratio a hair off its value (R-UI-161)", () => {
+  expect([1, 1.25, 1.5, 2].map(ratio => stillSide(32, ratio))).toEqual([32, 40, 48, 64]);
+  // 125% times an emulated or zoomed 120%, as the browser reports it: a 48 px box, never a 49 px bitmap.
+  expect(stillSide(32, 1.5000000596046448)).toBe(48);
+  expect(stillSide(32, 1.2499999)).toBe(40);
 });

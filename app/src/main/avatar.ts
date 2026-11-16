@@ -52,11 +52,18 @@ export function emblemTextureArrived(ok = true): void {
   notify();
 }
 
+/**
+ * How many device pixels a still `px` CSS pixels square has at `ratio`: its box's, rounded. A ratio is often a float a hair off
+ * its value (1.5000000596 for 125% times 120%), where rounding up made a 48 px box a 49 px bitmap that the screen then
+ * shrank, blurring it (R-UI-161).
+ */
+export const stillSide = (px: number, ratio: number): number => Math.min(512, Math.max(1, Math.round(px * ratio)));
+
 /** The emblem standing still, `px` CSS pixels square, as a data URL; null where it cannot be drawn yet. */
 function emblemStill(px: number): string | null {
   if (!glyphTextureReady()) return null;
   const ratio = typeof window === "undefined" ? 1 : Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const side = Math.min(512, Math.ceil(px * ratio));
+  const side = stillSide(px, ratio);
   const key = String(side);
   if (stills.has(key)) return stills.get(key)!;
   let url: string | null = null;
