@@ -33,6 +33,12 @@ _PATH = re.compile(rf"MEMORY\.md|memory/log/\d{{4}}-\d{{2}}-\d{{2}}\.md|skills/{
 MAX_BYTES = 128 * 1024
 # How long a writer waits for another process to finish with a memory file.
 _LOCK_WAIT_S = 30.0
+# How long a revision in a journal is kept. Nothing a member uses reads one back: no member sees its journal and no
+# feature undoes from it. The newest revision of each skill says when that skill last changed (members.skills), so it
+# stays whatever its age.
+JOURNAL_KEEP_S = 30 * 86_400
+# A revision's file name starts with the moment it was written (`_change`), so names sort by time.
+_STAMP = "%Y%m%dT%H%M%S%f"
 
 
 def redact_secrets(text: str) -> str:
@@ -188,6 +194,35 @@ class BotHomes:
     def delete(self, member_id: int, relative: str, *, expected_hash: str | None) -> None:
         with _LOCK:
             self._change(member_id, relative, None, expected_hash)
+
+    def prune_journals(self, now: float, keep_s: float = JOURNAL_KEEP_S) -> int:
+        """Remove the revisions older than `keep_s` from every journal (each member's and the shared one), all but the
+        newest applied revision of each skill. Every revision journals a document's whole earlier text, a day's log
+        each time it grows, so a journal nothing trims grows for as long as the member works. Returns how many went."""
+        cutoff = datetime.fromtimestamp(now - keep_s).strftime(_STAMP)
+        removed = 0
+        with _LOCK:
+            state = self.safe(self.root / "bot-state")
+            if not state.is_dir():
+                return 0
+            for folder in sorted(state.glob("*/journal")):
+                self.safe(folder)
+                newest = {}
+                for path in sorted(folder.glob("*.json")):
+                    if path.name[:len(cutoff)] >= cutoff:
+                        break
+                    try:
+                        entry = json.loads(self.safe(path).read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue  # left as it is
+                    document = entry.get("path") if isinstance(entry, dict) and entry.get("applied") else None
+                    if isinstance(document, str) and document.startswith("skills/") and document.endswith("/SKILL.md"):
+                        path, newest[document] = newest.get(document), path
+                        if path is None:
+                            continue
+                    path.unlink(missing_ok=True)
+                    removed += 1
+        return removed
 
     def journal(self, member_id: int) -> list[dict]:
         folder = self.safe(self.state(member_id) / "journal")
