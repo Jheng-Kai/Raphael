@@ -238,6 +238,10 @@ A draft stands in place of a waiting question's gold line. `sidebar-draft` types
 `sidebar-draft-cleared` empties the composer and waits for the last line to come back, `sidebar-draft-room` does the same in a group chat.
 Gotcha: the line follows the kept draft, so it changes 300 ms after typing stops, not on each key.
 
+```
+npm run look -- sidebar-draft sidebar-draft-cleared sidebar-draft-room --theme both --width 1120,720,1920x1080
+```
+
 ## Driving it with look
 
 ```powershell

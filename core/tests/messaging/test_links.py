@@ -223,17 +223,18 @@ async def test_the_switchboard_sends_the_file_a_reply_names_and_asks_in_the_writ
 
 
 class BotApi:
-    """The Bot API as far as a reply goes: one owner's message to answer, then every sent message and file recorded."""
+    """The Bot API as far as a reply goes: one owner's message to answer, then every sent message and file recorded. The
+    message comes only once the test has allowed its sender (`open`): polling starts as the channel connects, before that."""
 
     def __init__(self, owner):
-        self.owner, self.given, self.sent, self.files = owner, False, [], []
+        self.owner, self.given, self.open, self.sent, self.files = owner, False, False, [], []
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
         method = request.url.path.rsplit("/", 1)[-1]
         if method == "getMe":
             return httpx.Response(200, json={"ok": True, "result": {"id": 999, "is_bot": True, "username": "example_bot"}})
         if method == "getUpdates":
-            if self.given:
+            if self.given or not self.open:
                 await asyncio.sleep(0.01)
                 return httpx.Response(200, json={"ok": True, "result": []})
             self.given = True
@@ -272,6 +273,7 @@ async def test_a_reply_and_a_report_over_telegram_carry_the_file_and_no_dead_lin
         service.linked_files = LinkedFiles(folders=lambda member: folders.get(member, {}), home="/home/cua")
         assert (await service._connect("telegram", {"token": token}))["ok"]
         service._config.channel("telegram").allowed.append(AllowedUser(str(owner), "A"))
+        api.open = True
         try:
             await settle(lambda: api.sent and api.files, tries=2000)
             [text] = api.sent
