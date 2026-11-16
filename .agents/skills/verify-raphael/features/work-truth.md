@@ -24,13 +24,20 @@ RPC, schema migration or alternative brain loop.
   `STALE_QUEUE_MS` (2 h) ends at the next start as `stale_queue` (report, turn closed, waiting parent woken); a
   younger one is put back. Check: after a restart a member's queued own work starts, and a stuck "working" member
   never outlives the run that left it (`core/tests/background/test_queue_pump.py`).
+  The agent's start-up sweep of turns left running (`AgentHistory.expire_pending`) leaves the turns kept work still holds (the
+  work turn, the colleague's brief it answers) to that work, and a room drive asked for before the loop runs waits for
+  `RoomsService.start`. Checks: `core/tests/agent/test_restart_turns.py`, `test_room_exchanges.py`.
 - Stop can end what it shows (R-PUMP-02): `worker.cancel` of a task that is `queued` ends it `cancelled` (turn closed,
   waiting parent woken) even when it is in no queue and has no carrier; `_withdraw` no longer answers false for it.
-  Check: `test_stop_ends_a_queued_task_that_nothing_carries_and_its_parent_hears`.
+  A task being started (`running`, carried, no run yet) ends too: its run keeps the generation it was taken up at and
+  `_stopped_while_starting` ends it before the worker is asked anything.
+  Checks: `test_stop_ends_a_queued_task_that_nothing_carries_and_its_parent_hears`, `core/tests/background/test_stop_states.py`.
 - A stop says nothing (R-STOP-01): every `cancelled` ending (the owner's Stop, a member's own `stop_work`, a parent's end taking
   its children) writes no report text, no tool-call count, no `worker.report` and adds no line to the turn; a `stale_queue`
   ending is as silent (no report, `announced` 1, turn closed `cancelled` and empty). The thread draws no line for a task
   stopped before it did anything (`conversation.ts` `stoppedQuietly`). Crashes and lost workers keep their one line.
+  A turn that ends without its answer (`settle_asker`, answered false) ends the pieces it handed on that wait as Stop does
+  (`_waits`, `_end_later`), their card closed.
 - A member ends its own work by `stop_work` (R-STOP-02; `agent/team.py`, `BackgroundService.stop_own_work`): no `task_id`
   lists its unfinished tasks (it does or handed on; not another member's, a room's or the one it runs in), with one it stops
   that task and what waits on it. Checks: `core/tests/background/test_stop_work.py`.

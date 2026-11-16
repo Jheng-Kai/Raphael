@@ -672,3 +672,20 @@ test("the read made while Stop shows stops with it: an idle composer reads nothi
   await vi.advanceTimersByTimeAsync(120_000); await flush();
   expect(api.agentHistoryList).not.toHaveBeenCalled();
 });
+
+// Every pairing of a turn's status and its task's state: Stop shows exactly while the turn or its task is in progress, and
+// pressing it asks the core to end the very thing shown (the task by its id, the turn by its session).
+const STATUSES = ["running", "confirm", "done", "error", "expired", "cancelled", "denied"] as const;
+const STATES = [null, "queued", "running", "waiting", "done", "failed", "limit", "cancelled", "interrupted"] as const;
+test.each(STATUSES.flatMap(status => STATES.map(state => [status, state] as const)))(
+  "a turn %s with a task %s shows Stop only while something is in progress, and Stop ends that", async (status, state) => {
+    turns = [live({ status, ...(state ? { task: seven(state, state === "queued" || state === "running" || state === "waiting" ? {} : { finished_at_ms: 2 }) } : {}) })];
+    mount(); await flush();
+    const working = status === "running" || status === "confirm" || state === "queued" || state === "running" || state === "waiting";
+    expect($(".composer").dataset.taskState !== "idle").toBe(working);
+    if (!working) return;
+    press(); await flush();
+    expect(api.agentStop).toHaveBeenCalledWith("reply-11", 0);
+    if (state === "queued" || state === "running" || state === "waiting") expect(api.workerCancel).toHaveBeenCalledWith(7);
+    else expect(api.workerCancel).not.toHaveBeenCalled();
+  });
