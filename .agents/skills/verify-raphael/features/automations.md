@@ -154,7 +154,7 @@ core/tests/brain/test_db.py (migration 49 schema parity). The frontend edit cont
 
 ## Sub-features
 
-The app's own calendar, modelled on Google Calendar in the app's own look: week (default),
+The app's own calendar, in the app's own look: week (default),
 day and month; one-time events the owner and every member make and change; routine
 occurrences and Google events read here. Once/daily/weekdays/weekly/every schedules,
 destination/end conditions are what the member sets when the owner asks; the window only reads them.
@@ -214,7 +214,7 @@ mini-calendar dates with insufficient contrast, including while hovered.
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Leaving a deleted routine (owner round 3)
+## Leaving a deleted routine
 
 R-UI-47: confirming deletion in an open routine editor closes it, refreshes the
 calendar/list and shows the existing localized named success toast. The journey
@@ -229,15 +229,15 @@ offset, while retaining the same text pattern, surface, type and spacing.
 
 (Its scenes were retired with the routine editor.)
 
-## Owner round 6 contracts
+## Calendar layout at a 1120px window
 
-Owner round 6: automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member rail at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller page content uses the drawer; only calendar content below 520px reduces the number of days. calendar-shell asserts both modes.
+automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member rail at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller page content uses the drawer; only calendar content below 520px reduces the number of days. calendar-shell asserts both modes.
 
-## Owner round 7 contracts
+## Routine chips on the calendar
 
-A routine's chip keeps a fixed visible 20px avatar at the top right, except side by side. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Owner round 9 replaces the old 62px event/64px hour with viewport-derived compact hours and corresponding time/title spacing; narrow-day horizontal padding lets the time and avatar fit at their existing sizes. calendar-chips still asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
+A routine's chip keeps a fixed visible 20px avatar at the top right, except side by side. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Viewport-derived compact hours replace the old 62px event/64px hour and corresponding time/title spacing; narrow-day horizontal padding lets the time and avatar fit at their existing sizes. calendar-chips still asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
 
-## Owner round 9 regression coverage
+## Calendar hours and the first position
 
 Day and week share a viewport-derived hour height (28-54px), fitting eleven working
 hours below the sticky date/all-day header at 1280x800. Initial position shows the time

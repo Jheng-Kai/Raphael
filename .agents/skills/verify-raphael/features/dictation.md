@@ -127,7 +127,7 @@ Where the dictionary could be lost, and what carries it (R-DICT-STT-01, R-DICT-S
    short-sentence shortcut runs only when no such part is found (`BrainService._needs_no_model`).
 3. Final text. The cleanup model often ignores the named word, so the paste is respelled by rule inside
    Chinese or Japanese text (`textnorm.respell_dictionary_words`): other letter case, a split, or a name misspelt with a
-   capital or split ("Herder" → 「herdr」). English text, lower-case
+   capital or split ("Pinebox", "Pine Bus" → 「pinebot」, "Kelver" → 「kelvr」). English text, lower-case
    ordinary words and dictionary words of four letters or fewer are left alone. A dictionary entry's case wins in
    Chinese text: an owner's 「alt」 and 「Bots」 come out as typed.
 
@@ -145,7 +145,7 @@ Follow-up from the owner's 113 dictations of the same day (R-DICT-SPELL-02, R-DI
 R-DICT-KANA-01), all core text steps proved by pytest, none by the app:
 
 - The respelling never turns 「SpaceX」 into 「Space」 (a longer word that holds a dictionary word is right), keeps a
-  plural's ending (a dictionary word with an added s keeps its s), and respells a real word such as 「Cloud」 only where a rule or a correction's form is
+  plural's ending (「pinebots」), and respells a real word such as 「Cloud」 only where a rule or a correction's form is
   on record. A form seen once is evidence for it, though it is no rule yet: the Dictionary row still shows it under
   常被聽成, and `dictionary.misheard` stays empty until the pair is seen twice.
 - The cleanup prompt lists a dictionary word with Chinese characters for a Chinese transcript only when a form it is
@@ -160,10 +160,10 @@ npm run look -- dictation-dictionary stable-dictionary-controls --theme both --w
 ```
 
 `npm.cmd run native -- dictation-dictionary` (an OpenRouter key, about US$0.002 a run) synthesizes mixed speech
-(Hanhan for the Chinese, David for the English dictionary words, spoken as two words), plays it as the microphone through
+(Hanhan for the Chinese, David for 「kelver」 and 「pine bot」), plays it as the microphone through
 `RAPHAEL_FAKE_AUDIO`, and drives the real dictation key, MAI-Transcribe 2, the cleanup model and the paste into the
-composer: the dictionary name comes out as spelled; the owner's edit of "Herder" to 「herdr」 is learned with its pill and
-Dictionary row; the next dictation writes 「herdr」. The sample is a remark, never a request, the journey's agent may only
+composer: 「pinebot」 comes out as spelled; the owner's edit of "Kelver" to 「kelvr」 is learned with its pill and
+Dictionary row; the next dictation writes 「kelvr」. The sample is a remark, never a request, the journey's agent may only
 plan (`action_mode` plan), and two Escapes stop the corrected message's turn once the pill is up. The journey brings its own window to the front before a recording
 stops and cancels the dictation if another window takes it, so no words are pasted anywhere else.
 
@@ -263,7 +263,7 @@ Dictation is unchanged, but nothing speaks: no voice calls, no spoken Alt+Space 
 on a click, a hold or a key (R-UI-106).
 
 
-## Owner round 10 contracts (supersedes round 9 message previews)
+## Message previews and reply bubbles
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
 the bubble. Assistant messages render fully; authored reply envelopes retain separate
@@ -295,7 +295,7 @@ Calendar, member and Plugins scene clicks inherit this check. Connections search
 below the fixed Installed/Store switch in both states. A selected look report is
 required to establish the actual covered controls and any remaining movements.
 
-Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+Scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
@@ -402,7 +402,7 @@ question delivery, cleanup spend, no dictation history and no target paste. Keep
 private field contents, keystrokes, pasted text or passwords for correction learning.
 
 The four composer-learning scenes seed synthetic dictation through the existing native event
-boundary, correct a misspelt product name to its dictionary spelling, and send through the real composer.
+boundary, correct "Sample Too" to "SampleToolX", and send through the real composer.
 They assert exactly one dictionary.learn call with the complete correction, exactly one
 localized notice clear of the composer, and the unchanged single gold-emblem / bare-plane slot before and after send.
 Only dictation seeds learning; ordinary typing and clipboard paste do not. Native microphone,
@@ -442,7 +442,7 @@ button; focus rings remain reserved for Tab navigation.
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Desktop cancellation and confirmation (owner round 3)
+## Desktop cancellation and confirmation
 
 R-UI-46 / R-AG-16: the shared 1500ms two-Escape gesture also targets the visible
 recording, question or processing Stop. First Escape arms its localized hint;
@@ -489,7 +489,7 @@ arbitrary desktop content. Its actions fill a separate row within the narrow 540
 window rather than a wide dialog's right-aligned pill actions. These size/layout
 differences are intentional; the shared button height, palette and type remain.
 
-## Owner round 4 layout and microphone locale
+## Overview layout and microphone locale
 
 Overview totals always use a 2 by 2 grid. At the 760px dictation-container threshold,
 shortcuts occupy the right column starting beside the first total; activity follows
@@ -503,11 +503,11 @@ The left desktop track is capped at two short-card measures plus the existing
 12px grid gap, so Activity and the two stats columns share their right edge
 without stretching a stat beyond 384px. dictation-layout asserts those edges.
 
-## Owner round 6 contracts
+## The shortcut button in the overview
 
-Owner round 6: dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
+Dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
 
-## Owner round 9 regression coverage
+## The orb's Stop and two-Escape cancellation
 
 Ordinary listening/working orb states show no Stop button.
 Focused two-Escape cancellation uses the orb as its gesture target and still sends
@@ -519,13 +519,13 @@ any earlier ordinary-orb Stop wording; composer and permission Stop controls rem
 npm run look -- overlay-working-cancel --theme both --width 1120,720,1920x1080,1280x800
 ```
 
-## Executable round 10 matrix
+## Executable look matrix
 
 ```powershell
 npm run look -- conversation-chief-up conversation-chief-bottom conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom reply-split-bubbles overlay-learned-pill stable-connections-switch stable-dictionary-controls stable-settings-controls --theme both --width 1120,720,1920x1080
 ```
 
-## Native round 10 regression journey
+## Native regression journey
 
 ```powershell
 npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conversation

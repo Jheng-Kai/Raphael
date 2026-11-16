@@ -144,7 +144,7 @@ npm run look -- store-n8n plugins-store plugins-store-key plugins-store-all --th
 the need words, the filled form and the focus.
 
 
-## Owner round 10 connected apps and chosen models
+## Connected apps and chosen models
 
 API and CLI brain prompts share the Composio discovery/execution contract:
 COMPOSIO_SEARCH_TOOLS returns a tool slug and schema; execute that slug through
@@ -171,7 +171,7 @@ core/tests/test_connectors.py (91), core/tests/brain/test_provider_registry.py (
 test_providers_more.py (48). All use fakes or mock transports.
 
 
-## Owner round 10 contracts (supersedes round 9 message previews)
+## Message previews and reply bubbles
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
 the bubble. Assistant messages render fully; authored reply envelopes retain separate
@@ -199,7 +199,7 @@ Calendar, member and Plugins scene clicks inherit this check. Connections search
 below the fixed Installed/Store switch in both states. A selected look report is
 required to establish the actual covered controls and any remaining movements.
 
-Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+Scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
@@ -467,13 +467,13 @@ after reopening and the footer check's covered-button failure.
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Owner round 4 settings alignment
+## Settings alignment of Connections
 
 Connections uses the shared 640px settings-pane measure, including its header
 actions, toolbar and list/store grids. Search ends at the same content edge;
 capability lists outside Settings retain their own reading cap.
 
-## Owner round 7 contracts
+## Connected-app inventory count
 
 Settings retains the connected-app inventory count; the sidebar has no app entry or count. `apps-count` and `apps-unreadable` check the installed tab against the shared inventory.
 ## Search-first catalog and chat discovery
@@ -766,7 +766,7 @@ and in no call but the card's own, the sign-in waiting with only 取消, and the
 client proves: that Google accepts a Desktop client with no registered return address, the real consent screens (including the
 unverified-app warning), the 7-day expiry of a project left in Testing, and that `access_type=offline` returns a refresh token.
 
-## Executable round 10 matrix
+## Executable look matrix
 
 ```powershell
 npm run look -- conversation-chief-up conversation-chief-bottom conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom reply-split-bubbles overlay-learned-pill stable-connections-switch stable-dictionary-controls stable-settings-controls --theme both --width 1120,720,1920x1080

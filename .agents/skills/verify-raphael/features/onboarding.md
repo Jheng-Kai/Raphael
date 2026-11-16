@@ -144,7 +144,7 @@ on a rerun, and the way back from the first step returns to it.
 UI hand-off also runs these named scenes at 1920x1080 in both themes, as required by the shared
 guardian hand-off gate.
 
-## No conversation setup (owner round 4)
+## No conversation setup
 
 Raphael is usable immediately, including fresh installs and cleared conversations. The frontend
 no longer uses profile_ready to hide the ordinary empty thread/composer. The naming/personality/

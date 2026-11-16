@@ -267,7 +267,7 @@ Regression coverage: `i18n/i18n.test.ts` and `pages/locale-switch.test.ts`.
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Owner round 4 pane alignment
+## Pane alignment
 
 Every settings pane caps its direct content, header, toolbar, lists and grids at
 the same 640px measure. Settings list padding is removed at the pane boundary,
@@ -279,11 +279,11 @@ Compact panes with header actions reserve vertical clearance below the corner
 Close button. settings-alignment compares control bounds as well as containers
 and rejects overlap with Close.
 
-## Owner round 6 contracts
+## Concise settings copy
 
-Owner round 6: profile, dictation, appearance, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
+Profile, dictation, appearance, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
 
-## Owner round 7 contracts
+## Models without a price note
 
 Models omits the reference-price helper paragraph while retaining price/subscription information on each purpose row. Catalog failure remains an essential error. settings-concise rejects the redundant price note in the normal Models fixture; models-responsive retains the stacked narrow-row contract.
 
