@@ -94,6 +94,11 @@ class CuaBridge:
             self.process = None
 
     async def _write(self, packet):
+        # One connection serves several calls. A call that ran out of time closes it for all of them, and one that was
+        # between two requests then meets no process at all: that is a closed connection (which is repaired and
+        # told as such), not an AttributeError that reached the member as a failure of unknown cause.
+        if self.process is None or self.process.stdin is None or self.process.returncode is not None:
+            raise ConnectionError("Driver closed")
         self.process.stdin.write(json.dumps(packet).encode() + b"\n")
         await self.process.stdin.drain()
 
@@ -154,6 +159,8 @@ class CuaBridge:
     async def _read(self):
         try:
             while any(not future.done() for future in self.pending.values()):
+                if self.process is None:
+                    raise ConnectionError("Driver closed")
                 line = await self.process.stdout.readline()
                 if not line:
                     raise VmError("transport_closed")

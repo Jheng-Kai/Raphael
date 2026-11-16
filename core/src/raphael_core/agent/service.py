@@ -434,7 +434,10 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
         # The core's own words for the shape that fits (agent/plugins.py `shape_problem`): shown whole, never cut as a service's are.
         return ToolResult(_label(call), False, None, "bad_arguments", instruction=outcome.text)
     if outcome.text:
-        failure = classify({"message": outcome.text, "kind": outcome.kind if outcome.kind != "tool_error" else None})
+        # Not written down here: every loop that reads this result notes its failure once (`tool_failure`), and noting
+        # it here too made each failed call two lines of the log and two of self_check's last ten.
+        failure = classify({"message": outcome.text, "kind": outcome.kind if outcome.kind != "tool_error" else None},
+                           record=False)
         return ToolResult(
             _label(call), False, {"content": failure.reason, **failure.wire()}, outcome.kind or failure.kind, untrusted=True
         )

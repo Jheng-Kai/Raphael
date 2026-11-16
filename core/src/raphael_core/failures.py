@@ -346,7 +346,7 @@ _ALIASES = {"auth": "auth_expired", "login": "auth_expired", "not_configured": "
             "bad_arguments": "tool_broken", "bad_response": "tool_broken", "vault": "tool_broken",
             "resume_failed": "tool_broken", "forbidden": "refused", "presence_required": "refused",
             "approval_required": "permission_denied", "secret_store": "permission_denied",
-            "url_not_seen": "refused", "memory_refused": "refused",
+            "url_not_seen": "refused", "memory_refused": "refused", "computer_fault": "tool_broken",
             "context_length_exceeded": "context_overflow", "request_too_large": "payload_too_large",
             "content_filter": "content_policy", "content_policy_violation": "content_policy",
             "safety_violation": "content_policy"}

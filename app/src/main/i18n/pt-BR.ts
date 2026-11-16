@@ -1387,6 +1387,7 @@ export const ptBR = {
   "agent.reason.url_not_seen": "A URL não foi fornecida nem encontrada em resultado de ferramenta",
   "agent.reason.gone": "Esta ferramenta não existe mais. Abra o servidor em Conectar aplicativos (barra lateral) e recarregue as ferramentas.",
   "agent.reason.tool_error": "A ferramenta não terminou. Confira se a ação original concluiu, mantenha esta conversa e tente uma vez mais; relate falhas contínuas.",
+  "agent.reason.computer_fault": "Nesta etapa falhou a própria ferramenta de computador do Raphael, não o computador nem a página. Tente mais uma vez; relate se acontecer de novo.",
   "agent.reason.protocol": "A resposta da ferramenta é inutilizável. Confira a URL e recarregue em Conectar aplicativos (barra lateral); atualize o servidor se persistir.",
   "agent.reason.not_made": "Não executado",
   "conn.audit.none": "Não executado",

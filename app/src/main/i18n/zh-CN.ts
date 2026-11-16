@@ -1387,6 +1387,7 @@ export const zhCN = {
   "agent.reason.url_not_seen": "这个网址尚未由你提供，也未出现在工具结果中",
   "agent.reason.gone": "工具已不存在，请到侧边栏的「链接应用程序」打开对应服务器并按「重新读取工具」。",
   "agent.reason.tool_error": "工具未完成操作，请先确认原操作是否已完成，保留原对话再试一次，仍失败时回报问题。",
+  "agent.reason.computer_fault": "这一步是 Raphael 自己的电脑工具出错，不是电脑或网页的问题。请再试一次，如再次发生请报告问题。",
   "agent.reason.protocol": "工具回应无法使用，请到侧边栏的「链接应用程序」确认网址并重新读取工具，仍失败时更新服务器。",
   "agent.reason.not_made": "没有运行",
   "conn.audit.none": "没有运行",

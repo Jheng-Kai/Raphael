@@ -1387,6 +1387,7 @@ export const fr = {
   "agent.reason.url_not_seen": "Cette URL n’a été ni fournie ni trouvée dans un résultat d’outil",
   "agent.reason.gone": "Cet outil n’existe plus. Ouvrez son serveur dans Connecter des applications (barre latérale) et rechargez les outils.",
   "agent.reason.tool_error": "L’outil n’a pas terminé. Vérifiez si l’action initiale a abouti, conservez cette conversation et réessayez une fois ; signalez les échecs persistants.",
+  "agent.reason.computer_fault": "À cette étape, c’est l’outil ordinateur de Raphael lui-même qui a échoué, pas l’ordinateur ni la page. Réessayez une fois ; signalez-le si cela se reproduit.",
   "agent.reason.protocol": "La réponse de l’outil est inutilisable. Vérifiez l’URL et rechargez les outils dans Connecter des applications (barre latérale) ; si l’échec persiste, mettez le serveur à jour.",
   "agent.reason.not_made": "Non exécuté",
   "conn.audit.none": "Non exécuté",

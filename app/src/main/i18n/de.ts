@@ -1387,6 +1387,7 @@ export const de = {
   "agent.reason.url_not_seen": "URL wurde nicht bereitgestellt oder in einem Werkzeugergebnis gefunden",
   "agent.reason.gone": "Dieses Werkzeug ist nicht mehr vorhanden. Server unter Apps verbinden (Seitenleiste) öffnen und Werkzeuge neu laden.",
   "agent.reason.tool_error": "Werkzeug nicht abgeschlossen. Prüfen, ob ursprüngliche Aktion fertig ist, Gespräch behalten und einmal erneut versuchen; anhaltenden Fehler melden.",
+  "agent.reason.computer_fault": "Bei diesem Schritt ist Raphaels eigenes Computerwerkzeug ausgefallen, nicht der Computer oder die Seite. Einmal erneut versuchen; bei Wiederholung melden.",
   "agent.reason.protocol": "Werkzeugantwort unbrauchbar. URL prüfen und Werkzeuge unter Apps verbinden (Seitenleiste) neu laden; bei weiterem Fehler Server aktualisieren.",
   "agent.reason.not_made": "Nicht ausgeführt",
   "conn.audit.none": "Nicht ausgeführt",

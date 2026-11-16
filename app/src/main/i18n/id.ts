@@ -1387,6 +1387,7 @@ export const id = {
   "agent.reason.url_not_seen": "URL tidak diberikan atau ditemukan dalam hasil alat",
   "agent.reason.gone": "Alat ini sudah tidak ada. Buka servernya di Hubungkan aplikasi (bilah samping) dan muat ulang alat.",
   "agent.reason.tool_error": "Alat belum selesai. Periksa apakah tindakan awal selesai, simpan percakapan ini, lalu coba sekali lagi; laporkan kegagalan berlanjut.",
+  "agent.reason.computer_fault": "Pada langkah ini alat komputer milik Raphael sendiri yang gagal, bukan komputernya atau halamannya. Coba sekali lagi; laporkan jika terjadi lagi.",
   "agent.reason.protocol": "Respons alat tidak dapat dipakai. Periksa URL dan muat ulang alat di Hubungkan aplikasi (bilah samping); perbarui server jika tetap gagal.",
   "agent.reason.not_made": "Tidak dijalankan",
   "conn.audit.none": "Tidak dijalankan",

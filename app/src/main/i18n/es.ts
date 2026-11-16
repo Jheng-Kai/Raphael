@@ -1387,6 +1387,7 @@ export const es = {
   "agent.reason.url_not_seen": "La URL no fue proporcionada ni apareció en un resultado",
   "agent.reason.gone": "Esta herramienta ya no existe. Abre su servidor en Conectar aplicaciones (barra lateral) y recarga las herramientas.",
   "agent.reason.tool_error": "La herramienta no terminó. Comprueba si la acción original se completó, conserva esta conversación y reintenta una vez; informa si persiste.",
+  "agent.reason.computer_fault": "En este paso falló la herramienta de computadora del propio Raphael, no la computadora ni la página. Inténtalo una vez más; informa si vuelve a pasar.",
   "agent.reason.protocol": "La respuesta de la herramienta no se puede usar. Revisa la URL y recarga herramientas en Conectar aplicaciones (barra lateral); actualiza el servidor si falla.",
   "agent.reason.not_made": "No ejecutado",
   "conn.audit.none": "No ejecutado",

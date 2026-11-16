@@ -1387,6 +1387,7 @@ export const tr = {
   "agent.reason.url_not_seen": "URL sağlanmadı veya araç sonucunda bulunmadı",
   "agent.reason.gone": "Bu araç artık yok. Uygulama bağla (kenar çubuğu) bölümünde sunucusunu açıp araçları yeniden yükleyin.",
   "agent.reason.tool_error": "Araç tamamlanmadı. Asıl işlemin bitip bitmediğini kontrol edin, görüşmeyi saklayıp bir kez daha deneyin; sürerse bildirin.",
+  "agent.reason.computer_fault": "Bu adımda bilgisayar veya sayfa değil, Raphael'in kendi bilgisayar aracı hata verdi. Bir kez daha deneyin; tekrarlanırsa bildirin.",
   "agent.reason.protocol": "Araç yanıtı kullanılamıyor. URL’sini kontrol edip Uygulama bağla (kenar çubuğu) bölümünden araçları yeniden yükleyin; sürerse sunucuyu güncelleyin.",
   "agent.reason.not_made": "Çalıştırılmadı",
   "conn.audit.none": "Çalıştırılmadı",

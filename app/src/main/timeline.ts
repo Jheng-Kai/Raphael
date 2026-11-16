@@ -112,6 +112,7 @@ const REASONS: Record<string, MessageKey> = {
   url_not_seen: "agent.reason.url_not_seen",
   gone: "agent.reason.gone",
   tool_error: "agent.reason.tool_error",
+  computer_fault: "agent.reason.computer_fault",
   protocol: "agent.reason.protocol",
   cancelled: "agent.reason.cancelled",
   not_made: "agent.reason.not_made",

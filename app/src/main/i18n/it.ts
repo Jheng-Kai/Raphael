@@ -1387,6 +1387,7 @@ export const it = {
   "agent.reason.url_not_seen": "L’URL non è stato fornito né trovato in un risultato",
   "agent.reason.gone": "Questo strumento non esiste più. Apri il server in Connetti app (barra laterale) e ricarica gli strumenti.",
   "agent.reason.tool_error": "Lo strumento non ha terminato. Controlla se l’azione originale è completata, conserva la conversazione e riprova una volta; segnala se persiste.",
+  "agent.reason.computer_fault": "In questo passaggio si è guastato lo strumento computer di Raphael stesso, non il computer né la pagina. Riprova una volta; segnalalo se succede di nuovo.",
   "agent.reason.protocol": "Risposta dello strumento inutilizzabile. Controlla l’URL e ricarica gli strumenti in Connetti app (barra laterale); aggiorna il server se persiste.",
   "agent.reason.not_made": "Non eseguito",
   "conn.audit.none": "Non eseguito",

@@ -118,6 +118,23 @@ def _size_words(kib):
     return f"{kib / 1048576:.1f} GiB" if kib >= 1048576 else f"{kib / 1024:.0f} MiB"
 
 
+# A computer call that broke in the core itself, not in the computer or the page: what the member is told.
+COMPUTER_FAULT = "computer_fault"
+COMPUTER_FAULT_NOTE = ("Raphael's own computer layer failed on this call ({kind}), not the computer or the page; whether "
+                       "anything was done is unknown. Read the current window or page before the next action.")
+
+
+def _raised_at(error):
+    """`file:line in function` of the innermost frame an exception was raised in: where, never what it said."""
+    frame = error.__traceback__
+    while frame is not None and frame.tb_next is not None:
+        frame = frame.tb_next
+    if frame is None:
+        return "an unknown place"
+    code = frame.tb_frame.f_code
+    return f"{PurePosixPath(code.co_filename.replace(chr(92), '/')).name}:{frame.tb_lineno} in {code.co_name}"
+
+
 ENGINE_FAILURES = {
     "docker_stopped": "Docker Desktop is not running, so the computer could not start. Tell the owner plainly that Docker Desktop "
                       "is not running, and that opening it (or pressing the computer's screen) lets you try again.",
@@ -644,7 +661,8 @@ class VmTools:
             if notice:
                 notice.cancel()
                 await asyncio.gather(notice, return_exceptions=True)
-        if reading and result.kind not in NOTICES:
+        # A failure says why it failed; the time it took is never all it says (a bare "Elapsed" was read as its reason).
+        if reading and result.kind not in NOTICES and (result.ok or result.text):
             elapsed = round(time.monotonic() - began, 2)
             prefix, _, tail = result.text.rpartition("\n")
             try:
@@ -1132,9 +1150,13 @@ class VmTools:
             self.vm.invalidate(target)
             result = PluginResult(False, "connection_error")
             return result
-        except Exception:
+        except Exception as error:
+            # Nothing the computer said: a fault of this layer. It was once kept as a bare "error" with no line in the
+            # log, and the owner and the member were told only that the cause was unknown. Its type and where it was
+            # raised are written down (never its message, which can hold what the screen showed).
             self.vm.invalidate(target)
-            result = PluginResult(False, "error")
+            logger.warning("Computer tool %s failed in the core: %s at %s", tool.name, type(error).__name__, _raised_at(error))
+            result = PluginResult(False, COMPUTER_FAULT, COMPUTER_FAULT_NOTE.format(kind=type(error).__name__))
             return result
         finally:
             if self.logins and result.kind:

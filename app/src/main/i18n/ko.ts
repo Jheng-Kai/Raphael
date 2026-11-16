@@ -1387,6 +1387,7 @@ export const ko = {
   "agent.reason.url_not_seen": "제공되거나 도구 결과에서 확인된 URL이 아닙니다",
   "agent.reason.gone": "이 도구가 없어졌습니다. 앱 연결(사이드바)에서 서버를 열고 도구를 다시 불러오세요.",
   "agent.reason.tool_error": "도구가 완료되지 않았습니다. 원래 작업의 완료 여부를 확인하고 이 대화를 보관한 뒤 한 번 더 시도하세요. 계속 실패하면 보고하세요.",
+  "agent.reason.computer_fault": "이 단계는 컴퓨터나 페이지가 아니라 Raphael 자체 컴퓨터 도구의 오류입니다. 한 번 더 시도하고 다시 생기면 문제를 신고하세요.",
   "agent.reason.protocol": "도구 응답을 사용할 수 없습니다. URL을 확인하고 앱 연결(사이드바)에서 도구를 다시 불러오세요. 계속 실패하면 서버를 업데이트하세요.",
   "agent.reason.not_made": "실행 안 됨",
   "conn.audit.none": "실행 안 됨",

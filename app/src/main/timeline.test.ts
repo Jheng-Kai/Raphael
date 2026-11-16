@@ -45,6 +45,15 @@ test.each([
   expect(reasonText(step({ outcome: "blocked", reason }))).toBe(explanation);
 });
 
+test("a computer step that broke in the core says it was Raphael's own tool, not an unknown cause", () => {
+  setLocale("en");
+  const said = reasonText(step({ kind: "computer", outcome: "error", reason: "computer_fault" }));
+  expect(said).toContain("Raphael's own computer tool failed");
+  expect(said).not.toBe(reasonText(step({ kind: "computer", outcome: "error", reason: "error" })));
+  setLocale("zh-TW");
+  expect(reasonText(step({ kind: "computer", outcome: "error", reason: "computer_fault" }))).toContain("Raphael 自己的電腦工具出錯");
+});
+
 test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);

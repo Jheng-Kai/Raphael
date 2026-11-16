@@ -1387,6 +1387,7 @@ export const vi = {
   "agent.reason.url_not_seen": "URL chưa được cung cấp hoặc tìm thấy trong kết quả công cụ",
   "agent.reason.gone": "Công cụ không còn. Mở máy chủ tại Kết nối ứng dụng (thanh bên) và tải lại công cụ.",
   "agent.reason.tool_error": "Công cụ chưa xong. Kiểm tra thao tác gốc đã hoàn tất chưa, giữ cuộc trò chuyện và thử thêm một lần; báo lỗi nếu tiếp diễn.",
+  "agent.reason.computer_fault": "Ở bước này, công cụ máy tính của chính Raphael bị lỗi, không phải máy tính hay trang web. Hãy thử lại một lần; báo lỗi nếu còn xảy ra.",
   "agent.reason.protocol": "Phản hồi công cụ không dùng được. Kiểm tra URL và tải lại công cụ tại Kết nối ứng dụng (thanh bên); cập nhật máy chủ nếu vẫn lỗi.",
   "agent.reason.not_made": "Chưa chạy",
   "conn.audit.none": "Chưa chạy",
