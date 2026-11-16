@@ -41,7 +41,7 @@ def test_output_folder_is_shared_escaped_data_and_changes_never_move_files(conn,
     settings.set("owner_output_folder", str(first))
     assert str(first).replace("\\", "\\\\") in owner_context(settings)
     settings.set("owner_output_folder", str(second))
-    # Every turn and task writes there with the owner's file tools (R-PC-05); commands are never suggested (R-PC-01).
+    # Every turn and task writes there with the owner's file tools (R-PC-05): the file tools are the way, not a command.
     prompt = owner_context(SettingsStore(conn))
     assert "by default" in prompt and "write_file of owner_files" in prompt
     assert "owner's PC" not in prompt and "command" not in prompt

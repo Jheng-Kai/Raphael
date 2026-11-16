@@ -30,7 +30,7 @@ def local(conn):
 # can be shown, the session, and the owner's screen in reach.
 CHAT = (("chat", 1, 10), False, True, "local-session", False)
 TASK = (("task", 7), False, True, "", False)
-PHONE = (("chat", 1, 11), True, False, "phone", False)  # a phone, Telegram or a room: no card
+PHONE = (("chat", 1, 11), True, False, "phone", False)  # a phone, Telegram or an exchange between members: no card
 QUICK = (("chat", 1, 12), False, False, "quick", True)  # a quick question: the owner's screen, no card
 MODES = ["ask", "always", "never", "bypass"]
 
@@ -79,7 +79,7 @@ async def test_an_ordinary_conversation_and_a_task_run_a_hidden_command_after_th
 
 @pytest.mark.parametrize("mode,runs", [("ask", False), ("always", False), ("never", False), ("bypass", True)])
 async def test_where_no_card_can_be_shown_a_command_runs_only_when_nothing_waits_for_a_yes(conn, mode, runs):
-    # A phone, Telegram or a room cannot show the card: 全部允許 runs the command without one, every other mode runs nothing.
+    # A phone, Telegram or an exchange cannot show the card: 全部允許 runs it without one, every other mode runs nothing.
     host = AsyncMock()
     host.execute.return_value = {"exit_code": 0, "stdout": "cpu", "stderr": "", "truncated": False}
     hub = LocalTools(EmptyHub(), conn, host=host)

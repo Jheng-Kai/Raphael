@@ -1427,8 +1427,8 @@ The local commands (`mcp:local/local_exec`, `mcp:local/local_job`, its backgroun
 run hidden on the owner's PC from every turn and task again, through the approval machinery they always had: the
 first-consent card and the chat approvals without a timer in a private conversation at this computer, the 30-minute
 background approvals of a task or a routine, in the stored mode (ask, always, never; 全部允許 runs without a card).
-Settings has no control for the mode. Where no card can be shown (a phone, a room, a quick question) a command runs only
-under 全部允許. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
+Settings has no control for the mode. Where no card can be shown (a phone, an exchange, a quick question) a command runs
+only under 全部允許; a room's speaking turn has its speaking tools alone, as before. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
 seen is done on the member's own computer (`agent/capabilities.py`, `persona._SHARED_CONTRACT`).
 
 The safety net (R-PC-06): outside a quick question a command whose purpose is to show something on the owner's screen
