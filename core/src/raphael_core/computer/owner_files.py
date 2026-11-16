@@ -8,7 +8,7 @@ asks as any other change does. Commands, the desktop and the fixed commands stay
 
 Unlike Claude Code, which a person drives at the keyboard, Raphael also takes messages from phones and rooms and reads web
 pages, any of which may try to talk a member into reading a secret and sending it on. So the places that hold keys and
-passwords are kept from these tools whatever is asked (`kept`): SSH and cloud keys, the keychain and Windows' credential
+passwords are kept from these tools whatever is asked (`Kept`): SSH and cloud keys, the keychain and Windows' credential
 stores, browsers' profiles, password managers, `.env` files and private keys. Raphael's own data goes through the data
 floor as it does for every tool.
 
@@ -39,6 +39,11 @@ TOOLS = READS | WRITES
 WALK_SECONDS = 30
 GREP_FILE_BYTES = 16 * 1024 * 1024
 BINARY_PROBE = 8192
+# A search goes through a file a line at a time and looks at the walk's clock every LINE_CHECK lines: Python's regular
+# expressions cannot be stopped from another thread, so a slow pattern over a large file is bounded by the walk only if the
+# search itself stops. A search whose matches may span lines takes the file whole, so it takes smaller files only.
+LINE_CHECK = 1000
+WHOLE_FILE_BYTES = 1024 * 1024
 
 WHERE = ("the owner's own computer, the one Raphael runs on (not your own computer): path absolute, or from the owner's "
          "home (~)")
@@ -159,32 +164,66 @@ def _home():
     return Path.home()
 
 
-def kept(path, home=None):
-    """Whether `path` (resolved) is a place that holds keys or passwords."""
-    home = home or _home()
-    if any(_under(path, home / place) for place in _KEPT_IN_HOME):
-        return True
-    if any(_under(path, place) for place in _KEPT_SYSTEM):
-        return True
-    root = os.environ.get("SystemRoot")
-    if root and _under(path, Path(root) / "System32" / "config"):
-        return True
-    return any(_KEPT_NAME.fullmatch(part) for part in Path(path).parts[-1:])
+def _resolved(path):
+    try:
+        return os.path.realpath(path)
+    except (OSError, ValueError):
+        return str(path)
 
 
-def place(path, home=None):
-    """The owner's path, absolute and resolved through links (a link cannot lead a check astray): `~` and a relative
-    path are taken from the owner's home."""
+def _both(places):
+    """Each of `places` as written and as resolved through links, once."""
+    return list(dict.fromkeys(str(found) for place in places for found in (place, _resolved(place))))
+
+
+class Kept:
+    """Whether a path is a place that holds keys or passwords. `place` resolves the path a tool is given, so the places
+    it is compared with are resolved the same way, once for a call or a walk: a home moved behind a junction, or a folder
+    of keys that is a link, would otherwise compare a resolved path with an unresolved place and miss it. They are
+    kept as written too, for the path as it was asked."""
+
+    def __init__(self, home=None):
+        homes = _both([home or _home()])
+        places = [Path(root) / place for root in homes for place in _KEPT_IN_HOME] + [Path(place) for place in _KEPT_SYSTEM]
+        system = os.environ.get("SystemRoot")
+        if system:
+            places.append(Path(system) / "System32" / "config")
+        self.roots = list(dict.fromkeys(_key(found) for found in _both(places)))
+
+    def __call__(self, path):
+        key = _key(path)
+        if any(key == root or key.startswith(root + "/") for root in self.roots):
+            return True
+        return any(_KEPT_NAME.fullmatch(part) for part in Path(path).parts[-1:])
+
+
+def _asked(path, home):
+    """The owner's path as asked, absolute but not resolved through links: `~` and a relative path are taken from the
+    owner's home."""
     if not isinstance(path, str) or "\x00" in path or not path.strip():
         raise VmError("bad_path")
-    home = home or _home()
     text = path.strip()
     if text == "~" or text.startswith(("~/", "~\\")):
         text = str(home) + text[1:]
     candidate = Path(text)
     if not candidate.is_absolute():
-        candidate = home / candidate
-    return os.path.realpath(candidate)
+        candidate = Path(home) / candidate
+    return os.path.abspath(candidate)
+
+
+def place(path, home=None):
+    """The owner's path, absolute and resolved through links (a link cannot lead a check astray): `~` and a relative
+    path are taken from the owner's home."""
+    return os.path.realpath(_asked(path, home or _home()))
+
+
+def kept_place(path, home=None):
+    """Whether the owner's `path` is kept, judged both as asked and where it leads: a link named like an ordinary file
+    may lead into a kept place, and an ordinary-looking target may be reached through a kept folder that is a link."""
+    home = home or _home()
+    asked = _asked(path, home)
+    judge = Kept(home)
+    return judge(asked) or judge(os.path.realpath(asked))
 
 
 def writable_folders(settings):
@@ -271,8 +310,18 @@ class Walk:
 
     def __init__(self, base, protected, home=None):
         self.base, self.protected, self.home = base, protected, home or _home()
+        self.kept = Kept(self.home)
+        # The walked paths are resolved (they are under a resolved base), so the heavy places are too, once.
+        self.heavy = _both([Path(root) / place for root in _both([self.home]) for place in _HEAVY_IN_HOME]
+                           + [Path(place) for place in _HEAVY_SYSTEM])
         self.deadline = time.monotonic() + WALK_SECONDS
         self.cut = self.denied = False
+
+    def expired(self):
+        """Whether the walk's time is up. Once it is, the walk and the search over it stop, and the note says so."""
+        if not self.cut and time.monotonic() > self.deadline:
+            self.cut = True
+        return self.cut
 
     def _refused(self, full, folder=False):
         """Whether an entry of the walk is kept from it, judged where it leads: a link or a junction inside a walked folder
@@ -280,9 +329,9 @@ class Walk:
         resolved; a plain file stands in a folder that was judged on the way down."""
         linked = os.path.islink(full) or getattr(os.path, "isjunction", lambda path: False)(full)
         if not linked:
-            return kept(full, self.home) or (folder and self.protected(full))
+            return self.kept(full) or (folder and self.protected(full))
         real = os.path.realpath(full)
-        return kept(full, self.home) or kept(real, self.home) or self.protected(real)
+        return self.kept(full) or self.kept(real) or self.protected(real)
 
     def _skipped(self, folder, name):
         full = os.path.join(folder, name)
@@ -290,8 +339,7 @@ class Walk:
             return True
         if self._refused(full, folder=True):
             return True
-        heavy =[self.home / place for place in _HEAVY_IN_HOME] + [Path(place) for place in _HEAVY_SYSTEM]
-        return any(_under(full, place) and not _under(self.base, place) for place in heavy)
+        return any(_under(full, place) and not _under(self.base, place) for place in self.heavy)
 
     def files(self):
         if os.path.isfile(self.base):
@@ -302,15 +350,24 @@ class Walk:
             if isinstance(error, PermissionError):
                 self.denied = True
 
+        # The clock is looked at for each folder and each name in it, not only between files: a tree of folders without
+        # files, or a folder of many folders each judged on the way down, is walked within the same bound.
         for folder, folders, names in os.walk(self.base, onerror=refused):
-            folders[:] = [name for name in folders if not self._skipped(folder, name)]
+            taken = []
+            for name in folders:
+                if self.expired():
+                    return
+                if not self._skipped(folder, name):
+                    taken.append(name)
+            folders[:] = taken
             for name in names:
-                if time.monotonic() > self.deadline:
-                    self.cut = True
+                if self.expired():
                     return
                 full = os.path.join(folder, name)
                 if not self._refused(full):
                     yield full
+            if self.expired():
+                return
 
     def note(self):
         notes = []
@@ -332,16 +389,25 @@ def _shown(path):
     return path.replace("\\", "/") if os.name == "nt" else path
 
 
-def glob_files(arguments, protected):
-    base = place(arguments.get("path") or "~")
+def _searched(arguments, protected):
+    """Where a search starts, resolved, and the walk over it: refused when it is missing, a kept place (as asked or where
+    it leads) or Raphael's own data."""
+    home = _home()
+    asked = _asked(arguments.get("path") or "~", home)
+    base = os.path.realpath(asked)
     if not os.path.exists(base):
         raise Refused("path_missing", f"Path does not exist: {_shown(base)}")
-    if kept(base):
+    walk = Walk(base, protected, home=home)
+    if walk.kept(asked) or walk.kept(base):
         raise Refused("kept", KEPT_WORDS)
     if protected(base):
         raise Refused("protected_data", PROTECTED)
+    return base, walk
+
+
+def glob_files(arguments, protected):
+    base, walk = _searched(arguments, protected)
     pattern = _glob_pattern(arguments["pattern"])
-    walk = Walk(base, protected)
     found = [path for path in walk.files() if pattern.fullmatch(os.path.relpath(path, base).replace("\\", "/"))]
     found.sort(key=_mtime, reverse=True)
     if not found:
@@ -357,19 +423,44 @@ def _type_pattern(name):
     return re.compile(r".*\.(?:" + "|".join(re.escape(extension) for extension in extensions) + ")", re.I)
 
 
+def _hits(text, lines, expression, spans, walk, mode):
+    """Where a file's text matches: (line index, matches on that line), in order. A pattern that may span lines takes the
+    text whole (a file of at most WHOLE_FILE_BYTES); any other is matched one line at a time, as ripgrep matches, with a
+    look at the walk's clock every LINE_CHECK lines, and stops with the walk."""
+    first = mode == "files_with_matches"
+    if spans:
+        ends = [match.start() for match in re.finditer("\n", text)]
+        found = {}
+        for match in expression.finditer(text):
+            line = bisect.bisect_left(ends, match.start())
+            found[line] = found.get(line, 0) + 1
+            if first:
+                break
+        return sorted(found.items())
+    found = []
+    for index, line in enumerate(lines):
+        if index % LINE_CHECK == LINE_CHECK - 1 and walk.expired():
+            break
+        if mode == "count":
+            count = sum(1 for _ in expression.finditer(line))
+            if count:
+                found.append((index, count))
+        elif expression.search(line):
+            found.append((index, 1))
+            if first:
+                break
+    return found
+
+
 def grep_files(arguments, protected):
-    base = place(arguments.get("path") or "~")
-    if not os.path.exists(base):
-        raise Refused("path_missing", f"Path does not exist: {_shown(base)}")
-    if kept(base):
-        raise Refused("kept", KEPT_WORDS)
-    if protected(base):
-        raise Refused("protected_data", PROTECTED)
+    base, walk = _searched(arguments, protected)
     flags = re.MULTILINE | (re.IGNORECASE if arguments.get("ignore_case") else 0) | (re.DOTALL if arguments.get("multiline") else 0)
     try:
         expression = re.compile(arguments["pattern"], flags)
     except re.error as error:
         raise Refused("bad_pattern", f"The pattern is not a valid regular expression: {str(error)[:QUOTE_CHARS]}") from None
+    # A pattern that names a line end can match only in the text whole, as with multiline.
+    spans = bool(arguments.get("multiline")) or "\n" in arguments["pattern"] or "\\n" in arguments["pattern"]
     chosen = _glob_pattern(arguments["glob"]) if arguments.get("glob") else None
     typed = _type_pattern(arguments["type"]) if arguments.get("type") else None
     mode = arguments.get("output_mode", "files_with_matches")
@@ -377,8 +468,8 @@ def grep_files(arguments, protected):
     context = arguments.get("context")
     before = arguments["before"] if arguments.get("before") is not None else context or 0
     after = arguments["after"] if arguments.get("after") is not None else context or 0
-    walk = Walk(base, protected)
     files, rows, counts = [], [], []
+    larger = 0
     for path in walk.files():
         relative = os.path.relpath(path, base).replace("\\", "/") if path != base else os.path.basename(path)
         if chosen and not chosen.fullmatch(relative) or typed and not typed.fullmatch(os.path.basename(path)):
@@ -386,6 +477,9 @@ def grep_files(arguments, protected):
         try:
             info = os.stat(path)
             if not stat.S_ISREG(info.st_mode) or info.st_size > GREP_FILE_BYTES:
+                continue
+            if spans and info.st_size > WHOLE_FILE_BYTES:
+                larger += 1
                 continue
             with open(path, "rb") as stream:
                 data = stream.read()
@@ -395,34 +489,35 @@ def grep_files(arguments, protected):
         if b"\x00" in data[:BINARY_PROBE]:
             continue
         text = data.decode("utf-8", errors="replace")
+        lines = text.split("\n")
+        found = _hits(text, lines, expression, spans, walk, mode)
+        if not found:
+            continue
         if mode == "files_with_matches":
-            if expression.search(text):
-                files.append(path)
+            files.append(path)
             continue
         if mode == "count":
-            count = sum(1 for _ in expression.finditer(text))
-            if count:
-                counts.append((path, count))
+            counts.append((path, sum(count for _, count in found)))
             continue
-        lines = text.split("\n")
-        ends = [match.start() for match in re.finditer("\n", text)]
-        hits = sorted({bisect.bisect_left(ends, match.start()) for match in expression.finditer(text)})
-        if not hits:
-            continue
-        shown, last = set(), None
+        hits = [line for line, _ in found]
+        # The hits are in order, so each one's lines start after the last line shown: a file of many hits and wide
+        # context costs one pass over its lines.
+        marked, last = set(hits), None
         for hit in hits:
-            for number in range(max(0, hit - before), min(len(lines), hit + after + 1)):
-                if number in shown:
-                    continue
+            start = max(0, hit - before) if last is None else max(hit - before, last + 1)
+            for number in range(start, min(len(lines), hit + after + 1)):
                 if last is not None and number > last + 1 and (before or after):
                     rows.append("--")
-                shown.add(number)
                 last = number
-                mark = ":" if number == hit or number in hits else "-"
+                mark = ":" if number in marked else "-"
                 line = lines[number].rstrip("\r")[:2000]
                 rows.append(f"{_shown(path)}{mark}{number + 1}{mark}{line}" if numbers else f"{_shown(path)}{mark}{line}")
     offset, limit = arguments.get("offset", 0), arguments.get("head_limit", HEAD_LIMIT)
     note = walk.note()
+    if larger:
+        size = f"{WHOLE_FILE_BYTES / 1048576:g} MiB" if WHOLE_FILE_BYTES >= 1048576 else f"{WHOLE_FILE_BYTES:,} bytes"
+        note = "\n".join(filter(None, [note, f"({larger:,} file{' was' if larger == 1 else 's were'} larger than {size} "
+                                             "and not searched: a pattern that may span lines takes smaller files only.)"]))
     if mode == "files_with_matches":
         if not files:
             return PluginResult(True, text="\n".join(["No files found", note]).strip())
@@ -487,7 +582,7 @@ class OwnerFileTools:
                 folders.append(os.path.realpath(folder))
             except (OSError, ValueError):
                 continue
-        return any(_under(path, folder) for folder in folders) and not kept(path)
+        return any(_under(path, folder) for folder in folders) and not kept_place(arguments["path"])
 
     async def call(self, name, arguments, *, approver, run):
         try:
@@ -501,7 +596,7 @@ class OwnerFileTools:
                                         "Wait for that approval before trying it again.")
             path = arguments.get("path")
             if name != "glob" and name != "grep" or path:
-                if kept(place(path or "~")):
+                if kept_place(path or "~"):
                     return PluginResult(False, "kept", KEPT_WORDS)
             if name == "glob":
                 return await asyncio.to_thread(glob_files, arguments, self.guard())

@@ -7,6 +7,7 @@ there); the brain is a fake.
 """
 
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -139,6 +140,47 @@ async def test_a_search_judges_a_linked_file_where_it_leads(home, files):
     assert "readme.txt" not in listed.text
 
 
+@pytest.fixture
+def linked_home(tmp_path, monkeypatch):
+    """The owner's home reached through a folder link, as a home moved to another drive is: `_home` gives the link, and
+    every path a tool resolves lands in the folder it leads to."""
+    real = tmp_path / "real-home"
+    (real / ".ssh").mkdir(parents=True)
+    (real / ".ssh" / "config").write_text("Host PRIVATE\n", encoding="utf-8")
+    (real / "Documents").mkdir()
+    (real / "Documents" / "plan.md").write_text("ship\n", encoding="utf-8")
+    home = tmp_path / "home"
+    _link_folder(home, real)
+    monkeypatch.setattr(owner_files, "_home", lambda: home)
+    return home
+
+
+async def test_a_home_reached_through_a_link_keeps_its_places_of_keys(conn, linked_home, files):
+    # The file has an ordinary name, so only where it stands keeps it.
+    for name, arguments in (("read_file", {"path": "~/.ssh/config"}), ("glob", {"pattern": "*", "path": "~/.ssh"}),
+                            ("grep", {"pattern": "PRIVATE", "path": "~/.ssh"})):
+        result = await call(files, name, arguments)
+        assert not result.ok and result.kind == "kept", name
+    matched = await call(files, "grep", {"pattern": "PRIVATE|ship", "output_mode": "content"})
+    assert "plan.md" in matched.text and "PRIVATE" not in matched.text
+    SettingsStore(conn).set("owner_write_folders", [str(linked_home)])
+    written = await call(files, "write_file", {"path": "~/.ssh/config", "content": "Host leak\n"})
+    assert not written.ok and written.kind == "not_writable"
+
+
+async def test_a_place_of_keys_reached_through_a_link_is_kept_as_asked_and_where_it_leads(home, files, tmp_path):
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    (keys / "config").write_text("Host PRIVATE\n", encoding="utf-8")
+    (home / ".ssh" / "id_ed25519").unlink()
+    (home / ".ssh").rmdir()
+    _link_folder(home / ".ssh", keys)
+    result = await call(files, "read_file", {"path": "~/.ssh/config"})
+    assert not result.ok and result.kind == "kept"
+    found = await call(files, "grep", {"pattern": "PRIVATE", "path": "~/.ssh"})
+    assert not found.ok and found.kind == "kept"
+
+
 def test_a_walk_keeps_raphaels_own_data_behind_a_link(home, tmp_path):
     data = tmp_path / "raphael-data"
     data.mkdir()
@@ -240,6 +282,46 @@ async def test_a_cli_brain_has_the_owners_file_tools(make_rig, conn, home, monke
     assert (await typed(rig, "What does my plan say?"))["status"] == "done"
     [tools] = seen
     assert READS <= tools and not tools & PC_TOOLS
+
+
+def _clock(ticks):
+    """A clock for the walk that stands still for `ticks` looks and then is long past any deadline."""
+    looks = iter(range(10 ** 9))
+    return SimpleNamespace(monotonic=lambda: 0 if next(looks) < ticks else 10 ** 6)
+
+
+def test_a_slow_search_of_a_large_file_stops_with_the_walk_and_says_so(home, monkeypatch):
+    # Python's regular expressions cannot be stopped from outside, so the search itself looks at the clock as it goes.
+    big = home / "Documents" / "big.log"
+    big.write_text("".join(f"ship line {index}\n" for index in range(5000)), encoding="utf-8")
+    monkeypatch.setattr(owner_files, "time", _clock(20))
+    monkeypatch.setattr(owner_files, "LINE_CHECK", 10, raising=False)
+    result = owner_files.grep_files({"pattern": "ship line", "path": str(big), "output_mode": "content",
+                                     "head_limit": 0}, lambda path: False)
+    rows = [line for line in result.text.split("\n") if "ship line" in line]
+    assert 0 < len(rows) < 5000
+    assert f"stopped after {owner_files.WALK_SECONDS} seconds" in result.text
+
+
+def test_a_walk_through_folders_without_files_stops_in_time(home, monkeypatch):
+    for index in range(30):
+        (home / "empty" / f"folder{index}" / "deeper").mkdir(parents=True)
+    monkeypatch.setattr(owner_files, "time", _clock(2))
+    walk = owner_files.Walk(os.path.realpath(home / "empty"), lambda path: False, home=home)
+    assert list(walk.files()) == [] and walk.cut
+    monkeypatch.setattr(owner_files, "time", _clock(2))
+    listed = owner_files.glob_files({"pattern": "*.md", "path": "~/empty"}, lambda path: False)
+    assert "No files found" in listed.text and f"stopped after {owner_files.WALK_SECONDS} seconds" in listed.text
+
+
+def test_a_search_across_lines_takes_only_smaller_files_and_says_so(home, monkeypatch):
+    (home / "Documents" / "long.md").write_bytes(b"ship\nit\n" + b"x" * 2000)
+    (home / "Documents" / "short.md").write_bytes(b"ship\nit\n")
+    monkeypatch.setattr(owner_files, "WHOLE_FILE_BYTES", 1000, raising=False)
+    result = owner_files.grep_files({"pattern": "ship.it", "path": "~/Documents", "multiline": True},
+                                    lambda path: False)
+    assert "short.md" in result.text and "long.md" not in result.text
+    assert "1 file was larger than" in result.text
 
 
 def test_the_walk_skips_app_data_unless_it_starts_there(home):
