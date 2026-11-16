@@ -527,6 +527,7 @@ export const es = {
   "desktop.starting": "Iniciando el ordenador…",
   "desktop.building": "Creando el escritorio…",
   "desktop.firstBuild": "La primera creación puede tardar entre 5 y 15 minutos.",
+  "desktop.updateLine": "Actualizando el ordenador. El primer inicio tras una actualización puede tardar unos minutos.",
   "desktop.preparing": "Preparando el escritorio…",
   "desktop.retry": "Reintentar",
   "providers.retry": "Reintentar",

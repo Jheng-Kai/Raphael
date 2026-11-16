@@ -527,6 +527,7 @@ export const th = {
   "desktop.starting": "กำลังเริ่มคอมพิวเตอร์…",
   "desktop.building": "กำลังสร้างเดสก์ท็อป…",
   "desktop.firstBuild": "การสร้างครั้งแรกอาจใช้เวลา 5–15 นาที",
+  "desktop.updateLine": "กำลังอัปเดตคอมพิวเตอร์ การเปิดครั้งแรกหลังอัปเดตอาจใช้เวลาสองสามนาที",
   "desktop.preparing": "กำลังเตรียมเดสก์ท็อป…",
   "desktop.retry": "ลองอีกครั้ง",
   "providers.retry": "ลองอีกครั้ง",

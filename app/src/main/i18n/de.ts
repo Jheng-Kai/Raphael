@@ -527,6 +527,7 @@ export const de = {
   "desktop.starting": "Computer wird gestartet…",
   "desktop.building": "Desktop wird erstellt…",
   "desktop.firstBuild": "Die erste Erstellung kann 5–15 Minuten dauern.",
+  "desktop.updateLine": "Der Computer wird aktualisiert. Der erste Start nach einem Update kann einige Minuten dauern.",
   "desktop.preparing": "Desktop wird vorbereitet…",
   "desktop.retry": "Erneut versuchen",
   "providers.retry": "Erneut versuchen",

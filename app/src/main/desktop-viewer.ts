@@ -11,7 +11,7 @@ import { mountMemberResources } from "./member-profile-resources";
 import { cardFailure } from "./card";
 import { mountComputerLocation } from "./computer-location";
 import { mountComputerLifecycle } from "./computer-lifecycle";
-import { computerStateText } from './computer-state';
+import { computerStateText, computerUpdateLine } from './computer-state';
 
 export interface DesktopState {
   lifecycle?: "waking" | "updating" | "repairing";
@@ -23,6 +23,8 @@ export interface DesktopState {
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
   ready: boolean;
   image?: boolean;
+  /** The preparation under way makes the computer again on a newer image (R-COMP-UPDATE-01). */
+  update?: boolean;
   control: "member" | "owner";
   progress?: string;
   error?: string;
@@ -78,7 +80,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   panel.innerHTML = `<div class="desktop-location-header"></div><div class="desktop-takeover-bar" hidden>${iconButton("left", t("members.panelBack"), ' data-desktop="back" hidden')}${iconButton("shrink", t("desktop.collapse"), ' data-desktop="collapse" hidden')}</div><div class="desktop-shell">` +
     `<div class="desktop-screen"><img class="desktop-wallpaper" alt=""><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>${btn("", "sm", ' data-desktop="retry" hidden')}` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption"></p><div class="desktop-review" hidden></div>` +
+    `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption" role="status" hidden></p><div class="desktop-review" hidden></div>` +
     `<div class="desktop-foot"><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
     `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
     `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
@@ -195,8 +197,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     drawn = signature; drawnInline = inline;
     lifecycle.draw();
     paint(panel, "hidden", !visible || !state);
-    // The computer carries no words, face or buttons until its screen is up: no caption under it.
-    paint(panel.querySelector<HTMLElement>('.desktop-caption')!, 'hidden', true);
+    // The computer carries no words, face or buttons until its screen is up, and nothing is written over it. The one line
+    // under it is an update of its image, which can take minutes (R-COMP-UPDATE-01): a state, never a notice or a toast.
+    const caption = panel.querySelector<HTMLElement>('.desktop-caption')!, updateLine = computerUpdateLine(state);
+    paint(caption, 'textContent', updateLine); paint(caption, 'hidden', !updateLine);
+    panel.toggleAttribute('data-desktop-update', !!updateLine);
     options.status?.(state?.state === "running");
     paint(frame, "title", t("desktop.open"));
     const asleep = isAsleep(state);

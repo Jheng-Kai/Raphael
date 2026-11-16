@@ -527,6 +527,7 @@ export const fr = {
   "desktop.starting": "Démarrage de l’ordinateur…",
   "desktop.building": "Construction du bureau…",
   "desktop.firstBuild": "La première construction peut prendre 5 à 15 minutes.",
+  "desktop.updateLine": "Mise à jour de l’ordinateur. Le premier démarrage après une mise à jour peut prendre quelques minutes.",
   "desktop.preparing": "Préparation du bureau…",
   "desktop.retry": "Réessayer",
   "providers.retry": "Réessayer",

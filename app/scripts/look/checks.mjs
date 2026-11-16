@@ -536,7 +536,8 @@ export function checkRendered(name, context = {}) {
       // The whole screen is the one press: it opens the larger view while the computer runs and starts it in every other state but getting ready.
       require(!!visible(cover) === !preparing && (!asleep || phase === 'stopped'), 'the screen is the one press that opens or starts the computer, except while it is getting ready');
       require(!visible(panel.querySelector('[data-desktop="take"]')), 'Take control waits in the larger view, never under the preview');
-      require(!visible(panel.querySelector('.desktop-caption')), 'no caption stands under the screen');
+      // R-COMP-UPDATE-01: the one line under the screen is an update of the computer's image, said while it lasts.
+      require(!visible(panel.querySelector('.desktop-caption')) || preparing && !!panel.querySelector('.desktop-panel[data-desktop-update]'), 'no caption stands under the screen but the line of an update');
       require(!!visible(panel.querySelector('.computer-lifecycle-state')) === runs, 'the header names the state only once the computer runs');
       if (!runs) requireBareScreen(panel.querySelector('.desktop-screen'));
       if (live) require(panel.querySelector('[data-computer-state-text]')?.textContent === '執行中', 'the live header names the running state');
@@ -721,6 +722,19 @@ export function checkRendered(name, context = {}) {
     require(visible(section.querySelector('[data-act="update-install"]')), "a framed install action is visible");
     if (name === "app-update-ready") require(section.textContent.includes("更新已驗證"), "verified state is explicit");
     require(section.querySelector('[data-k="auto-update"]').getAttribute("aria-checked") === (name === "app-update-auto" ? "true" : "false"), "auto updates are opt-in");
+    return {check:name};
+  }
+  if (name === 'desktop-updating') {
+    // R-COMP-UPDATE-01: an update of the computer's image says so in one line under the screen, with how long it may
+    // take; the screen stays bare (R-UI-93), cannot be pressed, and nothing is a notice or a toast.
+    const panel = document.querySelector('.desktop-panel'), screen = panel?.querySelector('.desktop-screen'), caption = panel?.querySelector('.desktop-caption');
+    require(panel?.hasAttribute('data-desktop-update') && ['starting', 'building', 'preparing'].includes(panel.dataset.desktopState), 'the panel is in an update');
+    require(visible(caption) && caption.textContent === '正在更新電腦。更新後第一次開啟可能需要幾分鐘。', `the update line is shown (${caption?.textContent})`);
+    require(caption.getBoundingClientRect().top >= screen.getBoundingClientRect().bottom - 1, 'the line stands under the screen, never over it');
+    require(caption.getBoundingClientRect().right <= screen.getBoundingClientRect().right + 1 && caption.getBoundingClientRect().left >= screen.getBoundingClientRect().left - 1, 'the line is no wider than the screen');
+    requireBareScreen(screen);
+    require(!visible(panel.querySelector('[data-desktop="enlarge"]')), 'a computer being updated is not pressable');
+    require(!visible(panel.querySelector('.desktop-error')) && !visible(panel.querySelector('.computer-lifecycle-state')), 'no notice and no header word');
     return {check:name};
   }
   if (name === "app-attachment-count") {

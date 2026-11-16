@@ -527,6 +527,7 @@ export const zhCN = {
   "desktop.starting": "正在启动电脑…",
   "desktop.building": "正在创建桌面…",
   "desktop.firstBuild": "首次创建约需 5–15 分钟。",
+  "desktop.updateLine": "正在更新电脑。更新后第一次打开可能需要几分钟。",
   "desktop.preparing": "正在准备桌面…",
   "desktop.retry": "重试",
   "providers.retry": "重试",
