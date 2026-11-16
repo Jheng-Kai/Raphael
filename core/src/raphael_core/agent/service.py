@@ -4658,7 +4658,7 @@ class AgentService:
             try:
                 text = file(speaker.id, arguments.get("name"), arguments.get("reference")) if file else None
             except MemberError as error:
-                return ToolResult(name, False, None, "not_found" if error.kind == "not_found" else "bad_arguments", instruction=str(error))
+                return ToolResult(name, False, None, error.kind if error.kind in ("not_found", "unreadable") else "bad_arguments", instruction=str(error))
             return ToolResult(name, text is not None, {"text": text} if text is not None else None,
                               None if text is not None else "not_found", untrusted=True)
         if name == SKILL_READ:

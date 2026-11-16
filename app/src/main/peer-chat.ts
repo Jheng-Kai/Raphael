@@ -16,7 +16,8 @@ export interface PeerLine { key: string; from: number; at: number; text: string;
 
 const STATES = { queued: "handoff.queued", running: "handoff.running", waiting: "handoff.waiting", withheld: "handoff.withheld" } as const;
 const REASONS = { missing_artifact: "handoff.missingArtifact", artifact_changed: "handoff.changedArtifact", work_without_action: "handoff.noAction",
-  missing_terminal: "handoff.invalidFinal", dangling_mention: "handoff.invalidFinal", cancelled: "handoff.cancelled" } as const;
+  artifact_unreadable: "handoff.unreadableArtifact", missing_terminal: "handoff.invalidFinal", child_work_incomplete: "handoff.childWorkOpen",
+  cancelled: "handoff.cancelled" } as const;
 
 export const peerKey = (task: HandoffView): string => String(task.task_id ?? `x${task.work_turn_id}`);
 

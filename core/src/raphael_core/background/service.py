@@ -146,7 +146,7 @@ from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from .routine_outcome import failure as routine_failure
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
-from .outcomes import computer_files, file_named_in, named_files, worker_trace
+from .outcomes import computer_files, exists_unreadable, file_named_in, named_files, worker_trace
 from .handback import title
 from .tasks import FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore, deliverable_names
 
@@ -191,8 +191,8 @@ _TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 # Endings that are the app's judgement of the work, not a fault of the brain: the turn's words say what was missing, and no
 # brain failure is recorded with them. Recorded as one ("unknown" on `cli:claude`), a member asked about its failed routine
 # told the owner of a Claude error of unknown cause (R-ROUTINE-05).
-_JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_changed", "work_without_action",
-                             "missing_terminal", "dangling_mention", "child_work_incomplete"))
+_JUDGED_ENDINGS = frozenset(("routine_nothing", "routine_refused", "missing_artifact", "artifact_unreadable", "artifact_changed",
+                             "work_without_action", "missing_terminal", "child_work_incomplete"))
 # Endings that are the app's own state, no fault of the model either: the member was removed, the background is switched off, the
 # worker could not start or broke (`worker_` and the name of the error). A brain failure recorded for them says the model failed.
 _APP_ENDINGS = frozenset(("member_unknown_or_removed", "member_removed_from_room", "disabled", "gone", "worker"))
@@ -2852,7 +2852,7 @@ class BackgroundService:
             if (task.mode == 'work' or task.requires_artifact) and (failure := self._store.completion_reason(
                     task, verifiable=self._record_artifacts(task, current.created_at_ms,
                         '\n'.join([report.text, report.detail or '', *report.messages])), said=report.text)):
-                said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
+                said_why = {'work_without_action': 'work_only_words', 'artifact_unreadable': 'work_file_unreadable'}.get(failure, 'work_file_missing')
                 text = phrase(language,said_why) + ('\n\n' + report.text if failure == 'work_without_action' else '')
                 self._conclude(task,run,'failed','',text,report.detail if failure == 'work_without_action' else None,failure)
                 return
@@ -2943,8 +2943,17 @@ class BackgroundService:
         (`/home/cua/team/...`); a missing workspace never waives the requirement."""
         if not task.requires_artifact:
             return True
+        self._store.forget_unreadable(task.id)
         # Shared mounts can round modification times down to whole seconds.
         fresh_since_ms = since_ms - 1000
+        # A condition that names a file is met by a file of that name (whatever it holds: spaces, Chinese or Japanese); when it
+        # names none, any new file is the work.
+        wants = [name.lower() for name in deliverable_names(task.done_when)]
+        named = bool(wants)
+
+        def wanted(path: Path) -> bool:
+            """Whether the condition asks for this very file: its name is one the condition names, or ends in one after a space."""
+            return any(path.name.lower() == want or path.name.lower().endswith(' ' + want) for want in wants)
         baselines = {str(Path(item['uri'])): item for item in self._store.evidence(task.id) if item['kind'] == 'file_before'}
 
         def keep(path: Path, root: Path) -> bool:
@@ -2962,7 +2971,10 @@ class BackgroundService:
                 self._store.verify_artifact(task.id, "artifact", path, workspace=root,
                     mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
                 return True
-            except (OSError, ValueError):
+            except (OSError, ValueError) as error:
+                if wanted(path) and exists_unreadable(path, error):
+                    # The file the work was to leave is there; saying it is missing would send the member looking for the wrong thing.
+                    self._store.note_unreadable(task.id, path)
                 return False
 
         for path in named_files(task.done_when + '\n' + report + '\n' + '\n'.join(baselines)):
@@ -2983,9 +2995,6 @@ class BackgroundService:
                 path = root.joinpath(*below.parts)
                 if path.is_file() and self._gate.data_floor.access('read_file', {'path': str(path)}) is None:
                     keep(path, root)
-        # A condition that names a file is met by a file of that name (whatever it holds: spaces, Chinese or Japanese); when it
-        # names none, any new file is the work.
-        named = bool(deliverable_names(task.done_when))
         found = []
 
         def freshest_first(base: str, folders: list[str]) -> list[str]:
@@ -3002,6 +3011,9 @@ class BackgroundService:
             seen = listed = 0  # each folder has its own budget: a large one never hides the other
             for base, folders, names in os.walk(root):
                 folders[:] = freshest_first(base, folders)
+                for folder in folders:
+                    if named and wanted(Path(base) / folder):
+                        self._store.note_unreadable(task.id, Path(base) / folder)  # a folder in the place of the file
                 listed += len(names)
                 for name in names:
                     if named and not file_named_in(task.done_when, name):

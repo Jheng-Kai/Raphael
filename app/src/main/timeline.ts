@@ -104,6 +104,7 @@ const REASONS: Record<string, MessageKey> = {
   network: "agent.reason.network",
   cli_stopped: "agent.reason.cliStopped",
   not_found: "agent.reason.not_found",
+  unreadable: "agent.reason.unreadable",
   blocked: "agent.reason.blocked",
   approval_required: "agent.reason.approval_required",
   memory_refused: "agent.reason.memory_refused",

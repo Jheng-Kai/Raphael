@@ -43,6 +43,8 @@ export default [
   scene("routine-event-row", "An event and its check/fire times share the existing routine row and switch", [...eventDetails, check("routine-event-row")], { routines: [eventRoutine] }),
 
   scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-blocked')], {p04Blocked:true}),
+  scene("room-workflow-childwork-open", "A member that stopped while work it handed on was open says so", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-childwork-open')], {p04Blocked:'child_work_incomplete'}),
+  scene("room-workflow-file-unreadable", "A file that is there but cannot be opened is not called missing", [room(1),click('[data-handoff]'),wait('.peer-chat'),check('p04-unreadable')], {p04Blocked:'artifact_unreadable'}),
   scene("room-final-owner", "Chief is last after delivered work", [room(1),check('room-wrapup'),check('p04-chief-last')], {p03Handoff:'done',roomWrapup:true}),
   scene("room-progress-status-only", "Work progress stays in its status row", [room(1),check('room-thinking'),check('p04-status-only')], {roomThinking:true}),
   scene("room-no-dangling-mention", "Published final has no incomplete address", [room(1),check('p04-addresses')]),
