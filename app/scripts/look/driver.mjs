@@ -667,31 +667,51 @@ export async function perform(page, step, evidenceDirectory) {
     // The composer's idle emblem as the screen shows it, at the run's pixel ratio, kept beside the run, and compared pixel for
     // pixel with its own bitmap laid on the composer's ground: any resampling on the way to the screen shows as a difference (R-UI-161).
     case "emblem-picture": {
-      const place = await page.evaluate(() => {
+      // The screen is read two device pixels wider on every side and the bitmap laid at each whole-pixel offset in it: a paint
+      // snapped to the pixel grid matches at one offset, a resampled one at none.
+      const MARGIN = 2;
+      const place = await page.evaluate(margin => {
         const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility()), rect = img.getBoundingClientRect(), ratio = devicePixelRatio;
-        const x = Math.round(rect.left * ratio), y = Math.round(rect.top * ratio);
-        return { clip: { x: x / ratio, y: y / ratio, width: img.naturalWidth / ratio, height: img.naturalHeight / ratio }, ground: getComputedStyle(img.closest('.composer')).backgroundColor };
-      });
+        const x = Math.round(rect.left * ratio) - margin, y = Math.round(rect.top * ratio) - margin;
+        // Under a panel's scrim (a window under 1120 px) the screen shows the emblem dimmed: nothing to compare.
+        const covered = !img.closest('.cmp-voice').contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+        return { covered, device: [rect.left * ratio, rect.top * ratio], clip: { x: x / ratio, y: y / ratio, width: (img.naturalWidth + 2 * margin) / ratio, height: (img.naturalHeight + 2 * margin) / ratio }, ground: getComputedStyle(img.closest('.composer')).backgroundColor };
+      }, MARGIN);
+      if (place.covered) return { check: "emblem-picture", covered: true };
       const shot = Buffer.from(await page.screenshot({ type: "png", clip: place.clip })).toString("base64");
-      const comparison = await page.evaluate(async (shot, ground) => {
+      const comparison = await page.evaluate(async (shot, ground, margin) => {
         const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility());
         const read = async source => { const image = new Image(); image.src = source; await image.decode(); return image; };
         const [screen, bitmap] = await Promise.all([read(`data:image/png;base64,${shot}`), read(img.currentSrc)]);
         const pixels = (draw, width, height) => { const canvas = new OffscreenCanvas(width, height), context = canvas.getContext("2d", { willReadFrequently: true }); draw(context); return context.getImageData(0, 0, width, height).data; };
-        const width = bitmap.naturalWidth, height = bitmap.naturalHeight;
-        const seen = pixels(context => context.drawImage(screen, 0, 0, width, height), width, height);
+        const width = bitmap.naturalWidth, height = bitmap.naturalHeight, outer = width + 2 * margin;
+        const seen = pixels(context => context.drawImage(screen, 0, 0, outer, height + 2 * margin), outer, height + 2 * margin);
         const own = pixels(context => { context.fillStyle = ground; context.fillRect(0, 0, width, height); context.drawImage(bitmap, 0, 0); }, width, height);
-        let worst = 0, off = 0, total = 0;
-        for (let i = 0; i < seen.length; i += 4) {
-          const gap = Math.max(Math.abs(seen[i] - own[i]), Math.abs(seen[i + 1] - own[i + 1]), Math.abs(seen[i + 2] - own[i + 2]));
-          worst = Math.max(worst, gap); total += gap; if (gap > 16) off++;
+        let best = null;
+        for (let dy = 0; dy <= 2 * margin; dy++) for (let dx = 0; dx <= 2 * margin; dx++) {
+          let worst = 0, off = 0, total = 0;
+          for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4, j = ((y + dy) * outer + x + dx) * 4;
+            const gap = Math.max(Math.abs(seen[j] - own[i]), Math.abs(seen[j + 1] - own[i + 1]), Math.abs(seen[j + 2] - own[i + 2]));
+            worst = Math.max(worst, gap); total += gap; if (gap > 16) off++;
+          }
+          if (!best || total < best.total) best = { offset: [dx - margin, dy - margin], worst, total, off };
         }
-        return { screen: [screen.naturalWidth, screen.naturalHeight], bitmap: [width, height], worst, mean: Math.round(total / (seen.length / 4) * 100) / 100, off };
-      }, shot, place.ground);
+        return { bitmap: [width, height], offset: best.offset, worst: best.worst, mean: Math.round(best.total / (width * height) * 100) / 100, off: best.off };
+      }, shot, place.ground, MARGIN);
       const { width, deviceScaleFactor = 1 } = page.viewport(), theme = await page.evaluate(() => document.documentElement.dataset.theme);
       const file = `emblem-${theme}-${width}-x${deviceScaleFactor}.png`;
-      if (evidenceDirectory) await writeFile(`${evidenceDirectory}/${file}`, Buffer.from(shot, "base64"));
-      const result = { check: "emblem-picture", file, ratio: deviceScaleFactor, ...comparison };
+      // The emblem's own pixels as the screen showed them, where they matched best: the picture to look at, enlarged, for sharpness.
+      if (evidenceDirectory) {
+        const crop = await page.evaluate(async (shot, offset, margin, size) => {
+          const image = new Image(); image.src = `data:image/png;base64,${shot}`; await image.decode();
+          const canvas = document.createElement("canvas"); canvas.width = size[0]; canvas.height = size[1];
+          canvas.getContext("2d").drawImage(image, -(offset[0] + margin), -(offset[1] + margin));
+          return canvas.toDataURL("image/png").split(",")[1];
+        }, shot, comparison.offset, MARGIN, comparison.bitmap);
+        await writeFile(`${evidenceDirectory}/${file}`, Buffer.from(crop, "base64"));
+      }
+      const result = { check: "emblem-picture", file, ratio: deviceScaleFactor, device: place.device.map(value => Math.round(value * 1000) / 1000), ...comparison };
       if (comparison.off > 0) throw Object.assign(new Error(`The emblem on the screen is not its own bitmap: something resampled it (R-UI-161): ${JSON.stringify(result)}`), { assertion: result });
       return result;
     }

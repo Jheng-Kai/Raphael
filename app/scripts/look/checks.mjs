@@ -3375,10 +3375,18 @@ export function checkRendered(name, context = {}) {
         if (model) {
           const trigger = box(model), arrow = box(chevron);
           require(trigger.height >= 31.5 && visible(chevron) && arrow.width >= 15.5 && arrow.left >= trigger.left - 0.5 && arrow.right <= trigger.right + 0.5, `the model keeps its chevron whole: ${JSON.stringify(round(trigger))}`);
-          // A name that fits in the room the model keeps has nothing to give; a longer one shortens before the word goes.
-          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), keep = parseFloat(getComputedStyle(slot).flexBasis);
-          require(wordShown || shortened || box(slot).width <= keep + 0.5, `the model's name shortens before the permission's word goes: ${JSON.stringify(shown)}`);
-          Object.assign(result, { modelShortened: shortened });
+          // The word goes only when the row cannot hold it beside the model's first six letters (a shorter name whole), and
+          // stays whenever it can; a name shortened has all the room there is, with no gap left before it.
+          const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+          const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
+          const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width);
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          const need = fixed + (rects.length - 1) * gap + modeWide + modelNeed, room = bar.clientWidth;
+          require(wordShown ? room + 1 >= need : room < need + 1.5, `the permission's word shows exactly while the row holds it beside the model's first letters: ${JSON.stringify({ room, need: Math.round(need * 10) / 10, wordShown })}`);
+          const before = rects[rects.findIndex(rect => rect.control === 'cmp-model') - 1];
+          require(!shortened || box(slot).left <= before.right + gap + 1, `a shortened name leaves no room unused before it: ${JSON.stringify(shown)}`);
+          Object.assign(result, { modelShortened: shortened, room, need: Math.round(need * 10) / 10 });
         }
         Object.assign(result, { modeWord: word.textContent.trim(), modeWordShown: wordShown });
       }

@@ -126,6 +126,49 @@ export function bindActionMode(button: HTMLElement): void {
   draw(); void read();
 }
 
+/** How many letters' width of the model's name the row keeps before the permission's word gives way (R-UI-160). */
+const NAME_KEPT_EM = 6;
+
+/**
+ * Whether the permission's word fits in the composer's row: `room` holds the controls that never give way (`fixed`), the gaps
+ * between them, the permission with its word, and the model at its first letters (a shorter name whole, `modelNeed`). A word
+ * that shows keeps showing to half a pixel short and a hidden one comes back with a pixel to spare, so a measure rounded
+ * differently in the two states cannot turn it on and off.
+ */
+export function permissionWordFits(row: { room: number; fixed: number; gaps: number; modeWide: number; modelNeed: number; shown: boolean }): boolean {
+  return row.room + (row.shown ? 0.5 : -1) >= row.fixed + row.gaps + row.modeWide + row.modelNeed;
+}
+
+/**
+ * Short of room the composer's row gives way in one order (R-UI-160, agent.css): the model's name shortens first; once it would go
+ * under its first letters the permission's word hides and its shield stays, the room it gave going back to the name, so no gap
+ * stands beside a shortened name. Measured again when the row, the word or the model changes; the measure is the same whether
+ * the word shows or not, so one change settles it.
+ */
+function fitComposerRow(bar: HTMLElement): void {
+  if (typeof ResizeObserver !== "function") return;
+  const mode = bar.querySelector<HTMLElement>(".cmp-mode")!, word = mode.querySelector<HTMLElement>("span")!, model = bar.querySelector<HTMLElement>(".cmp-model")!;
+  const width = (element: Element): number => element.getBoundingClientRect().width;
+  const fit = (): void => {
+    if (!bar.isConnected || !bar.clientWidth) return;
+    const hidden = mode.hasAttribute("data-word-hidden");
+    const modeWide = width(mode) + (hidden ? (parseFloat(getComputedStyle(mode).columnGap) || 0) + width(word) : 0);
+    const trigger = model.querySelector<HTMLElement>(".mp-trigger"), name = trigger?.querySelector<HTMLElement>(".mp-tname");
+    const whole = name && (name.scrollWidth > name.clientWidth + 0.5 ? name.scrollWidth : width(name));
+    const modelNeed = trigger && name && whole !== undefined ? width(trigger) - width(name) + Math.min(whole, NAME_KEPT_EM * parseFloat(getComputedStyle(name).fontSize)) : 0;
+    const shown = [...bar.children].filter(child => width(child) > 0);
+    const fixed = shown.filter(child => child !== mode && child !== model).reduce((sum, child) => sum + width(child), 0);
+    const gaps = (shown.length - 1) * (parseFloat(getComputedStyle(bar).columnGap) || 0);
+    const fits = permissionWordFits({ room: bar.clientWidth, fixed, gaps, modeWide, modelNeed, shown: !hidden });
+    if (fits === hidden) mode.toggleAttribute("data-word-hidden", !fits);
+  };
+  const sizes = new ResizeObserver(fit);
+  for (const element of [bar, word, model]) sizes.observe(element);
+  // Another model, depth or language changes the words without always changing a size.
+  new MutationObserver(fit).observe(mode, { childList: true, subtree: true, characterData: true });
+  new MutationObserver(fit).observe(model, { childList: true, subtree: true, characterData: true });
+}
+
 export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8Array {
   const length = channels[0]?.length ?? 0, bytes = new Uint8Array(44 + length * 2), view = new DataView(bytes.buffer);
   const text = (at: number, value: string): void => { for (let i=0;i<value.length;i++) bytes[at+i]=value.charCodeAt(i); };
@@ -181,7 +224,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
     }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
   });
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
-  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);
+  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);fitComposerRow(el.querySelector<HTMLElement>(".cmp-bar")!);
   // The composer keeps its clicks (below), so a waiting picture opens large from here.
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const picture=(e.target as Element).closest<HTMLElement>(".cmp-pic"),src=picture?.querySelector("img")?.getAttribute("src");if(picture){if(src)openMediaLightbox(picture,src);return;}const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
   picker.addEventListener("change",()=>addFiles([...picker.files??[]]));bindFilePaste(input,addFiles,fit,()=>files.map(file=>file.name));

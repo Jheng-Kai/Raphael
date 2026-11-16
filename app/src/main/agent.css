@@ -491,24 +491,22 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .composer .cmp-page-note { display: block; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Under the words: what to add and how it acts on the left, which model and send on the right. Short of room the row gives
-   way in one order and never leaves the composer (R-UI-160): the model's name shortens first, to a few letters; then the
-   permission's word goes and its shield stays; last the name shortens away beside its depth and chevron. The + and the
-   right-hand button never give way. The order is the flex factors': each control starts at its smallest, the row's free room
-   goes to the permission's word a thousand times faster than to the model's name, each up to its own width, and what is
-   left stands before the model. */
+   way in one order and never leaves the composer (R-UI-160): the model's name shortens first; once it would go under six
+   letters the permission's word hides (`fitComposerRow` in chat-composer.ts) and its shield stays, the room it gave going back
+   to the name; last the name shortens away beside its depth and chevron. The + and the right-hand button never give way. */
 .cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.cmp-bar > .cmp-attach, .cmp-bar > .cmp-pair { flex: none; }
+.cmp-bar > .cmp-attach, .cmp-bar > .cmp-mode, .cmp-bar > .cmp-pair { flex: none; }
 .cmp-model:empty { display: none; }
 .cmp-model:empty + .cmp-pair { margin-inline-start: auto; }
-/* The shield and the word are two items of one line as tall as the button: a word the button cannot hold whole wraps to a
-   second line, out of sight, so it is shown whole or not at all. Its name stays the button's for a screen reader. */
-.composer .btn.cmp-mode { flex: 1000 0 auto; flex-wrap: wrap; justify-content: flex-start; align-content: flex-start; gap: 0 var(--sp-1); width: calc(16px + 2 * var(--sp-2) + 2px); min-width: calc(16px + 2 * var(--sp-2) + 2px); max-width: max-content; height: var(--h-ctl); min-height: var(--h-ctl); overflow: hidden; padding-block: 0; padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
-.composer .btn.cmp-mode > span { line-height: calc(var(--h-ctl) - 2px); }
+.composer .btn.cmp-mode { position: relative; overflow: hidden; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+/* A hidden word keeps its width, which is how the row knows when it fits again, but takes no room and shows nothing; the button
+   keeps the word in its name. */
+.composer .btn.cmp-mode[data-word-hidden] > span { position: absolute; visibility: hidden; }
 .composer .btn.cmp-mode:hover:not(:disabled) { color: var(--text); }
 .composer .btn.cmp-mode:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
-.composer .btn.cmp-mode .i { width: 16px; height: 16px; margin-block: calc((var(--h-ctl) - 2px - 16px) / 2); }
-/* The model starts at its chevron, its depth and six letters of its name, and grows to its whole name. */
-.cmp-model { display: flex; flex: 1 1 calc(2 * var(--sp-2) + 2 * var(--sp-1) + 16px + 6 * var(--fs-xs)); min-width: calc(2 * var(--sp-2) + 16px); max-width: max-content; margin-inline-start: auto; }
+.composer .btn.cmp-mode .i { width: 16px; height: 16px; }
+/* The model stands at the right, as wide as its name, and shortens its name when the row is short of room. */
+.cmp-model { display: flex; flex: 0 1 auto; min-width: calc(2 * var(--sp-2) + 16px); margin-inline-start: auto; }
 .cmp-model .mp-slot { display: inline-flex; flex: 0 1 auto; min-width: 0; }
 .cmp-model .sel.mp-trigger { flex: 0 1 auto; width: fit-content; min-width: 0; max-width: 220px; min-height: 32px; gap: var(--sp-1); padding: 0 var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); }
 .cmp-model .sel.mp-trigger:hover:not(:disabled) { background: var(--hover); color: var(--text); }
