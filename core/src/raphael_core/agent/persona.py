@@ -129,7 +129,6 @@ class Phrases:
     failed: str  # the action was tried and did not work
     open_not_found: str  # nothing was found to open by that name
     opened: str  # the fixed command opened something on the owner's PC: {target}
-    which_computer: str  # "open it on the computer" could mean either one: this PC or {who}'s own
     nothing_to_copy: str
     copy_last: str  # asks whether to copy Raphael's last answer to the clipboard
     copy_quote: str  # ... or a text the user quoted
@@ -232,7 +231,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         failed="這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。",
         open_not_found="找不到可以開啟的項目，請提供正確的檔案或網址後再試。",
         opened="已在你的電腦打開「{target}」。",
-        which_computer="要在你現在用的這台電腦打開，還是在{who}自己的電腦打開？",
         nothing_to_copy="無可複製的內容。",
         copy_last="是否將上一則回答複製到剪貼簿？",
         copy_quote="是否將引號內的文字複製到剪貼簿？",
@@ -314,7 +312,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         failed="This task has no confirmed result. Check whether the original action completed and provide the correct target before retrying.",
         open_not_found="The item to open was not found. Provide the correct file or URL and try again.",
         opened="Opened {target} on your computer.",
-        which_computer="Open it on this PC, or on {who}'s own computer?",
         nothing_to_copy="There is nothing to copy.",
         copy_last="Copy my last answer to the clipboard?",
         copy_quote="Copy the quoted text to the clipboard?",
@@ -403,7 +400,6 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         failed="結果を確認できません。元の操作が完了したか確認し、正しい対象を指定して再試行してください。",
         open_not_found="開く項目が見つかりません。正しいファイルか URL を指定して再試行してください。",
         opened="あなたのコンピューターで「{target}」を開きました。",
-        which_computer="このパソコンで開きますか？それとも{who}自身のコンピューターで開きますか？",
         nothing_to_copy="コピー対象が存在しません。",
         copy_last="直前の回答をクリップボードにコピーしますか？",
         copy_quote="引用された文章をクリップボードにコピーしますか？",
@@ -495,12 +491,10 @@ _MAC_PHRASES = {
         "computer_watch": "無法監看鍵盤與滑鼠，為安全起見不操作電腦。請先親自完成這一步，再到「系統設定 › 隱私權與安全性 › 輸入監控」允許拉斐爾，然後重新啟動拉斐爾。",
     },
     "en": {
-        "which_computer": "Open it on this Mac, or on {who}'s own computer?",
         "computer_unavailable": "The computer cannot be operated at this time. Complete this step yourself; if it keeps happening, allow Raphael in System Settings > Privacy & Security > Accessibility.",
         "computer_watch": "The keyboard and the mouse cannot be watched, so the computer is not operated. Complete this step yourself, then allow Raphael in System Settings > Privacy & Security > Input Monitoring and restart Raphael.",
     },
     "ja": {
-        "which_computer": "この Mac で開きますか？それとも{who}自身のコンピューターで開きますか？",
         "computer_unavailable": "現在コンピューターを操作できません。この操作はご自身で行い、続く場合は「システム設定 › プライバシーとセキュリティ › アクセシビリティ」でラファエルを許可してください。",
         "computer_watch": "キーボードとマウスを監視できないため、コンピューターを操作しません。この操作はご自身で行い、「システム設定 › プライバシーとセキュリティ › 入力監視」でラファエルを許可してから再起動してください。",
     },

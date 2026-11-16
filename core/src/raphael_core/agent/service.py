@@ -212,8 +212,7 @@ from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, ADMIN_CARD_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS, STAGED_TOOLS, TEAM_READS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
-from .whose_computer import MEMBER, UNSURE, answer_to_the_question, whose_computer
-from ..ui_languages import LANGUAGES
+from .whose_computer import MEMBER, whose_computer
 from .persona import (
     DEFAULT_LANGUAGE,
     PREFIXES,
@@ -572,8 +571,6 @@ class _Ask:
     floor_refusals: int = 0
     # A reaction's analysis whose member decided that no words are needed: nothing of its turn is left.
     silent: bool = False
-    # The owner answered "which computer?" with the member's own (`_which_computer`).
-    chose_own_computer: bool = False
 
     @property
     def nested(self) -> bool:
@@ -584,7 +581,7 @@ class _Ask:
         """A quick question that may mean the member's own computer: it takes no fast-router shortcut, which can only open
         things on the owner's PC, and goes to the member's turn (`whose_computer`). That turn holds both computers and the
         model picks by the owner's words; nothing here takes a tool away."""
-        return self.quick and (self.chose_own_computer or whose_computer(self.text) == MEMBER)
+        return self.quick and whose_computer(self.text) == MEMBER
 
 
 @dataclass(frozen=True)
@@ -1709,9 +1706,6 @@ class AgentService:
             return self._finish(ask, "chat", "negative", phrase(ask.language, off), ledger)
         settings = self._read_settings(ask.speaker, ask.conversation_id)
         blocked = self._blocked(settings)
-        if ask.quick and ask.source == VOICE and ask.speaker.is_raphael and not brain_ref(settings.model):
-            if (question := self._which_computer(ask)) is not None:
-                return self._finish(ask, "answer", "question", question, ledger)
         # Only a quick question is routed by the fast router, which can pick a command for this PC or a run on its
         # desktop; a conversation, spoken into or typed, goes to the narrated harness, which has no such tool (R-PC-01).
         # A quick question that names the member's own computer never takes that shortcut, which can only use the owner's
@@ -5015,30 +5009,6 @@ class AgentService:
         )
 
     # --- commands -------------------------------------------------------------------------------
-
-    def _which_computer(self, ask: _Ask) -> str | None:
-        """The one question a quick request to open something "on the computer" is asked, or None when it needs none. A
-        request that names whose computer it means is never asked. Asked once: the reply to the question that says a side
-        settles it (`answer_to_the_question`: the member's own computer is `ask.chose_own_computer`, this PC is the
-        router's as ever), and an agreeing reply is the member's, which cannot touch the owner's PC."""
-        if (len(ask.text) <= 24 or whose_computer(ask.text) == UNSURE) and self._asked_which_computer(ask):
-            # Asked once: whatever the reply, it is not asked again. It names a side, or agrees, or says the request again
-            # with no side on it; only "this PC" keeps the router and the owner's PC.
-            if answer_to_the_question(ask.text) == MEMBER or whose_computer(ask.text) == UNSURE:
-                ask.chose_own_computer = True
-            return None
-        if whose_computer(ask.text) == UNSURE:
-            return self._the_question(ask.speaker, ask.language)
-        return None
-
-    @staticmethod
-    def _the_question(speaker: Speaker, language: str) -> str:
-        return phrase(language, "which_computer", who=speaker.name or RAPHAEL_NAMES.get(normalize_language(language), "Raphael"))
-
-    def _asked_which_computer(self, ask: _Ask) -> bool:
-        """Whether the last thing said in this conversation was the question (`which_computer`), in any language."""
-        last = next(iter(reversed(self._context(2, ask.speaker.id, ask.conversation_id))), None)
-        return last is not None and last.text in {self._the_question(ask.speaker, language) for language in LANGUAGES}
 
     async def _command(
         self, ask: _Ask, decision: RouteDecision, settings: _Settings, ledger: Ledger

@@ -144,8 +144,9 @@ said into the overlay, opened the page on the owner's own PC with an empty reply
   and the owner's own stop).
 - Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's skips the fast
   router's shortcut (which can only use the owner's PC) and goes to the member's turn of the quick question, which holds both
-  computers: the model reads the owner's words and picks (R-PC-01); the owner's keeps the router and the shortcut; an unsure
-  open request is asked once (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py.
+  computers: the model reads the owner's words and picks (R-PC-01); the owner's, and a request that names no one's computer
+  (the owner's PC is the default), keep the router and the shortcut, and nothing asks which computer; the shortcut says
+  `opened`. Offline: core/tests/agent/test_whose_computer.py.
   The quick overlay's own look scenes are unchanged (no UI change), so no look run.
 
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole
