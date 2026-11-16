@@ -280,7 +280,7 @@ async def test_publish_only_prepares_local_files_and_github_url(rig):
     folder = Path(result["folder"])
     assert json.loads((folder / "member.raphael-member").read_bytes()) == value
     assert (folder / "README.md").is_file()
-    assert result["url"].startswith("https://github.com/Jheng-Kai/raphael-catalog/compare/")
+    assert result["url"].startswith("https://github.com/Jheng-Kai/SlimesStore/compare/")
     from urllib.parse import unquote_plus
     assert str(folder) not in unquote_plus(result["url"])
     assert rig.service.store.members() == before

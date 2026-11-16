@@ -20,7 +20,7 @@ from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..slime_ids import current_id
 from .templates import MAX_BYTES, checked, findings
 
-DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/raphael-catalog/main"
+DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/SlimesStore/main"
 # The catalogue's public keys, raw Ed25519 as 64 hex characters, one or two (a second while a key is rotated). There is none
 # until the owner has created the catalogue and its key (catalog-template/README.md): with no key the store is not open, asks
 # nothing of the network and says so. Fixture keys are supplied only by offline tests.
@@ -247,4 +247,4 @@ async def handle(service, params):
     atomic(folder / "member.raphael-member", raw)
     atomic(folder / "README.md", b"Submit this recipe by pull request. No credentials or permissions are included.\n")
     query = urlencode({"quick_pull": "1", "title": f"Add member template: {value['name']}", "body": f"Package: member.raphael-member\nSHA256: {digest}\n\nFork the catalogue and add the package, README and index entry. The maintainer reviews and signs the index."})
-    return {"folder": str(folder), "folder_id": folder.name, "url": "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?" + query}
+    return {"folder": str(folder), "folder_id": folder.name, "url": "https://github.com/Jheng-Kai/SlimesStore/compare/main...main?" + query}

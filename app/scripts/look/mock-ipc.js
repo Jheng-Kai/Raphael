@@ -1958,7 +1958,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.template_card_publish": {
         const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
-        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?quick_pull=1" };
+        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/SlimesStore/compare/main...main?quick_pull=1" };
         Object.assign(turn.templates[0], { state: "published", ...prepared });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return prepared;
