@@ -385,9 +385,12 @@ class CliLoop:
             return
         # What the model wrote to itself before its answer is no reply of the owner's (R-TEXT-05).
         text = split_notes(text, self.language)[0]
-        reply = (self._written_reply(text)
-                 if text.strip() and self.structured is None
-                 else public_reply(text, self.language, plain=self.plain))
+        try:
+            reply = (self._written_reply(text)
+                     if text.strip() and self.structured is None
+                     else public_reply(text, self.language, plain=self.plain))
+        except AgentFailure:
+            return None  # a reply object with no words in it: nothing to show
         if reply is None:
             return
         lines = reply.messages or [reply.text]
@@ -404,6 +407,14 @@ class CliLoop:
             self._release_held(answer=True)
             self._show(reply, lines)
         return lines
+
+    def _worded(self, text) -> bool:
+        """Whether `text`, as the CLI's answer, has words for the owner (`_written_reply` reads it)."""
+        try:
+            self._written_reply(text)
+        except AgentFailure:
+            return False
+        return True
 
     def _unthought(self, text):
         """`text` without reasoning the CLI wrote into its answer, which is shown as thinking (brain/reasoning.py)."""
@@ -1248,6 +1259,10 @@ class CliLoop:
                     if self._handed_off():
                         return None
                     final = self._unthought(event.text).strip()
+                    if final and self.structured is None and not self._worded(final):
+                        # A reply object with no words in it (`{"messages": []}`) says nothing, as an empty answer does:
+                        # read as words, it ended the turn on the line of an unknown failure.
+                        final = ""
                     if final:
                         check = self._computer_check.finishing()
                         if check and check != "stop":

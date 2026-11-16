@@ -20,7 +20,7 @@ from raphael_core.agent.persona import phrase
 from raphael_core.background.cli import RoomCliSessions
 from raphael_core.messaging.words import plain_replies
 from raphael_core.worker.computer_verification import NOTE
-from raphael_core.worker.loop import Stop, ToolOutcome
+from raphael_core.worker.loop import FINAL_REPORT, Stop, ToolOutcome
 from .test_member_computer_use import computer_owner  # noqa: F401
 from .test_permission_cards import chat, finished, typed
 from .test_service import make_rig  # noqa: F401
@@ -283,3 +283,32 @@ async def test_an_api_turn_keeps_the_answer_the_completion_check_does_not_count(
     assert SECOND in "\n\n".join(said) and said[-1] == phrase("en", "computer_unchecked")
     assert status == "error" and text == phrase("en", "computer_unchecked")
     assert phrase("en", "error") not in said
+
+
+# --- a final answer with no words in it ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("brain", ["claude", "codex", "gemini"])
+@pytest.mark.parametrize("empty", ['{"messages": []}', '{"text": ""}', '```json\n{"messages": [""]}\n```'])
+async def test_a_final_reply_object_with_no_words_is_asked_for_the_report_like_an_empty_answer(monkeypatch, tmp_path, brain, empty):
+    # Read as words, the object emptied to nothing and the turn ended on the line of an unknown failure.
+    async def first(loop):
+        if brain == "claude":
+            for packet in streamed_text("empty", empty, "end_turn", thought=False):
+                yield packet
+            yield {"type": "result", "subtype": "success", "is_error": False, "result": empty}
+            return
+        yield Event("message", empty, data={"id": "empty", "final": True})
+        yield Event("final", empty)
+
+    async def second(loop):
+        if brain == "claude":
+            yield {"type": "result", "subtype": "success", "is_error": False, "result": "Here is the report."}
+            return
+        yield Event("final", "Here is the report.")
+
+    turn = rig(monkeypatch, tmp_path, brain, [first, second])
+    outcome = await turn.loop.run()
+    assert len(turn.calls) == 2 and turn.calls[1]["user"].startswith(FINAL_REPORT)
+    assert outcome.status == "done" and outcome.final == "Here is the report." and turn.loop.failure is None
+    assert turn.shown == ["Here is the report."]
