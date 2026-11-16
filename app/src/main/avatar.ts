@@ -29,11 +29,20 @@ const canDraw = (): boolean => drawable ??= typeof document !== "undefined" && !
 
 /**
  * The window moved to a screen of another scale, or the page was zoomed: the pixel ratio changed, so every face is drawn again
- * for it. A still drawn for the old ratio would be resampled to its box, which is what blurs it (R-UI-161).
+ * for it. A still drawn for the old ratio would be resampled to its box, which is what blurs it (R-UI-161). The ratio's media
+ * query says so; a window resized by the move says so too where the query stays silent (a headless browser's emulated ratio).
  */
+let ratioSeen = 0;
+function pixelRatioMoved(): void {
+  const ratio = window.devicePixelRatio || 1;
+  if (ratio === ratioSeen) return;
+  ratioSeen = ratio;
+  notify();
+}
 function watchPixelRatio(): void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-  window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)?.addEventListener?.("change", () => { watchPixelRatio(); notify(); }, { once: true });
+  ratioSeen ||= window.devicePixelRatio || 1;
+  window.matchMedia(`(resolution: ${ratioSeen}dppx)`)?.addEventListener?.("change", () => { pixelRatioMoved(); watchPixelRatio(); }, { once: true });
 }
 
 /** The rune texture arrived (or could not be read): every face is drawn again. */
@@ -135,6 +144,7 @@ motionQuery?.addEventListener?.("change", (e) => {
   notify();
 });
 watchPixelRatio();
+if (typeof window !== "undefined") window.addEventListener?.("resize", pixelRatioMoved);
 
 /** The kinds of picture that may move. */
 const MAY_MOVE = /^data:image\/(gif|webp);/;

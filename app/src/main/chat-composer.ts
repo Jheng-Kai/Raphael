@@ -192,7 +192,7 @@ export function pixelMove(rect: { left: number; top: number }, moved: string, ra
  * picture, the composer, the column around it or the window changes, and after the button's entrance, whose scale falsifies
  * the measure while it runs.
  */
-export function keepEmblemOnPixels(voice: HTMLElement): void {
+function keepEmblemOnPixels(voice: HTMLElement): void {
   if (typeof ResizeObserver !== "function" || typeof MutationObserver !== "function") return;
   const snap = (): void => {
     const rect = voice.querySelector(".av > img.em")?.getBoundingClientRect();
@@ -214,6 +214,12 @@ export function keepEmblemOnPixels(voice: HTMLElement): void {
   new MutationObserver(snap).observe(voice, { childList: true, subtree: true });
   voice.addEventListener("animationend", snap);
   window.addEventListener("resize", snap);
+}
+
+/** The row under a composer's field, wherever the composer is built: it gives way in order and keeps its emblem sharp. */
+export function bindComposerRow(form: HTMLElement): void {
+  fitComposerRow(form.querySelector<HTMLElement>(".cmp-bar")!);
+  keepEmblemOnPixels(form.querySelector<HTMLElement>(".cmp-voice")!);
 }
 
 export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8Array {
@@ -271,7 +277,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
     }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
   });
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
-  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);fitComposerRow(el.querySelector<HTMLElement>(".cmp-bar")!);keepEmblemOnPixels(voice);
+  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);bindComposerRow(el);
   // The composer keeps its clicks (below), so a waiting picture opens large from here.
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const picture=(e.target as Element).closest<HTMLElement>(".cmp-pic"),src=picture?.querySelector("img")?.getAttribute("src");if(picture){if(src)openMediaLightbox(picture,src);return;}const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
   picker.addEventListener("change",()=>addFiles([...picker.files??[]]));bindFilePaste(input,addFiles,fit,()=>files.map(file=>file.name));

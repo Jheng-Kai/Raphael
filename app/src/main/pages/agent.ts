@@ -122,7 +122,7 @@ import { closeAndPress } from "../dismissals";
 import { closeMenu, copyButton, esc, ico, iconButton, openMenu, patchHTML, toaster } from "../ui";
 import { askInChat } from "../chat-ask";
 import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
-import { bindActionMode, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
+import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
@@ -533,6 +533,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
+  bindComposerRow(composer);
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;

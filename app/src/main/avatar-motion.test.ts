@@ -43,16 +43,35 @@ afterEach(() => {
 });
 
 describe("a screen of another scale", () => {
+  const ratio = (value: number): void => { Object.defineProperty(window, "devicePixelRatio", { value, configurable: true }); };
+  afterEach(() => ratio(1));
+
   test("the faces are drawn again for the new pixel ratio, and the next change is heard too", async () => {
+    ratio(1);
     const avatar = await load();
     const heard = vi.fn();
     avatar.onAvatarChange(heard);
-    expect(ratioQueries).toEqual([`(resolution: ${window.devicePixelRatio || 1}dppx)`]);
+    expect(ratioQueries).toEqual(["(resolution: 1dppx)"]);
+    ratio(1.25);
     ratioChange!();
     expect(heard).toHaveBeenCalledTimes(1);
-    expect(ratioQueries).toHaveLength(2);
+    expect(ratioQueries).toEqual(["(resolution: 1dppx)", "(resolution: 1.25dppx)"]);
+    ratio(1.5);
     ratioChange!();
     expect(heard).toHaveBeenCalledTimes(2);
+  });
+
+  test("a window resized by the move redraws the faces once, and a plain resize draws nothing", async () => {
+    ratio(1);
+    const avatar = await load();
+    const heard = vi.fn();
+    avatar.onAvatarChange(heard);
+    window.dispatchEvent(new Event("resize"));
+    expect(heard).not.toHaveBeenCalled();
+    ratio(1.5);
+    window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("resize"));
+    expect(heard).toHaveBeenCalledTimes(1);
   });
 });
 

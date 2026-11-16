@@ -438,7 +438,13 @@ export async function perform(page, step, evidenceDirectory) {
       if (await value()!==`${step.total}/${step.total}`) throw new Error('newest word was not restored');
       break;
     }
-    case "viewport": await page.setViewport({width:step.width ?? page.viewport().width,height:step.height ?? page.viewport().height,deviceScaleFactor:step.scale ?? page.viewport().deviceScaleFactor ?? 1}); await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); break;
+    case "viewport": {
+      // `physical`: the window moved to a screen of another scale keeps its device pixels, so its CSS size changes with the ratio.
+      const { width, height, deviceScaleFactor = 1 } = page.viewport(), scale = step.scale ?? deviceScaleFactor, keep = step.physical ? deviceScaleFactor / scale : 1;
+      await page.setViewport({ width: step.width ?? Math.round(width * keep), height: step.height ?? Math.round(height * keep), deviceScaleFactor: scale });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      break;
+    }
     case "window-control": {
       const selector = `[data-window-action="${step.control}"]`;
       if (step.restore) {
@@ -712,7 +718,8 @@ export async function perform(page, step, evidenceDirectory) {
         await writeFile(`${evidenceDirectory}/${file}`, Buffer.from(crop, "base64"));
       }
       const result = { check: "emblem-picture", file, ratio: deviceScaleFactor, device: place.device.map(value => Math.round(value * 1000) / 1000), ...comparison };
-      if (comparison.off > 0) throw Object.assign(new Error(`The emblem on the screen is not its own bitmap: something resampled it (R-UI-161): ${JSON.stringify(result)}`), { assertion: result });
+      // A resampled emblem differs by 10 to 20 on average (measured at 125% and 150%); one painted pixel for pixel by a hundredth.
+      if (comparison.mean > 1 || comparison.off > comparison.bitmap[0] * comparison.bitmap[1] / 100) throw Object.assign(new Error(`The emblem on the screen is not its own bitmap: something resampled it (R-UI-161): ${JSON.stringify(result)}`), { assertion: result });
       return result;
     }
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
