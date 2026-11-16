@@ -19,6 +19,7 @@ from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
+from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
@@ -71,6 +72,14 @@ JOB_SCHEMA = {"type": "object", "properties": {"job_id": {"type": "string"}, "st
 
 def is_local(key):
     return key.startswith(LOCAL_PREFIX)
+
+
+def owner_file_tool(key):
+    """The name of one of the owner's file tools (`owner_files`), or None. Unlike the local commands they are offered to
+    every turn and task (R-PC-04): reading is the whole computer's, writing only the owner's folders'."""
+    prefix = tool_key(OWNER_FILES, "")
+    name = key[len(prefix):] if key.startswith(prefix) else None
+    return name if name in OWNER_FILE_DEFINITIONS else None
 
 
 def command_of(arguments):
@@ -133,6 +142,7 @@ class LocalTools:
         self.data_floor = DataFloor(conn)
         self.host, self.enabled = host or LocalHost(), enabled
         self.jobs = {}
+        self.owner_files = OwnerFileTools(self.settings, self.data_floor)
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -141,12 +151,17 @@ class LocalTools:
         offered = getattr(self.delegate, "offered_for", lambda _: self.delegate.offered())(member_id)
         native = [PluginTool(tool_key("local", "local_exec"), "local", "local_exec", EXEC_DESCRIPTION, EXEC_SCHEMA, Tier.T2, pinned=True),
                   PluginTool(tool_key("local", "local_job"), "local", "local_job", "Read bounded output/state of your local command job, or stop its process tree. Jobs belong to this conversation or task.", JOB_SCHEMA, Tier.T0, pinned=True)]
-        return [*offered, *native]
+        files = [PluginTool(tool_key(OWNER_FILES, name), OWNER_FILES, name, item["description"], item["parameters"],
+                            Tier.T0 if name in OWNER_FILE_READS else Tier.T2, pinned=True, whole=True)
+                 for name, item in OWNER_FILE_DEFINITIONS.items()]
+        return [*offered, *native, *files]
 
     def offered(self):
         return self.offered_for(0)
 
     def tier_of(self, key):
+        if (name := owner_file_tool(key)) is not None:
+            return Tier.T0 if name in OWNER_FILE_READS else Tier.T2
         return Tier.T2 if key == tool_key("local", "local_exec") else Tier.T0 if is_local(key) else self.delegate.tier_of(key)
 
     def _full_permission(self):
@@ -157,6 +172,12 @@ class LocalTools:
                 or requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1]))
 
     def tier_for_call(self, key, arguments):
+        if (name := owner_file_tool(key)) is not None:
+            # A read asks nothing; a write outside the owner's folders is refused in `call`, so nothing asks for it.
+            schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
+            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments) or not self.owner_files.writable(arguments):
+                return Tier.T0
+            return Tier.T2
         if not is_local(key):
             return getattr(self.delegate, "tier_for_call", lambda k, a: self.delegate.tier_of(k))(key, arguments)
         schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
@@ -167,18 +188,24 @@ class LocalTools:
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
 
     def kind_of(self, server, name):
+        if server == OWNER_FILES:
+            return "read" if name in OWNER_FILE_READS else "write"
         return "write" if server == "local" else self.delegate.kind_of(server, name)
 
     def kind_for_call(self, server, name, arguments):
-        return self.kind_of(server, name) if server == "local" else getattr(self.delegate, "kind_for_call", lambda s, n, a: self.delegate.kind_of(s, n))(server, name, arguments)
+        return self.kind_of(server, name) if server in ("local", OWNER_FILES) else getattr(self.delegate, "kind_for_call", lambda s, n, a: self.delegate.kind_of(s, n))(server, name, arguments)
 
     def record_unrun(self, key, *, outcome, task_id=None):
-        if is_local(key):
+        if (name := owner_file_tool(key)) is not None:
+            self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver="none", outcome=outcome, task_id=task_id)
+        elif is_local(key):
             self.audit.add(server="local", tool=key.split("/")[-1], tier="T2", approver="none", outcome=outcome, task_id=task_id)
         else:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
+        if (name := owner_file_tool(key)) is not None:
+            return await self._owner_file(key, name, arguments, approver=approver, task_id=task_id)
         if not is_local(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, **({"pool": pool} if pool is not None else {}))
         result = PluginResult(False, "approval_required", "This local command needs the owner's approval in the app. Wait for that approval before trying it again.")
@@ -249,6 +276,16 @@ class LocalTools:
             if not background:
                 self.audit.add(server="local", tool=key.split("/")[-1], tier="T2", approver=approver,
                                outcome="ok" if result.ok and outcome == "blocked" else outcome, task_id=task_id)
+
+    async def _owner_file(self, key, name, arguments, *, approver, task_id):
+        if not Draft202012Validator(OWNER_FILE_DEFINITIONS[name]["parameters"]).is_valid(arguments):
+            return PluginResult(False, "bad_arguments")
+        owner = _CONTEXT.get()[0]
+        result = await self.owner_files.call(name, arguments, approver=approver, run=owner or ("task", task_id))
+        self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver=approver,
+                       outcome="ok" if result.ok else "blocked" if result.kind in ("kept", "not_writable", "approval_required",
+                                                                                     "protected_data") else "error", task_id=task_id)
+        return result
 
     async def _execute(self, command, *, audit=None, **params):
         outcome = "denied"
