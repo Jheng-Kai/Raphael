@@ -580,7 +580,7 @@ twice in a background run, with each tool's first failure for a CLI brain); the 
 only thing that ends a task nobody is in. A failed page read is read once more by the next reader the
 owner set up (`ServiceHub.read`): a service, never a model, and never one he did not set up.
 
-## Shared cancellation boundary (owner round 3)
+## Shared cancellation boundary
 
 Main, room and desktop surfaces register visible task targets with the same
 `src/shared/cancel-gesture.ts` document controller. It owns arming, localization,
@@ -598,7 +598,7 @@ it does not create another store or window. Deletion invalidation travels throug
 existing UI events before reloading selected objects. See the conversation,
 dictation, team/rooms and automations feature entries for executable journeys.
 
-## Recording release and launch policy (owner round 4)
+## Recording release and launch policy
 
 The recording composer's Stop uses the existing agentVoice down/up native path.
 It is excluded from generic task cancellation; task repaint preserves the voice
