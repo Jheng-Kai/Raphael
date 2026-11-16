@@ -4,14 +4,22 @@ stdio server for the tests that count processes."""
 
 import asyncio
 import ctypes
+import json
+import subprocess
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+import anyio
 import pytest
+from mcp import Client
 
+from raphael_core.integrations import pool as pool_module
 from raphael_core.integrations.client import McpConnector, McpFailure
 from raphael_core.integrations.config import ServerConfig
 from raphael_core.integrations.pool import McpPool
+
+from . import fake_server
 
 
 FAKE = str(Path(__file__).with_name("fake_server.py"))
@@ -293,6 +301,42 @@ async def test_a_call_keeps_the_connection_from_going_idle(connector, servers, n
     assert len(servers.opened) == 1
 
 
+async def test_a_server_that_never_lets_go_holds_a_closing_pool_no_longer_than_the_bound(
+    vault, pool, monkeypatch
+):
+    # The core's exit waits for the servers of its pools to be stopped, a cancelled close too, but
+    # never for ever: a stop that does not end is left behind once STOP_WAIT_S is out.
+    release = asyncio.Event()
+
+    @asynccontextmanager
+    async def never_lets_go(server, secrets):
+        async with Client(fake_server.build()) as client:
+            try:
+                yield client
+            finally:
+                with anyio.CancelScope(shield=True):  # as the SDK stops a server
+                    await release.wait()
+
+    monkeypatch.setattr(pool_module, "STOP_WAIT_S", 0.3)
+    connector = McpConnector(vault, never_lets_go)
+    loop = asyncio.get_running_loop()
+    try:
+        for cancelled in (True, False):
+            mine = pool()
+            await connector.call_tool(server_config(), "look", {"topic": "a"}, pool=mine)
+            began = loop.time()
+            closing = asyncio.ensure_future(mine.aclose())
+            if cancelled:
+                await asyncio.sleep(0)
+                closing.cancel()
+            done, _ = await asyncio.wait({closing}, timeout=5)
+            assert closing in done, "the close waited past its bound"
+            assert closing.cancelled() is cancelled  # a cancel is passed on once the wait is over
+            assert 0.25 <= loop.time() - began < 2.3  # the stop was waited for, up to the bound
+    finally:
+        release.set()
+
+
 # --- a real server process --------------------------------------------------------------------------
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="counts processes with Win32")
@@ -393,6 +437,67 @@ async def test_a_pool_closed_while_its_cancelled_connection_stops_the_server_sti
     await asyncio.wait_for(stopping.wait(), 30)
     await asyncio.wait_for(mine.aclose(), 15)  # the task is over: its pool is closed meanwhile
     assert call.done() and mine.open_count == 0
+
+
+# A process of its own, as the core is: its pool's close is cancelled while the SDK stops the server
+# (`_stop_server_process` lets go a second late), and it returns at once from its loop, as the core
+# does once everything else is closed.
+CANCELLED_CLOSE = r"""
+import asyncio, json, sys, time
+
+import mcp.client.stdio as sdk_stdio
+
+from raphael_core.integrations.client import McpConnector
+from raphael_core.integrations.config import ServerConfig
+from raphael_core.integrations.pool import McpPool
+from raphael_core.integrations.vault import MemoryVault
+
+real_stop = sdk_stdio._stop_server_process
+
+
+async def main():
+    stopping = asyncio.Event()
+
+    async def stop_server_process(process):
+        stopping.set()
+        await asyncio.sleep(1.0)
+        await real_stop(process)
+
+    sdk_stdio._stop_server_process = stop_server_process
+    config = ServerConfig(id="abc123", name="Real", transport="stdio", command=sys.executable, args=[sys.argv[1]])
+    pool = McpPool()
+    await McpConnector(MemoryVault()).call_tool(config, "pid", {}, timeout_s=30, pool=pool)
+    closing = asyncio.ensure_future(pool.aclose())
+    await stopping.wait()
+    began = time.monotonic()
+    closing.cancel()
+    try:
+        await closing
+    except asyncio.CancelledError:
+        pass
+    print(json.dumps({"close_s": time.monotonic() - began}))
+
+
+asyncio.run(main())
+"""
+
+
+def test_a_close_cancelled_as_the_core_exits_still_lets_go_of_the_server_first():
+    # A background task's pool is closed when the task ends, and the core closing cancels that task
+    # while the SDK is still stopping the server. A close that gave up then left the stop to the
+    # loop's last cancel, which broke it off before the SDK closed the server's transport: the
+    # interpreter's exit printed "Exception ignored ... unclosed transport" with a traceback. The
+    # child warns of every unclosed resource, so a transport left open shows whatever order the
+    # collector finalizes in.
+    child = subprocess.run(
+        [sys.executable, "-W", "always::ResourceWarning", "-c", CANCELLED_CLOSE, FAKE],
+        capture_output=True,
+        timeout=90,
+    )
+    stderr = child.stderr.decode("utf-8", errors="replace")
+    assert child.returncode == 0, stderr
+    assert "Traceback" not in stderr and "unclosed" not in stderr, stderr
+    assert json.loads(child.stdout.splitlines()[-1])["close_s"] < pool_module.STOP_WAIT_S
 
 
 @windows_only
