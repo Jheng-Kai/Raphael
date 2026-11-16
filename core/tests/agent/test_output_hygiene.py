@@ -1,8 +1,8 @@
 """Text the system keeps for itself never reaches the owner as a member's words (R-TEXT-05 to R-TEXT-08).
 
-Owner, 2026-11-14: replies that were a planning note the model wrote to itself, a quoted example standing in for the answer,
+Replies that were a planning note the model wrote to itself, a quoted example standing in for the answer,
 「見 detail」 pointing at a field the conversation folds away, and the line that a member woke the computer, written as the
-member's reply. The fixtures here are written for the shapes, not copied from his conversations.
+member's reply. The fixtures here are written for the shapes, not copied from real conversations.
 """
 import json
 from unittest.mock import AsyncMock
@@ -38,7 +38,7 @@ def test_a_note_to_itself_before_the_answer_is_taken_out_of_the_reply():
     reply, note = split_notes("《答。" + NOTE + " " + said + "》", "zh-TW")
     assert reply == "《答。" + said + "》" and note == NOTE
     # A title of the owner's language in the note does not hide it.
-    assert split_notes("先生 (Jack) answered both questions, and I should explain the window.\n\n好的。我來說明。", "zh-TW")[1]
+    assert split_notes("先生 (Alex) answered both questions, and I should explain the window.\n\n好的。我來說明。", "zh-TW")[1]
 
 
 @pytest.mark.parametrize("text", [

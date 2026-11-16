@@ -1,4 +1,4 @@
-"""Where a member's next call finds its cached prefix (owner, 2026-11-09, decisions 1, 3 and 4)."""
+"""Where a member's next call finds its cached prefix."""
 
 import json
 from types import SimpleNamespace

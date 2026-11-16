@@ -1,6 +1,6 @@
 """Running background work keeps its tool list while grants change, and every call is checked again.
 
-The list is fixed (owner, 2026-11-09, decision 2): a connection's tools are found and called through
+The list is fixed: a connection's tools are found and called through
 use_tool. A grant that is taken away refuses the call and leaves the search; one that comes back is
 found again, and a revoked alias is never given to another connection."""
 

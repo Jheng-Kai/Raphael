@@ -128,30 +128,30 @@ async def test_short_punctuated_sentence_needs_no_model(router, fake_client, key
     assert fake_client.calls == []
 
 
-# What speech-to-text wrote for the owner's 「grokbot」 in his dictation history (2026-11-13/14),
+# What speech-to-text wrote for the dictionary word 「lunabot」,
 # in sentences short and clear enough for the shortcut, which pasted them as they were heard.
 @pytest.mark.parametrize("text", [
-    "像是Grokbox這樣子區分開來嗎？",
-    "你這邊就是跟Grok Bus一樣。",
-    "我記得Grabbot是可以自己喚醒自己的。",
+    "像是Lunabox這樣子區分開來嗎？",
+    "你這邊就是跟Luna Bus一樣。",
+    "我記得Lunabbot是可以自己喚醒自己的。",
 ])
 async def test_a_short_sentence_with_a_dictionary_word_misheard_goes_to_the_model(
     router, fake_client, keys, text
 ):
     keys.set(KEY)
-    await router.call("dictionary.add", {"word": "grokbot"})
-    fake_client.next_completion = completion({"text": "像是grokbot這樣子區分開來嗎？"})
+    await router.call("dictionary.add", {"word": "lunabot"})
+    fake_client.next_completion = completion({"text": "像是lunabot這樣子區分開來嗎？"})
     await finalize(router, raw_text=text)
     [call] = fake_client.calls
-    assert "- grokbot（這次可能是：" in call["system"]
+    assert "- lunabot（這次可能是：" in call["system"]
 
 
 async def test_a_short_sentence_that_spells_the_dictionary_right_keeps_the_shortcut(
     router, fake_client, keys
 ):
     keys.set(KEY)
-    await router.call("dictionary.add", {"word": "grokbot"})
-    for text in ("像是grokbot這樣子區分開來嗎？", "像是Grokbot這樣子區分開來嗎？", "我的電腦好了。"):
+    await router.call("dictionary.add", {"word": "lunabot"})
+    for text in ("像是lunabot這樣子區分開來嗎？", "像是Lunabot這樣子區分開來嗎？", "我的電腦好了。"):
         result = await finalize(router, raw_text=text)
         assert result["cleaned"] and result["llm_ms"] == 0
     assert fake_client.calls == []
@@ -998,14 +998,14 @@ async def learn(router, word, misheard, *more):
 async def test_dictionary_list_shows_the_forms_a_correction_saved(router):
     # A correction of a known word saves how it was heard: the page shows it at once, before the
     # pair is a replacement rule.
-    await router.call("dictionary.add", {"word": "grokbot"})
-    assert await learn(router, "grokbot", "Grokbox") == {"learned": ["grokbot"]}
+    await router.call("dictionary.add", {"word": "lunabot"})
+    assert await learn(router, "lunabot", "Lunabox") == {"learned": ["lunabot"]}
     [entry] = (await router.call("dictionary.list", {}))["entries"]
-    assert (entry["word"], entry["misheard"], entry["heard"]) == ("grokbot", [], ["Grokbox"])
+    assert (entry["word"], entry["misheard"], entry["heard"]) == ("lunabot", [], ["Lunabox"])
     # Seen again, it is a rule, and listed once, as a rule.
-    await learn(router, "grokbot", "Grokbox")
+    await learn(router, "lunabot", "Lunabox")
     [entry] = (await router.call("dictionary.list", {}))["entries"]
-    assert (entry["misheard"], entry["heard"]) == (["Grokbox"], [])
+    assert (entry["misheard"], entry["heard"]) == (["Lunabox"], [])
 
 
 async def test_dictionary_learn_makes_a_rule_only_when_a_pair_is_seen_again(router):

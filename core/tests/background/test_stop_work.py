@@ -1,7 +1,7 @@
 """A member ends its own background work itself, and a stop says nothing (R-STOP-01, R-STOP-02).
 
-The owner (2026-11-15): 工程師 asked him to stop one of its own earlier tasks "from the interface" (「他們不是同一個 session 嗎？為什麼沒有辦法
-暫停它背後的工作？」), and every stop left 「任務已中止。已執行 N 次工具呼叫。」 in the conversation (「暫停就暫停，儘量保持畫面的乾淨還有整潔」).
+A member asked the owner to stop one of its own earlier tasks "from the interface", and every stop left
+「任務已中止。已執行 N 次工具呼叫。」 in the conversation; a stop keeps the conversation clean and tidy.
 """
 
 from dataclasses import replace

@@ -1,5 +1,5 @@
 """A connector's arguments sent in a wrong wrapper are answered with the shape that fits, and are not sent again and again
-(owner's real use, 2026-11-10 to 2026-11-14: a routine on a ChatGPT brain wrapped a Notion query's arguments in a `data` object
+(a routine on a ChatGPT brain once wrapped a Notion query's arguments in a `data` object
 five times, then ran 143 steps until the connector's query allowance was spent, with no card changed). Nothing here
 reaches a real connector."""
 import json

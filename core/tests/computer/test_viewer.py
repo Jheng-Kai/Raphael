@@ -438,7 +438,7 @@ async def test_take_control_refuses_active_tools_and_handback_releases_only_its_
 
 
 async def test_the_owner_takes_over_from_a_hold_another_view_of_his_left_behind(viewer):
-    """Owner, 2026-11-14: 「理論上不管甚麼時候我都應該要可以接手」. Two views of one computer are the owner's own."""
+    """The owner can take over at any time. Two views of one computer are the owner's own."""
     bridge, _, _ = viewer
     one, two = await bridge.open({}), await bridge.open({})
     target = bridge.vm.target()
@@ -455,7 +455,7 @@ async def test_the_owner_takes_over_from_a_hold_another_view_of_his_left_behind(
 
 
 async def test_a_press_between_a_working_members_actions_takes_the_computer_once_the_action_ends(viewer):
-    """Owner, 2026-11-14: take over while a member works. The press holds the screen at once (the member's next action
+    """Taking over while a member works: the press holds the screen at once (the member's next action
     is refused), waits for the action under way, and takes."""
     bridge, _, _ = viewer
     opened = await bridge.open({})

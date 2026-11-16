@@ -1,6 +1,6 @@
 """Tests for a task finding the tools it is not listed, and calling them by use_tool.
 
-The list is fixed (owner, 2026-11-09, decision 2): many tools of a connection stay out of it, and
+The list is fixed: many tools of a connection stay out of it, and
 find_tools returns the ones that fit what the task wants, each with its input schema."""
 
 import json

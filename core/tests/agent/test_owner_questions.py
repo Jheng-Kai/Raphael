@@ -404,7 +404,7 @@ async def test_a_background_report_shows_its_card_without_waiting_for_the_owner(
 
 
 async def test_a_background_page_never_asks_the_owner_whether_they_can_see_it(wired):
-    # Owner, 2026-11-14, with a picture: a card in the conversation read, in English, "The owner can see the page in this
+    # A card in the conversation read, in English, "The owner can see the page in this
     # conversation." above 「我完成了」: the sentence the tool gives the model had become the words of a question card.
     agent, background = wired
     origin = agent.history.add(session_id="job", question="Prepare", route="delegate", prefix="", text="",

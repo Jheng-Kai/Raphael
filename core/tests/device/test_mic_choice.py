@@ -106,7 +106,7 @@ def test_the_virtual_devices_of_macos_that_carry_an_apps_sound_are_loopbacks(nam
     assert not is_built_in(name)
 
 
-@pytest.mark.parametrize("name", ["MacBook Pro Microphone", "MacBook Air Microphone", "iMac Microphone", "Jack’s iPhone Microphone"])
+@pytest.mark.parametrize("name", ["MacBook Pro Microphone", "MacBook Air Microphone", "iMac Microphone", "Alex’s iPhone Microphone"])
 def test_a_macs_own_microphone_and_a_nearby_iphone_count_as_built_in(name):
     assert is_built_in(name)
     assert not is_loopback(name)

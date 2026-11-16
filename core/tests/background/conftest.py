@@ -121,7 +121,7 @@ def call(name, arguments, id=None):
 
 def use(name, arguments, id=None):
     """A call of a tool that is found, not listed (a connection's tools, management, the seldom ones): the list is
-    fixed (owner, 2026-11-09, decision 2), so the model calls it through use_tool."""
+    fixed, so the model calls it through use_tool."""
     return call("use_tool", {"name": name, "arguments": arguments}, id)
 
 

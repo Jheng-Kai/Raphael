@@ -1,6 +1,6 @@
 """What a member says while it works is in the owner's language (R-LANG-05).
 
-Owner, 2026-11-16: 「工程師又開始說英文了」. A CLI brain writes notes of its own between its tool calls, and 工程師 (brain
+A CLI brain writes notes of its own between its tool calls, and a member on one (brain
 cli:claude) posted them in English ("The popover helper already supports submenus...") to an owner who writes Chinese: a
 message here, a progress line there. The owner's language is read from his own words, never from the interface, and a
 CLI is told that every text it writes is in it; a note that still comes out in another language is not shown (the step it
@@ -20,7 +20,7 @@ from raphael_core.worker.loop import ToolOutcome
 from .test_service import make_rig  # noqa: F401
 
 ENGLISH = ("The popover helper already supports submenus (placement: \"beside\"), which is exactly the pops out to the right "
-           "behavior Jack described. Checking how existing code closes just the submenu.")
+           "behavior Alex described. Checking how existing code closes just the submenu.")
 ENGLISH_OPENING = "I will read the notes first."
 CHINESE_OPENING = "我先把筆記讀過一遍"
 CHINESE = "選單的做法已經有了，我接著改關閉的部分"

@@ -4,7 +4,7 @@ Facts behind it: a language-teaching member, told to use its own computer for a 
 page, had its page refused twice, and ended with 「我不會再換方式繞過這個攔截」 without opening its browser. Every word of the
 harness on that path pointed at stopping: "inspect once, change approach once, then report the exact blocker", a corrective
 note that allowed "a different approach at most once", "Only open a browser when the owner asks", every failure shown as
-"The call was refused", and a summary and replayed turns that kept yesterday's failures as today's facts. Hermes Agent keeps
+"The call was refused", and a summary and replayed turns that kept yesterday's failures as today's facts. A member keeps
 going because nothing tells it to stop, every failure arrives with its cause, and failures never become rules. These tests
 use fakes for every model, CLI and service; nothing is sent anywhere.
 """

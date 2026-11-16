@@ -218,7 +218,7 @@ def disk_runner(vm, runtime, df, du):
 
 
 async def test_the_disk_that_is_full_is_the_one_named_not_the_computers_small_folders(desktop):
-    """Owner, 2026-11-14: 「電腦磁碟快滿了。最大的資料夾：.browser-profiles (326 MiB)…」. The computer's own disk was at 2%;
+    """The warning 「電腦磁碟快滿了。最大的資料夾：.browser-profiles (326 MiB)…」 once named the wrong disk. The computer's own disk was at 2%;
     the 94% was C: of this PC, where the workspace is kept, and a few hundred MiB of folders were never the cause."""
     vm, target, runtime = desktop
     disk_runner(vm, runtime, OWNERS_DF,

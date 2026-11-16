@@ -86,7 +86,7 @@ PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAW
 
 
 @pytest.mark.parametrize("html", [
-    # The links on the daily overview Raphael could not show on 2026-11-14.
+    # The links on a daily overview Raphael could not show.
     "<button onclick=\"window.raphael.open('https://www.accuweather.com/zh/tw/taichung-city/315040/weather-forecast/315040')\">Source</button>",
     "<a href='https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition/'>NVIDIA</a>",
     f'<img alt="dot" src="data:image/png;base64,{PNG}">',
@@ -113,7 +113,7 @@ def test_a_secret_in_a_link_or_an_embedded_text_is_still_refused(conn, html):
     assert error.value.kind == "secret"
 
 
-# The owner's study pages for the member 紫苑 were refused three times (2026-11-14): an ordinary news address, whose last
+# Study pages of a language-teaching member were refused three times: an ordinary news address, whose last
 # path piece mixes letters and digits, read as a key. Only credentials are secret; an address, an ID inside one, an article,
 # a hash, a file name and a person's ID number are content.
 NHK_LINKS = (
@@ -264,7 +264,7 @@ def test_the_base_style_is_all_low_specificity_theme_words_and_loads_nothing():
     assert THEME["light"].keys() == THEME["dark"].keys() and FONT
     # The page's policy loads nothing it names: no address, no import, no picture, no font file.
     assert not re.search(r"url\(|@import|@font-face|https?:|//", BASE, re.I)
-    # The measures the owner named (his Grok Bot picture): a 32 px title, a table with hairlines, right-aligned figures.
+    # The measures: a 32 px title, a table with hairlines, right-aligned figures.
     assert ":where(h1){margin-top:0;font-size:32px" in BASE and "line-height:1.6" in BASE
     assert ":where(.num){text-align:end" in BASE and "overflow-x:auto" in BASE
 
@@ -421,7 +421,7 @@ async def shown_page(rig, client, **arguments):
 
 
 async def test_a_member_reads_the_id_of_a_page_it_showed_in_an_earlier_turn(make_rig, client):
-    """The owner's 2026-11-11 report: asked to change a page, the member sent a new one. Its later turn read only the
+    """Asked to change a page, the member sent a new one. Its later turn read only the
     page's title and revision, never the id update_page needs, so it could not name the page it had made."""
     rig = make_rig()
     page = await shown_page(rig, client)
@@ -607,7 +607,7 @@ async def test_a_report_that_breaks_the_format_is_refused_with_what_to_fix(make_
     assert words in reply and "hunter" not in reply
 
 
-# The owner's daily overview (2026-11-14): weather, investments, projects by status and owner, members; two halves side by side.
+# A daily overview: weather, investments, projects by status and owner, members; two halves side by side.
 DASHBOARD = {"sections": [
     {"kind": "stats", "title": "Today", "tiles": [
         {"name": "Taichung", "value": "29", "unit": "°C", "note": "Storms after noon", "trend": [24, 26, 29, 27]},
@@ -668,7 +668,7 @@ def test_a_chart_or_tiles_that_break_the_format_are_refused_with_what_to_fix(rep
     assert words in str(refused.value)
 
 
-# The owner's Tokyo list on Grok Bot (2026-11-14): a summary line, a note with an icon, a dropdown over a table whose last column is links.
+# A Tokyo list: a summary line, a note with an icon, a dropdown over a table whose last column is links.
 DOCUMENT = {"summary": "46 spots, 39 restaurants: pick with the filters.", "sections": [
     {"kind": "callout", "tone": "info", "heading": "Note", "text": "Staying in Otsuka. Prices are only what the sources give."},
     {"kind": "table", "title": "Spots", "filter": "Area", "columns": ["Name", "Area", "Price", "Link"],

@@ -240,13 +240,12 @@ def test_a_known_misheard_form_in_the_transcript_counts():
 
 
 # --- what a transcript may hold misheard (misheard_spans) ------------------------------------------
-# The owner's dictionary holds 「grokbot」; speech-to-text wrote it as below in his dictation history
-# (2026-11-13/14, MAI-Transcribe 2 without the dictionary). The sentences around the term are
-# shortened; the term and how it came out are as they were.
+# A dictionary holds 「lunabot」; speech-to-text wrote it as below when it had no dictionary. The
+# sentences around the term are shortened; the term and how it came out are as they were.
 
 OWNER_DICTIONARY = [
-    "grokbot", "OpenRouter", "Hermes", "GPT", "GitHub", "computer use", "Codex", "Windows",
-    "Telegram", "Space", "claude", "Typeless", "Agent", "YouTube", "MCP", "Google", "Brave", "Gmail",
+    "lunabot", "OpenRouter", "Docker", "GPT", "GitHub", "computer use", "Codex", "Windows",
+    "Telegram", "Space", "claude", "Slack", "Agent", "YouTube", "MCP", "Google", "Brave", "Gmail",
     "OpenClaw", "Canva", "STT", "Notion", "Artifacts", "onyx", "herdr", "project", "HiKari", "cron",
     "token", "Composio", "bot", "Bots", "Jev", "拉斐爾", "唯讀",
 ]
@@ -259,31 +258,31 @@ def spans(word, text, forms=()):
 @pytest.mark.parametrize(
     ("text", "found"),
     [
-        ("我記得 Grabbot 是可以自己喚醒自己的", ["Grabbot"]),
-        ("你這邊的話就是跟Grok Bus一樣，設計是滑鼠滾輪往下", ["Grok Bus"]),
-        ("你可以看一下Grokbox是怎麼做的", ["Grokbox"]),
-        ("像是 grok bot 這樣子區分開來", ["grok bot"]),
-        ("像是 Grok-Bot 這樣子", ["Grok-Bot"]),
+        ("我記得 Lunabbot 是可以自己喚醒自己的", ["Lunabbot"]),
+        ("你這邊的話就是跟Luna Bus一樣，設計是滑鼠滾輪往下", ["Luna Bus"]),
+        ("你可以看一下Lunabox是怎麼做的", ["Lunabox"]),
+        ("像是 luna bot 這樣子區分開來", ["luna bot"]),
+        ("像是 Luna-Bot 這樣子", ["Luna-Bot"]),
     ],
 )
-def test_what_speech_to_text_wrote_for_grokbot_is_found(text, found):
-    assert spans("grokbot", text) == found
+def test_what_speech_to_text_wrote_for_a_dictionary_word_is_found(text, found):
+    assert spans("lunabot", text) == found
 
 
 @pytest.mark.parametrize(
     ("word", "text"),
     [
         # Right as said, or only in another letter case: nothing to correct.
-        ("grokbot", "像是Grokbot這樣子區分開來嗎"),
-        ("grokbot", "像是 grokbot 這樣子"),
-        # A plural is the speaker's word: "Grokbots" stays for the model to judge with the rest.
-        ("grokbot", "像是Grokbots這樣子"),
+        ("lunabot", "像是Lunabot這樣子區分開來嗎"),
+        ("lunabot", "像是 lunabot 這樣子"),
+        # A plural is the speaker's word: "Lunabots" stays for the model to judge with the rest.
+        ("lunabot", "像是Lunabots這樣子"),
         # A longer word that holds the dictionary word is right as it stands (R-DICT-SPELL-02).
         ("Space", "我看了 SpaceX 的發射"),
         ("Space", "那個 Spacer 很好用"),
-        ("grokbot", "我用 grokbotz 試試"),
+        ("lunabot", "我用 lunabotz 試試"),
         # A run that only begins with the word, and words of the history that are other words.
-        ("grokbot", "我記得 Grok 是可以自己喚醒自己的"),
+        ("lunabot", "我記得 Luna 是可以自己喚醒自己的"),
         ("GitHub", "我們應該快要可以包新的 GitHub repo"),
         ("Google", "把一些檔案自動上傳到 Google Drive 這樣子"),
         ("Brave", "上傳到 Google Drive"),

@@ -233,8 +233,8 @@ async def test_images_go_to_the_vision_model_together_and_a_pdf_is_read(services
 
 @pytest.mark.parametrize("language", ["zh-TW", "en", "ja"])
 async def test_files_with_no_words_ask_to_look_at_them(services_rig, client, language):
-    # The words stand for the owner's, so they are in the conversation's language, never the interface's (owner,
-    # 2026-11-14): with no word of the owner's yet and no language in Raphael's profile, English on every interface.
+    # The words stand for the owner's, so they are in the conversation's language, never the interface's:
+    # with no word of the owner's yet and no language in Raphael's profile, English on every interface.
     question = "Look at this"
     rig = services_rig
     client.decisions.append(decision("unclear"))

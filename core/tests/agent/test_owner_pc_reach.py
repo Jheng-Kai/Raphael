@@ -1,6 +1,6 @@
 """R-PC-01: the owner's own PC is in reach of a quick question (Alt+Space) and of nothing else.
 
-Owner, 2026-11-13: 「正常對話的時候，不會有操控我電腦的邏輯…操控我電腦的邏輯只會在快速問答的部分」. An ordinary turn
+Logic that drives the owner's PC belongs to quick questions only. An ordinary turn
 (typed or said into a conversation, Raphael's or a member's, a room, a phone, a task, a routine) is offered no tool that
 sees or drives the PC, its prompt says nothing of that PC, and no permission mode reopens it; work that needs a computer
 goes to the member's own. Fakes only: no model, no PC, no Docker.

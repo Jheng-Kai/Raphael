@@ -1,6 +1,6 @@
 """What a member is told about writing skills, and when the tool for it is offered (R-SKILL-11).
 
-Owner, 2026-11-11: "他現在一直建立 skills，我覺得可能不太好…參考一下 Hermes agents，然後把他們的邏輯行為拿過來".
+A member that kept creating skills was too eager: the tool is offered only when the work calls for it.
 """
 
 from types import SimpleNamespace
@@ -26,7 +26,7 @@ def test_skill_manage_is_not_offered_merely_because_a_skill_is_enabled():
 def test_skill_manage_is_offered_for_a_request_about_skills_and_on_the_fixed_tool_sets():
     for text in ("Save this procedure as a skill", "把這個存成技能", "記下這個技巧"):
         assert SKILL_MANAGE in team_tools_for(team([]), WRITER, text), text
-    # The CLI brains and the workers have one fixed tool set whatever the request is (owner, 2026-11-09, decision 2).
+    # The CLI brains and the workers have one fixed tool set whatever the request is.
     assert SKILL_MANAGE in team_tools_for(team([]), WRITER, always=True)
 
 

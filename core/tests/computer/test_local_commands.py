@@ -154,7 +154,7 @@ def test_output_retains_head_and_tail_with_bounded_memory():
 
 
 # A hang guard for a real PowerShell, not a latency budget: a busy GitHub Windows runner took more than 30 s just to start
-# one (2026-11-06, both real-shell tests at once), while a healthy start takes about a second.
+# one (both real-shell tests at once), while a healthy start takes about a second.
 REAL_SHELL_GUARD = 120
 
 

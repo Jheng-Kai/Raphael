@@ -19,12 +19,12 @@ from raphael_core.worker.loop import Outcome
 from .conftest import call, report, turn, until, use
 from .test_handoff import args, setup, team_of
 
-HANDBACK = "Raphael, the source is checked and the report is ready; the whole of it is in my conversation with Jack."
+HANDBACK = "Raphael, the source is checked and the report is ready; the whole of it is in my conversation with Alex."
 
 
 def test_split_takes_the_last_block_out_and_keeps_the_owner_words():
-    owner, words = split("Jack, the report is done.\n\n<handback>first</handback>\n\nMore for Jack.\n<handback>  second\n line </handback>")
-    assert owner == "Jack, the report is done.\n\n\n\nMore for Jack." and words == "second line"
+    owner, words = split("Alex, the report is done.\n\n<handback>first</handback>\n\nMore for Alex.\n<handback>  second\n line </handback>")
+    assert owner == "Alex, the report is done.\n\n\n\nMore for Alex." and words == "second line"
     # A block the model did not close still ends the reply.
     assert split("Done for you.\n<handback>Raphael, done.") == ("Done for you.", "Raphael, done.")
     assert split("No block here.") == ("No block here.", "")
@@ -35,19 +35,19 @@ def test_split_takes_the_last_block_out_and_keeps_the_owner_words():
 def test_a_block_spread_over_two_messages_is_one_handback(make_rig):
     rig = make_rig()
     task = SimpleNamespace(id=7)
-    kept = rig.service._take_handback(task, ["Jack, the report is ready.", "<handback>Raphael, the source", "is checked.</handback>", "More for Jack."])
-    assert kept == ["Jack, the report is ready.", "More for Jack."]
+    kept = rig.service._take_handback(task, ["Alex, the report is ready.", "<handback>Raphael, the source", "is checked.</handback>", "More for Alex."])
+    assert kept == ["Alex, the report is ready.", "More for Alex."]
     assert rig.service._handbacks[7] == "Raphael, the source is checked."
 
 
 def test_a_report_without_a_handback_loses_its_greeting_to_the_owner():
-    assert fallback("Jack, the review is complete. The rest is detail.", "Jack") == "the review is complete."
-    assert fallback("Jack，比對做完了，結果貼在房間 17。其餘細節。", "Jack") == "比對做完了，結果貼在房間 17。"
+    assert fallback("Alex, the review is complete. The rest is detail.", "Alex") == "the review is complete."
+    assert fallback("Alex，比對做完了，結果貼在房間 17。其餘細節。", "Alex") == "比對做完了，結果貼在房間 17。"
     assert fallback("主人：已經完成。", "") == "已經完成。"
-    assert fallback("The review is complete.", "Jack") == "The review is complete."
+    assert fallback("The review is complete.", "Alex") == "The review is complete."
     # A hand-back the model opened with the owner's name is shown without it too.
-    assert unaddressed("Jack, Raphael asked and it is done.", "Jack") == "Raphael asked and it is done."
-    assert unaddressed("Raphael, done.", "Jack") == "Raphael, done."
+    assert unaddressed("Alex, Raphael asked and it is done.", "Alex") == "Raphael asked and it is done."
+    assert unaddressed("Raphael, done.", "Alex") == "Raphael, done."
 
 
 @pytest.mark.parametrize("brain", ["api", "cli"])
@@ -55,10 +55,10 @@ async def test_the_handback_reaches_the_asker_and_stays_out_of_the_owner_thread(
     rig = make_rig()
     model = "cli:codex:fake" if brain == "cli" else "fake/model"
     SettingsStore(rig.conn).set("agent_model", model)
-    SettingsStore(rig.conn).set("owner_name", "Jack")
+    SettingsStore(rig.conn).set("owner_name", "Alex")
     target, source = setup(rig, room=False, model=model)
     await rig.plugins.connect(look="T1")
-    full = "Jack, I checked the requested source.\n\nOWNER-RESULT: the findings.\n\n<handback>" + HANDBACK + "</handback>"
+    full = "Alex, I checked the requested source.\n\nOWNER-RESULT: the findings.\n\n<handback>" + HANDBACK + "</handback>"
     captured = []
     if brain == "api":
         def first(**kwargs):
@@ -88,7 +88,7 @@ async def test_the_handback_reaches_the_asker_and_stays_out_of_the_owner_thread(
     [view] = rig.service.handoff_views(source_turn_id=source.id)
     assert view["result"] == HANDBACK and view["own_work"] is False
     brief = captured[0]
-    assert "handed to you by your colleague Raphael" in brief and "as Jack" in brief and "<handback>" in brief
+    assert "handed to you by your colleague Raphael" in brief and "as Alex" in brief and "<handback>" in brief
     assert "your own background work" not in brief
 
 

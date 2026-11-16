@@ -145,7 +145,7 @@ _ATTACHED = _DATA + r"\attachments\0123456789abcdef0123456789abcdef.html"
     "Get-Process | Where-Object {$_.MainWindowTitle -match 'NHK'} | Select-Object Id,ProcessName",
 ])
 def test_a_member_reads_the_files_the_owner_attached_in_its_conversation(floor, command):
-    """Owner, 2026-11-14: 紫苑's own attachments were refused as protected_data 5 times."""
+    """A member's own attachments were refused as protected_data 5 times."""
     assert floor.access("local__local_exec", {"command": command}) is None
     assert floor.access("read_file", {"path": _ATTACHED}) is None
 

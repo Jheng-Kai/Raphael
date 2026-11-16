@@ -194,8 +194,8 @@ def test_terminal_echo_deduplication_keeps_order_and_intentional_repetition():
 
 @pytest.mark.parametrize("brain", ["codex", "claude", "gemini"])
 async def test_only_a_short_opening_reaches_the_owner_while_the_cli_works(make_rig, monkeypatch, brain):
-    # Owner, 2026-11-09, beside Grok Bot's replies: 「不會太多不重要的思考文字 然後重點都有說到」. The owner's DB had
-    # Claude Code turns with up to 13 messages said between steps; only the opening before the first step stays one.
+    # Not too much unimportant thinking text, and every main point said: Claude Code turns had up to 13 messages
+    # said between steps; only the opening before the first step stays one.
     rig = make_rig()
     rig.settings.set("agent_model", f"cli:{brain}:fake")
     monkeypatch.setattr(rig.service._cli_brains, "command", lambda name: ["fake"])
