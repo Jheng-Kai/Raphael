@@ -7,7 +7,7 @@ const desktop = { desktop: { state: "running", ready: true, control: "member" } 
 const menu = [member(1), {action:'open-details'}, click('[data-det="tab"][data-tab="computer"]'), wait('.desktop-panel[data-desktop-state="member"]'), click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-expanded][data-interactive="true"]'),click('[data-desktop="menu"]'), wait('#app-popover [data-pick]')];
 const login = [member(1), wait('[data-secret-card="card-login"]')];
 const keyed = [member(1), wait('[data-secret-card="card-key"]')];
-// Raphael's bots live in his panel, not in Settings.
+// Raphael's bots live in its panel, not in Settings.
 const raphael = [member(0), { action: "open-details" }];
 
 export default [

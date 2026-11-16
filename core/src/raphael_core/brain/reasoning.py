@@ -68,7 +68,7 @@ _NOTE_WORDS = 8
 
 
 def _latin_note(piece: str) -> bool:
-    """Whether a piece of a reply is Latin-script prose: a few words of the owner's language in it (his title, a name) are
+    """Whether a piece of a reply is Latin-script prose: a few words of the owner's language in it (a title, a name) are
     allowed, a sentence of it is not."""
     latin, owner = len(re.findall(r"[A-Za-z]", piece)), len(_OWNER_SCRIPT.findall(piece))
     return (latin >= 3 and owner * 3 <= latin and "```" not in piece

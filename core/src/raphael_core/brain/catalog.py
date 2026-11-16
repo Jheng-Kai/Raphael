@@ -9,7 +9,7 @@ and keeps for a day. This module reads it. Two kinds of model are kept:
 
 The kind is what the list says a model reads and writes: its `input_modalities` and
 `output_modalities`, or, for an entry that lacks those, its `modality` ("audio->transcription").
-Nothing else decides it: Raphael keeps no list of models of his own.
+Nothing else decides it: Raphael keeps no list of models of its own.
 
 Every other kind (embeddings, images, speech, video, reranking, decisions) is left out: no role can
 use one. So is a `:batch` variant, which runs on OpenRouter's batch API, whose answers come within a
@@ -18,8 +18,8 @@ model, not a choice.
 
 The roles (`ROLES`), and what each needs of a model, from the calls it makes:
 
-- `cleanup` (the `cleanup_model` setting) and `answer` (`agent_model`: Raphael's answers, his
-  routing when Jev fails or is unsure, the app he picks to open, and his web search) call
+- `cleanup` (the `cleanup_model` setting) and `answer` (`agent_model`: Raphael's answers, its
+  routing when Jev fails or is unsure, the app it picks to open, and its web search) call
   `complete_json`. It asks for JSON that fits a schema (`response_format` with a strict
   `json_schema`) and a `max_tokens`, under `provider.require_parameters`, which leaves out every
   provider that does not take exactly the parameters sent. The cached catalog decides reasoning:
@@ -28,7 +28,7 @@ The roles (`ROLES`), and what each needs of a model, from the calls it makes:
   low when no efforts are listed). An explicitly chosen answer effort is kept.
   So the model must list `response_format`, `structured_outputs` and `max_tokens` among its
   supported parameters. Tool calling is not
-  needed: Raphael runs his tools himself and hands the model their results, and the web search
+  needed: Raphael runs its tools itself and hands the model their results, and the web search
   (`chat_text` with OpenRouter's `web` plugin, which requires no parameter) takes any text model.
   The one thing that wants it is the call that picks a plugin's tools (agent/plugins.py), which
   asks for `tools` and `tool_choice` under the same `provider.require_parameters`: the catalog

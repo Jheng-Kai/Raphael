@@ -134,7 +134,7 @@ def test_a_time_in_milliseconds_is_not_a_card_number():
         "https://finance.yahoo.com/news/nvidia-stock-falls-after-ceo-transition-2026-11-13-153000",
         "C:/Users/me/Documents/Projects/Raphael/weekly-report/2026/v2/final-notes",
         "https://github.com/OpenAI/codex/releases/tag/v2-mp4-h264-support-notes-2026",
-        # The news links of the member 紫苑 (a Japanese teacher), refused three times the same day: a path piece that
+        # The news links of the member 小葵 (a Japanese teacher), refused three times the same day: a path piece that
         # mixes letters and digits is an article's number, not a key.
         "https://news.web.nhk/newsweb/na/nd-20261114de75840",
         "https://news.web.nhk/news/easy/20261112de74710/20261112de74710.html",

@@ -246,7 +246,7 @@ test("a member without a picture is a slime, its chosen one or a colour from its
   expect(face({ id: 3, name: "Ada", avatar: "slime:streaks-charcoal" }).innerHTML).toContain("#EE5A64");
   expect(face({ id: 3, name: "Ada", avatar: "slime:unknown" }).querySelector(".mb-av-slime")).not.toBeNull();
   expect(face({ id: 3, name: "Ada", avatar: "preset:old", avatar_url: "data:image/png;base64,AAAA" }).querySelector(".mb-av-slime svg.slime")).not.toBeNull();
-  // Raphael uses the first blue slime; his emblem shows only in voice.
+  // Raphael uses the first blue slime; its emblem shows only in voice.
   expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime svg.slime")?.outerHTML).toContain("#3DB5FF");
 });
 

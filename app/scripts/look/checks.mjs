@@ -559,7 +559,7 @@ export function checkRendered(name, context = {}) {
       require(!panel.querySelector('.mb-panel-tasks') && panel.querySelector('.mb-panel-routines .mp-empty'), 'an empty Details is one quiet routine line and no work list');
     } else if (name.startsWith('member-panel-details-no-computer-')) {
       // The computer lives in the third tab only, whatever its state and whoever the member: Details has its routines, for Raphael
-      // his conversations, and the chat platforms, and nothing else. The tab itself stays.
+      // its conversations, and the chat platforms, and nothing else. The tab itself stays.
       const raphael = name.endsWith('-raphael'), body = panel.querySelector('.mb-tab-body');
       require([...body.querySelectorAll(':scope > section')].map(section => section.className).join() === (raphael ? 'mb-panel-routines,,mb-panel-suggest' : 'mb-panel-routines,mb-panel-suggest'), `Details holds the routines${raphael ? ', the conversations' : ''} and the chat platforms (${[...body.querySelectorAll(':scope > section')].map(section => section.className)})`);
       require(!!panel.querySelector('[data-slot="conversations"]') === raphael, 'only Raphael has the conversation section');
@@ -1846,7 +1846,7 @@ export function checkRendered(name, context = {}) {
       for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`.mb-panel-suggest [data-intent=setup-${kind}]`)), `${kind} not set up is one row with 設定`);
       const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
       require(asks.length === 1 && asks[0].intent === 'setup-slack' && asks[0].text.includes('Slack') && !asks[0].memberId, "設定 asks Raphael in his conversation with the setup intent beside the words, once for two presses");
-      // While he works on it the button is busy: a spinner and no second press.
+      // While it works on it the button is busy: a spinner and no second press.
       const busy = document.querySelector('.mb-panel-suggest [data-intent=setup-slack]');
       require(busy.disabled && busy.getAttribute('aria-busy') === 'true' && visible(busy.querySelector('.spin')), 'the pressed 設定 is busy with a spinner');
       require(!document.querySelector('.mb-panel-suggest [data-intent=setup-discord]').disabled, 'the other platforms stay pressable');
@@ -3534,7 +3534,7 @@ export function checkRendered(name, context = {}) {
       require(style.backgroundColor !== neutral, "the owner's bubble wears the member's colour");
       for (const link of bubble.querySelectorAll('.message-link, .btn.message-expand')) require(getComputedStyle(link).color === style.color, "a link and the expand control take the bubble's words colour");
       require(chat && chat.dataset.memberBubble !== undefined, "the colour comes from the member's conversation");
-      // Raphael is the first blue slime, and his conversation wears its blue like any member's (R-UI-81).
+      // Raphael is the first blue slime, and its conversation wears its blue like any member's (R-UI-81).
       if (document.querySelector('.mb-chat [data-member="0"][aria-current="true"], .side .mb-chief[aria-current="true"]')) {
         const [r, g, b] = style.backgroundColor.match(/\d+/g).map(Number);
         require(b > r + 80 && b > g, `Raphael's own conversation wears his blue: ${style.backgroundColor}`);
@@ -4089,7 +4089,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, expanded, height: text.clientHeight, fullHeight: text.scrollHeight };
   }
   if (name === "onboarding-welcome") {
-    // The welcome shows: Raphael's emblem, his name, and an ask being typed with his 告。 answer
+    // The welcome shows: Raphael's emblem, its name, and an ask being typed with its 告。 answer
     // instead of a slogan, the language at the card's top left, and one wide black pill, centred in the fixed card.
     const card = document.querySelector('.ob-card').getBoundingClientRect();
     const canvas = document.querySelector('.ob-emblem canvas.ob-emb'), title = document.querySelector('.ob-col > h2');
@@ -4879,7 +4879,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, locale, surface: pane ? `settings:${pane}` : tab ? `dictation:${tab}` : page, stale };
   })();
   if (name === "conversation-sections") {
-    // One conversation per member: Raphael's panel has his conversation and his quick questions, nothing to add.
+    // One conversation per member: Raphael's panel has its conversation and its quick questions, nothing to add.
     const host = document.querySelector('.mb-det .conversation-list');
     require(visible(host), "the conversation list is visible");
     const heading = host.closest('section')?.querySelector(':scope > .mb-dh');
@@ -5321,7 +5321,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "quick-conversation-list") {
     // Each member has one conversation: Raphael's main one is the first row and the one a window opens,
-    // and his quick questions wait in the second, named only when the owner picks it.
+    // and its quick questions wait in the second, named only when the owner picks it.
     const rows = [...document.querySelectorAll('.mb-det [data-conversation-open]')];
     require(rows.length === 2, `Raphael's details list his main conversation and his quick questions: ${rows.length}`);
     const [main, quick] = rows;
@@ -6638,7 +6638,7 @@ export function checkRendered(name, context = {}) {
     require(open && visible(open), "the header still names the page or the room");
     return { check: name, samples: watch.samples };
   }
-  // The owner speaks with a page open in the thread's place (voice-mode.ts, page-view.css): the thread, and the "hearing" line in it, is hidden under the page, so the flyer is the only sign he is heard.
+  // The owner speaks with a page open in the thread's place (voice-mode.ts, page-view.css): the thread, and the "hearing" line in it, is hidden under the page, so the flyer is the only sign they are heard.
   if (name === "voice-over-page-listening" || name === "voice-over-page-hearing" || name === "voice-over-page-gone") {
     const pane = [...document.querySelectorAll(".page-agent .mb-chat")].find(visible), stage = pane.querySelector(":scope > .ra-stage");
     const view = stage.querySelector(":scope > .pgv"), dock = stage.querySelector(":scope > .ra-dock"), composer = dock.querySelector(".composer"), flyer = stage.querySelector(":scope > .ra-flyer");
@@ -6946,7 +6946,7 @@ export function checkRendered(name, context = {}) {
       const chart = root.querySelector('[data-report-chart="5"]');
       require([...chart.querySelectorAll(".rc-cap")].map(cap => cap.textContent).join("|") === "14|6|22|92|0", "each status's total on its column");
       require([...chart.querySelectorAll(".rc-li")].map(item => item.textContent).join("|") === "Claude|Codex|主人|拉斐爾", "the owners in the legend");
-      // Three owners are not members, so Raphael takes the fourth chart colour too, not his own blue beside the first.
+      // Three owners are not members, so Raphael takes the fourth chart colour too, not its own blue beside the first.
       const keys = [...chart.querySelectorAll(".rc-legend .rc-key")].map(key => getComputedStyle(key).backgroundColor);
       const token = name => { const probe = document.createElement("span"); probe.style.background = `var(${name})`; chart.append(probe); const colour = getComputedStyle(probe).backgroundColor; probe.remove(); return colour; };
       require(keys.join("|") === ["--chart-1", "--chart-2", "--chart-3", "--chart-4"].map(token).join("|"), `the chart colours in their order: ${keys}`);
@@ -9323,7 +9323,7 @@ export function checkRendered(name, context = {}) {
     require(title.getAttribute("aria-controls") === panel.id && !title.hasAttribute("aria-haspopup"), "title controls details without a popup");
     // The › that slides in under the pointer (R-UI-77) points at the panel; a dropdown glyph would promise a menu.
     require([...title.querySelectorAll(".i")].every(icon => icon.closest(".mb-pill-face, .mb-pill-go")), "title has no dropdown glyph outside its member avatar");
-    // Only Raphael has conversation rows (his and quick questions); a member has none.
+    // Only Raphael has conversation rows (its own and the quick questions); a member has none.
     const list = panel.querySelector(".conversation-list");
     require(!list || (visible(list) && list.scrollWidth <= list.clientWidth + 1), "Raphael's conversation rows fit the panel");
     const picker = panel.querySelector('[data-member-brain] .mp-trigger');
@@ -9377,7 +9377,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, chips: chips.length };
   }
   if (name === "overlay-emblem-gold" || name === "overlay-emblem-angry") {
-    // The rune band, sampled where the letters stand: gold for a report, red while he refuses.
+    // The rune band, sampled where the letters stand: gold for a report, red while it refuses.
     const canvas = document.querySelector('#emblem'), ctx = canvas.getContext('2d'), side = canvas.width, c = side / 2;
     const R = side / 1.3 / 2, data = ctx.getImageData(0, 0, side, side).data, picked = [];
     for (let a = 0; a < 360; a += 1.5) for (let r = 0.82; r <= 0.98; r += 0.02) {
@@ -10075,7 +10075,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, scrollLeft: Math.round(strip.scrollLeft), end };
   }
   if (name === "owner-pictures-row") {
-    // R-ATTACH-02: several pictures the owner sent are 96 px squares side by side, full rows first, right-aligned with his bubble, and the
+    // R-ATTACH-02: several pictures the owner sent are 96 px squares side by side, full rows first, right-aligned with their bubble, and the
     // block is no taller than its rows.
     return (async () => {
     const line = [...document.querySelectorAll('.tn')].filter(visible).find(item => item.querySelector('.owner-message .attachment-thumbs'));

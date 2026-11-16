@@ -3,7 +3,7 @@
    where a question waits for the owner. The sizes are the page's own fluid
    tokens (--pa-*, at the top of agent.css): compact in a small window, roomy in a maximised one.
 
-   Raphael's face is his emblem exactly as it is at the bottom right: bare, with no background,
+   Raphael's face is its emblem exactly as it is at the bottom right: bare, with no background,
    border, ring, disc, shadow or circle crop, wherever it shows (the column, the pill, the panel, the
    thread). So no rule here styles `.av` itself or the element a face is drawn into beyond its size:
    the members' own faces are styled by `.mb-av` alone, which Raphael's never carries (members.ts

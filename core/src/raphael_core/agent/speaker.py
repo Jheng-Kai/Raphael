@@ -22,7 +22,7 @@ from dataclasses import dataclass, replace
 from .policy import PLUGIN_PREFIX
 
 RAPHAEL_ID = 0
-# Raphael's name in each language: what `ask_member` takes for him, and what the member column shows.
+# Raphael's name in each language: what `ask_member` takes for it, and what the member column shows.
 RAPHAEL_NAMES = {"zh-TW": "拉斐爾", "en": "Raphael", "ja": "ラファエル",
                  "zh-CN": "拉斐尔", "ko": "라파엘", "es": "Raphael", "fr": "Raphael",
                  "de": "Raphael", "pt-BR": "Raphael", "it": "Raphael", "ru": "Рафаэль",

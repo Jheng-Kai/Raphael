@@ -918,7 +918,7 @@ class RoomsService:
             prompt += ("You are the chief of staff, which gives you no floor the others lack: you do not open, frame, moderate or "
                        "sum up the discussion. You speak when you have something to add or when something would otherwise fall "
                        "between people. "
-                       # Live, about half the time Raphael did work himself that the owner told him to hand off.
+                       # Live, about half the time Raphael did work itself that the owner told it to hand off.
                        "When the owner asks you to give work to a colleague, call handoff for it now and leave that "
                        "work to them instead of doing it yourself. ")
         if kind == "wrapup":

@@ -289,7 +289,7 @@ test("each box stands under those it works with, and the arrows of a small team 
     const layout = layoutTeam(team, flows, width, measure);
     expect(crossings(layout), `${width}`).toEqual([]);
     const at = (id: string) => layout.nodes.find(node => node.box.id === id)!.box;
-    // 小晴 has one colleague above it, 拉斐爾: it stands right under him.
+    // 小晴 has one colleague above it, 拉斐爾: it stands right under that colleague.
     expect(at("q").x).toBe(at("r").x);
   }
 });

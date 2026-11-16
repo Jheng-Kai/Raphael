@@ -2,7 +2,7 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
-  /** The conversation in which the owner asked for his own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
+  /** The conversation in which the owner asked for their own Google: the member answers with the card that walks the steps (`connectors/cards.py`, the app `google`). */
   function ownGoogleTurn(data) {
     const turn = structuredClone(data.connectorTurns.server);
     const text = "Google 要用你自己的帳號連接：照卡片上的步驟在 Google Cloud 建立桌面應用程式，再把 Client ID 與 Client secret 貼進卡片，最後按「連接 Google」。";
@@ -52,8 +52,8 @@ export function installMock(fixture, config = {}, target = window) {
     }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
     if (variant.ownerEdit === 'placed') {
-      // A member's thread as the owner's has it: routine turns posted after his message (07:00 and 08:00), so an edit that
-      // went to the end of the thread would be seen far from where he edited.
+      // A member's thread as the owner's has it: routine turns posted after their message (07:00 and 08:00), so an edit that
+      // went to the end of the thread would be seen far from where they edited.
       const routine = (id, hour, words) => ({...structuredClone(base), id, session_id:`routine-${id}`, source:'routine', route:'routine', question:`${hour}:00 例行`, prefix:'', text:words, created_at_ms:data.now + (id - 8200) * 3_600_000,
         messages:[{seq:1,kind:'reply',text:words,at_ms:data.now + (id - 8200) * 3_600_000}], drafts:[], reactions:{}, owner_questions:[], permissions:[]});
       data.turns.push(routine(8203, '07', '早上七點的例行整理已送出。'), routine(8204, '08', '早上八點的例行整理已送出。'));
@@ -353,7 +353,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.messages.push({ ...spoken, id: next, room_id: 2, text: "會議結束，結論已整理好" }, { ...spoken, id: next + 1, room_id: 3, text: "要先確認預算嗎？" });
     Object.assign(data.expectedLights.rooms, { 1: "message", 2: "done", 3: "waiting" });
   }
-  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by his own setting): the core lists the pinned first, then by
+  // Pinned tiles (`pinnedTiles`: member ids, 0 is Raphael, who is pinned by its own setting): the core lists the pinned first, then by
   // position, and a `position` written to a member is a place in the order of all of them, numbered again from 0.
   if (variant.pinnedTiles) for (const id of variant.pinnedTiles) { if (id === 0) data.settings.chief_pinned = true; else data.members.find(member => member.id === id).pinned = true; }
   if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
@@ -495,7 +495,7 @@ export function installMock(fixture, config = {}, target = window) {
     turn.handoffs = [{ ...data.roomHandoff, state: "done" }, { ...data.roomHandoff, task_id: 43, member_id: 2, member_name: "小森", mode: "consult", state: "running", result: "", evidence: [] }];
     turn.messages.push({ seq: 99, kind: "event", text: JSON.stringify(data.p02MeetingEvent), at_ms: data.now });
   }
-  // Raphael as his emblem, with no picture of the owner's in its place.
+  // Raphael as its emblem, with no picture of the owner's in its place.
   if (variant.emblem) data.avatar = null;
   if (variant.peerChat) {
     // Raphael asked 小晴 twenty minutes ago and now, and 小森 once in between: today's line opens only Raphael ⇄ 小晴 (R-UI-72).
@@ -877,7 +877,7 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_counts['2026-10-24']=4;
     data.home.calendar_days=Object.keys(data.home.calendar_counts);
   }
-  // The owner has not set up his own Google yet: its row is in the store (R-CONNECT-02).
+  // The owner has not set up their own Google yet: its row is in the store (R-CONNECT-02).
   // One store row for each mark of the set (`iconMarks`): the tile of each is checked in the real browser (check `icon-colours`).
   if (variant.iconMarks) for (const id of variant.iconMarks) data.services.push({ ...data.services[0], id: `mark-${id}`, name: `Mark ${id}`, publisher: "icon-mark", icon: id, category: "other", popular: false, server_id: null, auth: "oauth" });
   if (variant.noOwnGoogle) data.managedConnectors = data.managedConnectors.filter(c => c.id !== "google");
@@ -1958,7 +1958,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.template_card_publish": {
         const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
-        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/raphael-catalog/compare/main...main?quick_pull=1" };
+        const prepared = { folder: ["C:", "Users", "owner", "AppData", "Roaming", "Raphael", "template-exports", "3f9a1c07d2e84b56"].join(String.fromCharCode(92)), folder_id: "3f9a1c07d2e84b56", url: "https://github.com/Jheng-Kai/SlimesStore/compare/main...main?quick_pull=1" };
         Object.assign(turn.templates[0], { state: "published", ...prepared });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return prepared;
@@ -2395,7 +2395,7 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "keyboard_has_altgr") return false;
-      // The owner's clipboard is never read by a look: the live view's paste asks only while he holds a real screen.
+      // The owner's clipboard is never read by a look: the live view's paste asks only while they hold a real screen.
       if (command === "owner_clipboard_text") return null;
       // The shell's read of the clipboard (macOS, where the page may not read it): a scene's clipboard is the browser's own.
       if (command === "clipboard_text") return navigator.clipboard.readText().catch(() => "");

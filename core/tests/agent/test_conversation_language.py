@@ -103,7 +103,7 @@ async def test_a_reply_to_chinese_words_on_a_japanese_interface_names_no_languag
 
 @pytest.mark.parametrize("interface", ["en", "ja", "zh-TW"])
 def test_raphaels_replayed_lines_lose_the_windows_frame(interface):
-    # His lines are kept as the app shows them, 《prefix。…》 in the interface language; the model reads his words alone.
+    # Its lines are kept as the app shows them, 《prefix。…》 in the interface language; the model reads its words alone.
     from raphael_core.agent.history import Turn
     from raphael_core.memory.conversation import turn_text
     from raphael_core.messaging.words import compose

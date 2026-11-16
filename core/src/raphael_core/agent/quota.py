@@ -223,7 +223,7 @@ class Quotas:
 
     def _rearm(self, provider: str, periods: list[str]) -> None:
         """A window read with more than its last tenth left is no longer the one the owner was told about (a reset, a
-        voucher): when it falls to the last tenth again he hears it again."""
+        voucher): when it falls to the last tenth again they hear it again."""
         row = self.conn.execute("SELECT value FROM settings WHERE key = ?", (_WARNED,)).fetchone()
         try:
             told = json.loads(row[0]) if row else {}

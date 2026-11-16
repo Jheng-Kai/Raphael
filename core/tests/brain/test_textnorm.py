@@ -729,7 +729,7 @@ OWNER_WORDS = ["pinebot", "GitHub", "computer use", "OpenRouter", "Space", "clau
         ("用 Kelvr 開兩個分頁", "用 kelvr 開兩個分頁"),
         ("「Telegram」傳給我", "「Telegram」傳給我"),
         ("（tele gram）傳給我", "（Telegram）傳給我"),
-        # Misspelt the way speech-to-text writes a name it does not know (his history).
+        # Misspelt the way speech-to-text writes a name it does not know (their history).
         ("我記得 Pinebat 是可以自己喚醒自己的", "我記得 pinebot 是可以自己喚醒自己的"),
         ("你這邊的話就是跟Pine Bus一樣，設計是滑鼠滾輪往下", "你這邊的話就是跟pinebot一樣，設計是滑鼠滾輪往下"),
         ("你可以看一下Pinebox是怎麼做的", "你可以看一下pinebot是怎麼做的"),

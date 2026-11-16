@@ -47,11 +47,11 @@ import connectApps from "./connect-apps.mjs";
 import contextMenu from "./context-menu.mjs";
 import ownerRound from "./owner-round.mjs";
 import ownerRound3 from "./owner-round3.mjs";
-import ownerRound10 from "./owner-round10.mjs";
+import conversationAndStableControls from "./conversation-and-stable-controls.mjs";
 import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
-export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...foot, ...shortcuts, ...slime, ...pages, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...conversationAndStableControls, noNaming]);
 scenes.push(...colleagues);
 scenes.push(...memberStore);
 scenes.push(...mediaData);

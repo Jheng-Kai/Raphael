@@ -165,7 +165,7 @@ async def test_a_stop_the_owner_said_is_still_a_stop(desktop, tmp_path):
     with vm_scope(("turn", 1, 1), turn_id=7, private=True, language="en"):
         assert (await hub.call(named(hub, "get_desktop_state").key, {}, approver="auto")).ok
         (work,) = vm.work.items.values()
-        work.state = "stopped"  # as `request` leaves it when the owner presses Stop while it waits for him
+        work.state = "stopped"  # as `request` leaves it when the owner presses Stop while it waits for them
         stopped = await hub.call(named(hub, "get_desktop_state").key, {}, approver="auto")
         work.state = "expired"
         expired = await hub.call(named(hub, "get_desktop_state").key, {}, approver="auto")

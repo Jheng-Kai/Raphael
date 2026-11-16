@@ -1,6 +1,6 @@
 // The pages of the sidebar (main.ts): a button for each, its icon or Raphael's face, then its name.
 // The name has a class of its own (`nav-t`): Raphael's face is a span too (avatar.ts), and a new
-// language must name the page without writing over his face.
+// language must name the page without writing over its face.
 
 /** One page of the sidebar: `lead` is its icon, or Raphael's face for 拉斐爾, and `name` its name. */
 export const navItemHTML = (id: string, name: string, lead: string): string =>

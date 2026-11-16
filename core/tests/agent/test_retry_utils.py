@@ -1,6 +1,6 @@
 """The waits between a failed model call and the next: jittered, as long as the provider asks, and told once.
 
-Adapted from NousResearch/hermes-agent (MIT); see core/packaging/licenses.
+Adapted from third-party code under MIT, with changes; see core/packaging/licenses/NOTICES.md.
 """
 
 import threading

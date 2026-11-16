@@ -33,7 +33,7 @@ def ledger(conn, clock):
 
 
 async def reflect(memory, history, model, conn, clock, **options):
-    """One pass of Raphael over all his turns, its edits applied as the service applies them."""
+    """One pass of Raphael over all its turns, its edits applied as the service applies them."""
     turns = history.after(0)
     return await Reflector(model).reflect(
         memory.own(0), memory.shared, turns, today=clock.now().date(), model="m", ledger=ledger(conn, clock),

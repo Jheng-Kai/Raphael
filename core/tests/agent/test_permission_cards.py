@@ -40,7 +40,7 @@ async def typed(rig, text="Save an example", member_id=0, session="live"):
 
 
 class Judge(FakeOpenRouter):
-    """Jev, who says no rule falls under an action unless a test has directed him otherwise."""
+    """Jev, who says no rule falls under an action unless a test has directed it otherwise."""
 
     async def decide(self, **kwargs):
         if self.decisions:

@@ -433,3 +433,4 @@ NousResearch/hermes-agent (MIT):
 - `core/src/raphael_core/worker/repetition_guard.py`
 - `core/src/raphael_core/worker/stall_guards.py`
 - `core/src/raphael_core/worker/tool_guardrails.py`
+- `core/tests/agent/test_retry_utils.py`

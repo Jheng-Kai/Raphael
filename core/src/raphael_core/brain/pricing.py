@@ -41,7 +41,7 @@ FETCH_TIMEOUT_S = 5.0
 CACHE_KEY = "cache.pricing"
 # How the cached list was read. A cache of another reading is no cache: raise this whenever
 # `parse_catalog` reads a model differently, or the cache holds something else (2: the MAI models
-# per hour, not unknown; 3: every model Raphael could use, not only the prices of his own; 4: the
+# per hour, not unknown; 3: every model Raphael could use, not only the prices of its own; 4: the
 # batch variants left out; 5: whether a language model takes tools, as a capability; 6: the kind
 # of a model whose modalities are not listed, from its `modality`; 7: whether a language model
 # reads images and files, as capabilities).

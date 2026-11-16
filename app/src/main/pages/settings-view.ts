@@ -426,7 +426,7 @@ function outputFolderRow(v: SettingsView): string {
 
 /**
  * 一般, in a fixed order of sections: who you are, how the window looks, what Raphael works with (the timezone of
- * routines and the folder of what is delivered), and the guide. What he remembers is the 記憶 tab.
+ * routines and the folder of what is delivered), and the guide. What it remembers is the 記憶 tab.
  */
 function generalHTML(v: SettingsView): string {
   return (

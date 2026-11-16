@@ -78,7 +78,7 @@ test("stacked columns put each owner's part one on another, the total on top, in
   // The parts stand on one another: each begins where the one under it ends.
   const bars = [...done.querySelectorAll<HTMLElement>(".rc-bar")].map(bar => ({ bottom: parseFloat(bar.style.bottom), height: parseFloat(bar.style.height) }));
   bars.slice(1).forEach((bar, index) => expect(bar.bottom).toBeCloseTo(bars[index]!.bottom + bars[index]!.height, 0));
-  // Three owners are not members: Raphael takes the fourth chart colour, not his own blue beside the first.
+  // Three owners are not members: Raphael takes the fourth chart colour, not its own blue beside the first.
   expect([...box.querySelectorAll<HTMLElement>(".rc-legend .rc-key")].map(key => [key.dataset.s, key.getAttribute("style")])).toEqual([["1", null], ["2", null], ["3", null], ["4", null]]);
   expect(box.querySelector(".rc-unit")!.textContent).toBe("件");
   // The plot is what a reader reaches: an image named with every value, focusable for the arrow keys.

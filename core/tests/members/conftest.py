@@ -12,7 +12,7 @@ from raphael_core.memory.service import MemoryService
 from raphael_core.router import Router as RpcRouter
 
 TZ = timezone(timedelta(hours=8))
-# 2026-10-23 08:59:00 in Taipei: a minute before a routine at nine.
+# 23 October 2026, 08:59 in Taipei: a minute before a routine at nine.
 NOW_MS = int(datetime(2026, 10, 23, 8, 59, tzinfo=TZ).timestamp() * 1000)
 
 

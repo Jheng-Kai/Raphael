@@ -3,8 +3,8 @@ the team as the assistant sees it.
 
 The RPC methods (the main window only, through the shell's allow-list):
 
-- `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
-  in the language, his picture when the owner chose one: `avatar_rev` and `avatar_crop`), then every member
+- `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, its name
+  in the language, its picture when the owner chose one: `avatar_rev` and `avatar_crop`), then every member
   in its place: `{id, name, role, personality, instructions, avatar,
   avatar_rev?, cover?, group_id, model, tools, position, created, unread, unread_from, unread_kind, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
@@ -21,7 +21,7 @@ The RPC methods (the main window only, through the shell's allow-list):
   it may call is the question card that asks what to take on first (`agent.service.begin_setup`
   carries on from the owner's answer).
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
-  -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
+  -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: its picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
   threads with it), its memory folder, its routines, its tasks and its picture. The app asks first. Its own
   computer, if it had one, is removed too, afterwards and in the background (`computer/removals.py`): the answer
@@ -488,7 +488,7 @@ class MembersService:
         return member.speaker()
 
     def _starting_model(self) -> str:
-        """A new member starts on Raphael's model and holds it as its own, so that his next change moves no one else."""
+        """A new member starts on Raphael's model and holds it as its own, so that its next change moves no one else."""
         model = self._settings.get("agent_model")
         return model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
 
@@ -641,8 +641,8 @@ class MembersService:
         return self._picture(self._avatars / MEMBERS_DIR / name) if kind == "file" and name else None
 
     def _raphael_picture(self) -> tuple[_Picture, dict] | None:
-        """Raphael's picture of the owner's own and its crop, as the shell keeps them; None while he
-        is his emblem."""
+        """Raphael's picture of the owner's own and its crop, as the shell keeps them; None while it
+        is its emblem."""
         try:
             meta = json.loads((self._raphael_avatar / "picture.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -1021,7 +1021,7 @@ class MembersService:
         return {"path": str(path)}
 
     def _member_id(self, params: dict) -> int:
-        """The `id` of a member that is there (never Raphael's: he is not changed here)."""
+        """The `id` of a member that is there (never Raphael's: it is not changed here)."""
         member_id = _whole(params, "id")
         if member_id == 0:
             raise RpcError(

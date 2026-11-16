@@ -17,9 +17,9 @@ import { composioAction } from "../composio-result";
 // The field asks Raphael in writing
 // (`agent_ask_text`, Enter sends, Shift+Enter starts a new line) and Raphael's face is the voice
 // button, which does what the question key does (the same `window_hotkey` path) and flies up while
-// he listens (voice-mode.ts). When he asks a YES/NO question, a gold card takes the composer's
+// it listens (voice-mode.ts). When it asks a YES/NO question, a gold card takes the composer's
 // place: it is the overlay's question again (`AgentQuestion`), and answering either one answers
-// both. With no turn at all the page is Raphael alone, the composer under him. A background task
+// both. With no turn at all the page is Raphael alone, the composer under it. A background task
 // that waits for the owner's yes shows its question where the thread ends, as a gold card of its own
 // (background-questions.ts), answered here only.
 //
@@ -754,7 +754,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function drawFaces(): void {
     drawComposerTask();
-    // Each conversation wears its member's colour, Raphael's his first blue slime's (R-UI-81).
+    // Each conversation wears its member's colour, Raphael's being the first blue slime's (R-UI-81).
     const member = members.member(), color = memberColor(member);
     patchHTML(hero, faceHTML(member, inRaphael() ? 132 : 96));
     const bubble = ownerBubble(color);
@@ -1125,7 +1125,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     wait.hidden = true;
     const shown = turns;
     searchButton.hidden = shown.length === 0;
-    // Raphael is the app's own: he is not shared as a template.
+    // Raphael is the app's own: it is not shared as a template.
     shareButton.hidden = inRaphael();
     if (shown.length === 0 && searching) closeSearch(false);
     if (isEmpty()) {
@@ -1917,7 +1917,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /**
    * The questions from the background that wait in the open thread (background-mount.ts): the gold
-   * card is Raphael's own (his emblem, his 《問。》) in his thread and the member's (their face and
+   * card is Raphael's own (its emblem, its 《問。》) in its thread and the member's (their face and
    * name, plain words) in theirs. Called when the thread changes, and it reads the questions again.
    */
   function drawBackgroundQuestions(): void {

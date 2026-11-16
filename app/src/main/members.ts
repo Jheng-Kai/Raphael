@@ -5,7 +5,7 @@
 // 看的地方 are made of.
 //
 // A member's face is a slime (slime.ts), whatever an older build stored for it. Raphael's face is
-// the emblem or his picture (avatar.ts).
+// the emblem or its picture (avatar.ts).
 
 import { zoneLabel } from "./timezones";
 import { presenceAttrs, slimeFaceHTML } from "./slime";
@@ -87,7 +87,7 @@ export function memberSections(list: MembersList, query = "", firstId = RAPHAEL_
   return sections.filter((section) => (searching || section.group === null ? section.members.length > 0 : true));
 }
 
-/** Raphael as the list gives him, or a stand-in with his name before the list is read. */
+/** Raphael as the list gives it, or a stand-in with its name before the list is read. */
 export function raphaelOf(list: MembersList | null): Member {
   const found = list?.members.find((member) => member.id === RAPHAEL_ID);
   return (
@@ -136,7 +136,7 @@ export function orderedMembers(list: MembersList | null): Member[] {
 
 /**
  * Who 換成其他成員 on a pinned tile offers: the members
- * that are not pinned, in the column's order. Not Raphael (he is pinned by his own setting and holds the top slot), nobody
+ * that are not pinned, in the column's order. Not Raphael (it is pinned by its own setting and holds the top slot), nobody
  * hidden from the sidebar, and not the primary, who already has the top slot and would stand there twice.
  */
 export function pinReplacements(list: MembersList | null): Member[] {

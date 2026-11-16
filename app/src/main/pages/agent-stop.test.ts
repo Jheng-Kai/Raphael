@@ -27,7 +27,7 @@ const refresh = async (event: MainEvent = { type: "MembersChanged" }) => { emit(
 const choose = async (member: number, conversation: number) => {
   $(`.mb-col [data-member="${member}"]`).click();
   await flush();
-  // A member has one conversation; only Raphael's panel switches between his and the quick questions.
+  // A member has one conversation; only Raphael's panel switches between its conversation and the quick questions.
   if (member !== 0) return;
   if ($<HTMLElement>(".mb-det").hidden) $(".conversation-trigger").click();
   await flush();

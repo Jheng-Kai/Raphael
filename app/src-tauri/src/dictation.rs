@@ -25,7 +25,7 @@
 //!
 //! - **Dictation** (the dictation keys): the text is cleaned up and pasted.
 //! - **Agent** (the agent keys, `Right Alt+Space`): the recording is a question for Raphael, who
-//!   greets it on the overlay while he listens (a dictation shows the emblem alone). The
+//!   greets it on the overlay while it listens (a dictation shows the emblem alone). The
 //!   core starts it with `purpose: "agent"` and transcribes it without cleanup; the text goes to
 //!   `agent.ask`, and the answer is shown by the overlay (`say`). An answer that needs a YES/NO
 //!   first is shown as a question (`ask`) whose buttons answer through
@@ -2261,7 +2261,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// goes to `agent.ask` at once with the source [`TYPED_SOURCE`] and on from there as a spoken
     /// question does ([`Self::converse`]). The overlay shows its answer and any YES/NO question
     /// only when the 拉斐爾 page is no longer in front ([`AppFront`]), and never Raphael's reports
-    /// while he thinks: the window shows its own. Voice has overlay and Esc priority; a pending
+    /// while it thinks: the window shows its own. Voice has overlay and Esc priority; a pending
     /// typed confirmation waits for that overlay while remaining answerable from its window card.
     ///
     /// The images and PDFs the composer attached go to `agent.ask` as its `attachments`

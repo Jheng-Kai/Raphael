@@ -3,7 +3,7 @@ answer model (`agent_model`) when that is "".
 
 `look` shows the model the images (the owner's attachments, as `data:` URLs, or the addresses of
 images on the web) with the question, in one chat call of OpenRouter with image content parts, and
-gives back what the model says they show: data for the call that words Raphael's answer, never his
+gives back what the model says they show: data for the call that words Raphael's answer, never its
 words themselves. `read_file` shows it a PDF as a `file` content part, with OpenRouter's
 `file-parser` plugin (engine `mistral-ocr`), and gives back the document's text as the model reads
 it.

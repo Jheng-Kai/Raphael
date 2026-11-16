@@ -1,7 +1,7 @@
 """R-COMP-OWN-01: 「用你的電腦開…」 is the member's own computer, never the owner's PC.
 
 Said into the overlay (Alt+Space), 「用你的電腦開…」 meant Raphael's own computer, but the voice
-router took 「開」 as the fixed command that opens things and opened the page on his own PC, with an empty reply. A quick
+router took 「開」 as the fixed command that opens things and opened the page on their own PC, with an empty reply. A quick
 request that names the member's computer goes to the member's turn; the shortcut, when it runs, says what it did; a request
 that names neither computer is asked once. Fakes only: no model, no PC, no Docker.
 """

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The viewer page the core serves into the computer's screen (`BOOTSTRAP` in core/.../computer/viewer.py): while the owner
-// holds control, his Ctrl+V is held back and his clipboard, read by the app, is put into the computer before the keys of the
+// holds control, their Ctrl+V is held back and their clipboard, read by the app, is put into the computer before the keys of the
 // paste are sent. The page's own source is run here against a stand-in for noVNC's RFB.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -57,7 +57,7 @@ test("his text is put into the computer first, then the paste's keys follow", ()
   expect(rfb.pasted).toEqual(["sk-or-v1-0123456789abcdef"]);
   expect(rfb.sent).toEqual([]);
   vi.advanceTimersByTime(100);
-  // His Ctrl is still down in the computer, so only the V is pressed.
+  // Their Ctrl is still down in the computer, so only the V is pressed.
   expect(rfb.sent).toEqual([[0x76, "KeyV"]]);
 });
 
@@ -78,7 +78,7 @@ test("on a Mac his Command+V is the paste: the computer is told Ctrl+V, with its
   vi.advanceTimersByTime(100);
   expect(rfb.pasted).toEqual(["from the Mac"]);
   expect(rfb.sent).toEqual([[0xffeb, "MetaLeft", false], [0xffe3, "ControlLeft", true], [0x76, "KeyV"], [0xffe3, "ControlLeft", false]]);
-  // Ctrl and Command together are no paste of his.
+  // Ctrl and Command together are no paste of theirs.
   const both = key("KeyV", "v", { metaKey: true, ctrlKey: true });
   expect(both.defaultPrevented).toBe(false);
 });

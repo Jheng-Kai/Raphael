@@ -194,7 +194,7 @@ def test_the_page_holds_back_the_owners_paste_only_while_he_holds_control_and_ne
     assert "if (!rfb || rfb.viewOnly) return;" in script
     assert "navigator.clipboard" not in script and "readText" not in script
     # The paste is a client cut text, a message of the owner's input: the relay carries one of the largest size the page sends
-    # while he holds control, and drops it when he does not.
+    # while they hold control, and drops it when they do not.
     import struct
     from raphael_core.computer.rfb_input import frame
     from .test_rfb_input import payload, ready
@@ -576,7 +576,7 @@ async def test_one_view_that_cannot_close_does_not_end_the_watch_over_the_others
 
 
 async def test_a_lease_the_owner_stopped_using_is_released_but_a_touched_or_waited_for_one_is_not(viewer):
-    """How long a lease lives: while his input arrives, a sign-in request waits or a recording runs; else OWNER_IDLE_S."""
+    """How long a lease lives: while their input arrives, a sign-in request waits or a recording runs; else OWNER_IDLE_S."""
     from raphael_core.computer.vm import OWNER_IDLE_S
     bridge, _, clock = viewer
     opened = await bridge.open({})
@@ -591,7 +591,7 @@ async def test_a_lease_the_owner_stopped_using_is_released_but_a_touched_or_wait
         await asyncio.sleep(1.2)
     await pass_time(OWNER_IDLE_S - 20)
     assert target.key in bridge.vm.held
-    bridge.relay.sequences[token] = bridge.relay.sequence(token) + 1  # the relay forwarded one of his clicks
+    bridge.relay.sequences[token] = bridge.relay.sequence(token) + 1  # the relay forwarded one of their clicks
     await pass_time(OWNER_IDLE_S - 20)
     assert target.key in bridge.vm.held, "a touched screen restarts the wait"
     bridge.vm.work.pending = lambda t: SimpleNamespace(request_id="nonce", member_id=0, conversation_id=None)

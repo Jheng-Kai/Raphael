@@ -67,7 +67,7 @@ export function patchHTML(root: Element, html: string): void {
       } else {
         if (node !== at) live.insertBefore(node, at);
         // A face never turns into someone else's: its clock remembers the drawing it was made with, so morphing
-        // the pearl bow tie's into Raphael's drew its bow on him while he moved. Another member takes the
+        // the pearl bow tie's into Raphael's drew its bow on Raphael while Raphael moved. Another member takes the
         // fresh face whole.
         if (node instanceof Element && fresh instanceof Element && node.matches(".slime-surface") && fresh.matches(".slime-surface") && faceIdentity(node) !== faceIdentity(fresh)) {
           live.replaceChild(fresh, node);

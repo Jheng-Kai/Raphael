@@ -24,7 +24,6 @@ describe("owner", () => {
     ["a.md", "Own~er's picture of the page: wider"],
     ["a.md", "Same re~port: the card is wider"],
     ["a.md", "Own~er 2026-~11-09 asked for it"],
-    ["a.md", "a list own~er-approved by hand"],
     ["a.md", "Added because the own~er asked for this"],
   ])("a provenance mark hits: %s %s", (path, text) => {
     expect(rules(path, text)).toContain("owner");
@@ -39,6 +38,8 @@ describe("owner", () => {
     ["a.md", "A member does what its owner asks."],
     ["a.md", "The own~er asked for items to be listed, and the owner's check runs."],
     ["a.md", "| R-UI-01 | The owner's own list is on top |"],
+    ["a.py", "parser.add_argument(\"--own~er-approved-real-smoke\", action=\"store_true\")"],
+    ["a.md", "A real key stays own~er-approved; the flag is --own~er-approved-real-smoke."],
   ])("the owner as the app's user does not hit: %s %s", (path, text) => {
     expect(rules(path, text)).toEqual([]);
   });
@@ -109,6 +110,74 @@ describe("dated", () => {
     ["a.md", "A day is written 24 October 2026 when it is data."],
   ])("a date that is data does not hit: %s %s", (path, text) => {
     expect(rules(path, text)).toEqual([]);
+  });
+
+  it.each([
+    ["a.ts", `const link = "https://example.com/${day}"; const day = "${day}";`],
+    ["a.ts", `const glob = './*'; const day = "${day}";`],
+    ["a.mjs", `run("gh release create ./*"); stdout: "built (${day})";`],
+    ["a.ts", "const note = `a // b ${day}`;"],
+    ["a.py", `body = {"kind": "calendar#events", "updated": "${day}"}`],
+    ["a.py", `body = 'a # b ${day}'`],
+    ["a.rs", `fn run<'a>(x: &'a str) { let day = "${day}"; }`],
+    ["a.yml", `url: https://example.com/#anchor-${day}`],
+  ])("a comment marker inside a string is text, so a date after it is data: %s %s", (path, text) => {
+    expect(rules(path, text)).toEqual([]);
+  });
+
+  it.each([
+    ["a.ts", `const link = "https://example.com"; // since ${day}`],
+    ["a.ts", `const glob = './*'; // since ${day}`],
+    ["a.mjs", `const text = "it's"; // since ${day}`],
+    ["a.py", `body = {"kind": "calendar#events"}  # since ${day}`],
+    ["a.rs", `fn run<'a>(x: &'a str) { // since ${day}`],
+    ["a.rs", `let quote = '"'; // since ${day}`],
+    ["a.yml", `url: https://example.com/#anchor # since ${day}`],
+  ])("a real comment after such a string still hits: %s %s", (path, text) => {
+    expect(rules(path, text)).toEqual(["dated"]);
+  });
+
+  it("a line of a multi-line template literal is data, and a comment after its end is not", () => {
+    const code = ["const prompt = `", `Meet at https://x.test/ // on ${day}`, "`; // note", `const day = "${day}";`].join("\n");
+    expect(hitsOf("a.ts", sample(code))).toEqual([]);
+    const marked = code.replace("// note", `// since ${day}`);
+    expect(hitsOf("a.ts", sample(marked)).map((hit) => [hit.line, hit.rule])).toEqual([[3, "dated"]]);
+  });
+
+  it("a prompt held in a triple-quoted string is data, and a docstring is not", () => {
+    const quotes = '"""';
+    const python = [
+      `PROMPT = ${quotes}\\`,
+      `Example: "${day} reading the page".`,
+      `${quotes} + MORE`,
+      "",
+      "def read():",
+      `    ${quotes}Reads a page.`,
+      `    Added ${day}.`,
+      `    ${quotes}`,
+      `    return "${day}"`,
+      "",
+      "class Box:",
+      `    ${quotes}One box, as of ${day}.${quotes}`,
+      "",
+      "SYSTEM = (",
+      `    ${quotes}\\`,
+      `Example ${day}.${quotes}`,
+      ")",
+    ].join("\n");
+    expect(hitsOf("a.py", sample(python)).map((hit) => [hit.line, hit.rule])).toEqual([[7, "dated"], [12, "dated"]]);
+  });
+
+  it("a comment after a triple-quoted string, and a module docstring after comments, still count", () => {
+    const quotes = '"""';
+    const python = [
+      "# A header comment.",
+      `${quotes}The module.`,
+      `Since ${day}.`,
+      quotes,
+      `X = ${quotes}data ${day}${quotes}  # since ${day}`,
+    ].join("\n");
+    expect(hitsOf("a.py", sample(python)).map((hit) => [hit.line, hit.rule])).toEqual([[3, "dated"], [5, "dated"]]);
   });
 
   it("the Date column of the rule ledger is data, and a second date in the row is not", () => {

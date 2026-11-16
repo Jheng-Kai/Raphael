@@ -1,7 +1,7 @@
 """Team consultation, administration, meetings and durable work (raphael_core.members).
 
 - `ask_member {member, request}` has another assistant answer a request, and gives the answer back
-  as tool data. Every assistant may ask any other (Raphael by one of his names): asking is how what
+  as tool data. Every assistant may ask any other (Raphael by one of its names): asking is how what
   one of them knows reaches another, since their conversations are private. The one asked answers
   through the same answer path as always (`AgentService.answer_for`), as itself: from its own
   conversation, its own memory and the shared one, with its own tools, as if the owner had asked
@@ -78,7 +78,7 @@ def asks_to_create_member(text: str) -> bool:
 
 
 def names_raphael(text: str) -> bool:
-    """Whether the words name Raphael, in any of his languages."""
+    """Whether the words name Raphael, in any of its languages."""
     folded = (text or "").casefold()
     return any(name.casefold() in folded for name in RAPHAEL_NAMES.values())
 
@@ -228,7 +228,7 @@ class Team(Protocol):
         ...
 
     def find(self, name: str) -> Speaker | None:
-        """The member called `name` (Raphael, for one of his names); None for nobody."""
+        """The member called `name` (Raphael, for one of its names); None for nobody."""
         ...
 
     def named_in(self, text: str) -> Sequence[Speaker]:

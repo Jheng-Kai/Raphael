@@ -76,8 +76,8 @@ const alert = (html: string): string => `<div class="ob-alert" role="alert">${ht
 
 // ---------- welcome ----------
 
-/** What the welcome types: something the owner might ask, and Raphael's answer in his own manner,
- * 告。, 解。 or 否。 — what the team can do, said by him rather than a slogan. */
+/** What the welcome types: something the owner might ask, and Raphael's answer in its own manner,
+ * 告。, 解。 or 否。 — what the team can do, said by it rather than a slogan. */
 export const DEMOS = [
   ["onboarding.demo1Ask", "onboarding.demo1Reply"], ["onboarding.demo2Ask", "onboarding.demo2Reply"],
   ["onboarding.demo3Ask", "onboarding.demo3Reply"], ["onboarding.demo4Ask", "onboarding.demo4Reply"],
@@ -87,12 +87,12 @@ export const demoAsk = (demo: (typeof DEMOS)[number]): string => t(demo[0]);
 export const demoReply = (demo: (typeof DEMOS)[number]): string => t(demo[1]);
 
 /**
- * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), his name, and under it
- * an ask being typed with his answer: mount.ts types, deletes and moves on; with reduced motion the first pair stands.
+ * Raphael's emblem (the canvas is drawn by mount.ts with the same renderer as the voice screen), its name, and under it
+ * an ask being typed with its answer: mount.ts types, deletes and moves on; with reduced motion the first pair stands.
  * A reader hears one sentence of what the team does instead. The language is chosen at the window's top left.
  */
 export function welcomeHTML(): string {
-  // His name is one wordmark for every language, 「智慧之王ラファエル」,
+  // Its name is one wordmark for every language, 「智慧之王ラファエル」,
   // inked in the theme's colour through a mask; a reader hears the name in the window's language.
   return (
     `<div class="ob-emblem" aria-hidden="true"><canvas class="ob-emb"></canvas></div>` +

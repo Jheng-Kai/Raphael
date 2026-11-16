@@ -15,7 +15,7 @@ import { mcpProposalsHTML } from "./mcp-proposal";
 import { liveAction, pastStep, workActions } from "./work-actions";
 // Shared conversation rendering and message controls.
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
-// their actions below each bubble; Raphael on the left, with his face and each public message
+// their actions below each bubble; Raphael on the left, with its face and each public message
 // in order. Receipts fold into reply detail, questions mount inline, and pending work shares the live work line.
 // Raw steps remain available to older detail callers, outside the main conversation flow.
 //
