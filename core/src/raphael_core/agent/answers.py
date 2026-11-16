@@ -355,6 +355,36 @@ def _unpointed(text: str) -> tuple[str, bool]:
     return (re.sub(r"\n{3,}", "\n\n", text).strip(), True) if pointed else (text, False)
 
 
+def _joined_reply(text: str) -> dict | None:
+    """A reply written as objects one after another, nothing but space between them, the last one the reply object.
+    Live (2026-11-16, a ChatGPT sign-in model): the final answer was its last progress object followed by the reply,
+    `{"thinking":…,"progress":…,"messages":[…]}{"text":…,"messages":[…],"memory":[],"need":{}}`, and the conversation
+    showed both objects whole, line breaks as `nn`. The messages an earlier object wrote for the owner come first."""
+    decoder, objects, at = json.JSONDecoder(), [], 0
+    while at < len(text):
+        if text[at].isspace():
+            at += 1
+            continue
+        try:
+            value, at = decoder.raw_decode(text, at)
+        except ValueError:
+            return None
+        objects.append(value)
+    if len(objects) < 2 or not all(isinstance(item, dict) for item in objects):
+        return None
+    final = dict(objects[-1])
+    if not ("text" in final or "messages" in final):
+        return None
+    earlier = [message for item in objects[:-1] if isinstance(item.get("messages"), list)
+               for message in item["messages"] if isinstance(message, str) and message.strip()]
+    if earlier:
+        own = final.get("messages") if isinstance(final.get("messages"), list) else None
+        if own is None:
+            own = [final["text"]] if isinstance(final.get("text"), str) and final["text"].strip() else []
+        final["messages"] = [*earlier, *own]
+    return final
+
+
 def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool = False) -> dict:
     """Accept an envelope (including a fenced one) or ordinary prose at one boundary."""
     text = value.strip()
@@ -378,6 +408,8 @@ def _reply_input(value: str, default_prefix: str | None = None, *, literal: bool
         return {"text": value, "prefix": default_prefix}
     if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
         return obj
+    if obj is None and (joined := _joined_reply(envelope)) is not None:
+        return joined
     if loose := loose_reply(text):
         return loose
     if isinstance(obj, (dict, list)) or (fenced and envelope.startswith(("{", "["))):

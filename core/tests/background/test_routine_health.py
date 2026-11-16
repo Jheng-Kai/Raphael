@@ -149,6 +149,8 @@ async def test_a_run_set_to_make_a_page_is_done_only_when_the_page_exists(make_r
                                                status="running", source="routine"))
     task = await ended(rig, first)
     assert (task.state, task.reason) == ("failed", "routine_nothing") and pages == []
+    # What was missing is the app's judgement of the work, no fault of the brain: none is recorded for a member to report.
+    assert history.get(task.turn_id).status == "error" and history.get(task.turn_id).failure is None
     rig.client.replies = [turn("", [call("show_page", {"title": "News", "html": "<p>News</p>"}, "c1")]), report("Made the page.")]
     second = routine_run(rig, prompt)
     rig.service.attach_turn(second, history.add(session_id="routine:1", question="News", route="routine", prefix="", text="",

@@ -39,6 +39,21 @@ def test_the_rest_of_the_reply_object_written_into_its_words_is_never_shown(plai
         assert parse_reply({"text": authored, "messages": [authored]}, "en", plain=plain, long=True).text == authored
 
 
+@pytest.mark.parametrize("plain", [False, True])
+def test_a_progress_object_written_just_before_the_reply_object_never_shows_as_braces(plain):
+    from raphael_core.agent.answers import parse_reply
+    report = "Checked all three members.\n\n### 1. The daily reminder\n\n- It is off"
+    progress = {"thinking": "Records checked", "progress": "Putting the results together", "messages": ["All three are checked."]}
+    final = {"text": report, "messages": [report], "memory": [], "need": {}}
+    reply = parse_reply(json.dumps(progress, ensure_ascii=False) + json.dumps(final, ensure_ascii=False), "en", plain=plain,
+                        long=True)
+    assert reply.messages[0] == "All three are checked." and "### 1. The daily reminder" in reply.text
+    assert not any(mark in reply.text for mark in ('{"', '"thinking"', '"memory"', "\\n"))
+    # Words that only contain two objects among other words stay as they were written.
+    authored = 'Send {"a": 1} and then {"text": "b"} to the API.'
+    assert parse_reply(authored, "en", plain=plain, long=True).text == authored
+
+
 @pytest.mark.parametrize("route", ["normal", "quick", "resumed", "failure"])
 @pytest.mark.parametrize("fenced", [False, True])
 @pytest.mark.parametrize("authored", [False, True], ids=["reply", "authored-json"])
