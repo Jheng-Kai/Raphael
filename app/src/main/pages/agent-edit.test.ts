@@ -21,6 +21,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { messageActionsHTML } from "../timeline";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -281,6 +282,20 @@ describe("work that is under way while a message is edited", () => {
     agent.hide();
   });
 
+  test("Escape in an edit belongs to the work under way: it asks to stop that work, and the edit stays until it is sent or left", async () => {
+    const agent = mount([running(), turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    await editMessage(8);
+    box().focus();
+    press("Escape"); await flush();
+    expect($(".cmp-voice").dataset.cancelArmed).toBe("true");
+    expect(composerNow()).toEqual({ text: "message eight", chips: [], replacing: true, quote: null });
+    expect(api.agentRetract).not.toHaveBeenCalled();
+    await pickMember(4); await pickMember(3);
+    expect(composerNow().replacing).toBe(false);
+    expect(shown("message eight")).toBe(1);
+    agent.hide();
+  });
+
   test("Cancel on a running message keeps the words being written, and an edit in the composer stays an edit", async () => {
     const agent = mount([running(), turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
     api.agentRetract.mockImplementation(async (session: string) => { rows = rows.filter(item => item.session_id !== session); });
@@ -328,5 +343,27 @@ describe("the message being edited is gone from the conversation", () => {
     await new Promise(resolve => setTimeout(resolve, 450)); await flush();
     expect(composerNow().replacing).toBe(true);
     agent.hide();
+  });
+});
+
+describe("the actions of a message stand on the message, whatever it carries", () => {
+  // The place beside the bubble is drawn by look (owner-picture-actions); what the page must give it is one actions block as the message's own
+  // child, and the pictures and the bubble as the siblings the stylesheet anchors to.
+  test.each(KINDS.map(kind => [kind.name, kind] as const))("%s", async (_name, kind) => {
+    const agent = mount([turn(8, { ...kind.turn, reactions: undefined })]); await flush(); await pickMember(3);
+    const message = $('.thread .tn[data-id="8"] .owner-message');
+    expect(message.querySelectorAll(":scope > .message-actions")).toHaveLength(1);
+    expect(message.querySelectorAll('[data-act="more-message"]')).toHaveLength(1);
+    expect(message.querySelectorAll('[data-act="reply-message"]')).toHaveLength(1);
+    const words = (kind.turn.question ?? "").trim() !== "";
+    expect(message.querySelectorAll(".bubble")).toHaveLength(words ? 1 : 0);
+    expect(message.querySelectorAll(".me-files + .bubble")).toHaveLength(words && kind.files.length ? 1 : 0);
+    expect(message.querySelectorAll(".message-actions .message-actions, .me-files .message-actions, .bubble .message-actions")).toHaveLength(0);
+    agent.hide();
+  });
+
+  test("a group room's own message offers no edit", () => {
+    expect(messageActionsHTML(1, false, undefined, false)).not.toContain("data-owner-act");
+    expect(messageActionsHTML(1, false, "edit", true)).toContain('data-owner-act="edit"');
   });
 });
