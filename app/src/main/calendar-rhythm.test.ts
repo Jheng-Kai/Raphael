@@ -68,9 +68,11 @@ test("a chip's run marks are one group inside the chip, after its title, and a d
   host.innerHTML=chipHTML(entries[0]!,"","",{face:20,history:true});
   const end=host.querySelector('.cal-chip > .cal-chip-end')!;
   expect([...end.children].map(child=>child.className)).toEqual(["cal-run-mark","au-history-mark"]);
+  expect(end.className).toBe("cal-chip-end");
   expect(host.querySelector('.cal-chip-copy')!.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   host.innerHTML=chipHTML({...entries[0]!,run:{status:"done"}},"","",{face:20,history:true});
   expect([...host.querySelector('.cal-chip-end')!.children].map(child=>child.className)).toEqual(["au-history-mark"]);
+  expect(host.querySelector('.cal-chip-end')!.className).toBe("cal-chip-end is-foot");
   host.innerHTML=chipHTML({...entries[0]!,run:{status:"done"}},"is-line","",{face:0});
   expect(host.querySelector('.cal-chip-end')).toBeNull();
 });

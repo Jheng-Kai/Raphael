@@ -75,7 +75,7 @@ export default [
   scene("automations-sparse", "Sparse week keeps working hours in view", [...auto, check("calendar-shell")], { calendarSparse: true }),
   scene("automations-day-sparse", "Sparse day keeps working hours in view", [...auto, ...view("day"), check("calendar-shell")], { calendarSparse: true }),
   scene("automations-all-day", "A full week retains all-day items above compact timed rows", [...auto, check("calendar-shell"), check("calendar-all-day")], { calendarAllDay: true }),
-  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now"), check("calendar-chip-marks")]),
+  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now"), check("calendar-chip-marks-dot")]),
   scene("automations-day", "The day view, and the view dropdown keeps its place", [...calendar, ...view("day"), ...view("week"), ...view("day"), check("calendar-shell"), check("calendar-now")]),
   scene("automations-view-menu", "The view dropdown is the shared menu", [...auto, click('[data-au="view"]'), wait("#app-popover")]),
   scene("automations-month", "The month: chips in each day", [...auto, ...view("month"), check("calendar-month")]),

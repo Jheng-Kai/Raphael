@@ -221,9 +221,9 @@
 .is-movable .cal-chip.btn, .au-bar .cal-chip.is-own.btn { cursor: grab; }
 .btn.au-event-more { display: none; }
 .au-event.is-tight .cal-chip > .av, .au-event.is-tight .cal-chip > .cal-mark { display: none; }
-/* With its face hidden, a tight chip's marks stand as they do in a chip without one: the run mark in the top corner, the dot at the foot. */
-.au-event.is-tight .cal-chip:not(.is-line) > .cal-chip-end { justify-content: flex-start; }
-.au-event.is-tight .cal-chip:not(.is-line) > .cal-chip-end > .au-history-mark { margin-top: auto; }
+/* With its face hidden, a tight chip's icon stands as it does in a chip without one: in the top corner, with the dot at the column's foot. */
+.au-event.is-tight .cal-chip:not(.is-line) > .cal-chip-end:not(.is-foot) { justify-content: flex-start; }
+.au-event.is-tight .cal-chip:not(.is-line) > .cal-chip-end:not(.is-foot) > .au-history-mark { margin-top: auto; }
 .au-event-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .au-bar-edge { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .au-event.is-dragging { z-index: 5; opacity: 0.88; }

@@ -37,15 +37,26 @@
 .cal-chip.is-rhythm small { flex: 0 1 auto; min-width: 0; max-width: none; overflow: hidden; visibility: hidden; white-space: nowrap; font-size: var(--fs-2xs); color: var(--text-2); }
 .cal-run-mark { display: inline-flex; flex: none; color: var(--warn); }
 .cal-run-mark[data-status="error"] { color: var(--danger); }
-/* The marks of the last run (the icon of a failed or waiting run, the dot of any run) are one group at the chip's end. A chip of the hours
-   gives the group a column of its own beside the copy, in the top corner by the time (the foot with a face there) and the dot at the foot:
-   the title takes the room that is left and is cut before the marks, and no mark lies on a letter (R-CAL-10). */
+/* The marks of the last run (the icon of a failed or waiting run, the dot of any run) are one group at the chip's end (R-CAL-10).
+   The icon keeps the top right corner and gives the title a column of its own, with the dot at the column's foot (the foot with a face
+   there): the title is cut before it. The dot alone costs the title no width: it is a strip at the chip's foot, the title takes the
+   chip's whole width and as many whole lines as fit above the strip. A chip too short for one line and the strip has the dot beside
+   the line. */
 .cal-chip-end { display: flex; flex: none; align-items: center; gap: var(--sp-1); }
-.cal-chip.btn:not(.is-line):has(> .cal-chip-end) { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); column-gap: var(--sp-1); }
-.cal-chip:not(.is-line) > .cal-chip-end { flex-direction: column; justify-content: flex-start; }
-.cal-chip:not(.is-line) > .cal-chip-end > .au-history-mark { margin-top: auto; }
-.cal-chip:not(.is-line):has(> .av) > .cal-chip-end { justify-content: flex-end; }
-.cal-chip:not(.is-line):has(> .av) > .cal-chip-end > .au-history-mark { margin-top: 0; }
+.cal-chip.btn:not(.is-line):has(> .cal-chip-end:not(.is-foot)) { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); column-gap: var(--sp-1); }
+.cal-chip:not(.is-line) > .cal-chip-end:not(.is-foot) { flex-direction: column; justify-content: flex-start; gap: 0; }
+.cal-chip:not(.is-line) > .cal-chip-end:not(.is-foot) > .au-history-mark { margin-top: auto; }
+.cal-chip:not(.is-line):has(> .av) > .cal-chip-end:not(.is-foot) { justify-content: flex-end; }
+.cal-chip:not(.is-line):has(> .av) > .cal-chip-end:not(.is-foot) > .au-history-mark { margin-top: 0; }
+.cal-chip.btn:not(.is-line):has(> .cal-chip-end.is-foot) { container: cal-foot / size; gap: 0; }
+/* The strip leans 1px into the chip's foot padding. */
+.cal-chip:not(.is-line) > .cal-chip-end.is-foot { justify-content: flex-end; margin: auto 0 -1px; }
+/* The room is the chip's content less the strip (5px): two title lines need 30px, the time 13px more where it is drawn (a chip wider than 50px, as for the time above), one line 15px. The whole lines that fit are all that is drawn. */
+.cal-chip:has(> .cal-chip-end.is-foot) time { min-height: 13px; line-height: 13px; }
+@container cal-foot (min-width: 51px) and (max-height: 47px) { .cal-chip b { -webkit-line-clamp: 1; } }
+@container cal-foot (max-width: 50px) and (max-height: 34px) { .cal-chip b { -webkit-line-clamp: 1; } }
+@container cal-foot (min-width: 51px) and (max-height: 32px) { .cal-chip-end.is-foot { position: absolute; top: 50%; right: 6px; margin: 0; transform: translateY(-50%); } .cal-chip-copy { padding-right: calc(6px + var(--sp-1)); } }
+@container cal-foot (max-width: 50px) and (max-height: 19px) { .cal-chip-end.is-foot { position: absolute; top: 50%; right: 6px; margin: 0; transform: translateY(-50%); } .cal-chip-copy { padding-right: calc(6px + var(--sp-1)); } }
 
 .cal-chip > .av { position: absolute; top: 2px; right: 3px; }
 .cal-chip.is-line > .av { position: static; flex: none; }
