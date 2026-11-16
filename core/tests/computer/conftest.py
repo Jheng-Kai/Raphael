@@ -209,7 +209,11 @@ def rig(make_rig):
 def the_working_folder_gains_nothing():
     """A path built from strings (a host path joined to a guest path, a POSIX path given to a Windows `Path`) lands in the
     folder the tests run from instead of under `tmp_path`. A test that leaves anything there fails at its end."""
-    before = set(os.listdir())
+    def entries():
+        with os.scandir(os.getcwd()) as scan:  # `os.listdir` is patched by the tests of the Docker Desktop probe
+            return {entry.name for entry in scan}
+
+    before = entries()
     yield
-    gained = sorted(set(os.listdir()) - before)
+    gained = sorted(entries() - before)
     assert not gained, f"The test left {gained} in the working folder {os.getcwd()}: its paths belong under tmp_path"
