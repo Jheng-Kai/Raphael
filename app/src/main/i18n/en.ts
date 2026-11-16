@@ -1110,6 +1110,8 @@ export const en = {
   "agent.reason.gone": "This tool is gone. Open its server in Connect apps (sidebar) and reload tools.",
   "agent.reason.tool_error": "The tool did not finish. Check whether the original action completed, keep this conversation and try once more; report continued failure.",
   "agent.reason.computer_fault": "Raphael's own computer tool failed on this step, not the computer or the page. Try once more; report it if it happens again.",
+  "agent.reason.plan_excluded": "Not included in your plan with this service. Tried again after you reconnect it or tomorrow.",
+  "agent.reason.allowance_spent": "This service's allowance for this tool is used up for now. Tried again when the service said.",
   "agent.reason.protocol": "The tool response is unusable. Check the URL and reload tools in Connect apps (sidebar); update the server if it still fails.",
   "agent.reason.cancelled": "Stopped",
   "agent.reason.not_made": "Not run",

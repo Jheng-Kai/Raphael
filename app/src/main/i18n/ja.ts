@@ -1110,6 +1110,8 @@ export const ja = {
   "agent.reason.gone": "ツールがありません。サイドバーの「アプリを連携」で該当サーバーのツールを再読み込みしてください。",
   "agent.reason.tool_error": "ツールが完了しませんでした。元の操作が完了したか確認し、この会話を残して一度再試行してください。",
   "agent.reason.computer_fault": "このステップは Raphael 自身のコンピューターツールの不具合で、コンピューターやページの問題ではありません。もう一度試し、再発したら問題を報告してください。",
+  "agent.reason.plan_excluded": "このサービスのご契約プランにはこのツールが含まれていません。再接続するか明日、もう一度試します。",
+  "agent.reason.allowance_spent": "このサービスのこのツールの利用枠は今は使い切っています。サービスが示した時刻にもう一度試します。",
   "agent.reason.protocol": "ツールの応答を利用できません。サイドバーの「アプリを連携」で URL を確認して再読み込みし、解決しなければサーバーを更新してください。",
   "agent.reason.cancelled": "中止しました",
   "agent.reason.not_made": "実行されませんでした",

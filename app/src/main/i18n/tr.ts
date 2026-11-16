@@ -1388,6 +1388,8 @@ export const tr = {
   "agent.reason.gone": "Bu araç artık yok. Uygulama bağla (kenar çubuğu) bölümünde sunucusunu açıp araçları yeniden yükleyin.",
   "agent.reason.tool_error": "Araç tamamlanmadı. Asıl işlemin bitip bitmediğini kontrol edin, görüşmeyi saklayıp bir kez daha deneyin; sürerse bildirin.",
   "agent.reason.computer_fault": "Bu adımda bilgisayar veya sayfa değil, Raphael'in kendi bilgisayar aracı hata verdi. Bir kez daha deneyin; tekrarlanırsa bildirin.",
+  "agent.reason.plan_excluded": "Bu hizmetteki planınıza dahil değil. Yeniden bağlandığında veya yarın tekrar denenir.",
+  "agent.reason.allowance_spent": "Bu hizmetin bu araç için kotası şimdilik doldu. Hizmetin söylediği saatte tekrar denenir.",
   "agent.reason.protocol": "Araç yanıtı kullanılamıyor. URL’sini kontrol edip Uygulama bağla (kenar çubuğu) bölümünden araçları yeniden yükleyin; sürerse sunucuyu güncelleyin.",
   "agent.reason.not_made": "Çalıştırılmadı",
   "conn.audit.none": "Çalıştırılmadı",

@@ -106,6 +106,11 @@ class PluginResult:
     billing: dict | None = None  # Core-owned media receipt: model and cost only, never tool content.
 
 
+# The failures whose `text` is the core's own words of what to do (the shape that fits; a tool its service will refuse
+# the same way for a while), shown to the model whole as its instruction and never cut as a service's words are.
+SAID_WHOLE = frozenset({"bad_arguments", "plan_excluded", "allowance_spent"})
+
+
 class PluginHub(Protocol):
     def offered(self) -> list[PluginTool]:
         """The tools that may be offered to a model now."""

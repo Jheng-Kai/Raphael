@@ -1388,6 +1388,8 @@ export const id = {
   "agent.reason.gone": "Alat ini sudah tidak ada. Buka servernya di Hubungkan aplikasi (bilah samping) dan muat ulang alat.",
   "agent.reason.tool_error": "Alat belum selesai. Periksa apakah tindakan awal selesai, simpan percakapan ini, lalu coba sekali lagi; laporkan kegagalan berlanjut.",
   "agent.reason.computer_fault": "Pada langkah ini alat komputer milik Raphael sendiri yang gagal, bukan komputernya atau halamannya. Coba sekali lagi; laporkan jika terjadi lagi.",
+  "agent.reason.plan_excluded": "Tidak termasuk dalam paket Anda di layanan ini. Dicoba lagi setelah dihubungkan ulang atau besok.",
+  "agent.reason.allowance_spent": "Kuota layanan ini untuk alat ini sedang habis. Dicoba lagi pada waktu yang disebutkan layanan.",
   "agent.reason.protocol": "Respons alat tidak dapat dipakai. Periksa URL dan muat ulang alat di Hubungkan aplikasi (bilah samping); perbarui server jika tetap gagal.",
   "agent.reason.not_made": "Tidak dijalankan",
   "conn.audit.none": "Tidak dijalankan",

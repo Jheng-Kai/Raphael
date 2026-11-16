@@ -226,6 +226,7 @@ from .persona import (
 from .plugins import (
     MAX_OFFERED,
     PLAN_CONTEXT_TURNS,
+    SAID_WHOLE,
     Offer,
     PlannedCall,
     Planner,
@@ -430,9 +431,10 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     if outcome.ok:
         data = {"content": outcome.text, "cut_short": outcome.truncated}
         return ToolResult(_label(call), True, data, untrusted=True, blocks=outcome.blocks)
-    if outcome.kind == "bad_arguments" and outcome.text:
-        # The core's own words for the shape that fits (agent/plugins.py `shape_problem`): shown whole, never cut as a service's are.
-        return ToolResult(_label(call), False, None, "bad_arguments", instruction=outcome.text)
+    if outcome.kind in SAID_WHOLE and outcome.text:
+        # The core's own words (the shape that fits, `shape_problem`; a tool held, integrations/service.py): shown whole,
+        # never cut as a service's are.
+        return ToolResult(_label(call), False, None, outcome.kind, instruction=outcome.text)
     if outcome.text:
         # Not written down here: every loop that reads this result notes its failure once (`tool_failure`), and noting
         # it here too made each failed call two lines of the log and two of self_check's last ten.

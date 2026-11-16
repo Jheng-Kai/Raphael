@@ -1109,6 +1109,8 @@ export const zhTW = {
   "agent.reason.gone": "工具已不存在，請到側欄的「連結應用程式」開啟對應伺服器並按「重新讀取工具」。",
   "agent.reason.tool_error": "工具未完成操作，請先確認原操作是否已完成，保留原對話再試一次，仍失敗時回報問題。",
   "agent.reason.computer_fault": "這一步是 Raphael 自己的電腦工具出錯，不是電腦或網頁的問題。請再試一次，若再發生請回報問題。",
+  "agent.reason.plan_excluded": "你在這項服務的方案不包含這個工具，重新連結或明天會再試。",
+  "agent.reason.allowance_spent": "這項服務的這個工具額度暫時用完，到服務說的時間會再試。",
   "agent.reason.protocol": "工具回應無法使用，請到側欄的「連結應用程式」確認網址並重新讀取工具，仍失敗時更新伺服器。",
   "agent.reason.cancelled": "已中止",
   "agent.reason.not_made": "沒有執行",

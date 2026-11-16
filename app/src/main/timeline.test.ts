@@ -54,6 +54,18 @@ test("a computer step that broke in the core says it was Raphael's own tool, not
   expect(reasonText(step({ kind: "computer", outcome: "error", reason: "computer_fault" }))).toContain("Raphael 自己的電腦工具出錯");
 });
 
+test("a connected tool its service will refuse for a while says why and when it is tried again", () => {
+  setLocale("en");
+  const unknown = reasonText(step({ server: "Notes", outcome: "error", reason: "error" }));
+  const plan = reasonText(step({ server: "Notes", outcome: "error", reason: "plan_excluded" }));
+  const spent = reasonText(step({ server: "Notes", outcome: "blocked", reason: "allowance_spent" }));
+  expect(plan).toContain("Not included in your plan");
+  expect(spent).toContain("allowance for this tool is used up");
+  expect([plan, spent]).not.toContain(unknown);
+  setLocale("zh-TW");
+  expect(reasonText(step({ server: "Notes", outcome: "error", reason: "plan_excluded" }))).toContain("方案不包含");
+});
+
 test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);

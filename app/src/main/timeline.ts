@@ -113,6 +113,8 @@ const REASONS: Record<string, MessageKey> = {
   gone: "agent.reason.gone",
   tool_error: "agent.reason.tool_error",
   computer_fault: "agent.reason.computer_fault",
+  plan_excluded: "agent.reason.plan_excluded",
+  allowance_spent: "agent.reason.allowance_spent",
   protocol: "agent.reason.protocol",
   cancelled: "agent.reason.cancelled",
   not_made: "agent.reason.not_made",
