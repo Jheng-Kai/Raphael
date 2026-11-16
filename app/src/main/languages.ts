@@ -44,6 +44,10 @@ const VARIANT_NOTES: Record<string, "language.note.zh-TW" | "language.note.zh-HK
 };
 const groupName = (g: LanguageGroup): string => g.id === "zh" ? t("language.zh") : g.name;
 const variantName = (v: LanguageVariant): string => VARIANT_NAMES[v.id] ? t(VARIANT_NAMES[v.id]) : v.name;
+// A language's own name ("English", "日本語") carries its lang, so that it is read in that language; a name the window
+// translates (Chinese and its forms) is in the window's language and carries none.
+const groupLang = (g: LanguageGroup): string => g.id === "zh" ? "" : ` lang="${esc(g.id)}"`;
+const variantLang = (v: LanguageVariant): string => VARIANT_NAMES[v.id] ? "" : ` lang="${esc(v.id)}"`;
 const variantNote = (v: LanguageVariant): string => VARIANT_NOTES[v.id] ? t(VARIANT_NOTES[v.id]) : v.note ?? "";
 
 /** The language group containing a persisted variant id. */
@@ -140,7 +144,7 @@ function variantChipHTML(group: LanguageGroup, selected: string[]): string {
   const name = variantName(current);
   const label = t("languages.variantsOf", { p0: groupName(group), p1: name });
   return `<button type="button" class="btn lang-variant-chip" data-variant-menu="${esc(group.id)}" aria-haspopup="menu" aria-expanded="false" ` +
-    `aria-label="${esc(label)}"><span>${esc(name)}</span>${ico("down")}</button>`;
+    `aria-label="${esc(label)}"><span${variantLang(current)}>${esc(name)}</span>${ico("down")}</button>`;
 }
 
 /**
@@ -154,7 +158,7 @@ export function variantMenuHTML(groups: LanguageGroup[], selected: string[], gro
     const guidance = variantNote(variant);
     const on = selected.includes(variant.id);
     return `<button type="button" role="menuitemradio" tabindex="-1" class="lang-variant" data-variant="${esc(variant.id)}" aria-checked="${on}">` +
-      `<span class="ck">${on ? CHECK : ""}</span><span class="mtd"><span class="mt">${esc(variantName(variant))}</span>` +
+      `<span class="ck">${on ? CHECK : ""}</span><span class="mtd"><span class="mt"${variantLang(variant)}>${esc(variantName(variant))}</span>` +
       (guidance ? `<span class="mdesc">${esc(guidance)}</span>` : "") + `</span></button>`;
   }).join("");
 }
@@ -174,7 +178,7 @@ export function languagePanelHTML(groups: LanguageGroup[] | null, selected: stri
     const blocked = !on && selected.length >= MAX_LANGUAGES;
     const several = group.variants.length > 1;
     return `<div class="lang-row"><button type="button" class="lang-item lang-language" data-language="${esc(group.id)}" aria-pressed="${on}"${blocked ? ' aria-disabled="true"' : ""}>` +
-      `<span class="ck">${on ? CHECK : ""}</span><span class="mt">${esc(groupName(group))}</span>` +
+      `<span class="ck">${on ? CHECK : ""}</span><span class="mt"${groupLang(group)}>${esc(groupName(group))}</span>` +
       (several && !on ? `<span class="md">${esc(t("languages.009", { p0: group.variants.length }))}</span>` : "") +
       `</button>` +
       (several && on ? variantChipHTML(group, selected) : "") + `</div>`;

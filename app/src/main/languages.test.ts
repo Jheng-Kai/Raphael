@@ -143,6 +143,19 @@ describe("the language picker", () => {
     expect(variantMenuHTML(GROUPS, ["zh-TW"], "nope")).toBe("");
   });
 
+  test("marks a language's own name with its lang, and a name written in the window's language with none", () => {
+    // A screen reader says "English" as English, and the look audit does not take it for English interface copy.
+    const html = languagePanelHTML(GROUPS, ["en-GB", "zh-HK", "ja-JP"]);
+    expect(html).toContain('<span class="mt" lang="en">English</span>');
+    expect(html).toContain('<span class="mt" lang="ja">日本語</span>');
+    expect(html).toContain('<span class="mt">中文</span>');
+    expect(html).toContain('<span lang="en-GB">English (UK)</span>');
+    expect(html).toContain('aria-label="中文的寫法：繁體中文（香港）"><span>繁體中文（香港）</span>');
+    const english = variantMenuHTML(GROUPS, ["en-GB"], "en");
+    expect(english).toContain('<span class="mt" lang="en-US">English (US)</span>');
+    expect(variantMenuHTML(GROUPS, ["zh-HK"], "zh")).not.toContain("lang=");
+  });
+
   test("shows no variants for a language that is not chosen, only how many it has, and none for a language with one", () => {
     const html = languagePanelHTML(GROUPS, ["ja-JP"]);
     expect(html).not.toContain("data-variant-menu=");

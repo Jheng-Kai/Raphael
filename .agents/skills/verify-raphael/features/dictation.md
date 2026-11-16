@@ -31,7 +31,10 @@ use (`data-variant-menu`); the chip, or Right on it, opens the forms in a submen
 The core rules are unchanged: one form per language, the order is the priority.
 
 The chip's accessible name is one translated string (`languages.variantsOf`, the language and the form in use) and it has
-no `title`: the form is on the chip already.
+no `title`: the form is on the chip already. A language's own name ("English", "日本語", "English (United States)") carries
+its `lang`, so it is read in that language; the Chinese names, which the window translates, carry none. The look audit
+does not take text marked with another language's `lang` for English interface copy (R-UI-14), which "English" in this
+list otherwise was in a zh-TW window.
 
 Cleanup is in no one language (R-DICT-CLEAN-01). The cleanup prompt (`prompts/cleanup_system.md`) names fillers, correction
 cues and particles by kind; the semantic calls are the model's and only hard limits are rules (never add a word, particle,
