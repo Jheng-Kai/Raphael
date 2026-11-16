@@ -75,7 +75,7 @@ class Brain(FakeClient):
 
 
 def cli_brain(monkeypatch, seen, act, **behaviour):
-    """A Codex-like CLI whose child speaks MCP to Raphael's one server with the token it was given."""
+    """A CLI whose child speaks MCP to Raphael's one server with the token it was given."""
     class Driver:
         def __init__(self, name, command, *, model, **kwargs):
             self.model = model

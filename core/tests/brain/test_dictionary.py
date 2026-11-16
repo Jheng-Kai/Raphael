@@ -274,8 +274,8 @@ def test_a_lower_case_word_that_neither_sounds_nor_looks_like_what_was_heard_is_
 
 @pytest.mark.parametrize(("word", "misheard"), [
     # What speech-to-text wrote for dictionary words.
-    ("lunabot", "Lunabox"), ("lunabot", "Luna Bus"), ("lunabot", "Lunabbot"), ("herdr", "Herder"),
-    ("lunabot", "lunabox"), ("claude", "cloud"),
+    ("pinebot", "Pinebox"), ("pinebot", "Pine Bus"), ("pinebot", "Pinebat"), ("kelvr", "Kelver"),
+    ("pinebot", "pinebox"), ("claude", "cloud"),
 ])
 def test_a_lower_case_name_corrected_from_its_mishearing_is_learned(conn, word, misheard):
     d = DictionaryStore(conn)
@@ -285,15 +285,15 @@ def test_a_lower_case_name_corrected_from_its_mishearing_is_learned(conn, word, 
 
 def test_a_correction_of_a_word_the_owner_added_is_kept_and_becomes_a_rule_when_seen_again(conn):
     d = DictionaryStore(conn)
-    d.add("lunabot")
-    assert d.learn_pair("lunabot", "Lunabox") is Learned.PENDING
-    assert d.replacements() == [] and d.hint_forms() == [("Lunabox", "lunabot")]
-    assert d.learn_pair("lunabot", "Lunabox") is Learned.RULE
-    assert apply_replacements("你可以看一下Lunabox是怎麼做的", d.replacements()) == (
-        "你可以看一下lunabot是怎麼做的"
+    d.add("pinebot")
+    assert d.learn_pair("pinebot", "Pinebox") is Learned.PENDING
+    assert d.replacements() == [] and d.hint_forms() == [("Pinebox", "pinebot")]
+    assert d.learn_pair("pinebot", "Pinebox") is Learned.RULE
+    assert apply_replacements("你可以看一下Pinebox是怎麼做的", d.replacements()) == (
+        "你可以看一下pinebot是怎麼做的"
     )
     [entry] = d.list()
-    assert (entry.word, entry.misheard, entry.source) == ("lunabot", ["Lunabox"], "manual")
+    assert (entry.word, entry.misheard, entry.source) == ("pinebot", ["Pinebox"], "manual")
 
 
 def test_direct_learned_add_cannot_bypass_term_acceptance(conn):

@@ -1117,14 +1117,14 @@ def test_words_left_out_for_the_transcript_do_not_count_towards_the_limit():
 
 
 # --- a dictionary word the transcript may hold misheard --------------------------------------------
-# A dictionary that holds 「lunabot」 and 「claude」: the cleanup model kept "Luna Bus" and "Cloud"
+# A dictionary that holds 「pinebot」 and 「claude」: the cleanup model kept "Pine Bus" and "Cloud"
 # because nothing pointed it at them.
 
 
 def test_a_misspelled_dictionary_word_is_named_for_the_model():
-    heard = "你這邊的話就是跟Luna Bus一樣，設計是滑鼠滾輪往下"
-    prompt = build_system_prompt(["拉斐爾", "OpenRouter", "lunabot"], [], heard=heard)
-    assert dictionary_lines(prompt) == ["- lunabot（這次可能是：Luna Bus）"]
+    heard = "你這邊的話就是跟Pine Bus一樣，設計是滑鼠滾輪往下"
+    prompt = build_system_prompt(["拉斐爾", "OpenRouter", "pinebot"], [], heard=heard)
+    assert dictionary_lines(prompt) == ["- pinebot（這次可能是：Pine Bus）"]
 
 
 def test_a_learned_form_in_the_transcript_is_listed_with_the_word():
@@ -1134,9 +1134,9 @@ def test_a_learned_form_in_the_transcript_is_listed_with_the_word():
 
 
 def test_known_forms_and_new_spellings_are_listed_apart():
-    heard = "我記得 Lunabbot 跟 Lunabox 都可以"
-    prompt = build_system_prompt(["lunabot"], [("Lunabox", "lunabot")], heard=heard)
-    assert dictionary_lines(prompt) == ["- lunabot（常被聽成：Lunabox；這次可能是：Lunabbot）"]
+    heard = "我記得 Pinebat 跟 Pinebox 都可以"
+    prompt = build_system_prompt(["pinebot"], [("Pinebox", "pinebot")], heard=heard)
+    assert dictionary_lines(prompt) == ["- pinebot（常被聽成：Pinebox；這次可能是：Pinebat）"]
 
 
 def test_the_rules_tell_the_model_to_write_the_entry_for_what_is_listed_under_it():
@@ -1149,8 +1149,8 @@ def test_the_rules_tell_the_model_to_write_the_entry_for_what_is_listed_under_it
 
 
 def test_dictionary_spans_is_empty_for_a_transcript_that_spells_the_dictionary_right():
-    assert cleanup.dictionary_spans(["lunabot", "GitHub"], [], "像是Lunabot跟GitHub這樣子") == {}
-    assert cleanup.dictionary_spans(["lunabot"], [], "像是Lunabox這樣子") == {"lunabot": ["Lunabox"]}
+    assert cleanup.dictionary_spans(["pinebot", "GitHub"], [], "像是Pinebot跟GitHub這樣子") == {}
+    assert cleanup.dictionary_spans(["pinebot"], [], "像是Pinebox這樣子") == {"pinebot": ["Pinebox"]}
 
 
 def test_a_mac_app_is_known_by_its_bundle_identifier():

@@ -119,7 +119,7 @@ async def test_the_reader_and_the_read_attachment_tool_give_the_same_source(name
     kind, found = await read_file(attachment)
     assert kind == "text" and found["text"] == source and found["truncated"] is False
     result = await Tools(object()).read_attachment(attachment, "", Ledger(SpendTracker(conn)))
-    # The tool gives numbered lines, as Claude Code's Read does; without the numbers they are the file's lines.
+    # The tool gives numbered lines; without the numbers they are the file's lines.
     numbered = result.data["text"].split("\n")
     assert result.ok and result.untrusted and [line.split("\t", 1)[1] for line in numbered] == source.removesuffix("\n").split("\n")
     assert [line.split("\t", 1)[0].strip() for line in numbered] == [str(n) for n in range(1, len(numbered) + 1)]

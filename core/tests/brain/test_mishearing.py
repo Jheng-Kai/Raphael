@@ -240,13 +240,13 @@ def test_a_known_misheard_form_in_the_transcript_counts():
 
 
 # --- what a transcript may hold misheard (misheard_spans) ------------------------------------------
-# A dictionary holds 「lunabot」; speech-to-text wrote it as below when it had no dictionary. The
+# A dictionary holds 「pinebot」; speech-to-text wrote it as below when it had no dictionary. The
 # sentences around the term are shortened; the term and how it came out are as they were.
 
 OWNER_DICTIONARY = [
-    "lunabot", "OpenRouter", "Docker", "GPT", "GitHub", "computer use", "Codex", "Windows",
+    "pinebot", "OpenRouter", "Docker", "GPT", "GitHub", "computer use", "Codex", "Windows",
     "Telegram", "Space", "claude", "Slack", "Agent", "YouTube", "MCP", "Google", "Brave", "Gmail",
-    "OpenClaw", "Canva", "STT", "Notion", "Artifacts", "onyx", "herdr", "project", "HiKari", "cron",
+    "OpenClaw", "Canva", "STT", "Notion", "Artifacts", "onyx", "kelvr", "project", "HiKari", "cron",
     "token", "Composio", "bot", "Bots", "Jev", "拉斐爾", "唯讀",
 ]
 
@@ -258,31 +258,31 @@ def spans(word, text, forms=()):
 @pytest.mark.parametrize(
     ("text", "found"),
     [
-        ("我記得 Lunabbot 是可以自己喚醒自己的", ["Lunabbot"]),
-        ("你這邊的話就是跟Luna Bus一樣，設計是滑鼠滾輪往下", ["Luna Bus"]),
-        ("你可以看一下Lunabox是怎麼做的", ["Lunabox"]),
-        ("像是 luna bot 這樣子區分開來", ["luna bot"]),
-        ("像是 Luna-Bot 這樣子", ["Luna-Bot"]),
+        ("我記得 Pinebat 是可以自己喚醒自己的", ["Pinebat"]),
+        ("你這邊的話就是跟Pine Bus一樣，設計是滑鼠滾輪往下", ["Pine Bus"]),
+        ("你可以看一下Pinebox是怎麼做的", ["Pinebox"]),
+        ("像是 pine bot 這樣子區分開來", ["pine bot"]),
+        ("像是 Pine-Bot 這樣子", ["Pine-Bot"]),
     ],
 )
 def test_what_speech_to_text_wrote_for_a_dictionary_word_is_found(text, found):
-    assert spans("lunabot", text) == found
+    assert spans("pinebot", text) == found
 
 
 @pytest.mark.parametrize(
     ("word", "text"),
     [
         # Right as said, or only in another letter case: nothing to correct.
-        ("lunabot", "像是Lunabot這樣子區分開來嗎"),
-        ("lunabot", "像是 lunabot 這樣子"),
-        # A plural is the speaker's word: "Lunabots" stays for the model to judge with the rest.
-        ("lunabot", "像是Lunabots這樣子"),
+        ("pinebot", "像是Pinebot這樣子區分開來嗎"),
+        ("pinebot", "像是 pinebot 這樣子"),
+        # A plural is the speaker's word: "Pinebots" stays for the model to judge with the rest.
+        ("pinebot", "像是Pinebots這樣子"),
         # A longer word that holds the dictionary word is right as it stands (R-DICT-SPELL-02).
         ("Space", "我看了 SpaceX 的發射"),
         ("Space", "那個 Spacer 很好用"),
-        ("lunabot", "我用 lunabotz 試試"),
+        ("pinebot", "我用 pinebotz 試試"),
         # A run that only begins with the word, and words of the history that are other words.
-        ("lunabot", "我記得 Luna 是可以自己喚醒自己的"),
+        ("pinebot", "我記得 Pine 是可以自己喚醒自己的"),
         ("GitHub", "我們應該快要可以包新的 GitHub repo"),
         ("Google", "把一些檔案自動上傳到 Google Drive 這樣子"),
         ("Brave", "上傳到 Google Drive"),
