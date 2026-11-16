@@ -527,6 +527,7 @@ export const ru = {
   "desktop.starting": "Запуск компьютера…",
   "desktop.building": "Создание рабочего стола…",
   "desktop.firstBuild": "Первое создание может занять 5–15 минут.",
+  "desktop.updateLine": "Компьютер обновляется. Первый запуск после обновления может занять несколько минут.",
   "desktop.preparing": "Подготовка рабочего стола…",
   "desktop.retry": "Повторить",
   "providers.retry": "Повторить",

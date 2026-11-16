@@ -527,6 +527,7 @@ export const ko = {
   "desktop.starting": "컴퓨터 시작 중…",
   "desktop.building": "데스크톱 구성 중…",
   "desktop.firstBuild": "첫 구성에는 5~15분이 걸릴 수 있습니다.",
+  "desktop.updateLine": "컴퓨터를 업데이트하는 중입니다. 업데이트 후 처음 시작할 때는 몇 분 걸릴 수 있습니다.",
   "desktop.preparing": "데스크톱 준비 중…",
   "desktop.retry": "재시도",
   "providers.retry": "재시도",

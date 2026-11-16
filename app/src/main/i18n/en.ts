@@ -401,6 +401,7 @@ export const en = {
   "desktop.starting": "Starting the computer…",
   "desktop.building": "Building the desktop…",
   "desktop.firstBuild": "First build can take 5–15 minutes.",
+  "desktop.updateLine": "Updating the computer. The first start after an update can take a few minutes.",
   "desktop.preparing": "Preparing the desktop…",
   "desktop.retry": "Retry",
   "desktop.buildFailed": "The desktop image could not be created. Check Docker Desktop, network and disk space, then press Retry.",

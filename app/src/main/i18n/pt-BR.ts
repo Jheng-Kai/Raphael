@@ -527,6 +527,7 @@ export const ptBR = {
   "desktop.starting": "Iniciando o computador…",
   "desktop.building": "Criando a área de trabalho…",
   "desktop.firstBuild": "A primeira criação pode levar de 5 a 15 minutos.",
+  "desktop.updateLine": "Atualizando o computador. A primeira inicialização após uma atualização pode levar alguns minutos.",
   "desktop.preparing": "Preparando a área de trabalho…",
   "desktop.retry": "Tentar novamente",
   "providers.retry": "Tentar novamente",

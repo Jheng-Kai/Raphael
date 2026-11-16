@@ -527,6 +527,7 @@ export const vi = {
   "desktop.starting": "Đang khởi động máy tính…",
   "desktop.building": "Đang dựng màn hình…",
   "desktop.firstBuild": "Lần dựng đầu có thể mất 5–15 phút.",
+  "desktop.updateLine": "Đang cập nhật máy tính. Lần khởi động đầu tiên sau khi cập nhật có thể mất vài phút.",
   "desktop.preparing": "Đang chuẩn bị màn hình…",
   "desktop.retry": "Thử lại",
   "providers.retry": "Thử lại",

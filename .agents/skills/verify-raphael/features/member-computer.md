@@ -4,7 +4,8 @@
 
 A member inspected the shared computer and reported measured faults, which these rules fix (R-COMP-SIZE-01,
 R-COMP-SCRATCH-01, R-COMP-LOCALE-01). Image layer 13 (`IMAGE_LABELS`, tag `v13`): the container's shape changed (the UTF-8
-locale), no file of the image did, so only the final `LABEL` step reruns on a PC that built v12. The owner's layer-12
+locale), no file of the image did, so only the final `LABEL` step should rerun on a PC that built v12 (on the owner's PC
+it did not: steps 12 to 21 ran again, see "A new image layer" below). The owner's layer-12
 computer is made again once, when idle; its workspace and sign-ins are kept; hand-installed packages and `/tmp` go.
 `vm.py`: `resources`, `sized`, `machine_size`, `fit_limits`, `run_args` (locale), `scratch_args`; `carry_runtime.py` (staging
 ownership).
@@ -25,6 +26,62 @@ cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m p
 
 Not proved by the offline tests: `docker update` on a live computer and the v13 build; `npm run verify -- --computer` with
 Docker running is that check.
+
+## A new image layer: its cache source, the old images, the update line
+
+R-COMP-IMAGE-01, R-COMP-IMAGE-02, R-COMP-UPDATE-01. Measured on the owner's PC at the switch to layer 13: Docker Desktop
+started by the app (51 s), then the image built in 4 min 31 s, its package step (`[12/21]`, 186 s) and Chrome (37 s) run
+again although layer 13 changed only comments and the last `LABEL`; the steps before were CACHED. Inferred, not proved:
+the engine's build cache had dropped those records, and the build named no cache source. A restart pressed meanwhile
+answered `busy`, the panel said nothing, and the images of layers 9, 11 and 12 all stayed.
+
+What is true now (`vm.py`, `lifecycle.py`, `viewer.py`, `computer-state.ts`, `desktop-viewer.ts`):
+- The build (`build_args`) writes BuildKit's inline cache record into the image and names the newest earlier image of
+  ours as `--cache-from` (`cache_source`, from `owned_images`: tags of `raphael/cua-local-vm` that carry
+  `org.raphael.computer=1` and a lower layer). Relied on: Docker's documentation of the inline cache
+  (docs.docker.com/build/cache/backends/inline/: `BUILDKIT_INLINE_CACHE=1` instead of `--cache-to type=inline`, imported
+  with `--cache-from`) and of the `docker` driver (Docker Desktop's default builder), which exports the inline cache; and
+  that the daemon's BuildKit reads `--cache-from` from a local image before any registry (moby's local inline-cache
+  importer), which was not checked against this PC's Docker. Images built before carry no record: on the owner's PC the
+  first build to gain is layer 14 built from a layer 13 that this code built, so at the earliest the layer after next.
+- Once a computer is ready on the current image, `clean_soon` looks (first ready start of the core, then once a day per
+  engine) and `remove_old_images` removes the older tags of ours that no container references, under the build lock,
+  never forced. The acceptance's and the tests' injected runners never remove (`clean_images`). The acceptance's
+  previous-layer checks need those old images: once the app has removed them they are skipped.
+- A preparation that builds with an earlier image, or makes a computer of an earlier layer again, is marked `update`
+  (`LocalVm.updating`, `_progress`); `computer.viewer_status` passes it on and the Computer tab shows
+  `desktop.updateLine` in `.desktop-caption` under the bare screen (`data-desktop-update` on the panel). A restart,
+  update or repair pressed during any preparation (`preparing_now`) returns its state instead of `busy`; reset still
+  waits.
+
+```powershell
+cd core; $env:PYTHONPATH="$PWD\src"; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_image_workflow.py tests/computer/test_lifecycle.py tests/computer/test_viewer.py tests/evaluate/test_computer_acceptance.py -q
+cd app; node node_modules/vitest/vitest.mjs run src/main/desktop-viewer.test.ts src/main/i18n/i18n.test.ts
+```
+
+The look scene of the update line (not yet run when it was added):
+
+```powershell
+npm run look -- desktop-updating desktop-building desktop-preparing computer-state-updating --theme both --width 1120,720,1920x1080
+```
+
+On a real engine, with Docker already running and the owner's say (it never starts Docker): `npm run verify -- --computer`
+runs `image update` after the previous-layer checks, with throwaway images of two files (`tiny_dockerfile`) in a repository
+of the run's own; the computer's own image is never built twice for it. Expected lines, in order:
+
+```text
+ok image update fixtures: Built layers 11, 12, 14 and an unlabelled tag in raphael-acceptance-<token>/cua-local-vm with the product's build command; a stopped container uses layer 11
+ok image update record: Layer 12, built by the product's command, carries BuildKit's inline cache record
+ok image update cache source: The product names raphael-acceptance-<token>/cua-local-vm:driver-0.37.0-v12 as the cache source, over the older, the newer and the unlabelled tags
+ok image update press during the build: A restart pressed while the engine built answered building with update; the panel said the same; the preparation ended ready
+ok image update cached steps: The unchanged step was CACHED and the changed one built; the log names the import from ... (the engine's own cache also held that step)
+ok image update old tags: Removed ...-v12; kept layer 11 (a stopped container uses it), the current, the newer and the unlabelled tags; every other image on the engine is as it was
+ok image update cleanup: Removed raphael-acceptance-<token>/cua-local-vm and its container
+```
+
+"as the build began" instead of "while the engine built", or "does not name the import", is still a pass and says what
+was seen. Not proved anywhere: that a cache source alone gives the unchanged heavy steps once the engine has lost its
+own cache (that would mean clearing the owner's build cache), and how much faster the next real layer builds.
 
 ## A member's files
 

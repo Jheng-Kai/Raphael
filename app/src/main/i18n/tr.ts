@@ -527,6 +527,7 @@ export const tr = {
   "desktop.starting": "Bilgisayar başlatılıyor…",
   "desktop.building": "Masaüstü oluşturuluyor…",
   "desktop.firstBuild": "İlk oluşturma 5–15 dakika sürebilir.",
+  "desktop.updateLine": "Bilgisayar güncelleniyor. Güncellemeden sonraki ilk açılış birkaç dakika sürebilir.",
   "desktop.preparing": "Masaüstü hazırlanıyor…",
   "desktop.retry": "Yeniden dene",
   "providers.retry": "Yeniden dene",

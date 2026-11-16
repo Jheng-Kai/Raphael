@@ -527,6 +527,7 @@ export const id = {
   "desktop.starting": "Memulai komputer…",
   "desktop.building": "Membangun desktop…",
   "desktop.firstBuild": "Pembuatan pertama dapat memakan waktu 5–15 menit.",
+  "desktop.updateLine": "Memperbarui komputer. Pembukaan pertama setelah pembaruan bisa memakan waktu beberapa menit.",
   "desktop.preparing": "Menyiapkan desktop…",
   "desktop.retry": "Coba lagi",
   "providers.retry": "Coba lagi",
