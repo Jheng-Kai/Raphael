@@ -570,7 +570,7 @@ describe("Models", () => {
       const row = rowOf(html, name);
       expect(row).toContain(`data-row="${k}"`);
       expect(row).toContain(
-        `<span class="price num" data-price="${k}">${price}</span></div></div>` +
+        `<span class="price num" data-price="${k}"><span class="price-part">${price}</span></span></div></div>` +
           `<div class="ctl"><span class="mp-slot" data-model-picker="${role}"><button type="button" class="sel mp-trigger" aria-haspopup="dialog"`,
       );
       // The button names what is chosen and leaves its price to the line under the row's name.
@@ -618,7 +618,7 @@ describe("Models", () => {
     expect(modelPickerLook(local, "stt").current).toBe("elevenlabs/scribe-v2");
     const row = rowOf(tab("models", { brain: { ...brain, stt_engine: "local", stt_local_model: "sensevoice" } }), "語音轉文字");
     expect(row).toContain('<strong class="mp-tname">SenseVoice</strong><span class="mp-source">本機</span>');
-    expect(row).toContain('data-price="stt-model">免費</span>');
+    expect(row).toContain('data-price="stt-model"><span class="price-part">免費</span></span>');
   });
 
   test("gives each picker the favourites of its own role, none when the core has not said", () => {
@@ -641,7 +641,7 @@ describe("Models", () => {
   test("shows a saved model the catalog does not have by its id, with an unknown price", () => {
     const row = rowOf(tab("models", { brain: { ...brain, cleanup_model: "x/old" } }), "整理文字");
     expect(row).toContain('<strong class="mp-tname">old</strong>');
-    expect(row).toContain('data-price="model">價格未知</span>');
+    expect(row).toContain('data-price="model"><span class="price-part">價格未知</span></span>');
   });
 });
 

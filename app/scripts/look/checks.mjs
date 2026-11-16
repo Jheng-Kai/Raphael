@@ -8573,7 +8573,8 @@ export function checkRendered(name, context = {}) {
     const clips = [{ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }];
     for (let node = row.parentElement; node && node !== document.body; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.overflowY !== 'visible' || style.overflowX !== 'visible' || style.contain.includes('paint') || style.contain.includes('strict')) clips.push(node.getBoundingClientRect());
+      const hides = value => !!value && value !== 'visible';
+      if (hides(style.overflowY) || hides(style.overflowX) || String(style.contain ?? '').match(/paint|strict/)) clips.push(node.getBoundingClientRect());
     }
     const room = { left: Math.max(...clips.map(box => box.left)), top: Math.max(...clips.map(box => box.top)), right: Math.min(...clips.map(box => box.right)), bottom: Math.min(...clips.map(box => box.bottom)) };
     const inside = box => box.left >= room.left - 1 && box.right <= room.right + 1 && box.top >= room.top - 1 && box.bottom <= room.bottom + 1;
@@ -8625,8 +8626,10 @@ export function checkRendered(name, context = {}) {
       const holder = owner ?? block(price);
       const room = holder.clientWidth - parseFloat(frame.paddingLeft) - parseFloat(frame.paddingRight);
       let cursor = 0;
-      for (const part of text.split(' · ')) {
+      for (const [index, part] of text.split(' · ').entries()) {
         const first = at(cursor, false), last = at(cursor + part.length, true);
+        // The 「· 」 before a part but the first belongs to its box when it is written inside it.
+        const dot = index > 0 ? at(cursor - 2, false) : null;
         cursor += part.length + 3;
         if (!part.trim() || !first || !last) continue;
         const range = document.createRange();
@@ -8636,10 +8639,18 @@ export function checkRendered(name, context = {}) {
         wrapped++;
         // Broken: then it must be a part no line of the row could hold. Its width on one line, as it would be written:
         const style = price.style.whiteSpace; price.style.setProperty('white-space', 'nowrap', 'important');
-        const natural = range.getBoundingClientRect().width;
+        const whole = document.createRange();
+        whole.setStart(dot && dot.node.textContent.slice(dot.offset, dot.offset + 2) === '· ' ? dot.node : first.node, dot && dot.node.textContent.slice(dot.offset, dot.offset + 2) === '· ' ? dot.offset : first.offset);
+        whole.setEnd(last.node, last.offset);
+        const natural = whole.getBoundingClientRect().width;
         price.style.whiteSpace = style;
         require(natural > room, `the part 「${part}」 is broken across lines though a line of its row holds ${Math.round(room)}px and it needs ${Math.round(natural)}px`);
       }
+    }
+    // The name keeps its room: a short name is never cut to an ellipsis by the price beside it.
+    for (const row of document.querySelectorAll('.mc-row')) {
+      const model = row.querySelector('.mc-model-line strong');
+      if (model && visible(model) && row.querySelector('.mc-price') && model.textContent.trim().length <= 24) require(model.scrollWidth <= model.clientWidth + 1, `the name 「${model.textContent.trim()}」 is cut by the price beside it`);
     }
     return { check: name, prices: prices.length, parts, wrapped };
   }

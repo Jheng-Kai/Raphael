@@ -35,7 +35,7 @@ import {
 } from "../languages";
 import { createHotkeyRecording } from "../hotkey-recording";
 import { isTopLayer, registerDismissal } from "../dismissals";
-import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, replacementNotices, splitEffort, withFavorite } from "../model-picker";
+import { type ModelPicker, type ModelPickerLook, type PickerRole, mountModelPicker, priceHTML, replacementNotices, splitEffort, withFavorite } from "../model-picker";
 import { createServices } from "../services";
 import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
@@ -88,6 +88,7 @@ import {
   paneListHTML,
   localView,
   priceTexts,
+  priceMarkup,
   retentionChoices,
   retentionOf,
   sttEngine,
@@ -349,7 +350,7 @@ export function createSettings(app: AppContext): SettingsPage {
   function paintPrices(): void {
     const texts = priceTexts(view());
     el.querySelectorAll<HTMLElement>("[data-price]").forEach((node) => {
-      node.textContent = texts[node.dataset.price ?? ""] ?? "";
+      node.innerHTML = priceMarkup(node.dataset.price ?? "", texts[node.dataset.price ?? ""] ?? "");
     });
   }
 
@@ -691,7 +692,7 @@ export function createSettings(app: AppContext): SettingsPage {
     paintPrices();
     for (const role of ["image", "video"] as const) {
       const price = body.querySelector<HTMLElement>(`[data-media-price="${role}"]`);
-      if (price) price.textContent = mediaRowPrice(view(), role);
+      if (price) price.innerHTML = priceHTML(mediaRowPrice(view(), role));
     }
     for (const [role, picker] of pickers) picker.update(lookFor(role));
   }

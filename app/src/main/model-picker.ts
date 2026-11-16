@@ -119,6 +119,14 @@ export function priceDescription(model: CatalogModel, role: PickerRole): string 
   return priceText(model, role);
 }
 
+/**
+ * A price as markup: its parts (the pieces joined by 「 · 」, each a number with its unit) are boxes that never break inside, so a
+ * line ends only between parts. The words read as the text does: the 「·」 stands before every part but the first.
+ */
+export function priceHTML(text: string): string {
+  return text.split(" · ").map((part, index) => `<span class="price-part">${index ? "· " : ""}${esc(part)}</span>`).join(" ");
+}
+
 function mediaPrice(model: CatalogModel): string {
   const units = [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
     model.per_request == null || model.per_request === 0 && (hasTokenPrice(model) || model.image_output_per_mtok != null) ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })];
@@ -753,7 +761,7 @@ export function listHTML(list: PickerList, selected = list.current, models: read
     const price = lead ? "" : chooserPrice(model, models, list.role);
     return `<div class="mc-item"><button type="button" role="radio" class="mc-row mp-opt${lead ? " mp-lead" : ""}" aria-checked="${chosen}" data-model="${esc(model.id)}" data-id="${esc(model.id)}"${chosen ? ' data-current="true"' : ""}${!usable ? ' disabled aria-disabled="true"' : ""}>` +
       `<span class="mc-radio" aria-hidden="true"></span>${lead ? "" : modelMark(model)}<span class="mc-model"><span class="mc-model-line"><strong>${esc(model.name)}</strong></span>` +
-      `<span class="mc-description">${esc(sub)}</span></span>${price ? `<span class="mc-price num">${esc(price)}</span>` : ""}</button>` +
+      `<span class="mc-description">${esc(sub)}</span></span>${price ? `<span class="mc-price num">${priceHTML(price)}</span>` : ""}</button>` +
       (stars && !lead ? `<button type="button" class="mp-star" data-star="${esc(model.id)}" aria-pressed="${starred}" aria-label="${esc(t(starred ? "picker.favRemove" : "picker.favAdd", { p0: model.name }))}">${ico("star")}</button>` : "") + `</div>`;
   }).join("");
 }

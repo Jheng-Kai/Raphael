@@ -207,6 +207,7 @@ says and knows: its own four first, in its order, then the older models its prog
 each name with its version and each row the exact model id (`cli:claude:claude-opus-5-5`), made
 and sized as a Codex row (`chooser-claude-style`); `chooser-claude-older` scrolls to the oldest. Inspect that every name is whole at 720 wide.
 The fixture is the shape of the core's answer, with aliases on the four current rows.
+`model-choices-answer`, `model-choices-cleanup`, `model-choices-stt` and `quick-model-menu` also run `price-parts` (R-MODEL-06): a price never breaks inside one of its parts.
 
 Keep pane/theme PNGs; inspect wrapping, focus, scroll access, active selections and
 dropdown/popover contrast. Use `--locale en` and `--locale ja` for translation work;
