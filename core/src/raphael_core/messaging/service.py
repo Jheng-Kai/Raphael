@@ -78,6 +78,9 @@ class MessagingService:
         self._ended = False
         self._approved_pairings: dict[tuple[str, str], str] = {}
         self.cards = None
+        # Where the file a link of an outgoing message names is found (`links.LinkedFiles`, set by the app): called with
+        # the member whose message it is, the link's kind and its target.
+        self.linked_files = None
         # One lock for the changes of the connections, so a switch and a disconnect cannot cross.
         self._lock = asyncio.Lock()
 
@@ -189,6 +192,12 @@ class MessagingService:
         async def stop(session):
             return await self._stop(f"member:{member}:{session}" if member else session)
 
+        async def find(speaker, kind, target):
+            # The links of a message are looked for in the computer of the member that wrote it: the bot's own member,
+            # unless a report says it was another one's work.
+            found = self.linked_files
+            return None if found is None else await found(member if speaker is None else speaker, kind, target)
+
         switchboard = Switchboard(
             self._types[kind].make(secrets, self._client()),
             ask=ask,
@@ -198,6 +207,7 @@ class MessagingService:
             chat_allowed=lambda chat: self._config.channel(kind).chat_allowed(chat),
             language=self._language,
             pairing=Pairing(changed=lambda event, pairing: self.cards.event(kind, event, pairing) if self.cards else None),
+            find=find,
         )
         self._running[kind] = _Running(switchboard, asyncio.ensure_future(switchboard.run()))
 
@@ -218,15 +228,16 @@ class MessagingService:
         target = session_target(session)
         return target is not None and target[1] in self._base_types and (target[0] == 0 or target[0] in self._members())
 
-    async def report(self, session: str, text: "str | Sequence[str]", *, files=()) -> None:
-        """A background task of a chat has ended: tell that chat (one message, or several in order)."""
+    async def report(self, session: str, text: "str | Sequence[str]", *, files=(), member: int | None = None) -> None:
+        """A background task of a chat has ended: tell that chat (one message, or several in order). `member` is whose
+        work it was when that is not the chat's own member (a member's task handed over in Raphael's chat)."""
         target = session_target(session)
         if target is None or not self.handles(session):
             return
-        member, kind, chat = target
-        running = self._running.get(member_account(member, kind))
+        owner, kind, chat = target
+        running = self._running.get(member_account(owner, kind))
         if running is not None:
-            await running.switchboard.tell(chat, text, files=files)
+            await running.switchboard.tell(chat, text, files=files, member=member)
 
     async def remove_member(self, member: int) -> None:
         """Stop the member's owned poller and in-flight requests before its history is removed."""

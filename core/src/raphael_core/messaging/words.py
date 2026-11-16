@@ -23,6 +23,9 @@ _WORDS: dict[str, dict[str, str]] = with_ui_words({
         "heard": "聽到：「{text}」",
         "voice_empty": "沒有聽到內容。",
         "voice_large": "這則語音太大了（上限 {mb} MB）。",
+        # What stands in place of a link a phone cannot open (messaging/links.py, R-MSG-LINK-03).
+        "link_file": "{name}（無法傳到這裡，請在電腦上開啟）",
+        "link_local": "（這個連結只能在電腦上開啟）",
     },
     "en": {
         "queued": "Queued. I'll answer in order.",
@@ -39,6 +42,8 @@ _WORDS: dict[str, dict[str, str]] = with_ui_words({
         "heard": "Heard: “{text}”",
         "voice_empty": "I didn't hear anything.",
         "voice_large": "That voice message is too large (the limit is {mb} MB).",
+        "link_file": "{name} (couldn't be sent here; open it on the computer)",
+        "link_local": "(a link that opens only on the computer)",
     },
     "ja": {
         "queued": "順番にお答えします。",
@@ -55,6 +60,8 @@ _WORDS: dict[str, dict[str, str]] = with_ui_words({
         "heard": "聞き取り：「{text}」",
         "voice_empty": "何も聞こえませんでした。",
         "voice_large": "この音声メッセージは大きすぎます（上限 {mb} MB）。",
+        "link_file": "{name}（ここには送れませんでした。パソコンで開いてください）",
+        "link_local": "（パソコンでしか開けないリンクです）",
     },
 })
 
