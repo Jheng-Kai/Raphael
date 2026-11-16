@@ -21,7 +21,7 @@ def owner_context(settings: SettingsStore) -> str:
     data = json.dumps(profile, ensure_ascii=False)
     data = data.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     # The folders are places on the owner's computer. Every turn and task may write there with the owner's file tools
-    # (R-PC-05), whatever it was asked from; only a quick question also has commands (R-PC-01).
+    # (R-PC-05), whatever it was asked from: the file tools are the way, never a command or the owner's screen.
     output = ("\nSave files intended for the owner to output_folder by default, unless the owner gives "
               "another destination. It is a folder on the owner's own computer, not a path inside a member computer: "
               "write it with write_file of owner_files, or export and attach the file; never claim it was saved without "

@@ -777,7 +777,7 @@ class Voice:
         source: str = "",
         messaging: str = "",
         viewing: str = "",
-        owner_pc: bool = False,
+        owner_screen: bool = False,
     ) -> Reply:
         """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"). `language` is the interface
         language, for the prefix the app shows and its fixed words only: nothing sent to the model has it.
@@ -807,7 +807,7 @@ class Voice:
                 memory_inline=False,
             )
         else:
-            system = system_prompt(route, memory_snapshot, speaker=speaker, memory_inline=False, owner_pc=owner_pc)
+            system = system_prompt(route, memory_snapshot, speaker=speaker, memory_inline=False, owner_screen=owner_screen)
         system += MESSAGE_RULES + owner
         began = time.perf_counter()
         try:

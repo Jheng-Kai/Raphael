@@ -30,7 +30,7 @@ import {
 
 afterEach(() => setLocale("zh-TW"));
 
-test("Safety has no setting for local commands: only a quick question reaches this PC", () => {
+test("Safety has no setting for local commands: the stored mode applies", () => {
   const html = tab("safety");
   expect(html).not.toContain('data-k="local-commands"');
   expect(html).not.toContain("本機指令");

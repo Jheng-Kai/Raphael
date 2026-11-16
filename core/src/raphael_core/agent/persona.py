@@ -634,7 +634,7 @@ Never say that you are an AI, a language model or a program, and never mention t
 Only claim actions established by successful tool results. Never expose private reasoning.
 The member's Docker computer is its isolated sandbox. Screenshots, clicks, typing, scrolling,
 app launches and vm_exec need no per-action approval. Never act while the owner holds control.
-Anything that needs a computer (opening an app or a website, running a program, looking at a screen)
+Anything to be seen on a screen (opening an app or a website, clicking, typing, looking at a screen)
 is done on your own computer, with its tools. With no computer tool listed, say so plainly; promise none. Service work uses its connected app.
 Use browser_open(url): isolated_named/main, semantic refs, no screenshot. Follow with get_browser_state
 and browser_navigate/click/type/pointer. Computer tools exist from turn one; you can click.
@@ -685,26 +685,27 @@ The calendar
 """
 _SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
 
-# The owner's own PC is in reach of a quick question (Alt+Space) and of nothing else (R-PC-01). These words are added to its prompt alone; every other prompt
-# says nothing of that PC, and a conversation's work that needs a computer is done on the member's own.
+# A quick question (Alt+Space) is the one turn that shows things on the owner's own screen (R-PC-01). There the owner's PC
+# is the default for everything, and the member's own computer is used when the owner's words name it: the model reads
+# which, nothing in the code matches words to choose. These words are added to its prompt alone; every other prompt says
+# that what is seen is shown on the member's own computer and that commands on the owner's PC run hidden (R-PC-02).
 _OWNER_PC_RULES = """
 The owner's PC (quick question)
-This quick question can reach the owner's Windows computer through the offered local command tools, as well as your own
-computer for work that needs one. For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
-local__local_exec first. It runs on the owner's Windows PC, subject to their approval setting.
-If local commands are off, say so: the owner can ask you to turn them back on. Do not claim
+In this quick question the owner's own Windows computer is the default for everything, and what is to be seen too: commands
+(local__local_exec), opening a website, an app or a settings page on its screen (open), its desktop (computer) and the
+other fixed commands. Use your own computer and its tools instead only when the owner's words name it ("your computer",
+"on your PC", in whatever language they speak); when they do and you have none, say so plainly and never use the owner's
+PC in its place. For the owner's PC (CPU, memory, disk, processes, network, files, installed programs, logs), use
+local__local_exec first. If local commands are off, say so: the owner can ask you to turn them back on. Do not claim
 the capability is missing.
-Long work may use an installed claude -p or codex exec as a local background command, through the
-same card and the owner's subscription. Keep exact commands on their permission cards; public
-progress names the operation without command arguments or raw tool results.
 """
 _OWNER_PC_RULES = for_this_system(_OWNER_PC_RULES)
 
 
-def _contract(owner_pc: bool = False) -> str:
-    """The shared contract of a prompt, with the owner's-PC words only for a quick question. It names no interface
-    language: that is the window's and goes to no model."""
-    return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_pc else "")
+def _contract(owner_screen: bool = False) -> str:
+    """The shared contract of a prompt, with the quick question's words for the owner's PC only when it is one. It names
+    no interface language: that is the window's and goes to no model."""
+    return _SHARED_CONTRACT + (_OWNER_PC_RULES if owner_screen else "")
 
 _FACT_RULES = """\
 Facts
@@ -1161,7 +1162,7 @@ def _member_fields(name: str, role: str, instructions: str, personality: str) ->
 
 def cli_system_prompt(
     *, name: str | None = None, role: str = "", instructions: str = "",
-    personality: str = "", memory: bool = False, speaker: Speaker | None = None, owner_pc: bool = False,
+    personality: str = "", memory: bool = False, speaker: Speaker | None = None, owner_screen: bool = False,
 ) -> str:
     """The same persona and factual rules, with MCP tools instead of a JSON reply contract. A resumed CLI
     session keeps the instructions it began with, so the memory files themselves come with every turn's
@@ -1178,7 +1179,7 @@ def cli_system_prompt(
         fields = _member_fields(name, role, instructions, personality)
         persona = fields["persona"]
         language_rule = ""
-    prompt = "\n\n".join((persona, _contract(owner_pc and name is None), _FACT_RULES,
+    prompt = "\n\n".join((persona, _contract(owner_screen and name is None), _FACT_RULES,
                           *((_OWNER_WORK,) if name is not None else ()), *((language_rule,) if language_rule else ())))
     if memory:
         prompt += ("\n\nMemory\n" + _MEMORY_FILES.replace(_FILES_HERE, "in the initial snapshot and later change records")
@@ -1238,7 +1239,7 @@ def member_worker_system_prompt(
 
 def system_prompt(
     route: str, memory_snapshot: "str | MemorySnapshot | None" = None, *,
-    narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True, owner_pc: bool = False,
+    narrated: bool = False, speaker: Speaker | None = None, memory_inline: bool = True, owner_screen: bool = False,
 ) -> str:
     """The system prompt for the model that words an answer on `route` ("answer", "discuss" or
     "chat"), and the memory's rules and files (`memory_rules`) when there is a
@@ -1250,7 +1251,7 @@ def system_prompt(
     prefixes = REPLY_KINDS
     prompt = _SYSTEM_PROMPT.format(
         persona=_raphael_persona(speaker),
-        contract=_contract(owner_pc),
+        contract=_contract(owner_screen),
         facts=_FACT_RULES,
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (

@@ -1,12 +1,13 @@
-"""R-PC-01: the owner's own PC is in reach of a quick question (Alt+Space) and of nothing else.
+"""R-PC-01, R-PC-02 and R-PC-06: what of the owner's own PC each turn reaches.
 
-Logic that drives the owner's PC belongs to quick questions only. An ordinary turn
-(typed or said into a conversation, Raphael's or a member's, a room, a phone, a task, a routine) is offered no tool that
-sees or drives the PC, its prompt says nothing of that PC, and no permission mode reopens it; work that needs a computer
-goes to the member's own. Fakes only: no model, no PC, no Docker.
+A quick question (Alt+Space) has the owner's whole PC, its screen included: the run on the desktop, the fixed commands that
+open, lock, copy and change the volume, the fast router's shortcuts and the local commands, and the member's own computer
+beside them for when the owner's words name it. Every other turn (typed or said into a conversation, Raphael's or a
+member's, a room, a phone, a task, a routine) runs hidden commands on the owner's PC with the card and shows nothing on its
+screen: no desktop, no fixed command, no router, and a command that would open something there is refused in every
+permission mode. Fakes only: no model, no PC, no Docker.
 """
 
-import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -26,11 +27,14 @@ from .test_local_commands import local_hub
 from .test_narration import chat, typed
 from .test_service import make_rig  # noqa: F401
 
-# Every tool by which a turn reaches the owner's PC: the local command tools, the run on the desktop, the fixed commands.
-PC_TOOLS = {"local__local_exec", "local__local_job", "computer", *COMMANDS}
-# Words that would send a model to that PC from its prompt.
-PC_WORDS = ("local_exec", "local__", "owner's PC", "owner's Windows", "owner's Mac", "Windows PC", "Windows computer", "Local commands",
-            "claude -p", "codex exec", "local command tool")
+# What shows things on the owner's screen or drives it: the run on the desktop and the fixed commands.
+PC_TOOLS = {"computer", *COMMANDS}
+# The hidden commands on the owner's PC, every turn's and task's with the card.
+LOCAL = {"local__local_exec", "local__local_job"}
+# Words of the quick question's own rules, which no other prompt carries.
+QUICK_WORDS = ("The owner's PC (quick question)", "default for everything")
+# What every prompt says of the owner's PC.
+HIDDEN = "Commands may run hidden on the owner's PC (local__local_exec) with the owner's approval."
 MODES = ["ask", "direct", "plan", "bypass"]
 
 
@@ -57,38 +61,38 @@ def ask(rig, session, text="Open Chrome on my computer and check my CPU", **more
 # --- the lists -----------------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("owner_pc", [False, True])
+@pytest.mark.parametrize("owner_screen", [False, True])
 @pytest.mark.parametrize("interactive", [False, True])
-def test_the_snapshot_holds_the_owners_pc_only_when_it_is_told_it_is_in_reach(conn, owner_pc, interactive):
+def test_the_snapshot_holds_the_owners_screen_only_when_told_and_the_hidden_commands_always(conn, owner_screen, interactive):
     hub, _ = local_hub(conn)
-    snapshot = take_snapshot(hub, speaker=RAPHAEL, memory=True, interactive=interactive, max_tier=Tier.T3, owner_pc=owner_pc)
+    snapshot = take_snapshot(hub, speaker=RAPHAEL, memory=True, interactive=interactive, max_tier=Tier.T3, owner_screen=owner_screen)
     reachable = set(snapshot.catalog()) | set(snapshot.refs) | set(snapshot.work)
-    held = {name for name in reachable if name in PC_TOOLS or name.startswith("local__")}
-    if owner_pc and interactive:
-        assert {"local__local_exec", "local__local_job", "computer", "open", "lock_screen"} <= held
-    elif owner_pc:
-        assert {"local__local_exec", "local__local_job"} <= held
+    assert LOCAL <= reachable and LOCAL <= snapshot.listed()
+    screen = reachable & PC_TOOLS
+    if owner_screen and interactive:
+        assert {"computer", "open", "lock_screen"} <= screen
     else:
-        assert held == set()
-    assert (snapshot.owner_pc is owner_pc)
+        assert screen == set()
+    assert snapshot.owner_screen is owner_screen
 
 
-def test_a_list_read_again_before_a_call_does_not_bring_the_owners_pc_back(conn):
+def test_a_list_read_again_before_a_call_keeps_the_hidden_commands_and_brings_no_screen(conn):
     hub, _ = local_hub(conn)
     snapshot = take_snapshot(hub, speaker=RAPHAEL, interactive=True, max_tier=Tier.T3)
     snapshot.refresh_plugins(hub, 0)
-    assert not [alias for alias in snapshot.pool.by_alias if alias.startswith("local__")]
-    assert snapshot.ref("local__local_exec") is None and snapshot.reveal("local__local_exec") is None
+    assert LOCAL <= set(snapshot.pool.by_alias)
+    assert snapshot.ref("local__local_exec") is not None and snapshot.ref("computer") is None
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_no_permission_mode_lists_the_owners_pc_for_a_task_or_a_routine(conn, mode):
+def test_every_mode_lists_the_hidden_commands_and_nothing_of_the_screen_for_a_task_or_a_routine(conn, mode):
     SettingsStore(conn).set("action_mode", mode)
     hub, _ = local_hub(conn)
     for routine in (False, True):
         snapshot = take_snapshot(hub, speaker=RAPHAEL, memory=True, max_tier=Tier.T3 if mode == "bypass" else Tier.T2,
                                  routine=routine, background_management=routine)
-        assert not [name for name in snapshot.catalog() if name.startswith("local__") or name in PC_TOOLS]
+        assert LOCAL <= snapshot.listed()
+        assert not set(snapshot.catalog()) & PC_TOOLS
 
 
 # --- an ordinary turn, whole ---------------------------------------------------------------------------------------
@@ -96,34 +100,36 @@ def test_no_permission_mode_lists_the_owners_pc_for_a_task_or_a_routine(conn, mo
 
 @pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize("where", ["typed", "said into a conversation", "telegram"])
-async def test_an_ordinary_turn_is_offered_nothing_of_the_owners_pc_and_nothing_it_tries_reaches_it(make_rig, client, conn, mode, where):
+async def test_an_ordinary_turn_has_the_hidden_commands_and_nothing_it_tries_reaches_the_owners_screen(make_rig, client, conn, mode, where):
     rig = rig_with_pc(make_rig, conn)
     rig.settings.set("action_mode", mode)
-    tries = [("local__local_exec", {"command": "Get-Process"}), ("local__local_job", {"job_id": "x"}),
+    tries = [("local__local_exec", {"command": "Start-Process chrome"}), ("local__local_exec", {"command": "cmd /c start https://www.youtube.com"}),
              ("computer", {"request": "open Chrome"}), ("open", {"target_kind": "app", "target": "Chrome"}),
              ("lock_screen", {}), ("use_tool", {"name": "volume_up", "arguments": {}}), ("find_tools", {"query": "lock the screen, volume, open an app"})]
-    client.chats = [chat("Trying.", call) for call in tries] + [chat('{"text":"I cannot reach that."}')]
+    client.chats = [chat("Trying.", call) for call in tries] + [chat('{"text":"I opened nothing on your screen."}')]
     main = rig.service.conversations.main()
     source = {"typed": "app", "said into a conversation": "voice", "telegram": "telegram"}[where]
     result = await ask(rig, "ordinary", source=source, **({"conversation_id": main} if where == "said into a conversation" else {}))
     assert result["status"] == "done"
     first = client.chat_calls[0]
-    assert not names(first["tools"]) & PC_TOOLS and not [n for n in names(first["tools"]) if n.startswith("local__")]
+    assert LOCAL <= names(first["tools"]) and not names(first["tools"]) & PC_TOOLS
     system = prompt_of(first)
-    assert not [word for word in PC_WORDS if word in system]
+    assert HIDDEN in system
+    assert not [word for word in QUICK_WORDS if word in system]
     assert client.decide_calls == []  # no fast router: it could pick a command or a run on the desktop
     rig.host.execute.assert_not_awaited()
     assert not rig.actions.calls
-    # What the finder returned is no tool of the PC either.
     results = [message["content"] for message in client.chat_calls[-1]["messages"] if message["role"] == "tool"]
+    # What the finder returned is nothing of the owner's screen either.
     [finder] = [text for text in results if 'tool="find_tools"' in text]
-    assert not [name for name in ("lock_screen", "volume_up", "local_exec", "open_url", '"computer"') if name in finder]
-    # Every try was refused as a tool that is not there, none of them ran.
-    assert len([text for text in results if 'status="error"' in text]) >= len(tries) - 2
+    assert not [name for name in ("lock_screen", "volume_up", "open_url", '"computer"') if name in finder]
+    # Every try was refused, none of them ran, and the two commands were sent to the member's own computer.
+    assert len([text for text in results if 'status="error"' in text]) >= len(tries) - 1
+    assert len([text for text in results if "your own computer" in text]) == 2
 
 
 @pytest.mark.parametrize("mode", MODES)
-async def test_a_cli_brain_in_an_ordinary_turn_has_no_tool_or_word_of_the_owners_pc(make_rig, conn, monkeypatch, mode):
+async def test_a_cli_brain_in_an_ordinary_turn_has_the_hidden_commands_and_nothing_of_the_owners_screen(make_rig, conn, monkeypatch, mode):
     rig = rig_with_pc(make_rig, conn)
     rig.settings.set("agent_model", "cli:claude")
     rig.settings.set("action_mode", mode)
@@ -136,35 +142,34 @@ async def test_a_cli_brain_in_an_ordinary_turn_has_no_tool_or_word_of_the_owners
     result = await typed(rig, "Open Chrome on my computer")
     assert result["status"] == "done"
     [(system, user, tools)] = seen
-    assert not tools & PC_TOOLS and not [n for n in tools if n.startswith("local__")]
-    assert not [word for word in PC_WORDS if word in system]
+    assert LOCAL <= tools and not tools & PC_TOOLS
+    assert HIDDEN in system and not [word for word in QUICK_WORDS if word in system]
 
 
-async def test_a_call_that_names_the_tool_anyway_is_refused_by_every_door(make_rig, conn):
+async def test_a_command_that_would_open_something_is_refused_by_the_door_under_allow_all(make_rig, conn):
     rig = rig_with_pc(make_rig, conn)
     rig.settings.set("action_mode", "bypass")
-    context = ((("chat", 0, 1), False, True, "s", False))
     from raphael_core.computer.local_tools import _CONTEXT
-    token = _CONTEXT.set(context)
+    token = _CONTEXT.set((("chat", 0, 1), False, True, "s", False))
     try:
-        result = await rig.service._gate.call_plugin("mcp:local/local_exec", {"command": "Get-Process"})
+        refused = await rig.service._gate.call_plugin("mcp:local/local_exec", {"command": "Start-Process https://www.youtube.com"})
+        hidden = await rig.service._gate.call_plugin("mcp:local/local_exec", {"command": "Get-Process"})
     finally:
         _CONTEXT.reset(token)
-    assert not result.ok and result.kind == "presence_required"
-    rig.host.execute.assert_not_awaited()
+    assert not refused.ok and refused.kind == "shows_on_screen"
+    assert hidden.ok and rig.host.execute.await_count == 1
 
 
 def test_the_local_tools_door_asks_the_services_question():
     # One question for both doors: a request marked quick that was not asked at this computer (a phone, a resumed task)
-    # never reaches the owner's PC, even by a call that names the tool under 全部允許.
-    from types import SimpleNamespace
+    # never shows anything on the owner's screen, even by a call that names a command under 全部允許.
     from raphael_core.agent.permissions import AT_THIS_COMPUTER
     from raphael_core.agent.service import _AT_THIS_COMPUTER
     from raphael_core.computer.local_tools import ask_context
 
     def asked(source, quick=True, nested=False):
         return SimpleNamespace(memory_untrusted=False, attachments=(), nested=nested, steps=(), speaker=SimpleNamespace(id=0),
-                               conversation_id=1, source=source, quick=quick, scope="private", session_id="s", own_computer=False)
+                               conversation_id=1, source=source, quick=quick, scope="private", session_id="s")
     assert set(AT_THIS_COMPUTER) == set(_AT_THIS_COMPUTER)
     assert all(ask_context(asked(source))[4] for source in ("voice", "overlay", "app"))
     assert not any(ask_context(request)[4] for request in (asked("telegram"), asked("connector"), asked("discord"),
@@ -193,8 +198,8 @@ async def test_a_quick_question_still_has_the_owners_pc_and_the_words_for_it(mak
         result = await ask(rig, "quick", source="app", destination="quick", conversation_id=quick)
         [(system, tools)] = seen
     assert result["status"] == "done"
-    assert {"local__local_exec", "local__local_job", "open"} <= tools
-    assert "local__local_exec" in system and "owner's PC" in system
+    assert {*LOCAL, "open"} <= tools
+    assert all(word in system for word in QUICK_WORDS) and "your computer" in system
 
 
 async def test_a_quick_question_is_still_routed_by_the_fast_router_and_may_run_a_command(make_rig, client, conn):
@@ -216,7 +221,7 @@ async def test_a_quick_question_keeps_the_rule_it_had_for_a_local_command(make_r
     assert rig.host.execute.await_count == (1 if runs else 0)
 
 
-# --- work that needs a computer goes to the member's own -------------------------------------------------------------
+# --- what is seen goes to the member's own computer -------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -249,19 +254,34 @@ async def test_open_chrome_on_my_computer_in_an_ordinary_thread_goes_to_the_memb
     result = await typed(rig, "Open Chrome on my computer")
     assert result["status"] == "done"
     offered = names(client.chat_calls[0]["tools"])
-    assert {"computer__browser_open", "computer__vm_exec"} <= offered
-    assert not offered & PC_TOOLS and not [n for n in offered if n.startswith("local__")]
+    assert {"computer__browser_open", "computer__vm_exec", *LOCAL} <= offered
+    assert not offered & PC_TOOLS
     assert "your own computer" in prompt_of(client.chat_calls[0])
     rig.host.execute.assert_not_awaited()
     assert not rig.actions.calls
 
 
-async def test_without_a_computer_of_its_own_the_member_is_told_to_say_so_and_has_no_other_machine(make_rig, client, conn):
+async def test_a_quick_question_offers_the_owners_pc_beside_the_members_own_computer(with_own_computer, client):
+    # The owner's PC is the default; the member's own computer is there for when the owner's words name it. Both are
+    # offered and the model picks: nothing in the code matches the words to take one away.
+    rig, hub = with_own_computer
+    await hub.prepare(0)
+    client.chats = [chat('{"text":"Done."}')]
+    result = await ask(rig, "quick", text="Use your computer to open YouTube", source="app", destination="quick",
+                       conversation_id=rig.service.conversations.quick())
+    assert result["status"] == "done"
+    offered = names(client.chat_calls[0]["tools"])
+    assert {"computer__browser_open", "open", *LOCAL} <= offered
+    system = prompt_of(client.chat_calls[0])
+    assert all(word in system for word in QUICK_WORDS) and "only when the owner's words name it" in system
+
+
+async def test_without_a_computer_of_its_own_the_member_is_told_to_say_so_and_never_to_use_the_owners_screen(make_rig, client, conn):
     rig = rig_with_pc(make_rig, conn)
     client.chats = [chat('{"text":"I have no computer to open it on."}')]
     result = await typed(rig, "Open Chrome on my computer")
     assert result["status"] == "done"
     offered = names(client.chat_calls[0]["tools"])
-    assert not offered & PC_TOOLS and not [n for n in offered if n.startswith(("local__", "computer__"))]
+    assert not offered & PC_TOOLS and not [n for n in offered if n.startswith("computer__")]
     system = prompt_of(client.chat_calls[0])
-    assert "say so plainly" in system and "never look for another machine" in system
+    assert "say so plainly; promise none" in system and "your own isolated computer, never on the owner's screen" in system

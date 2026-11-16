@@ -70,7 +70,9 @@ def test_the_reply_to_which_computer_names_a_side(reply, side):
 
 
 @pytest.mark.parametrize("text", ["用你的電腦開 YouTube", "用你自己的電腦打開 youtube.com", "open YouTube on your own computer"])
-async def test_a_quick_request_for_the_members_computer_goes_to_its_turn_not_to_the_owners_pc(with_own_computer, client, text):
+async def test_a_quick_request_for_the_members_computer_skips_the_shortcut_and_the_model_picks(with_own_computer, client, text):
+    # The shortcut can only open things on the owner's PC, so it is skipped; the turn holds both computers and the model
+    # reads the owner's words (R-PC-01): nothing in the code takes the owner's PC away.
     rig, hub = with_own_computer
     await hub.prepare(0)
     client.chats = [chat("Opening it.", ("computer__vm_exec", {"command": "echo opening"})), chat('{"text":"Opened."}')]
@@ -80,9 +82,8 @@ async def test_a_quick_request_for_the_members_computer_goes_to_its_turn_not_to_
     assert not rig.actions.calls  # nothing was opened on the owner's PC
     rig.host.execute.assert_not_awaited()
     offered = names(client.chat_calls[0]["tools"])
-    assert {"computer__browser_open", "computer__vm_exec"} <= offered
-    assert not offered & PC_TOOLS and not [name for name in offered if name.startswith("local__")]
-    assert "owner's PC" not in prompt_of(client.chat_calls[0])
+    assert {"computer__browser_open", "computer__vm_exec", "open", "local__local_exec"} <= offered
+    assert "only when the owner's words name it" in prompt_of(client.chat_calls[0])
 
 
 async def test_the_member_that_has_no_computer_says_so_and_still_does_not_borrow_the_owners(make_rig, client, conn):
@@ -92,8 +93,8 @@ async def test_the_member_that_has_no_computer_says_so_and_still_does_not_borrow
     result = await rig.ask("用你的電腦開 YouTube", language="zh-TW")
     assert result["status"] == "done" and result["text"]
     assert client.decide_calls == [] and not rig.actions.calls
-    offered = names(client.chat_calls[0]["tools"])
-    assert not offered & PC_TOOLS and not [name for name in offered if name.startswith("local__")]
+    assert not rig.host.execute.await_count
+    assert "when they do and you have none, say so plainly and never use the owner's" in prompt_of(client.chat_calls[0])
 
 
 @pytest.mark.parametrize("text", ["用我的電腦開 youtube.com", "open youtube.com on my computer", "打開 youtube.com"])
@@ -157,7 +158,7 @@ async def test_the_members_own_computer_answers_without_asking_again(with_own_co
     again = await rig.ask(reply, language="en")
     assert again["text"] not in {asked["text"], ""}  # it was asked once, and now it is done
     assert client.decide_calls == [] and not rig.actions.calls
-    assert not names(client.chat_calls[0]["tools"]) & PC_TOOLS
+    assert {"computer__vm_exec", "open"} <= names(client.chat_calls[0]["tools"])
 
 
 async def test_this_pc_as_the_answer_keeps_the_owner_pc_shortcut(make_rig, client, actions):

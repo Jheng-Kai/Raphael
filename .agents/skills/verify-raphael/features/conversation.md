@@ -1199,9 +1199,9 @@ turns keep no native session, and each turn records the model that actually answ
 face tooltip). A request replaces only the YES/NO questions waiting in its own conversation, so
 quick use leaves a formal approval waiting and adds no formal rows. A spoken answer with public
 progress has no reply message: the thread shows its text after the work line. A quick question is the one
-turn that reaches the owner's own PC (R-PC-01): the fast router, the commands to open, lock or
-copy, the desktop run and the local command tools are its alone, and a spoken or typed turn of a formal
-conversation goes to the narrated harness with none of them.
+turn that reaches the owner's own screen (R-PC-01): the fast router, the commands to open, lock or
+copy and the desktop run are its alone, and a spoken or typed turn of a formal conversation goes to the
+narrated harness with none of them; the hidden local commands are every turn's, with the card (R-PC-02).
 
 ```powershell
 npm run look -- quick-question-result quick-formal-isolation quick-stop quick-model-selection --theme both --width 1120,720,1920x1080

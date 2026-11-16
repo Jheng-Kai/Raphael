@@ -21,9 +21,34 @@ def local(conn):
     host = AsyncMock()
     host.execute.return_value = {"exit_code": 7, "stdout": "head and tail", "stderr": "", "truncated": False}
     hub = LocalTools(EmptyHub(), conn, host=host)
-    token = _CONTEXT.set((("chat", 1, 10), False, True, "local-session", True))  # the owner's PC is in reach (a quick question)
+    token = _CONTEXT.set(CHAT)  # an ordinary private conversation: hidden commands with the card (R-PC-02)
     yield hub, host, ToolGate(hub, conn=conn)
     _CONTEXT.reset(token)
+
+
+# The contexts a command is asked from (`local_tools.ask_context`, `run_context`): who runs it, outside content read, a card
+# can be shown, the session, and the owner's screen in reach.
+CHAT = (("chat", 1, 10), False, True, "local-session", False)
+TASK = (("task", 7), False, True, "", False)
+PHONE = (("chat", 1, 11), True, False, "phone", False)  # a phone, Telegram or a room: no card
+QUICK = (("chat", 1, 12), False, False, "quick", True)  # a quick question: the owner's screen, no card
+MODES = ["ask", "always", "never", "bypass"]
+
+
+def with_mode(hub, mode):
+    if mode == "bypass":
+        hub.settings.set("action_mode", "bypass")
+    else:
+        hub.settings.set("local_commands_mode", mode)
+
+
+async def called(hub, context, command, approver="user"):
+    token = _CONTEXT.set(context)
+    try:
+        return hub.tier_for_call("mcp:local/local_exec", {"command": command}), await hub.call(
+            "mcp:local/local_exec", {"command": command}, approver=approver)
+    finally:
+        _CONTEXT.reset(token)
 
 
 @pytest.mark.parametrize("command", [
@@ -38,24 +63,104 @@ async def test_secret_stores_are_refused_even_after_explicit_approval(local, com
     host.execute.assert_not_awaited()
 
 
-@pytest.mark.parametrize("mode", ["ask", "always", "never", "bypass"])
-@pytest.mark.parametrize("tool,arguments", [("local_exec", {"command": "Get-Process"}), ("local_job", {"job_id": "x"})])
-async def test_the_owners_pc_is_out_of_reach_of_every_turn_that_is_not_a_quick_question(conn, mode, tool, arguments):
-    # R-PC-01: the context of an ordinary conversation, a task or a phone never reaches the PC, in any permission mode.
+@pytest.mark.parametrize("context", [CHAT, TASK], ids=["conversation", "task"])
+async def test_an_ordinary_conversation_and_a_task_run_a_hidden_command_after_the_owners_yes(conn, context):
+    # R-PC-02: commands on the owner's PC are every turn's and task's again, hidden, through the card they always had.
+    host = AsyncMock()
+    host.execute.return_value = {"exit_code": 0, "stdout": "cpu", "stderr": "", "truncated": False}
+    hub = LocalTools(EmptyHub(), conn, host=host)
+    assert {"local__local_exec", "local__local_job"} <= {f"{tool.server}__{tool.name}" for tool in hub.offered()}
+    tier, unanswered = await called(hub, context, "Get-Process", approver="none")
+    assert tier == Tier.T2 and not unanswered.ok and unanswered.kind == "approval_required"
+    host.execute.assert_not_awaited()
+    tier, result = await called(hub, context, "Get-Process")
+    assert result.ok and host.execute.await_count == 1
+
+
+@pytest.mark.parametrize("mode,runs", [("ask", False), ("always", False), ("never", False), ("bypass", True)])
+async def test_where_no_card_can_be_shown_a_command_runs_only_when_nothing_waits_for_a_yes(conn, mode, runs):
+    # A phone, Telegram or a room cannot show the card: 全部允許 runs the command without one, every other mode runs nothing.
+    host = AsyncMock()
+    host.execute.return_value = {"exit_code": 0, "stdout": "cpu", "stderr": "", "truncated": False}
+    hub = LocalTools(EmptyHub(), conn, host=host)
+    with_mode(hub, mode)
+    tier, result = await called(hub, PHONE, "Get-Process")
+    assert tier == Tier.T0  # nothing can ask there
+    assert result.ok is runs and host.execute.await_count == (1 if runs else 0)
+    if not runs:
+        assert result.kind == "presence_required" and "private conversation in the app" in result.text
+
+
+# R-PC-06: what shows something on the owner's screen, in PowerShell and cmd, typed as a model would.
+ON_SCREEN = [
+    "Start-Process chrome", "Start-Process 'https://www.youtube.com'", "saps notepad", "start https://www.youtube.com",
+    'start "" "C:\\Users\\me\\Documents\\report.pdf"', "explorer C:\\Users\\me\\Documents", "explorer.exe https://www.youtube.com",
+    "Invoke-Item C:\\Users\\me\\report.pdf", "ii .", "rundll32 url.dll,FileProtocolHandler https://www.youtube.com",
+    "https://www.youtube.com", "C:\\Users\\me\\Desktop\\YouTube.lnk", "cmd /c start https://www.youtube.com",
+    'cmd.exe /C "start chrome"', 'powershell -NoProfile -Command "Start-Process notepad"', "Get-Date; Start-Process msedge",
+    '& "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" https://www.youtube.com',
+    '[System.Diagnostics.Process]::Start("https://www.youtube.com")', "notepad.exe C:\\notes.txt",
+    "Get-ChildItem *.pdf | ForEach-Object { Invoke-Item $_ }", "ms-settings:display", ".\\report.pdf",
+]
+# What shows nothing and must still run: reads, programs run directly, and a URL that is only downloaded.
+SHOWS_NOTHING = [
+    "git status", "dir", "Get-ChildItem C:\\Users\\me", "python script.py", "npm test", "npm start",
+    "curl https://www.youtube.com", 'curl "https://example.com/?q=1&start"', 'curl.exe -s "https://example.com/a?x=1&ii=2"',
+    "Invoke-WebRequest https://www.youtube.com -OutFile page.html", "Invoke-RestMethod https://api.example.com/status",
+    "Start-Sleep 2", "Start-Job { Get-Process }", 'Get-Process | Where-Object { $_.ProcessName -eq "chrome" }',
+    "Stop-Process -Name chrome", "tasklist | findstr chrome", "Test-Path C:\\Users\\me\\Desktop\\YouTube.lnk",
+    "Get-Content C:\\notes.txt", "echo start", "C:\\Python312\\python.exe -m pip list", "python3.11 -V", "cmd /c dir",
+    'powershell -Command "Get-Process"', "Get-Item HKCU:\\Software\\Raphael", "open README.md",
+]
+MAC_ON_SCREEN = ["open -a Safari", "open https://www.youtube.com", "open ~/Documents/report.pdf", 'sh -c "open -a Notes"',
+                 "osascript -e 'tell application \"Safari\" to activate'"]
+MAC_SHOWS_NOTHING = ["ls -la", "ps aux", "curl https://www.youtube.com", "osascript -e 'return 1'", "git status"]
+
+
+@pytest.mark.parametrize("command", ON_SCREEN)
+def test_a_command_that_opens_something_on_the_screen_is_told_apart(command):
+    from raphael_core.computer.on_screen import launches_on_screen
+    assert launches_on_screen(command, "win32")
+
+
+@pytest.mark.parametrize("command", SHOWS_NOTHING)
+def test_a_command_that_shows_nothing_is_not_taken_for_one(command):
+    from raphael_core.computer.on_screen import launches_on_screen
+    assert not launches_on_screen(command, "win32")
+
+
+@pytest.mark.parametrize("command,shows", [*((command, True) for command in MAC_ON_SCREEN),
+                                           *((command, False) for command in MAC_SHOWS_NOTHING)])
+def test_on_a_mac_open_and_an_app_brought_to_the_front_show_something(command, shows):
+    from raphael_core.computer.on_screen import launches_on_screen
+    assert launches_on_screen(command, "darwin") is shows
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("context", [CHAT, TASK, PHONE], ids=["conversation", "task", "phone"])
+async def test_a_command_that_shows_something_on_the_owners_screen_is_refused_outside_a_quick_question(conn, mode, context):
+    # R-PC-06: whatever the mode, 全部允許 included; nothing asks for it, and the member is told to use its own computer.
     host = AsyncMock()
     hub = LocalTools(EmptyHub(), conn, host=host)
-    if mode == "bypass":
-        hub.settings.set("action_mode", "bypass")
-    else:
-        hub.settings.set("local_commands_mode", mode)
-    for context in ((("chat", 1, 10), False, True, "s", False), (("task", 7), False, True, "", False), _CONTEXT.get()):
-        token = _CONTEXT.set(context)
-        try:
-            result = await hub.call(f"mcp:local/{tool}", arguments, approver="user")
-        finally:
-            _CONTEXT.reset(token)
-        assert not result.ok and result.kind == "presence_required" and "out of reach" in result.text
+    with_mode(hub, mode)
+    for command in ("Start-Process https://www.youtube.com", "cmd /c start chrome", "explorer C:\\Users"):
+        tier, result = await called(hub, context, command)
+        assert tier == Tier.T0 and not result.ok and result.kind == "shows_on_screen"
+        assert "your own computer" in result.text
     host.execute.assert_not_awaited()
+    from raphael_core.agent.steps import reason_of
+    assert reason_of("error", "shows_on_screen") == "blocked"  # the step says a rule held it, never the code
+
+
+@pytest.mark.parametrize("mode,runs", [("ask", False), ("always", False), ("never", False), ("bypass", True)])
+async def test_a_quick_question_still_opens_things_on_the_owners_screen(conn, mode, runs):
+    # The owner's PC is a quick question's default for what is seen too: only its own rule applies (no card there).
+    host = AsyncMock()
+    host.execute.return_value = {"exit_code": 0, "stdout": "", "stderr": "", "truncated": False}
+    hub = LocalTools(EmptyHub(), conn, host=host)
+    with_mode(hub, mode)
+    tier, result = await called(hub, QUICK, "Start-Process https://www.youtube.com")
+    assert result.kind != "shows_on_screen" and host.execute.await_count == (1 if runs else 0)
 
 
 async def test_unapproved_command_names_the_missing_owner_approval(local):

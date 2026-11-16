@@ -47,7 +47,7 @@ def home(tmp_path, monkeypatch):
 @pytest.fixture
 def files(conn):
     hub, _ = local_hub(conn)
-    token = _CONTEXT.set((("chat", 0, 1), False, True, "session", False))  # an ordinary turn: the owner's PC out of reach
+    token = _CONTEXT.set((("chat", 0, 1), False, True, "session", False))  # an ordinary turn: the owner's screen out of reach
     yield hub
     _CONTEXT.reset(token)
 
@@ -60,14 +60,14 @@ async def call(hub, name, arguments, approver="auto"):
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_every_turn_and_task_lists_the_reads_and_none_of_the_owners_pc(conn, mode):
+def test_every_turn_and_task_lists_the_reads_and_nothing_of_the_owners_screen(conn, mode):
     SettingsStore(conn).set("action_mode", mode)
     hub, _ = local_hub(conn)
     for kind in ({"interactive": True}, {"interactive": False}, {"routine": True, "background_management": True}):
         snapshot = take_snapshot(hub, speaker=RAPHAEL, memory=True, max_tier=Tier.T3, **kind)
         listed = set(snapshot.catalog())
         assert READS | WRITES <= listed, kind
-        assert not listed & PC_TOOLS and not [name for name in listed if name.startswith("local__")]
+        assert not listed & PC_TOOLS  # the hidden commands are listed too (R-PC-02); the screen is a quick question's
 
 
 def test_reads_ask_nothing_and_a_write_asks_only_inside_the_owners_folders(conn, home, files):

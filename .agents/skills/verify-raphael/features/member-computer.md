@@ -50,7 +50,8 @@ id) or a task; what it read is the file's sha256. Paths are absolute or taken fr
 the team folder the guest opens each component without following a link. Searches skip `.git`, `.browser-profiles`,
 `.raphael-checkpoints` and `.raphael-jobs` and honour `.gitignore`; they search hidden files. Results pass the same login
 redaction as every computer tool. No card asks for any of these in the member's own computer; the CLI vendors' own Read,
-Write, Edit, Glob, Grep and shell stay off (R-PC-01): a CLI brain gets these through the `computer` MCP server.
+Write, Edit, Glob, Grep and shell stay off (they would act on the owner's PC outside Raphael's card, R-PC-02): a CLI brain
+gets these through the `computer` MCP server.
 
 Offline evidence (fake docker `Runtime`; the guest helper itself runs on a folder of the test; ripgrep's answers are scripted):
 `core/tests/computer/test_file_read.py`, `test_file_tools.py`, `test_file_search.py`, and `test_catalog_stays.py` (the
@@ -141,10 +142,11 @@ said into the overlay, opened the page on the owner's own PC with an empty reply
   is the answer at once. `ComputerWork.begin` revives a work item whose stop was only inferred from a cancelled first call.
   Offline: core/tests/computer/test_first_call.py (fakes for each transient kind, the bound, each real failure, the cut-short call
   and the owner's own stop).
-- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's goes to the member's turn
-  with the owner's PC out of reach; the owner's keeps the router and the shortcut; an unsure open request is asked once
-  (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py. The quick overlay's own look
-  scenes are unchanged (no UI change), so no look run.
+- Whose computer: `agent/whose_computer.py` reads a quick request (member, owner, unsure). The member's skips the fast
+  router's shortcut (which can only use the owner's PC) and goes to the member's turn of the quick question, which holds both
+  computers: the model reads the owner's words and picks (R-PC-01); the owner's keeps the router and the shortcut; an unsure
+  open request is asked once (`which_computer`); the shortcut says `opened`. Offline: core/tests/agent/test_whose_computer.py.
+  The quick overlay's own look scenes are unchanged (no UI change), so no look run.
 
 ## The computer wakes by a decision, waits for a loaded PC, keeps its panels whole
 
@@ -1410,30 +1412,46 @@ desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.p
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
 native shell, live model quality and judge remain separately unverified.
 
-## The owner's PC is for a quick question alone (R-PC-01)
+## The owner's screen is a quick question's; hidden commands are every turn's (R-PC-01, R-PC-02, R-PC-06)
 
-The owner's PC is controlled only from a quick question (Alt+Space), never from an ordinary conversation.
-One switch decides it, `take_snapshot(owner_pc=...)` (`ask.quick`, never nested): without it a turn is offered, finds and
-refreshes into none of `mcp:local/local_exec`, `mcp:local/local_job`, the harness `computer` tool (the guarded run on the
-owner's desktop) or the fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken
-conversation, Raphael's or a member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event
-runs, on API and CLI brains, in every permission mode. The fast router (Jev) is asked about a quick question alone, so a
-conversation never routes to a command or a desktop run. The prompt of such a turn carries no owner's-PC words
-(`persona._OWNER_PC_RULES` is added to a quick question only; the owner's files are every turn's, see below); it says
-that anything needing a computer is done on the member's own computer and, when that is not available, to say so.
-`LocalTools.call` refuses a call whose context is not a quick question (`presence_required`, even under 全部允許), and
-the harness `computer`, command and CLI native-command paths repeat the check (`AgentService._owner_pc`). A quick
-question is unchanged, including that it can show no card, so a local command runs there only where nothing waits for a
-yes. The consent card, the Settings mode and the background approvals below are kept in the code, with no door
-until the owner decides whether a quick question asks at the overlay.
+What shows on the owner's screen is driven only from a quick question (Alt+Space). One switch decides it,
+`take_snapshot(owner_screen=...)` (`permissions.owner_screen`: a quick question asked at this computer, never nested):
+without it a turn is offered and finds none of the harness `computer` tool (the guarded run on the owner's desktop) or the
+fixed commands (open, volume, media, lock_screen, copy_text). That is every typed or spoken conversation, Raphael's or a
+member's, rooms, exchanges, Telegram/Slack/Discord, background tasks, routines and event runs, on API and CLI brains, in
+every permission mode. The fast router (Jev) is asked about a quick question alone. What such a turn shows on a screen
+(a website, YouTube, a program, clicks, typing) it shows on the member's own computer; with none it says so.
 
-Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question, the member's
-own computer), computer/test_local_commands.py (the context), background/test_local_commands.py,
-members/test_local_commands.py and brain/test_owner.py. No look scene changes: nothing rendered changed.
+The local commands (`mcp:local/local_exec`, `mcp:local/local_job`, its background jobs, and a CLI brain's own command)
+run hidden on the owner's PC from every turn and task again, through the approval machinery they always had: the
+first-consent card and the chat approvals without a timer in a private conversation at this computer, the 30-minute
+background approvals of a task or a routine, in the stored mode (ask, always, never; 全部允許 runs without a card).
+Settings has no control for the mode. Where no card can be shown (a phone, a room, a quick question) a command runs only
+under 全部允許. Every prompt says commands may run hidden on the owner's PC with the owner's approval and that work to be
+seen is done on the member's own computer (`agent/capabilities.py`, `persona._SHARED_CONTRACT`).
+
+The safety net (R-PC-06): outside a quick question a command whose purpose is to show something on the owner's screen
+(Start-Process, saps, start, cmd /c start, explorer, Invoke-Item, ii, rundll32 url.dll, Process.Start, a URL, a shortcut
+or a document typed as the command, a windowed program, `open` on a Mac) is refused in every mode without a card, and the
+member is told to open it on its own computer (`computer/on_screen.py`, checked in `LocalTools.tier_for_call` and `call`,
+`AgentService._cli_permission` and the background CLI loop). It stops a model that picked the wrong computer; it is no
+defence against someone set on getting round it.
+
+A quick question keeps the owner's PC as its default for everything, commands and what is seen alike, and also holds the
+member's own computer for a request whose words name it (`persona._OWNER_PC_RULES` says which is the default and how the
+owner names the other; the desktop `computer` stays beside the member's computer tools). The model picks; no word matched in
+code takes either computer away. A quick question can show no card, so a local command runs there only under 全部允許.
+
+Offline: core/tests/agent/test_owner_pc_reach.py (lists, prompts, API and CLI, every mode, a quick question beside the
+member's own computer), computer/test_local_commands.py (contexts, the table of commands that show something and of those
+that do not, every mode), agent/test_local_commands.py and agent/test_local_command_flow.py (cards in a conversation, the
+CLI's own command), background/test_local_commands.py (30-minute approvals, a task's refused opener),
+members/test_local_commands.py, members/test_cli_brains.py, members/test_connection_floor.py, agent/test_computer_choice.py
+and agent/test_whose_computer.py. No look scene changes: nothing rendered changed (the cards are the existing ones).
 
 ## The owner's files: read everywhere, write in the owner's folders (R-PC-04, R-PC-05)
 
-Members read every file of the owner's computer from every turn, task and source, and write only in folders the owner chose; control of the computer stays a quick question's. Modelled on Claude Code (its file tools read the whole computer; Write and Edit only the
+Members read every file of the owner's computer from every turn, task and source, and write only in folders the owner chose; its screen stays a quick question's. Modelled on Claude Code (its file tools read the whole computer; Write and Edit only the
 working and added directories). `computer/owner_files.py` adds five pinned plugin tools under the `owner_files` server,
 offered by `LocalTools.offered_for` beside the local commands but not keyed `mcp:local/`, so `take_snapshot` never drops them:
 every turn and task, every source and brain (API, and CLI through its MCP list) and every permission mode has them.
@@ -1463,7 +1481,7 @@ npm run look -- owner-write-folders owner-output-folder output-folder-picker out
 Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a
 real Windows disk (CI runs the offline suite there).
 
-## Owner-PC commands (now a quick question's alone, see above)
+## Owner-PC commands (hidden, every turn's, with the card; see above)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
 sandbox or guarded real-desktop mouse/keyboard tool. A quick question sees the
@@ -1504,7 +1522,7 @@ Acceptance still requires the owner's real CPU question to a member on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
 tree cleanup on Stop/app close, and the Docker path after schema discovery.
 Offline fakes and rendered fixture success do not prove Docker, cargo, native
-journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
+journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03/06 and R-AG-13.
 
 The optional Docker desktop defaults to one shared computer on this PC (a seat per member, section
 "Shared computer seats" above; 6 GiB and four CPUs) and, on a remote host or when `computer_vm_mode=per-bot`

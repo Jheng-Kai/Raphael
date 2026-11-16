@@ -3,7 +3,8 @@
 As Claude Code: its Read, Glob and Grep reach the whole computer, and its
 Write and Edit only the folders it was given. So every turn and every task, wherever it was asked from, may read, find and
 search the owner's files; a write goes only into the folders the owner listed in Settings (and the output folder), and
-asks as any other change does. Commands, the desktop and the fixed commands stay with a quick question (R-PC-01).
+asks as any other change does. Commands on the owner's PC ask with their own card (R-PC-02); the desktop and the fixed
+commands stay with a quick question (R-PC-01).
 
 Unlike Claude Code, which a person drives at the keyboard, Raphael also takes messages from phones and rooms and reads web
 pages, any of which may try to talk a member into reading a secret and sending it on. So the places that hold keys and

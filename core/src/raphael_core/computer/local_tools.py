@@ -12,21 +12,27 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from ..agent.plugins import PluginResult, PluginTool, tool_key
-from ..agent.permissions import owner_pc as reaches_owner_pc, qualifies
+from ..agent.permissions import owner_screen as reaches_owner_screen, qualifies
 from ..agent.policy import UNATTENDED_WAIT_S, Tier
 from ..agent.data_floor import DataFloor, WRITE_REFUSAL
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
 from .local_host import LocalHost, Output
 from .local_patterns import DANGEROUS_PATTERNS, MAC_DANGEROUS_PATTERNS
+from .on_screen import launches_on_screen
 from .owner_files import DEFINITIONS as OWNER_FILE_DEFINITIONS, READS as OWNER_FILE_READS, SERVER as OWNER_FILES, OwnerFileTools
 
 LOCAL_PREFIX = "mcp:local/"
 BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
 FOREGROUND_TIMEOUT_S = 120
+# Who runs the command, whether it read outside content, whether its chat can show a card, its session, and whether the
+# owner's screen is in reach (a quick question alone, `permissions.owner_screen`).
 _CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", False))
-OUT_OF_REACH = ("The owner's own PC is out of reach here: it is only for a quick question asked through the overlay. "
-                "Do the work on your own computer, or say plainly that it cannot be done.")
+ON_SCREEN = ("Nothing was run: this command would show something on the owner's screen, and only a quick question shows "
+             "anything there. Open pages, programs and files on your own computer with its tools. To run a program and "
+             "read what it prints, run it directly, without opening a window.")
+NO_CARD = ("Nothing was run: a local command needs the owner's yes on a card, and this conversation cannot show one. "
+           "Tell the owner plainly that it can be asked for in a private conversation in the app.")
 # These patterns are best effort, not a shell parser or sandbox. The owner card is the real gate.
 _SECRET_WINDOWS = r"\.env(?:[.\\/\s'\"]|$)|\.codex[\\/]auth\.json|\.claude[\\/]channels|\b(?:cmdkey|vaultcmd|mimikatz|Get-StoredCredential|CredEnumerate|CredRead)\b"
 # A Mac's secret store is the Keychain: its command-line reads and exports, and its files.
@@ -50,16 +56,19 @@ def safety_patterns(platform):
 
 _DANGEROUS, _SECRET, _OPAQUE = safety_patterns(sys.platform)
 
+# Held to 400 characters: it is listed in every turn and task.
 EXEC_DESCRIPTION = (
-    "Run one command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs. "
-    "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
-    "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+    "Run one hidden command on the owner's Windows PC for CPU, memory, disk, processes, network, files and logs; outside "
+    "a quick question one that opens a program, a page or a file on its screen is refused. For Raphael itself use "
+    "self_check first. Approval is enforced; foreground max 120 s. No interactive programs. Long claude -p or codex exec "
+    "work uses background; it spends the owner's subscription."
 )
 if sys.platform == "darwin":
     EXEC_DESCRIPTION = (
-        "Run one zsh command on the owner's Mac for CPU, memory, disk, processes, network, files and logs. "
-        "For Raphael itself use self_check first, never a whole-profile scan. Approval is enforced; foreground max 120 s. "
-        "No interactive programs. Long claude -p or codex exec work uses background and the same card; it spends the owner's subscription."
+        "Run one hidden zsh command on the owner's Mac for CPU, memory, disk, processes, network, files and logs; outside "
+        "a quick question one that opens an app, a page or a file on its screen is refused. For Raphael itself use "
+        "self_check first. Approval is enforced; foreground max 120 s. No interactive programs. Long claude -p or codex "
+        "exec work uses background; it spends the owner's subscription."
     )
 EXEC_SCHEMA = {"type": "object", "properties": {
     "command": {"type": "string", "minLength": 1, "maxLength": 16000},
@@ -75,8 +84,8 @@ def is_local(key):
 
 
 def owner_file_tool(key):
-    """The name of one of the owner's file tools (`owner_files`), or None. Unlike the local commands they are offered to
-    every turn and task (R-PC-04): reading is the whole computer's, writing only the owner's folders'."""
+    """The name of one of the owner's file tools (`owner_files`), or None. Like the local commands they are offered to
+    every turn and task (R-PC-04), but without a card: reading is the whole computer's, writing only the owner's folders'."""
     prefix = tool_key(OWNER_FILES, "")
     name = key[len(prefix):] if key.startswith(prefix) else None
     return name if name in OWNER_FILE_DEFINITIONS else None
@@ -112,14 +121,23 @@ def requires_command_approval(settings, command, *, external):
 def ask_context(ask, results=()):
     external = bool(ask.memory_untrusted or ask.attachments or ask.nested or any(getattr(r, "untrusted", False) for r in results)
                     or any(s.tool in ("web_search", "web_read", "read_attachment") or s.server not in (None, "Raphael", "local") for s in ask.steps))
-    # The last cell: only a quick question reaches the owner's own PC (R-PC-01); every other turn is refused in `call`.
+    # The last cell: only a quick question shows anything on the owner's screen (R-PC-01); every other turn's command that
+    # would is refused in `call` (R-PC-06).
     return (("chat", ask.speaker.id, ask.conversation_id), external,
             qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id,
-            reaches_owner_pc(source=ask.source, quick=ask.quick, nested=ask.nested, own_computer=ask.own_computer))
+            reaches_owner_screen(source=ask.source, quick=ask.quick, nested=ask.nested))
 
 
 def run_context(run):
+    # A task asks through its waiting question (`present`), and never shows anything on the owner's screen.
     return (("task", run.task_id), bool(run._memory_untrusted or run.attachments), True, "", False)
+
+
+def shows_on_screen(key, arguments):
+    """Whether this call of a local command would show something on the owner's screen where only a quick question may
+    (R-PC-06): refused in `call` whatever the permission mode, so nothing asks for it."""
+    return (key == tool_key("local", "local_exec") and isinstance(arguments, dict) and isinstance(arguments.get("command"), str)
+            and not _CONTEXT.get()[4] and launches_on_screen(arguments["command"]))
 
 
 def command_context(select):
@@ -183,7 +201,8 @@ class LocalTools:
         schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
         if not Draft202012Validator(schema).is_valid(arguments):
             return Tier.T0
-        if key.endswith("/local_job") or self.settings.get("local_commands_mode") == "never" or _SECRET.search(str(arguments)) or not _CONTEXT.get()[2]:
+        if (key.endswith("/local_job") or self.settings.get("local_commands_mode") == "never" or _SECRET.search(str(arguments))
+                or not _CONTEXT.get()[2] or shows_on_screen(key, arguments)):
             return Tier.T0
         return Tier.T2 if self.requires_approval(arguments) else Tier.T0
 
@@ -212,18 +231,18 @@ class LocalTools:
         outcome = "blocked"
         background = False
         try:
-            owner, external, present, session, owner_pc = _CONTEXT.get()
+            owner, external, present, session, _screen = _CONTEXT.get()
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
-            if not owner_pc:
-                # Whatever the permission mode: 全部允許 never reopens the owner's PC to an ordinary conversation, a room, a task or a phone.
-                return PluginResult(False, "presence_required", OUT_OF_REACH)
+            if shows_on_screen(key, arguments):
+                # Whatever the permission mode, 全部允許 included: what is seen is shown on the member's own computer.
+                return PluginResult(False, "shows_on_screen", ON_SCREEN)
             access = self.data_floor.access(key, arguments)
             if access == "write":
                 return PluginResult(False, "protected_data", WRITE_REFUSAL)
             if (not present and not self._full_permission()) or owner is None:
-                return PluginResult(False, "presence_required", "A quick question cannot show the card a local command needs, so nothing was run. Tell the owner plainly that it cannot be done here.")
+                return PluginResult(False, "presence_required", NO_CARD)
             if key.endswith("/local_job"):
                 job = self.jobs.get(arguments["job_id"])
                 if job is None or job["owner"] != owner:
