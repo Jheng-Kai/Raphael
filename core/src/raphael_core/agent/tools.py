@@ -70,9 +70,12 @@ _GEOCODING_LANGUAGE = {
 }
 # The kind of failure of a tool whose capability the owner turned off.
 DISABLED = "disabled"
-# The weather, both requests together, and each stage of a request.
+# The weather, both requests together; and one try of one request, which is made a second time when it hangs or its
+# connection fails. A request that answers takes about a second and the whole lookup about two; a try that waited five
+# seconds for nothing left no time in the eight for another, which a fresh connection often answers.
 WEATHER_TIMEOUT_S = 8.0
-_HTTP_STAGE_TIMEOUT_S = 5.0
+WEATHER_TRY_S = 3.0
+WEATHER_TRIES = 2
 # A search with its model's reading of the results.
 SEARCH_TIMEOUT_S = 12.0
 SEARCH_MAX_TOKENS = 500
@@ -258,8 +261,9 @@ class Tools:
         if not city.strip():
             return ToolResult("weather", False, None, "needs_city",
                               instruction="No city is known yet. Ask the user which city they mean, then look it up; do not guess one.")
+        deadline = asyncio.get_running_loop().time() + WEATHER_TIMEOUT_S
         try:
-            data = await asyncio.wait_for(self._weather(city, language), WEATHER_TIMEOUT_S)
+            data = await asyncio.wait_for(self._weather(city, language, deadline), WEATHER_TIMEOUT_S)
         except TimeoutError:
             return self._failed("weather", "timeout")
         except httpx.HTTPStatusError:
@@ -284,17 +288,36 @@ class Tools:
         return ToolResult(name, False, data, kind, detail=detail,
                           instruction=missing.sentence("en") if missing else None)
 
-    async def _get_json(self, url: str, params: dict[str, Any]) -> Any:
-        response = await self._http_client().get(url, params=params, timeout=_HTTP_STAGE_TIMEOUT_S)
-        response.raise_for_status()
-        return response.json()
+    async def _get_json(self, url: str, params: dict[str, Any], deadline: float, stage: str) -> Any:
+        """What Open-Meteo answers at `url`, as JSON. A try that hangs past `WEATHER_TRY_S` or loses its connection is made
+        once more while time is left before `deadline` (the loop's clock); a page that came, an error page too, is never
+        asked for again."""
+        loop = asyncio.get_running_loop()
+        tries = 0
+        while True:
+            tries += 1
+            wait = min(WEATHER_TRY_S, deadline - loop.time())
+            if wait <= 0:
+                raise TimeoutError
+            began = loop.time()
+            try:
+                response = await asyncio.wait_for(self._http_client().get(url, params=params, timeout=wait), wait)
+            except (TimeoutError, httpx.TransportError) as error:
+                # Which request failed and how, never the place: the log then says where Open-Meteo hangs.
+                logger.info("Open-Meteo's %s request failed on try %d of %d after %.1f s: %s",
+                            stage, tries, WEATHER_TRIES, loop.time() - began, type(error).__name__)
+                if tries >= WEATHER_TRIES:
+                    raise
+                continue
+            response.raise_for_status()
+            return response.json()
 
-    async def _find_place(self, city: str, language: str) -> Any:
+    async def _find_place(self, city: str, language: str, deadline: float) -> Any:
         """The first place the geocoder finds for `city`, the way `geocoding_queries` asks."""
         code = _GEOCODING_LANGUAGE.get(language, "en")
         for name, name_language in geocoding_queries(city, code):
             places = await self._get_json(
-                GEOCODING_URL, {"name": name, "count": 1, "language": name_language}
+                GEOCODING_URL, {"name": name, "count": 1, "language": name_language}, deadline, "place"
             )
             results = places.get("results") if isinstance(places, dict) else None
             if isinstance(results, list) and results:
@@ -303,8 +326,8 @@ class Tools:
                 raise ValueError("The places are not a list")
         raise _NotFound
 
-    async def _weather(self, city: str, language: str) -> dict:
-        place = await self._find_place(city, language)
+    async def _weather(self, city: str, language: str, deadline: float) -> dict:
+        place = await self._find_place(city, language, deadline)
         latitude, longitude = place["latitude"], place["longitude"]
         if _number(latitude) is None or _number(longitude) is None:
             raise ValueError("The place has no coordinates")
@@ -319,6 +342,8 @@ class Tools:
                 "timezone": "auto",
                 "forecast_days": 2,
             },
+            deadline,
+            "forecast",
         )
         named = place.get("name")
         data = _compact({"city": named if isinstance(named, str) else None})
