@@ -254,6 +254,14 @@ file card above, and one `open_attachment` call with that id. Not covered: the n
 npm run look -- message-attachment-link composer-send-while-working transcript-working link-chips --theme both --width 1120,720,1920x1080
 ```
 
+An image link to a stored file is its chip too (R-MSG-LINK-02). A member's reply ended with
+`![影片中的反向金字塔截圖](attachment:<id>.png)` under the picture it had just sent as a media message, and the renderer showed that
+markdown raw: `parseMessageBlocks` takes only `http(s)` images and `inline` kept any other `![` as text. Now `inline` reads an
+image whose target is of the `attachment:` kind as R-MSG-LINK-01 reads a link: a file of the conversation is its chip (the picture
+itself stays the media message above, not drawn twice), any other target says 「圖片「<words>」無法顯示」 (`chat.pictureMissing`,
+`chat.pictureMissingBare`, all 15 locales), a renderer given no files shows the words alone, and one still arriving shows its words.
+attachment-links.test.ts holds it with a turn of the real shape; `message-attachment-link` does not draw an image link yet.
+
 ## One member, one working slime (R-SLIME-03)
 
 A reply that queued research in the background once drew two working slimes (an empty slime under the reply, a task line with the
@@ -2576,6 +2584,18 @@ the theme they are opened in (as the core's helper tells a real page), so the da
 embed: only a page's frame is shown at any height; a PDF keeps its fixed height with its own 展開, the YouTube player is 16:9,
 pictures and videos are at most 300 px, diagrams, tables and code blocks keep their own size rules, a report is a link card, and the
 computer's screen card is 16:9 with no pointer: none of these changed.
+
+A page that cannot draw says so (R-PAGE-13). A member's daily page loaded a Google Fonts style sheet in its head and stood as an
+empty grey box under 準備就緒: with the font host silent the page painted nothing and its frame never fired `load`, the only thing
+that took the card out of its placeholder (reproduced in Edge with that page's shape served by the core's own host and the font
+host mapped to a local port that never answers: `loading`, no paint, no height). The helper (`_HELPER` in core agent/pages.py)
+now lets a style sheet hold the page back for three seconds, then puts it back with a media no screen matches, which takes its own
+media once it has come (measured: the page drew at about 3.5 s; with a host that answers after 5 s the style sheet applied then).
+The card (`page-card.ts`) is ready on the page's first message or its `load`, whichever is first; a line drawn again while the page
+is on its way stays the placeholder; and a page silent for 15 seconds (`DRAW_MS`) shows 「這個頁面顯示不出來。」 (`page.notDrawn`, all
+15 locales) with 再試一次 and a failed pill, and stands after all if it draws later. page-card.test.ts and core
+tests/agent/test_pages.py hold it; no look scene covers a silent host yet (the look fixture's pages are `data:` documents that
+load nothing from elsewhere), and the real app with a silent font host was not run.
 
 The matrix below covers both themes at 1120, 720 and 1920x1080:
 
