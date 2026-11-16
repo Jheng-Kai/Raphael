@@ -645,6 +645,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     }
 
     /// The controller, asking `gate` before each recording whether the app may record.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn with_microphone_gate(mut self, gate: MicrophoneGate) -> Self {
         self.microphone = Some(gate);
         self
