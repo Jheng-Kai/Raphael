@@ -1,4 +1,5 @@
-"""Fixed UI translations of the line that says a member woke the computer (computer/vm_tools.py, R-COMP-WAKE-01).
+"""Fixed UI translations of the lines about a member's computer: that a member woke it (computer/vm_tools.py,
+R-COMP-WAKE-01), and that a member's answer does not count because it never read its last change back (R-COMP-PERF-09).
 
 Each English source maps to its twelve translations, in the order of `ui_words.NEW_LANGUAGES`; the catalogue test in
 tests/agent/test_ui_languages.py holds them to the same format fields as their source. The app keeps no copy of them: the
@@ -29,6 +30,19 @@ _ROWS = {
         "{who} ha riattivato il computer per usarlo", "Компьютер разбужен: {who} пользуется им",
         "{who} đã đánh thức máy tính để sử dụng", "{who} ปลุกคอมพิวเตอร์เพื่อใช้งาน",
         "{who} membangunkan komputer untuk menggunakannya", "{who} bilgisayarı kullanmak için uyandırdı"),
+    # A member answered after a change on its screen without reading the result back, once told to (R-COMP-PERF-09).
+    "The screen was not checked after the last change; this does not count as done.": (
+        "最后一次操作画面后没有再确认结果，这次不算完成。", "화면을 마지막으로 조작한 뒤 결과를 확인하지 않아 완료로 처리할 수 없습니다.",
+        "No se comprobó la pantalla tras el último cambio; esto no cuenta como terminado.",
+        "Écran non vérifié après la dernière modification : cela ne compte pas comme terminé.",
+        "Der Bildschirm wurde nach der letzten Änderung nicht geprüft; dies zählt daher nicht als erledigt.",
+        "A tela não foi conferida depois da última alteração, então isto não conta como concluído.",
+        "Lo schermo non è stato controllato dopo l’ultima modifica, quindi non conta come completato.",
+        "После последнего действия на экране результат не проверен, поэтому это не считается завершённым.",
+        "Chưa kiểm tra lại màn hình sau thao tác cuối cùng nên việc này chưa được tính là hoàn tất.",
+        "ไม่ได้ตรวจหน้าจออีกครั้งหลังการเปลี่ยนแปลงล่าสุด จึงไม่นับว่าเสร็จ",
+        "Layar tidak diperiksa lagi setelah perubahan terakhir, jadi ini belum dianggap selesai.",
+        "Ekran son değişiklikten sonra kontrol edilmedi; bu yüzden bu tamamlanmış sayılmaz."),
 }
 
 COMPUTER_WORDS = {source: dict(zip(_ORDER, row, strict=True)) for source, row in _ROWS.items()}

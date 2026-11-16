@@ -17,6 +17,7 @@ from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...services.video import is_video, sample_all
 from ...worker.tool_guardrails import ToolGuardrails
+from ...worker.computer_verification import STOPPED, UNCHECKED
 from ..answers import MESSAGE_RULES, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..failure import AgentFailure
@@ -28,6 +29,7 @@ from ...conversation_language import in_language
 from ...ui_languages import LANGUAGE_NAMES, fixed_language
 from ..narration import CLI_PROGRESS_RULES
 from ..owner_questions import OWNER_CARDS
+from ..persona import phrase
 from ..policy import CONFIRM_TIMEOUT_S, EXPIRED_NOTE
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
@@ -88,6 +90,28 @@ async def _settled(task):
         task.exception()  # retrieved: a failure of the abandoned read is of no use to the turn
     if cancelled:
         raise asyncio.CancelledError
+
+
+def hear(heard, event):
+    """Count what a CLI sent in one run, never its words: each kind of event (a message it marked final apart), the length
+    of its text, and the session it named."""
+    heard["events"][event.kind] += 1
+    text = event.text if isinstance(event.text, str) else ""
+    if event.kind == "text_delta":
+        heard["text_chars"] += len(text)
+    elif event.kind == "message":
+        heard["message_chars"] = [*heard["message_chars"][-4:], len(text)]
+        if event.data.get("final"):
+            heard["events"]["message_final"] += 1
+    elif event.kind == "final":
+        heard["final_chars"] = len(text)
+    elif event.kind == "session":
+        heard["session"] = text
+
+
+def heard_runs(runs) -> str:
+    """The runs of a turn as `hear` counted them, for the log."""
+    return json.dumps([{**run, "events": dict(run["events"])} for run in runs], ensure_ascii=True, default=str)
 
 
 def recorded_steps(messages):
@@ -295,7 +319,7 @@ class CliLoop:
         self.tool_messages = []
         self.response = None
         self.permission_always = False
-        # Why the turn failed ("missing", "login", "busy", "error", "quota", "rate_limited"), else None.
+        # Why the turn failed ("missing", "login", "busy", "error", "quota", "rate_limited", UNCHECKED), else None.
         self.failure = None
         self.actual_model = None
         self.driver = None
@@ -326,6 +350,8 @@ class CliLoop:
         self._attempts = 0
         self._receipts = list(self.steps)
         self._stream_records = []
+        # What each run of the CLI sent, counted (`hear`): a turn that ends with no words says what it did receive.
+        self._heard_runs = []
         self._usage = {}
         self._guardrails = ToolGuardrails()
         # What failed in this turn and what was called, for the note after a tool's first failure (R-PERSIST-03): a CLI
@@ -363,9 +389,12 @@ class CliLoop:
             return
         # What the model wrote to itself before its answer is no reply of the owner's (R-TEXT-05).
         text = split_notes(text, self.language)[0]
-        reply = (self._written_reply(text)
-                 if text.strip() and self.structured is None
-                 else public_reply(text, self.language, plain=self.plain))
+        try:
+            reply = (self._written_reply(text)
+                     if text.strip() and self.structured is None
+                     else public_reply(text, self.language, plain=self.plain))
+        except AgentFailure:
+            return None  # a reply object with no words in it: nothing to show
         if reply is None:
             return
         lines = reply.messages or [reply.text]
@@ -382,6 +411,14 @@ class CliLoop:
             self._release_held(answer=True)
             self._show(reply, lines)
         return lines
+
+    def _worded(self, text) -> bool:
+        """Whether `text`, as the CLI's answer, has words for the owner (`_written_reply` reads it)."""
+        try:
+            self._written_reply(text)
+        except AgentFailure:
+            return False
+        return True
 
     def _unthought(self, text):
         """`text` without reasoning the CLI wrote into its answer, which is shown as thinking (brain/reasoning.py)."""
@@ -931,6 +968,7 @@ class CliLoop:
                     fresh_context = getattr(self, "_fresh_context", False)
                     while True:
                         resumed = self._session is not None
+                        server.new_run()  # each CLI process counts its MCP requests from 1
                         failure = await self._attempt(name, command, model, server, self._session, workspace, recovering=recovering)
                         if self._final_nudged and failure not in (None, "tools_changed", "owner_input"):
                             self._missing_terminal()
@@ -1049,9 +1087,19 @@ class CliLoop:
             with StreamSteps(lambda: self.activity_turn) as steps:
                 self.catalog_changed = False
                 began = time.perf_counter()
+                heard = {"attempt": self._attempts, "resumed": session, "session": None, "events": Counter(),
+                         "text_chars": 0, "message_chars": [], "final_chars": None, "ended": None, "exit": None}
+                self._heard_runs.append(heard)
                 try:
-                    return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)
+                    heard["ended"] = await self._stream_attempt(name, command, model, server, session, workspace, steps,
+                                                                user=user, heard=heard)
+                    return heard["ended"]
+                except BaseException as error:
+                    heard["ended"] = type(error).__name__
+                    raise
                 finally:
+                    child = getattr(self.driver, "child", None)
+                    heard["exit"] = getattr(getattr(child, "process", None), "returncode", None)
                     # Speech no step followed when an attempt ends (a failure, a restart, a hand-off) stands as said.
                     self._release_held(answer=True)
                     self._meter(name, resumed=session is not None, ms=int((time.perf_counter() - began) * 1000))
@@ -1109,8 +1157,10 @@ class CliLoop:
             self._frames = await asyncio.to_thread(sample_all, videos) if videos else []
         return [*self.images, *self._frames]
 
-    async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user):
-        """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
+    async def _stream_attempt(self, name, command, model, server, session, workspace, steps, *, user, heard=None):
+        """Run the CLI once for this turn: None once its answer is queued, else why it failed. What the CLI sent is
+        counted in `heard` (kinds, lengths, the session it named; never its words)."""
+        heard = heard if heard is not None else {"events": Counter(), "text_chars": 0, "message_chars": []}
         self._buffer = self._thought = ""
         self._completed_buffer, self._separated = False, []
         self._usage = {}
@@ -1131,6 +1181,7 @@ class CliLoop:
                 aclosing(self._events(stream) if self.stall_s else stream) as events:
             async for event in events:
                 self.alive()
+                hear(heard, event)
                 if self.catalog_changed and event.kind in ("tool_end", "text_delta", "final"):
                     await self.driver.interrupt()
                     return "tools_changed"
@@ -1211,11 +1262,13 @@ class CliLoop:
                     if self._handed_off():
                         return None
                     final = self._unthought(event.text).strip()
+                    if final and self.structured is None and not self._worded(final):
+                        # A reply object with no words in it (`{"messages": []}`) says nothing, as an empty answer does:
+                        # read as words, it ended the turn on the line of an unknown failure.
+                        final = ""
                     if final:
-                        if check := self._computer_check.finishing():
-                            if check == "stop":
-                                self._queue.put_nowait(Outcome("stopped", kind="computer_verification_required"))
-                                return None
+                        check = self._computer_check.finishing()
+                        if check and check != "stop":
                             self.reload_note = check
                             self.catalog_changed = True
                             return "tools_changed"
@@ -1226,8 +1279,18 @@ class CliLoop:
                         self.owner_input.closed = True
                         if hasattr(self.brains, "sign_in_back"):
                             self.brains.sign_in_back(name)  # it answered: its sign-in stands
+                        if check == "stop":
+                            # Told once to read its last change on the screen back, it answered again without doing so
+                            # (R-COMP-PERF-09). The answer stays in front of the owner, and the turn ends on why it does
+                            # not count as done: a stop with no words was read as a reply that said nothing.
+                            self.failure, self.failure_reason = UNCHECKED, None
+                            logger.info("CLI turn ends unchecked: no screen read after the last change: %s",
+                                        heard_runs(self._heard_runs))
+                            self._queue.put_nowait(Outcome("stopped", final=phrase(self.language, UNCHECKED), kind=STOPPED))
+                            return None
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
+                    logger.info("CLI final answer was empty: %s", heard_runs(self._heard_runs))
                     self._progress()
                     return self._missing_terminal()
         if self._handed_off():
@@ -1275,7 +1338,13 @@ class CliLoop:
             self.failure = "cli_stopped"
             text = Failure("cli_stopped", "CLI ended without an answer after the wrap-up ask").sentence(
                 NAMES[brain_ref(self.model)[0]], self.language)
-        return self._written_reply(text)
+        try:
+            return self._written_reply(text)
+        except AgentFailure:
+            # The turn is about to end on the line of an unknown failure: what the CLI did send says why next time.
+            logger.warning("CLI turn has no words to show: outcome=%s kind=%s chars=%d published=%d runs=%s",
+                           outcome.status, outcome.kind, len(text or ""), len(self._published), heard_runs(self._heard_runs))
+            raise
 
     def _written_reply(self, text):
         literal = self.structured is None

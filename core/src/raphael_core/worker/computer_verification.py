@@ -5,6 +5,11 @@ import re
 
 NOTE = ("Before finishing computer work, check the result with verify_state and an expectation, "
         "or read the intended get_window_state/get_browser_state. Do not claim success without that check.")
+# How a turn ends when the check stops it (the kind of its outcome, which carries the answer), and the reason it then
+# fails with, also the name of the sentence that says it: after a change on the screen the member never read the result
+# back, not even once told to (R-COMP-PERF-09).
+STOPPED = "computer_verification_required"
+UNCHECKED = "computer_unchecked"
 READS = {"get_window_state", "get_browser_state", "get_desktop_state", "verify_state"}
 # browser_open answers with the page it opened (its references and text): the change and its read in one call. Asked
 # to read that page again before answering, every "open this page and tell me" turn was started again and said its

@@ -323,7 +323,7 @@ async def _run_task(
     )
     messages = conversation
     guardrails = guardrails or ToolGuardrails()
-    from .computer_verification import ComputerVerification
+    from .computer_verification import STOPPED, ComputerVerification
     computer_check = ComputerVerification()
     computer_check.restore(messages)
     corrective = sum(message.get("role") == "user" and str(message.get("content")).startswith(CORRECTIVE_NOTE)
@@ -397,7 +397,9 @@ async def _run_task(
                 said = "".join([*pieces, turn.content])
                 if check := computer_check.finishing():
                     if check == "stop":
-                        raise Stop("computer_verification_required")
+                        # Told once to read its last change on the screen back, it answered again without doing so: the
+                        # answer goes with the stop, for whoever ends the turn to keep it beside why it does not count.
+                        return Outcome("stopped", said, STOPPED, None, model_calls, tool_calls)
                     messages.append({"role": "user", "content": check})
                     continue
                 if tools and nudged < MAX_NUDGES and stalled(said):

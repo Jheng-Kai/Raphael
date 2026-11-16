@@ -172,6 +172,7 @@ class Phrases:
     computer_limit: str  # a run used all its actions, time or money: {steps}
     computer_done: str  # the run ended and the model said nothing
     computer_model: str  # the answer model takes no tools, so nothing can be operated
+    computer_unchecked: str  # a member answered, told to check its last change on the screen, without checking it
     # The memory (`raphael_core.memory`): what Raphael says when the owner asked it to remember or
     # to forget something and the model had nothing more to say.
     remembered: str  # it was written
@@ -268,6 +269,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         computer_limit="已達操作上限。停在第 {steps} 步。",
         computer_done="操作完成。",
         computer_model="目前的模型不支援呼叫工具。無法操作電腦。",
+        computer_unchecked="最後一次操作畫面後沒有再確認結果，這次不算完成。",
         remembered="已記下。",
         remembered_unconfirmed="已記下，標為待確認。",
         forgotten="已刪除此記憶。",
@@ -355,6 +357,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         computer_limit="The operation limit was reached. Stopped at step {steps}.",
         computer_done="Done.",
         computer_model="The current model cannot call tools. The computer cannot be operated.",
+        computer_unchecked="The screen was not checked after the last change; this does not count as done.",
         remembered="Noted.",
         remembered_unconfirmed="Noted, marked as unconfirmed.",
         forgotten="The memory is deleted.",
@@ -435,6 +438,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         computer_limit="操作の上限に達しました。{steps} 手目で停止しました。",
         computer_done="操作を完了しました。",
         computer_model="現在のモデルはツールを呼び出せません。操作できません。",
+        computer_unchecked="画面を最後に操作したあと結果を確認していないため、完了とみなしません。",
         remembered="記憶しました。",
         remembered_unconfirmed="未確認として記憶しました。",
         forgotten="記憶を削除しました。",
