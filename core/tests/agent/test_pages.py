@@ -945,6 +945,40 @@ def test_the_helper_does_not_pass_on_growth_that_only_follows_its_frame():
     assert _HELPER.index("framed = innerHeight;") < _HELPER.index("post('height', {height})")
 
 
+# A member's page shaped like a daily lesson: a Google Fonts style sheet in its head, its words built by its own script at
+# the end of its body. The words are made up.
+LESSON = ('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
+          '<link rel="preconnect" href="https://fonts.googleapis.com">'
+          '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">'
+          "<style>body{margin:0;background:var(--p-bg);font-family:'Noto Sans TC',sans-serif}</style></head>"
+          '<body class="dark"><header><h1>Daily lesson</h1></header><div id="article"></div>'
+          "<script>document.getElementById('article').textContent='A short made-up paragraph.';</script></body></html>")
+
+
+async def test_a_style_sheet_from_elsewhere_that_does_not_come_stops_holding_the_page_back(conn):
+    # R-PAGE-13: a style sheet in the head holds the whole page back while it comes (nothing is drawn, the page's script
+    # waits, no load and no height reach the card), and one whose host never answers held it back for good: the card stood
+    # as an empty box under its ready pill. Measured in Edge: with the font host silent the page stays `loading` and paints
+    # nothing; with this helper it draws within about 3.5 s and applies the style sheet if it comes later.
+    from raphael_core.agent.pages import _HELPER
+    page = stored(conn, title="Daily lesson", html=LESSON)
+    host = PageHost(PageStore(conn))
+    try:
+        body = (await fetch(await host.url(page["id"], "dark"))).split("\r\n\r\n", 1)[1]
+    finally:
+        await host.aclose()
+    # The helper runs before the page's own head, so its timer is set before the style sheet starts to hold the page.
+    assert body.index(_HELPER) < body.index('<link href="https://fonts.googleapis.com')
+    release = _HELPER[_HELPER.index("setTimeout(() => {"):]
+    release = release[:release.index("}, 3000);")]
+    # Only while the page is still loading, and only a style sheet that has not come (a loaded one has its `sheet`).
+    assert "document.readyState === 'complete'" in release and "link.sheet" in release
+    assert "querySelectorAll('link[rel~=\"stylesheet\" i]')" in release
+    # It is put back as one that holds nothing (a media no screen matches), which takes its own media once it has come.
+    assert "late.media = 'print'" in release and "late.addEventListener('load', () => { late.media = media; }" in release
+    assert "link.replaceWith(late)" in release
+
+
 async def test_a_youtube_video_plays_from_the_page_host_which_names_itself_to_youtube(conn):
     """WebKit sends YouTube no referrer from the app's `tauri://` page (its error 153): on a Mac the player is a page here."""
     host = PageHost(PageStore(conn))
