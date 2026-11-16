@@ -43,6 +43,11 @@ def helper_name(source):
     return 'raphael-carry-' + source.name.removeprefix('raphael-computer-')
 
 
+def helper_prefix(owner):
+    """What the name of every carry helper of the computers of `owner` starts with (`helper_name`)."""
+    return f'raphael-carry-{owner}-'
+
+
 def folder_name(name, key, occupied):
     name = unicodedata.normalize('NFKC', name)
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name).strip(' .')[:80]
@@ -163,7 +168,7 @@ async def candidates(vm, target):
             if match:
                 keys.add(match[1])
     else:
-        root = vm.root / 'vm-homes'
+        root = vm.homes
         if root.is_symlink():
             raise VmError('outside_workspace')
         keys.update(path.name for path in root.iterdir() if re.fullmatch(r'[0-9a-f]{16}', path.name)

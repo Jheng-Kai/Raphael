@@ -900,7 +900,7 @@ class App(Router):
 
         import os
         from .native_journeys import native_enabled
-        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn,
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn, machine_dir=paths.machine_dir(data_dir),
                           enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
@@ -1583,6 +1583,8 @@ class App(Router):
 
     async def _hello(self, params: dict) -> dict:
         if not self._closed:
+            # Before any member's work: a computer prepared from here on waits for the folders' move, never races it.
+            self.vm.relocate_soon()
             self.messaging.start()  # Receiving and persistent inbox recovery cannot wait.
             self.agent.start()
             self.background.start()  # What the last run left queued was put back before the loop ran, and starts here.

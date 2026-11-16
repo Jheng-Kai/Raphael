@@ -77,7 +77,7 @@ async def maintain(vm, target, action, *, confirmed=False):
                 if str(target.workspace) != target.name + "-workspace":
                     raise VmError("outside_workspace")
             else:
-                root = vm.root / "vm-homes"
+                root = vm.homes
                 if root.is_symlink() or root.resolve() != root or workspace.is_symlink() or workspace.resolve() != root / target.unit:
                     raise VmError("outside_workspace")
         await vm.disconnect_unit(target)
