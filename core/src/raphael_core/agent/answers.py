@@ -396,20 +396,25 @@ def _spoken(item: dict, *, final: bool) -> list[str]:
     return [item["text"]] if final and isinstance(item.get("text"), str) and item["text"].strip() else []
 
 
-def _run_reply(objects: list[dict], before: str = "", after: str = "", *, strict: bool = False) -> dict | None:
-    """The reply that objects written one after another make, with the words said before and after them: the messages an
-    earlier object wrote for the owner come first, the last object is the reply. None when they are not the protocol (no
-    field of it that an author would not write by hand, or an earlier object of other fields), or when there is one object
-    and nothing else, which is the ordinary envelope. `strict` also asks the last object for the protocol's fields only."""
+def _protocol_objects(objects: list[dict], *, strict: bool = False) -> bool:
+    """Whether objects written one after another are the protocol: one of them has a field that only the protocol has, each
+    but the last has no other field than its fields, and the last has at least one of them (an object of fields of its own,
+    such as `{"metadata": …}`, is the member's content and stays). `strict` asks the last for its fields only."""
     final, earlier = objects[-1], objects[:-1]
-    if (not any(item.keys() & _STRONG_KEYS for item in objects) or not all(item.keys() <= _KNOWN_KEYS for item in earlier)
-            or (strict and not final.keys() <= _KNOWN_KEYS)):
-        return None
-    if not earlier and not before and not after:
-        return None
-    reply = dict(final)
-    parts = [before, *(message for item in earlier for message in _spoken(item, final=False)), *_spoken(final, final=True), after]
+    return (any(item.keys() & _STRONG_KEYS for item in objects) and all(item.keys() <= _KNOWN_KEYS for item in earlier)
+            and bool(final.keys() & _KNOWN_KEYS) and not (strict and not final.keys() <= _KNOWN_KEYS))
+
+
+def _compose(lead: list[dict], words: str, trailing: list[dict], after: str = "") -> dict:
+    """The reply of protocol objects with the words among them, in the order they were written: what the leading objects
+    said for the owner, the words, what the objects that end the text said (the last of them is the reply), the words
+    after. `_objects` is what the objects said, which is all that speech while a turn works counts."""
+    objects = [*lead, *trailing]
+    said = [[message for message in _spoken(item, final=item is objects[-1])] for item in objects]
+    reply = dict(objects[-1])
+    parts = [*(m for group in said[:len(lead)] for m in group), words, *(m for group in said[len(lead):] for m in group), after]
     reply["messages"] = [part for part in parts if part.strip()]
+    reply["_objects"] = [m for group in said for m in group]
     return reply
 
 
@@ -433,28 +438,45 @@ def _read_envelope(text: str, *, edges: bool = True, strict: bool = False) -> di
     else: words that only contain objects stay words. Objects count only when they stand where a line begins and begin or end
     the text (without `edges`, when they are all of it)."""
     text = _unfenced(text) if edges else text.strip()
-    objects, end, cut = _object_run(text, 0)
+    lead, end, cut = _object_run(text, 0)
+    if cut and not edges:
+        return None  # authored words, for a path that reads whole objects only
     if cut:
-        return _CUT
-    if objects:
-        after = text[end:].strip()
-        if after and not edges:
-            return None
-        return _run_reply(objects, after=after, strict=strict)
+        # An object cut off after objects that said something: what they said is the reply, and the tail goes.
+        if lead and all(item.keys() <= _KNOWN_KEYS for item in lead):
+            reply = _compose(lead, "", [])
+            return reply if reply["messages"] else _CUT
+        return None if lead else _CUT
     if not edges:
-        return None
+        return _single_or_run(lead, strict) if lead and not text[end:].strip() else None
+    if lead and not (_protocol_objects(lead) or all(item.keys() <= _KNOWN_KEYS for item in lead)):
+        return None  # objects of the member's own at the start: the member's content
     fences, counted = 0, 0
     for match in _LINE_OBJECT.finditer(text):
         start = match.end() - 1
+        if start < end:
+            continue
         fences, counted = fences + text.count("```", counted, start), start
         if fences % 2:
             continue  # inside a block of code, which is a member's example
-        objects, end, cut = _object_run(text, start)
+        trailing, stop, cut = _object_run(text, start)
+        words = text[end:start].strip()
         if cut:
-            return _CUT
-        if objects and not text[end:].strip() and (reply := _run_reply(objects, before=text[:start].strip())) is not None:
-            return reply
+            # Words, then an object that stops before it is closed: the words are the answer with a broken tail.
+            reply = _compose(lead, words, []) if lead else {"messages": [words] if words else [], "_objects": []}
+            return reply if reply["messages"] else _CUT
+        if trailing and not text[stop:].strip() and _protocol_objects([*lead, *trailing]):
+            return _compose(lead, words, trailing)
+    if lead and _protocol_objects(lead):
+        return _compose(lead, "", [], text[end:].strip())
     return None
+
+
+def _single_or_run(objects: list[dict], strict: bool) -> dict | None:
+    """The reply of objects that are all of a text, None for one object alone (the ordinary envelope) or for any other."""
+    if len(objects) == 1 or not _protocol_objects(objects, strict=strict):
+        return None
+    return _compose(objects[:-1], "", objects[-1:])
 
 
 def _exact_envelope(obj: Any) -> bool:
@@ -674,9 +696,11 @@ def public_reply(content: str, language: str, *, plain: bool = False, explicit: 
         return None
     if explicit:
         if isinstance(value, dict):
-            if not isinstance(value.get("messages"), list):
+            # Speech beside a tool call counts what the objects said, never the words that stood among them.
+            said = value["_objects"] if "_objects" in value else value.get("messages")
+            if not isinstance(said, list) or not said:
                 return None
-            value = {"messages": value["messages"], "prefix": value.get("prefix")}
+            value = {"messages": said, "prefix": value.get("prefix")}
         elif not isinstance(value, str) or len(message_parts(value)) < 2:
             return None
     try:

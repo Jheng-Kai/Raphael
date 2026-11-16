@@ -33,18 +33,23 @@ async def test_tool_narration_precedes_the_complete_final_messages(setup, client
     ('```json\n{"text":"A clean answer."}\n```', "A clean answer."),
     ('```\n{"messages":["A clean answer."]}\n```', "A clean answer."),
     ("A clean answer.", "A clean answer."),
-    ('{"thinking":"Check the example."}\nDuplicate prose.\n{"text":"A clean answer."}', None),
-    ('{"thinking":"Check the example."}\nA clean answer.\n{"metadata":{"ignored":true}}', None),
+    # Objects at the start, words, then objects that end the text are one reply: what the earlier objects said for the owner,
+    # the words, then what the last object says. No protocol is shown.
+    ('{"thinking":"Check the example."}\nDuplicate prose.\n{"text":"A clean answer."}', "Duplicate prose.\n\nA clean answer."),
+    # An object with no field of the protocol is the member's own content and stays where it stands.
+    ('{"thinking":"Check the example."}\nA clean answer.\n{"metadata":{"ignored":true}}',
+     'A clean answer.\n{"metadata":{"ignored":true}}'),
     ('A clean answer.\n```json\n{"text": broken, "need": {}}\n```', None),
     ('```json\n{"text": "unfinished\n```\nA clean answer.', None),
-    ('A clean answer.\n{"text": "unfinished', None),
+    # Words followed by a cut protocol object are the answer with a broken tail: the tail goes, the words stay.
+    ('A clean answer.\n{"text": "unfinished', "A clean answer."),
     (json.dumps({"text": 'A clean answer.\n```json\n{"progress":"Echoed protocol."}\n```',
                  "detail": 'Details.\n{"thinking":"Echoed protocol."}'}), 'A clean answer.\n```json\n{"progress":"Echoed protocol."}\n```'),
     (json.dumps({"messages": ['A clean answer.\n{"text":"Echoed protocol."}']}), 'A clean answer.\n{"text":"Echoed protocol."}'),
     (json.dumps({"text": 'Braces in a string: } and an escaped "quote".', "memory": [], "need": {}}),
      'Braces in a string: } and an escaped "quote".'),
 ], ids=["bare", "json-fence", "plain-fence", "prose", "two-objects", "public-and-metadata",
-        "malformed-balanced", "malformed-fenced", "malformed-bare", "echoed-text", "echoed-message", "escaped-braces"])
+        "malformed-balanced", "malformed-fenced", "malformed-cut-tail", "echoed-text", "echoed-message", "escaped-braces"])
 async def test_final_content_uses_reply_objects_or_prose_without_protocol(setup, client, content, expected):
     rig, team = setup
     teacher = member(team)
@@ -53,7 +58,9 @@ async def test_final_content_uses_reply_objects_or_prose_without_protocol(setup,
     result = await typed(rig, "Explain this", teacher.id, language="en")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert result["text"] == turn["text"] == expected
-    assert [m["text"] for m in turn["messages"] if m["kind"] == "reply"] == [expected]
+    replies = [m["text"] for m in turn["messages"] if m["kind"] == "reply"]
+    # The words among the objects and what the last object says are two messages, in the order they were written.
+    assert replies == (expected.split("\n\n") if content.startswith('{"thinking":"Check the example."}\nDuplicate') else [expected])
     if "Details." in content:
         assert turn["detail"] == 'Details.\n{"thinking":"Echoed protocol."}'
 
@@ -76,7 +83,7 @@ async def test_each_pre_tool_object_is_published_in_order_without_duplicate_pros
 Duplicate prose.
 {"thinking":"Then I can choose the example.","progress":"Choosing the example."}
 ''', ("local_time", {})), finish]
-    await typed(rig, "Choose a lesson", teacher.id, language="en")
+    await typed(rig, "Please choose a lesson for this week", teacher.id, language="en")
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert [(m["kind"], m["text"]) for m in turn["messages"]][-2:] == [
         ("thinking", "The example is ready."), ("reply", "Done."),
