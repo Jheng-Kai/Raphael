@@ -63,7 +63,7 @@ _RUN_ON = re.compile(r"((?<=[.!?:)\]])[ \t]*(?=[\u3040-\u30ff\u3400-\u4dbf\u4e00
 _PLANNING = re.compile(
     r"\b(?:I (?:should|need to|must|will|want to) (?:respond|reply|answer|explain|confirm|ask|check|compute|calculate|say|tell|mention|"
     r"give|offer|keep|avoid|first|also|then|not)\b|(?:the|this) (?:user|owner)\b|"
-    r"(?:he|she|they|Jack) (?:says?|said|wants?|asked|answered|is asking|mentioned)\b|plan\s*:|next,? I\b)", re.I)
+    r"(?:he|she|they) (?:says?|said|wants?|asked|answered|is asking|mentioned)\b|plan\s*:|next,? I\b)", re.I)
 _NOTE_WORDS = 8
 
 
