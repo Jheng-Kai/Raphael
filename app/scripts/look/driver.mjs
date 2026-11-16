@@ -438,7 +438,7 @@ export async function perform(page, step, evidenceDirectory) {
       if (await value()!==`${step.total}/${step.total}`) throw new Error('newest word was not restored');
       break;
     }
-    case "viewport": await page.setViewport({width:step.width,height:step.height,deviceScaleFactor:1}); break;
+    case "viewport": await page.setViewport({width:step.width ?? page.viewport().width,height:step.height ?? page.viewport().height,deviceScaleFactor:step.scale ?? page.viewport().deviceScaleFactor ?? 1}); break;
     case "window-control": {
       const selector = `[data-window-action="${step.control}"]`;
       if (step.restore) {

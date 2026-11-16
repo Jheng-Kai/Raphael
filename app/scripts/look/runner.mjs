@@ -91,7 +91,7 @@ export async function run(options) {
   await mkdir(options.out, { recursive: true });
   // Keep each invocation separate: a blocked run must never inherit old green screenshots.
   const directory = await mkdtemp(join(options.out, "run-"));
-  const report = { status: "running", startedAt: new Date().toISOString(), options: { scenes: options.selected.map(scene => scene.name), themes: options.themes, widths: options.widths, heights: options.heights, locale: options.locale }, results: [], contactSheets: [], errors: [] };
+  const report = { status: "running", startedAt: new Date().toISOString(), options: { scenes: options.selected.map(scene => scene.name), themes: options.themes, widths: options.widths, heights: options.heights, scale: options.scale ?? 1, locale: options.locale }, results: [], contactSheets: [], errors: [] };
   report.cpuSlowdown = cpuSlowdown;
   let server, browser;
   const save = () => saveReport(directory, report);
@@ -154,7 +154,7 @@ export async function run(options) {
       const requestFailures = navigationRequests(page);
       page.on("response", response => { if (response.status() >= 400 && !favicon(response.url())) error("http", `${response.status()} ${response.url()}`); });
       try {
-        await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: 1 });
+        await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: options.scale ?? 1 });
         await page.emulateTimezone("Asia/Taipei");
         // Still frames by default; a scene about something that moves turns motion on and holds it with `freeze-motion`.
         await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: scene.motion ? "no-preference" : "reduce" }, { name: "prefers-color-scheme", value: theme }]);

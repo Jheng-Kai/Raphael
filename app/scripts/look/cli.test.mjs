@@ -30,6 +30,11 @@ describe("look CLI", () => {
     expect(options.widths).toEqual([1120, 720, 1920]);
     expect(options.heights).toEqual({ 1920: 1080 });
   });
+  it("renders at a pixel ratio of 1 unless a scale is asked for", () => {
+    expect(parseOptions(["chat"], [{ name: "chat" }]).scale).toBe(1);
+    expect(parseOptions(["chat", "--scale", "1.25"], [{ name: "chat" }]).scale).toBe(1.25);
+    for (const value of ["0.5", "4", "x"]) expect(() => parseOptions(["chat", "--scale", value], [{ name: "chat" }])).toThrow(/Invalid scale/);
+  });
   it("lists scenes without starting Vite or requiring a browser package", () => {
     const result = look("--list");
     expect(result.status, result.stderr).toBe(0);
