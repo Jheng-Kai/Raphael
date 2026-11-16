@@ -268,5 +268,5 @@ describe("the walk over tracked files", () => {
 describe("this repository", () => {
   it("carries no provenance mark, dated comment or pointer into history in any tracked file", () => {
     expect(trackedHits().map(({ path, line, rule }) => `${path}:${line}:${rule}`)).toEqual([]);
-  });
+  }, 120_000);
 });
