@@ -147,7 +147,7 @@ from .routine_outcome import failure as routine_failure
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, take_snapshot
 from .outcomes import computer_files, file_named_in, named_files, worker_trace
 from .handback import title
-from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
+from .tasks import FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore, deliverable_names
 
 logger = logging.getLogger(__name__)
 
@@ -2941,7 +2941,7 @@ class BackgroundService:
                     keep(path, root)
         # A condition that names a file is met by a file of that name (whatever it holds: spaces, Chinese or Japanese); when it
         # names none, any new file is the work.
-        named = bool(FILE_NAMES.findall(task.done_when))
+        named = bool(deliverable_names(task.done_when))
         found = []
 
         def freshest_first(base: str, folders: list[str]) -> list[str]:

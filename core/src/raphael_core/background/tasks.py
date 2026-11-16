@@ -49,6 +49,23 @@ FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
 FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html?|xlsx?|pdf|csv|tsv|txt|jsonl?|ndjson|md|docx?|pptx?|rtf|odt|ods|odp|epub|ipynb|'
                         r'ya?ml|toml|ini|xml|log|sql|diff|patch|png|jpe?g|gif|svg|webp|bmp|tiff?|heic|mp4|mov|webm|mkv|avi|mp3|wav|m4a|flac|ogg|'
                         r'zip|7z|rar|tar|tgz|gz))(?!\w)')
+# What a condition says of a file it only reads: a verb of reading before the name, within the same part of the sentence.
+_PART_START = re.compile(r"[.;。,，；]|\band\b|\bthen\b|並|并|然後|然后|再")
+_READ_BEFORE = re.compile(r"(?:\b(?:read|reads|open|use|using|parse|analy[sz]e|review|check|inspect|look at|based on|from|given|using)\b|"
+                          r"讀取?|读取?|閱讀|阅读|打開|打开|開啟|使用|根據|根据|依據|依据|分析|參考|参考|檢查|检查|查看|來自|来自)[^\n]{0,40}$", re.I)
+
+
+def deliverable_names(text: str) -> list[str]:
+    """The files a condition names for the work to leave: the names in it, less the ones it only reads ("read server.log and
+    write up what failed") and so cannot ask the work to make."""
+    names = []
+    for found in FILE_NAMES.finditer(text):
+        before = _PART_START.split(text[max(0, found.start() - 60):found.start()])[-1]
+        if not _READ_BEFORE.search(before):
+            names.append(found.group(1))
+    return names
+
+
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
 WRITTEN_WORK_CHARS = 200
@@ -482,7 +499,7 @@ class TaskStore:
         before = {item['uri']: item for item in receipts if item['kind'] == 'file_before'}
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
         waived = [Path(item['uri']).name.lower() for item in receipts if item['kind'] == 'artifact_note']
-        expected = [name for name in FILE_NAMES.findall(task.done_when) if not any(
+        expected = [name for name in deliverable_names(task.done_when) if not any(
             found == name.lower() or found.endswith(' ' + name.lower()) for found in waived)] if task.requires_artifact else []
         requires_artifact = task.requires_artifact and (not waived or bool(expected) or bool(before))
         if requires_artifact and not artifacts:

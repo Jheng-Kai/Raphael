@@ -50,24 +50,37 @@ _DRAFT_TOOL = re.compile(r"\b(?:email|slack)_draft\b")
 
 # A page: made by a verb that has it as its object, a few plain words from it. A word that turns the page into what the
 # verb is about ("write a summary of the page", "make sure the page loads", "create a ticket for each page") ends the span.
-_MAKE = r"(?:make|create|build|generate|produce|publish|render|write|put together)"
+_MAKE = r"(?:make|create|build|generate|produce|publish|render|write|put together|prepare|compose|design|assemble|compile|set up)"
+# Or a verb that puts the result somewhere: the page is where it goes, and a new one ("a page", never "the page").
+_PLACE = r"(?:make|create|build|generate|produce|publish|render|write|put|save|show|display|present|turn|convert|export|output|post)"
 _NOT_OBJECT = (r"(?:of|on|about|for|at|to|from|that|which|with|in|into|sure|every|each|per|when|if|whether|after|before|by|"
-               r"regarding|than|who|where|while|so|announcing|describing|explaining|covering|summari[sz]ing|reviewing|"
-               r"checking|testing|fixing|monitoring|listing)")
-_PAGE_NOUN = r"(?:web ?pages?|html pages?|pages?)"
+               r"regarding|than|who|where|while|so|what|how|why|announcing|describing|explaining|covering|summari[sz]ing|"
+               r"reviewing|checking|testing|fixing|monitoring|listing)")
+# "A page of my journal" is a measure of writing, not a page to make.
+_PAGE_NOUN = r"(?:web ?pages?|html pages?|pages?(?!\s+of\s+(?:my|your|the|a|an)\s+(?:journal|diary|notebook|book|notes?)\b))"
 _PAGE_EN = re.compile(rf"\b{_MAKE}\b(?:\s+(?!{_NOT_OBJECT}\b)[\w'’-]+){{0,4}}\s+{_PAGE_NOUN}\b"
-                      rf"|\bturn\b[^\n]{{0,30}}\binto\b(?:\s+(?!{_NOT_OBJECT}\b)[\w'’-]+){{0,3}}\s+{_PAGE_NOUN}\b", re.I)
+                      rf"|\bturn\b[^\n]{{0,30}}\binto\b(?:\s+(?!{_NOT_OBJECT}\b)[\w'’-]+){{0,3}}\s+{_PAGE_NOUN}\b"
+                      rf"|\b{_PLACE}\b(?:\s+(?!{_NOT_OBJECT}\b)[\w'’-]+){{0,7}}\s+(?:to|into|onto|on|as|in)\s+(?:an?|one)\s+"
+                      rf"(?:(?!{_NOT_OBJECT}\b)[\w'’-]+\s+){{0,2}}{_PAGE_NOUN}\b", re.I)
 # Chinese has no spaces: the verb and the noun are close, and a word that makes the page the subject of a check ends the span.
 _ZH_MAKE = (r"(?:做|製作|制作|建立|生成|產生|产生|生出|撰寫|撰写|寫|写|輸出|输出|整理成|做成|變成|变成|成為|成为|整理為|整理为|"
             r"設計|设计|發布|发布|產出|产出)")
 _ZH_PAGE = r"(?:網頁|网页|頁面|页面|報告頁|报告页)"
 _ZH_GAP = (r"(?:(?!關於|关于|有關|有关|針對|针对|對於|对于|檢查|检查|確認|确认|測試|测试|檢測|检测|監測|监测|是否|能否|可否|能不能|"
            r"有沒有|有没有|如果|每個|每个|所有|各個|各个)[^。\n，,、；;:：])")
-_PAGE_ZH = re.compile(rf"{_ZH_MAKE}{_ZH_GAP}{{0,14}}{_ZH_PAGE}|{_ZH_PAGE}{_ZH_GAP}{{0,6}}(?:製作|制作|生成|產生|产生|建立)")
+# A page made as the place of a result: 放到一個網頁, 用網頁呈現, 出一份網頁報告 (a new page: "one", "a", never an existing one).
+_ZH_NEW = r"(?:一個|一个|一份|一頁|一页|一張|一张|新的)"
+_ZH_PLACE = (r"(?:放到|放進|放进|放入|貼到|贴到|寫到|写到|寫入|写入|輸出到|输出到|輸出成|输出成|匯出成|导出成|轉成|转成|轉為|转为|存成|存為|存为)"
+             rf"{_ZH_GAP}{{0,6}}{_ZH_NEW}{_ZH_GAP}{{0,6}}{_ZH_PAGE}")
+_ZH_AS = rf"(?:用|以|透過|透过|通過|通过)(?:{_ZH_NEW})?{_ZH_PAGE}(?:的形式)?(?:呈現|呈现|顯示|显示|展示|輸出|输出|表示|來看|来看|整理)"
+_ZH_ISSUE = rf"出{_ZH_NEW}{_ZH_GAP}{{0,6}}{_ZH_PAGE}"
+_PAGE_ZH = re.compile(rf"{_ZH_MAKE}{_ZH_GAP}{{0,14}}{_ZH_PAGE}|{_ZH_PAGE}{_ZH_GAP}{{0,6}}(?:製作|制作|生成|產生|产生|建立)"
+                      rf"|{_ZH_PLACE}|{_ZH_AS}|{_ZH_ISSUE}")
 # Japanese: a page of a site ("ホームページ"), or a count of pages ("1ページ"), is no page to make.
 _JA_PAGE = r"(?<!ホーム)(?<!トップ)(?<![0-9０-９一二三四五六七八九十])ページ"
 _JA_GAP = r"(?:(?!確認|チェック|について|に関する|かどうか|調べ)[^。\n、])"
 _PAGE_JA = re.compile(rf"{_JA_PAGE}{_JA_GAP}{{0,10}}(?:作成|作る|作って|作り|生成|公開)|{_JA_PAGE}(?:に|として|へ)まとめ"
+                      rf"|{_JA_PAGE}(?:として|にして|にし|形式で)"
                       rf"|(?:作成|作る|作って|作り|生成|公開|まとめ){_JA_GAP}{{0,14}}{_JA_PAGE}")
 
 # A draft is something made only as an email or a Slack draft (`PRODUCERS["draft"]`): a post, an article or a reply drafted in the

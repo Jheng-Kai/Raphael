@@ -27,6 +27,18 @@ PAGES = [
     ("Generate an HTML report page", PAGE),
     ("Use update_page to refresh the dashboard", PAGE),
     ("Do not repeat yesterday's items, make a web page", PAGE),
+    # The page is where the result goes.
+    ("Write the results to a web page.", PAGE),
+    ("Make the report into a page.", PAGE),
+    ("Put today's summary on a page I can open.", PAGE),
+    ("Collect the headlines and save them as an HTML page.", PAGE),
+    ("Every morning, summarise the news and show it as a page.", PAGE),
+    ("Prepare a report page for the team each Friday.", PAGE),
+    ("Write the results to the page.", None),
+    ("Put the results of the page in the conversation", None),
+    ("Check that the pricing page still loads and tell me if it changed.", None),
+    ("Summarise what changed on a page at example.com and reply here", None),
+    ("Remind me to write a page of my journal", None),
     ("Do not make a page; only tell me in the conversation", None),
     ("Never write a page, and do not make a draft either", None),
     ("Instead of making a page, reply here", None),
@@ -47,6 +59,11 @@ PAGES = [
     ("把結果輸出成網頁", PAGE),
     ("幫我做一個網頁來看今天的行程", PAGE),
     ("不要重複昨天的內容，做成網頁", PAGE),
+    ("每天早上把新聞整理好，放到一個網頁上給我看", PAGE),
+    ("用網頁呈現本週的銷售數字", PAGE),
+    ("幫我出一份網頁報告", PAGE),
+    ("把結果放到現有的網頁上，不用新做", None),
+    ("用網頁版 Gmail 查看新郵件並回報", None),
     ("不要做網頁，直接回報", None),
     ("不要製作頁面，也不要做草稿，只在對話裡回答", None),
     ("不要做網頁，或擬郵件草稿，直接回答", None),
@@ -60,6 +77,12 @@ PAGES = [
     ("把销售数据整理成网页并展示", PAGE),
     ("生成一个页面显示今天的待办", PAGE),
     ("不要重复昨天的内容，做成网页", PAGE),
+    ("每天早上把新闻整理好，放到一个网页上给我看", PAGE),
+    ("用网页呈现本周的销售数字", PAGE),
+    ("帮我出一份网页报告", PAGE),
+    ("把结果放到现有的网页上，不用新做", None),
+    ("用网页版邮箱查看新邮件并回报", None),
+    ("检查登录页面是否正常并直接回复", None),
     ("不要做网页，直接回报", None),
     ("检查官网首页是否正常并直接回复", None),
     ("写一篇关于网页性能的分析直接回复我", None),
@@ -68,6 +91,9 @@ PAGES = [
     ("毎朝、今日のニュースのWebページを作って", PAGE),
     ("レポートページを生成して公開", PAGE),
     ("結果をページにまとめて表示して", PAGE),
+    ("結果をウェブページとして表示してください", PAGE),
+    ("毎朝ニュースをまとめてページにしてください", PAGE),
+    ("ホームページとして使っている会社のサイトを確認して", None),
     ("HTMLページを作成してください", PAGE),
     ("レポートをページとして公開して", PAGE),
     ("今日のニュースを一つのページにまとめてください", PAGE),
@@ -528,3 +554,75 @@ async def test_each_folder_has_its_own_budget_when_the_condition_names_no_file(m
         fresh(leave(team, "projects/x/new.txt"))
     task = await made_files(make_rig, tmp_path, "the notes are written up", make)
     assert (task.state, task.reason) == ("done", None)
+
+
+# A file the condition names only as what the work reads is no file the work was to leave.
+INPUTS = [
+    "Read server.log and write up what failed",
+    "Use config.yaml and write down the result",
+    "Open data.csv, analyse it and write a short summary",
+    "Based on notes.md, write the findings",
+    "請讀取 server.log 並整理出失敗的原因",
+    "根據 config.yaml 寫出結果",
+    "server.logを読んで、失敗の原因をまとめて",
+]
+
+
+@pytest.mark.parametrize("condition", INPUTS, ids=range(len(INPUTS)))
+async def test_a_file_the_condition_only_reads_is_not_the_file_the_work_leaves(make_rig, tmp_path, condition):
+    def make(workspace, team, fresh):
+        for name in ("server.log", "config.yaml", "data.csv", "notes.md"):
+            os.utime(leave(team, name), (1_000_000, 1_000_000))
+        fresh(leave(team, "projects/summary.md"))
+    task = await made_files(make_rig, tmp_path, condition, make)
+    assert (task.state, task.reason) == ("done", None), condition
+
+
+async def test_work_that_leaves_nothing_when_the_condition_reads_a_file_is_still_missing_its_file(make_rig, tmp_path):
+    task = await made_files(make_rig, tmp_path, "Read server.log and write up what failed",
+                            lambda workspace, team, fresh: os.utime(leave(team, "server.log"), (1_000_000, 1_000_000)))
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_a_file_the_condition_reads_and_one_it_names_to_leave_are_told_apart(make_rig, tmp_path):
+    def make(workspace, team, fresh):
+        os.utime(leave(team, "data.csv"), (1_000_000, 1_000_000))
+        fresh(leave(team, "decoy.md"))
+    task = await made_files(make_rig, tmp_path, "Read data.csv and save the result as report.md", make)
+    assert (task.state, task.reason) == ("failed", "missing_artifact")
+
+
+async def test_a_task_that_does_not_require_a_file_keeps_no_file_as_evidence_and_is_judged_on_what_it_did(make_rig, tmp_path):
+    """The scan runs only for work that must leave a file: a condition that names a log as input changes nothing here."""
+    from raphael_core.agent.speaker import RAPHAEL
+    from .conftest import call, turn, until
+    from .test_handoff import args
+    rig = make_rig()
+    target, source = setup(rig)
+    workspace, team = _team_rig(rig, tmp_path)
+    rig.client.replies.extend([turn("", [call("local_time", {}, "c1")]), said("The failures are in the log.")])
+    receipt = rig.service.handoff(RAPHAEL, args(target, done_when="Read server.log and tell me what failed"),
+                                  source_turn_id=source.id, language="en")
+    task_id = receipt.data["task_id"]
+    await until(lambda: rig.task(task_id).state in ("done", "failed"))
+    leave(team, "projects/summary.md")
+    task = rig.task(task_id)
+    assert (task.state, task.reason) == ("done", None)
+    assert [item for item in rig.service._store.evidence(task_id) if item["kind"] == "artifact"] == []
+
+
+@pytest.mark.parametrize("went_through, kind, ok", [(True, None, True), (False, "tool_error", False), (False, "approval_required", False)])
+async def test_a_tool_of_a_connected_app_is_written_only_when_its_call_went_through(went_through, kind, ok):
+    """`written` is evidence that something was changed: a refused or failed call, or a read, is none."""
+    from types import SimpleNamespace
+    from raphael_core.background.run import TaskRun
+    from raphael_core.background.snapshot import MCP, ToolRef
+    from raphael_core.agent.policy import Tier
+    ref = ToolRef(MCP, "Notes__note", "Notes", "note", Tier.T1)
+    for reads in (False, True):
+        run = TaskRun.__new__(TaskRun)
+        run.acted, run.written = False, set()
+        run._gate = SimpleNamespace(reads_only=lambda server, name, arguments: reads)
+        run._note_action(ref, {}, ok)
+        assert run.written == (set() if reads or not ok else {"note"}), (reads, ok)
+    assert went_through == ok
