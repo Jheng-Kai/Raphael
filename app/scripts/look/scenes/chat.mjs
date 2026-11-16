@@ -124,7 +124,7 @@ export default [
       wait('[data-connector="card-gmail"][data-card-state="failed"]')],
     { connectorCard: "gmail", connectorMember: 1, cardSignIn: "fail", cardFailureKind: "invalid_request",
       cardFailureText: "Gmail 無法接受連線請求的格式，需要更新連線功能。" }),
-  // R-CONNECT-01 (owner, 2026-10-25 and 2026-11-11): a card that did not connect says why in its own sentence, with a retry only where
+  // R-CONNECT-01: a card that did not connect says why in its own sentence, with a retry only where
   // pressing again can help. The first is the cause that used to show only 「沒有連上」: nothing had been sent.
   scene("connector-cause-busy", "A sign-in that never left the PC says so, and offers 再試一次",
     [member(1), wait('[data-connector="card-gmail"][data-card-state="failed"]'), check("connector-cause-busy")],
@@ -284,7 +284,7 @@ export default [
   scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
   scene("member-draft-done", "Confirmed drafts settle into a summary and add members to the column", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="confirm"]'), check('member-draft-submitted'), wait('.draft-done'), click('[data-act="draft-done"]'), wait('.draft-done.is-open'), check("member-draft-done")], { adminApproval: "draft" }),
   scene("empty", "Conversation without turns", [], { turns: [] }),
-  // 新增成員 is one small dialog over the dimmed window (owner, 2026-11-11, after Grok Bot's Create New Bot): the slime, the name, the shared picker, 取消 and 建立.
+  // 新增成員 is one small dialog over the dimmed window: the slime, the name, the shared picker, 取消 and 建立.
   scene("member-maker", "新增成員 is a small centred dialog: the large slime, the name under it, the tabbed picker, 取消 and a 建立 that waits for a name", [...makerOpen, check("member-maker")]),
   scene("member-maker-chosen", "A tab moves nothing, a slime changes the large one, a name makes 建立 pressable", [...makerOpen, check("member-maker-box"), click('.cr-dialog [data-slime-tab="characters"]'), check("member-maker-tab"), click('.cr-dialog [data-slime-character="shion"]'), type("#mb-new-name", "紫苑"), check("member-maker-chosen")]),
   scene("member-maker-made", "建立 opens the member, which speaks first and asks what it is for", [...makerOpen, ...makerGobta, click('.cr-dialog [data-dlg="create"]'), waitGone(".cr-dialog"), { action: "wait-text", selector: ".page-agent .ra-body", text: "哥布達" }, check("member-maker-made")]),
@@ -356,7 +356,7 @@ export default [
     key("Escape"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), { ...click('#app-popover [data-quick="+"]'), measure: { name: "emoji-picker-reopen", budgetMs: 120, maxLongTaskMs: 50, readySelector: "#app-popover.emoji-picker .emoji-cell" } }, wait("#app-popover.emoji-picker .emoji-cell")]),
   scene("emoji-search","Search filters the grid in place to emoji whose names match, with no section labels", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="react-message"]'), click('#app-popover [data-quick="+"]'), wait("#app-popover.emoji-picker .emoji-cell"), type("#app-popover.emoji-picker input", "愛心"), check("emoji-search")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
-  // Opening a long conversation from the sidebar, cold and coming back (owner, 2026-11-10: 開啟對話太慢).
+  // Opening a long conversation from the sidebar, cold and coming back.
   scene("conversation-open-cost", "Opening a long conversation from the sidebar draws its newest turn within the budget, cold and coming back", [member(2), { action: "open-cost", from: 2, to: 1, newest: 300050, rounds: 3,
     limits: { coldMs: 1500, warmMs: 1000 }, first: ["conversations.list", "agent.history.list"], once: ["agent.history.list"], never: ["members.list"] }],
     { heavyThread: { member: 1, count: 50, newest: 300050 } }),

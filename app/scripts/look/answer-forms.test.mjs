@@ -51,7 +51,7 @@ it.each(['data-member-template', 'data-template-connection="gmail" data-connecte
 });
 
 it("a × in a card's head is always shown and ends the head at the right padding", () => {
-  // A page card's hidden × (until 2026-11-10) was taken by the shared failure of a link the page could not open.
+  // A page card's hidden × was once taken by the shared failure of a link the page could not open.
   const browser = new Window(), doc = browser.document;
   doc.body.innerHTML = '<section class="conversation-card"><header class="card-head"><b>Page</b><span class="card-status">Failed</span><button class="card-close"></button></header></section>';
   const places = { "card-status": { left: 400, right: 450 }, "card-close": { left: 456, right: 480 } };
@@ -69,7 +69,7 @@ it("a × in a card's head is always shown and ends the head at the right padding
 });
 
 it("a card's buttons stand at the card's right padding, not only at the end of their own row", () => {
-  // A failed page's 再試一次 stood at the card's left in a row its parent had shrunk to the button, and passed (2026-11-10).
+  // A failed page's 再試一次 stood at the card's left in a row its parent had shrunk to the button, and passed.
   const browser = new Window(), doc = browser.document;
   doc.body.innerHTML = '<section class="conversation-card"><header class="card-head"><b>Page</b><span class="card-status">Failed</span></header><div class="card-actions"><button class="btn pri">Retry</button></div></section>';
   const places = { "card-status": { left: 400, right: 480 }, "card-actions": { left: 0, right: 80 }, "btn pri": { left: 0, right: 80 } };
@@ -109,7 +109,7 @@ it("a question's answer button stands at the field height and shares the field's
 });
 
 it("a page open in the conversation's place is the whole area: the panel folded, the page's pill, Share, no dialog (2026-11-11, 2026-11-14)", () => {
-  // The × once stood outside a dialog's page (2026-11-11); the page now replaces the conversation, the header's arrow goes back, and (R-PAGE-08)
+  // The × once stood outside a dialog's page; the page now replaces the conversation, the header's arrow goes back, and (R-PAGE-08)
   // it takes the whole area beside the sidebar with the page's own pill in the header's centre and Share at its right.
   const browser = new Window(), doc = browser.document;
   doc.body.innerHTML = '<div class="page-agent"><div class="mb-det" hidden></div><section class="mb-chat"><div class="mb-head"><span class="mb-head-l"><button class="icon back" data-page-back aria-label="返回"><svg></svg></button></span>' +
@@ -157,7 +157,7 @@ it("a page open in the conversation's place is the whole area: the panel folded,
     places["pg-frame"] = rect(380, 60, 1000, 790);
     expect(() => checkRendered('page-inplace')).toThrow(/spans the full width of the view/);
     places["pg-frame"] = rect(280, 60, 1100, 900);
-    // Cut off where the composer's row begins (the band the owner did not want, 2026-11-14).
+    // Cut off where the composer's row begins (a band of the page must not stand there).
     places["pgv-page"] = rect(280, 0, 1100, 790);
     expect(() => checkRendered('page-inplace')).toThrow(/runs to the window's foot/);
     places["pgv-page"] = rect(280, 0, 1100, 900);

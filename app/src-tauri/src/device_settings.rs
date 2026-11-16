@@ -673,7 +673,7 @@ mod tests {
 
     #[test]
     fn the_store_reads_now_without_waiting_and_says_none_while_a_change_holds_it() {
-        // `commands::start` puts in force what the window may already have changed (2026-11-15).
+        // `commands::start` puts in force what the window may already have changed.
         let store = DeviceStore::new(PathBuf::from("device.json"), DeviceSettings::default());
         let mut held = store.current.try_lock().unwrap();
         held.emblem_size = 120;

@@ -280,7 +280,7 @@ export async function idleCost(page, seconds, revision) {
 }
 
 /**
- * A resting member's slime in the list (a moving face, R-SLIME-01) no longer wiggles under the pointer (owner, 2026-11-07, 0c1848d9): it glances aside at rest
+ * A resting member's slime in the list (a moving face, R-SLIME-01) no longer wiggles under the pointer: it glances aside at rest
  * and looks back at you while the pointer is on it, and glances aside again when the pointer has gone. A press squashes it until it is let go, with the
  * control standing still. (A picture does neither: slime.css `:not([data-slime-still])`, proved by slime-places.)
  */

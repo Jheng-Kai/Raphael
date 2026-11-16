@@ -17,7 +17,7 @@ try {
 `;
 
 // The owner speaks Taiwan Chinese with English names in it: Hanhan says the Chinese, David the
-// names. 「herder」 is how the owner's 「herdr」 sounds, 「grok bot」 his 「grokbot」.
+// names. 「herder」 is how 「herdr」 sounds, 「pine bot」 is 「pinebot」.
 const mixedSpeech = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Speech
@@ -36,7 +36,7 @@ try {
 `;
 
 // A remark, never a request: the corrected message reaches a real model, which must find nothing to do.
-export const DICTIONARY_SPEECH = [{ text: "我覺得" }, { text: "herder", en: true }, { text: "跟" }, { text: "grok bot", en: true }, { text: "都很好用" }];
+export const DICTIONARY_SPEECH = [{ text: "我覺得" }, { text: "herder", en: true }, { text: "跟" }, { text: "pine bot", en: true }, { text: "都很好用" }];
 
 export async function prepareDictionarySample(directory, { executeCommand = execute } = {}) {
   const file = join(directory, "dictation.wav");

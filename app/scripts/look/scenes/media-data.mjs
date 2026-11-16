@@ -1,7 +1,7 @@
 import { scene, member, room, wait, click, hover, check, settings, scroll, key, lookCall } from "./steps.mjs";
 import { png, mp4, clip, voice } from "../media-fixture.mjs";
 
-// Two pictures a member drew before its words (owner, 2026-11-14: each is a message the owner can copy and reply to, R-UI-156):
+// Two pictures a member drew before its words (each is a message the owner can copy and reply to, R-UI-156):
 // a square one and a landscape one, drawn by the mock (`drawnPictures`); the landscape one carries the owner's ❤️.
 const square = { id: `${"e".repeat(32)}.png`, name: "office-day.png", mime: "image/png", size: 48211 };
 const wide = { id: `${"f".repeat(32)}.png`, name: "office-night.png", mime: "image/png", size: 51630 };
@@ -38,7 +38,7 @@ const missing = kind => {
     steps:[{kind:"tool",tool:`${kind}_generate`,server:"media",outcome:"error",reason:"not_configured",missing:prerequisite,ms:20,at_ms:1792807155000}]});
 };
 
-// Our own players (owner, 2026-11-15: 「不要用系統 default 的比較好，我們就直接自己增加一些 custom 的東西」, R-MEDIA-01): a video a member
+// Our own players (R-MEDIA-01): a video a member
 // sent, a message of its own (R-MEDIA-02), a sound the owner sent, and files that show a mark by their kind.
 const tour = { id: `${"c".repeat(32)}.mp4`, name: "office-tour.mp4", mime: "video/mp4", size: 56034 };
 const memo = { id: `${"d".repeat(32)}.m4a`, name: "會議重點.m4a", mime: "audio/mp4", size: 11688 };
@@ -80,7 +80,7 @@ export default [
   scene("video-message-playing", "A press on the picture plays it: the scrubber shows what was played and what is loaded, and the button pauses", [...videoOpen, click(`${tourOf} video`), wait(`${tourOf} .mp[data-playing]`), playFor(1800), hover(`${tourOf} video`), check('video-player-playing')], videos),
   scene("video-message-space", "Space pauses the focused video part-way; its controls stay while it waits", [...videoOpen, click(`${tourOf} video`), wait(`${tourOf} .mp[data-playing]`), playFor(1200), key(" "), wait(`${tourOf} .mp[data-started]:not([data-playing])`), check('video-player-space')], videos),
   scene("video-full-screen", "The full screen button opens the app's own full screen: the lightbox with the same video and our controls", [...videoOpen, hover(`${tourOf} video`), click(`${tourOf} [data-mp-act="full"]`), wait('.media-lightbox .lb-video video[src]'), check('video-full-screen')], videos),
-  // Owner, 2026-11-15, of the full screen's 1×: 「這邊倍數的部分 寫到下面去了 根本看不到」.
+  // In the app's full screen the speeds once fell below the window, out of sight.
   scene("video-full-screen-speed", "In the app's full screen the speeds open above the controls, every one on screen", [...videoOpen, hover(`${tourOf} video`), click(`${tourOf} [data-mp-act="full"]`), wait('.media-lightbox .lb-video video[src]'), hover('.media-lightbox .lb-video video'), click('.media-lightbox [data-mp-act="rate"]'), wait('#app-popover .menu-choice[data-value="1.5"]'), check('video-full-screen-speed')], videos),
   scene("video-lightbox-playing","F while a video plays carries it into the lightbox where it was, still playing", [...videoOpen, click(`${tourOf} video`), wait(`${tourOf} .mp[data-playing]`), playFor(1200), key("f"), wait('.media-lightbox .lb-video .mp[data-playing]'), playFor(600), hover('.media-lightbox .lb-video video'), check('video-lightbox-playing')], videos),
   scene("video-message-reply", "Replying to a video quotes it as the video: the play mark, the author and 影片", [...videoOpen, hover(`${tourOf} .attachment-video`), click(`${tourOf} [data-act="reply-message"]`), wait('.cmp-quote:not([hidden]) .quote-mark'), check('video-message-reply')], videos),

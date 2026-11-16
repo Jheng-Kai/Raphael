@@ -1,5 +1,5 @@
 /**
- * Where slimes move (R-SLIME-01; owner, 2026-11-11: 「只有左邊成員列表工作中、對話框思考那一行要有動畫，其他地方放史萊姆的樣子就可以了」).
+ * Where slimes move (R-SLIME-01).
  * Runs in the page, so it is self-contained. A slime is allowed to move in two places only: a member's row or tile in the
  * left list, and the thinking or waiting line of the open conversation. In every other place it must be a picture: drawn
  * with `data-slime-still`, with no strips, and with nothing running on it or any node inside it.

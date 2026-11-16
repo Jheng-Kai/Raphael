@@ -2,7 +2,7 @@ import { scene, check, click, focus, frameCheck, frameExpect, frameScroll, hover
 
 const shown = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#buy" }];
 // A page in a card is only a preview (inert): the owner presses the card and the page opens in the conversation's place, where it
-// works (owner, 2026-11-11: a page replaces the conversation like Grok Bot's, with no dialog; the arrow at the header's top left goes back).
+// works (a page replaces the conversation, with no dialog; the arrow at the header's top left goes back).
 const larger = [click(".pg-card .pg-body"), wait(".pgv-frame-box iframe")];
 const back = click('.mb-head [data-page-back]');
 const news = [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#hide" }];
@@ -18,7 +18,7 @@ const pressNews = click('[data-panel-file="page:page-news"]');
 const pressReport = click('[data-panel-file="page:page-report"]');
 const dashboardLink = '.pg-link[data-page="page-dashboard"]', dashboardFixture = { dashboardTurn: true };
 const dashboard = [member(0), wait(dashboardLink), click(dashboardLink), wait(".pgv:not([hidden]) .rs-tiles")];
-// A document-style report (owner, 2026-11-14, after Grok Bot's Tokyo list), and an HTML page that writes no style of its own (R-PAGE-06).
+// A document-style report, and an HTML page that writes no style of its own (R-PAGE-06).
 const document_ = [member(1), wait(".pg-link"), click(".pg-link"), wait(".pgv:not([hidden]) .rp-table")];
 const documentFixture = { documentTurn: true };
 const dropdown = "[data-report-filter]";
@@ -27,7 +27,7 @@ const baseOpen = [member(1), wait('.pg-body[data-state="ready"] iframe'), { acti
 const baseFixture = { baseTurn: true, pageBase: true };
 
 export default [
-  // Owner, 2026-11-15: 「他現在看起來是會變得無限長 看不到底部 可以一直滑動」: a side column `height: 100vh` with padding said a taller
+  // A side column `height: 100vh` with padding said a taller
   // page each time its frame grew, up to 20000 px. It opens at its own height and stops there.
   scene("page-window-sized", "A page whose side column is one window tall plus its padding opens at its own height and never grows on", [member(1), wait('.pg-body[data-state="ready"] iframe'), click(".pg-card .pg-body"), wait(".pgv-frame-box iframe"), { ...lookCall("letTimePass"), wait: 800 }, check("page-window-height"), { ...lookCall("letTimePass"), wait: 2500 }, check("page-window-stable"), { action: "wheel", selector: ".pgv-page", deltaY: 6000 }, { ...lookCall("letTimePass"), wait: 600 }], { baseTurn: true, pageWindow: true }),
   scene("page-product", "A member shows a product page as a card: its title row and the top of the page, clipped, nothing in it to press", [...shown, check("page-card")], { pageTurn: true }),
@@ -44,15 +44,14 @@ export default [
   scene("page-collapsed-press", "Pressing the preview opens the whole page in the conversation's place, scrolling and operable", [...news, check("page-collapsed"), ...larger, check("page-opened-whole")], newsFixture),
   scene("page-collapsed-key", "The card is one control: Tab reaches it and Enter opens the whole page", [...news, focus(".pg-card .pg-body"), key("Enter"), wait(".pgv-frame-box iframe"), check("page-opened-whole")], newsFixture),
   scene("page-gone", "A page that cannot open says what it knows and offers another try", [member(1), wait(".pg-failed:not([hidden])"), check("page-gone")], { pageTurn: true, pageGone: true }),
-  // A page replaces the conversation (owner, 2026-11-11; R-PAGE-01, R-PAGE-02): the thread's place, the arrow at the header's top left, the composer below.
+  // A page replaces the conversation (R-PAGE-01, R-PAGE-02): the thread's place, the arrow at the header's top left, the composer below.
   scene("page-inplace", "A tall HTML page open in the conversation's place: its title, the round back arrow at the header's top left, the composer below, no dialog", [...news, ...larger, check("page-inplace")], newsFixture),
   scene("page-inplace-back", "The arrow brings back the thread read higher up exactly where it was, the card holding the same frame, nothing reloaded", [member(1), wait('.pg-body[data-state="ready"] iframe'), { action: "frame-wait", selector: "#hide" }, { ...scroll(".pg-card"), block: "center" }, wait(".pg-card .pg-more"), { ...scroll(".pg-card"), block: "center" }, check("page-inplace-before"), ...larger, frameScroll(300), back, check("page-inplace-kept")], { ...newsFixture, longThread: true }),
   scene("page-inplace-esc", "Escape goes back to the conversation and leaves the draft in the composer as it was", [...news, type('.page-agent .cmp-input', draft), ...larger, key("Escape"), check("page-inplace-escaped")], newsFixture),
   scene("page-inplace-update", "The member changes the page while it is open: it updates where the owner was reading, nothing closes or blinks, the conversation keeps one card", [...news, ...larger, frameScroll(300), frameExpect("", 40), check("page-watch"), lookCall("updatePage", "page-news"), frameExpect("練習問題（已更新）", 40), check("page-inplace-updated")], newsFixture),
   scene("page-inplace-working", "While the member works on a change asked for under the open page, its working line shows under the page and the page stays", [...news, ...larger, type('.page-agent .cmp-input', "把最後一題改成問今天的新聞"), click('.page-agent .cmp-send'), wait(".pgv-status .live-action"), check("page-inplace-working")], { ...newsFixture, pageAsk: true }),
   scene("page-inplace-reply", "A change asked for under the open page goes to the member with the page named; its working line shows under the page, then the first words of its reply", [...news, ...larger, type('.page-agent .cmp-input', "把最後一題改成問今天的新聞"), click('.page-agent .cmp-send'), wait(".pgv-status .live-action"), check("page-inplace-working"), lookCall("updatePage", "page-news"), lookCall("answerPageAsk", "好了，最後一題改成問今天的新聞，其他沒有動。"), wait(".pgv-status .pgv-reply"), check("page-inplace-answered")], { ...newsFixture, pageAsk: true }),
-  // The page runs under the composer to the window's foot and the composer floats over it (R-PAGE-11; owner, 2026-11-14: 「它應該要是全螢幕的
-  // 輸入框，感覺像是放在這個 HTML 或者是 page 上面的感覺」): read to its end, the last line stands clear above the composer, and only the composer takes the pointer.
+  // The page runs under the composer to the window's foot and the composer floats over it (R-PAGE-11): read to its end, the last line stands clear above the composer, and only the composer takes the pointer.
   scene("page-end", "A long HTML page read to its end: it ran under the floating composer to the window's foot, and its last line stands clear above the composer", [...baseOpen, frameScroll(8000), waitScrollEnd(".pgv-page"), check("page-under-composer")], baseFixture),
   scene("page-inplace-reply-end", "The member's reply line floats over the composer while the page is read to its end: the last line clears both", [...news, ...larger, type('.page-agent .cmp-input', "把最後一題改成問今天的新聞"), click('.page-agent .cmp-send'), wait(".pgv-status .live-action"), lookCall("updatePage", "page-news"), lookCall("answerPageAsk", "好了，最後一題改成問今天的新聞，其他沒有動。"), wait(".pgv-status .pgv-reply"), frameScroll(4000), waitScrollEnd(".pgv-page"), check("page-inplace-answered"), check("page-under-composer")], { ...newsFixture, pageAsk: true }),
   scene("page-room-end", "A room's page runs under the room's floating composer the same way, and only the composer takes the pointer", [...roomShown, ...larger, frameScroll(4000), waitScrollEnd(".pgv-page"), check("page-under-composer")], { pageTurn: true, roomOwnerCard: "page" }),
@@ -64,8 +63,8 @@ export default [
     ...(at === 0 ? [check("voice-over-page-listening")] : [click(".page-agent .composer .cmp-voice"), wait('.page-agent .composer[data-task-state="ack"]'), { action: "emit", events: [], wait: 700 }, check("voice-over-page-hearing")]),
     ...(at === 2 ? [{ action: "emit", events: [{ type: "Dictation", phase: "cancelled", agent: true, member_id: 1 }], wait: 900 }, check("voice-over-page-gone")] : [])],
     { ...newsFixture, ownerVoice: "pending", emblem: true })),
-  // Owner, 2026-11-15: after speaking over an open page and sending, Raphael stayed in front of the page and the slot stayed Stop
-  // until he left the page. The words come back as a member's voice turn: Raphael leaves and the composer is at rest.
+  // After speaking over an open page and sending, Raphael stayed in front of the page and the slot stayed Stop
+  // until the owner left the page. The words come back as a member's voice turn: Raphael leaves and the composer is at rest.
   scene("voice-over-page-answered", "Words spoken over an open page are answered: Raphael leaves the page and the composer is at rest", [
     ...news, ...larger, { action: "press-voice" }, wait(".ra-stage.is-page > .ra-flyer canvas.ra-flyer-emblem"), { action: "emit", events: [{ type: "VoiceLevel", value: 0.6 }], wait: 600 },
     click(".page-agent .composer .cmp-voice"), { action: "emit", events: [], wait: 2500 }, check("voice-over-page-gone")], { ...newsFixture, ownerVoice: "answer", emblem: true }),
@@ -78,11 +77,11 @@ export default [
   scene("page-report-team", "The contents take the owner to the team: boxes in each member's colour joined by labelled arrows", [...report, click('.rp-toc [data-report-goto="rp-s2"]'), check("page-report-team")], { reportTurn: true }),
   scene("page-report-tab", "A tab over the table shows only its group's rows", [...report, { ...scroll(".rp-table-box"), block: "center" }, click('.rp-table-box [data-report-tab="g1"]'), check("page-report-tab")], { reportTurn: true }),
   scene("page-report-close", "The header's arrow brings the thread back where it was, with the link card in sight", [...report, back, check("page-report-closed")], { reportTurn: true }),
-  // Share (owner, 2026-11-10: 存成檔案): the report saved as one HTML file, and that file opened on its own, as a browser opens it.
+  // Share (存成檔案): the report saved as one HTML file, and that file opened on its own, as a browser opens it.
   scene("page-report-share", "Share saves the report as a file and says where it went, and the report stays open", [...report, ...share, check("page-report-shared")], { reportTurn: true }),
   { ...scene("page-report-file", "The saved file opened on its own: the same page in its reader's theme, with nothing of the app", [...report, ...share, { action: "saved-file" }, check("page-report-file")], { reportTurn: true }), file: true },
   { ...scene("page-report-file-team", "The file's contents take its reader to the team, drawn for the width it is read at", [...report, ...share, { action: "saved-file" }, click('.rp-toc a[href="#rp-s2"]'), check("page-report-file-team")], { reportTurn: true }), file: true },
-  // A page of the Library opens as the page itself (owner, 2026-11-14; R-PAGE-08: 「它是會直接打開那個檔案本身…然後它會一樣顯示在 app 裡面，然後它有一個share的鍵」):
+  // A page of the Library opens as the page itself (R-PAGE-08):
   // the details panel folds, the header's centre is the page's pill, Share is at the right, the whole area scrolls; the arrow puts the Library
   // and the thread back where they were.
   scene("page-library-open", "A page pressed in the Library opens itself, whole, in the area beside the sidebar: the panel folded, the page's pill, Share, no frame", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), check("page-library-open")], libraryFixture),
@@ -92,14 +91,14 @@ export default [
   scene("page-library-esc", "Escape puts the page away as the arrow does: the Library is back on its tab", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), key("Escape"), check("page-library-kept")], libraryFixture),
   scene("page-library-older", "A page of an older conversation opens from the Library without a stop in that conversation, and the arrow brings back the conversation that was open, with the Library", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), check("page-library-open"), check("page-library-older-open"), back, check("page-library-older-kept")], { ...libraryFixture, libraryOlder: true }),
   scene("page-library-share", "Share on an HTML page saves it as a file (the core builds it of the stored page, the window gives no text) and says where it went; the page stays open", [...inLibrary, pressNews, wait(".pgv-frame-box iframe"), ...share, check("page-library-shared")], libraryFixture),
-  // Raphael's daily overview (owner, 2026-11-14: the old home becomes the page a 07:00 routine sends; every kind of chart, as
-  // clean as Grok Bot's): figures, weather, schedule, projects by status and owner, investments, members, on one report.
+  // Raphael's daily overview (the page a 07:00 routine sends; every kind of chart):
+  // figures, weather, schedule, projects by status and owner, investments, members, on one report.
   scene("page-dashboard-card", "The 07:00 routine's turn in Raphael's conversation: a few words of what it did, then the overview's link card", [member(0), wait(dashboardLink), check("page-dashboard-card")], dashboardFixture),
   scene("page-dashboard", "The overview opens in the conversation's place: tiles of today's figures, then charts side by side where the page is wide", [...dashboard, check("page-dashboard")], dashboardFixture),
   scene("page-dashboard-projects", "Projects by status and owner as stacked columns with their totals; pointing at one shows who has how many", [...dashboard, { ...scroll('[data-report-chart="5"]'), block: "center" }, hover('[data-report-chart="5"] .rc-band[data-i="2"]'), wait(".rc-tip"), check("page-dashboard-projects")], dashboardFixture),
   scene("page-dashboard-lines", "Investments as lines from one start, with a gap on a closed day; pointing shows each line's value on that day", [...dashboard, { ...scroll('[data-report-chart="6"]'), block: "center" }, hover('[data-report-chart="6"] .rc-plot'), wait(".rc-tip"), check("page-dashboard-lines")], dashboardFixture),
   scene("page-dashboard-lower", "The lower half: a ring of parts beside its names and shares, bars across, and the members' routines", [...dashboard, { ...scroll('[data-report-chart="8"]'), block: "center" }, check("page-dashboard-lower")], dashboardFixture),
-  // A document, as Grok Bot's pages are: a large
+  // A document: a large
   // title and one line of summary, a box that lists the sections, a note with an icon, a dropdown and tabs over a wide table with figures
   // at the right and a column of links.
   scene("page-document", "A document-style report: a large title, a one-line summary, a boxed list of its sections, a note, then a table with a dropdown, tabs, figures at the right and links", [...document_, check("page-document")], documentFixture),

@@ -26,7 +26,7 @@ export default [
   scene("owner-question-cancelled", "Cancel reports the decision on the original card", [...open, click('[data-owner-answer="cancel"]'), wait('[data-card-state="cancelled"]'), check("owner-question-cancelled")], { ownerQuestion: "asked" }),
   scene("owner-question-background", "A routine's question lives in its member conversation and keeps Stop in the composer", [...open, check("owner-question-background")], { ownerQuestion: "background" }),
   scene("owner-question-text", "An owner can send a free text answer using the same card", [...open, type('[data-owner-answer-input]', "請改到下週五寄出，先讓我確認內容。"), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
-  // The card in the shape Grok Bot's form of choices has: a grey line, described rows, a skip row, several choices,
+  // The card of choices: a grey line, described rows, a skip row, several choices,
   // a field that grows to three lines, an answered card that is one row, and a composer that says it takes the answer or anything else.
   scene("question-card-described", "A card with a grey line, a second line under two rows and a skip row", [...open, check("question-card-described")], { ownerQuestion: "asked", ownerQuestionShape: "described" }),
   scene("question-card-skipped", "The skip row answers as a skip and the card collapses to one row", [...open, click("[data-owner-skip]"), wait('[data-card-state="answered"]'), check("question-card-skipped")], { ownerQuestion: "asked", ownerQuestionShape: "described" }),

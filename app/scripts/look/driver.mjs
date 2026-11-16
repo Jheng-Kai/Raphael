@@ -1167,7 +1167,7 @@ export async function perform(page, step, evidenceDirectory) {
     case "room-row-menu": await click(`[data-room-more="${step.id}"]`); break;
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
     case "search":
-      // On the rail there is no search button (owner, 2026-11-12 23:25): the card opens by Ctrl+Shift+F, as it does for the owner.
+      // On the rail there is no search button: the card opens by Ctrl+Shift+F, as it does for the owner.
       if (!(await page.$("#app-popover .side-search-input"))) {
         if (await page.$eval('[data-col="search"]', el => el.getClientRects().length > 0)) await click('[data-col="search"]');
         else { await page.keyboard.down("Control"); await page.keyboard.down("Shift"); await page.keyboard.press("KeyF"); await page.keyboard.up("Shift"); await page.keyboard.up("Control"); }

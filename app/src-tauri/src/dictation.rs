@@ -7541,7 +7541,7 @@ mod tests {
         }
     }
 
-    /// The owner, 2026-11-14: with a picture attached, the composer's voice button sent the voice turn without it.
+    /// With a picture attached, the composer's voice button once sent the voice turn without it.
     #[tokio::test]
     async fn a_composers_voice_message_carries_its_words_files_and_quote_to_the_agent() {
         for (member, conversation, quick) in [(3, 42, false), (0, 4, true)] {
@@ -7827,7 +7827,7 @@ mod tests {
         )
     }
 
-    /// The owner's report, since 2026-10-26: the dictation key did nothing while a question said to
+    /// The dictation key once did nothing while a question said to
     /// the overlay was answered.
     #[tokio::test(start_paused = true)]
     async fn dictation_works_while_a_question_said_to_the_overlay_is_answered() {

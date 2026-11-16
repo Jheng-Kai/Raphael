@@ -1,6 +1,5 @@
 /**
- * The owner reads a member's conversation at its bottom while the member's reply arrives as the core sends it (owner,
- * 2026-11-14: 「成員回覆的時候，有時候畫面會從最底部往上跳一點…完全不要有任何移動」, R-FOLLOW-01). Every frame is sampled at
+ * The owner reads a member's conversation at its bottom while the member's reply arrives as the core sends it (R-FOLLOW-01). Every frame is sampled at
  * the point it is painted: a ResizeObserver on a 1 px probe that changes size each animation frame is told after layout,
  * after the app's own observers (made before it) and before paint, so it reads what the owner sees, not a state the same
  * frame still corrects. Each frame records how far the thread stands above its bottom (`scrollHeight - scrollTop -
