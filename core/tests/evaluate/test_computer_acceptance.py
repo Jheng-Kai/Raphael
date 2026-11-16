@@ -1862,8 +1862,11 @@ async def test_the_image_update_check_never_touches_an_image_outside_its_own_rep
         run.record(f"{count} screens fake", "ok", "fake computer only")
     async def no_previous():
         pass  # the owner's layer images here are for this check alone: no previous-layer computer is made from them
+    async def relocation():
+        return "fake move only"
     monkeypatch.setattr(run, "computer", computer)
     monkeypatch.setattr(run, "previous", no_previous)
+    monkeypatch.setattr(run, "relocation", relocation)
     original = vm.IMAGE, vm.REPOSITORY
     assert await run.run([1], shared=False) == 0
     rows = {row["name"]: row for row in run.results if row["name"].startswith("image update")}
