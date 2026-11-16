@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from .process import Child, subscription_env
+from .records import workspace_root
 from .terminal_login import TerminalSignIn
 from .models import claude_cli_models, claude_models, codex_models, antigravity_models, find_model
 from ...brain.model_ref import CLI_NAMES as NAMES
@@ -350,7 +351,8 @@ class CliBrains:
             return
         try:
             if name == "claude":
-                models = await claude_cli_models(command, self.environ, self._claude_folder())
+                models = await claude_cli_models(command, self.environ, self._claude_folder(),
+                                                 cwd=workspace_root(self.home) / "models")
             elif name == "codex":
                 models = await codex_models(command, self.environ,
                     Path(self.environ.get("CODEX_HOME", self.home / ".codex")) / "config.toml")

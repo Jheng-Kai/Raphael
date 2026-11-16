@@ -36,7 +36,8 @@ from .drivers import Driver
 from .context import (KNOWN_CONTEXT_TOKENS, context_tokens, fresh_user, line_hashes, resumed_user,
                       should_compact, window_tokens)
 from .process import secure_directory
-from .native_diagnostics import capture as native_capture, directory as native_directory
+from .native_diagnostics import capture as native_capture
+from . import records
 from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, PATIENT_WAITS, classify, failure_ledger, tool_failure
 from ...retry_utils import MODEL_SILENCE_S, Outage
 
@@ -908,6 +909,11 @@ class CliLoop:
         return f"{name} 暫時限流，{seconds} 秒後重試。"
 
     async def _work(self):
+        # The member's CLI records are never swept while a run of it goes on (agent.cli.records).
+        with records.at_work(self.member_id):
+            await self._run()
+
+    async def _run(self):
         name, model = brain_ref(self.model)
         try:
             command = self.brains.command(name)
@@ -926,7 +932,7 @@ class CliLoop:
             began = time.perf_counter()
             try:
                 # A stable, empty workspace keeps native CLI resume independent of turn temp files.
-                workspace_root = native_directory("workspaces") or self.brains.home / ".raphael" / "cli-workspaces"
+                workspace_root = records.workspace_root(self.brains.home)
                 # Claude Code shares a cached prefix only within one working directory, which its own system prompt
                 # names: one per member, so all the member's conversations and tasks
                 # start from the same cached prefix. Codex keys its cache by thread and keeps its login beside its

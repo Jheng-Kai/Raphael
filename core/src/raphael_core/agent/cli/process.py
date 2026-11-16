@@ -12,6 +12,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 API_KEYS = frozenset({"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"})
+# What a run's private folder in the system's temporary folder is named with (agent.cli.records knows its records by it).
+PRIVATE_PREFIX = "raphael-cli-"
 
 
 def subscription_env(environ=None):
@@ -21,7 +23,7 @@ def subscription_env(environ=None):
 
 class PrivateFiles:
     def __init__(self):
-        self._directory = tempfile.TemporaryDirectory(prefix="raphael-cli-")
+        self._directory = tempfile.TemporaryDirectory(prefix=PRIVATE_PREFIX)
         self.path = Path(self._directory.name)
 
     async def secure(self):
