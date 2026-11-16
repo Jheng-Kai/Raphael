@@ -200,10 +200,9 @@ export function createAutomationsPage(app: AppContext): Page {
     const place = `top:calc(${top} * var(--au-hour));height:calc(${drawn} * var(--au-hour) - 2px);left:calc(${part.lane * 100 / part.lanes}% + 1px);width:calc(${100 / part.lanes}% - 3px)`;
     const label = labelOf(entry), focused = entry.id === focusedHomeItem ? " is-home-focus" : "";
     const cls = entry.kind === "routine" ? `au-occurrence${entry.run && !isRunException(entry) ? " is-past" : ""}` : entry.kind === "event" ? `au-calendar-event${focused}${past ? " is-past" : ""}` : `au-own-event${focused}${past ? " is-past" : ""}`;
-    const chip = chipHTML(entry, `${cls}${short ? " is-line" : ""}`, `${entryAttrs(entry, label)}${entry.run ? ` data-run="${entry.run.id}" data-status="${entry.run.status}"` : ""}`, { face: short ? 0 : 20 });
-    const mark = entry.run ? `<i class="au-history-mark" data-status="${entry.run.status}"></i>` : "";
+    const chip = chipHTML(entry, `${cls}${short ? " is-line" : ""}`, `${entryAttrs(entry, label)}${entry.run ? ` data-run="${entry.run.id}" data-status="${entry.run.status}"` : ""}`, { face: short ? 0 : 20, history: true });
     const edge = entry.kind === "own" && part.end === entry.end ? `<i class="au-event-edge" data-edge="bottom"></i>` : "";
-    return `<div class="au-event${entry.kind === "own" ? " is-movable" : ""}${period !== "day" && (part.lanes > 1 || calendarWidth()/range().n < 120) ? " is-tight" : ""}" data-wrap="${esc(entry.id)}" data-part-start="${part.start}" style="${place}">${chip}${mark}${moreOf(entry)}${edge}</div>`;
+    return `<div class="au-event${entry.kind === "own" ? " is-movable" : ""}${period !== "day" && (part.lanes > 1 || calendarWidth()/range().n < 120) ? " is-tight" : ""}" data-wrap="${esc(entry.id)}" data-part-start="${part.start}" style="${place}">${chip}${moreOf(entry)}${edge}</div>`;
   }
   const draftTitle = (): string => draft?.title.trim() || t("cal.title");
   function draftOnDay(key: string): string {

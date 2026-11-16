@@ -862,7 +862,9 @@ export function installMock(fixture, config = {}, target = window) {
   };
   reproject();
   if (variant.calendarRhythm) {
-    const rhythm = { id:91, member_id:1, title:"Gmail 與行程檢查", prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
+    // `calendarLongTitle`: the run's chips carry a title longer than any chip, so that a mark beside it has a title to cut (check `calendar-chip-marks-cut`).
+    const rhythmTitle = variant.calendarLongTitle ? "每三小時檢查 Gmail、行程與尚未回覆的客戶來信，再整理成一頁簡報" : "Gmail 與行程檢查";
+    const rhythm = { id:91, member_id:1, title:rhythmTitle, prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
     data.routines = [rhythm,{...rhythm,id:92,title:"每日摘要",schedule:{kind:"daily",time:"09:00"},next_run:octoberAt(24,9)}];
     data.routineRuns = [[8,"done"],[11,"error"],[14,"confirm"]].map(([hour,status],i)=>({id:901+i,routine_id:91,scheduled:octoberAt(24,hour),started:octoberAt(24,hour),finished:status==="confirm"?null:octoberAt(24,hour)+60000,status,turn_id:2,summary:"樣本報告",cost:0}));
     data.home.calendar_events = [own(80,"樣本整理日",octoberAt(24,0),octoberAt(25,0),{all_day:true})];
