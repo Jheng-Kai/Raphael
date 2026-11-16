@@ -14,7 +14,7 @@ export const journeys = [
   { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
   { name: "sidebar-foot", description: "Inspect the resizable sidebar, in-place search, the foot (the face and the Connections pill) and the account menu in the real WebView" },
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
-  { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
+  { name: "conversation-and-learned-pill", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
   { name: "hidden-window-refused", description: "The same returns while WebView2 refuses the normal-memory step (0x8007139F): the page still shows and runs" },
   { name: "startup-rooms", description: "Ten normal and ten slow-core owner-path launches keep seeded group chats in the sidebar, without a page reload" },
@@ -1786,7 +1786,7 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     }
     const wrong = result.visits.filter(visit => visit.issues.length);
     if (wrong.length) result.failures.push(`Wrong-language UI in ${wrong.length} visits; exact elements in visits[].issues`);
-  } else if (name === "owner-round10") {
+  } else if (name === "conversation-and-learned-pill") {
     const conversation = await newConversation(context);
     await typed(context, Array.from({length: 55}, (_, i) => `Review step ${i + 1}: retain this complete owner instruction.`).join("\n"), conversation);
     await capture("long-owner");
@@ -1800,13 +1800,13 @@ await page.waitForFunction(role => document.querySelector('.ms-pane #ms-role')?.
     await pause(700);
     await page.evaluate(checkRendered,"conversation-bottom");
     await capture("at-bottom");
-    await type(page,".composer .cmp-input","[native-round10:wait] Hold this synthetic answer until I stop it.");
+    await type(page,".composer .cmp-input","[native-hold:wait] Hold this synthetic answer until I stop it.");
     await click(page,".composer .cmp-send");
     await page.waitForSelector('.composer [data-task-state], .composer[data-task-state="running"], .composer[data-task-state="ack"]');
     await pause(500);
     await page.keyboard.press("Escape");
     await page.waitForSelector('[data-cancel-armed="true"]');
-    result.firstEscape = (await snapshot()).agent_turns.find(turn => turn.question.includes("[native-round10:wait]"));
+    result.firstEscape = (await snapshot()).agent_turns.find(turn => turn.question.includes("[native-hold:wait]"));
     if (result.firstEscape?.status !== "running") throw new Error("The first Escape stopped the native answer");
     await page.evaluate(checkRendered, "cancel-armed");
     await capture("answer-first-escape");
