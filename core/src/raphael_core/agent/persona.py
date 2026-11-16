@@ -119,6 +119,7 @@ class Phrases:
     no_answer: str  # the model gave no answer (it spent its turn thinking, or said nothing)
     work_only_words: str  # work handed on came back with a promise or a line, and nothing done
     work_file_missing: str  # the file the work was to leave is not there, or changed since
+    work_file_unreadable: str  # the file the work was to leave is there but cannot be opened
     routine_refused: str  # a routine's run said it was done, but a step it needed was refused and nothing after went through
     routine_nothing: str  # a routine's run said it was done, but what it was to make is not there
     work_children_open: str  # work this one handed on again is not all finished
@@ -221,6 +222,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         no_answer="模型這次沒有給出回答，請再試一次，或換一個模型。",
         work_only_words="只有回覆，沒有實際做事，這項工作不算完成。",
         work_file_missing="完成條件要的檔案沒有找到，這項工作不算完成。",
+        work_file_unreadable="完成條件要的檔案在，但無法開啟（可能是同名資料夾、沒有權限，或正被其他程式使用），這項工作不算完成。",
         routine_refused="這次執行需要的一個步驟被拒絕了，沒有完成。",
         routine_nothing="這次執行沒有做出原本要做的東西，不算完成。",
         work_children_open="交給同事的工作還沒全部完成，這項工作不算完成。",
@@ -302,6 +304,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         no_answer="The model gave no answer this time. Try again or choose another model.",
         work_only_words="It only replied and did nothing, so this work does not count as done.",
         work_file_missing="The file this work was to leave is missing, so it does not count.",
+        work_file_unreadable="The file this work was to leave is there but cannot be opened (a folder of that name, no permission, or in use by another program), so it does not count.",
         routine_refused="A step this run needed was refused, so it did not finish.",
         routine_nothing="This run did not make what it was set to, so it is not done.",
         work_children_open="What was handed on to colleagues is not all finished, so this does not count.",
@@ -390,6 +393,7 @@ PHRASES: dict[str, Phrases] = with_ui_words({
         no_answer="モデルから回答が返りませんでした。もう一度試すか、別のモデルを選んでください。",
         work_only_words="返信だけで実際の作業がないため、完了とみなしません。",
         work_file_missing="完了条件のファイルが見つからないため、完了とみなしません。",
+        work_file_unreadable="完了条件のファイルはありますが開けません（同名のフォルダー、権限がない、または他のアプリが使用中）。完了とみなしません。",
         routine_refused="この実行に必要な手順が拒否されたため、完了しませんでした。",
         routine_nothing="この実行は作るはずだったものを作れなかったため、完了とみなしません。",
         work_children_open="同僚に渡した作業がすべて終わっていないため、完了とみなしません。",

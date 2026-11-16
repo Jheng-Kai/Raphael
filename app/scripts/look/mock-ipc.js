@@ -445,7 +445,7 @@ export function installMock(fixture, config = {}, target = window) {
   const arrivals = new Map((variant.arrivals ?? []).map(turn => [turn.id, structuredClone(turn)]));
   const pendingReplies = new Map();
   if (variant.p04Blocked) {
-    data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:"missing_artifact",result:"",evidence:[]}];
+    data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:typeof variant.p04Blocked==="string"?variant.p04Blocked:"missing_artifact",result:"",evidence:[]}];
     data.messages.at(-1).text="尚未取得檔案，目前沒有可驗收結果。";
     data.messages.push({...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴的檔案尚未完成，補齊後可以重新驗收，要不要重試由你決定。"});
   }

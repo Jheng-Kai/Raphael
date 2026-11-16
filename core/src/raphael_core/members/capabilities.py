@@ -368,20 +368,27 @@ class MemberCapabilities(PluginSets, SkillLibrary, GrowingSkills):
         target = folder.joinpath(*parts)
         try:
             self.homes.safe(target)
-            inside = target.resolve().is_relative_to(folder.resolve()) and target.is_file()
-            size = target.stat().st_size if inside else 0
+            inside = target.resolve().is_relative_to(folder.resolve())
+            there = inside and target.exists()
+            is_file = there and target.is_file()
+            size = target.stat().st_size if is_file else 0
         except (HomeError, OSError, ValueError):
-            inside = False
-        if not inside:
+            there = is_file = False
+        if not there:
             raise MemberError("not_found", "the skill's folder has no such file")
+        if not is_file:
+            raise MemberError("unreadable", "that path is a folder, not a file: it is there but cannot be read as one; name a file inside it")
         if size > MAX_SKILL_FILE_BYTES:
             raise MemberError("size", "that file is too large to read; it is over 256 KB")
         try:
             text = target.read_text(encoding="utf-8")
         except UnicodeError:
             raise MemberError("skill", "that file is not UTF-8 text") from None
-        except OSError:
+        except (FileNotFoundError, NotADirectoryError):
             raise MemberError("not_found", "the skill's folder has no such file") from None
+        except OSError:
+            raise MemberError("unreadable", "that file is there but could not be opened (no permission, or another program is using it); "
+                                            "it is not missing, so do not look for another copy") from None
         return redact_secrets(text)
 
     @staticmethod

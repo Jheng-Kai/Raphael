@@ -470,6 +470,13 @@ describe("a step in words", () => {
     expect(reasonText(step())).toBe("");
   });
 
+  test("a file that is there and cannot be read is told apart from one that is not there", () => {
+    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("檔案在，但讀不了：可能是資料夾、受保護，或正被其他程式使用。");
+    expect(reasonText(step({ outcome: "error", reason: "not_found" }))).not.toBe(reasonText(step({ outcome: "error", reason: "unreadable" })));
+    setLocale("en");
+    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("The file is there but cannot be read: it may be a folder, protected, or in use by another program.");
+  });
+
   test("durations read as people say them", () => {
     expect(formatDuration(420)).toBe("0.4 秒");
     expect(formatDuration(2_340)).toBe("2.3 秒");

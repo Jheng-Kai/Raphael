@@ -93,3 +93,20 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     assert rig.service._cli_sessions.get(other.id, "claude", other_named["id"]) == "named-session"
     assert rig.conn.execute("SELECT conversation_id FROM conversation_context_summaries").fetchall()[0][0] == other_named["id"]
     assert rig.conn.execute("SELECT COUNT(*) FROM conversation_context_summaries").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("reference, reason, said", [
+    ("page.html", "unreadable", "folder, not a file"),
+    ("missing.html", "not_found", "no such file"),
+])
+async def test_a_skill_file_that_is_a_folder_is_told_apart_from_one_that_is_not_there_to_the_model_and_the_owner(
+        setup, client, reference, reason, said):
+    rig, team = setup
+    one = member(team)
+    skill = team.members.capabilities.keep_skill(one.id, "owner/repo", "---\nname: verbs\ndescription: Practice verbs\n---\nBody")
+    (team.members.capabilities._path(one.id, skill["id"]).parent / "page.html").mkdir()
+    client.chats = [chat("Reading the page.", ("skill_read", {"name": "verbs", "reference": reference})), live_said("Done.")]
+    result = await typed(rig, "Fill the page", one.id, language="en")
+    assert said in str(client.chat_calls[1]["messages"])
+    steps = AgentHistory(rig.conn).steps([result["turn_id"]])[result["turn_id"]]
+    assert [step.reason for step in steps if step.tool == "skill_read"] == [reason]

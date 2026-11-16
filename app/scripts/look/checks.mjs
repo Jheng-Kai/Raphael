@@ -5044,6 +5044,7 @@ export function checkRendered(name, context = {}) {
   if(name.startsWith("p04-")) {
     const messages=[...document.querySelectorAll('.au-room-thread .message-text')];
     if(name==='p04-blocked'){const chat=document.querySelector('.peer-chat'),task=window.__look.data.roomHandoffs[0],lines=[...(chat?.querySelectorAll('.peer-line')??[])];require(visible(chat)&&chat.querySelector('.peer-state')?.textContent.includes('缺少驗收所需的檔案'),'missing artifact reason is actionable');require(lines[0]?.dataset.peerFrom===String(task.from_member_id)&&lines[0].querySelector('.message-text')?.textContent===task.request,"the request is only ever the delegating member's own message");}
+    if(name==='p04-childwork-open'||name==='p04-unreadable'){const state=document.querySelector('.peer-chat .peer-state')?.textContent??'',line=name==='p04-unreadable'?'檔案在，但無法開啟':'交給別人的工作還在進行，就先停下了';require(state.includes(line),'the ending says in plain words which it was');require(!/_|missing|artifact|child_work/u.test(state),'no reason code reaches the screen');}
     if(name==='p04-chief-last')require(document.querySelector('.au-room-thread .tn:last-child .au-room-wrapup') || document.querySelector('.au-room-thread .tn:last-child.au-room-wrapup'),'chief is last');
     if(name==='p04-status-only')require(!messages.some(message=>message.textContent.includes('正在發言')),'progress never enters final bodies');
     if(name==='p04-addresses')require(!messages.some(message=>/@(?:\s|$)/u.test(message.textContent)),'no dangling address');
