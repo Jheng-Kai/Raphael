@@ -892,10 +892,10 @@ class CliLoop:
 
     def _handed_off(self):
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:
-        live, a turn cut at its first hand-off could start only one of a meeting's action items."""
+        live, a turn cut at its first hand-off could start only one of a meeting's action items. The owner's words its model
+        has not read are not read now either: those of the conversation's inbox go back there as a turn of their own."""
         if self._handoff_pending:
-            self.tool_messages.extend(self.owner_input.drain())
-            self.owner_input.closed = True
+            self.tool_messages.extend(self.owner_input.set_aside())
             self._queue.put_nowait(Outcome('stopped', kind='handoff'))
         return self._handoff_pending
 
