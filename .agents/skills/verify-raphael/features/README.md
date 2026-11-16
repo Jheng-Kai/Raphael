@@ -155,9 +155,9 @@ the affected scene selection, hidden-window polling and native visibility bounda
 See [Member computer](member-computer.md#three-computer-levels) for
 R-COMP-3-01 through R-COMP-3-04, the selected matrix and replaced scene contracts.
 
-## Owner polish
+## Polish of Settings, Data and conversations
 
-See [owner-polish.md](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
+See [Polish of Settings, Data and conversations](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
 
 ## Calendar navigation review
 
@@ -226,7 +226,7 @@ npm run look -- chat member-brain-saved member-avatar sidebar-group-avatar --the
 
 One parser in `message-content.ts` returns ordered text, table, code, diagram and
 image blocks for chief, member and group replies, stored/streamed content, search
-and copy. Text keeps the round 10 authored bubbles; rich cards are siblings outside
+and copy. Text keeps its authored bubbles; rich cards are siblings outside
 bubbles. Owner content stays plain with its existing collapse. Tables wrap first,
 copy as TSV and preserve Markdown in whole-reply copy. Code scrolls locally, never
 executes, and loads only eight small highlighting grammars when needed. Mermaid
@@ -284,7 +284,7 @@ contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
 delete-conversation cover navigation in an isolated fake-brain app. No judge,
 OpenRouter or Claude session search; one heavy process at a time.
 
-## Owner round 10 connected apps and chosen models
+## Connected apps and the chosen model
 
 API and CLI brain prompts share the Composio discovery/execution contract:
 COMPOSIO_SEARCH_TOOLS returns a tool slug and schema; execute that slug through
@@ -312,7 +312,7 @@ test_providers_more.py (48). All use fakes or mock transports. No live owner
 Composio, Gmail, OpenRouter, judge or live verification was exercised.
 
 
-## Owner round 10 contracts (supersedes round 9 message previews)
+## Message previews, scrolling, learned words and stable controls
 
 Only owner messages use eight-line faded previews with a quiet expand action inside
 the bubble. Assistant messages render fully; authored reply envelopes retain separate
@@ -340,7 +340,7 @@ Calendar, member and Plugins scene clicks inherit this check. Connections search
 below the fixed Installed/Store switch in both states. A selected look report is
 required to establish the actual covered controls and any remaining movements.
 
-Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+Scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
@@ -350,13 +350,12 @@ process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared nati
 CARGO_TARGET_DIR apply.
 
 
-## Owner round 9 contracts
+## Start view, calendar hours, reply envelopes and the orb
 
 Home was removed (R-UI-114 is retired): the app opens on Raphael's conversation, and the calendar opens from the
 account menu; see [Navigation](navigation.md). Day/week working hours
 fit the viewport below a pinned all-day row; see [Automations](automations.md).
-Owner/member/room messages share eight-line faded previews and the existing
-expand-message control, without inner scrolling. CLI envelope parsing is shared by
+CLI envelope parsing is shared by
 normal, quick, resumed, failure, room and background routes; see
 [Conversation](conversation.md). The ordinary orb has no Stop; focused double-Escape
 and permission/question actions remain. See [Dictation](dictation.md).
@@ -365,12 +364,11 @@ Native readable-layout includes the start conversation, the account menu, compac
 (Home and its allowance-timing journey were removed). Run these with self-diagnosis and memory-growth after an offline debug
 build, one heavy process at a time.
 
-## Owner round 8 contracts
+## Details controls, conversation mask, toasts and dictation overview
 
 Details controls, including the shared brain picker, fill the same panel content width.
 The conversation mask has a fully transparent top band before its fade in both themes.
-Home wraps its report at CJK sentence boundaries. Owner round 9 supersedes the old
-Today/stat arrangement with four fixed equal blocks and a mini calendar. Compact dictation
+Compact dictation
 orders totals, activity, then a column-filling shortcut card; that card is a page-level
 overview section, exempt from the generic short-card cap, with exact column alignment
 checked by dictation-overview. Conversation toasts reserve the bottom composer's space; when
@@ -530,7 +528,7 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 | Usage | Planned usage-ledger: complete/cancel local fake turns, open grouping/export and allowances; assert SQLite totals, CSV and CLI status classification; fake brain, signed-in Codex CLI for allowance acceptance. |
 | Onboarding | Planned onboarding-native: empty data, complete profile/ability steps, hotkey practice and speech exercise, restart; assert completion gating and persisted first-run choices; fake brain/local STT. |
 
-## Owner round 3 shared interactions
+## Shared Escape, deleted-object fallback and desktop confirmation
 
 The conversation, dictation and team/rooms entries map the shared two-step Escape
 contract (R-UI-46), deleted-object fallback (R-UI-47), opaque desktop confirmation
@@ -539,7 +537,7 @@ actual native-sized viewport as well as the requested matrix size; see dictation
 CI's judge request admission limit is 1998 for the 1980 combinations (330 scenes x six), below
 the unchanged 2000-request hard cap; the monetary limit is unchanged.
 
-## Owner round 4 acceptance
+## Designed window size acceptance
 
 The designed default is 1280x800 with the 720x480 minimum; every launch opens at it,
 centred, and window-state restores nothing. The unspecified look viewport reads the main-window size
@@ -558,19 +556,19 @@ exercising keyboard focus. The retired first-bot scenarios are replaced by no-na
 This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
 
 
-## Owner round 5 acceptance
+## Details inset and compact conversation headers
 
 The historical Team Fit/card checks below were retired with the canvas;
 sidebar-shell now covers chief and folder rows. The details scroll container owns the single horizontal inset.
 Compact conversation headers show identity once; caption/identity lines cannot
 flex-shrink. Shared checks cover these contracts in browser and native WebView.
-The owner's specific 1920 half-line clipping was not reproduced on the baseline;
+A half-line clipping at 1920 was not reproduced on the baseline;
 the full-line guard passes before and after and is preventive coverage only.
 
 
-## Owner round 6 contracts
+## Details scrim, label wrapping and the Fit button
 
-Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column.
+These contracts add no scene. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column.
 
 
 ## Memory growth native acceptance (phase 2)
@@ -579,9 +577,9 @@ Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280
 checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation is mapped in
 [Members](members.md); no memory page exists (R-MEM-10). This is separate from live provider and design-judge acceptance.
 
-## Owner round 7 contracts
+## Calendar chips, the sidebar shell and onboarding abilities
 
-Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities (replacing onboarding-abilities-hero, beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
+The affected journeys include onboarding-abilities (beside onboarding-tools and onboarding-services), details-quick-once and conversation-scroll-edge. The sidebar is covered by the sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance
 

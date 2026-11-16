@@ -471,7 +471,7 @@ scenes are in [Connections and MCP](connections-mcp.md) and [Conversation](conve
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Deleting the selected member or resource (owner round 3)
+## Deleting the selected member or resource
 
 R-UI-47: deleting the open member selects Raphael before repainting. Missing roster
 entries also fall back to Raphael with the existing success notice. Deleting a
@@ -494,9 +494,9 @@ Pointer regression tests cover Raphael and another member in agent-members.test.
 Native voice-conversation proves local WAV transcription and persisted turns with
 a fake brain; it does not prove a physical microphone or live-provider behavior.
 
-## Owner round 6 contracts
+## Overlay scrim, inset and card cap in conversations
 
-Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain as approved.
+member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement stay as they are.
 
 
 ## Bot homes, phase 1

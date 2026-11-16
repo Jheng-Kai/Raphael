@@ -1723,7 +1723,7 @@ fills the slot in every state, Escape shows the Stop it arms, and `.cmp-voice` s
 A room keeps its browser recorder but uses the same recording/send slot: the next press transcribes and sends the spoken
 words together with the typed draft once. Escape discards recording or pending transcription; Stop represents sent work only.
 Room speech uses the shared dictation finalizer and dictionary learning (`chat-composer.test.ts`).
-See [Owner polish](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
+See [Polish of Settings, Data and conversations](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
 
 ```powershell
 npm run look -- composer-voice-recording composer-voice-sent composer-voice-attachment-quick composer-voice-attachment-member composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
