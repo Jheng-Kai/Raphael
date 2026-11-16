@@ -53,8 +53,12 @@
 .slime[data-state="sleeping"] { --eye-y: 50px; --eye-w: 3.5; --eyes: path("M 38.51 50.31 Q 43 50 47.49 49.69 M 52.51 49.69 Q 57 50 61.49 50.31"); }
 
 /* At small sizes, fit the eye spacing, centre and stroke to physical pixels rather than shrinking a large face. */
-.slime-surface { --slime-unit: tan(atan2(min(100cqw, 100cqh), 92px)); }
-.mb-preset-slime .slime-surface { --slime-unit: tan(atan2(round(84cqw, 1px), 92px)); }
+/* The face's size reaches tan(atan2()) as pixels, through a registered length: WebKit (macOS) loses the unit of an atan2()
+   whose length is relative (cqw, em), so tan() read its degrees as radians. A 22px face got 1.215 for 0.239 and eyes seven
+   times too large, and every size another wrong one, so the eyes jumped about with the window. */
+@property --slime-size { syntax: "<length>"; inherits: false; initial-value: 92px; }
+.slime-surface { --slime-size: min(100cqw, 100cqh); --slime-unit: tan(atan2(var(--slime-size), 92px)); }
+.mb-preset-slime .slime-surface { --slime-size: round(84cqw, 1px); }
 @container (width <= 48px) {
   /* Resolve typed geometry once per face/atlas; all sampled paths inherit computed values. */
   .slime-face, .slime-loop-eyes {

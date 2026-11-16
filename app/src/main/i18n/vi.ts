@@ -462,7 +462,7 @@ export const vi = {
   "missing.urlRead": "Không đọc trực tiếp được URL này. Cung cấp trang công khai hoặc tệp đã tải; tự mở trang cần đăng nhập hoặc bị hạn chế.",
   "missing.unknown": "Chưa rõ nguyên nhân lỗi. Giữ cuộc trò chuyện này và thử thêm một lần; báo lỗi nếu vẫn xảy ra.",
   "missing.microphone": "Không truy cập được micrô. Cho phép Raphael sử dụng và bật quyền ứng dụng máy tính trong quyền riêng tư micrô Windows.",
-  "missing.accessibility": "Phím đọc chính tả cần quyền Trợ năng. Hãy cho phép Raphael trong Cài đặt hệ thống > Quyền riêng tư & Bảo mật > Trợ năng.",
+  "missing.accessibility": "Phím đọc chính tả cần quyền Trợ năng. Hãy cho phép Raphael trong Cài đặt hệ thống > Quyền riêng tư & Bảo mật > Trợ năng. Nếu đã bật, hãy xóa Raphael bằng nút − rồi thêm lại.",
   "ownerQuestion.submit": "Gửi câu trả lời",
   "ownerQuestion.answered": "Đã trả lời",
   "ownerQuestion.skip": "Bỏ qua",

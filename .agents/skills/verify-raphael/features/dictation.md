@@ -11,6 +11,14 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
 - Paste: `paste/macos.rs` puts the text on the pasteboard with nspasteboard.org's transient markers, sends ⌘V (the key
   that types "v" on the layout), and puts the clipboard back after `pasteboard::READ_WAIT`. A target is the focused
   window's window-server number, its process and its app's bundle identifier (lowercased).
+- The layout is read on the main thread only: `keys.rs` `on_main` hands `key_for` and
+  `layout_needs_option` to the main queue, and `layout()` gives nothing anywhere else. On macOS 26 the paste and copy
+  threads' own reading stopped the app (a libdispatch assertion in `TSMGetInputSourceProperty`) after every dictation
+  and every tidy. A main thread that does not answer within 500 ms means the ANSI V and C keys.
+- Permissions follow the app's signature: a rebuilt ad hoc app is another app to macOS, whose old switch under
+  Accessibility still shows on but no longer counts. The hotkeys notice (`missing.accessibility`) says to remove
+  Raphael with − and add it again. A local build signed with one Apple Development identity keeps its permissions
+  across rebuilds.
 - Learning from corrections: `learn/ax.rs` reads the focused text element through the accessibility API; terminals are
   not watched on macOS.
 - Media: `media/macos.rs`, MediaRemote where macOS answers, else Music, Spotify, TV and VLC through `osascript`.

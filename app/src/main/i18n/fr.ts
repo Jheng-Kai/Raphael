@@ -462,7 +462,7 @@ export const fr = {
   "missing.urlRead": "Impossible de lire directement cette URL. Fournissez une page publique ou un fichier téléchargé ; ouvrez vous-même les pages avec connexion ou restreintes.",
   "missing.unknown": "La cause de l’échec est inconnue. Conservez cette conversation et réessayez une fois ; signalez le problème s’il persiste.",
   "missing.microphone": "L’accès au microphone a échoué. Autorisez Raphael et les applications de bureau dans les réglages de confidentialité du microphone Windows.",
-  "missing.accessibility": "Les touches de dictée ont besoin de l’accessibilité. Autorisez Raphael dans Réglages Système > Confidentialité et sécurité > Accessibilité.",
+  "missing.accessibility": "Les touches de dictée ont besoin de l’accessibilité. Autorisez Raphael dans Réglages Système > Confidentialité et sécurité > Accessibilité. Si c’est déjà activé, retirez Raphael avec − et ajoutez-le à nouveau.",
   "ownerQuestion.submit": "Envoyer la réponse",
   "ownerQuestion.answered": "Répondu",
   "ownerQuestion.skip": "Passer",

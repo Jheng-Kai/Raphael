@@ -462,7 +462,7 @@ export const ptBR = {
   "missing.urlRead": "Não foi possível ler esta URL diretamente. Envie uma página pública ou arquivo baixado; abra pessoalmente páginas restritas ou com login.",
   "missing.unknown": "A causa da falha é desconhecida. Mantenha esta conversa e tente mais uma vez; relate se persistir.",
   "missing.microphone": "Falha ao acessar o microfone. Permita o uso pelo Raphael e por apps de desktop na privacidade do microfone do Windows.",
-  "missing.accessibility": "As teclas de ditado precisam de Acessibilidade. Permita o Raphael em Ajustes do Sistema > Privacidade e Segurança > Acessibilidade.",
+  "missing.accessibility": "As teclas de ditado precisam de Acessibilidade. Permita o Raphael em Ajustes do Sistema > Privacidade e Segurança > Acessibilidade. Se já estiver ativado, remova o Raphael com − e adicione-o de novo.",
   "ownerQuestion.submit": "Enviar resposta",
   "ownerQuestion.answered": "Respondido",
   "ownerQuestion.skip": "Pular",

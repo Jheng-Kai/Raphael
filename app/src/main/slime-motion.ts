@@ -88,3 +88,19 @@ export function eyeStyle(state: string): string {
   const base = /\.slime \{ ([^}]*--eyes:[^}]+)\}/.exec(source)?.[1] ?? '';
   return (base+rule).replace(/--eye-y:[^;]+;/g, '');
 }
+
+const eyePaths = new Map<string, string>();
+/**
+ * A state's eyes as one path: the `--eyes` slime.css gives it (the state's own, else the resting one). The drawing writes it
+ * into `d` as well, for WebKit (macOS) has no CSS `d`: there every state showed the resting eyes. Chromium takes the
+ * stylesheet's `d: var(--eyes)` over the attribute, so it draws and eases them as before.
+ */
+export function eyePath(state: string): string {
+  let path = eyePaths.get(state);
+  if (path === undefined) {
+    const paths = [...eyeStyle(state).matchAll(/--eyes: path\("([^"]+)"\)/g)];
+    path = paths[paths.length - 1]?.[1] ?? '';
+    eyePaths.set(state, path);
+  }
+  return path;
+}

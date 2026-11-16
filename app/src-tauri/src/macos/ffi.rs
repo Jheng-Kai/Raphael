@@ -454,6 +454,26 @@ unsafe extern "C" {
     pub fn IsSecureEventInputEnabled() -> Boolean;
 }
 
+// ---------- libdispatch and pthread (libSystem) ----------
+
+/// A dispatch queue, opaque.
+#[repr(C)]
+pub struct DispatchQueue {
+    _private: [u8; 0],
+}
+
+unsafe extern "C" {
+    /// The main queue (`dispatch_get_main_queue()` is this symbol's address).
+    pub static _dispatch_main_q: DispatchQueue;
+
+    pub fn dispatch_async_f(
+        queue: *const DispatchQueue,
+        context: *mut c_void,
+        work: unsafe extern "C" fn(*mut c_void),
+    );
+    pub fn pthread_main_np() -> i32;
+}
+
 // ---------- AVFoundation (only its classes are used, through the Objective-C runtime) ----------
 
 #[link(name = "AVFoundation", kind = "framework")]

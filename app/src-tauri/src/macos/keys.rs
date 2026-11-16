@@ -4,6 +4,7 @@
 //! `handy_keys::RAPHAEL_INPUT_MARKER` in `kCGEventSourceUserData`, so that Raphael's own hotkey tap
 //! and the watch on the owner's input both know it for Raphael's and let it pass.
 
+use std::ffi::c_void;
 use std::thread;
 use std::time::Duration;
 
@@ -257,13 +258,51 @@ pub fn scroll(vertical: i32, horizontal: i32) -> bool {
     true
 }
 
+/// How long a reading of the layout from another thread waits for the main thread.
+const MAIN_WAIT: Duration = Duration::from_millis(500);
+
+/// Runs `read` on the main thread and gives back what it returned. Text Input Sources may be read
+/// only there: on macOS 26 a paste thread that asks for the layout stops the app (a libdispatch
+/// assertion in `TSMGetInputSourceProperty`, SIGTRAP). `None` when the main thread does not answer
+/// within [`MAIN_WAIT`] (busy, or no main run loop at all, as in tests); the caller then falls back.
+fn on_main<T: Send + 'static>(read: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    // SAFETY: pthread_main_np only reads the calling thread's identity.
+    if unsafe { pthread_main_np() } != 0 {
+        return Some(read());
+    }
+    type Job = Box<dyn FnOnce() + Send>;
+    unsafe extern "C" fn run(context: *mut c_void) {
+        // SAFETY: `context` is the Box::into_raw below, handed to exactly one run.
+        let job = unsafe { Box::from_raw(context.cast::<Job>()) };
+        job();
+    }
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let job: Job = Box::new(move || {
+        let _ = sender.send(read());
+    });
+    // SAFETY: the main queue lives as long as the process; `run` takes the box back once.
+    unsafe {
+        dispatch_async_f(
+            &raw const _dispatch_main_q,
+            Box::into_raw(Box::new(job)).cast(),
+            run,
+        );
+    }
+    receiver.recv_timeout(MAIN_WAIT).ok()
+}
+
 /// The current keyboard layout's `uchr` data, kept alive by the input source it came from.
 struct Layout {
     _source: Cf,
     data: CFDataRef,
 }
 
+/// The layout, on the main thread only (see [`on_main`]); `None` anywhere else.
 fn layout() -> Option<Layout> {
+    // SAFETY: pthread_main_np only reads the calling thread's identity.
+    if unsafe { pthread_main_np() } == 0 {
+        return None;
+    }
     // SAFETY: a Copy function's result is owned; the property is valid while the source is.
     unsafe {
         let source = Cf::owned(TISCopyCurrentKeyboardLayoutInputSource())?;
@@ -300,19 +339,28 @@ fn translate(layout: &Layout, key: u16, modifiers: u32) -> Option<String> {
 }
 
 /// The key that types `character` (lowercase, no modifier) on the current layout. The shortcut
-/// ⌘V means the key that types "v", which is another key on Dvorak or AZERTY.
+/// ⌘V means the key that types "v", which is another key on Dvorak or AZERTY. Callable from any
+/// thread: the layout is read on the main thread.
 pub fn key_for(character: char) -> Option<u16> {
-    let layout = layout()?;
-    let wanted = character.to_string();
-    CHARACTER_KEYS
-        .into_iter()
-        .find(|&key| translate(&layout, key, 0).is_some_and(|typed| typed == wanted))
+    on_main(move || {
+        let layout = layout()?;
+        let wanted = character.to_string();
+        CHARACTER_KEYS
+            .into_iter()
+            .find(|&key| translate(&layout, key, 0).is_some_and(|typed| typed == wanted))
+    })
+    .flatten()
 }
 
 /// Whether the current layout types plain ASCII characters with Option that it has on no key
 /// without it (`@` on a German keyboard, `[` on a Swedish one): Option is then needed for typing,
-/// as AltGr is on Windows, and a hotkey that holds Right Option gets in its way.
+/// as AltGr is on Windows, and a hotkey that holds Right Option gets in its way. Callable from any
+/// thread: the layout is read on the main thread.
 pub fn layout_needs_option() -> bool {
+    on_main(needs_option).unwrap_or(false)
+}
+
+fn needs_option() -> bool {
     let Some(layout) = layout() else {
         return false;
     };
@@ -331,4 +379,30 @@ pub fn layout_needs_option() -> bool {
             .flat_map(|typed| typed.chars().collect::<Vec<_>>())
             .any(|c| c.is_ascii_graphic() && !plain.contains(&c))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// The 1.4.0 crash: the paste and copy threads asked for the layout and macOS 26 stopped the app.
+    /// A test thread is never the main thread, and the test binary runs no main run loop, so the
+    /// reading waits for the main thread, gives up and falls back instead of touching the layout.
+    #[test]
+    fn a_paste_thread_never_reads_the_layout_itself() {
+        let started = Instant::now();
+        let (v, option) = thread::spawn(|| (key_for('v'), layout_needs_option()))
+            .join()
+            .expect("reading the layout off the main thread must not stop the app");
+        assert_eq!(v, None);
+        assert!(!option);
+        assert_eq!(v.unwrap_or(code::ANSI_V), code::ANSI_V);
+        assert!(started.elapsed() < MAIN_WAIT * 4);
+    }
+
+    #[test]
+    fn the_layout_is_none_off_the_main_thread() {
+        assert!(thread::spawn(|| layout().is_none()).join().unwrap());
+    }
 }

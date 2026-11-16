@@ -90,6 +90,16 @@ This supersedes the former landing panel. R-PANEL-01/02/03/04 require the existi
 
 A routine row of Details opens the routine to read; an address in its instructions is a link to the owner's browser, while the row itself (a button, its status line cut short) stays words (R-LINK-01, `urls-member-routine`, described with the other linked surfaces in [conversation](conversation.md)).
 
+## The same eyes in WebKit (macOS)
+
+On a Mac the faces of 48 px and under had eyes of every size, some upside down, changing with the window: WebKit loses
+the angle unit of an `atan2()` whose length is relative (`cqw`), so `tan()` read degrees as radians. The face's size
+now reaches `tan(atan2())` as the registered length `--slime-size` (`slime.css`). WebKit also has no CSS `d`, so every
+state showed the resting eyes: the drawing writes the state's path into `d` as well (`slime-motion.ts` `eyePath`, read
+from slime.css's `--eyes` through the generated data; `slime.ts` `slimeSVG`, `enter` and the strips). Chromium still
+takes `d: var(--eyes)` and eases between shapes; WebKit changes them at once. The tests in `slime.test.ts` keep both.
+The look harness renders in Chromium, so a WebKit change is checked in a WKWebView by hand.
+
 ## Quiet resting poses
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.

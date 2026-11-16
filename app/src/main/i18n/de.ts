@@ -462,7 +462,7 @@ export const de = {
   "missing.urlRead": "Diese URL konnte nicht direkt gelesen werden. Öffentliche Seite oder heruntergeladene Datei bereitstellen; geschützte Seiten selbst öffnen.",
   "missing.unknown": "Fehlerursache unbekannt. Gespräch behalten und noch einmal versuchen; anhaltendes Problem melden.",
   "missing.microphone": "Mikrofonzugriff fehlgeschlagen. Raphael Zugriff gewähren und Desktop-Apps in den Windows-Mikrofondatenschutzeinstellungen erlauben.",
-  "missing.accessibility": "Die Diktiertasten brauchen die Bedienungshilfen. Erlaube Raphael unter Systemeinstellungen > Datenschutz & Sicherheit > Bedienungshilfen.",
+  "missing.accessibility": "Die Diktiertasten brauchen die Bedienungshilfen. Erlaube Raphael unter Systemeinstellungen > Datenschutz & Sicherheit > Bedienungshilfen. Ist es schon an, entferne Raphael mit − und füge es erneut hinzu.",
   "ownerQuestion.submit": "Antwort absenden",
   "ownerQuestion.answered": "Beantwortet",
   "ownerQuestion.skip": "Überspringen",

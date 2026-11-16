@@ -1043,7 +1043,9 @@ export function checkRendered(name, context = {}) {
       require(Math.abs(bounds.right - innerWidth) <= 2 && bounds.left <= 2, 'the larger view fills the whole window');
       require(getComputedStyle(document.querySelector('#nav')).visibility === 'hidden', 'the sidebar steps away under the larger view');
       const collapse = document.querySelector('.window-chrome > [data-desktop="collapse"]'), strip = document.querySelector('.window-chrome').getBoundingClientRect();
-      require(visible(collapse) && collapse.getBoundingClientRect().bottom <= strip.bottom + 1 && collapse.getBoundingClientRect().right <= document.querySelector('.window-controls').getBoundingClientRect().left + 1, 'fold back sits beside the window buttons');
+      // On a Mac the window's buttons are macOS's lights at the top left, and nothing of the page stands at the right but fold back.
+      const captionLeft = document.documentElement.dataset.platform === 'macos' ? innerWidth : document.querySelector('.window-controls').getBoundingClientRect().left;
+      require(visible(collapse) && collapse.getBoundingClientRect().bottom <= strip.bottom + 1 && collapse.getBoundingClientRect().right <= captionLeft + 1, 'fold back sits beside the window buttons');
       const dock = panel.querySelector('.desktop-dock'), screenBox = panel.querySelector('.desktop-screen').getBoundingClientRect();
       require(visible(dock) && Math.abs((dock.getBoundingClientRect().left + dock.getBoundingClientRect().right) / 2 - innerWidth / 2) <= 2 && dock.getBoundingClientRect().top >= screenBox.bottom, 'one pill sits centred below the screen');
       require(Math.abs(screenBox.width / screenBox.height - 1280 / 900) < 0.03, 'the screen keeps its own proportions');
@@ -1819,9 +1821,11 @@ export function checkRendered(name, context = {}) {
         const search = document.querySelector('[data-room-search]'), menu = document.querySelector('[data-room-menu]');
         const box = search.getBoundingClientRect(), heading = room.querySelector('.au-room-heading').getBoundingClientRect();
         const controls = document.querySelector('.window-controls').getBoundingClientRect(), tools = room.querySelector('.page-head .ra-tools'), reserve = parseFloat(getComputedStyle(tools).marginRight);
+        // On a Mac there are no buttons at the right (macOS draws its lights at the top left): the tool keeps the pane's own inset from the window's edge.
+        const mac = document.documentElement.dataset.platform === 'macos', end = mac ? innerWidth : controls.left, gap = mac ? Math.max(16, parseFloat(getComputedStyle(room).paddingRight)) : 14, what = mac ? 'edge' : 'buttons';
         require(visible(search) && search.closest('.page-head .ra-tools') && getComputedStyle(menu).display === 'none', 'group search stands alone in the shared header tool row; the menu is the row\'s right click');
         require(Math.abs((head.left - pane.left) - (pane.right - head.right)) <= 1, `the head keeps one inset on both sides (${head.left - pane.left} / ${pane.right - head.right})`);
-        if (reserve > 0) require(Math.abs(controls.left - box.right - 14) <= 2, `group search ends 14 px short of the window's buttons (${controls.left - box.right})`);
+        if (reserve > 0) require(Math.abs(end - box.right - gap) <= 2, `group search ends ${gap} px short of the window's ${what} (${end - box.right})`);
         else require(Math.abs(box.right - head.right) <= 1, `group search ends the head where a side thread stands at the right (${head.right - box.right} short)`);
         require(Math.abs(box.top + box.height / 2 - (heading.top + heading.height / 2)) <= 2, 'group search shares the heading\'s line');
       }
@@ -4550,9 +4554,10 @@ export function checkRendered(name, context = {}) {
     require(note.textContent === expected, `which subscription, what is left and when it resets: ${note.textContent}`);
     require(note.getAttribute("role") === "status", "it is read out as a status");
     require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the toast is inside the window: ${JSON.stringify(box)}`);
-    // Reading the catalogue of models moves nothing; on a loaded machine the composer's own read of it lands after the mark.
+    // Reading the catalogues of models (the cloud's and this computer's speech models) moves nothing; on a loaded machine the
+    // composer's own read of them lands after the mark.
     const moved = window.__look.calls.slice(window.__quotaCallsBefore ?? 0)
-      .filter(call => call.method !== "models.catalog" && (["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`)));
+      .filter(call => !["models.catalog", "models.local"].includes(call.method) && (["members.update", "settings.set"].includes(call.method) || /model/i.test(`${call.method ?? ""} ${call.command ?? ""}`)));
     require(moved.length === 0, `no model, member or setting moves: ${JSON.stringify(moved)}`);
     return { check: name, text: note.textContent, width: Math.round(box.width), height: Math.round(box.height) };
   }
@@ -8845,7 +8850,13 @@ export function checkRendered(name, context = {}) {
     // No tool meets the window's buttons: it ends 14 px short of them where the pane reaches the window's edge, and at its pane's edge where another pane stands to its right.
     const tools = buttons.filter(button => button.closest(".ra-tools")), edge = tools.length ? Math.max(...tools.map(button => box(button).right)) : null;
     const reaches = page.right >= innerWidth - 1 && !pane.classList.contains("has-side-thread") && !(pane.closest(".page-agent")?.dataset.det === "open" && !pane.classList.contains("au-room-pane") && innerWidth >= 1120);
-    if (edge !== null && reaches) require(Math.abs(controls.left - edge - 14) <= 2, `the tools end 14 px short of the window's buttons: ${Math.round(controls.left - edge)} (${Math.round(edge)} and ${Math.round(controls.left)})`);
+    // On a Mac there are no buttons at the right (macOS draws its lights at the top left): the tools keep the pane's own inset, at
+    // least the details panel's padding (16 px) clear of the window's edge.
+    const mac = document.documentElement.dataset.platform === "macos", end = mac ? innerWidth : controls.left;
+    if (edge !== null && reaches && !mac) require(Math.abs(controls.left - edge - 14) <= 2, `the tools end 14 px short of the window's buttons: ${Math.round(controls.left - edge)} (${Math.round(edge)} and ${Math.round(controls.left)})`);
+    // The pane's own inset is its `--row-edge`, measured where the pane resolves it; the room Windows keeps for its buttons
+    // (`--row-end`) is not part of it, so a Mac row that still kept that room fails.
+    if (edge !== null && reaches && mac) { const probe = document.createElement("div"); probe.style.cssText = "position:absolute;visibility:hidden;width:var(--row-edge)"; pane.append(probe); const inset = probe.getBoundingClientRect().width; probe.remove(); require(inset >= 16 && Math.abs(innerWidth - edge - inset) <= 2, `on a Mac the tools keep the pane's inset (${inset} px) from the window's edge: ${Math.round(innerWidth - edge)}`); }
     for (const button of tools) { const b = box(button); require(b.right <= page.right + 1, "a tool stays inside its pane"); }
     // What the pointer reaches: the pill and every button press; the empty stretch of the row moves the window. Under 1120 px an open
     // details panel lies over the chat with a dim over its header: nothing of the row presses, and the scrim's top row moves the window. A
@@ -8867,7 +8878,7 @@ export function checkRendered(name, context = {}) {
     const gapX = (() => { const a = box(who.closest("button") ?? who); return (a.right + (buttons.filter(b => box(b).left > a.right)[0]?.getBoundingClientRect().left ?? a.right + 40)) / 2; })();
     const empty = at(gapX, 14);
     require(empty?.closest(".mb-head") === head && !empty.closest("button"), `an empty part of the row is the header's own, under no strip of the window: ${empty?.className}`);
-    return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), firstMessageTop: first ? Math.round(box(first).top) : null, toolsGap: edge === null ? null : Math.round(controls.left - edge), findOpen };
+    return { check: name, pillY, rowTop: Math.round(row.top), rowHeight: Math.round(row.height), stageTop: Math.round(box(stage).top), threadHeight: Math.round(scroller.clientHeight), firstMessageTop: first ? Math.round(box(first).top) : null, toolsGap: edge === null ? null : Math.round(end - edge), findOpen };
   }
   // The details panel reaches the window's top: its own head is its top row, its round buttons level with the window's, its last one 14 px short of them.
   if (name === "details-top-row") {
@@ -8879,12 +8890,14 @@ export function checkRendered(name, context = {}) {
     require(buttons.length >= 2, "the panel's gear and close stand in its row");
     for (const button of buttons) require(Math.abs(box(button).top + box(button).height / 2 - 30) <= 2, `a panel button is level with the window's buttons' row, 30 px from the top: ${Math.round(box(button).top + box(button).height / 2)}`);
     const last = Math.max(...buttons.map(button => box(button).right));
-    require(Math.abs(controls.left - last - 14) <= 2, `the panel's last button ends 14 px short of the window's buttons: ${Math.round(controls.left - last)}`);
+    // On a Mac there are no buttons at the right: the last button ends the panel's padding (16 px) short of the window's edge.
+    const mac = document.documentElement.dataset.platform === "macos", end = mac ? innerWidth : controls.left, gap = mac ? 16 : 14;
+    require(Math.abs(end - last - gap) <= 2, `the panel's last button ends ${gap} px short of the window's ${mac ? "edge" : "buttons"}: ${Math.round(end - last)}`);
     require(head.hasAttribute("data-window-drag"), "the panel's row moves the window");
     for (const button of buttons) { const b = box(button), hit = document.elementFromPoint(b.left + b.width / 2, b.top + 6); require(hit && button.contains(hit), `the pointer reaches the panel's ${button.getAttribute("aria-label")} at the top of the row`); }
     const scroll = panel.querySelector(":scope > .mb-det-scroll");
     require(box(scroll).top >= box(head).bottom - 1, "the panel's contents start under its row");
-    return { check: name, rowHeight: Math.round(box(head).height), closeGap: Math.round(controls.left - last) };
+    return { check: name, rowHeight: Math.round(box(head).height), closeGap: Math.round(end - last) };
   }
   // The thread read higher up has messages under the row; they fade (the mask) and the pill and buttons stay on their own opaque surfaces.
   if (name === "conversation-top-row-scrolled") {
