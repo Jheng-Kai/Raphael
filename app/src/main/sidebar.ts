@@ -3,11 +3,11 @@ import { onLocaleChange, t } from "./i18n";
 import { messageTooltip } from "./message-tooltip";
 import * as api from "./api";
 import { entryLabel, type InventoryView } from "./apps-inventory";
-import { entryMark } from "./service-mark";
+import { pillMarks } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
 import type { AppContext } from "./types";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
-import { ico } from "./ui";
+import { esc, ico } from "./ui";
 import { openAccountMenu } from "./account-menu";
 import { mountEdge, savedWidth, saveWidth } from "./edge-drag";
 import { mountUpdateNotice } from "./update-notice";
@@ -22,8 +22,9 @@ const CONVERSATION_MIN = 604;
  *  list between its two shapes. */
 const RAIL_WIDTH = 88, TO_RAIL = 150, FROM_RAIL = 170;
 const WIDTH_KEY = "raphael.sidebar.width";
-/** The Connections pill's marks before any app is connected: what most people connect first. */
-const STARTER_APPS = ["Gmail", "Notion", "Google Calendar"] as const;
+/** What the Connections pill's marks are filled up with while fewer than three apps are connected: what most people connect
+ *  first. Each is named by its own mark's id, so a connected app is the same one by its mark, whatever it is called. */
+const STARTER_APPS = [{ name: "Gmail", icon: "gmail" }, { name: "Notion", icon: "notion" }, { name: "Google Calendar", icon: "googlecalendar" }] as const;
 const clampWidth = (width: number): number => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)));
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent" | "go">): void {
@@ -44,13 +45,12 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<
     if (typeof inventory === "object") rememberAppLogos(inventory.apps);
     const connected: { name: string; logo?: string }[] = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
       .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0)) : [];
-    // With nothing connected yet the pill still shows what it is for; a reading that failed shows none.
-    // Each mark is the app's own, from the one source every place draws it from (ours, else the catalogue's picture).
-    const shown = typeof inventory === "object" && !connected.length ? STARTER_APPS.map(name => ({ name })) : connected;
-    const marks = typeof inventory === "object" ? shown
-      .flatMap(app => { const mark = entryMark(app, "md"); return mark ? [mark] : []; }).slice(0, 3)
+    // The pill always shows three marks: the connected apps' own first, the starters that are not connected filling up the
+    // rest; a reading that failed shows none. Each mark is the app's own, from the one source every place draws it from
+    // (ours, else the catalogue's picture); an app with none leaves no hole.
+    const marks = typeof inventory === "object" ? pillMarks(connected, STARTER_APPS, 3)
       // Each mark knows where it stands against the middle one, for the pill's hover (sidebar.css `--spread`).
-      .map((mark, at, all) => `<span class="sidebar-app-mark" style="--spread:${at - (all.length - 1) / 2}">${mark}</span>`).join("") : "";
+      .map(({ key, html }, at, all) => `<span class="sidebar-app-mark" data-mark="${esc(key)}" style="--spread:${at - (all.length - 1) / 2}">${html}</span>`).join("") : "";
     const host = apps.querySelector(".sidebar-app-marks")!;
     if (lastMarks !== marks) { host.innerHTML = marks; lastMarks = marks; }
     fitMarks();

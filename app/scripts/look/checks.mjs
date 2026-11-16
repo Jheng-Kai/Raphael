@@ -2954,14 +2954,20 @@ export function checkRendered(name, context = {}) {
   const footBox = el => el.getBoundingClientRect();
   const footNear = (a, b, message) => require(Math.abs(a - b) <= 1, `${message}: ${Math.round(a * 10) / 10} not ${Math.round(b * 10) / 10}`);
   const footRail = () => document.documentElement.hasAttribute('data-sidebar-collapsed');
-  if (name === 'foot-starter-apps') {
-    // With nothing connected the pill shows what it is for: Gmail, Notion and Google Calendar (sidebar.ts STARTER_APPS).
+  if (name.startsWith('foot-pill-marks-')) {
+    // The pill always shows three marks: the connected apps' own, most recently used first, then the starters that are not
+    // connected (sidebar.ts STARTER_APPS), each named by its mark's id. The name carries the marks the scene's apps must give.
+    const want = name.slice('foot-pill-marks-'.length).split(',');
     const pill = document.querySelector('#nav .sidebar-apps[data-connect-apps]');
-    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) { require(![...pill.querySelectorAll('.sidebar-app-marks .mono')].some(visible), 'on the rail the door has no marks'); return { check: name, rail: true }; }
-    const marks = [...pill.querySelectorAll('.sidebar-app-marks .mono')].filter(visible);
-    require(marks.length === 3, `the three starter marks show beside the words: ${marks.length}`);
+    const all = [...pill.querySelectorAll('.sidebar-app-marks .sidebar-app-mark')];
+    require(all.map(mark => mark.dataset.mark).join() === want.join(), `the pill's marks are ${want.join()}, not ${all.map(mark => mark.dataset.mark).join()}`);
+    require(all.every(mark => mark.querySelector('.mono')), 'every mark is drawn');
+    if (document.documentElement.hasAttribute('data-sidebar-collapsed')) { require(!all.some(mark => visible(mark.querySelector('.mono'))), 'on the rail the door has no marks'); return { check: name, rail: true }; }
+    const shown = all.filter(mark => visible(mark.querySelector('.mono')));
+    require(shown.length === 3, `three marks show beside the words: ${shown.length}`);
+    require(shown.every((mark, at) => mark === all[at]), 'the marks that fit are the first ones: the last drop first');
     require(visible(pill.querySelector('.nav-t')), 'the words stay whole');
-    return { check: name };
+    return { check: name, marks: want };
   }
   if(name==='foot-rest'){
     // The foot at rest, both shapes: the list's one row (measured by sidebar-air) or the rail's column; the app opens on a conversation, so no Home
