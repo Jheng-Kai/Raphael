@@ -17,6 +17,7 @@ from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import wrap_untrusted
 from ...services.video import is_video, sample_all
 from ...worker.tool_guardrails import ToolGuardrails
+from ...worker.computer_verification import STOPPED, UNCHECKED
 from ..answers import MESSAGE_RULES, message_parts, parse_reply, public_reply, pending_replies
 from ..conversations import Conversations
 from ..failure import AgentFailure
@@ -57,9 +58,6 @@ NATIVE_READS = frozenset(("Read", "Glob", "Grep", "LS", "Skill", "ToolSearch", "
                           "webSearch"))
 RECOVERY_RECORD_CHARS = 2000
 RECOVERY_BLOCK_CHARS = 40000
-# Why a turn that answered does not count as done: after a change on the computer's screen it never read the result back,
-# not even once told to (worker/computer_verification.py, R-COMP-PERF-09).
-UNCHECKED = "computer_unchecked"
 
 COMPUTER_CHANGED = ("The computer tool catalog changed. Reload the computer MCP catalog and continue "
                     "the original task. Do not repeat completed actions.")
@@ -1269,8 +1267,7 @@ class CliLoop:
                             self.failure, self.failure_reason = UNCHECKED, None
                             logger.info("CLI turn ends unchecked: no screen read after the last change: %s",
                                         heard_runs(self._heard_runs))
-                            self._queue.put_nowait(Outcome("stopped", final=phrase(self.language, "computer_unchecked"),
-                                                           kind="computer_verification_required"))
+                            self._queue.put_nowait(Outcome("stopped", final=phrase(self.language, UNCHECKED), kind=STOPPED))
                             return None
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None

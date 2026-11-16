@@ -1,4 +1,4 @@
-"""A CLI member that answers twice without reading its last change on the screen back keeps its answer (R-COMP-PERF-09).
+"""A member that answers twice without reading its last change on the screen back keeps its answer (R-COMP-PERF-09).
 
 A member on Claude Code worked for most of an hour on its computer: one page change in a browser early on, then only
 shell commands and file edits. It answered, was started again in the same native session with the completion note
@@ -21,6 +21,8 @@ from raphael_core.background.cli import RoomCliSessions
 from raphael_core.messaging.words import plain_replies
 from raphael_core.worker.computer_verification import NOTE
 from raphael_core.worker.loop import Stop, ToolOutcome
+from .test_member_computer_use import computer_owner  # noqa: F401
+from .test_permission_cards import chat, finished, typed
 from .test_service import make_rig  # noqa: F401
 
 FIRST = "Version two is ready.\n\nThe English and Chinese cuts are in the team folder, with the font sheet."
@@ -267,3 +269,17 @@ def test_an_empty_reply_logs_its_shape_alone(caplog, value, shape):
         parse_reply(value, "en")
     [line] = [record.getMessage() for record in caplog.records]
     assert line.startswith("The model's reply said nothing: " + shape) and "secret words" not in line
+
+
+async def test_an_api_turn_keeps_the_answer_the_completion_check_does_not_count(computer_owner, client):
+    rig_, vm, hub, cards = computer_owner
+    client.chats = [chat("Look first.", ("computer__get_desktop_state", {})), chat("Click.", ("computer__click", {})),
+                    finished(FIRST), finished(SECOND)]
+    reply = await typed(rig_, "Use the computer")
+    assert any(message.get("content") == NOTE for message in client.chat_calls[-1]["messages"])
+    said = plain_replies([row[0] for row in rig_.conn.execute(
+        "SELECT text FROM agent_messages WHERE kind='reply' ORDER BY turn_id, seq")])
+    status, text = rig_.conn.execute("SELECT status, text FROM agent_turns WHERE id=?", (reply["turn_id"],)).fetchone()
+    assert SECOND in "\n\n".join(said) and said[-1] == phrase("en", "computer_unchecked")
+    assert status == "error" and text == phrase("en", "computer_unchecked")
+    assert phrase("en", "error") not in said

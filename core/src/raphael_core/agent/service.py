@@ -2809,9 +2809,11 @@ class AgentService:
                 return self._finish(ask, "greeting", "", said, ledger)
             return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
-        if isinstance(loop, CliLoop) and loop.failure:
+        # A CLI that failed, or any loop whose answer the completion check did not count (R-COMP-PERF-09): the turn ends
+        # failed on the reason its loop gave, after whatever the loop already showed.
+        if getattr(loop, "failure", None):
             return self._finish(ask, "answer", "negative", reply.text, ledger, status="error", detail=outcome.detail,
-                                failure=turn_failure(loop.failure, settings.model, loop.failure_reason))
+                                failure=turn_failure(loop.failure, settings.model, getattr(loop, "failure_reason", None)))
         if ask.source in _NO_OWNER_WORDS:
             if not reply.text.strip():
                 raise AgentFailure("error")

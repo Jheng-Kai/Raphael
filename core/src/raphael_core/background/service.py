@@ -138,6 +138,7 @@ from ..services.attachments import Attachment
 from ..services.video import is_video, place_videos, video_notes
 from ..agent.attachment_inputs import earlier_files, text_context
 from ..router import Router
+from ..worker.computer_verification import STOPPED as UNCHECKED_STOP, UNCHECKED
 from ..worker.guards import neutralize, wrap_untrusted
 from ..worker.loop import WAITING as PAUSED_KIND
 from .brief import BRIEF_WINDOW_MS, TaskBrief, ToolUse
@@ -2832,6 +2833,15 @@ class BackgroundService:
             else:
                 from ..agent.answers import split_messages
                 self._conclude(task, run, "limit", notice, said, None, kind, replies=split_messages(said))
+        elif status == "stopped" and kind == UNCHECKED_STOP:
+            # Told once to read its last change on the screen back, the member answered again without doing so
+            # (R-COMP-PERF-09): what it said stays in its thread, and the task ends on why it does not count as done.
+            plain = task.member_id != 0 or task.room_id is not None
+            said = report_from(str(reply.get("final") or ""), language, plain=plain, long=not plain,
+                               literal=run.model.startswith("cli:"))
+            if said:
+                self._reply(task, said, final=True)
+            self._conclude(task, run, "failed", negative, phrase(language, UNCHECKED), None, UNCHECKED)
         elif status == "stopped" and kind == "missing_terminal":
             self._conclude(task, run, "failed", negative, phrase(language, "no_answer"), None, "missing_terminal")
         elif status == "stopped" and kind == "failed":

@@ -77,6 +77,7 @@ async def test_fake_brain_cannot_claim_success_without_a_post_action_check():
     result = await run_task(brain, system="", user="Save", tools=[{"type": "function", "function": {
         "name": "computer__click", "parameters": {"type": "object"}}}])
     assert result.status == "stopped" and result.kind == "computer_verification_required"
+    assert result.final == "Successfully saved; done."  # what it said goes with the stop, for the turn to keep
     assert any("Before finishing computer work" in str(message.get("content")) for message in brain.messages)
 
 

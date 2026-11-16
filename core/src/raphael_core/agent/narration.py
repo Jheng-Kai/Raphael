@@ -19,10 +19,12 @@ from ..brain.textnorm import public_line
 from ..background.run import estimate_cost, summary_reply
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
+from ..worker.computer_verification import STOPPED as UNCHECKED_STOP, UNCHECKED
 from ..worker.tool_guardrails import ToolGuardrails
 from .answers import MESSAGE_RULES, Reply, loose_reply, parse_reply, public_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
+from .persona import phrase
 from .progress_updates import IN_MESSAGES, ProgressUpdates
 from .tools import ToolResult
 from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
@@ -155,6 +157,8 @@ class NarratedLoop:
         self.batch_calls = []
         self.guardrails = ToolGuardrails()
         self.last_failure = None
+        # Why the turn does not count although it answered (UNCHECKED), as a CLI loop's `failure` says it; else None.
+        self.failure = None
         self.used_tools = False
         # The conversation as the model last saw it (the loop's own list, which it goes on adding to).
         self.live: list[dict] = []
@@ -314,6 +318,16 @@ class NarratedLoop:
         self.response = None
 
     def reply(self, outcome: Outcome) -> Reply:
+        if outcome.kind == UNCHECKED_STOP:
+            # Told once to read its last change on the screen back, the model answered again without doing so
+            # (R-COMP-PERF-09): its answer stays in front of the owner, and the turn ends on why it does not count as done.
+            if outcome.final.strip() and self.publish_reply is not None:
+                try:
+                    self.publish_reply(parse_reply(outcome.final, self.language, plain=self.plain, long=True))
+                except AgentFailure:
+                    pass  # nothing it said can be shown: the reason stands alone
+            self.failure = UNCHECKED
+            return parse_reply(phrase(self.language, UNCHECKED), self.language, plain=True, long=True)
         if outcome.status != "done":
             if self.last_failure is not None and outcome.kind == "failed":
                 raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure, model=self.model)
