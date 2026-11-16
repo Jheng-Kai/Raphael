@@ -664,16 +664,36 @@ export async function perform(page, step, evidenceDirectory) {
       return await slimeSharp(page, undefined, evidenceDirectory && `${evidenceDirectory}/sharp-${revision ?? "current"}-${await page.evaluate(() => document.documentElement.dataset.theme)}-${page.viewport().width}`, revision);
     }
     case "slime-pointer": return await slimePointer(page, step.selector);
-    // The composer's idle emblem as the screen shows it, at the run's pixel ratio, kept beside the run (R-UI-161).
+    // The composer's idle emblem as the screen shows it, at the run's pixel ratio, kept beside the run, and compared pixel for
+    // pixel with its own bitmap laid on the composer's ground: any resampling on the way to the screen shows as a difference (R-UI-161).
     case "emblem-picture": {
-      const clip = await page.evaluate(() => {
-        const button = [...document.querySelectorAll('.composer .cmp-voice')].find(element => element.checkVisibility()), rect = button.getBoundingClientRect();
-        return { x: rect.left - 4, y: rect.top - 4, width: rect.width + 8, height: rect.height + 8 };
+      const place = await page.evaluate(() => {
+        const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility()), rect = img.getBoundingClientRect(), ratio = devicePixelRatio;
+        const x = Math.round(rect.left * ratio), y = Math.round(rect.top * ratio);
+        return { clip: { x: x / ratio, y: y / ratio, width: img.naturalWidth / ratio, height: img.naturalHeight / ratio }, ground: getComputedStyle(img.closest('.composer')).backgroundColor };
       });
+      const shot = Buffer.from(await page.screenshot({ type: "png", clip: place.clip })).toString("base64");
+      const comparison = await page.evaluate(async (shot, ground) => {
+        const img = [...document.querySelectorAll('.composer .cmp-voice .av > img')].find(element => element.checkVisibility());
+        const read = async source => { const image = new Image(); image.src = source; await image.decode(); return image; };
+        const [screen, bitmap] = await Promise.all([read(`data:image/png;base64,${shot}`), read(img.currentSrc)]);
+        const pixels = (draw, width, height) => { const canvas = new OffscreenCanvas(width, height), context = canvas.getContext("2d", { willReadFrequently: true }); draw(context); return context.getImageData(0, 0, width, height).data; };
+        const width = bitmap.naturalWidth, height = bitmap.naturalHeight;
+        const seen = pixels(context => context.drawImage(screen, 0, 0, width, height), width, height);
+        const own = pixels(context => { context.fillStyle = ground; context.fillRect(0, 0, width, height); context.drawImage(bitmap, 0, 0); }, width, height);
+        let worst = 0, off = 0, total = 0;
+        for (let i = 0; i < seen.length; i += 4) {
+          const gap = Math.max(Math.abs(seen[i] - own[i]), Math.abs(seen[i + 1] - own[i + 1]), Math.abs(seen[i + 2] - own[i + 2]));
+          worst = Math.max(worst, gap); total += gap; if (gap > 16) off++;
+        }
+        return { screen: [screen.naturalWidth, screen.naturalHeight], bitmap: [width, height], worst, mean: Math.round(total / (seen.length / 4) * 100) / 100, off };
+      }, shot, place.ground);
       const { width, deviceScaleFactor = 1 } = page.viewport(), theme = await page.evaluate(() => document.documentElement.dataset.theme);
       const file = `emblem-${theme}-${width}-x${deviceScaleFactor}.png`;
-      if (evidenceDirectory) await page.screenshot({ path: `${evidenceDirectory}/${file}`, type: "png", clip });
-      return { action: "emblem-picture", file, clip };
+      if (evidenceDirectory) await writeFile(`${evidenceDirectory}/${file}`, Buffer.from(shot, "base64"));
+      const result = { check: "emblem-picture", file, ratio: deviceScaleFactor, ...comparison };
+      if (comparison.off > 0) throw Object.assign(new Error(`The emblem on the screen is not its own bitmap: something resampled it (R-UI-161): ${JSON.stringify(result)}`), { assertion: result });
+      return result;
     }
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
     case "motion-cost": return await motionCost(page,step.revision);
