@@ -53,8 +53,29 @@ SHAPES = {
     "words, then the reply in a code block": ("Here you go:\n```json\n" + FINAL + "\n```", f"Here you go:\n\n{REPORT}", WRITTEN),
     "the reply in a code block, then words": ("```json\n" + FINAL + "\n```\nThanks", f"{REPORT}\n\nThanks", WRITTEN),
     "the reply cut off": (FINAL[:40], FAILS, WRITTEN),
-    "a progress object, then the reply cut off": (PROGRESS + FINAL[:40], FAILS, WRITTEN),
-    "words, then the reply cut off": ("Here you go:\n" + FINAL[:40], FAILS, WRITTEN),
+    # What stood before a cut object is the answer with a broken tail; a turn fails only when nothing stands before it.
+    # A cut object is forgiven only when plain words written outside any object stand before it. Objects alone before it are
+    # progress, and the answer is missing, whatever they said.
+    "a progress object that said something, then the reply cut off": (PROGRESS + FINAL[:40], FAILS, WRITTEN),
+    "a progress object with no message, then the reply cut off": (obj(thinking="t", progress="p") + FINAL[:40], FAILS, WRITTEN),
+    "a progress object, words, then the reply cut off": (
+        PROGRESS + "\nA clean answer.\n" + '{"text": "unfinished', f"{EARLY}\n\nA clean answer.", WRITTEN),
+    "words, then the reply cut off": ("Here you go:\n" + FINAL[:40], "Here you go:", WRITTEN),
+    "words, then a cut object of fields": ('A clean answer.\n{"text": "unfinished', "A clean answer.", WRITTEN),
+    # Objects at the start, words, then objects that end the text are one reply: what the earlier objects said, the words,
+    # what the last object says.
+    "a progress object, words, then the reply object": (
+        obj(thinking="Check the example.") + "\nDuplicate prose.\n" + obj(text="A clean answer."),
+        "Duplicate prose.\n\nA clean answer.", WRITTEN),
+    "a message, words, then the reply object": (
+        obj(thinking="t", messages=["First."]) + "\nBetween.\n" + obj(text="Last."), "First.\n\nBetween.\n\nLast.", WRITTEN),
+    # An object with none of the protocol's fields is the member's own content: it stays where it stands.
+    "a progress object, words, then an object of the member's own": (
+        obj(thinking="Check the example.") + '\nA clean answer.\n{"metadata":{"ignored":true}}',
+        'A clean answer.\n{"metadata":{"ignored":true}}', WRITTEN),
+    "progress objects with words between, and no reply": (
+        "```json\n" + obj(thinking="One.", progress="Two.") + "\n```\nDuplicate prose.\n" + obj(thinking="Three.", progress="Four."),
+        "Duplicate prose.", WRITTEN),
     "an array": ("[" + FINAL + "]", FAILS, WRITTEN),
     "a reply with fields of its own": (obj(text="hi", say_ja="やあ"), "hi", WRITTEN),
     "words that hold an object": (obj(text='Use {"a": 1} here'), 'Use {"a": 1} here', 'Use {"a": 1} here'),
