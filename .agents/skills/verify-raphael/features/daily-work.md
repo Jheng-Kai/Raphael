@@ -2,11 +2,11 @@
 
 ## Work and files in the member panel
 
-The owner's 2026-11-05 request places newest member work before the existing routines and conversation list in Details (R-PANEL-01/02). A row opens its existing result and keeps stop/rerun in the shared contextual menu. Library lists recorded artifacts/pages and a bounded local workspace/team snapshot through shared file chips, grouped This week / Earlier with Show more. Empty sections use one sentence. New files remain at their existing location; browsing creates no task, computer or filesystem content. Output-folder preferences and delivery permissions remain governed by R-OUTPUT-01. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery-2026-11-05) for the selected two-theme/three-size matrix and evidence scope.
+Details places newest member work before the existing routines and conversation list in Details (R-PANEL-01/02). A row opens its existing result and keeps stop/rerun in the shared contextual menu. Library lists recorded artifacts/pages and a bounded local workspace/team snapshot through shared file chips, grouped This week / Earlier with Show more. Empty sections use one sentence. New files remain at their existing location; browsing creates no task, computer or filesystem content. Output-folder preferences and delivery permissions remain governed by R-OUTPUT-01. See [Member computer](member-computer.md#three-tab-member-panel-and-local-engine-recovery) for the selected two-theme/three-size matrix and evidence scope.
 
 ## Calm conversations
 
-See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
+See [Conversation](conversation.md#calm-conversations) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
 
 
 ## Sub-features
@@ -17,7 +17,7 @@ See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) 
   responsive sidebar. Ctrl+1..9 selects the displayed member order. Alt+Up/Down
   selects the previous/next conversation of the current member, without wrapping.
   IME and repeated keys suppress every shortcut. Visible modals own keyboard
-  input; mounted hidden settings do not block shortcuts. Since 2026-11-11 the
+  input; mounted hidden settings do not block shortcuts. The
   Ctrl combinations (K, F, Shift+F, B, N, 1..9) also work while a text field,
   such as the composer, has the focus, because none of them types anything;
   Alt+Up/Down stay with the text and the combinations a field uses itself

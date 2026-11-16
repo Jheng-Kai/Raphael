@@ -1,9 +1,8 @@
 # Group chats and folders
 
-## No listener; a reply that does not finish is a status line (core, 2026-11-10)
+## No listener; a reply that does not finish is a status line (core)
 
-Harness step 4 of the backend design (「群組與交辦」「失敗與可靠性」), after Hermes
-`gateway/hosted_room_discussion.py` and `tools/delegate_tool.py`. R-ROOM-02.
+R-ROOM-02.
 
 - Nothing asks a member beforehand whether it will speak: `members/exchanges.py` has no `listen`, and
   `Router.room_listener` and the CLI listener are gone. An @ or a reply to a member's message goes to
@@ -27,13 +26,12 @@ Harness step 4 of the backend design (「群組與交辦」「失敗與可靠性
   budget stop, say), and speech a restart cut off is a `restart` line that does not run again. The
   provider's or the CLI's own words stay in the task's private record; the exchange logs only the kind.
   The line is a size larger (`--fs-sm`) and a step darker (`--text-2`, the name in `--text`) than the quiet event
-  lines, still one centred line: the owner needs to see it (owner, 2026-11-10, after the judge read it as small
-  and faint).
+  lines, still one centred line: the owner needs to see it, so it must not read as small
+  and faint.
 
-## A room stops a spiral by itself; length is no error; a CLI member keeps its session (core, 2026-11-11)
+## A room stops a spiral by itself; length is no error; a CLI member keeps its session (core)
 
-From the owner's own data of 2026-11-09 to 11-11 (a meeting of 330 member turns in 70 minutes, 97 failed for length,
-nothing stopped it). R-ROOM-10 to R-ROOM-13, R-MEM-11. No screen changes: the one new line is the existing close-out
+Without these a long meeting fails for length again and again and nothing stops it. R-ROOM-10 to R-ROOM-13, R-MEM-11. No screen changes: the one new line is the existing close-out
 bubble (`kind: wrapup`) in the chief's name, the only words a failure puts in the room.
 
 - What a reply is given of the discussion follows the model's window (`fresh_budget`) as well as `ROOM_CONTEXT_CHARS`.
@@ -67,7 +65,7 @@ npm run look -- room-reply-status room-mention-blocked room-discussion room-conc
 Not shown offline: a live room on the installed Claude Code or Codex where a reply takes longer than
 60 s; only a live run on the owner's brains shows it.
 
-## Room CLI permission callback (core, 2026-11-09)
+## Room CLI permission callback (core)
 
 R-ROOM-01 / R-CLI-07: Claude Code's permission-prompt callback `approve` remains mounted
 beside the four speech tools after every MCP catalog refresh. It is a permission decision,
@@ -97,10 +95,10 @@ $env:RAPHAEL_NATIVE_BINARY = "<a --debug build of this commit>"; npm run native 
 ```
 
 A room with Raphael and a new member, both addressed, must finish both turns `done` with their words in the room
-and no 「暫時沒有回應」. First run 2026-11-09 on 6e371c0c: both answered in 6 s, but the member's words were stored
-as the raw `{"text","detail"}` envelope (app/.look/briefs/room-cli-json-envelope.md).
+and no 「暫時沒有回應」. Both answer within seconds, and the member's words are stored as text, never as the
+raw `{"text","detail"}` envelope.
 
-Owner decision 2026-10-30 removes the Team page, route and spatial canvas.
+There is no Team page, route or spatial canvas.
 The global sidebar owns folder creation, rename, collapse, member moves and order.
 Member brain display remains in the details panel. The plus offers new members
 and group chats. Everyone is the existing all-member `is_team` room in the room list.
@@ -117,16 +115,16 @@ A room message carries no speaker name:
 the face beside it says who spoke, its name in the face's tooltip and for a screen reader (the author
 stays in the markup, visually hidden); a message with nothing else in its meta line has no meta line.
 The face stands beside the message, never above it, small (24 px) at its lower left, by its last
-bubble, as Grok Bot's group. Whom a message answers is quoted at the top of its bubble
-(owner, 2026-11-09: 「回覆 小晴」 above it did not show who answered whom): the shared conversation quote, the
+bubble. Whom a message answers is quoted at the top of its bubble
+(a bare 「回覆 小晴」 above it would not show who answered whom): the shared conversation quote, the
 source's name over its first words (two lines at most, Markdown marks dropped), a press jumps to it; a source that
 is gone says so without a name. The side thread lays its replies out the same way. Checks: `room-discussion`,
 `room-replies`, `room-reply-owner`, `room-reply-peer`, `room-reply-source-missing`.
-That hidden name is placed absolutely, so the thread (`.ra-scroll`) is its box: before 2026-11-09 it took the
-stage instead, escaped the clip at its depth in a long room and stretched the main area, and the wheel past
-the last message scrolled the whole room away (owner screenshot). Scene: `room-long-reply-wheel`; R-UI-62.
+That hidden name is placed absolutely, so the thread (`.ra-scroll`) is its box: were it not the box, it would take the
+stage instead, escape the clip at its depth in a long room and stretch the main area, and the wheel past
+the last message would scroll the whole room away. Scene: `room-long-reply-wheel`; R-UI-62.
 The room's right-click dialogs 參與成員 and 房內角色 (and the new room dialog) are one list of rows
-(`.room-list`, owner 2026-11-09): each member's face and name, a check on the right of a chosen member,
+(`.room-list`): each member's face and name, a check on the right of a chosen member,
 a pressed state for a reader; in 房內角色 each row carries its role as a bare dropdown on the right.
 No separate list of picked names. Scenes: `primary-room-members`, `room-role-assignment`, `new-room`,
 `plus-create-room`, `room-replies`.
@@ -208,25 +206,25 @@ Synthetic IPC does not establish native persistence, provider or design acceptan
 
 ## Folded room receipts
 
-R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open keeps the line node and the open conversation between members through WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Room workflow checks read the request, result, files and reason in that conversation (peer-chat.ts, 2026-11-07).
+R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open keeps the line node and the open conversation between members through WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Room workflow checks read the request, result, files and reason in that conversation (peer-chat.ts).
 ## Send while rooms work
 
 R-QUEUE-06 uses the shared chat composer: clear the submitted draft immediately,
 preserve new typing and files, and serialize rooms.send per room without changing
 speaker selection. Failed delivery keeps its request identity for retry. Scene:
 room-send-while-working, both themes at 1120,720,1920x1080. Shared private
-consumers and the selected matrix are in conversation.md#durable-owner-inbox-2026-11-03.
+consumers and the selected matrix are in conversation.md#durable-owner-inbox.
 
 
 ## Meetings and private work
 
-Owner follow-up (2026-11-08, meetings-and-delegation): an explicit meeting keeps
+An explicit meeting keeps
 meeting=1 and gives every participant a speech turn in order, even when earlier
 members pass. The agenda author also receives a review turn. Owner corrections re-open
 that ordered queue; an explicitly addressed follow-up schedules only its recipients.
 Serial meeting rounds use the existing turn budget, including follow-up mentions,
 so the smaller parallel-round cap cannot truncate a normal meeting. Ordinary room chats
-no longer have listeners (superseded 2026-11-10, "No listener" below). Persistent turns
+no longer have listeners (see "No listener" above). Persistent turns
 sharing a member and conversation serialize through the existing session lock. An early CLI exit retains
 bounded, scrubbed stderr in private failure details; normal logs retain only the kind.
 A missing resume session gets one fresh attempt

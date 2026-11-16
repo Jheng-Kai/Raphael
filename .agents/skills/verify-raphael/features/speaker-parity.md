@@ -42,4 +42,4 @@ video generation, native persistence, audio and OS hotkeys remain unverified.
 The draft preference is now inside the shared grouped resource card. The same
 speaker-draft-chief/member/profile scenes remain; the first two additionally assert
 that the switch shares the Memory/Skills/Commands/Voice list. See the
-[Settings by purpose](settings-appearance.md#settings-by-purpose-2026-11-05) matrix.
+[Settings by purpose](settings-appearance.md#settings-by-purpose) matrix.

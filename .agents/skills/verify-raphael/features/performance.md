@@ -15,7 +15,7 @@ and descendants independently keep `animation: none !important` to avoid
 long-thread freezes. The main console logs
 `main page: document <visibilityState>` once per visibility event.
 
-Home was removed on 2026-11-12. The calendar's overview shows local data first and starts no allowance read of its own; the account
+The calendar's overview shows local data first and starts no allowance read of its own; the account
 menu reads `usage.allowances` through the existing API at each opening (another unit owns how that read refreshes).
 
 Conversation events use bounded trailing refresh windows and cheap local turn

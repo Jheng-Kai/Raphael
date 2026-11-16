@@ -14,7 +14,7 @@ a precheck or a skipped run.
 
 ## Routines are read; their members change them
 
-Owner: 「這邊的所有設定都只能透過 Agent 完成 但是我們看的到內容」, and the calendar too. There is no routine editor:
+Every routine setting is made through an agent, and the owner can read all of it; the calendar too. There is no routine editor:
 a routine opens to read (`routine-view.ts`: its name, when it runs, who runs it, its instructions, no field and no
 footer) from the member panel, a conversation's receipt, the calendar and its popover. A routine is made, changed,
 tested, paused for good or deleted by asking its member in the conversation (the routine tools; the member explains
@@ -39,8 +39,8 @@ a dot (`routine-view-failed`), and a routine that is running shows the member's 
 bubble for its instructions (`routine-running`, R-ROUTINE-08). Existing consumers: `routine-sentence` (a failed run's line and
 the same view), `details-routine-view` (a routine that works has no status line).
 
-A routine's run reads the team without a card (R-ROUTINE-09; owner, 2026-11-14: a health check raised 16 cards for the
-members it read, two timed out, the runs were cancelled): `member_manage` reading actions (a member's routines, skills,
+A routine's run reads the team without a card (R-ROUTINE-09; a health check that reads many members must not raise a card for each one, or its runs time out and are
+cancelled): `member_manage` reading actions (a member's routines, skills,
 commands, settings) are T1 and wait for nobody. Every change a run makes to the team keeps its exact-action card, and a
 destructive one its T3. Core only, no screen: `core/tests/members/test_routine_reads.py`.
 
@@ -53,7 +53,7 @@ npm run look -- routine-view-failed routine-running routine-sentence details-rou
 
 ## Calm conversations
 
-See [Conversation](conversation.md#calm-conversations-owner-request-2026-11-05) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
+See [Conversation](conversation.md#calm-conversations) for R-UI-101/R-CLI-07 and the selected matrix. Routine origins now name the routine inside its reply, with the existing editor target. Failures appear once; rerun shares reply/copy actions. Public work receipts collapse into reply detail; calendars and owner cards retain their behavior. This supersedes older transcript trigger-chip and between-message receipt descriptions.
 
 
 ## Routine guard reasons
@@ -73,7 +73,7 @@ existing row, icon and typography with ordinary routines and event error rows.
 
 ## Calendar navigation review
 
-The account menu's 行事曆 (Home's calendar icon before 2026-11-12) resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
+The account menu's 行事曆 resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
 
 Selected scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls. Run both themes at 1120,900,720,1920x1080,480. Check return through the account menu and a conversation, true page reload, seven columns at 1120/720, narrow fallback dates, bar edges, hover surface and stable button geometry. At 480, month overflow counts fit their buttons and the rhythm shows only face and title.
 
@@ -150,14 +150,14 @@ editor actions with details-routines and automation-edit at the same width/theme
 Core contracts: core/tests/members/test_events.py,
 core/tests/members/test_event_harness.py (API and CLI create/list/update),
 core/tests/brain/test_db.py (migration 49 schema parity). The frontend edit contract
-(member-profile.test.ts) was retired with the routine editor on 2026-11-09.
+(member-profile.test.ts) was retired with the routine editor.
 
 ## Sub-features
 
-The app's own calendar, modelled on Google Calendar in the app's own look: week (default),
+The app's own calendar, in the app's own look: week (default),
 day and month; one-time events the owner and every member make and change; routine
 occurrences and Google events read here. Once/daily/weekdays/weekly/every schedules,
-destination/end conditions are what the member sets when the owner asks; the window only reads them (2026-11-09).
+destination/end conditions are what the member sets when the owner asks; the window only reads them.
 
 ## How to get to it (user POV)
 
@@ -169,7 +169,7 @@ Press the owner's face at the sidebar's foot, then 行事曆. No sidebar row sta
 - **Chips:** time and title, sized by duration, side by side when overlapping (R-UI-65). An own event is ink, a routine its member's slime colour with the member's 20px face, a Google event an outline with Google's mark. Side by side a chip gives up its face to its words. A routine's occurrence has no length and is drawn an hour long. A failed or waiting run's mark stands in a corner (beside the time, or the foot corner under a face), so the title keeps its lines; titles balance their two lines. The event whose panel is open, or that Home opened, lifts with a shadow; a ring stays keyboard focus's (R-UI-31).
 - **Panels:** the form or detail stands beside its slot or event, on the right, else on the left while that stays on the calendar; a slot too wide for either side (the day view) has it centred over it, never over the rail or the sidebar. The notes grow with their words up to six lines, with no drag grip.
 - **Make:** click a slot for the small form beside it, drag over a range to set the time, or 建立 for the same form. It holds the title, start, end, all-day and notes, and 改成例行任務 for what repeats. Enter or 儲存 saves and draws it. A press outside closes a form with nothing typed; one that holds words stays until 取消 or Escape.
-- **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens to read, and its member changes it in the conversation (2026-11-09).
+- **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens to read, and its member changes it in the conversation.
 - **Month:** six weeks of chips, 還有 N 個 for what does not fit, which opens that day. A click on an empty part of a day makes an all-day event there.
 - **Narrow windows:** at 760px of content width and below, a calendar icon in the toolbar opens the rail as a drawer from the left, + makes an event, and a week still shows all seven days whenever its actual calendar content is at least 520px. Below that it shows one to three days from the date in view and names those dates in the title. Tight chips retain readable times. Picking a date or starting a member drag closes the drawer.
 
@@ -200,7 +200,7 @@ due-time execution and persisted accounting, disable/delete it and verify it doe
 
 ## Gotchas
 
-Time is fixed to 2026-10-24, Asia/Taipei. Synthetic drop proves the handler's result,
+Time is fixed to 24 October 2026, Asia/Taipei. Synthetic drop proves the handler's result,
 not physical pointer dragging. Mock routines never execute jobs or OS wake behavior.
 A calendar PNG cannot prove scheduler reliability. The old separate run-log UI is
 gone; Usage retains aggregate summaries and CSV only.
@@ -214,7 +214,7 @@ mini-calendar dates with insufficient contrast, including while hovered.
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
 
-## Leaving a deleted routine (owner round 3)
+## Leaving a deleted routine
 
 R-UI-47: confirming deletion in an open routine editor closes it, refreshes the
 calendar/list and shows the existing localized named success toast. The journey
@@ -227,17 +227,17 @@ The shared toast stays at the bottom-right on the calendar. The existing
 conversation/member/room and calendar comparisons intentionally differ in vertical
 offset, while retaining the same text pattern, surface, type and spacing.
 
-(Its scenes were retired with the routine editor on 2026-11-09.)
+(Its scenes were retired with the routine editor.)
 
-## Owner round 6 contracts
+## Calendar layout at a 1120px window
 
-Owner round 6: automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member rail at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller page content uses the drawer; only calendar content below 520px reduces the number of days. calendar-shell asserts both modes.
+automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member rail at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller page content uses the drawer; only calendar content below 520px reduces the number of days. calendar-shell asserts both modes.
 
-## Owner round 7 contracts
+## Routine chips on the calendar
 
-A routine's chip keeps a fixed visible 20px avatar at the top right, except side by side. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Owner round 9 replaces the old 62px event/64px hour with viewport-derived compact hours and corresponding time/title spacing; narrow-day horizontal padding lets the time and avatar fit at their existing sizes. calendar-chips still asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
+A routine's chip keeps a fixed visible 20px avatar at the top right, except side by side. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Viewport-derived compact hours replace the old 62px event/64px hour and corresponding time/title spacing; narrow-day horizontal padding lets the time and avatar fit at their existing sizes. calendar-chips still asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
 
-## Owner round 9 regression coverage
+## Calendar hours and the first position
 
 Day and week share a viewport-derived hour height (28-54px), fitting eleven working
 hours below the sticky date/all-day header at 1280x800. Initial position shows the time
@@ -259,7 +259,7 @@ Title priority review: calendar-rhythm-week, calendar-rhythm-day and calendar-rh
 R-CAL-07. The all-day band of the day and week view draws three rows and one button per day that has more, 「還有 N 個」,
 N being the items not drawn. Pressing it opens that day's column in place to every all-day item of that day (the hours move down by
 what the band grew and keep their height, the day names stay on top, the page scrolls, there is no scrollbar of the band's own); that
-day's button then reads 「收合」 and folds that day. Each day opens by itself (R-CAL-08, owner 2026-11-14): other days stay folded with
+day's button then reads 「收合」 and folds that day. Each day opens by itself (R-CAL-08): other days stay folded with
 their own 「還有 N 個」, several may be open, the band is as tall as its tallest day, and focus follows the day's button (收合 after
 opening, 「還有 N 個」 after folding). It is the same toggle for Tab, Enter and Space, with aria-expanded, and the choice
 (`band` in `pages/automations.ts`: the view and first day of the range, and the set of open dates) is folded again on any other day or week.
@@ -267,7 +267,7 @@ opening, 「還有 N 個」 after folding). It is the same toggle for Tab, Enter
 is drawn in one piece per run of open days (square cut sides, no resize handle at a cut end) in the first free row of those days. A month's
 count (a separate `.cal-more`, still `data-au="open-day"`) opens that day in the day view with the band already open. The words are
 `overview.moreEvents` and `common.showLess`, both in the fifteen languages. The gutter's `+8` is the time zone (GMT+8) and is no count.
-Fixture: `calendarManyAllDay: N` puts N all-day items on 2026-10-24; `calendarBusyWeek` puts five on Thursday the 22nd, four bars across
+Fixture: `calendarManyAllDay: N` puts N all-day items on 24 October 2026; `calendarBusyWeek` puts five on Thursday the 22nd, four bars across
 Saturday and Sunday and four on Saturday (R-CAL-08). Checks: calendar-more-folded (the count equals the hidden items),
 calendar-more-open (every item in the document, scrolled to and pressable, the hours moved by the band's growth, the first timed event and
 the last hour reachable; per day: an open day holds every item with its own 收合 under them, a folded day three rows and its count),
@@ -316,7 +316,7 @@ R-RT-04/05: Gmail requests twenty items with payload and verbose output off. Cal
 
 The new automation-event-calendar scene uses the same event form as Gmail: pick, create once, then reopen. Its check preserves the ordinary detected path, small arguments and moving window without exposing them in the UI. Selected scope is all six automation-event-* scenes; the UI appearance is unchanged.
 
-(Its scenes were retired with the routine editor on 2026-11-09.)
+(Its scenes were retired with the routine editor.)
 
 ## Cold Calendar catalogue review
 
@@ -377,6 +377,6 @@ settings-view.test.ts, agent-members.test.ts and look audit/app tests.
 
 R-COLLEAGUE-05: Edit a saved webhook routine > External URL. Choose Tailscale Funnel, Cloudflare Tunnel or ngrok, copy the exact command and run the already-installed tool yourself. Paste its HTTPS URL and Test external URL. The PC-on reminder stays beside auth choices. Explicit key generation rotates the key; copy uses the displayed value and closing clears it. HMAC and Bearer share the existing receiver.
 
-(Its scenes were retired with the routine editor on 2026-11-09.)
+(Its scenes were retired with the routine editor.)
 
 The self-post uses a short-lived authenticated nonce and must reach this exact hook without executing its work or consuming admission. Private addresses, redirects, credentials and unrelated endpoints fail. Fakes prove these boundaries; no tunnel, public network or live form service is started during offline checks.
