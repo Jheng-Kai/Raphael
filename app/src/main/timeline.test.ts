@@ -465,12 +465,16 @@ describe("a step in words", () => {
   test("a failure says why in a few words, from its kind; an unknown kind is a plain error", () => {
     expect(reasonText(step({ outcome: "error", reason: "auth" }))).toBe("登入或金鑰尚未就緒，請到側欄的「連結應用程式」開啟對應應用程式並完成登入設定。");
     expect(reasonText(step({ outcome: "error", reason: "bad_arguments" }))).toBe("參數錯誤");
-    // A file that is there and cannot be read is told apart from one that is not there.
-    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("檔案在，但讀不了：可能是資料夾、受保護，或正被其他程式使用。");
-    expect(reasonText(step({ outcome: "error", reason: "not_found" }))).not.toBe(reasonText(step({ outcome: "error", reason: "unreadable" })));
     expect(reasonText(step({ outcome: "timeout", reason: null }))).toBe("服務無回應");
     expect(reasonText(step({ outcome: "error", reason: "something new" }))).toBe("目前無法確認失敗原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。");
     expect(reasonText(step())).toBe("");
+  });
+
+  test("a file that is there and cannot be read is told apart from one that is not there", () => {
+    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("檔案在，但讀不了：可能是資料夾、受保護，或正被其他程式使用。");
+    expect(reasonText(step({ outcome: "error", reason: "not_found" }))).not.toBe(reasonText(step({ outcome: "error", reason: "unreadable" })));
+    setLocale("en");
+    expect(reasonText(step({ outcome: "error", reason: "unreadable" }))).toBe("The file is there but cannot be read: it may be a folder, protected, or in use by another program.");
   });
 
   test("durations read as people say them", () => {

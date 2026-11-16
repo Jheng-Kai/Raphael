@@ -489,7 +489,10 @@ class TaskStore:
 
     def note_unreadable(self, task_id, path):
         """Write down that `path`, a file the task was to leave, is there but cannot be read: it is no artifact, and no missing file either."""
-        self.record_evidence(task_id, 'artifact_unreadable', kind='artifact_unreadable', uri=str(path), digest='', mime='text/plain')
+        with self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO task_evidence(task_id,tool_call_id,kind,uri,digest,mime,scope,verified_at_ms,verdict) "
+                "SELECT id,'artifact_unreadable','artifact_unreadable',?,'','text/plain',scope,?,'unreadable' FROM worker_tasks WHERE id=?",
+                (str(path), self._now_ms(), task_id))
 
     def forget_unreadable(self, task_id):
         """Each look for the files of a task starts with what it finds now: a file that was locked a moment ago may be free."""

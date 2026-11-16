@@ -433,7 +433,9 @@ async def test_a_file_another_program_holds_is_there_but_unreadable_not_missing(
     rig.client.replies.append(saved)
     task = await _finish(rig, target, source, done_when=f'Save "{output}"')
     assert (task.state, task.reason) == ("failed", "artifact_unreadable")
-    assert not [item for item in rig.service._store.evidence(task.id) if item["kind"] == "artifact"]
+    evidence = rig.service._store.evidence(task.id)
+    assert not [item for item in evidence if item["kind"] == "artifact"]
+    assert [item["verdict"] for item in evidence if item["kind"] == "artifact_unreadable"] == ["unreadable"], "never a verified file"
 
 
 async def test_a_file_of_the_members_folder_that_cannot_be_read_is_not_missing(make_rig, tmp_path, lock_file):

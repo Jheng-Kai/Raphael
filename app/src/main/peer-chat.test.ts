@@ -112,7 +112,7 @@ test("Esc closes it, an answer that arrives redraws it, and leaving the conversa
 test("each ending the core gives has its own line in every language, and one nothing gives has none", () => {
   const ENDINGS = { artifact_unreadable: "handoff.unreadableArtifact", child_work_incomplete: "handoff.childWorkOpen", missing_artifact: "handoff.missingArtifact",
     artifact_changed: "handoff.changedArtifact", work_without_action: "handoff.noAction", missing_terminal: "handoff.invalidFinal" } as const;
-  const states = (reason: string): string => peerLines([task(1, { mode: "work", state: "failed", result: "", reason })]).at(-1)!.state!;
+  const states = (reason: string): string => peerLines([task(1, { mode: "work", state: "failed", result: "", reason })])[1]!.state!;
   for (const locale of LOCALES) {
     setLocale(locale.id);
     for (const [reason, key] of Object.entries(ENDINGS)) {
@@ -128,8 +128,8 @@ test("each ending the core gives has its own line in every language, and one not
 
 test("a member that said it was finished while work it handed on was open says so, in words a first-time user can read", () => {
   setLocale("en");
-  expect(peerLines([task(1, { mode: "work", state: "failed", result: "", reason: "child_work_incomplete" })]).at(-1)!.state)
+  expect(peerLines([task(1, { mode: "work", state: "failed", result: "", reason: "child_work_incomplete" })])[1]!.state)
     .toBe("Incomplete · Stopped while work it handed on was still running");
-  expect(peerLines([task(2, { mode: "work", state: "failed", result: "", reason: "artifact_unreadable" })]).at(-1)!.state)
+  expect(peerLines([task(2, { mode: "work", state: "failed", result: "", reason: "artifact_unreadable" })])[1]!.state)
     .toBe("Incomplete · The file is there but cannot be opened");
 });
