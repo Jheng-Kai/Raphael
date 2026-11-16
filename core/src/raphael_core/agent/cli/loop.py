@@ -954,6 +954,7 @@ class CliLoop:
                     fresh_context = getattr(self, "_fresh_context", False)
                     while True:
                         resumed = self._session is not None
+                        server.new_run()  # each CLI process counts its MCP requests from 1
                         failure = await self._attempt(name, command, model, server, self._session, workspace, recovering=recovering)
                         if self._final_nudged and failure not in (None, "tools_changed", "owner_input"):
                             self._missing_terminal()

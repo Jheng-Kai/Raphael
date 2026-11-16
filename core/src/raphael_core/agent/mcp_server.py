@@ -20,14 +20,19 @@ class RaphaelMcp:
         self.definitions, self.execute = definitions, execute
         self.token = secrets.token_urlsafe(32)
         # A request's id is only its endpoint's own count, and /mcp and /computer both count from 1 (as does a CLI that
-        # started again in the same turn): a call is recorded under this server's, the endpoint's and the request's ids,
-        # or one tool's record replaced another's (owner's data, 2026-11-14: a picture's result over a command's).
+        # started again in the same turn, `new_run`): a call is recorded under this server's run's, the endpoint's and the
+        # request's ids, or one tool's record replaced another's (owner's data: a picture's result over a command's).
         self._calls = secrets.token_hex(4)
         self.server = None
         self.url = ""
         self.computer_url = ""
         self.closed = False
         self._tasks = set()
+
+    def new_run(self):
+        """A CLI started again in the same turn (the completion check, a changed tool list, a recovery) counts its requests
+        from 1 again on this same server: its calls are named apart from the earlier run's."""
+        self._calls = secrets.token_hex(4)
 
     async def __aenter__(self):
         self.server = await asyncio.start_server(self._connection, "127.0.0.1", 0, limit=65536)
