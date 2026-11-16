@@ -309,12 +309,11 @@ export function installMock(fixture, config = {}, target = window) {
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
   // The composer's row at its fullest (R-UI-160): a permission mode with a long word (`mode`, in `language` when one is named)
-  // and the longest name of a model that answers in the recorded OpenRouter list (core/tests/brain/fixtures/openrouter_catalog.json),
-  // with a depth beside it.
+  // and the scene's `model`, with a depth beside it.
   if (variant.composerLongRow) {
     data.settings.action_mode = variant.composerLongRow.mode ?? "bypass";
     if (variant.composerLongRow.language) data.device.ui_language = variant.composerLongRow.language;
-    const long = { ...structuredClone(data.catalog.llm[0]), id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super (free)", provider: "NVIDIA" };
+    const long = { ...structuredClone(data.catalog.llm[0]), ...variant.composerLongRow.model };
     data.catalog.llm.push(long);
     data.settings.agent_model = `${long.id}?effort=high`;
   }
