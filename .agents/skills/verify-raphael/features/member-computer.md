@@ -2,7 +2,7 @@
 
 ## Where the app's data lives
 
-R-COMP-PLACE-01, R-CLI-12, R-MEM-14. Every kind of data the app writes, where it goes, and what bounds it. `<F>` is the
+R-COMP-PLACE-01, R-CLI-12, R-MEM-15. Every kind of data the app writes, where it goes, and what bounds it. `<F>` is the
 identity's folder name: `Raphael` for the release, `Raphael Dev` for a development build (app/src-tauri/src/identity.rs
 `RELEASE`/`DEVELOPMENT`; the shell sets `RAPHAEL_DATA_DIR` for a development build, `data_env`). On macOS `%APPDATA%\<F>`
 and `%LOCALAPPDATA%\<F>` are both `~/Library/Application Support/<F>`, so `paths.machine_dir(base)` is the data folder
@@ -14,7 +14,7 @@ itself and nothing moves. Sizes are the ones read on the owner's PC when the lay
 | Small settings (`device.json`, `integrations.json`, `connectors.json`, `messaging.json`, `schedule-awake.json`, `.window-state.json`) | `%APPDATA%\<F>` | shell `device_settings.rs`, `schedule_awake.rs`; core `IntegrationsService`, `MessagingStore` (data folder) | under 1 MB | rewritten | fixed shape |
 | `connectors-catalog.json` (a downloaded catalogue) | `%APPDATA%\<F>` | `connectors/service.py` `CATALOG_FILE` | 3.8 MB | replaced | one file |
 | Attachments | `%APPDATA%\<F>\attachments` | `services/attachment_store.py` (`root / "attachments"`) | 988 MB, 262 files | each attached file | nothing |
-| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal 30 days (R-MEM-14) |
+| Members' memory: `bots/<id>` (SOUL.md, MEMORY.md, skills, `memory/log/<day>.md`), `shared/USER.md`, `bot-state` (journals, mirrors, locks, backups) | `%LOCALAPPDATA%\<F>` | `paths.memory_dir`, whose parent `memory/service.py` gives `BotHomes` | bots 3.0 MB, bot-state 0.8 MB | each memory write; a log line | MEMORY.md 2,200 and USER.md 1,375 characters, 128 KB a file, unused entries 90 days; daily logs: nothing; journal 30 days (R-MEM-15) |
 | Conversation folding | database (`conversation_summaries`, `conversation_context_summaries`, `room_thread_summaries`) | `memory/conversation.py`, `members/room_summary.py` | in the database | one row per conversation or thread | `SUMMARY_MAX_TOKENS`; goes with its conversation |
 | Vault, keys, sign-ins | Windows Credential Manager, macOS Keychain (never a file) | `brain/secrets.py` `CredentialKeyStore`, `CredentialVault` | none on disk | per secret | none needed |
 | Logs | `%LOCALAPPDATA%\<F>\logs` | shell `lib.rs` `log_plugin`, `identity.rs` | 3.5 MB | per line | 1 MB files, three kept |

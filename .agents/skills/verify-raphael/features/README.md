@@ -5,7 +5,7 @@
 See [Member computer](member-computer.md#where-the-apps-data-lives) for the inventory of every kind of data the app
 writes, with its folder, its size on the owner's PC and what bounds it, and for the layout: R-COMP-PLACE-01 (the
 members' computer folders in the machine-local folder, an earlier install's moved once by rename), R-CLI-12 (Claude Code's
-records of the members' runs swept once a day) and R-MEM-14 (the memory journal keeps thirty days). No scene changes;
+records of the members' runs swept once a day) and R-MEM-15 (the memory journal keeps thirty days). No scene changes;
 the move's real-engine proof is the computer acceptance's `folders move` step.
 
 ## Designed for everyone, pass 1
