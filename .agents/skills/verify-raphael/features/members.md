@@ -214,7 +214,7 @@ complete flow for creation changes.
 
 A member's face is a slime (R-UI-116): its picker in
 the details panel and on the settings page shows the slimes alone, with no 生成 tab and no picture drawn by an image
-model. It is one row of tabs, the groups in their order (角色, 動物, 職業, 自然, 季節與食物, 小物, 純色) as the app's small pill tabs in a
+model. It is one row of tabs, the groups in their order (角色, 奇幻, 動物, 自然, 生活, 純色; the slimes in 角色 are told apart by how they look) as the app's small pill tabs in a
 chip row (`slime-tabs.ts`), and under it only the open group's slimes with no heading. It opens on the group that holds
 the face now, with that face marked. The groups stand on one another in one cell, so the picker is one size and a press on
 a tab moves nothing; Left and Right move between tabs, Down goes into the group and Up back to the tab. Scenes:
