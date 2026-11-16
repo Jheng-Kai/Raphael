@@ -27,6 +27,15 @@ let texture: "waiting" | "ready" | "missing" = "waiting";
 let drawable: boolean | undefined;
 const canDraw = (): boolean => drawable ??= typeof document !== "undefined" && !!document.createElement("canvas").getContext?.("2d");
 
+/**
+ * The window moved to a screen of another scale, or the page was zoomed: the pixel ratio changed, so every face is drawn again
+ * for it. A still drawn for the old ratio would be resampled to its box, which is what blurs it (R-UI-161).
+ */
+function watchPixelRatio(): void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)?.addEventListener?.("change", () => { watchPixelRatio(); notify(); }, { once: true });
+}
+
 /** The rune texture arrived (or could not be read): every face is drawn again. */
 export function emblemTextureArrived(ok = true): void {
   texture = ok ? "ready" : "missing";
@@ -121,6 +130,7 @@ motionQuery?.addEventListener?.("change", (e) => {
   reduced = e.matches;
   notify();
 });
+watchPixelRatio();
 
 /** The kinds of picture that may move. */
 const MAY_MOVE = /^data:image\/(gif|webp);/;
