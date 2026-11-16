@@ -1974,6 +1974,100 @@ class Acceptance:
                 return "Two seat-local terminals; foreign window read/click refused before driver dispatch"
             terminals_ok = await self.check("shared terminal wall", launches)
 
+            async def launches_land():
+                """A program a member launches opens on that member's screen and on no other. Seen on a real shared
+                computer: a terminal launched at one seat opened on another member's screen, and its own member could
+                not find it. The window manager opens a new window on the screen the pointer is on, so the pointer is
+                first put on a screen nobody holds; xfce4-terminal opens a later launch's window in the copy already
+                running, so both seats launch it together (no --disable-server), and then one seat launches it again
+                while a copy with a window on the other seat runs. Every window is found by what the launch's own reply
+                names, through the members' own tools."""
+                target = targets[members[0]]
+                screens = {member: targets[member].screen for member in members}
+                nobody = vm.screen_grid(target.screens)[0][target.screens - 1]
+                marker = secrets.token_hex(3)
+                opened = {}
+
+                async def pointer_on_nobodys_screen():
+                    await self.guest(target, ["python3", "-c", X_WARP, str(nobody[0] + 640), str(nobody[1] + 400)])
+
+                async def launch(member, title):
+                    result = await tool(member, "launch_app", {"launch_path": f"xfce4-terminal --title={title}"})
+                    named = re.search(r"This launch's window on your screen:\n\s+window_id=(\d+) pid=(\d+)", result.text)
+                    require(named, f"Expected member {member}'s launch to name its window on its own screen, observed {result.text[-400:]!r}")
+                    launched = re.search(r"\(pid (\d+)\)", result.text)
+                    opened[int(named[1])] = dict(member=member, title=title, pid=int(named[2]),
+                                                 launch_pid=int(launched[1]) if launched else None)
+
+                before = {row["window_id"] for row in (await machine.seat_windows(target))["windows"]}
+                try:
+                    await pointer_on_nobodys_screen()
+                    began = time.monotonic()
+                    # Both run to their end before anything is judged or closed: a launch still waiting holds its window.
+                    for outcome in await asyncio.gather(*(launch(member, f"lands-{member}-{marker}") for member in members),
+                                                        return_exceptions=True):
+                        if isinstance(outcome, BaseException):
+                            raise outcome
+                    together = time.monotonic() - began
+                    first_copy = next(window["pid"] for window in opened.values() if window["member"] == members[0])
+                    await pointer_on_nobodys_screen()
+                    await launch(members[1], f"lands-{members[1]}-again-{marker}")
+                    canvas = (await machine.seat_windows(target))["windows"]
+                    held = set(screens.values())
+                    stray = [row for row in canvas if row["window_id"] not in before | opened.keys()
+                             and seat_view.holder(row["bounds"], target.screens) in held]
+                    require(not stray, f"Expected no other new window on a member's screen, observed {stray}")
+                    lists = {member: {row["window_id"]: row for row in await rows(member)} for member in members}
+                    for identifier, window in opened.items():
+                        member = window["member"]
+                        local = lists[member].get(identifier)
+                        require(local, f"Expected {window['title']} in member {member}'s own window list, observed {sorted(lists[member])}")
+                        x, y, width, height = (local["bounds"][key] for key in ("x", "y", "width", "height"))
+                        require(0 <= x and 0 <= y and x + width <= 1280 and y + height <= 900,
+                                f"Expected {window['title']} wholly inside screen {screens[member]}, observed seat-local {local['bounds']}")
+                        row = next((row for row in canvas if row["window_id"] == identifier), None)
+                        require(row and seat_view.holder(row["bounds"], target.screens) == screens[member],
+                                f"Expected {window['title']} on screen {screens[member]} of the canvas, observed {row}")
+                        for other in members:
+                            require(other == member or identifier not in lists[other],
+                                    f"Expected {window['title']} not to be listed for member {other}")
+                    for member in members:
+                        shown = (await tool(member, "get_desktop_state", {})).text
+                        for identifier, window in opened.items():
+                            require((f"window_id={identifier} " in shown) == (window["member"] == member),
+                                    f"Expected member {member}'s desktop to show its own launches only: {window['title']} "
+                                    f"{'missing' if window['member'] == member else 'shown'}")
+                    handed = [window["title"] for window in opened.values()
+                              if window["launch_pid"] is not None and window["pid"] != window["launch_pid"]]
+                    again = next(window for window in opened.values() if "-again-" in window["title"])
+                    # What tied each window, as the core read it (seat_launch.MARKS): a startup id on the window itself
+                    # (xfce4-terminal's --startup-id), on its client leader (GTK at display open), or neither.
+                    marks = await machine.launch_marks(target, [dict(window_id=identifier, pid=window["pid"])
+                                                                for identifier, window in opened.items()])
+                    ids = {kind: [mark[kind] for mark in marks.values() if mark.get(kind)] for kind in ("own", "leader")}
+                    return (f"pointer on screen {target.screens}, nobody's; two seats launched together in {together:.1f} s and one again: "
+                            + "; ".join(f"{window['title']} window {identifier} pid {window['pid']} (launch pid {window['launch_pid']}) "
+                                        f"wholly inside screen {screens[window['member']]}" for identifier, window in opened.items())
+                            + f"; opened by another process than its launch's: {', '.join(handed) or 'none (each its own process)'}"
+                            + f"; the second seat's second window {'is' if again['pid'] == first_copy else 'is not'} in the copy "
+                              f"that holds the first seat's window; a startup id on the window itself on {len(ids['own'])} of "
+                              f"{len(opened)} ({len(set(ids['own']))} different), on its leader on {len(ids['leader'])}"
+                            + "; each seat's list and desktop show only its own")
+                finally:
+                    left = []
+                    for row in (await machine.seat_windows(target))["windows"]:
+                        if row["window_id"] not in before and "terminal" in row.get("app_name", "").lower():
+                            left.append(row["window_id"])
+                            await self.guest(target, ["wmctrl", "-i", "-c", str(row["window_id"])], allow_failure=True)
+                    until = time.monotonic() + 5
+                    while left:
+                        present = {row["window_id"] for row in (await machine.seat_windows(target))["windows"]}
+                        left = [identifier for identifier in left if identifier in present]
+                        require(not left or time.monotonic() < until, f"Expected the launched terminals closed, observed {left}")
+                        if left:
+                            await asyncio.sleep(.2)
+            await self.check("shared launches land on their own screens", launches_land)
+
             async def pointer_wall():
                 member = members[1]
                 args = {key: terminals[member][key] for key in ("pid", "window_id")}
