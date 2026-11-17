@@ -1,6 +1,7 @@
 """The switchboard with a channel that is not Telegram: nothing in it depends on one app."""
 
 import asyncio
+import time
 import contextlib
 
 import pytest
@@ -39,11 +40,14 @@ class FakeChannel:
 
 
 async def settle(predicate, tries=200):
-    for _ in range(tries):
-        if predicate():
-            return
+    """Wait until `predicate()` holds, for as long as `tries` steps of 5 ms take by the clock. Counting steps alone
+    was not a time: a 5 ms sleep can come back at once, and alone, before other tests had warmed the process, a
+    whole Telegram reply did not fit in two thousand of them."""
+    deadline = time.monotonic() + tries * 0.005
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise AssertionError("did not happen")
         await asyncio.sleep(0.005)
-    raise AssertionError("did not happen")
 
 
 def make(channel, *, allowed=("U1",)):
