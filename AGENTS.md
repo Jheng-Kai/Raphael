@@ -1,12 +1,7 @@
 # Working in Raphael
 
 - Use English for code, comments and commit messages; talk to the maintainer in Traditional Chinese (繁體中文).
-- Select verification by the changed behavior and its consumers. Frontend changes run
-  `npm run verify` from `app/`; add `--contract` or `--rust` only when those boundaries change.
-- A core change runs the test folders it touched and `npm run verify -- --contract` (the scenario
-  drivers and the default prompt's size budget: where two units that each passed alone break
-  together). The whole core suite is CI's: push and read the result; do not run `--core` on a
-  developer's machine as a matter of course.
+- Test what changed (below): the same rule for everyone, every change. Do not run suites by habit.
 - For local UI changes, run mapped affected scenes with
   `npm run look -- <affected scenes> --theme both --width 1120,720,1920x1080` from `app/`.
   Shared components need representative affected consumers, not every unrelated page.
@@ -24,19 +19,51 @@
   Keep the map current when behavior or navigation changes.
 - Preserve unrelated work and formatting. Report incomplete checks plainly.
 
+## Test what changed
+
+A change is checked by what it touches and by the regression tests that guard that behavior, never by
+running everything. Tests that the change cannot reach, and suites that already passed and that the change
+does not touch, are not run again: CI runs the whole Vitest suite, the whole core suite and the Rust suite on
+every pull request, and a pull request merges only on CI green on its exact commit.
+
+From `app/`, `npm run verify -- --changed` is the local check of every change. It works out the selection
+from git (everything that differs from where the branch left `origin/main`, committed or not) and runs:
+
+1. `tsc`, the app's own TypeScript check.
+2. The Vitest tests related to each changed frontend file (`vitest related`: the tests that import it, and
+   changed test files themselves).
+3. The repository's rule tests, which read the whole tree: RULES.md and its named tests, the feature maps,
+   design tokens, focus rings, layout, UI rules, every locale and the history marks (`repo-clean`).
+4. For each changed core package, its test folder (`raphael_core/members/…` → `core/tests/members`), for a
+   changed top-level module its test file, and each changed core test file, with warnings as errors.
+5. Contrast only when CSS changed, and Rust formatting only when Rust changed.
+
+Add to it only what the change itself calls for:
+
+| The change touches | Also run |
+| --- | --- |
+| UI (markup, CSS, words on screen) | the feature-map scenes that show it, `npm run look -- <scenes> --theme both --width 1120,720,1920x1080`, and inspect every contact sheet and the changed parts at full size |
+| A new screen or a visual redesign | `npm run judge` on that same look run (a fix that keeps the design needs no judge) |
+| The core loop, a prompt, the tool list or `core/tests/evaluate` | `--contract` (the scenario drivers and the default prompt's size budget) |
+| Rust that no owner build or CI run will compile before hand-off | `--rust` |
+| A path offline tests cannot reach (a container, a native call, a provider) | one real run of that path, or record it as unverified |
+| The brain/tool path | `npm run verify -- --live` in an authorized live environment |
+| The computer image, the container's shape in `vm.py` or the view path | `npm run verify -- --computer` with Docker already running (it never starts Docker, never runs in CI) |
+
+Not run locally unless the table above asks for it: the whole `npm run verify`, `--core`, `--contract`,
+`--rust`, `look -- --all` and judge. Documentation-only changes need diff/link review only.
+
+Report in the pull request which checks ran with their exits, which scenes were inspected, and what was not
+run and why. A check that could not run is reported as not run, never as passed.
+
 ## Definition of done
 
 Follow [product rules](.agents/product/RULES.md), [architecture](.agents/product/ARCHITECTURE.md)
-and [verify-raphael](.agents/skills/verify-raphael/SKILL.md). From `app/`, run
-the checks for the affected boundaries and, for UI, the selected scene matrix above;
-inspect its contact sheets and relevant full-size images, then run judge on that same
-selected look run. Explain omissions and tool blockers. Documentation-only changes
-need diff/link review rather than application suites. Full integration acceptance uses
+and [verify-raphael](.agents/skills/verify-raphael/SKILL.md). Run the checks of "Test what changed" for the
+change, explain omissions and tool blockers, and merge on CI green on the exact commit.
+Full integration acceptance, before a release, uses
 `npm run verify -- --contract --rust`, CI green on the exact commit (it runs the whole core suite),
 and `npm run look -- --all --theme both --width 1120,720,1920x1080`.
-Brain/tool changes also require `npm run verify -- --live` in an authorized live environment.
-A change to the computer image, the container's shape in `vm.py` or the view path also requires
-`npm run verify -- --computer` with Docker already running (it never starts Docker, never runs in CI).
 CI enforces repository contracts and the offline suites on every PR; the rendered matrix,
 judge and live checks run locally and never in CI. A Windows release starts only after CI has
 passed on its exact commit (run CI by hand on it when no pull request did). Use the [PR contract](.github/pull_request_template.md)
