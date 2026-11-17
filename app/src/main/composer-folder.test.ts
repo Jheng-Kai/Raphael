@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // The member's folder in the composer's row (composer-folder.ts, R-PC-05): it names where the member's files for the owner go,
-// and its menu switches, adds and goes back to the output folder, saving the member's folders whole.
+// and its menu lists the output folder first, then the ones added, switches between them and adds one, saving the member's
+// folders whole.
 import { beforeEach, expect, test, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ settings: { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: {} as Record<string, string[]> } }));
@@ -13,7 +14,7 @@ const api = vi.hoisted(() => ({
   pickOutputFolder: vi.fn(async (): Promise<string | null> => null),
 }));
 vi.mock("./api", () => api);
-import { mountComposerFolder } from "./composer-folder";
+import { mountComposerFolder, removeFolder } from "./composer-folder";
 import { setLocale, t } from "./i18n";
 import type { MainEvent } from "./types";
 import { closeMenu } from "./ui";
@@ -54,14 +55,12 @@ test("it waits hidden until the folders are read, then names the member's first 
   expect(button.hidden).toBe(false);
   expect(button.querySelector("span")!.textContent).toBe("Notes");
   expect(button.getAttribute("aria-label")).toBe(t("composerFolder.label", { p0: "D:\\Work\\Notes" }));
-  expect(button.dataset.default).toBe("false");
 });
 
 test("a member with no folder of its own names the output folder, and with none at all asks for one", async () => {
   member = 4;
   const mounted = await mount();
   expect(word()).toBe("Deliveries");
-  expect(button.dataset.default).toBe("true");
   state.settings.owner_output_folder = "";
   handlers.forEach(handler => handler({ type: "SettingsChanged" } as MainEvent)); await flush();
   expect(word()).toBe(t("output.pick"));
@@ -71,53 +70,79 @@ test("a member with no folder of its own names the output folder, and with none 
   expect(word()).toBe("Notes");
 });
 
-test("its menu checks the first folder, and choosing another puts it first, keeping the other members' folders", async () => {
+test("its menu lists the output folder first and the added ones after it by name, and choosing one puts it first, keeping the other members' folders", async () => {
   state.settings.member_write_folders["9"] = ["F:\\Other"];
   await mount();
   const card = await open();
   const rows = [...card.querySelectorAll<HTMLElement>("[data-folder]")];
-  expect(rows.map(row => row.getAttribute("aria-checked"))).toEqual(["true", "false"]);
-  expect(rows[1].querySelector(".cb-path")!.textContent).toBe("E:\\Archive");
-  await press('[data-folder="1"]');
+  expect(rows.map(row => row.textContent)).toEqual(["Deliveries", "Notes", "Archive"]);
+  expect(rows.map(row => row.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+  // The whole path waits under the pointer; the card holds no path and one action, 加入資料夾, at its foot.
+  expect(rows[2].dataset.tooltip).toBe("E:\\Archive");
+  expect(card.textContent).not.toContain("E:\\");
+  expect([...card.querySelectorAll<HTMLElement>("[data-folder-act]")].map(act => act.dataset.folderAct)).toEqual(["add"]);
+  expect(card.lastElementChild!.querySelector('[data-folder-act="add"]')!.textContent).toBe(t("writeFolders.add"));
+  await press('[data-folder="2"]');
   expect(api.settingsSet).toHaveBeenCalledWith("member_write_folders", { "3": ["E:\\Archive", "D:\\Work\\Notes"], "9": ["F:\\Other"] });
   expect(word()).toBe("Archive");
   expect(document.querySelector("#app-popover .cb-folders")).toBeNull();
-  // The one already first saves nothing.
-  await open(); await press('[data-folder="0"]');
+  // The order of the menu stays; the one already chosen saves nothing.
+  const again = await open();
+  expect([...again.querySelectorAll("[data-folder]")].map(row => row.textContent)).toEqual(["Deliveries", "Archive", "Notes"]);
+  await press('[data-folder="1"]');
   expect(api.settingsSet).toHaveBeenCalledTimes(1);
 });
 
-test("a folder added with the picker goes first, once, and a cancelled picker changes nothing", async () => {
+test("choosing the output folder puts it first in the member's list, and a member with none has it checked", async () => {
   await mount();
   await open();
-  api.pickOutputFolder.mockResolvedValueOnce("E:\\Archive");
-  await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["E:\\Archive", "D:\\Work\\Notes"] });
-  await open();
-  api.pickOutputFolder.mockResolvedValueOnce(null);
-  await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenCalledTimes(1);
-});
-
-test("going back to the output folder clears the member's own folders, and with none the output folder is the one checked row", async () => {
-  await mount();
-  await open();
-  expect(document.querySelector('#app-popover [data-folder-act="default"] .cb-path')!.textContent).toBe("C:\\Owner\\Deliveries");
-  await press('[data-folder-act="default"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", {});
+  await press('[data-folder="0"]');
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["C:\\Owner\\Deliveries", "D:\\Work\\Notes", "E:\\Archive"] });
   expect(word()).toBe("Deliveries");
+  member = 4;
   const card = await open();
   const rows = [...card.querySelectorAll<HTMLElement>("[data-folder]")];
-  expect(rows).toHaveLength(1);
-  expect(rows[0].getAttribute("aria-checked")).toBe("true");
-  expect(rows[0].querySelector("b")!.textContent).toBe(t("composerFolder.output"));
-  expect(card.querySelector('[data-folder-act="default"]')).toBeNull();
+  expect(rows.map(row => [row.textContent, row.getAttribute("aria-checked")])).toEqual([["Deliveries", "true"]]);
+  await press('[data-folder="0"]');
+  expect(api.settingsSet).toHaveBeenCalledTimes(1);
 });
 
-test("with no folder and no output folder the menu says the member cannot write, and still offers to add one", async () => {
+test("a folder added with the picker goes at the end, the chosen one staying chosen, once, and a cancelled picker changes nothing", async () => {
+  await mount();
+  await open();
+  api.pickOutputFolder.mockResolvedValueOnce("F:\\New");
+  await press('[data-folder-act="add"]');
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["D:\\Work\\Notes", "E:\\Archive", "F:\\New"] });
+  expect(word()).toBe("Notes");
+  for (const picked of ["E:\\Archive", "C:\\Owner\\Deliveries", null]) {
+    await open();
+    api.pickOutputFolder.mockResolvedValueOnce(picked);
+    await press('[data-folder-act="add"]');
+  }
+  expect(api.settingsSet).toHaveBeenCalledTimes(1);
+  // A member with none keeps the output folder chosen, and it is written first so the added one follows it.
+  member = 4;
+  await open();
+  api.pickOutputFolder.mockResolvedValueOnce("G:\\Drafts");
+  await press('[data-folder-act="add"]');
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["D:\\Work\\Notes", "E:\\Archive", "F:\\New"], "4": ["C:\\Owner\\Deliveries", "G:\\Drafts"] });
+  expect(word()).toBe("Deliveries");
+});
+
+test("removing a folder chooses the next one, and the output folder left alone is the empty list, the default", () => {
+  const output = "C:\\Owner\\Deliveries";
+  expect(removeFolder(["D:\\Notes", output, "E:\\Archive"], output, "D:\\Notes")).toEqual([output, "E:\\Archive"]);
+  expect(removeFolder([output, "D:\\Notes"], output, "D:\\Notes")).toEqual([]);
+  expect(removeFolder(["D:\\Notes"], output, "D:\\Notes")).toEqual([]);
+});
+
+test("with no folder and no output folder the menu says the member cannot write, and the one added is chosen", async () => {
   state.settings = { owner_output_folder: "", member_write_folders: {} };
   await mount();
   const card = await open();
   expect(card.querySelector(".cb-empty")!.textContent).toBe(t("memberSettings.foldersNone"));
-  expect(card.querySelector('[data-folder-act="add"]')).not.toBeNull();
+  api.pickOutputFolder.mockResolvedValueOnce("D:\\Work");
+  await press('[data-folder-act="add"]');
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["D:\\Work"] });
+  expect(word()).toBe("Work");
 });

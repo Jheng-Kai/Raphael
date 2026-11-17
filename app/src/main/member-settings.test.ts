@@ -114,33 +114,36 @@ describe("the page of a member", () => {
     expect(page.el.querySelector('[data-cat="routines"], [data-cat="messaging"], .member-msg, [data-cat="model"], [data-cat="voice"], [data-cat="general"], [data-slot="model"]')).toBeNull();
   });
 
-  test("a member's folders are its own: picked with the picker, each removed from its own ⋯, and with none the output folder is named", async () => {
+  test("a member's folders are its own: the output folder first as every member's default, the ones picked after it, each removed from its own ⋯", async () => {
     // R-PC-05: the owner chooses where each member may write on this computer; reading reaches the whole computer.
     api.settingsGet.mockResolvedValue({ settings: { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: { "4": ["D:\\Other"] } } });
     await open(3);
     const section = (): HTMLElement => $('[data-k="ms-folders"]');
+    const rows = (): string[][] => [...section().querySelectorAll(".ms-folder")].map(row => [row.querySelector(".ms-path")!.textContent!, row.querySelector(".ms-tag")?.textContent ?? (row.querySelector('[data-ms="folder-menu"]') ? "⋯" : "")]);
     expect(section().querySelector("h2")!.textContent).toBe("可以寫入的資料夾");
-    expect(section().querySelector(".ms-empty")!.textContent).toBe("沒有選資料夾時，寫到輸出資料夾：C:\\Owner\\Deliveries");
-    expect(section().querySelector("input, textarea")).toBeNull();
-    // The picker adds one; the whole map is saved with the other members' folders kept.
+    // The output folder is changed in Settings › General alone: marked, with no ⋯ of its own.
+    expect(rows()).toEqual([["C:\\Owner\\Deliveries", "預設"]]);
+    expect(section().querySelector(".ms-empty, input, textarea")).toBeNull();
+    // The picker adds one after it; the whole map is saved with the other members' folders kept.
     api.pickOutputFolder.mockResolvedValue("C:\\Work\\Notes");
     api.settingsSet.mockImplementation(async (_key: string, value: Record<string, string[]>) => ({ settings: { owner_output_folder: "C:\\Owner\\Deliveries", member_write_folders: value } }));
     await press('[data-ms="folder-add"]');
-    expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "4": ["D:\\Other"], "3": ["C:\\Work\\Notes"] });
-    expect(section().querySelector('.ms-folder .ms-path')!.textContent).toBe("C:\\Work\\Notes");
-    expect(section().querySelector(".ms-empty")).toBeNull();
-    // The same folder twice is nothing; a cancelled picker is nothing.
+    expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "4": ["D:\\Other"], "3": ["C:\\Owner\\Deliveries", "C:\\Work\\Notes"] });
+    expect(rows()).toEqual([["C:\\Owner\\Deliveries", "預設"], ["C:\\Work\\Notes", "⋯"]]);
+    // A folder listed already is nothing, the output folder too; a cancelled picker is nothing.
     api.settingsSet.mockClear();
+    await press('[data-ms="folder-add"]');
+    api.pickOutputFolder.mockResolvedValue("C:\\Owner\\Deliveries");
     await press('[data-ms="folder-add"]');
     api.pickOutputFolder.mockResolvedValue(null);
     await press('[data-ms="folder-add"]');
     expect(api.settingsSet).not.toHaveBeenCalled();
-    // Removing it waits in its ⋯ and asks once; the member then writes to the output folder again.
-    await press('[data-ms="folder-menu"][data-index="0"]');
+    // Removing it waits in its ⋯ and asks once; the output folder alone is the member's default again.
+    await press('[data-ms="folder-menu"][data-index="1"]');
     (document.querySelector<HTMLElement>("#app-popover [data-confirm-item]"))!.click(); await flush();
     (document.querySelector<HTMLElement>("#app-popover [data-confirm-item]"))!.click(); await flush();
     expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "4": ["D:\\Other"] });
-    expect(section().querySelector(".ms-folder")).toBeNull();
+    expect(rows()).toEqual([["C:\\Owner\\Deliveries", "預設"]]);
   });
 
   test("with no output folder either, the member is told it cannot write on this computer", async () => {

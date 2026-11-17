@@ -1082,13 +1082,18 @@ export function checkRendered(name, context = {}) {
     const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...section.querySelectorAll('.ms-folder')];
     require(visible(section) && !section.querySelector('input, textarea'), "folders are picked, never typed");
     require(section.querySelector('h2')?.textContent === "可以寫入的資料夾" && visible(section.querySelector('[data-ms="folder-add"]')), "the section is named and its + adds");
-    require(rows.length === 2 && rows.every(row => visible(row)), "each folder is a row of its own");
-    for (const row of rows) {
+    require(rows.length === 3 && rows.every(row => visible(row)), "each folder is a row of its own");
+    const paths = rows.map(row => row.querySelector('.ms-path')?.textContent);
+    require(paths[0] === "C:\\Owner\\Deliveries" && paths[2] === sample, `the output folder first, the added ones after it in their order: ${paths.join(" | ")}`);
+    const tag = rows[0].querySelector('.ms-tag');
+    require(visible(tag) && tag.textContent === "預設" && !rows[0].querySelector('[data-ms="folder-menu"]'), "the output folder is marked as the default and has no ⋯");
+    require(tag.getBoundingClientRect().left >= rows[0].querySelector('.ms-path').getBoundingClientRect().right - 0.5, "its mark never runs over its path");
+    for (const [index, row] of rows.entries()) {
       const path = row.querySelector('.ms-path'), more = row.querySelector('[data-ms="folder-menu"]');
-      require(visible(path) && visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
-      require(path.scrollWidth <= path.clientWidth + 1, "the whole path is shown, wrapped, never cut");
+      if (index) require(visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
+      require(visible(path) && path.scrollWidth <= path.clientWidth + 1, "the whole path is shown, wrapped, never cut");
     }
-    require(!document.querySelector('.ms-pane [data-k="ms-folders"] .ms-empty'), "no default line beside the member's own folders");
+    require(!section.querySelector('.ms-empty'), "no empty line beside the folders");
     return {check:name};
   }
   if (name === "composer-folder") {
@@ -1106,9 +1111,13 @@ export function checkRendered(name, context = {}) {
     const card = document.querySelector('#app-popover .cb-folders'), button = document.querySelector('.page-agent .composer .cmp-folder');
     require(visible(card) && card.querySelector('.cb-head h3')?.textContent === "可以寫入的資料夾", "the menu is the permission's kind of card, named for the folders");
     const rows = [...card.querySelectorAll('[data-folder]')];
-    require(rows.length === 2 && rows[0].getAttribute('aria-checked') === "true" && rows[1].getAttribute('aria-checked') === "false", "the member's folders, the first checked");
-    require(rows[0].querySelector('.cb-path')?.textContent === "C:\\Owner\\Notes" && rows.every(row => row.querySelector('.cb-path').scrollWidth <= row.querySelector('.cb-path').clientWidth + 1), "each path is whole");
-    require(visible(card.querySelector('[data-folder-act="add"]')) && card.querySelector('[data-folder-act="default"] .cb-path')?.textContent === "C:\\Owner\\Deliveries", "adding one and going back to the output folder are offered");
+    const names = rows.map(row => row.querySelector('.cb-name b')?.textContent);
+    require(names[0] === "Deliveries" && names[1] === "Notes" && rows.length === 3, `the output folder first, then the member's own, by name: ${names.join(" | ")}`);
+    require(rows.map(row => row.getAttribute('aria-checked')).join() === "false,true,false", "the chosen one, the member's first, is checked");
+    require(rows[1].dataset.tooltip === "C:\\Owner\\Notes" && !/[A-Z]:\\/.test(card.textContent), "each whole path waits under the pointer, none is written in the card");
+    const acts = [...card.querySelectorAll('[data-folder-act]')];
+    require(acts.length === 1 && acts[0].dataset.folderAct === "add" && visible(acts[0]) && acts[0].getBoundingClientRect().top >= rows.at(-1).getBoundingClientRect().bottom - 0.5, "adding one is the one action, at the card's foot");
+    for (const name_ of rows.map(row => row.querySelector('.cb-name b'))) require(visible(name_) && name_.scrollWidth <= name_.clientWidth + 1, `each name is whole: ${name_.textContent}`);
     const box = document.querySelector('#app-popover').getBoundingClientRect();
     require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, "the menu stays inside the window");
     require(box.bottom <= button.getBoundingClientRect().top + 1, "it opens above the button");
@@ -1117,9 +1126,9 @@ export function checkRendered(name, context = {}) {
     return {check: name};
   }
   if (name === "member-write-folders-default") {
-    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), line = section?.querySelector('.ms-empty');
-    require(visible(line) && line.textContent === "沒有選資料夾時，寫到輸出資料夾：C:\\Owner\\Deliveries", `one quiet line names the output folder: ${line?.textContent}`);
-    require(!section.querySelector('.ms-folder'), "a member with no folder of its own lists none");
+    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...(section?.querySelectorAll('.ms-folder') ?? [])];
+    require(rows.length === 1 && rows[0].querySelector('.ms-path')?.textContent === "C:\\Owner\\Deliveries", `a member with no folder of its own lists the output folder alone: ${rows.map(row => row.textContent).join(" | ")}`);
+    require(visible(rows[0].querySelector('.ms-tag')) && !rows[0].querySelector('[data-ms="folder-menu"]') && !section.querySelector('.ms-empty'), "marked as the default, with no ⋯ and no other line");
     require(!document.querySelector('[data-row="write-folders"]'), "Settings › General has no list of folders for every member");
     return {check:name};
   }

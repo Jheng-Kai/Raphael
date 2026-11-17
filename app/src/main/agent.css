@@ -517,8 +517,6 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .composer .btn.cmp-folder:hover:not(:disabled) { color: var(--text); }
 .composer .btn.cmp-folder:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .composer .btn.cmp-folder .i { flex: none; width: 16px; height: 16px; }
-/* A folder's path is read whole, wrapped where it must. */
-.cb-folders .cb-name small.cb-path { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 .cb-folders .cb-actions { border-top: 1px solid var(--line); }
 .cmp-model:empty { display: none; }
 .cmp-model:empty + .cmp-pair { margin-inline-start: auto; }

@@ -1651,26 +1651,32 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
   start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
   Privacy & Security › Files and Folders or Full Disk Access.
-- Writes (T2, kind write): `write_file`, `edit_file`, only inside the member's own folders (`member_write_folders` by
-  member id, set in that member's settings, 工具 › 可以寫入的資料夾: picked, never typed, removed one by one) or, for a member
-  with none, the output folder of Settings › General (`brain.owner.member_folders`). Both are owner-only settings, never a
-  management tool. Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write
+- Writes (T2, kind write): `write_file`, `edit_file`, only inside the member's folders (`brain.owner.member_folders`): the
+  output folder of Settings › General, every member's default and always one of them, and the ones the owner added for
+  that member (`member_write_folders` by member id, set in that member's settings, 工具 › 可以寫入的資料夾: picked, never
+  typed, removed one by one). Both are owner-only settings, never a management tool. Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write
   that cannot happen. The calling member comes with the command context (`local_tools._CONTEXT`, its sixth part): the
   speaker of a turn, the member of a task.
-- The owner context names the member's own first folder as its output folder and the rest as its write folders
-  (`brain/owner.py`). A command it starts on this computer begins in its first folder (`command_folder`).
+- The member's list keeps its chosen folder first, where its files for the owner go; the output folder is written into the
+  list only while an added folder follows it, so the output folder alone is the empty list. The owner context names the
+  chosen folder as its output folder and the rest as its write folders (`brain/owner.py`). A command it starts on this
+  computer begins in the chosen folder (`command_folder`).
 - Migration 88 turned the one list every member shared into each member's own list, the output folder first.
-- The composer of a member's own conversation names that folder beside the permission (`composer-folder.ts`, the
-  `.cmp-folder` button in the permission's quiet type): the member's first folder, else the output folder, else 選擇資料夾.
-  Its menu is the permission's kind of card: the member's folders with the first checked (choosing one puts it first),
-  加入資料夾 (the native picker, the pick first) and 改用輸出資料夾 (clears the member's list). Short of room its word hides
-  with the permission's and its folder icon stays (`fitComposerRow`); a room's composer has none.
+- The member's settings and the composer's menu list the folders in one order (`composer-folder.ts` `listedFolders`): the
+  output folder first, then the added ones in the order they were added. In the settings the output folder is marked 預設
+  and has no ⋯ (it is changed in Settings › General alone); each added one is removed from its own ⋯, the next one chosen
+  when it was the chosen one.
+- The composer of a member's own conversation names the chosen folder beside the permission (the `.cmp-folder` button in
+  the permission's quiet type), else 選擇資料夾. Its menu is the permission's kind of card: each folder by its name (the
+  whole path under the pointer), the chosen one checked (choosing one puts it first), and 加入資料夾 alone at its foot
+  (the native picker; the pick goes at the end). Short of room its word hides with the permission's and its folder icon
+  stays (`fitComposerRow`); a room's composer has none.
 
 Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
 places and links, glob and grep, writes inside and outside, each member's own folders, an unapproved write),
 brain/test_owner.py (the prompt per member, migration 88), member-settings.test.ts, settings-view.test.ts and
-composer-folder.test.ts. Look: `member-write-folders` (adds with the picker, removes the first),
-`member-write-folders-default` (one quiet line naming the output folder), `composer-folder` and `composer-folder-menu`
+composer-folder.test.ts. Look: `member-write-folders` (the output folder first and marked, adds with the picker, removes
+the chosen one), `member-write-folders-default` (the output folder alone), `composer-folder` and `composer-folder-menu`
 beside the output folder scenes; the composer row's narrow scenes prove the folder gives way with the permission:
 
 ```powershell

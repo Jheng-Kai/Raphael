@@ -1,28 +1,43 @@
 // The folder a member writes to on the owner's computer, chosen where the owner writes to it (R-PC-05): a quiet button in the
-// composer's row beside the permission, as the permission names how it acts. Its menu lists the member's own folders, the first
-// being where its files for the owner go, adds one with the native picker and goes back to the output folder of Settings ›
-// General. Each folder is removed in the member's settings (工具 › 可以寫入的資料夾).
+// composer's row beside the permission, as the permission names how it acts. Its menu lists the member's folders, the output
+// folder of Settings › General first (every member's default), then the ones added for the member; the checked one is where its
+// files for the owner go. The menu ends with 加入資料夾. Each added folder is removed in the member's settings.
 import * as api from "./api";
 import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
 import type { BrainSettings, MainEvent } from "./types";
 import { closeMenu, esc, ico, openPopover, toaster } from "./ui";
 
-const nameOf = (folder: string): string => folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+export const folderName = (folder: string): string => folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+
+// The member's list (`member_write_folders`) keeps its chosen folder first; the output folder is written into it only while a
+// folder added for the member follows it, so a list of the output folder alone is the empty list, the default.
+const normal = (list: string[], output: string): string[] => (list.length === 1 && list[0] === output ? [] : list);
+const base = (own: readonly string[], output: string): string[] => (own.length ? [...own] : output ? [output] : []);
+/** The member's folders as the menus list them: the output folder first, then the ones added, in the order they were added. */
+export const listedFolders = (own: readonly string[], output: string): string[] => [...new Set([output, ...own].filter(Boolean))];
+/** The folder the member's files for the owner go to: the first of its list, else the output folder. */
+export const chosenFolder = (own: readonly string[], output: string): string => own[0] ?? output;
+/** The list after `folder` is chosen: it goes first. */
+export const chooseFolder = (own: readonly string[], output: string, folder: string): string[] =>
+  normal([folder, ...base(own, output).filter(item => item !== folder)], output);
+/** The list after `folder` is added: it goes at the end, the chosen one staying chosen. A folder listed already changes nothing. */
+export const addFolder = (own: readonly string[], output: string, folder: string): string[] =>
+  listedFolders(own, output).includes(folder) ? [...own] : normal([...base(own, output), folder], output);
+/** The list after `folder` is removed: the next one is chosen when it was the chosen one. */
+export const removeFolder = (own: readonly string[], output: string, folder: string): string[] =>
+  normal(own.filter(item => item !== folder), output);
 
 export function mountComposerFolder(button: HTMLElement, member: () => number, host: { onEvent?(handler: (event: MainEvent) => void): void } = {}): { draw(): void } {
   let own: Record<string, string[]> = {}, output = "", known = false, generation = 0;
   let menu: HTMLElement | null = null;
   const mine = (): string[] => own[String(member())] ?? [];
-  /** Where the member's files for the owner go now: its first folder, else the output folder, else nowhere yet. */
-  const current = (): string => mine()[0] ?? output;
 
   function draw(): void {
-    const folder = current();
+    const folder = chosenFolder(mine(), output);
     button.hidden = !known;
-    button.querySelector("span")!.textContent = folder ? nameOf(folder) : t("output.pick");
+    button.querySelector("span")!.textContent = folder ? folderName(folder) : t("output.pick");
     button.setAttribute("aria-label", folder ? t("composerFolder.label", { p0: folder }) : t("composerFolder.none"));
-    button.dataset.default = String(!mine().length);
   }
 
   function take(settings: BrainSettings): void {
@@ -48,18 +63,16 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
     } catch (error) { toaster.info(describeError(error)); }
   }
 
-  // The same card as the permission and the model beside it: its title, then each folder with its whole path.
+  // The same card as the permission and the model beside it: its title, each folder by its name (its whole path under the
+  // pointer, the owner's own words), and 加入資料夾 at its foot.
   function cardHTML(): string {
-    const folders = mine(), title = esc(t("memberSettings.folders"));
-    // A folder's name and path are the owner's own words, never interface copy (`owner-data`).
-    const row = (folder: string, index: number, checked: boolean, label?: string): string =>
-      `<button type="button" role="radio" class="cb-row" data-folder="${index}" aria-checked="${checked}"><span class="cb-name"><b${label ? "" : ' class="owner-data"'}>${esc(label ?? nameOf(folder))}</b><small class="cb-path owner-data">${esc(folder)}</small></span>` +
-      `${checked ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`;
-    const rows = folders.length ? folders.map((folder, index) => row(folder, index, index === 0)).join("")
-      : output ? row(output, -1, true, t("composerFolder.output")) : `<p class="cb-empty">${esc(t("memberSettings.foldersNone"))}</p>`;
-    const actions = `<button type="button" role="menuitem" class="cb-row cb-action" data-folder-act="add"><span class="cb-icon" aria-hidden="true">${ico("plus")}</span><span class="cb-name"><b>${esc(t("writeFolders.add"))}</b></span></button>` +
-      (folders.length && output ? `<button type="button" role="menuitem" class="cb-row cb-action" data-folder-act="default"><span class="cb-icon" aria-hidden="true">${ico("folder")}</span><span class="cb-name"><b>${esc(t("composerFolder.useOutput"))}</b><small class="cb-path owner-data">${esc(output)}</small></span></button>` : "");
-    return `<div class="cb-card cb-folders"><header class="cb-head"><h3><span>${title}</span></h3></header><div class="cb-list" role="radiogroup" aria-label="${title}">${rows}</div><div class="cb-list cb-actions">${actions}</div></div>`;
+    const folders = listedFolders(mine(), output), chosen = chosenFolder(mine(), output), title = esc(t("memberSettings.folders"));
+    const rows = folders.map((folder, index) =>
+      `<button type="button" role="radio" class="cb-row" data-folder="${index}" aria-checked="${folder === chosen}" data-tooltip="${esc(folder)}"><span class="cb-name"><b class="owner-data">${esc(folderName(folder))}</b></span>` +
+      `${folder === chosen ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`).join("") ||
+      `<p class="cb-empty">${esc(t("memberSettings.foldersNone"))}</p>`;
+    const add = `<button type="button" role="menuitem" class="cb-row cb-action" data-folder-act="add"><span class="cb-icon" aria-hidden="true">${ico("plus")}</span><span class="cb-name"><b>${esc(t("writeFolders.add"))}</b></span></button>`;
+    return `<div class="cb-card cb-folders"><header class="cb-head"><h3><span>${title}</span></h3></header><div class="cb-list" role="radiogroup" aria-label="${title}">${rows}</div><div class="cb-list cb-actions">${add}</div></div>`;
   }
 
   button.addEventListener("click", event => {
@@ -68,20 +81,16 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
     menu = openPopover(button, cardHTML(), { className: "menu cb-menu", role: "dialog", label: t("memberSettings.folders"), placement: "start", onClose: () => { menu = null; } });
     menu.addEventListener("click", picked => {
       const target = picked.target as Element, row = target.closest<HTMLElement>("[data-folder]"), act = target.closest<HTMLElement>("[data-folder-act]")?.dataset.folderAct;
-      const folders = mine();
+      const list = mine(), folders = listedFolders(list, output);
       if (row) {
-        const index = Number(row.dataset.folder);
+        const folder = folders[Number(row.dataset.folder)];
         closeMenu(); button.focus({ preventScroll: true });
-        // The chosen folder goes first: the member's files for the owner go there from now on.
-        if (index > 0) void save([folders[index], ...folders.filter((_, at) => at !== index)]);
+        if (folder !== undefined && folder !== chosenFolder(list, output)) void save(chooseFolder(list, output, folder));
       } else if (act === "add") {
         closeMenu();
         void api.pickOutputFolder().then(path => {
-          if (path !== null) return save([path, ...folders.filter(folder => folder !== path)]);
+          if (path !== null && !folders.includes(path)) return save(addFolder(list, output, path));
         }).catch(error => toaster.info(describeError(error)));
-      } else if (act === "default") {
-        closeMenu(); button.focus({ preventScroll: true });
-        void save([]);
       }
     });
     menu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus({ preventScroll: true });

@@ -14,6 +14,7 @@
 import "./member-panel.css";
 import "./member-settings.css";
 import * as api from "./api";
+import { addFolder, folderName, listedFolders, removeFolder } from "./composer-folder";
 import { describeError } from "./format";
 import { onLocaleChange, getLocale, t } from "./i18n";
 import { openMemberAvatarMenu } from "./member-avatar-menu";
@@ -146,7 +147,6 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
 
   const foldersOf = (settings: BrainSettings): { own: Record<string, string[]>; output: string } =>
     ({ own: settings.member_write_folders ?? {}, output: settings.owner_output_folder ?? "" });
-  const folderName = (folder: string): string => folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
 
   /** The member's folders saved whole: the owner's choice alone (R-PC-05), never a member's. */
   async function saveFolders(member: Member, next: string[]): Promise<void> {
@@ -248,16 +248,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   }
 
   /**
-   * The folders of the owner's computer this member may write to (R-PC-05), each a row with its whole path and its removal in
-   * its ⋯, added with the native picker, never typed. The first is where its files for the owner go. With none, one quiet line
-   * says it writes to the output folder of Settings › General. Reading reaches the whole computer (R-PC-04).
+   * The folders of the owner's computer this member may write to (R-PC-05), each a row with its whole path, as the composer's
+   * menu lists them: the output folder of Settings › General first, marked as every member's default and changed only there,
+   * then the ones added with the native picker, never typed, each removed in its ⋯. Reading reaches the whole computer (R-PC-04).
    */
-  /** The quiet line of a member with no folder of its own, the output folder's path in it as the owner's own words. */
-  function outputLine(path: string): string {
-    const [before, after = ""] = t("memberSettings.foldersDefault", { p0: "\u0001" }).split("\u0001");
-    return `<p class="ms-empty">${esc(before)}<span class="ms-path">${esc(path)}</span>${esc(after)}</p>`;
-  }
-
   function foldersHTML(member: Member): string {
     const title = t("memberSettings.folders");
     const tool = iconBtn("plus", t("writeFolders.add"), ' data-ms="folder-add" data-k="ms-folder-add"');
@@ -265,11 +259,12 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (folders === "loading") rows = spinner();
     else if (folders === "failed") rows = muted(t("mem.loadFailed"));
     else {
-      const own = folders.own[String(member.id)] ?? [];
-      rows = own.map((folder, index) =>
-        `<div class="ms-row ms-folder" data-k="ms-folder:${index}"><span class="ms-label ms-path">${esc(folder)}</span>` +
-        `${iconBtn("more", t("members.more", { p0: folderName(folder) }), ` data-ms="folder-menu" data-index="${index}" data-k="ms-folder-menu:${index}" aria-haspopup="menu" aria-expanded="false"`)}</div>`).join("") ||
-        (folders.output ? outputLine(folders.output) : muted(t("memberSettings.foldersNone")));
+      const output = folders.output;
+      rows = listedFolders(folders.own[String(member.id)] ?? [], output).map((folder, index) =>
+        `<div class="ms-row ms-folder" data-k="ms-folder:${index}"><span class="ms-label ms-path owner-data">${esc(folder)}</span>` +
+        (folder === output ? `<span class="ms-tag">${esc(t("memberSettings.foldersDefault"))}</span>`
+          : iconBtn("more", t("members.more", { p0: folderName(folder) }), ` data-ms="folder-menu" data-index="${index}" data-k="ms-folder-menu:${index}" aria-haspopup="menu" aria-expanded="false"`)) +
+        `</div>`).join("") || muted(t("memberSettings.foldersNone"));
     }
     return section(title, rows, tool, "ms-folders");
   }
@@ -637,14 +632,16 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
       case "folder-add": void api.pickOutputFolder().then(path => {
-        const own = typeof folders === "object" ? folders.own[String(member.id)] ?? [] : [];
-        if (path !== null && !own.includes(path)) return saveFolders(member, [...own, path]);
+        if (path === null || typeof folders !== "object") return;
+        const own = folders.own[String(member.id)] ?? [], output = folders.output;
+        if (!listedFolders(own, output).includes(path)) return saveFolders(member, addFolder(own, output, path));
       }).catch(error => toaster.info(describeError(error))); break;
       case "folder-menu": {
-        const own = typeof folders === "object" ? folders.own[String(member.id)] ?? [] : [], folder = own[Number(act.dataset.index)];
-        if (folder === undefined) break;
+        if (typeof folders !== "object") break;
+        const own = folders.own[String(member.id)] ?? [], output = folders.output, folder = listedFolders(own, output)[Number(act.dataset.index)];
+        if (folder === undefined || folder === output) break;
         openConfirmMenu(act, { label: t("writeFolders.remove", { p0: folderName(folder) }), ask: t("settings.keyRemoveConfirm"),
-          run: () => void saveFolders(member, own.filter(item => item !== folder)) });
+          run: () => void saveFolders(member, removeFolder(own, output, folder)) });
         break;
       }
     }
