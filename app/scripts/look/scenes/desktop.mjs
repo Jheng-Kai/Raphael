@@ -7,7 +7,7 @@ const take = [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop=
 const teachComputer = () => ({desktop:{state:'running',ready:true,control:'member'}});
 const teaching = [member(1),{action:'open-details'},wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="teach"]'),wait('.desktop-recording:not([hidden])')];
 const draft = [...teaching,click('[data-desktop="teach"]'),wait('.desktop-review #mp-skill-text')];
-const menu = [click('[data-desktop="menu"]'),wait('#app-popover [data-pick="files"]')];
+const menu = [click('[data-desktop="menu"]'),wait('#app-popover [data-pick="send-file"]')];
 const boot = (state, desktopHour = 9, extra = {}) => ({desktopHour, desktop:{state,ready:false,control:'member',...extra}});
 // A booting computer says nothing: the scene waits for the panel's own state in data, not for words.
 const bootEntry = (state = 'starting') => [member(1), {action:'open-details'}, wait(`.desktop-panel:not([hidden])[data-desktop-state="${state}"]`)];

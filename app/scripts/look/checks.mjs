@@ -1464,7 +1464,7 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.side, [data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
       const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
-      if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="files"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds files and teaching');
+      if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="send-file"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds sending a file and teaching');
     } else if (name === 'level-reopen') {
       const frame = desktop.querySelector('iframe'), current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(desktop.hasAttribute('data-expanded') && desktop.dataset.interactive === 'true' && frame.contentWindow.__desktopConnections === 1, 'the same connected stream accepts the new takeover');
