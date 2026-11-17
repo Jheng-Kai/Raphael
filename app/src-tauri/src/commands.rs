@@ -2652,6 +2652,7 @@ mod tests {
                 "open_library_file",
                 "open_link",
                 "open_team_file",
+                "owner_clipboard_sequence",
                 "owner_clipboard_text",
                 "pick_output_folder",
                 "repair_accessibility",
