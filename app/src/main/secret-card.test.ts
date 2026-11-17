@@ -55,9 +55,10 @@ describe("a secret card", () => {
     expect(html).toContain(`placeholder="${t("card.keyField")}"`);
   });
 
-  test("a connection that is no known program gets the generic plug, never a letter", () => {
+  test("a connection that is no known program gets the generic app mark, never a letter", () => {
     const html = secretCardHTML(card({ name: "天氣服務" }));
     expect(html).toContain('class="mono md" aria-hidden="true"');
+    expect(html).toContain("logo-generic");
     expect(html).not.toContain("天"[0] + "</span>");
   });
 

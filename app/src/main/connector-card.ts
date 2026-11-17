@@ -85,7 +85,7 @@ export function clausesHTML(text: string): string {
   return text.split(/(?<=[，、])/u).map(clause => `<span class="cc-clause">${esc(clause)}</span>`).join("");
 }
 
-/** The app's bare mark: its brand path in its brand colour, or the generic plug. */
+/** The app's bare mark: its brand path in its brand colour, the catalogue's picture, or the generic app mark. */
 export function appMarkHTML(app: string, logo?: string, icon?: string): string {
   return entryIcon({ name: app, logo, icon }, "md");
 }
@@ -143,7 +143,7 @@ export function connectorCardHTML(card: ConnectorCard): string {
   const google = card.needs === "own_google";
   const asking = asksMore(card) || google;
   return cardHTML({
-    title: asking && ["pending", "failed", "cancelled"].includes(card.state) ? t("cards.connect", { p0: card.name }) : card.name, mark: google ? appMarkHTML("Google", undefined, "gmail") : appMarkHTML(card.app, card.logo),
+    title: asking && ["pending", "failed", "cancelled"].includes(card.state) ? t("cards.connect", { p0: card.name }) : card.name, mark: google ? appMarkHTML("Google", undefined, "google") : appMarkHTML(card.app, card.logo),
     status: connected ? "done" : card.state === "failed" ? "failed" : card.state === "expired" || card.state === "cancelled" ? "ready" : "waiting",
     statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asking && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : card.state === "expired" ? t("cards.expired") : card.state === "cancelled" ? t("cards.cancelled") : undefined,
     body: state || t("cards.connectWhy"),

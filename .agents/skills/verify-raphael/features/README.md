@@ -25,6 +25,14 @@ button), both themes at 1120,720,1920x1080. Not changed, and open for a decision
 (it has no field, and `chat-usage-limit` still points at the usage page), the key beside the usage page, the guide's
 first screens, the computer tab's wallpaper and the Composio, Connect Apps and dictation-shortcut entries.
 
+## Every app wears its own mark, at one size
+
+See [Connections and MCP](connections-mcp.md#connect-apps-one-view-read-this-first) (its marks) for R-UI-164: every app, tool server and service wears its own
+mark in one square wherever it is listed (Google its G, Outlook the catalogue's picture no larger than the rest, a server nobody drew
+the generic app mark, never the plug). Selected scenes: member-settings-tools, mention-menu-open, connect-icons, connect-apps-connected-marks,
+connect-apps, connect-app-oauth, connector-slack, connector-key, connector-google-steps, foot-apps-three and foot-starter-apps, both
+themes at 1120,720,1920x1080.
+
 ## Delete dialog and the member's colour on switches
 
 See [Conversation](conversation.md#the-delete-dialog) for R-UI-146: the one delete

@@ -1,15 +1,24 @@
+import { ICON } from "./icon-set";
 import { pluginLogoURL } from "./plugins-data";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML, type ServiceIconId } from "./service-icons";
-import { esc, ico } from "./ui";
+import { esc } from "./ui";
 
-const isIcon = (id: string | null | undefined): id is ServiceIconId => !!id && (id in SERVICE_ICONS || hasLogo(id as ServiceIconId));
+export const isIcon = (id: string | null | undefined): id is ServiceIconId => !!id && (id in SERVICE_ICONS || hasLogo(id as ServiceIconId));
+
+/**
+ * The one mark of an app, tool server or service we draw no mark for and the catalogue gives no picture of: a drawn app,
+ * as large as a brand's mark beside it (it is a `.logo`), never the plug of 工具 and 連結應用程式 and never a letter.
+ * Every list, menu, card and work step draws it from here (R-UI-164).
+ */
+export const genericGlyph = (): string => `<svg class="logo logo-generic" viewBox="0 0 24 24" aria-hidden="true">${ICON.app}</svg>`;
+export const genericMark = (size: "md" | "xl"): string => `<span class="mono ${size}" aria-hidden="true">${genericGlyph()}</span>`;
 
 /** One bare mark renderer for store entries, connected apps and conversation cards. */
 export function iconHTML(_name: string, icon: ServiceIconId | null, size: "md" | "xl"): string {
   if (icon && hasLogo(icon)) return `<span class="mono ${size} logo-art">${serviceLogoHTML(icon)}</span>`;
   return icon && icon in SERVICE_ICONS
     ? `<span class="mono ${size} logo-mono"${brandStyle(icon)}>${serviceIconSVG(icon)}</span>`
-    : `<span class="mono ${size}" aria-hidden="true">${ico("plug")}</span>`;
+    : genericMark(size);
 }
 
 /** A service the app knows is drawn with its own mark in its brand colour; a catalogue's picture is only for the rest
@@ -48,7 +57,7 @@ export function pillMarks(connected: readonly MarkEntry[], starters: readonly Ma
 }
 
 /** The app's own mark (ours, else the catalogue's picture, the one source every place draws it from), or null where only
- *  the generic plug would stand: a row of marks leaves such an app out rather than show a plug. */
+ *  the generic mark would stand: a row of marks leaves such an app out rather than show the generic one. */
 export function entryMark(entry: MarkEntry, size: "md" | "xl"): string | null {
   const known = markIcon(entry);
   if (known) return iconHTML(entry.name, known, size);

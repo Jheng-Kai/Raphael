@@ -38,7 +38,7 @@ export function modelMark(model: { id: string; provider?: string }): string {
   return id ? iconHTML(model.provider ?? author, id, "md") : `<span class="mono md" aria-hidden="true">${ico("bot")}</span>`;
 }
 
-/** An unrecognised custom connection, or artwork not installed yet, gets a plug. */
+/** An unrecognised custom connection, or artwork not installed yet, gets the generic app mark. */
 export function providerMark(kind: string, officialOnly = false): string {
   const key = kind.toLowerCase().replace(/[\s-]+/g, "_").replace(/_cn$/, "");
   const id = MARKS[key] ?? (LOGO_IDS.includes(key as LogoIconId) ? key as LogoIconId : null);

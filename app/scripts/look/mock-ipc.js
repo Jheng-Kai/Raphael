@@ -129,6 +129,13 @@ export function installMock(fixture, config = {}, target = window) {
     data.servers.push({ ...structuredClone(data.servers[0]), id: "mobbin", name: "Mobbin MCP" });
     data.commands.push({ id: 41, member_id: 1, name: "weekly", description: "每週整理", template: "整理本週：{input}" });
   }
+  // Every list draws each app's own mark at one size (R-UI-164): beside the fixture's own Google account, an app whose only
+  // mark is the catalogue's 128 px picture (Outlook, `imageResponses`). Its tool choices carry the managed connections too, as
+  // the core's do, so the 工具 tab lists Notion, Google and Outlook beside the servers.
+  if (variant.appMarks) {
+    data.managedConnectors.push({ id: "composio:outlook", kind: "composio", name: "Outlook", description: "讀取、搜尋與整理郵件", logo: "https://logos.composio.dev/api/outlook",
+      status: "ACTIVE", enabled: true, enabled_tools: ["OUTLOOK_LIST_MESSAGES", "OUTLOOK_SEARCH_MESSAGES"], disabled_tools: [] });
+  }
   // A long conversation, as a daily user's are (pages of 100-440 KB): `count` answered turns of written words,
   // a list, a table and a code card each, the newest with the id `heavyThread.newest`.
   if (variant.heavyThread) {
@@ -1154,7 +1161,7 @@ export function installMock(fixture, config = {}, target = window) {
       ...data.servers.map(server => {
         const tools = server.enabled ? server.tools.filter(tool => tool.enabled).length : 0;
         const state = !server.enabled ? "disabled" : server.error === "auth" ? "needs_sign_in" : server.error ? "error" : server.status === "unchecked" ? "unchecked" : tools ? "ready" : "no_tools";
-        return { id: server.id, name: server.name, enabled: server.enabled, state, tools, services: server.catalog_id ? [server.catalog_id] : [], rank: 2 };
+        return { id: server.id, name: server.name, enabled: server.enabled, state, tools, services: server.catalog_id ? [server.catalog_id] : [], rank: 2, logo: server.logo };
       }),
       ...data.managedConnectors.map(connector => {
         const off = new Set(connector.disabled_tools ?? []);
@@ -1163,7 +1170,7 @@ export function installMock(fixture, config = {}, target = window) {
         const state = !connector.enabled ? "disabled" : waiting ? "needs_sign_in" : connector.status === "FAILED" ? "error" : ready.length ? "ready" : "no_tools";
         const google = connector.kind === "google";
         const services = google ? [["gmail", "gmail_"], ["googlecalendar", "calendar_"]].filter(([, prefix]) => ready.some(tool => tool.startsWith(prefix))).map(([id]) => id) : [connector.id.replace("composio:", "")];
-        return { id: connector.id, name: connector.name || (google ? "Google" : connector.id), enabled: connector.enabled, state, tools: ready.length, services, rank: google ? 0 : 1 };
+        return { id: connector.id, name: connector.name || (google ? "Google" : connector.id), enabled: connector.enabled, state, tools: ready.length, services, rank: google ? 0 : 1, logo: connector.logo };
       }),
     ];
     const claimed = new Set();
@@ -1172,7 +1179,8 @@ export function installMock(fixture, config = {}, target = window) {
       if (entry.services.length && entry.services.every(service => claimed.has(service))) entry.state = "duplicate";
       else entry.services.forEach(service => claimed.add(service));
     }
-    const apps = entries.map(({ id, name, enabled, state, tools }) => ({ id, name, enabled, state, tools, connected: state === "ready" }));
+    // Each carries its public picture where it has one, as the core's inventory does (R-APPS-MARK-01).
+    const apps = entries.map(({ id, name, enabled, state, tools, logo }) => ({ id, name, enabled, state, tools, connected: state === "ready", ...(logo ? { logo } : {}) }));
     return { state: "complete", count: apps.filter(app => app.connected).length, apps };
   };
   // A skill's document: its frontmatter says its name and when to use it, as the core reads them (members/capabilities.py `skill_metadata`).
@@ -1455,7 +1463,9 @@ export function installMock(fixture, config = {}, target = window) {
         }
         return {};
       }
-      case "members.tool_choices": return { tools: [], connections: data.servers };
+      case "members.tool_choices": return { tools: [], connections: variant.appMarks
+        ? [...data.servers, ...data.managedConnectors.map(c => ({ id: c.id, name: c.name || (c.kind === "google" ? "Google" : c.id), enabled: c.enabled, ...(c.logo ? { logo: c.logo } : {}) }))]
+        : data.servers };
       case "members.update": {
         const member = update(data.members, p.id, p);
         if (variant.pinnedTiles && p.position !== undefined) {

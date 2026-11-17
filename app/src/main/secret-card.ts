@@ -14,7 +14,7 @@ import type { MessageKey } from "./i18n/zh-TW";
 import { syncQuestionCard } from "./owner-question-sync";
 import { SERVICE_ICONS, type MonoIconId, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import { appLogo } from "./app-logos";
-import { entryMark } from "./service-mark";
+import { entryMark, genericMark } from "./service-mark";
 import type { AgentTurn, SecretCard } from "./types";
 import { btn, esc, ico } from "./ui";
 
@@ -27,7 +27,7 @@ const FAILURES: Record<string, MessageKey> = {
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
-/** The connection's mark: its own, bare, when its name says which program it is, else the generic plug (a line's icon, with `inline`). */
+/** The connection's mark: its own, bare, when its name says which program it is, else the generic app mark (a line's icon, with `inline`). */
 export function connectionMarkHTML(name: string, inline = false): string {
   const id = serviceIconOf({ name });
   if (id && hasLogo(id)) return `<span class="mono md logo-art">${serviceLogoHTML(id)}</span>`;
@@ -38,7 +38,7 @@ export function connectionMarkHTML(name: string, inline = false): string {
   // An app we draw no mark for: the catalogue's picture of it, the one the lists draw (app-logos.ts).
   const picture = entryMark({ name, logo: appLogo(name) }, "md");
   if (picture) return picture;
-  return inline ? ico("plug") : `<span class="mono md" aria-hidden="true">${ico("plug")}</span>`;
+  return inline ? ico("app") : genericMark("md");
 }
 
 /** Whether the card still waits for the owner to type the key. */

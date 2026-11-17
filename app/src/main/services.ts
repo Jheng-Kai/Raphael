@@ -283,7 +283,8 @@ function listViewHTML(entry: (typeof CAPABILITIES)[number], v: ServicesView, bra
   }
   const rows = serviceRows(entry.kind, status, brain, names)
     .map((row) => {
-      const mark = row.mark ? iconHTML(row.name, row.mark, "md") : `<span class="mono md" aria-hidden="true">${ico(LOCAL_ICONS[row.id] ?? "plug")}</span>`;
+      const local = LOCAL_ICONS[row.id];
+      const mark = row.mark || !local ? iconHTML(row.name, row.mark, "md") : `<span class="mono md" aria-hidden="true">${ico(local)}</span>`;
       const why = whyOf(entry.kind, row.id);
       return (
         `<div class="cs-item svc-srv" data-svc="service" data-service="${esc(row.id)}">` +

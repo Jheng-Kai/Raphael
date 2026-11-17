@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, t } from "./i18n";
 import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
+import { genericGlyph } from "./service-mark";
 import {
   type SigninPhase,
   type TurnLook,
@@ -391,9 +392,9 @@ test.each([false, true])("a durable receipt renders outside assistant bubbles wi
   expect(visible(html)).toContain("與 小晴 的 1 則訊息");
 });
 
-test("an unknown tool connection has a plug with its accessible name, never an initial", () => {
+test("an unknown tool connection has the generic app mark with its accessible name, never an initial", () => {
   const html = stepHTML(step({ server: "Files", tool: "list" }), false);
-  expect(html).toContain(`<span class="step-ic" role="img" aria-label="Files" title="Files">${ico("plug")}</span>`);
+  expect(html).toContain(`<span class="step-ic" role="img" aria-label="Files" title="Files">${genericGlyph()}</span>`);
   expect(html).not.toContain(">F<");
   expect(html).not.toContain('class="step-ic letter"');
 });

@@ -23,7 +23,7 @@ const menuOpen = [wait("#app-popover[data-team-mentions]")];
 
 export default [
   // The @ menu: the other members, then the apps, nothing else.
-  scene("mention-menu-open", "An @ lists the other members and the connected apps, each saying at the right what it is", [type(field, "@"), ...menuOpen, check("mention-menu-open")], apps),
+  scene("mention-menu-open", "An @ lists the other members and the connected apps, each saying at the right what it is; every app wears its own mark at one size, Google its G and Outlook the catalogue's picture", [type(field, "@"), ...menuOpen, check("mention-menu-open"), check("app-marks-mentions")], { appMarks: true }),
   scene("mention-menu-filter", "What follows the @ narrows the rows by the app's one matcher", [type(field, "@no"), ...menuOpen, check("mention-menu-filter")], apps),
   scene("mention-menu-signin", "An app whose sign-in ran out says 需要登入 after its name", [type(field, "@"), ...menuOpen, check("mention-menu-signin")], signIn),
   scene("mention-menu-signin-pick", "Pressing that app opens where it is signed in, and leaves no address in the words", [type(field, "請用 @"), ...menuOpen, click('#app-popover [data-value="Notion"]'),

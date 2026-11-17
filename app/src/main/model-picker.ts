@@ -11,6 +11,7 @@ import {
 } from "./local-models";
 import { formatPerMinute, formatPerMtok } from "./pricing";
 import { modelMark, providerMark } from "./provider-marks";
+import { genericMark } from "./service-mark";
 import { CLIS, cliModels } from "./cli-brains";
 import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
 import { CHECK, btn, esc, ico, openMenu, sel } from "./ui";
@@ -735,7 +736,7 @@ export function moveEffortSlider(range: HTMLInputElement): string {
 export const sourceMarkHTML = (source: ChooserSource): string => sourceMark(source);
 
 const sourceMark = (source: ChooserSource): string =>
-  providerMark(source.kind, true) || `<span class="mono md" aria-hidden="true">${ico(source.id === "local-speech" ? "mic" : "plug")}</span>`;
+  providerMark(source.kind, true) || (source.id === "local-speech" ? `<span class="mono md" aria-hidden="true">${ico("mic")}</span>` : genericMark("md"));
 
 /** What a source's row says under its name: whether it is ready, or how many models it has. */
 export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string {

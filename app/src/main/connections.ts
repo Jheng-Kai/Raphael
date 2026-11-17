@@ -225,7 +225,7 @@ export function ownGoogleEntry(googleId: string | null): StoreService {
   const said = (key: "plugins.googleDescription" | "store.googleAbout"): Words => { const text = t(key); return { "zh-TW": text, en: text, ja: text }; };
   const examples = [t("store.googleSetUp")];
   return {
-    id: OWN_GOOGLE, name: t("plugins.privateGoogle"), publisher: "Google", url: "", category: "productivity", icon: "gmail", popular: false, auth: "none",
+    id: OWN_GOOGLE, name: t("plugins.privateGoogle"), publisher: "Google", url: "", category: "productivity", icon: "google", popular: false, auth: "none",
     summary: said("plugins.googleDescription"), about: said("store.googleAbout"), examples: { "zh-TW": examples, en: examples, ja: examples },
     server_id: googleId,
   };
@@ -300,8 +300,8 @@ export function examplePrompt(s: StoreService | undefined): string | null {
 
 function groupIcon(g: ConnectionGroup, v: ConnectionsView, size: "md" | "xl"): string {
   const entry = entryOf(g, v);
-  // The private Google connection is Gmail and its calendar: it wears Gmail's mark, never a generic plug (R-UI-28).
-  const icon = g.source === "google" ? "gmail" : entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url });
+  // The private Google connection is the owner's Google account: it wears Google's G, as the 工具 tab and the @ menu draw it (R-UI-164).
+  const icon = g.source === "google" ? "google" : entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url });
   return entryIcon({ name: g.name, logo: g.logo, icon }, size);
 }
 

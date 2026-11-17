@@ -523,7 +523,7 @@
     "architecture": "以下是摘要系統的結構。\n\n```mermaid\narchitecture-beta\ngroup api(cloud)[Research]\nservice db(database)[Sources] in api\nservice server(server)[Summary] in api\ndb:R -- L:server\n```\n\n資料與摘要在同一個系統內整理。",
     "wide": "以下表格欄位較多，可以在卡片內左右捲動。\n\n| 一 | 二 | 三 | 四 | 五 | 六 | 七 | 八 | 九 | 十 |\n| - | - | - | - | - | - | - | - | - | - |\n| 第一項 | 第二項 | 第三項 | 第四項 | 第五項 | 第六項 | 第七項 | 第八項 | 第九項 | 第十項 |\n\n頁面仍保持原本的閱讀寬度。"
   },
-  "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg", "https://images.example.test/rich-preview.svg?synthetic=consent": "assets/slack.svg" },
+  "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg", "https://logos.composio.dev/api/outlook": "assets/catalog-square.svg", "https://images.example.test/rich-preview.svg?synthetic=consent": "assets/slack.svg" },
   "conversationSamples": {
     "memberConversation": {
       "id": 12,
