@@ -66,10 +66,11 @@ test("a connected tool its service will refuse for a while says why and when it 
   expect(reasonText(step({ server: "Notes", outcome: "error", reason: "plan_excluded" }))).toContain("方案不包含");
 });
 
-test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
+test("queued owner bubbles show send now with no queued words, and withdraw instead of edit or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
-  expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
+  expect(document.querySelector(".message-actions")?.firstElementChild?.matches('[data-act="send-now"]')).toBe(true);
+  expect(document.body.textContent).not.toContain("Queued");
   expect(document.querySelector('button[data-act="more-message"][data-owner-act="cancel"]')).not.toBeNull();
   expect(document.querySelector('[data-owner-act="edit"],.live-presence,.work-section')).toBeNull();
   // Only a message that waits its turn can be sent now (R-QUEUE-05): the menu reads this mark.

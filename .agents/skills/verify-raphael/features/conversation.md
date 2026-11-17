@@ -2440,7 +2440,8 @@ and CLI) and core/tests/test_e2e_steering.py (a real core over stdio, the fake L
 script of native_journeys.py).
 
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
-queued bubble (a small text button in sight right after its 「排隊中」 mark, not in the ⋯ menu) interrupts the work now and adds the message as context. R-QUEUE-05:
+queued bubble (a small text button in sight, first in its action row, not in the ⋯ menu; no 「排隊中」 words stand beside
+it, the button alone says the message waits) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
 running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
 Antigravity child is ended and the next turn resumes its stored native session; an API loop's
@@ -2450,8 +2451,8 @@ started as its own turn this way too (it never steers). Rooms keep a new exchang
 A message already steered and read, or already started, is not sent again (`sent: false`).
 Known gap: a message handed to a running Claude Code or Antigravity turn but not yet read
 shows as sent, not queued, so it has no 「立即送出」; Stop returns it to the field, and the
-messages with files or behind another queued one show 「排隊中」 and offer it. Once that
-work ends without reading it, it runs at once or waits as 「排隊中」 again (R-QUEUE-10).
+messages with files or behind another queued one wait and offer it. Once that
+work ends without reading it, it runs at once or waits with 「立即送出」 again (R-QUEUE-10).
 ```powershell
 npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-sendnow composer-queued-sendnow-menu composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
