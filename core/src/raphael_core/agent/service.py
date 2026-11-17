@@ -932,6 +932,10 @@ class AgentService:
                                                       scope=row[1] if row else "background"))
         background.diagnostics = task_diagnostics
         background.messaging_context = self._messaging_context
+        # A message handed to a task under way is settled when the task's model reads it, and comes back to its conversation
+        # as a turn of its own when the task stops running without reading it (R-QUEUE-11).
+        background.owner_read = self._steered
+        background.owner_unread = self._given_back
         # The connections to the plugins' servers, kept for a short while: a second question about
         # the same service does not start it again.
         self._pool = McpPool(idle_s=PLUGIN_IDLE_S)
@@ -1504,15 +1508,19 @@ class AgentService:
             self._inbox.transfer(ask.turn_id)
             self._handing.add(ask.turn_id)
             try:
-                steered = await steer(ask.speaker.id, ask.conversation_id, ask.text)
+                # The ticket goes with the words: the message is settled when the task's model reads them (`_steered`), and
+                # comes back here as a turn of its own when the task stops running first (`_given_back`).
+                steered = await steer(ask.speaker.id, ask.conversation_id, ask.text, ticket=ask.turn_id)
             finally:
                 self._handing.discard(ask.turn_id)
-            if steered:
-                self._inbox.settle(ask.turn_id, 'steered')
-                self._queued_asks.pop(ask.turn_id, None)
-                self._turn_changed(ask.turn_id, ask.speaker.id)
-                return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
-            self._inbox.requeue(ask.turn_id)
+            if not steered:
+                self._inbox.requeue(ask.turn_id)
+            else:
+                # A task that ended while it took them has given them back unread: they wait for their turn below.
+                self._release_steering(scope)
+                if self._inbox.get(ask.turn_id)['state'] != 'queued':
+                    self._turn_changed(ask.turn_id, ask.speaker.id)
+                    return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         first = self._start_drain(scope)
         if first is not None and first[0] == ask.turn_id:
             return await asyncio.shield(first[1])
@@ -1610,9 +1618,27 @@ class AgentService:
             self._drains.pop(scope, None)
 
     def _claim(self, scope):
-        """The next message of `scope` to run, after what ended work left unread has gone back ahead of it."""
+        """The next message of `scope` to run, after what ended work left unread has gone back ahead of it. Messages a
+        background task holds unread hold nothing up: that work is not the conversation's turn."""
         self._release_steering(scope)
-        return self._inbox.claim(scope)
+        return self._inbox.claim(scope, aside=self._held_by_background())
+
+    def _held_by_background(self):
+        """The turn ids of the messages background tasks were handed and hold unread (`BackgroundService.words_held`)."""
+        held = getattr(self._background, "words_held", None)
+        return held() if callable(held) else set()
+
+    def _given_back(self, turn_ids):
+        """A background task stopped running without reading the messages `turn_ids` handed to it: each conversation they
+        were said in takes them back at its front, in the order they were said, to answer each as a turn of its own."""
+        scopes = []
+        for turn_id in turn_ids:
+            row = self._inbox.get(turn_id)
+            if row is not None and (scope := (row['member_id'], row['conversation_id'])) not in scopes:
+                scopes.append(scope)
+        for scope in scopes:
+            self._release_steering(scope)
+            self._start_drain(scope)
 
     def _steered(self, turn_id, member_id):
         """The model of the work a message was handed to has just read it: it is settled now, never to run again."""
@@ -1627,12 +1653,14 @@ class AgentService:
         """Every message of `scope` handed to running work, never read by its model and held by no work that still runs,
         goes back to the front of the inbox in the order it was said, to be a turn of its own. The work may have answered,
         handed off, asked the owner, failed, been stopped or lost its CLI, or wait on a card that will never be answered:
-        its loop is closed, or gone from `_owner_loops`, or its turn no longer runs. What a model read was settled as it read
-        it (`_steered`), so nothing here is read twice."""
+        its loop is closed, or gone from `_owner_loops`, or its turn no longer runs. A background task holds its own until
+        it stops running (`BackgroundService.words_held`, `_given_back`). What a model read was settled as it read it
+        (`_steered`), so nothing here is read twice."""
         loop = self._owner_loops.get(scope)
         origin = self._history.get(loop.owner_turn_id) if loop is not None else None
         held = (set(loop.owner_input.leftover()) if loop is not None and not loop.owner_input.closed
                 and origin is not None and origin.status in ("running", "confirm") else set())
+        held |= self._held_by_background()
         rows = self._conn.execute(
             "SELECT turn_id FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='steering' ORDER BY seq DESC", scope,
         ).fetchall()
@@ -5643,6 +5671,11 @@ class AgentService:
             active = self._owner_loops.get(scope)
             if active is not None:
                 active.owner_input.withdraw(row['turn_id'])
+            if row['turn_id'] in self._held_by_background():
+                # A background task holds it: it lets go first, unless its model read it meanwhile, which settled it.
+                await self._background.take_back_words(row['turn_id'])
+                if self._inbox.get(row['turn_id'])['state'] != 'steering':
+                    return {'sent': False}
             self._inbox.requeue(row['turn_id'])
         elif row['state'] != 'queued':
             return {'sent': False}
@@ -5662,6 +5695,8 @@ class AgentService:
         active = self._owner_loops.get(scope)
         if active:
             active.owner_input.withdraw(turn_id)
+        if (drop := getattr(self._background, "drop_words", None)) is not None:
+            drop(turn_id)
         with self._conn:
             self._conn.execute("UPDATE agent_turns SET status='withdrawn' WHERE id=?", (turn_id,))
             self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid=?", (turn_id,))

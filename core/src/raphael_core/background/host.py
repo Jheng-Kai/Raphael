@@ -390,6 +390,7 @@ class WorkerHost:
         link.peer.register("host.chat", self._chat)
         link.peer.register("host.tool", self._tool)
         link.peer.register("host.summarize", self._summarize)
+        link.peer.register("host.read", self._read)
         self._pending = link
         try:
             hello = await asyncio.wait_for(
@@ -453,6 +454,14 @@ class WorkerHost:
     async def _summarize(self, params: dict) -> dict:
         return await self._run_for(params).summarize(params)
 
+    async def _read(self, params: dict) -> None:
+        """The task's model is given the owner's words of a ticket now. Told before the request that gives them, and before
+        the task's end, so its run is still the worker's."""
+        run = self._current.get(params.get("task_id"))
+        ticket = params.get("ticket")
+        if run is not None and type(ticket) is int:
+            run.owner_read(ticket)
+
     # --- carrying a task out --------------------------------------------------------------------
 
     async def run(self, run: TaskRun, spec: dict) -> dict:
@@ -488,15 +497,36 @@ class WorkerHost:
             raise WorkerUnavailable
         return reply
 
-    async def steer(self, run: TaskRun, text: str) -> bool:
+    async def steer(self, run: TaskRun, text: str, ticket: int | None = None) -> bool:
+        """Give the owner's words to the task for its model's next step; whether it took them. With a `ticket`, the worker
+        tells when the model reads them (`host.read`, `TaskRun.owner_read`)."""
         link = self._link
         if link is None or self._current.get(run.task_id) is not run:
             return False
         try:
-            reply = await link.peer.request("task.steer", {"task_id": run.task_id, "text": text})
+            reply = await link.peer.request("task.steer", {"task_id": run.task_id, "text": text,
+                                                           **({"ticket": ticket} if ticket is not None else {})})
             return isinstance(reply, dict) and reply.get("accepted") is True
         except (PeerClosed, RpcError):
             return False
+
+    async def withdraw(self, run: TaskRun, ticket: int) -> bool:
+        """Take the words of `ticket` back from the task before its model reads them; whether they were still unread. A read
+        the worker made first was told before this answer (`host.read`)."""
+        link = self._link
+        if link is None or self._current.get(run.task_id) is not run:
+            return False
+        try:
+            reply = await link.peer.request("task.withdraw", {"task_id": run.task_id, "ticket": ticket})
+            return isinstance(reply, dict) and reply.get("withdrawn") is True
+        except (PeerClosed, RpcError):
+            return False
+
+    def forget(self, run: TaskRun, ticket: int) -> None:
+        """Tell the task to drop the words of `ticket` unread, without waiting for its answer."""
+        link = self._link
+        if link is not None and self._current.get(run.task_id) is run:
+            link.peer.notify("task.withdraw", {"task_id": run.task_id, "ticket": ticket})
 
     def cancel(self, run: TaskRun) -> None:
         """Stop the task: the worker is told, and ended if it has not stopped in `grace_s`."""

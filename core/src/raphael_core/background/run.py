@@ -394,6 +394,9 @@ class TaskRun:
         self.tool_seconds: float | None = None
         # The task's stall time ran out (`limit_time`).
         self.stalled = False
+        # Told the ticket (a message's turn id) of words of the owner the task was handed, the moment its model reads them
+        # (the worker's `host.read`); the service settles that message then (BackgroundService._owner_read).
+        self.owner_read: Callable[[int], None] = lambda ticket: None
 
     # --- cancelling -----------------------------------------------------------------------------
 

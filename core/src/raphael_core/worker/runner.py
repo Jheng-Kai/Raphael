@@ -8,8 +8,13 @@ a core that is gone leaves it nothing to do. The core calls:
   (`loop.run_task`) and answer with how it ended. Tasks run side by side, one per id. A task that goes
   on after the owner answered its question is given `messages` (the whole conversation, as it was given
   back) in place of `system` and `user`; a task that pauses for a question answers with the conversation
-  as it stands (`messages`) and the id of the call that waits (`waiting_call`);
-- `task.cancel {task_id}` (a notification): stop the task at once.
+  as it stands (`messages`) and the id of the call that waits (`waiting_call`). Words of the owner the
+  task was handed and had not read when it paused come again with it (`owner_input`, each `{text, ticket}`);
+- `task.cancel {task_id}` (a notification): stop the task at once;
+- `task.steer {task_id, text, ticket}`: words of the owner for the task's model at its next step, answered
+  with whether the task took them. `ticket` (optional) is their message's turn id;
+- `task.withdraw {task_id, ticket}`: take those words back before the model reads them, answered with
+  whether they were still unread (sent as a notification, it is not answered).
 
 and, while a task runs, the worker calls the core's `host.chat {task_id, messages, tools}` for a
 reply of the model (with `room`, how many times the usual limit on a reply, when it asks again for a
@@ -18,7 +23,9 @@ call that the limit cut off; the reply says `finish_reason: "length"` when it wa
 goes after it) and
 `host.summarize {task_id, system, user, max_tokens}` for the checkpoint of a long task. A refusal of
 any comes as an error whose data says `stop`, and the loop ends with it. A task here has nobody in it
-to read a note about a call that repeats itself, so the loop ends it (`tool_guardrails`).
+to read a note about a call that repeats itself, so the loop ends it (`tool_guardrails`). It tells the core
+`host.read {task_id, ticket}` (a notification) the moment the model is given words of the owner that came
+with a ticket, before the request that gives them: the core settles that message then (R-QUEUE-11).
 
 stdout is claimed for the protocol before anything else is done (`stdio_server.claim_stdout`). This
 module imports the loop and the channel and nothing of the core's other side: no keys, no database,
@@ -151,6 +158,7 @@ class Worker:
         self._cancelled: dict[int, asyncio.Event] = {}
         self._owner_inputs = {}
         peer.register("task.steer", self._steer)
+        peer.register("task.withdraw", self._withdraw)
         peer.register("worker.hello", self._hello)
         peer.register("task.run", self._run)
         peer.register("task.cancel", self._cancel)
@@ -174,11 +182,19 @@ class Worker:
             raise invalid_params("system and user must be strings")
         if not isinstance(tools, list) or not all(_is_tool(tool) for tool in tools):
             raise invalid_params("tools must be a list of tools in the chat format")
+        unread = params.get("owner_input") or []
+        if not isinstance(unread, list) or not all(isinstance(item, dict) and _owner_words(item.get("text"))
+                                                   and type(item.get("ticket")) is int for item in unread):
+            raise invalid_params("owner_input must be a list of the owner's words with their tickets")
         if task_id in self._cancelled:
             raise RpcError(BUSY, "That task is running")
         cancelled = self._cancelled[task_id] = asyncio.Event()
         from .owner_input import OwnerInput
         inbox = self._owner_inputs[task_id] = OwnerInput()
+        # The core settles a message the moment its words reach the model: told before the request that gives them.
+        inbox.on_read = lambda ticket: self._peer.notify("host.read", {"task_id": task_id, "ticket": ticket})
+        for item in unread:
+            inbox.add(item["text"], ticket=item["ticket"])
         window = params.get("context_window")
         try:
             outcome = await run_task(
@@ -209,11 +225,18 @@ class Worker:
         return _result(outcome)
 
     async def _steer(self, params: dict) -> dict:
-        task_id, text = params.get("task_id"), params.get("text")
-        if type(task_id) is not int or not isinstance(text, str) or not text.strip() or len(text) > 12000:
+        task_id, text, ticket = params.get("task_id"), params.get("text"), params.get("ticket")
+        if type(task_id) is not int or not _owner_words(text) or (ticket is not None and type(ticket) is not int):
             raise invalid_params("invalid owner input")
         inbox = self._owner_inputs.get(task_id)
-        return {"accepted": bool(inbox and inbox.add(text))}
+        return {"accepted": bool(inbox and inbox.add(text, ticket=ticket))}
+
+    async def _withdraw(self, params: dict) -> dict:
+        task_id, ticket = params.get("task_id"), params.get("ticket")
+        if type(task_id) is not int or type(ticket) is not int:
+            raise invalid_params("invalid owner input")
+        inbox = self._owner_inputs.get(task_id)
+        return {"withdrawn": bool(inbox and inbox.withdraw(ticket))}
 
     async def _cancel(self, params: dict) -> dict:
         task_id = params.get("task_id")
@@ -221,6 +244,10 @@ class Worker:
             if task_id in (None, running):
                 cancelled.set()
         return {}
+
+
+def _owner_words(text: Any) -> bool:
+    return isinstance(text, str) and bool(text.strip()) and len(text) <= 12000
 
 
 def _is_tool(tool: Any) -> bool:
