@@ -113,8 +113,8 @@ DEFINITIONS = {
 KEPT_WORDS = ("This place holds keys or passwords (SSH or cloud keys, the keychain, a browser's profile, a password "
               "manager, a .env file or a private key), so it is kept from members' file tools. Tell the owner plainly; "
               "they can open it themselves.")
-NOT_WRITABLE = ("You may write only inside the folders the owner chose for you ({folders}); without a choice that is the "
-                "output folder of Settings › General. Save it there, or attach the file to your reply; tell the owner if it "
+NOT_WRITABLE = ("You may write only inside your folders ({folders}): the output folder of Settings › General and the "
+                "folders the owner added for you. Save it there, or attach the file to your reply; tell the owner if it "
                 "must go elsewhere: the owner adds folders in your settings.")
 NO_FOLDERS = "no folder is chosen yet"
 PROTECTED = "This is Raphael's own data, which members do not search."

@@ -263,15 +263,17 @@ async def test_writing_is_only_inside_the_owners_folders(conn, home, files):
 
 
 async def test_each_member_writes_in_its_own_folders_and_one_with_none_in_the_output_folder(conn, home, files):
-    # R-PC-05: the owner chooses a member's folders in its settings; its own folders take the output folder's place.
+    # R-PC-05: the output folder is every member's default; the folders the owner adds for a member come beside it.
     settings = SettingsStore(conn)
     settings.set("owner_output_folder", str(home / "Documents" / "notes"))
     settings.set("member_write_folders", {"0": [str(home / "project")], "4": [str(home / "Documents")]})
     mine = await call(files, "write_file", {"path": "~/project/todo.md", "content": "a\n"})
     assert mine.ok and (home / "project" / "todo.md").exists()
     output = await call(files, "write_file", {"path": "~/Documents/notes/out.md", "content": "a\n"})
-    assert not output.ok and output.kind == "not_writable" and str(home / "project") in output.text
-    # Another member, with no folder chosen, has the output folder alone; reading stays open to every member.
+    assert output.ok and (home / "Documents" / "notes" / "out.md").exists()
+    elsewhere = await call(files, "write_file", {"path": "~/Documents/budget-new.csv", "content": "a\n"})
+    assert not elsewhere.ok and elsewhere.kind == "not_writable" and str(home / "project") in elsewhere.text
+    # Another member, with no folder added, has the output folder alone; reading stays open to every member.
     token = _CONTEXT.set((("chat", 7, 2), False, True, "session", False, 7))
     try:
         other = await call(files, "write_file", {"path": "~/project/other.md", "content": "a\n"})

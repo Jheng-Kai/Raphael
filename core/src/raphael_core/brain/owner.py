@@ -10,12 +10,13 @@ from .settings import SettingsStore
 
 
 def member_folders(settings: SettingsStore, member_id: int) -> list[str]:
-    """The folders of the owner's computer `member_id` may write to (R-PC-05): the ones the owner chose for that member, the
-    first being where its files for the owner go; a member with none chosen has the output folder alone, and none at all
-    when that is not set either. Reading is not limited by these."""
+    """The folders of the owner's computer `member_id` may write to (R-PC-05), the first being where its files for the owner
+    go: the output folder is every member's default and always one of them; the folders the owner added for the member come
+    beside it, and the first of the member's list is the chosen one (the output folder heads the list when it is chosen).
+    None at all when neither is set. Reading is not limited by these."""
     own = settings.get("member_write_folders").get(str(member_id)) or []
     output = settings.get("owner_output_folder")
-    return list(own) if own else [output] if output else []
+    return list(dict.fromkeys(folder for folder in (*own[:1], output, *own[1:]) if folder))
 
 
 def owner_context(settings: SettingsStore, member_id: int = 0) -> str:

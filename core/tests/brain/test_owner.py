@@ -69,9 +69,14 @@ def test_each_member_is_told_its_own_folders_and_one_with_none_the_output_folder
         return prompt, json.loads(prompt.split("<owner_context>\n")[1].split("\n</owner_context>")[0])
 
     prompt, data = told(4)
-    assert data["output_folder"] == str(tmp_path / "work") and data["write_folders"] == [str(tmp_path / "notes")]
+    # The member's first folder is the chosen one; the output folder, every member's default, is always beside it.
+    assert data["output_folder"] == str(tmp_path / "work") and data["write_folders"] == [str(tmp_path / "out"), str(tmp_path / "notes")]
     assert "everywhere else on it is read-only" in prompt
-    assert member_folders(settings, 4) == [str(tmp_path / "work"), str(tmp_path / "notes")]
+    assert member_folders(settings, 4) == [str(tmp_path / "work"), str(tmp_path / "out"), str(tmp_path / "notes")]
+    # The output folder chosen heads the member's list, and the folders added come after it.
+    settings.set("member_write_folders", {"4": [str(tmp_path / "out"), str(tmp_path / "work")]})
+    assert member_folders(settings, 4) == [str(tmp_path / "out"), str(tmp_path / "work")]
+    settings.set("member_write_folders", {"4": [str(tmp_path / "work"), str(tmp_path / "notes")]})
     _, data = told(9)
     assert data["output_folder"] == str(tmp_path / "out") and "write_folders" not in data
     assert member_folders(settings, 9) == [str(tmp_path / "out")]
