@@ -1014,6 +1014,16 @@ export async function perform(page, step, evidenceDirectory) {
       if (writes.length) throw new Error(`An unchanged desktop refresh wrote to the panel: ${writes.join(', ')}`);
       return { check: 'desktop-refresh-still', mutations: writes.length };
     }
+    case 'desktop-drop-file': {
+      // A file dragged from the PC onto the computer's screen: the browser's own drop, with a real File in it.
+      await page.evaluate(() => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(['meeting notes'], 'notes.txt', { type: 'text/plain' }));
+        const target = document.querySelector('.desktop-panel .desktop-screen');
+        for (const type of ['dragenter', 'dragover', 'drop']) target.dispatchEvent(new DragEvent(type, { dataTransfer: transfer, bubbles: true, cancelable: true }));
+      });
+      return {check:'desktop-drop-file', synthetic:true};
+    }
     case 'desktop-owner-typing': {
       await page.waitForFunction(() => document.querySelector('.desktop-panel')?.dataset.interactive === 'true');
       // The stream the owner holds: the larger view a card's 接手 opens (R-PANEL-09), or the card's own screen.

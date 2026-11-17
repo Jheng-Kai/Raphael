@@ -2126,4 +2126,29 @@ Compare the key card with the login card and chat-secret-masked at the same them
 field, Save below, no value in the markup, text or recorded calls. Core: `tests/computer/test_computer_keys.py`,
 `tests/evaluate/test_card_tools.py`, `tests/brain/test_db.py`. App: `secret-card.test.ts`, `vault.test.ts`,
 `desktop-viewer.test.ts`, `desktop-paste-page.test.ts`; Rust: `cargo test paste::clipboard`. Not proved offline: a paste
-into a real container (the image's VNC server taking the client's cut text) and a real Credential Manager write.
+into a real container and a real Credential Manager write.
+
+## Copy and paste with the computer, and files handed to it (R-PASTE-01, R-PASTE-02, R-COMP-FILE-01)
+
+A shared computer's screens are x0vncserver, which carries no clipboard before TigerVNC 1.15, so the screen's cut text
+never reached it: the owner's paste pasted the computer's own old clipboard. Now the app hands the paste's text to the
+computer's clipboard through the core (`computer.viewer_clipboard` `put`, the driver's `clipboard_write`) before the page
+sends the keys, and only when the PC's clipboard changed since it last matched the computer's (`owner_clipboard_sequence`),
+so a copy made inside the computer still pastes there. The owner's own Ctrl+C, Ctrl+X or Ctrl+Shift+C in the screen they
+hold (Command on a Mac, told as Ctrl) tells the app 250 ms later, and the core brings the computer's clipboard text to the
+PC's clipboard (`take`, the driver's `clipboard_read`, the device's clipboard write), unless the computer's clipboard is
+what this view last knew. Code: `computer/owner_transfer.py`, `DesktopViewer.clipboard`, `answerPaste` and `bringCopy` in
+`desktop-viewer.ts`, `owner_clipboard_sequence` in `commands.rs`.
+
+A file dropped on the computer's screen (watching or holding it) or chosen with 傳送檔案到電腦 in the held computer's ⋯ goes
+to the upload store a megabyte at a time and `computer.viewer_put_file` copies it into `/home/cua/team` under its own
+name, ` (2)` added when the name is taken; one quiet line under the screen says where it went. A remote computer gets it
+over the engine, at most 32 MB.
+
+```powershell
+npm run look -- desktop-owner desktop-send-file-menu desktop-file-dropped --theme both --width 1120,720,1920x1080
+```
+
+Core: `tests/computer/test_owner_transfer.py`, `tests/computer/test_viewer.py`. App: `desktop-viewer.test.ts`,
+`desktop-paste-page.test.ts`. Not proved offline: the driver's clipboard in a real container (what `clipboard_read`
+answers, and that a paste lands); `npm run verify -- --computer` with Docker running proves it.

@@ -231,6 +231,7 @@ pub fn run() {
             commands::keyboard_has_altgr,
             commands::repair_accessibility,
             commands::owner_clipboard_text,
+            commands::owner_clipboard_sequence,
             commands::open_link,
             commands::open_external_url,
             commands::clipboard_text,
