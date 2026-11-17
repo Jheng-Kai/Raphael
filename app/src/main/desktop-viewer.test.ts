@@ -1071,6 +1071,7 @@ let peer: { postMessage: ReturnType<typeof vi.fn> };
 const wire = (): void => { peer = { postMessage: vi.fn() }; Object.defineProperty(frame(), 'contentWindow', { value: peer, configurable: true }); };
 const holdControl = async (): Promise<void> => { panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); api.desktopControl.mockResolvedValue({ ...running, control: 'owner' }); await takeOver(); message('interactive', { held: true }); await flush(); };
 const pasteReplies = (sent: { mock: { calls: unknown[][] } }): unknown[][] => sent.mock.calls.filter(([data]) => (data as { type?: string }).type === 'raphael-desktop-paste');
+const lastReply = (sent: { mock: { calls: unknown[][] } }): unknown[] | undefined => { const replies = pasteReplies(sent); return replies[replies.length - 1]; };
 
 test('the owner pasting into the screen they hold sends their clipboard text to the page, and to that page alone', async () => {
   await holdControl();
@@ -1127,12 +1128,12 @@ test('their paste goes to the computer through the core first, and a clipboard t
   const sent = peer.postMessage;
   askPaste(7); await flush();
   expect(api.desktopClipboard).toHaveBeenCalledWith('one', 'put', 'from the PC');
-  expect(pasteReplies(sent).at(-1)).toEqual([{ type: 'raphael-desktop-paste', id: 7, text: 'from the PC' }, 'http://127.0.0.1:5000']);
+  expect(lastReply(sent)).toEqual([{ type: 'raphael-desktop-paste', id: 7, text: 'from the PC' }, 'http://127.0.0.1:5000']);
   // Nothing copied on the PC since: the computer pastes its own clipboard, which may hold a copy made in it.
   api.desktopClipboard.mockClear();
   askPaste(8); await flush();
   expect(api.desktopClipboard).not.toHaveBeenCalled();
-  expect(pasteReplies(sent).at(-1)).toEqual([{ type: 'raphael-desktop-paste', id: 8, text: null }, 'http://127.0.0.1:5000']);
+  expect(lastReply(sent)).toEqual([{ type: 'raphael-desktop-paste', id: 8, text: null }, 'http://127.0.0.1:5000']);
   // A new copy on the PC goes again.
   api.ownerClipboardSequence.mockResolvedValue(42); api.ownerClipboardText.mockResolvedValue('newer');
   askPaste(9); await flush();
@@ -1145,7 +1146,7 @@ test('a paste the core could not hand over still gives the page the text, as bef
   api.desktopClipboard.mockResolvedValue({ put: false });
   const sent = peer.postMessage;
   askPaste(1); await flush();
-  expect(pasteReplies(sent).at(-1)).toEqual([{ type: 'raphael-desktop-paste', id: 1, text: 'kept' }, 'http://127.0.0.1:5000']);
+  expect(lastReply(sent)).toEqual([{ type: 'raphael-desktop-paste', id: 1, text: 'kept' }, 'http://127.0.0.1:5000']);
   api.desktopClipboard.mockClear();
   askPaste(2); await flush();
   expect(api.desktopClipboard).toHaveBeenCalledWith('one', 'put', 'kept');
@@ -1162,7 +1163,7 @@ test("their copy in the screen they hold brings the computer's copy to their PC,
   api.desktopClipboard.mockClear();
   askPaste(4); await flush();
   expect(api.desktopClipboard).not.toHaveBeenCalled();
-  expect(pasteReplies(peer.postMessage).at(-1)?.[0]).toEqual({ type: 'raphael-desktop-paste', id: 4, text: null });
+  expect(lastReply(peer.postMessage)?.[0]).toEqual({ type: 'raphael-desktop-paste', id: 4, text: null });
 });
 
 test('a copy while they only watch, or from another window, brings nothing', async () => {
