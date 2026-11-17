@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import * as verifyModule from "./verify-checks.mjs";
 import { verifyChecks } from "./verify-checks.mjs";
 
 const app = resolve(import.meta.dirname, "..");
@@ -39,6 +40,42 @@ describe("the checks of a verify run", () => {
     expect(check.env.RAPHAEL_COMPUTER_CANCEL_FILE).toBe(join("C:/a verify run", "computer.cancel"));
     expect(check.args).not.toContain("raphael_core.evaluate.guardian");
     expect(check.env.PYTHONPATH.split(process.platform === "win32" ? ";" : ":")[0]).toBe(resolve(app, "../core/src"));
+  });
+});
+describe("a verify run of only what changed (--changed)", () => {
+  const run = (changed, args = ["--changed"]) => verifyChecks({ args, directory: "run", environment: {}, changed });
+  const of = (changed, name, args) => run(changed, args).find(check => check.name === name);
+  it("runs the frontend tests related to changed files and the rule tests, never the whole suite", () => {
+    const checks = run(["app/src/main/desktop-viewer.ts", "app/src/main/desktop-viewer.test.ts", "app/scripts/look/checks.mjs", ".agents/product/RULES.md"]);
+    expect(checks.map(check => check.name)).toEqual(["tsc", "related", "rules"]);
+    const related = checks[1].args;
+    expect(related.slice(1, 4)).toEqual(["related", "--run", "--passWithNoTests"]);
+    expect(related.slice(-3)).toEqual(["src/main/desktop-viewer.ts", "src/main/desktop-viewer.test.ts", "scripts/look/checks.mjs"]);
+    expect(of([], "rules").args).toEqual(expect.arrayContaining(["run", "src/architecture", "guardian-contract", "feature-map", "scripts/repo-clean"]));
+  });
+  it("runs the test folder of each changed core package, a changed module's test file and changed test files, once", () => {
+    const exists = path => ["tests/members", "tests/computer", "tests/test_app.py", "tests/members/test_service.py", "tests/computer/conftest.py", "tests/agent"].includes(path);
+    const { coreTargets } = verifyModule;
+    expect(coreTargets(["core/src/raphael_core/members/service.py", "core/tests/members/test_service.py", "core/src/raphael_core/app.py", "core/src/raphael_core/computer/vm.py", "core/src/raphael_core/agent/history.py"], exists))
+      .toEqual(["tests/agent", "tests/computer", "tests/members", "tests/test_app.py"]);
+    expect(coreTargets(["core/tests/computer/conftest.py", "core/src/raphael_core/nowhere/x.py", "core/pyproject.toml"], exists)).toEqual(["tests/computer"]);
+    const core = of(["core/src/raphael_core/members/service.py"], "core");
+    expect(core.args).toEqual(expect.arrayContaining(["-W", "error", "tests/members"]));
+    expect(core.cwd).toBe(resolve(app, "../core"));
+  });
+  it("checks contrast only when CSS changed and Rust formatting only when Rust changed", () => {
+    expect(run(["app/src/main/agent.ts"]).map(check => check.name)).not.toContain("contrast");
+    expect(run(["app/src/main/agent.css"]).map(check => check.name)).toContain("contrast");
+    expect(run(["app/src/main/agent.ts"]).map(check => check.name)).not.toContain("rustfmt");
+    expect(run(["app/src-tauri/src/commands.rs"]).map(check => check.name)).toContain("rustfmt");
+  });
+  it("adds the core contract, the Rust suite or a judge only when asked, and refuses to mix with --quick", () => {
+    expect(run(["core/src/raphael_core/agent/persona.py"], ["--changed", "--contract"]).map(check => check.name)).toContain("contract");
+    expect(run(["app/src-tauri/src/commands.rs"], ["--changed", "--rust"]).map(check => check.name)).toEqual(expect.arrayContaining(["rustfmt", "cargo", "clippy"]));
+    expect(run([]).map(check => check.name)).toEqual(["tsc", "rules"]);
+    const result = spawnSync(process.execPath, [join(app, "scripts/verify.mjs"), "--quick", "--changed"], { cwd: app, encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--quick cannot be combined with --changed");
   });
 });
 describe("the TypeScript compiler of the build", () => {

@@ -45,26 +45,32 @@ can select an already installed Edge/Chrome executable.
 
 ## User-facing behavior
 
-Choose the smallest verification scope that covers the changed behavior and its
-affected consumers before running commands. Use the feature map to name those scenes
-and state the selection briefly. A shared dialog, for example, needs its conversation,
-routine, group and room confirmation scenes, not unrelated settings, onboarding and
-dictation journeys. Keep all three sizes and both themes for the selected UI scenes.
+The project's rule is "Test what changed" in [AGENTS.md](../../../AGENTS.md): check what the change
+touches and the regression tests that guard it, and leave the whole suites to CI. Choose the smallest
+verification scope that covers the changed behavior and its affected consumers before running commands.
+Use the feature map to name those scenes and state the selection briefly. A shared dialog, for example,
+needs its conversation, routine, group and room confirmation scenes, not unrelated settings, onboarding
+and dictation journeys. Keep all three sizes and both themes for the selected UI scenes.
 
 ```powershell
-npm run verify
+npm run verify -- --changed
 npm run look -- <affected scenes> --theme both --width 1120,720,1920x1080
 ```
+
+`--changed` reads the change from git (everything that differs from where the branch left `origin/main`,
+committed or not) and runs `tsc`, the Vitest tests related to the changed frontend files, the repository's
+rule tests, the core test folders of the changed core packages, and contrast or Rust formatting only when
+CSS or Rust changed. It prints the changed files and each check's targets first; copy them into the pull
+request. Add `--contract`, `--rust`, judge, `--live` or `--computer` only when AGENTS.md's table asks for
+them. Do not run the whole `npm run verify`, `--core` or `look -- --all` for a local change: CI runs the
+whole suites on every pull request.
 
 Use the selected feature matrix for a local UI handoff. Reserve the full matrix for
 integration/release acceptance, CI, explicit requests or genuinely app-wide changes
 such as global tokens, navigation and shared layout. Sharing a component alone does
-not require full-project verification. Add core or Rust checks only when their code,
-contracts or behavior change; frontend-only styling does not require either suite.
-Documentation-only changes need diff/link review. All commands are from `app/`.
-`verify -- --quick` omits contrast and is only an iteration check. Report unavailable
-dependencies and exact exits; do not rerun unchanged, unrelated suites to replace a
-blocked check.
+not require full-project verification. Documentation-only changes need diff/link review.
+All commands are from `app/`. Report unavailable dependencies and exact exits; do not
+rerun unchanged, unrelated suites to replace a blocked check.
 
 Scenes use real clicks, input, hover, menus and navigation. Extend
 `app/scripts/look/scenes/*.mjs` and the one `fixture.json` when a journey is missing.
@@ -181,9 +187,9 @@ Their named tests run in the ordinary Vitest/pytest suites on every PR, not loca
 From app/, the complete integration offline check is `npm run verify -- --contract --rust` together with CI's result
 on the exact commit: CI runs the whole core suite on every push (about a quarter of an hour over eight machines),
 so `--core`, the same suite on a developer's machine, is for when CI cannot be used. A core change runs the test
-folders it touched and `--contract` (the scenario drivers in `core/tests/evaluate` and the default prompt's size
-budget) before it is handed back: units that ran only their own files let failures through to the merged
-tree, nearly all of them in those two places.
+folders it touched (`--changed` names them). A change to the core loop, a prompt, the tool list or
+`core/tests/evaluate` also runs `--contract` (the scenario drivers and the default prompt's size budget)
+before it is handed back: those are the two places where units that each passed alone broke together.
 Local changes use the affected frontend/core/Rust boundaries described above.
 
 CI deals the Python test files among eight machines by the seconds recorded in
@@ -200,8 +206,9 @@ The 1920 viewport is 1080px high. Inspect every generated contact sheet and rele
 full-size image, then run `npm run judge -- <look run dir> --references <external png/jpg paths...>`
 (or `npm run verify -- --judge <look run dir>` with RAPHAEL_JUDGE_REFERENCES as a JSON
 array of external paths). Judge reviews the same selected look run; it must not widen
-a local change into a full-project review. Judge is required after look and before UI hand-off,
-or must be recorded as blocked/SKIP with the reason when unavailable.
+a local change into a full-project review. Judge is required for a new screen or a visual
+redesign, after look and before UI hand-off, or must be recorded as blocked/SKIP with the reason
+when unavailable; a fix that keeps the design records it as SKIP, not a redesign.
 It refuses failed/incomplete look evidence, uses judge rules plus each scene's
 feature entry, and fails scores below 4, hard violations, malformed reviews and
 budget exhaustion. Reports and summaries live in app/.look/judge-*/; cache identity
