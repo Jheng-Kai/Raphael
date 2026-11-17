@@ -156,7 +156,11 @@ Every count reads its launchers for the browser's own name and mark, the helper,
 ("N screens browser mark").
 The shared block reads the running browser's flags and what a page is told of `navigator.webdriver`, presses the
 Browser icon's command ("shared browser is a person's"), and sends the owner's own click and typed line through
-the app's relay path to a held seat ("shared owner input").
+the app's relay path to a held seat ("shared owner input"). It then puts the owner's text through the viewer's
+clipboard into the computer and reads it back ("shared owner paste"), brings the computer's copy to a recorder in place
+of the PC's clipboard, once ("shared owner copy"), and places files through the viewer's `put_file` and reads them as
+the guest's own user ("shared owner files"): the clipboard is read and written by xclip or xsel when the image has one,
+else by the driver.
 Every failure includes expected/observed evidence.
 
 Every per-count block compares the live tools/list of all DRIVER_TOOLS with

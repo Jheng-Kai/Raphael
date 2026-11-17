@@ -5,9 +5,10 @@ import asyncio
 import base64
 import csv
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
+import hashlib
 import http.client
 import json
 import os
@@ -26,6 +27,7 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from ..computer import lifecycle, vm
+from ..computer.owner_transfer import clipboard_text
 from ..computer.viewer import DesktopViewer
 from ..computer.rfb_view import Rfb, WebSocket, UpgradeRefused, exact
 from ..computer.vm_bridge import CuaBridge
@@ -76,6 +78,21 @@ X_WARP = ("import ctypes, sys\nx = ctypes.CDLL('libX11.so.6'); x.XOpenDisplay.re
           "x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]; x.XDefaultRootWindow.restype = ctypes.c_ulong\n"
           "x.XWarpPointer.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong] + [ctypes.c_int] * 6\n"
           "x.XWarpPointer(d, 0, x.XDefaultRootWindow(d), 0, 0, 0, 0, int(sys.argv[1]), int(sys.argv[2])); x.XFlush.argtypes = [ctypes.c_void_p]; x.XFlush(d)\n")
+
+# What the owner pastes and copies (Chinese, a check mark, a line break and a tab) and the guest's own clipboard programs, tried in
+# this order; neither is added to the image, so a computer that has neither is read and written through its driver.
+OWNER_TEXTS = ("中文 ✓", "第一行 ✓\nsecond line\n\t第三行 « »\n末尾")
+CLIPBOARD_TOOL = 'for tool in xclip xsel; do command -v "$tool" >/dev/null 2>&1 && { echo "$tool"; exit 0; }; done; echo none'
+CLIPBOARD_READ = {"xclip": ["xclip", "-selection", "clipboard", "-o"], "xsel": ["xsel", "--clipboard", "--output"]}
+CLIPBOARD_WRITE = {"xclip": "xclip -selection clipboard -i", "xsel": "xsel --clipboard --input"}
+# What the guest's own user finds in a folder under a mark (and any half-written file, ".raphael-*.part"): each file's SHA-256 and
+# size, read as that user so a file it cannot read fails the program, and a folder as "dir".
+TEAM_LISTING = ("import hashlib, json, os, sys\nfolder, mark = sys.argv[1:3]\nentries = {}\n"
+                "for name in sorted(os.listdir(folder)):\n    path = os.path.join(folder, name)\n"
+                "    if mark not in name and not name.startswith('.raphael-'):\n        continue\n"
+                "    if os.path.isdir(path):\n        entries[name] = ['dir']\n"
+                "    else:\n        data = open(path, 'rb').read()\n        entries[name] = [hashlib.sha256(data).hexdigest(), len(data)]\n"
+                "print(json.dumps(entries))")
 
 
 def whole_panel(rectangle):
@@ -619,6 +636,32 @@ class Acceptance:
 
     async def text(self, target, args):
         return (await self.guest(target, args)).stdout
+
+    async def clipboard_tool(self, target):
+        return (await self.text(target, ["sh", "-c", CLIPBOARD_TOOL])).strip()
+
+    async def driver_tool(self, target, name, arguments):
+        """One call of the computer's driver outside the viewer, for a computer the owner does not hold. The bridge's command is
+        the run's guarded one while `shared` runs."""
+        async with CuaBridge(self.machine, target) as bridge:
+            reply = await bridge.request("tools/call", {"name": name, "arguments": arguments})
+        require(not reply.get("isError"), f"Expected the driver's {name} to answer, observed {reply}")
+        return reply
+
+    async def read_clipboard(self, target, tool):
+        if tool == "none":
+            return clipboard_text(await self.driver_tool(target, "clipboard_read", {"include_text": True}))
+        return (await self.guest(target, CLIPBOARD_READ[tool])).stdout
+
+    async def write_clipboard(self, target, tool, text):
+        if tool == "none":
+            await self.driver_tool(target, "clipboard_write", {"text": text})
+            return
+        encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
+        await self.guest(target, ["sh", "-c", f"echo {encoded} | base64 -d | {CLIPBOARD_WRITE[tool]} >/dev/null 2>&1"])
+
+    async def team_entries(self, target, folder, mark):
+        return json.loads(await self.text(target, ["python3", "-c", TEAM_LISTING, folder, mark]))
 
     async def mark(self, target):
         result = await self.guest(target, ["cat", vm.SCREENS_READY], allow_failure=True)
@@ -2500,6 +2543,124 @@ class Acceptance:
                 self.record("shared owner input", "skipped", "shared terminal wall failed")
             if not browsers_ok:
                 self.record("shared foreground page hold", "skipped", "shared computer browser failed")
+
+            driven = []
+            driver_call = viewer.driver_call
+
+            async def recorded_driver_call(target, name, arguments):
+                answer = await driver_call(target, name, arguments)
+                driven.append(f"{name} {'answered' if answer is not None else 'refused or failed'}")
+                return answer
+            viewer.driver_call = recorded_driver_call
+
+            @asynccontextmanager
+            async def holding(opened):
+                await viewer.control({**opened, "held": True})
+                try:
+                    yield
+                finally:
+                    await viewer.control({**opened, "held": False})
+
+            def reader(tool):
+                return tool if tool != "none" else "the driver's own clipboard_read (the image has neither xclip nor xsel)"
+
+            async def owner_paste():
+                """The owner's paste, through the viewer's own `clipboard` put while they hold the screen, lands in the computer's
+                clipboard: read back by a program of the guest's own where the image has one, else by the driver."""
+                target = targets[members[1]]
+                tool = await self.clipboard_tool(target)
+                opened = await viewer.open({"member_id": members[1]})
+                try:
+                    for text in OWNER_TEXTS:
+                        driven.clear()
+                        async with holding(opened):
+                            held = target.key in machine.held
+                            put = await viewer.clipboard({**opened, "action": "put", "text": text})
+                        require(put == {"put": True}, f"Expected the owner's paste {text!r} to reach the computer's clipboard, observed {put} "
+                                f"(screen held by the owner: {held}; the viewer's driver calls: {driven})")
+                        seen = await self.read_clipboard(target, tool)
+                        require(seen == text, f"Expected the computer's clipboard to hold {text!r} as {reader(tool)} reads it, observed {seen!r}")
+                finally:
+                    await viewer.close(opened)
+                return (f"{len(OWNER_TEXTS)} texts (Chinese and a check mark, one over four lines with a tab) put through the viewer's clipboard "
+                        f"while the owner held seat {target.screen}'s screen, each read back exactly from the computer's clipboard by {reader(tool)}")
+            await self.check("shared owner paste", owner_paste)
+
+            async def owner_copy():
+                """What a program of the computer copies comes to the owner's clipboard (a recorder here, never this PC's) through the
+                viewer's `take`, once: a second take with the clipboard as it was copies nothing, a changed clipboard copies again."""
+                target = targets[members[1]]
+                tool = await self.clipboard_tool(target)
+                copied = []
+                viewer.copy_to_owner = copied.append
+                opened = await viewer.open({"member_id": members[1]})
+
+                async def take():
+                    driven.clear()
+                    async with holding(opened):
+                        held = target.key in machine.held
+                        answer = await viewer.clipboard({**opened, "action": "take"})
+                    return answer, f"(screen held by the owner: {held}; the viewer's driver calls: {driven})"
+                try:
+                    first_text, second_text = OWNER_TEXTS[1], OWNER_TEXTS[0]
+                    await self.write_clipboard(target, tool, first_text)
+                    answer, note = await take()
+                    require(answer == {"copied": True} and copied == [first_text],
+                            f"Expected the computer's copy {first_text!r} to reach the owner's clipboard, observed {answer} and {copied} {note}")
+                    answer, note = await take()
+                    require(answer == {"copied": False} and copied == [first_text],
+                            f"Expected a take with the clipboard as it was to copy nothing, observed {answer} and {copied} {note}")
+                    await self.write_clipboard(target, tool, second_text)
+                    answer, note = await take()
+                    require(answer == {"copied": True} and copied == [first_text, second_text],
+                            f"Expected the changed clipboard {second_text!r} to be copied, observed {answer} and {copied} {note}")
+                finally:
+                    viewer.copy_to_owner = None
+                    await viewer.close(opened)
+                return (f"Text set in the computer's clipboard ({'by the driver' if tool == 'none' else 'by ' + tool}) reached the owner's clipboard recorder "
+                        "through the viewer's take; a second take with it unchanged copied nothing; a changed clipboard was copied again")
+            await self.check("shared owner copy", owner_copy)
+
+            async def owner_files():
+                """The owner's files, placed through the viewer's `put_file` (the upload store and the place the product copies to), appear in
+                the computer's team folder as the guest's own user reads it: the same bytes, a taken name numbered, and a name with path
+                parts or characters a folder refuses made safe, placed in the team folder and nowhere above it."""
+                target = targets[members[1]]
+                marker = secrets.token_hex(3)
+                folder = self.root / "owner-transfer"
+                folder.mkdir(parents=True, exist_ok=True)
+                uploads = {"first": bytes(range(256)) * 20, "again": b"a later upload \x00\xfe", "other": "text, 也是 ✓\n".encode("utf-8")}
+                stored = {}
+                for key, data in uploads.items():
+                    stored[key] = folder / f"{marker}-{key}"
+                    stored[key].write_bytes(data)
+                viewer.stored_path = stored.__getitem__
+                taken = f"{marker} 報告 ✓.bin"
+                drops = [("first", taken, taken), ("again", taken, f"{marker} 報告 ✓ (2).bin"),
+                         ("other", f"..\\..\\up/{marker}-rép:ort?*.txt", f"{marker}-rép_ort__.txt")]
+                placed = []
+                opened = await viewer.open({"member_id": members[1]})
+                try:
+                    for key, name, expected in drops:
+                        answer = await viewer.put_file({**opened, "stored_id": key, "name": name})
+                        placed.append(answer.get("name"))
+                        require(answer == {"name": expected, "path": f"{vm.SHARED}/{expected}"},
+                                f"Expected {name!r} to be placed as {expected!r}, observed {answer}")
+                    want = {expected: [hashlib.sha256(uploads[key]).hexdigest(), len(uploads[key])] for key, _, expected in drops}
+                    found = await self.team_entries(target, vm.SHARED, marker)
+                    require(found == want, f"Expected the guest to read exactly {want} in {vm.SHARED}, observed {found}")
+                    above = await self.team_entries(target, "/home/cua", marker)
+                    require(not above, f"Expected nothing of the drops above the team folder, observed {above}")
+                finally:
+                    viewer.stored_path = None
+                    for name in placed:
+                        if name:
+                            (Path(target.shared) / name).unlink(missing_ok=True)
+                    await viewer.close(opened)
+                return (f"{len(drops)} drops placed through the viewer's put_file: {', '.join(expected for _, _, expected in drops)}; the guest user "
+                        f"read each in {vm.SHARED} with the same SHA-256 and size (binary bytes, Chinese names), the taken name numbered, "
+                        "no half-written file left, nothing above the team folder")
+            await self.check("shared owner files", owner_files)
 
             async def demonstration():
                 from ..bots.homes import BotHomes

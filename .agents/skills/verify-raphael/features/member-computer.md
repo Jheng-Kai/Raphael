@@ -2215,4 +2215,6 @@ npm run look -- desktop-owner desktop-send-file-menu desktop-file-dropped --them
 
 Core: `tests/computer/test_owner_transfer.py`, `tests/computer/test_viewer.py`. App: `desktop-viewer.test.ts`,
 `desktop-paste-page.test.ts`. Not proved offline: the driver's clipboard in a real container (what `clipboard_read`
-answers, and that a paste lands); `npm run verify -- --computer` with Docker running proves it.
+answers, and that a paste lands); `npm run verify -- --computer` with Docker running proves it ("shared owner paste",
+"shared owner copy", "shared owner files" in `evaluate/computer_acceptance.py`; the offline world fakes the driver and
+the guest's programs, so only a real run shows what the driver's clipboard does).

@@ -85,6 +85,33 @@ async def test_a_copy_with_no_text_a_clipboard_that_cannot_be_written_or_no_hold
         await bridge.clipboard({**opened, "action": "take"})
 
 
+@pytest.mark.xfail(strict=True, reason="CuaBridge.request turns away every tools/call of a held computer (vm_bridge.py), the owner's own "
+                   "clipboard calls included, so a paste or copy never reaches the driver while the owner holds the screen")
+async def test_the_viewers_own_driver_call_reaches_the_driver_while_the_owner_holds_the_screen(viewer, monkeypatch):
+    from raphael_core.computer.vm_bridge import CuaBridge
+    bridge, _, _ = viewer
+    sent = []
+
+    async def enter(self):
+        self.process = type("Process", (), {"returncode": None})()
+        return self
+
+    async def leave(self, *exc):
+        self.process = None
+
+    async def write(self, packet):
+        sent.append(packet)
+        self.pending[packet["id"]].set_result({"content": [{"type": "text", "text": "ok"}]})
+    monkeypatch.setattr(CuaBridge, "__aenter__", enter)
+    monkeypatch.setattr(CuaBridge, "__aexit__", leave)
+    monkeypatch.setattr(CuaBridge, "_write", write)
+    opened = await held(bridge)
+    assert bridge.vm.target(1).key in bridge.vm.held
+    assert await bridge.driver_call(bridge.vm.target(1), "clipboard_write", {"text": "pasted"}) is not None
+    assert [packet["params"]["name"] for packet in sent if packet["method"] == "tools/call"] == ["clipboard_write"]
+    await bridge.close(opened)
+
+
 def test_the_driver_answer_gives_its_text_only_from_a_text_field():
     assert clipboard_text({"structuredContent": {"text": "a"}}) == "a"
     assert clipboard_text({"content": [{"type": "text", "text": json.dumps({"text": "b", "types": []})}]}) == "b"
