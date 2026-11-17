@@ -1651,18 +1651,24 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   Raphael's own data keeps the data floor. Walks skip `Library`, `AppData`, caches, `.git` and `node_modules` unless they
   start inside them (each app's container on a Mac would ask the owner). A denied file on a Mac names System Settings ›
   Privacy & Security › Files and Folders or Full Disk Access.
-- Writes (T2, kind write): `write_file`, `edit_file`, only inside `owner_output_folder` and `owner_write_folders`
-  (Settings › General, 成員可以寫入的資料夾: picked, never typed, removed one by one; owner-only, never a management tool).
-  Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write that cannot happen.
-- The owner context names the output folder and the write folders for every turn (`brain/owner.py`).
+- Writes (T2, kind write): `write_file`, `edit_file`, only inside the member's own folders (`member_write_folders` by
+  member id, set in that member's settings, 工具 › 可以寫入的資料夾: picked, never typed, removed one by one) or, for a member
+  with none, the output folder of Settings › General (`brain.owner.member_folders`). Both are owner-only settings, never a
+  management tool. Elsewhere `tier_for_call` says T0 and `call` refuses (`not_writable`), so no card asks for a write
+  that cannot happen. The calling member comes with the command context (`local_tools._CONTEXT`, its sixth part): the
+  speaker of a turn, the member of a task.
+- The owner context names the member's own first folder as its output folder and the rest as its write folders
+  (`brain/owner.py`). A command it starts on this computer begins in its first folder (`command_folder`).
+- Migration 88 turned the one list every member shared into each member's own list, the output folder first.
 
 Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
-places and links, glob and grep, writes inside and outside, an unapproved write), brain/test_owner.py, and
-settings-view.test.ts. Look: `owner-write-folders` (adds with the picker, removes the first) beside the output folder
-scenes:
+places and links, glob and grep, writes inside and outside, each member's own folders, an unapproved write),
+brain/test_owner.py (the prompt per member, migration 88), member-settings.test.ts and settings-view.test.ts. Look:
+`member-write-folders` (adds with the picker, removes the first) and `member-write-folders-default` (one quiet line
+naming the output folder) beside the output folder scenes:
 
 ```powershell
-npm run look -- owner-write-folders owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- member-write-folders member-write-folders-default owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
 ```
 
 Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a

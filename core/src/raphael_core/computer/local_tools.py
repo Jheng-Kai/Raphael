@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import re
 import sys
 import uuid
@@ -29,7 +30,8 @@ BACKGROUND_WAIT_S = UNATTENDED_WAIT_S
 FOREGROUND_TIMEOUT_S = 120
 # Who runs the command, whether it read outside content, whether its chat can show a card, its session, and whether the
 # owner's screen is in reach (a quick question alone, `permissions.owner_screen`).
-_CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", False))
+# (owner of the call, external content seen, owner present, session, may show on the owner's screen, member id)
+_CONTEXT = ContextVar("local_command_context", default=(None, True, False, "", False, 0))
 ON_SCREEN = ("Nothing was run: this command would show something on the owner's screen, and only a quick question shows "
              "anything there. Open pages, programs and files on your own computer with its tools. To run a program and "
              "read what it prints, run it directly, without opening a window.")
@@ -125,6 +127,17 @@ def command_of(arguments):
     return ""
 
 
+def command_folder(settings, member_id):
+    """Where a member's command on the owner's computer starts when it names no folder: its first folder, as Claude Code's
+    commands start in its project, else the owner's home. A start, not a fence: what a command may touch is still the
+    owner's yes on its card (R-PC-02)."""
+    from .owner_files import writable_folders
+    for folder in writable_folders(settings, member_id):
+        if os.path.isdir(folder):
+            return folder
+    return str(Path.home())
+
+
 def requires_command_approval(settings, command, *, external):
     if settings.get("action_mode") == "bypass":
         return False
@@ -139,12 +152,14 @@ def ask_context(ask, results=()):
     # would is refused in `call` (R-PC-06).
     return (("chat", ask.speaker.id, ask.conversation_id), external,
             qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id,
-            reaches_owner_screen(source=ask.source, quick=ask.quick, nested=ask.nested))
+            reaches_owner_screen(source=ask.source, quick=ask.quick, nested=ask.nested), ask.speaker.id)
 
 
 def run_context(run):
-    # A task asks through its waiting question (`present`), and never shows anything on the owner's screen.
-    return (("task", run.task_id), bool(run._memory_untrusted or run.attachments), True, "", False)
+    # A task asks through its waiting question (`present`), and never shows anything on the owner's screen. Its member's
+    # folders are the ones it may write to.
+    task = run._store.get(run.task_id)
+    return (("task", run.task_id), bool(run._memory_untrusted or run.attachments), True, "", False, task.member_id if task else 0)
 
 
 def shows_on_screen(key, arguments):
@@ -207,7 +222,7 @@ class LocalTools:
         if (name := owner_file_tool(key)) is not None:
             # A read asks nothing; a write outside the owner's folders is refused in `call`, so nothing asks for it.
             schema = OWNER_FILE_DEFINITIONS[name]["parameters"]
-            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments) or not self.owner_files.writable(arguments):
+            if name in OWNER_FILE_READS or not Draft202012Validator(schema).is_valid(arguments) or not self.owner_files.writable(arguments, _CONTEXT.get()[5]):
                 return Tier.T0
             return Tier.T2
         if not is_local(key):
@@ -245,7 +260,7 @@ class LocalTools:
         outcome = "blocked"
         background = False
         try:
-            owner, external, present, session, _screen = _CONTEXT.get()
+            owner, external, present, session, _screen, member = _CONTEXT.get()
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
@@ -280,7 +295,7 @@ class LocalTools:
             timeout = arguments.get("timeout_seconds", 60 if arguments.get("background") else FOREGROUND_TIMEOUT_S)
             if not arguments.get("background"):
                 timeout = min(timeout, FOREGROUND_TIMEOUT_S)
-            params = {"cwd": arguments.get("cwd") or str(Path.home()), "timeout_seconds": timeout}
+            params = {"cwd": arguments.get("cwd") or command_folder(self.settings, member), "timeout_seconds": timeout}
             if arguments.get("background"):
                 if len(self.jobs) >= 64:
                     for old, job in list(self.jobs.items()):
@@ -314,7 +329,8 @@ class LocalTools:
         if not Draft202012Validator(OWNER_FILE_DEFINITIONS[name]["parameters"]).is_valid(arguments):
             return PluginResult(False, "bad_arguments")
         owner = _CONTEXT.get()[0]
-        result = await self.owner_files.call(name, arguments, approver=approver, run=owner or ("task", task_id))
+        result = await self.owner_files.call(name, arguments, approver=approver, run=owner or ("task", task_id),
+                                             member_id=_CONTEXT.get()[5])
         self.audit.add(server=OWNER_FILES, tool=name, tier=self.tier_of(key).name, approver=approver,
                        outcome="ok" if result.ok else "blocked" if result.kind in ("kept", "not_writable", "approval_required",
                                                                                      "protected_data") else "error", task_id=task_id)

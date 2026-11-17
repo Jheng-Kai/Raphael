@@ -125,7 +125,7 @@ async def test_a_quick_question_publishes_running_action_before_completion_and_s
 async def test_foreground_command_cannot_request_an_unbounded_timeout(make_rig, conn):
     from raphael_core.computer.local_tools import _CONTEXT
     rig, hub, host = rig_with_command(make_rig, conn)
-    token = _CONTEXT.set((('chat', 0, 1), False, True, 'synthetic', True))
+    token = _CONTEXT.set((('chat', 0, 1), False, True, 'synthetic', True, 0))
     try:
         host.execute.return_value = {'exit_code': None, 'stdout': '', 'stderr': '', 'timed_out': True, 'truncated': False}
         result = await hub.call('mcp:local/local_exec', {'command': COMMAND, 'timeout_seconds': 86400}, approver='user')

@@ -2189,6 +2189,29 @@ PRAGMA user_version = 87;
 COMMIT;
 """
 
+
+# The folders of the owner's computer members may write to are each member's own (R-PC-05). The one list every member
+# shared (`owner_write_folders`, beside the output folder) becomes each member's list, the output folder first, since a
+# member's own folders take the output folder's place: no member loses a folder it could write to. A database with no
+# list keeps none, and running it again changes nothing.
+def _member_folders(conn):
+    with conn:
+        row = conn.execute("SELECT value FROM settings WHERE key='owner_write_folders'").fetchone()
+        shared = json.loads(row[0]) if row else []
+        if isinstance(shared, list) and any(isinstance(item, str) and item.strip() for item in shared):
+            saved = conn.execute("SELECT value FROM settings WHERE key='owner_output_folder'").fetchone()
+            output = json.loads(saved[0]) if saved else ""
+            folders = list(dict.fromkeys(item.strip() for item in (output, *shared) if isinstance(item, str) and item.strip()))[:50]
+            members = sorted({0, *(member for (member,) in conn.execute("SELECT id FROM members"))})
+            conn.execute("INSERT INTO settings (key, value) VALUES ('member_write_folders', ?)"
+                         " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (json.dumps({str(member): folders for member in members}),))
+        conn.execute("DELETE FROM settings WHERE key='owner_write_folders'")
+        conn.execute("PRAGMA user_version = 88")
+
+
+_MIGRATIONS[88] = _member_folders
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

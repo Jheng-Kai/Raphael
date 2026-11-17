@@ -24,7 +24,7 @@ import { entryIcon } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
-import type { AppContext, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
+import type { AppContext, BrainSettings, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
 import { type IconName, actionRow, btn, closeMenu, esc, ico, iconBtn, iconButton, openConfirmMenu, openPopover, patchHTML, tg, toaster } from "./ui";
 
 export interface MemberSettingsHost {
@@ -113,6 +113,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   let skills: Loaded<MemberSkill[]> = "loading";
   let commands: Loaded<MemberCommand[]> = "loading";
   let toolChoices: Loaded<ToolChoices> = "loading";
+  /** The owner's folders for members (R-PC-05): each member's own, and the output folder a member with none writes to. */
+  let folders: Loaded<{ own: Record<string, string[]>; output: string }> = "loading";
   let skillText: { id: number; skill: MemberSkill; text: string; revision?: string } | "loading" | null = null;
   let skillBusy = false;
   let command: { id: number | null; name: string; description: string; template: string } = { id: null, name: "", description: "", template: "" };
@@ -128,16 +130,34 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const mine = ++epoch, id = host.member().id;
     // Each read is its own: one that fails (or a core that has not got it) leaves the others to answer.
     const read = <T>(call: () => Promise<T>): Promise<T> => Promise.resolve().then(call);
-    const [skillList, commandList, tools] = await Promise.allSettled([
+    const [skillList, commandList, tools, settings] = await Promise.allSettled([
       read(() => api.membersSkillsList(id)),
       read(() => api.membersCommandsList(id)),
       read(() => api.membersToolChoices()),
+      read(() => api.settingsGet()),
     ]);
     if (mine !== epoch || id !== host.member().id || el.hidden) return;
     if (skillList.status === "fulfilled") skills = skillList.value?.skills ?? []; else if (!Array.isArray(skills)) skills = "failed";
     if (commandList.status === "fulfilled") commands = commandList.value?.commands ?? []; else if (!Array.isArray(commands)) commands = "failed";
     if (tools.status === "fulfilled" && tools.value) { toolChoices = tools.value; rememberAppLogos(tools.value.connections); } else if (typeof toolChoices !== "object") toolChoices = "failed";
+    if (settings.status === "fulfilled" && settings.value) folders = foldersOf(settings.value.settings); else if (typeof folders !== "object") folders = "failed";
     draw();
+  }
+
+  const foldersOf = (settings: BrainSettings): { own: Record<string, string[]>; output: string } =>
+    ({ own: settings.member_write_folders ?? {}, output: settings.owner_output_folder ?? "" });
+  const folderName = (folder: string): string => folder.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || folder;
+
+  /** The member's folders saved whole: the owner's choice alone (R-PC-05), never a member's. */
+  async function saveFolders(member: Member, next: string[]): Promise<void> {
+    if (typeof folders !== "object") return;
+    const own = { ...folders.own };
+    if (next.length) own[String(member.id)] = next; else delete own[String(member.id)];
+    try {
+      const saved = await api.settingsSet("member_write_folders", own);
+      folders = foldersOf(saved.settings);
+      draw();
+    } catch (error) { toaster.info(describeError(error)); }
   }
 
   // ---------- drawing ----------
@@ -223,7 +243,35 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
         `${tg(member.tools === null || member.tools.includes(app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
     }
     return section("", rows, "", "ms-tools") +
-      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft");
+      section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft") +
+      foldersHTML(member);
+  }
+
+  /**
+   * The folders of the owner's computer this member may write to (R-PC-05), each a row with its whole path and its removal in
+   * its ⋯, added with the native picker, never typed. The first is where its files for the owner go. With none, one quiet line
+   * says it writes to the output folder of Settings › General. Reading reaches the whole computer (R-PC-04).
+   */
+  /** The quiet line of a member with no folder of its own, the output folder's path in it as the owner's own words. */
+  function outputLine(path: string): string {
+    const [before, after = ""] = t("memberSettings.foldersDefault", { p0: "\u0001" }).split("\u0001");
+    return `<p class="ms-empty">${esc(before)}<span class="ms-path">${esc(path)}</span>${esc(after)}</p>`;
+  }
+
+  function foldersHTML(member: Member): string {
+    const title = t("memberSettings.folders");
+    const tool = iconBtn("plus", t("writeFolders.add"), ' data-ms="folder-add" data-k="ms-folder-add"');
+    let rows: string;
+    if (folders === "loading") rows = spinner();
+    else if (folders === "failed") rows = muted(t("mem.loadFailed"));
+    else {
+      const own = folders.own[String(member.id)] ?? [];
+      rows = own.map((folder, index) =>
+        `<div class="ms-row ms-folder" data-k="ms-folder:${index}"><span class="ms-label ms-path">${esc(folder)}</span>` +
+        `${iconBtn("more", t("members.more", { p0: folderName(folder) }), ` data-ms="folder-menu" data-index="${index}" data-k="ms-folder-menu:${index}" aria-haspopup="menu" aria-expanded="false"`)}</div>`).join("") ||
+        (folders.output ? outputLine(folders.output) : muted(t("memberSettings.foldersNone")));
+    }
+    return section(title, rows, tool, "ms-folders");
   }
 
   /** What the chosen kind holds. */
@@ -379,7 +427,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     // Another member, or the picture taken off, ends a move of the cover that was under way.
     if (reposition && (!sameMember || member.cover?.kind !== "image")) { reposition = null; delete cover.dataset.repositioning; }
     const face = faceHTML(member, 96).replace(/--slime-(?:delay|since):[^;"\s]+;?| data-slime-mounted="[\d.]+"/g, "");
-    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, commands, toolChoices, skillText, skillBusy, command, getLocale(),
+    const signature = JSON.stringify([stableMember(member), face, view, category, [...editing], [...saving], adding, skills, commands, toolChoices, folders, skillText, skillBusy, command, getLocale(),
       reposition ? reposition.from : null]);
     if (drawn === signature) return;
     drawn = signature;
@@ -588,6 +636,17 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       case "draft": void host.update(member.id, { draft_first: !(member.draft_first ?? true) }); break;
       case "notify": void host.update(member.id, { notify: !(member.notify ?? false) }); break;
       case "tool": void toggleTool(act.dataset.id ?? ""); break;
+      case "folder-add": void api.pickOutputFolder().then(path => {
+        const own = typeof folders === "object" ? folders.own[String(member.id)] ?? [] : [];
+        if (path !== null && !own.includes(path)) return saveFolders(member, [...own, path]);
+      }).catch(error => toaster.info(describeError(error))); break;
+      case "folder-menu": {
+        const own = typeof folders === "object" ? folders.own[String(member.id)] ?? [] : [], folder = own[Number(act.dataset.index)];
+        if (folder === undefined) break;
+        openConfirmMenu(act, { label: t("writeFolders.remove", { p0: folderName(folder) }), ask: t("settings.keyRemoveConfirm"),
+          run: () => void saveFolders(member, own.filter(item => item !== folder)) });
+        break;
+      }
     }
   });
 

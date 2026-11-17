@@ -401,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 87
+LATEST = 88
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -718,7 +718,7 @@ SCHEMA_V87 = {**SCHEMA_V86, "agent_turn_versions": [  # the earlier versions of 
     "prefix TEXT NOT NULL", "text TEXT NOT NULL", "detail TEXT", "status TEXT NOT NULL", "model TEXT", "failure TEXT",
     "messages TEXT NOT NULL DEFAULT '[]'"]}
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86)])
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:

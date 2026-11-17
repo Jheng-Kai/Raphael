@@ -9,10 +9,19 @@ import json
 from .settings import SettingsStore
 
 
-def owner_context(settings: SettingsStore) -> str:
+def member_folders(settings: SettingsStore, member_id: int) -> list[str]:
+    """The folders of the owner's computer `member_id` may write to (R-PC-05): the ones the owner chose for that member, the
+    first being where its files for the owner go; a member with none chosen has the output folder alone, and none at all
+    when that is not set either. Reading is not limited by these."""
+    own = settings.get("member_write_folders").get(str(member_id)) or []
+    output = settings.get("owner_output_folder")
+    return list(own) if own else [output] if output else []
+
+
+def owner_context(settings: SettingsStore, member_id: int = 0) -> str:
     name, about = settings.get("owner_name"), settings.get("owner_about")
-    folder = settings.get("owner_output_folder")
-    writable = [item for item in settings.get("owner_write_folders") if item != folder]
+    folders = member_folders(settings, member_id)
+    folder, writable = (folders[0], folders[1:]) if folders else ("", [])
     if not name and not about and not folder and not writable:
         return ""
     profile = {"name": name, "about": about, "output_folder": folder}

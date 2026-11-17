@@ -1943,7 +1943,7 @@ class AgentService:
                 memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
-                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings),
+                roster=roster_prompt(self._team, ask.speaker, self._chat_language(ask)), owner=owner_context(self._settings, ask.speaker.id),
                 reasoning_effort=self._effort(settings),
                 recall=self._recall(ask, context), source=ask.source, messaging=self._messaging_context(ask.speaker.id),
                 viewing=viewing_text(ask.viewing), owner_screen=self._owner_screen(ask),
@@ -2134,7 +2134,7 @@ class AgentService:
             f"Owner's instructions: {speaker.instructions}\n\n"
         )
         from .card_context import source_text
-        return persona + owner_context(self._settings) + conversation_block(context.summary, context.turns, index) + source_text(source) + self._messaging_context(speaker.id)
+        return persona + owner_context(self._settings, speaker.id) + conversation_block(context.summary, context.turns, index) + source_text(source) + self._messaging_context(speaker.id)
 
     @member_turn(lambda self, run: run.context.speaker.id)
     @tool_step(lambda self, run: "computer")
@@ -2437,7 +2437,7 @@ class AgentService:
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
                     memory_snapshot=memory, narrated=True, memory_inline=False,
                 )
-            system += owner_context(self._settings)
+            system += owner_context(self._settings, ask.speaker.id)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
             if self._gate.plan_first:
@@ -2947,7 +2947,7 @@ class AgentService:
         from .owner_questions import ASK_OWNER, question_input
         from .persona import greeting_prompt
         system = greeting_prompt(ask.speaker)
-        system += owner_context(self._settings) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
+        system += owner_context(self._settings, ask.speaker.id) + roster_prompt(self._team, ask.speaker, self._chat_language(ask))
         if self._memory is not None:
             snapshot = self._memory.snapshot(ask.speaker.id)
             memory = "\n".join(text for text in (snapshot.shared, snapshot.own) if text)
@@ -3000,7 +3000,7 @@ class AgentService:
         async def execute(call_id, name, args):
             raise AgentFailure("error")  # No tool of any kind is offered to a question about a reaction.
         common = dict(model=settings.model, ledger=ledger, language=ask.language, plain=True,
-                      system=reaction_prompt(ask.speaker) + owner_context(self._settings), user=ask.text, tools=[],
+                      system=reaction_prompt(ask.speaker) + owner_context(self._settings, ask.speaker.id), user=ask.text, tools=[],
                       progress=lambda text: None, thinking=lambda text: None, execute=execute)
         if brain_ref(settings.model):
             loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions, member_id=ask.speaker.id, owner_text=ask.text,
