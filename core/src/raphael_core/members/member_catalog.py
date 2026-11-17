@@ -21,10 +21,10 @@ from ..slime_ids import current_id
 from .templates import MAX_BYTES, checked, findings
 
 DEFAULT_URL = "https://raw.githubusercontent.com/Jheng-Kai/SlimesStore/main"
-# The catalogue's public keys, raw Ed25519 as 64 hex characters, one or two (a second while a key is rotated). There is none
-# until the owner has created the catalogue and its key (catalog-template/README.md): with no key the store is not open, asks
+# The catalogue's public keys, raw Ed25519 as 64 hex characters, one or two (a second while a key is rotated). The private half
+# lives only in the catalogue repository's signing secret (catalog-template/README.md). With no key the store is not open, asks
 # nothing of the network and says so. Fixture keys are supplied only by offline tests.
-PUBLIC_KEYS: tuple[str, ...] = ()
+PUBLIC_KEYS: tuple[str, ...] = ("fc8425a35255a86798e7ee9f73d2e6347ab1210cec4cc44fdc2c4cb01b1005c6",)
 INDEX_CAP = 256 * 1024
 MAX_INDEX_AGE = 7 * 24 * 60 * 60
 STALE_INDEX = with_ui_words({

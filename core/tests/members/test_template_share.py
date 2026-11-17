@@ -1,4 +1,4 @@
-"""Sharing a member as a template, end to end and offline: what travels, what never does, and the store before it opens."""
+"""Sharing a member as a template, end to end and offline: what travels, what never does, and the store's keys."""
 import json
 import re
 from pathlib import Path
@@ -94,10 +94,10 @@ async def test_a_publish_request_says_where_its_files_are_and_only_that_folder_c
             await rig.call("members.template", {"action": "folder", "folder_id": bad})
 
 
-def test_the_store_has_no_placeholder_key_that_could_pass_for_a_real_one():
-    # Until the owner creates the catalogue and generates its key (catalog-template/README.md) the list is empty.
+def test_the_app_carries_one_or_two_well_formed_store_keys():
+    assert 1 <= len(PUBLIC_KEYS) <= 2
     assert all(re.fullmatch(r"[0-9a-f]{64}", key) for key in PUBLIC_KEYS)
-    assert PUBLIC_KEYS == ()
+    assert len(set(PUBLIC_KEYS)) == len(PUBLIC_KEYS)
 
 
 async def test_a_store_without_a_key_is_not_open_and_never_reaches_the_network(rig, tmp_path):
@@ -120,6 +120,9 @@ def test_a_key_that_is_not_a_key_is_refused_when_the_store_is_made(tmp_path):
             Catalog(tmp_path, keys=(bad,))
 
 
-async def test_the_default_store_of_the_app_is_not_open(rig):
-    assert member_catalog.client(rig.service).keys == ()
-    assert (await rig.call("members.template", {"action": "catalog"}))["open"] is False
+def test_the_default_store_of_the_app_is_open_on_the_store_address(rig, monkeypatch):
+    # Checked without asking the network: offline tests never reach the real catalogue.
+    monkeypatch.delenv("RAPHAEL_CATALOG_URL", raising=False)
+    store = member_catalog.client(rig.service)
+    assert store.is_open and store.keys == PUBLIC_KEYS
+    assert store.url == member_catalog.DEFAULT_URL == "https://raw.githubusercontent.com/Jheng-Kai/SlimesStore/main"
