@@ -6,6 +6,7 @@ import { readdirSync } from "node:fs";
 import { BRAND_COLORS, COLOURED_MARKS, LOGO_IDS, SERVICE_ICONS, brandStyle, hasLogo, monogram, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import { iconHTML } from "./connections";
 import { ico } from "./ui";
+import { genericGlyph } from "./service-mark";
 import { providerMark } from "./provider-marks";
 import providerKinds from "./fixtures/provider-kinds.json";
 
@@ -18,9 +19,9 @@ test("the provider-kinds fixture covers the local registry", () => {
 test.each(providerKinds)("provider kind %s resolves to installed artwork or its own generic icon", (kind) => {
   const html = providerMark(kind);
   if (["openai_compatible", "koboldcpp", "text_generation_webui"].includes(kind)) {
-    expect(html).toContain(ico("plug"));
+    expect(html).toContain(genericGlyph());
   } else {
-    expect(html).not.toContain(ico("plug"));
+    expect(html).not.toContain(genericGlyph());
     expect(html).toMatch(/logo-(?:art|mono)/);
     expect(html).not.toContain('src=""');
   }
@@ -38,17 +39,18 @@ test.each([
 test("new provider artwork is reserved and regional variants share the base mark", () => {
   for (const id of ["vertex", "bedrock", "xai", "moonshot", "dashscope", "minimax", "vllm", "text_generation_webui", "inference_net"] as const) {
     expect(LOGO_IDS).toContain(id);
-    if (!hasLogo(id)) expect(iconHTML(id, id, "md")).toContain(ico("plug"));
+    if (!hasLogo(id)) expect(iconHTML(id, id, "md")).toContain(genericGlyph());
   }
   for (const id of ["moonshot", "dashscope", "minimax"]) expect(providerMark(`${id}_cn`)).toBe(providerMark(id));
 });
 
-test("reserved provider brands with no installed artwork show the plug instead of a broken image or initial", () => {
+test("reserved provider brands with no installed artwork show the generic mark instead of a broken image or initial", () => {
   for (const id of ["openai", "azure", "litellm", "portkey", "nebius", "bifrost", "groq", "anthropic", "googlegemini", "googlecloud", "ollama", "vercel", "lmstudio", "deepseek", "mistral"] as const) {
     expect(LOGO_IDS).toContain(id);
     const html = iconHTML(id, id, "md");
     expect(html).not.toContain('src=""');
-    if (!hasLogo(id)) expect(html).toContain(ico("plug"));
+    if (!hasLogo(id)) expect(html).toContain(genericGlyph());
+    expect(html).not.toContain(ico("plug"));
   }
 });
 
@@ -186,7 +188,7 @@ describe("the marks of well-known programs", () => {
     const manifest = JSON.parse(readFileSync("scripts/release-licenses/manifest.json", "utf8"));
     const icons = manifest.components.find((entry: { name: string }) => entry.name === "Simple Icons");
     const logos = manifest.components.find((entry: { name: string }) => entry.name === "Brand logos");
-    for (const name of ["OpenRouter", "Brave", "SearXNG", "Slack"]) {
+    for (const name of ["OpenRouter", "Brave", "SearXNG", "Slack", "Google"]) {
       expect(notice).toContain(name);
       expect(icons.usage).toContain(name);
     }
@@ -222,7 +224,7 @@ describe("the marks of well-known programs", () => {
 // The colour of every one-colour mark is its owner's: on the white tile of 連結應用程式 and in its chip, as everywhere. The official colours are Simple Icons' hex of each brand (https://simpleicons.org); a mark that is black
 // in its official form takes the tile's near-black. The real browser's computed colours are the look check `icon-colours`.
 const OFFICIAL: Record<string, string> = {
-  notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", linear: "#5E6AD2", figma: "multi",
+  notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", google: "multi", linear: "#5E6AD2", figma: "multi",
   spotify: "#1ED760", discord: "#5865F2", slack: "multi", todoist: "#E44332", obsidian: "#7C3AED", atlassian: "#0052CC", cloudflare: "#F38020",
   sentry: "#362D59", stripe: "#635BFF", n8n: "#EA4B71", zapier: "#FF4F00", paypal: "#002991", webflow: "#146EF5", wix: "#0C6EFC",
   netlify: "#00C7B7", neon: "#00E599", prisma: "#2D3748", airtable: "multi", calendly: "#006BFF", posthog: "black", postman: "#FF6C37",

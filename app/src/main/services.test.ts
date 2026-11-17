@@ -25,6 +25,7 @@ import {
 } from "./services";
 import type { BrainSettings, ServicesStatus } from "./types";
 import { ico, toaster } from "./ui";
+import { genericGlyph } from "./service-mark";
 
 interface Over {
   search?: string;
@@ -115,14 +116,15 @@ const inDialog = (html: string): string => html.slice(html.indexOf('<div class="
 /** The part of the page that is the section: before the dialog. */
 const inSection = (html: string): string => (html.includes('<div class="cs-scrim"') ? html.slice(0, html.indexOf('<div class="cs-scrim"')) : html);
 
-test("a service added by a newer core gets a plug instead of an initial", () => {
+test("a service added by a newer core gets the generic app mark instead of an initial", () => {
   const newer = status();
   newer.search.options.push({ id: "future-search", needs_key: false, has_key: false, key_optional: false });
   const host = document.createElement("div");
   host.innerHTML = dialog("search", null, { status: newer });
   const picture = host.querySelector('[data-service="future-search"] .ic')!;
   expect(picture.textContent).toBe("");
-  expect(picture.querySelector("path")?.getAttribute("d")).toBe(/d="([^"]+)"/.exec(ico("plug"))![1]);
+  expect(picture.querySelector("path")?.getAttribute("d")).toBe(/d="([^"]+)"/.exec(genericGlyph())![1]);
+  expect(picture.innerHTML).not.toContain(ico("plug"));
 });
 
 beforeEach(() => {

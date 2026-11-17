@@ -47,6 +47,7 @@ import {
 } from "./connections";
 import { STORE_GROUPS } from "./store-finder";
 import { ico, toaster } from "./ui";
+import { genericGlyph, genericMark } from "./service-mark";
 import { confirmDelete } from "./member-dialogs";
 
 const browsers: Window[] = [];
@@ -517,9 +518,10 @@ describe("a row of the apps", () => {
     expect(connected.querySelector('[data-conn="join"]')).toBeNull();
   });
 
-  test("a service with no bundled mark uses a plug, and known marks keep their brand colour", () => {
+  test("a service with no bundled mark uses the generic app mark, and known marks keep their brand colour", () => {
     const html = connectionsHTML(view());
-    expect(html).toContain(ico("plug"));
+    expect(html).toContain(genericGlyph());
+    expect(html).not.toContain(ico("plug"));
     expect(html).not.toContain(">C<");
     expect(html).toMatch(/class="mono md logo-mono" style="--brand:#5E6AD2"/); // Linear
     expect(cardOf("notion").innerHTML).toMatch(/class="mono md logo-mono">/); // Notion: the colour of the text
@@ -574,12 +576,12 @@ describe("the connected apps", () => {
     expect(main.querySelector(".logo-mono")).not.toBeNull();
     expect(notion!.innerHTML).toMatch(/class="tg" role="switch" aria-checked="true" aria-label="開啟 Notion" data-conn="enable" data-id="ab12"/);
     expect(notion!.querySelectorAll("button")).toHaveLength(2);
-    // A server of the user's own: where it is reached, and a neutral plug.
+    // A server of the user's own: where it is reached, and the generic app mark.
     expect(files!.textContent).toContain("npx");
-    expect(files!.querySelector(".mono.md svg.i")).not.toBeNull();
+    expect(files!.querySelector(".mono.md svg.logo-generic")).not.toBeNull();
     expect(files!.querySelector(".logo-mono")).toBeNull();
-    expect(html).toContain(ico("plug"));
-    expect(files!.querySelector(".cs-tile")!.textContent).toBe(""); // a plug, never a letter
+    expect(html).toContain(genericGlyph());
+    expect(files!.querySelector(".cs-tile")!.textContent).toBe(""); // the generic mark, never a letter
     const remote = rows(connectedList({ groups: [{ ...custom, transport: "http", url: "https://example.com/mcp" }] }))[0]!;
     expect(remote.querySelector(".ds")!.textContent).toBe("https://example.com/mcp");
   });
@@ -1825,7 +1827,7 @@ describe("what the dialog does", () => {
     const c = createConnections(host);
     await c.load();
     const entry = ownGoogleEntry(null);
-    expect(entry).toMatchObject({ id: "google", name: "Google（私人連接）", icon: "gmail", server_id: null });
+    expect(entry).toMatchObject({ id: "google", name: "Google（私人連接）", icon: "google", server_id: null });
     expect(entry.about["zh-TW"]).toContain("不經過 Composio");
     expect(namesIn(connectionsHTML(c.view()))).toContain("Google（私人連接）");
     c.click(button("join", { id: "google" }));
@@ -2257,10 +2259,11 @@ describe("what the dialog does", () => {
   });
 });
 
-test("unknown connections use a plug at both sizes without exposing the name as markup or initials", () => {
+test("unknown connections use the generic app mark at both sizes without exposing the name as markup or initials", () => {
   for (const size of ["md", "xl"] as const) {
     for (const name of ["Files", "筆記", "<img src=x onerror=alert(1)>", ""]) {
-      expect(iconHTML(name, null, size)).toBe(`<span class="mono ${size}" aria-hidden="true">${ico("plug")}</span>`);
+      expect(iconHTML(name, null, size)).toBe(genericMark(size));
+      expect(iconHTML(name, null, size)).toBe(`<span class="mono ${size}" aria-hidden="true">${genericGlyph()}</span>`);
     }
   }
 });

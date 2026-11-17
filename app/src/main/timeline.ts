@@ -44,6 +44,7 @@ import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import { appLogo } from "./app-logos";
 import { pluginLogoURL } from "./plugins-data";
+import { genericGlyph } from "./service-mark";
 import type { AgentStep, AgentTask, AgentTurn, CliBrainId, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
 
@@ -385,7 +386,7 @@ function stepIcon(step: AgentStep): string {
   const picture = pluginLogoURL(step.server ? appLogo(step.server) : undefined);
   return picture
     ? `<span class="step-ic logo-art" ${named}><img class="logo" src="${esc(picture)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>`
-    : `<span class="step-ic" ${named}>${ico("plug")}</span>`;
+    : `<span class="step-ic" ${named}>${genericGlyph()}</span>`;
 }
 
 /** One step: what, where, how long, and whether it worked (a mark and a word, never the colour alone). */

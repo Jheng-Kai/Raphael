@@ -9,7 +9,7 @@ const open = [...settings("connections"), wait(".cs-card")];
 const linked = [...settings("connections"), click('[data-conn="connected"]'), wait(".cs-linked")];
 
 // Every one-colour and coloured mark of `service-icons.ts` (SERVICE_ICONS), as a row of the apps on its tile (R-APPS-01).
-const MARKS = ["notion", "github", "googledrive", "gmail", "googlecalendar", "linear", "figma", "spotify", "discord", "slack", "todoist", "obsidian", "atlassian", "cloudflare",
+const MARKS = ["notion", "github", "googledrive", "gmail", "googlecalendar", "google", "linear", "figma", "spotify", "discord", "slack", "todoist", "obsidian", "atlassian", "cloudflare",
   "sentry", "stripe", "n8n", "zapier", "paypal", "webflow", "wix", "netlify", "neon", "prisma", "airtable", "calendly", "posthog", "postman", "sanity", "bitly", "telegram",
   "openrouter", "brave", "searxng"];
 
@@ -122,11 +122,12 @@ export default [
   scene("connect-apps-more", "更多 opens a menu of the categories that are not in the row, on the floating surface", [...open, click('[data-k="conn-more"]'), wait("#app-popover"), check("connect-apps-more"), check("float-surface")]),
   scene("connect-apps-search", "A search over the whole catalog replaces the sections with its results", [...open, type("#conn-search", "git"), wait(".cs-card"), check("connect-apps-search")]),
   scene("connect-apps-connected", "The chip opens the list of the connected apps in the same dialog, behind a back chevron", [...linked, check("connect-apps-connected"), check("connect-back")]),
+  scene("connect-apps-connected-marks", "Every connected app wears its own mark at one size: Google its G, Outlook the catalogue's picture, a server nobody drew the generic app mark (R-UI-164)", [...linked, check("app-marks-connected")], { appMarks: true }),
   scene("connect-app-oauth", "An app that signs in with OAuth: its page has the mark on a tile, the name, a white 連結 and a card of information", [...open, click('[data-conn="open-store"][data-id="gmail"]'), wait(".cs-page"), check("connect-app-oauth"), check("connect-back")]),
   scene("connect-app-key", "An app that asks for an API key: its page says how it signs in, once, and 連結 opens the form for the key", [...open, click('[data-conn="open-store"][data-id="acme-ledger"]'), wait(".cs-page .cs-needs"), check("connect-app-key"), check("connect-back")]),
   scene("connect-app-connected", "A connected app's page shows its connected state, its switch and its ⋯ in the place of 連結, and its tools in a card", [...linked, click('[data-conn="open"][data-id="composio:notion"]'), wait(".cs-page .cs-tools"), check("connect-app-connected"), check("connect-back")]),
   scene("connect-icons", "Every mark of the set stands on its white tile in its owner's colour: Spotify green, Discord blue, Jira blue, the near-black ones near-black", [
-    ...open, type("#conn-search", "icon-mark"), wait(".cs-card"), scroll(".cs-card:last-child"), scroll(".cs-card:last-child"), check("icon-colours"),
+    ...open, type("#conn-search", "icon-mark"), wait(".cs-card"), scroll(".cs-card:last-child"), scroll(".cs-card:last-child"), check("icon-colours"), check("app-marks-apps"),
   ], { iconMarks: MARKS }),
   ...connectedRowScenes,
   ...ownerRowScenes,

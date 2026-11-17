@@ -7,7 +7,7 @@ property of their owners.
 
 monday.com, Jam, Fireflies, Close, Attio, Granola, Klaviyo, Apify, Jotform, Context7, DeepWiki, Mobbin,
 Microsoft Learn (Microsoft), Amazon Web Services, Hugging Face, Exa, Tavily, Jina and Firecrawl, and the marks drawn
-from Simple Icons (Notion, GitHub, Google Drive, Gmail, Google Calendar, Linear, Figma, Spotify, Discord, Slack, Todoist,
+from Simple Icons (Notion, GitHub, Google, Google Drive, Gmail, Google Calendar, Linear, Figma, Spotify, Discord, Slack, Todoist,
 Obsidian, Atlassian, Cloudflare, Sentry, Stripe, Zapier, PayPal, Webflow, Wix, Netlify, Neon, Prisma,
 Airtable, Calendly, PostHog, Postman, Sanity, Bitly, Telegram, OpenRouter, Brave and SearXNG) are
 trademarks or registered trademarks of their respective owners.
@@ -22,6 +22,9 @@ are Simple Icons artwork, checked identical to the upstream files (develop branc
 Upstream: https://github.com/simple-icons/simple-icons (icons/openrouter.svg,
 icons/brave.svg and icons/searxng.svg). The CC0-1.0 text is included separately.
 The Slack path is from Simple Icons 13.21.0 (CC0-1.0), supplied by the maintainer.
+The Google account's mark (added 2026-11-17) is drawn in the four parts and colours of Google's own
+sign-in G (https://developers.google.com/identity/branding-guidelines); the one-colour Google path of
+Simple Icons stands beside it in service-icons.ts.
 
 The model providers' marks (added 2026-10-23), each from its owner's site, GitHub organization or
 Simple Icons as recorded in app/src/main/service-logos/sources.json: OpenAI, Microsoft Azure,

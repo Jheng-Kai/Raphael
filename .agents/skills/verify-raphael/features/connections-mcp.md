@@ -73,6 +73,16 @@ Marks and inner cards:
 - Marks keep their owners' colours on the tile and in the chip (R-ICON-01): `connect-icons` shows a row for every mark of `SERVICE_ICONS` (fixture
   variant `iconMarks`) and `icon-colours` compares the computed colour of each with its brand hex (Simple Icons) in the real browser;
   `service-icons.test.ts` pins the table and the rule that wins on the tile.
+- Every app, tool server and service wears a mark of its own at one size wherever it is listed (R-UI-164): the 工具 tab of a member's
+  settings, the @ menu, 連結應用程式's list, connected list and app pages, the Connections pill and the cards all draw from
+  `service-mark.ts`. The owner's Google account wears Google's G; an app with no mark of ours wears the catalogue's picture; a server
+  nobody drew wears the one generic app mark (`genericMark`), never the plug. A mark is a square as tall as its `.mono` box, so the
+  catalogue's 128 px picture (Outlook's) is no larger than the marks beside it. The fixture variant `appMarks` adds Outlook with that
+  picture (`assets/catalog-square.svg`, synthetic) and lists the managed connections in the tools tab; the look checks
+  `app-marks-tools` (`member-settings-tools`), `app-marks-mentions` (`mention-menu-open`), `app-marks-apps` (`connect-icons`) and
+  `app-marks-connected` (`connect-apps-connected-marks`, its own scene) measure every row's mark (visible, one, square,
+  inside its box, one size for the list) and require Google's four colours and Outlook's picture. `app-marks.test.ts` fails when an
+  app the app knows has no mark, when the plug stands for one, or when a stylesheet draws a mark wider than it is tall.
 - Inside a floating surface a card is the surface with a hairline and a control the control fill (R-FLOAT-02): the check `float-cards` is
   appended to every tab of Settings and to the dialogs, menus and popovers that hold cards, fields or rows (`FLOAT_CARD_SCENES` in
   `scenes/index.mjs`); it fails on a near-identical grey without an edge or a darker hole. The model chooser is one tone with a hairline
@@ -92,6 +102,7 @@ Three layers in every dialog (R-FLOAT-03): the outermost, outside the dialog, is
 
 ```powershell
 npm run look -- connect-icons --theme both --width 1120,720,1920x1080
+npm run look -- member-settings-tools mention-menu-open connect-icons connect-apps-connected-marks connect-apps connect-app-oauth connector-slack connector-key connector-google-steps foot-apps-three foot-starter-apps --theme both --width 1120,720,1920x1080
 npm run look -- profile appearance models dictation tools safety about usage model-choices-answer model-choices-local quick-model-menu cli-account-menu member-maker slime-picker template-preview template-review-pages connections-command --theme both --width 1120,720,1920x1080
 ```
 

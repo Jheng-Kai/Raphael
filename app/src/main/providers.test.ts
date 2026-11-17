@@ -218,7 +218,9 @@ test.each(["zh-TW", "en", "ja"] as const)("%s renders every kind as a marked car
   expect(cards).toHaveLength(kinds.length);
   expect(cards.map((card) => card.querySelector<HTMLElement>('[data-pv="add"]')?.dataset.id).sort()).toEqual(kinds.map((kind) => kind.kind).sort());
   for (const card of cards) {
-    expect(card.querySelector('.ic .mono :is(img.logo, svg.i)')).not.toBeNull();
+    // its maker's picture, or the generic app mark (a `.logo` too), never the plug (R-UI-164)
+    expect(card.querySelector('.ic .mono :is(img.logo, svg.logo)')).not.toBeNull();
+    expect(card.querySelector('.ic .mono svg.i')).toBeNull();
     expect(card.querySelector(".ds")?.textContent?.length).toBeGreaterThan(8);
     expect(card.querySelector('button[type="button"][data-pv="add"]')).not.toBeNull();
   }

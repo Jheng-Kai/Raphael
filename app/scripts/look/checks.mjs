@@ -2037,7 +2037,7 @@ export function checkRendered(name, context = {}) {
       };
       for (const [place, mark] of Object.entries(marks)) {
         require(mark && visible(mark) && /logo-(art|mono)/.test(mark.className), `Codex has a maker's mark in ${place}`);
-        require(!mark.querySelector('svg.i'), `${place} draws no plug and no robot for Codex`);
+        require(!mark.querySelector('svg.i, .logo-generic'), `${place} draws no generic mark and no robot for Codex`);
         const box = mark.getBoundingClientRect();
         require(box.width >= 14 && box.height >= 14, `${place} draws the mark at a readable size`);
       }
@@ -7792,9 +7792,48 @@ export function checkRendered(name, context = {}) {
   // ---------- 連結應用程式 (R-APPS-01, R-APPS-02) and one colour for everything that floats (R-FLOAT-01) ----------
   const colourOf = (prop, tokenName) => { const probe = document.createElement('i'); probe.style[prop] = `var(${tokenName})`; document.body.append(probe); const out = getComputedStyle(probe)[prop]; probe.remove(); return out; };
   const connectModal = () => document.querySelector('.modal-scrim[data-standalone="connections"] .modal');
+  if (name.startsWith("app-marks-")) {
+    // Every app, tool server and service of a list wears a mark of its own in one square, the same for every row of the list
+    // (R-UI-164): a brand's mark, the catalogue's picture of it, or the one generic app mark for a server nobody drew; never
+    // the plug, a letter or a hole. The owner's Google account wears Google's G, and the catalogue's 128 px picture (Outlook's)
+    // is no larger than the marks beside it.
+    const lists = {
+      "app-marks-tools": () => [...document.querySelectorAll('.ms-pane .ms-row.ms-app')].map(row => ({ label: row.querySelector('.ms-label').textContent.trim(), mark: row.querySelector(':scope > .mono') })),
+      "app-marks-mentions": () => [...document.querySelectorAll('#app-popover[data-team-mentions] [data-value]')].filter(row => row.querySelector('.mtrail')?.textContent === '應用程式')
+        .map(row => ({ label: row.dataset.value, mark: row.querySelector('.mlead .mono') })),
+      "app-marks-apps": () => [...document.querySelectorAll('.cs-card')].map(card => ({ label: card.querySelector('.nm')?.textContent.trim(), mark: card.querySelector('.cs-tile .mono') })),
+      "app-marks-connected": () => [...document.querySelectorAll('.cs-linked')].map(row => ({ label: row.querySelector('.nm').textContent.trim(), mark: row.querySelector('.cs-tile .mono') })),
+    };
+    const rows = lists[name]?.() ?? [];
+    require(rows.length > 0, "the list has rows");
+    const sizes = [];
+    for (const { label, mark } of rows) {
+      require(mark && visible(mark), `${label} has a mark`);
+      const art = [...mark.querySelectorAll('.logo')].filter(visible);
+      require(art.length === 1, `${label} draws one mark (${art.length})`);
+      require(!mark.querySelector('svg.i') && !/^S$/.test(mark.textContent.trim()), `${label} wears no line icon (the plug) and no letter for its mark`);
+      if (art[0].tagName === 'IMG') require(art[0].complete && art[0].naturalWidth > 0, `${label}'s picture is loaded`);
+      const box = art[0].getBoundingClientRect(), frame = mark.getBoundingClientRect();
+      require(Math.abs(box.width - box.height) <= 0.5, `${label}'s mark is a square (${box.width} x ${box.height})`);
+      require(box.left >= frame.left - 0.5 && box.right <= frame.right + 0.5 && box.top >= frame.top - 0.5 && box.bottom <= frame.bottom + 0.5, `${label}'s mark stays inside its box`);
+      sizes.push(`${label} ${box.width}`);
+      if (/^(Notion|GitHub|Gmail|Google Drive|Google Calendar|Slack|Telegram|Discord|Hugging Face|Mobbin MCP|OpenRouter|Outlook|Linear)$/.test(label)) require(!mark.querySelector('.logo-generic'), `${label} wears its own mark, not the generic one`);
+    }
+    const widths = sizes.map(item => parseFloat(item.split(' ').pop()));
+    require(Math.max(...widths) - Math.min(...widths) <= 0.5, `every mark of the list is one size (${sizes.join(', ')})`);
+    if (name !== "app-marks-apps") {
+      // The owner's Google account wears Google's four-coloured G, never Gmail's mark or the generic one.
+      const google = rows.find(item => /^Google(?:s*[（(].*[)）])?$/.test(item.label))?.mark;
+      const fills = new Set([...(google?.querySelectorAll('path') ?? [])].map(path => getComputedStyle(path).fill));
+      require(google && google.matches('.logo-mono') && fills.size === 4, `Google is listed and wears Google's G (${[...fills]})`);
+      const outlook = rows.find(item => item.label === 'Outlook')?.mark;
+      require(outlook?.querySelector('img.logo')?.src === 'https://logos.composio.dev/api/outlook', "Outlook is listed and wears the catalogue's picture of it");
+    }
+    return { check: name, marks: sizes };
+  }
   if (name === "icon-colours") {
     // The owner's colours on the tile (Simple Icons' hex of each brand; "black" = black in its official form; "multi" = drawn in several colours).
-    const official = { notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", linear: "#5E6AD2", figma: "multi", spotify: "#1ED760", discord: "#5865F2", slack: "multi",
+    const official = { notion: "black", github: "black", googledrive: "multi", gmail: "multi", googlecalendar: "multi", google: "multi", linear: "#5E6AD2", figma: "multi", spotify: "#1ED760", discord: "#5865F2", slack: "multi",
       todoist: "#E44332", obsidian: "#7C3AED", atlassian: "#0052CC", cloudflare: "#F38020", sentry: "#362D59", stripe: "#635BFF", n8n: "#EA4B71", zapier: "#FF4F00", paypal: "#002991", webflow: "#146EF5",
       wix: "#0C6EFC", netlify: "#00C7B7", neon: "#00E599", prisma: "#2D3748", airtable: "multi", calendly: "#006BFF", posthog: "black", postman: "#FF6C37", sanity: "#F03E2F", bitly: "#EE6123",
       telegram: "#26A5E4", openrouter: "black", brave: "#FB542B", searxng: "#3050FF" };
@@ -9013,7 +9052,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "store-n8n") {
     const card = document.querySelector('[data-conn="open-store"][data-id="n8n"]')?.closest('.cs-card');
-    require(card?.querySelector('.logo-mono svg path'), "n8n carries its own mark, not the generic plug");
+    require(card?.querySelector('.logo-mono svg path'), "n8n carries its own mark, not the generic one");
     // What it needs is said in the conversation it is set up in, not on its row.
     require(card && !card.querySelector('.need'), "its row asks nothing it would have to explain");
     require(card?.querySelector('[data-conn="join"]'), "it is connected from its row like any app");
@@ -10034,9 +10073,9 @@ export function checkRendered(name, context = {}) {
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(300, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
     const mark = card.querySelector('.mono'), markStyle = mark && getComputedStyle(mark);
-    // An app the catalog has no logo for draws the generic plug, never another brand's mark (R-UI-28).
-    require(visible(mark) && mark.querySelector('svg.logo path, img.logo, svg.i'), "R-UI-34: the app's own catalog or bundled mark, or the generic plug");
-    if (name === 'connector-key' || name === 'connector-app') require(!mark.querySelector('img.logo'), "an app without a catalog logo draws the generic plug");
+    // An app the catalog has no logo for draws the one generic app mark, never another brand's mark and never the plug (R-UI-28, R-UI-164).
+    require(visible(mark) && mark.querySelector('svg.logo path, img.logo') && !mark.querySelector('svg.i'), "R-UI-34: the app's own catalog or bundled mark, or the generic app mark");
+    if (name === 'connector-key' || name === 'connector-app') require(mark.querySelector('.logo-generic') && !mark.querySelector('img.logo'), "an app without a catalog logo draws the generic app mark");
     // A known app draws its bundled mark first (service-mark.ts entryIcon); either is Slack's own.
     if (name.startsWith('connector-slack')) require(mark.querySelector('svg.logo path') || mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card shows Slack's own mark: the bundled drawing or exactly the store's catalog logo");
     if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
