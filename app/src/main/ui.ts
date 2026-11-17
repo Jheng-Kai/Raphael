@@ -672,7 +672,8 @@ function listenForSubmenus(state: MenuState): void {
       origin = point; pending = row;
       const open = (): void => {
         pending = null; timer = undefined;
-        if (!row.isConnected || !state.el.isConnected) return;
+        // A press that opened the submenu before the pointer's delay ran out has done it: opening it again would be a second press on its opener, which folds it away (R-UI-124).
+        if (!row.isConnected || !state.el.isConnected || childOf()?.anchor === row) return;
         const focus = document.activeElement as HTMLElement | null;
         row.click();
         focus?.focus({ preventScroll: true });

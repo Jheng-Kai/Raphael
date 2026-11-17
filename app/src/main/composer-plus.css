@@ -1,0 +1,19 @@
+/* The composer's + menu (R-UI-166): rows of an icon and words (the shortcut quiet at the right of the first, a chevron on the two that
+   open a submenu), a hairline between what is added and what the member may use. The submenus draw each app and skill as one row, its
+   switch at the right on the row's own fill (R-UI-157), in the member's colour when on (R-UI-147: the menu is on the body, so it carries
+   the colour itself, composer-plus.ts `wear`). */
+.menu.composer-plus { min-width: 232px; }
+.menu.composer-plus button > svg.i { flex: none; margin-left: auto; color: var(--text-3); }
+.menu.composer-plus .ck { color: var(--text-2); }
+.menu.composer-plus-sub { min-width: 248px; max-width: min(320px, calc(100vw - 16px)); }
+.menu.composer-plus-sub .ck { color: var(--text-2); }
+/* A long list scrolls by itself under its two fixed rows, and the arrow keys bring the row they reach into view. */
+.menu.composer-plus-sub .pm-list { max-height: calc(var(--h-menu) * 7.5); overflow-y: auto; overscroll-behavior: contain; }
+.menu.composer-plus-sub .pm-switch { min-height: var(--h-menu); padding-top: 0; padding-bottom: 0; }
+.menu.composer-plus-sub .pm-switch .tg { margin-left: auto; }
+/* The switch is drawn on the row (the row is the button), so the state it shows is the row's `aria-checked`. */
+.menu.composer-plus-sub .pm-switch[aria-checked="true"] .tg { background: var(--accent); border-color: var(--accent); }
+.menu.composer-plus-sub .pm-switch[aria-checked="true"] .tg::after { transform: translateX(16px); background: var(--on-accent); }
+.menu.composer-plus-sub[data-member-switch] .pm-switch[aria-checked="true"] .tg { background: var(--member-switch); border-color: var(--member-accent); }
+.menu.composer-plus-sub[data-member-switch] .pm-switch[aria-checked="true"] .tg::after { background: var(--member-knob); }
+.menu.composer-plus-sub .pm-switch:hover:not([aria-checked="true"]) .tg { border-color: var(--text-2); }

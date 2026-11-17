@@ -28,7 +28,7 @@ export const addFolder = (own: readonly string[], output: string, folder: string
 export const removeFolder = (own: readonly string[], output: string, folder: string): string[] =>
   normal(own.filter(item => item !== folder), output);
 
-export function mountComposerFolder(button: HTMLElement, member: () => number, host: { onEvent?(handler: (event: MainEvent) => void): void } = {}): { draw(): void } {
+export function mountComposerFolder(button: HTMLElement, member: () => number, host: { onEvent?(handler: (event: MainEvent) => void): void } = {}): { draw(): void; add(): void; shown(): boolean } {
   let own: Record<string, string[]> = {}, output = "", known = false, generation = 0;
   let menu: HTMLElement | null = null;
   const mine = (): string[] => own[String(member())] ?? [];
@@ -75,6 +75,14 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
     return `<div class="cb-card cb-folders"><header class="cb-head"><h3><span>${title}</span></h3></header><div class="cb-list" role="radiogroup" aria-label="${title}">${rows}</div><div class="cb-list cb-actions">${add}</div></div>`;
   }
 
+  /** Adds a folder with the native picker: it goes at the end of the member's list and is not chosen. The + menu's 加入資料夾 is this too. */
+  function add(): void {
+    const list = mine(), folders = listedFolders(list, output);
+    void api.pickOutputFolder().then(path => {
+      if (path !== null && !folders.includes(path)) return save(addFolder(list, output, path));
+    }).catch(error => toaster.info(describeError(error)));
+  }
+
   button.addEventListener("click", event => {
     event.stopPropagation();
     if (menu?.isConnected) { closeMenu(); return; }
@@ -87,10 +95,7 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
         closeMenu(); button.focus({ preventScroll: true });
         if (folder !== undefined && folder !== chosenFolder(list, output)) void save(chooseFolder(list, output, folder));
       } else if (act === "add") {
-        closeMenu();
-        void api.pickOutputFolder().then(path => {
-          if (path !== null && !folders.includes(path)) return save(addFolder(list, output, path));
-        }).catch(error => toaster.info(describeError(error)));
+        closeMenu(); add();
       }
     });
     menu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus({ preventScroll: true });
@@ -98,5 +103,5 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
   host.onEvent?.(event => { if (event.type === "SettingsChanged") void read(); });
   onLocaleChange(draw);
   draw(); void read();
-  return { draw };
+  return { draw, add, shown: () => !button.hidden };
 }
