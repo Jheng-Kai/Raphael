@@ -703,9 +703,9 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  * decided when the menu opens (`ownerEditOf`, message-edit.ts), so a message that stops being the owner's last is not drawn again.
  */
 export function messageActionsHTML(_time: number, regenerate = false, owner?: "own" | "cancel", actionable = true, extra = "", queued = false): string {
-  // A message that waits its turn says so and offers 立即送出 in sight: it is the exception, not a menu item
-  //.
-  const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
+  // A message that waits its turn offers 立即送出 in sight: it is the exception, not a menu item. The button alone says the
+  // message waits, with no words beside it (R-QUEUE-05).
+  const waiting = queued ? btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"') : "";
   return `<div class="message-actions">${waiting}` + extra +
     (actionable ? reactionControlHTML() : "") +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +

@@ -252,7 +252,7 @@ test("Stop targets the running turn and appends every queued draft after current
  expect(api.core).toHaveBeenCalledWith("attachments.get", {id:"stored-example"});
 });
 
-test("a queued message shows 立即送出 in sight beside 排隊中, not in its menu, and sends it by turn, while a running one has none", async () => {
+test("a queued message shows 立即送出 in sight with no 排隊中 words, not in its menu, and sends it by turn, while a running one has none", async () => {
  turns=[live({question:"Original request"}),live({id:12,session_id:"queued-b",status:"queued",question:"Second",text:"",messages:[]})];
  api.agentSendNow.mockImplementation(async (session: string) => {
    turns = turns.map(turn => turn.session_id === "reply-11" ? { ...turn, status: "denied" } : turn.session_id === session ? { ...turn, status: "running" } : turn);
@@ -262,7 +262,8 @@ test("a queued message shows 立即送出 in sight beside 排隊中, not in its 
  const menu=async (id:number)=>{ $(`.tn[data-id="${id}"] [data-act="more-message"]`).click(); await flush(); return [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item=>item.dataset.pick); };
  const button=$('.tn[data-id="12"] .message-actions [data-act="send-now"]');
  expect(button.textContent).toContain("立即送出");
- expect(button.previousElementSibling?.classList.contains("queued-mark")).toBe(true);
+ expect(button.previousElementSibling).toBeNull();
+ expect($('.tn[data-id="12"]').textContent).not.toContain("排隊中");
  const queued=await menu(12);
  expect(queued).toEqual(expect.arrayContaining(["copy","cancel"]));
  expect(queued).not.toContain("send-now");

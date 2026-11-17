@@ -3534,11 +3534,12 @@ export function checkRendered(name, context = {}) {
     return {check:name,place};
   }
   if (name === "composer-queued-sendnow-menu") {
-    // 立即送出 is the exception and stands in sight beside 「排隊中」; the menu does not repeat it.
+    // 立即送出 is the exception and stands in sight, first in the row, with no 「排隊中」 words; the menu does not repeat it.
     const labels = [...document.querySelectorAll('#app-popover [data-pick]')].map(node => `${node.dataset.pick}:${node.textContent.trim()}`);
     require(!labels.some(item => item.startsWith("send-now:")) && labels.some(item => item.startsWith("cancel:")), `the menu keeps Cancel and has no 立即送出: ${labels}`);
-    const mark = document.querySelector('.tn[data-id="901"] .queued-mark'), button = document.querySelector('.tn[data-id="901"] .message-actions [data-act="send-now"]');
-    require(visible(mark) && visible(button) && button.textContent.trim() === "立即送出" && mark.nextElementSibling === button, "立即送出 stands in sight right after 排隊中");
+    const button = document.querySelector('.tn[data-id="901"] .message-actions [data-act="send-now"]');
+    require(visible(button) && button.textContent.trim() === "立即送出" && !button.previousElementSibling, "立即送出 stands in sight, first in the row");
+    require(!document.querySelector('.tn[data-id="901"]').textContent.includes("排隊中"), "no 排隊中 words beside the message");
     const box = button.getBoundingClientRect(), bubble = document.querySelector('.tn[data-id="901"] .bubble').getBoundingClientRect();
     require(box.right <= bubble.left + 1 && Math.abs((box.top + box.bottom) / 2 - (bubble.top + bubble.bottom) / 2) <= bubble.height / 2, "beside the bubble, on its line");
     const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
@@ -3551,7 +3552,7 @@ export function checkRendered(name, context = {}) {
     require(sent.length === 1 && sent[0].params.turn_id === 901 && sent[0].params.member_id === 1 && sent[0].params.session_id, "send now names the queued message once");
     require(!calls.some(call => call.command === "agent_retract" || call.method === "agent.history.stop" || call.method === "worker.cancel"), "send now withdraws nothing and is not a Stop");
     const bubble = document.querySelector('.tn[data-id="901"]');
-    require(bubble && !bubble.querySelector('.queued-mark') && bubble.dataset.status !== "queued", "the message is no longer queued");
+    require(bubble && !bubble.querySelector('.queued-send-now') && bubble.dataset.status !== "queued", "the message is no longer queued");
     require(bubble.querySelector('.message-text').textContent.trim() === "第二個範例請求", "the message keeps its words");
     require(!document.querySelector('.tn[data-status="queued"]'), "nothing is left queued");
     require(document.querySelector('.cmp-input').value === "", "the field was not given words back");
@@ -3564,7 +3565,7 @@ export function checkRendered(name, context = {}) {
       require(queued.length === 2, "both queued messages are visible");
       require(queued.map(node => node.querySelector('.message-text').textContent).join('|') === "第二個範例請求|第三個範例請求", "the bubbles retain send order");
       require(queued.every(node => node.querySelector('button[data-act="more-message"][data-owner-act="cancel"]') && !node.querySelector('[data-owner-act="edit"]')), "queued bubbles offer withdraw instead of edit in their menu");
-      require(queued.every(node => visible(node.querySelector('.queued-mark'))), "each queued mark is visible");
+      require(queued.every(node => visible(node.querySelector('.queued-send-now')) && !node.textContent.includes("排隊中")), "each queued message shows 立即送出 and no 排隊中 words");
       const presence = [...document.querySelectorAll('.thread .live-presence')];
       require(presence.length === 1 && presence[0].getBoundingClientRect().top >= queued[1].getBoundingClientRect().bottom, "one live presence follows the newest message");
       const bubbles = queued.map(node => node.querySelector('.bubble').getBoundingClientRect());
