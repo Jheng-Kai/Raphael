@@ -351,6 +351,30 @@ test("a control beside a popover that opened it, and is not its anchor, toggles 
   expect(act).toHaveBeenCalledTimes(1);
 });
 
+test("a press on the control that opened a submenu closes the submenu alone, and a press outside closes both", () => {
+  // The written forms of a language open beside the picker from a chip in it: pressing the chip again only folds them away.
+  const anchor = document.createElement("button"), outside = document.createElement("button");
+  document.body.append(anchor, outside);
+  const outsidePressed = vi.fn();
+  outside.addEventListener("click", outsidePressed);
+  openMenu(anchor, [], "", () => {}, undefined, [{ label: "Written forms", submenu: true, run(row) {
+    openMenu(row, [{ value: "a", label: "Sample A" }, { value: "b", label: "Sample B" }], "a", () => {}, undefined, [], { placement: "beside" });
+  } }]);
+  const panel = document.getElementById("app-popover")!, chip = panel.querySelector<HTMLButtonElement>("button")!;
+  press(chip);
+  expect(document.getElementById("app-submenu")).not.toBeNull();
+  press(chip);
+  expect(document.getElementById("app-submenu")).toBeNull();
+  expect(document.getElementById("app-popover")).toBe(panel);
+  expect(chip.getAttribute("aria-expanded")).toBe("false");
+  // Open again, then a press outside closes the submenu and the menu under it, and reaches what it pressed.
+  press(chip);
+  expect(document.getElementById("app-submenu")).not.toBeNull();
+  press(outside);
+  expect(document.querySelector("#app-popover, #app-submenu")).toBeNull();
+  expect(outsidePressed).toHaveBeenCalledOnce();
+});
+
 test("a press in a field the menu is anchored to leaves the menu open: a caret is not an opener", () => {
   const field = document.createElement("textarea");
   document.body.append(field);

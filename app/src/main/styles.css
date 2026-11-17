@@ -694,9 +694,12 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .lang-list { overflow-x: hidden; overflow-y: auto; max-height: min(340px, calc(100vh - 140px)); }
 .menu .lang-item .md { margin-left: var(--sp-3); }
 .menu .lang-item[aria-disabled="true"] { color: var(--text-3); cursor: not-allowed; }
-/* One row per language; a chosen language with several written forms ends its row with a chip naming the one in use. */
-.lang-row { display: flex; align-items: center; gap: var(--sp-1); }
+/* One row per language, one button: its whole width lights under the pointer, the chip of a language with several written
+   forms included, which stands on the row naming the one in use (R-UI-165). */
+.lang-row { display: flex; align-items: center; border-radius: var(--r-sm); }
 .lang-row > .lang-item { flex: 1; min-width: 0; }
+.menu .lang-row > .lang-item:hover, .menu .lang-row > .lang-item:focus-visible { background: transparent; }
+.menu .lang-row:hover:not(:has(> .lang-item[aria-disabled="true"])), .menu .lang-row:has(> .lang-item:focus-visible) { background: var(--hover); }
 .lang-variant-chip.btn { display: inline-flex; align-items: center; gap: 2px; flex: none; max-width: 52%; min-height: 0; height: var(--h-ctl-sm); margin-right: var(--sp-1); padding: 0 var(--sp-1) 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
 .lang-variant-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lang-variant-chip .i { width: 16px; height: 16px; flex: none; }

@@ -1,7 +1,8 @@
 // The languages a person speaks, and how each is written. One dropdown in the settings opens one
-// picker for both: each language is one row, checked on or off, and a chosen language with several
-// written variants (中文: 台灣、香港、簡體…) carries a small chip at the end of its row naming the one in
-// use; the chip opens the variants in a submenu beside the picker, so the list never grows or jumps.
+// picker for both: each language is one row, one button, checked on or off, and a language with several
+// written variants (中文: 台灣、香港、簡體…) always carries a small chip on its row naming the one in use, or
+// the one it would start with; the chip opens the variants in a submenu beside the picker, so the list never
+// grows or jumps.
 // The persisted core setting remains an ordered list of variant ids, one variant per selected language
 // (one to five).
 import { t } from "./i18n";
@@ -87,12 +88,15 @@ export function toggleTranscriptionLanguage(groups: LanguageGroup[], selected: s
   return { ok: true, languages: [...selected, group.variants[0].id] };
 }
 
-/** A variant can only replace the variant of an already selected transcription language. */
+/** A variant replaces the variant of its selected language, or chooses its language with that variant (up to five). */
 export function chooseLanguageVariant(groups: LanguageGroup[], selected: string[], id: string): LanguageChange {
   const group = groupOf(groups, id);
   if (!group) return { ok: false, reason: t("languages.unavailable") };
   const current = selected.find((value) => group.variants.some((v) => v.id === value));
-  if (!current) return { ok: false, reason: t("variants.chooseLanguageFirst") };
+  if (!current) {
+    if (selected.length >= MAX_LANGUAGES) return { ok: false, reason: t("languages.003", { p0: MAX_LANGUAGES }) };
+    return { ok: true, languages: [...selected, id] };
+  }
   return { ok: true, languages: selected.map((value) => value === current ? id : value) };
 }
 
@@ -135,9 +139,9 @@ function chosenVariant(group: LanguageGroup, selected: string[]): LanguageVarian
 }
 
 /**
- * The chip at the end of a chosen language's row: the variant in use, opening the others beside the picker. Its
- * accessible name says whose form it is in one translated string; it has no tooltip, which would only repeat the
- * form the chip shows.
+ * The chip on a row of a language with several variants, always shown: the variant in use, or the one choosing the language
+ * starts with, opening the others beside the picker. Its accessible name says whose form it is in one translated string; it
+ * has no tooltip, which would only repeat the form the chip shows.
  */
 function variantChipHTML(group: LanguageGroup, selected: string[]): string {
   const current = chosenVariant(group, selected) ?? group.variants[0];
@@ -164,9 +168,9 @@ export function variantMenuHTML(groups: LanguageGroup[], selected: string[], gro
 }
 
 /**
- * The picker: every language on one row, checked when it is chosen (up to five, at least one). A chosen
- * language with several variants shows the one in use on a chip at the end of its row; one that is not
- * chosen says how many it has.
+ * The picker: every language on one row, checked when it is chosen (up to five, at least one). The row is one button; a
+ * language with several variants carries a chip on it, chosen or not, naming the variant in use or the one it would start
+ * with (R-UI-165).
  */
 export function languagePanelHTML(groups: LanguageGroup[] | null, selected: string[]): string {
   const head = `<div class="lang-head"><span class="lang-title">${esc(t("transcription.title"))}</span>` +
@@ -177,11 +181,10 @@ export function languagePanelHTML(groups: LanguageGroup[] | null, selected: stri
     const on = chosen.some((g) => g.id === group.id);
     const blocked = !on && selected.length >= MAX_LANGUAGES;
     const several = group.variants.length > 1;
-    return `<div class="lang-row"><button type="button" class="lang-item lang-language" data-language="${esc(group.id)}" aria-pressed="${on}"${blocked ? ' aria-disabled="true"' : ""}>` +
+    return `<div class="lang-row${several ? " has-variants" : ""}"><button type="button" class="lang-item lang-language" data-language="${esc(group.id)}" aria-pressed="${on}"${blocked ? ' aria-disabled="true"' : ""}>` +
       `<span class="ck">${on ? CHECK : ""}</span><span class="mt"${groupLang(group)}>${esc(groupName(group))}</span>` +
-      (several && !on ? `<span class="md">${esc(t("languages.009", { p0: group.variants.length }))}</span>` : "") +
       `</button>` +
-      (several && on ? variantChipHTML(group, selected) : "") + `</div>`;
+      (several ? variantChipHTML(group, selected) : "") + `</div>`;
   }).join("");
   return head + `<div class="lang-list">${items}</div><p class="lang-foot">${esc(AUTO_DETECT_HINT())}</p>`;
 }

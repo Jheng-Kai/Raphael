@@ -74,8 +74,10 @@ describe("language variants", () => {
     expect(chooseLanguageVariant(GROUPS, ["zh-TW", "en-US", "ja-JP", "ko-KR", "fr-FR"], "en-GB")).toEqual({ ok: true, languages: ["zh-TW", "en-GB", "ja-JP", "ko-KR", "fr-FR"] });
   });
 
-  test("does not add languages from the variant picker", () => {
-    expect(chooseLanguageVariant(GROUPS, ["zh-TW"], "en-GB")).toMatchObject({ ok: false });
+  test("a written form of a language not chosen chooses the language with that form, up to five", () => {
+    // The chip stands on every row with several forms (R-UI-165), so its forms can be picked before the language is.
+    expect(chooseLanguageVariant(GROUPS, ["zh-TW"], "en-GB")).toEqual({ ok: true, languages: ["zh-TW", "en-GB"] });
+    expect(chooseLanguageVariant(GROUPS, ["zh-TW", "ja-JP", "ko-KR", "fr-FR", "de-DE"], "en-GB")).toMatchObject({ ok: false });
     expect(chooseLanguageVariant(GROUPS, ["zh-TW"], "unknown")).toMatchObject({ ok: false });
   });
 });
@@ -156,11 +158,14 @@ describe("the language picker", () => {
     expect(variantMenuHTML(GROUPS, ["zh-HK"], "zh")).not.toContain("lang=");
   });
 
-  test("shows no variants for a language that is not chosen, only how many it has, and none for a language with one", () => {
+  test("a language with several written forms always carries its chip, chosen or not, and one with a single form none", () => {
+    // R-UI-165: the row is one button; the chip on it names the form in use, or the one choosing the language starts with.
     const html = languagePanelHTML(GROUPS, ["ja-JP"]);
-    expect(html).not.toContain("data-variant-menu=");
-    expect(html).toContain('data-language="zh" aria-pressed="false"><span class="ck"></span><span class="mt">中文</span><span class="md">4 種寫法</span>');
+    expect(html).toContain('<div class="lang-row has-variants"><button type="button" class="lang-item lang-language" data-language="zh" aria-pressed="false"><span class="ck"></span><span class="mt">中文</span></button><button type="button" class="btn lang-variant-chip" data-variant-menu="zh"');
+    expect(html).toContain('data-variant-menu="zh" aria-haspopup="menu" aria-expanded="false" aria-label="中文的寫法：繁體中文（台灣）"><span>繁體中文（台灣）</span>');
     expect(html).not.toContain('data-variant-menu="ja"');
+    expect(html).not.toContain("種寫法");
+    expect(html).toContain('<div class="lang-row"><button type="button" class="lang-item lang-language" data-language="ja" aria-pressed="true">');
   });
 
   test("marks the languages that cannot be added at five, while the chosen ones can still be dropped", () => {
