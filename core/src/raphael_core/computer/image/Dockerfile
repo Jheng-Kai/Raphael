@@ -139,7 +139,7 @@ RUN set -eux; \
     git --version; npm --version; rg --version | head -n 1
 # Google's own Chrome is the members' browser where Google builds one (amd64): it is what an owner signs in to
 # Google with, and it is taken from Google's own repository, signed with Google's key, at the version that is
-# current when the image is built. There is no Chrome for arm64 Linux: there the browser stays Chromium.
+# current when the image is built. Google built none for arm64 Linux then: layer 14, the last step, takes it there.
 RUN set -eux; \
     if [ "$(dpkg --print-architecture)" = amd64 ]; then \
       curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o /usr/share/keyrings/google-linux.asc; \
@@ -161,8 +161,9 @@ RUN set -eux; \
       chmod 0644 "$folder/raphael.json"; \
       /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$folder/raphael.json"; \
     done
-# Firefox ESR came with the base image and is no one's browser here: the members' is Google's Chrome (Chromium on
-# arm64) and the driver's is Chromium, so a second browser was only a place an owner would sign in for nobody. Purging it also takes its
+# Firefox ESR came with the base image and is no one's browser here: the members' is Google's Chrome (on arm64 from
+# layer 14) and the driver's is Chromium where there is no Chrome, so a second browser was only a place an owner
+# would sign in for nobody. Purging it also takes its
 # alternatives, its menu entry and its mime registrations; what the base put beside it that no package owns (and
 # XFCE's own helper entry for it, which only lists it among the applications to prefer) is removed by name.
 # The base's own layer still holds the files, so this makes the image no smaller: it removes the browser, not the
@@ -279,7 +280,68 @@ RUN set -eux; \
     /usr/bin/python3 -c 'import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])' /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml; \
     test -z "$(grep -il firefox /usr/local/bin/raphael-browser || true)"; \
     rm -rf /opt/raphael-layer12
+# Layer 14. Google now builds its Chrome for arm64 Linux as well (its repository lists amd64 and arm64), so the members'
+# browser is Google's own Chrome on every computer, as it has been on amd64: the browser an owner signs in to Google
+# with, under Google's own name, mark and defaults. The Chrome step above takes it only on amd64; it and every other
+# step above stay as they were (a comment is no part of a step), so a PC that built layer 13 runs only this one, and on
+# amd64, where Chrome is already there, it does nothing but its checks. Where Chrome is missing it is taken as the amd64
+# step takes it (Google's repository, Google's key, the version current at the build) and the desktop is named for it
+# again as the layer 9 step names it: the launchers, the menu's one browser, XFCE's Web Browser and the menu's other
+# browser entries. raphael-browser, raphael-seat-browser and raphael-browser-tabs (layer 12) take Chrome wherever it is
+# installed, and the managed policy above is written for Chrome on every architecture. Debian's Chromium stays: the
+# driver takes Google's Chrome first for a browser of its own, as on amd64, and Chromium only where there is none.
+# Chromium's profiles are not carried into Chrome: the workspace's preparation (layer14/prepare-raphael-workspace.sh,
+# installed only here) removes them once from each workspace, the members' sign-ins with them, and keeps the rest.
+COPY layer14/ /opt/raphael-layer14/
+RUN set -eux; \
+    if [ ! -x /opt/google/chrome/chrome ]; then \
+      curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o /usr/share/keyrings/google-linux.asc; \
+      printf 'deb [arch=%s signed-by=/usr/share/keyrings/google-linux.asc] https://dl.google.com/linux/chrome/deb/ stable main\n' "$(dpkg --print-architecture)" > /etc/apt/sources.list.d/raphael-google-chrome.list; \
+      apt-get update; \
+      apt-get install -y --no-install-recommends google-chrome-stable; \
+      rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raphael-google-chrome.list; \
+      install -m 0755 /opt/raphael-layer14/prepare-raphael-workspace.sh /usr/local/bin/prepare-raphael-workspace.sh; \
+      name='Google Chrome' icon=google-chrome; \
+      for file in /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/raphael-browser.desktop; do \
+        sed -i -e "s/^Name=.*/Name=$name/" -e "s/^Icon=.*/Icon=$icon/" "$file"; \
+      done; \
+      printf '%s\n' '[Desktop Entry]' 'Version=1.0' 'Type=X-XFCE-Helper' "Name=$name" "Icon=$icon" 'StartupNotify=true' \
+        'X-XFCE-Binaries=raphael-browser;' 'X-XFCE-Category=WebBrowser' 'X-XFCE-Commands=%B;' 'X-XFCE-CommandsWithParameter=%B "%s";' \
+        > /usr/share/xfce4/helpers/raphael-browser.desktop; \
+      for entry in google-chrome com.google.Chrome chromium; do \
+        if [ -e "/usr/share/applications/$entry.desktop" ]; then \
+          printf '%s\n' '[Desktop Entry]' 'Type=Application' "Name=$name" 'Exec=raphael-browser %U' "Icon=$icon" 'Terminal=false' 'NoDisplay=true' \
+            > "/home/cua/.local/share/applications/$entry.desktop"; \
+        fi; \
+      done; \
+      chown cua:cua /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/*.desktop; \
+      for link in x-www-browser gnome-www-browser; do \
+        update-alternatives --install "/usr/bin/$link" "$link" /usr/local/bin/raphael-browser 500; \
+      done; \
+    fi; \
+    /opt/google/chrome/chrome --version; \
+    test -x /usr/bin/google-chrome-stable; \
+    test -x /opt/google/chrome/google-chrome; \
+    test -e /usr/share/icons/hicolor/48x48/apps/google-chrome.png; \
+    for file in /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/raphael-browser.desktop; do \
+      grep -qx 'Name=Google Chrome' "$file"; \
+      grep -qx 'Icon=google-chrome' "$file"; \
+    done; \
+    grep -qx 'Name=Google Chrome' /usr/share/xfce4/helpers/raphael-browser.desktop; \
+    grep -qx 'WebBrowser=raphael-browser' /home/cua/.config/xfce4/helpers.rc; \
+    for entry in google-chrome com.google.Chrome chromium; do \
+      if [ -e "/usr/share/applications/$entry.desktop" ]; then \
+        grep -qx 'Exec=raphael-browser %U' "/home/cua/.local/share/applications/$entry.desktop"; \
+        grep -qx 'NoDisplay=true' "/home/cua/.local/share/applications/$entry.desktop"; \
+      fi; \
+    done; \
+    test "$(readlink -f /usr/bin/x-www-browser)" = /usr/local/bin/raphael-browser; \
+    cmp /etc/opt/chrome/policies/managed/raphael.json /etc/chromium/policies/managed/raphael.json; \
+    /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' /etc/opt/chrome/policies/managed/raphael.json; \
+    sh -n /usr/local/bin/prepare-raphael-workspace.sh; \
+    /usr/lib/chromium/chromium --version; \
+    rm -rf /opt/raphael-layer14
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="13"
+      org.raphael.computer.layer="14"

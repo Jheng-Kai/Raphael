@@ -17,8 +17,10 @@ from .test_vm import Runtime, container
 CONTEXT = Path(vm_module.__file__).parent / "image"
 CURRENT = "sha256:" + "c" * 64
 COMPUTER = "e" * 64  # the container id of the test's own computer
-V9, V11, V12, V14 = (f"raphael/cua-local-vm:driver-0.37.0-v{layer}" for layer in (9, 11, 12, 14))
-ID9, ID11, ID12, ID14 = ("sha256:" + digit * 64 for digit in "9ab4")
+# The current layer is the core's; NEWER is a layer after it (a build the owner may go back to).
+LAYER = int(IMAGE_LABELS[f"{LABEL}.layer"])
+V9, V11, V12, NEWER = (f"raphael/cua-local-vm:driver-0.37.0-v{layer}" for layer in (9, 11, 12, LAYER + 1))
+ID9, ID11, ID12, ID_NEWER = ("sha256:" + digit * 64 for digit in "9ab4")
 
 
 def labels(layer, **extra):
@@ -32,7 +34,7 @@ class Engine(Runtime):
     def __init__(self):
         super().__init__()
         self.image_id = CURRENT
-        self.images = {IMAGE: (CURRENT, labels(13))}
+        self.images = {IMAGE: (CURRENT, labels(LAYER))}
         self.others = {}
         self.list_fails = self.ps_fails = self.rm_fails = self.ignore_filters = False
 
@@ -82,7 +84,7 @@ class Engine(Runtime):
             return Result(0, "\n".join(known[ident] for ident in command[4:]) + "\n")
         if command[:1] == ["build"]:
             self.calls.append((command, kwargs))
-            self.images[IMAGE] = (CURRENT, labels(13))
+            self.images[IMAGE] = (CURRENT, labels(LAYER))
             return Result(0)
         return await super().__call__(args, **kwargs)
 
@@ -178,12 +180,12 @@ async def test_the_old_computer_made_again_on_the_new_layer_is_part_of_the_updat
 async def test_once_the_current_layer_runs_only_the_older_images_of_ours_are_removed(engine_vm):
     vm, target, engine = engine_vm
     vm.clean_images = True
-    engine.images.update({V9: (ID9, labels(9)), V12: (ID12, labels(12)), V14: (ID14, labels(14))})
+    engine.images.update({V9: (ID9, labels(9)), V12: (ID12, labels(12)), NEWER: (ID_NEWER, labels(LAYER + 1))})
     assert (await vm.start(target))["ready"]
     assert await vm.image_tasks[""] == [V12, V9]
     assert engine.commands("image", "rm") == [["image", "rm", V12], ["image", "rm", V9]]
     # The current image and a newer layer (a build the owner may go back to) stay.
-    assert set(engine.images) == {IMAGE, V14}
+    assert set(engine.images) == {IMAGE, NEWER}
 
 
 async def test_an_older_image_a_stopped_container_still_uses_is_kept(engine_vm):

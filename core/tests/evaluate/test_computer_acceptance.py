@@ -597,7 +597,72 @@ def test_previous_fixture_matches_release_shape_without_changing_vm(tmp_path, mo
     assert [a for a, b in zip(eleventh, current) if a != b] == [f"{vm.LABEL}.layer=11", acceptance.OLD_IMAGES["11"]]
     twelfth = acceptance.previous_args(target, machine.owner, "private", "12")
     assert [a for a, b in zip(twelfth, current) if a != b] == [f"{vm.LABEL}.layer=12", acceptance.OLD_IMAGES["12"]]
-    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11", "12"]
+    # Layer 13 is the shape of today's, locale and all: only its label and image differ.
+    with_locale = vm.run_args(target, machine.owner, "private")
+    thirteenth = acceptance.previous_args(target, machine.owner, "private", "13")
+    assert len(thirteenth) == len(with_locale) and "LANG=C.UTF-8" in thirteenth and "LC_ALL=C.UTF-8" in thirteenth
+    assert [a for a, b in zip(thirteenth, with_locale) if a != b] == [f"{vm.LABEL}.layer=13", acceptance.OLD_IMAGES["13"]]
+    assert acceptance.OLD_IMAGES["13"] == "raphael/cua-local-vm:driver-0.37.0-v13"
+    assert vm.IMAGE not in acceptance.OLD_IMAGES.values() and list(acceptance.OLD_IMAGES) == ["4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]
+
+
+def test_the_old_browser_fixture_writes_what_an_earlier_layer_kept_in_a_real_shell(tmp_path):
+    import shutil
+    import subprocess
+    shell = shutil.which("sh")
+    if shell is None:
+        pytest.skip("An installed POSIX shell is required to run the fixture")
+    workspace = tmp_path / "workspace"
+    (workspace / ".browser-profiles").mkdir(parents=True)
+    (workspace / ".browser-profiles" / acceptance.DROPPED_MARK).write_text("", encoding="utf-8")
+    command = acceptance.OLD_BROWSER_FIXTURE.replace(acceptance.PROFILES, (workspace / ".browser-profiles").as_posix())
+    assert acceptance.PROFILES not in command
+    done = subprocess.run([shell, "-c", command], capture_output=True, text=True, timeout=10)
+    assert done.returncode == 0, done.stderr
+    for relative in acceptance.OLD_BROWSER_FILES:
+        assert (workspace / ".browser-profiles" / relative).read_text(encoding="utf-8") == "old"
+    # No earlier layer wrote the mark: a workspace two shared blocks share is as an earlier layer left it each time.
+    assert not (workspace / ".browser-profiles" / acceptance.DROPPED_MARK).exists()
+    assert (workspace / "browser-data-kept.txt").read_text(encoding="utf-8") == "kept"
+    assert acceptance.OLD_BROWSER_DATA == {"driver/main/Default/Cookies", "chromium/Default/Cookies"}
+
+
+OTHERS = {"driver/other/kept", "google-chrome/Default/Cookies"}
+CHROMIUMS = {"driver/main/Default/Cookies", "chromium/Default/Cookies"}
+
+
+@pytest.mark.parametrize("architecture,files,ok", [
+    ("arm64", OTHERS | {acceptance.DROPPED_MARK}, True),
+    ("arm64", OTHERS | {acceptance.DROPPED_MARK, "driver/main/Default/Cookies"}, False),
+    ("arm64", OTHERS | {acceptance.DROPPED_MARK, "chromium/Default/Cookies"}, False),
+    ("arm64", OTHERS, False),
+    ("arm64", {"google-chrome/Default/Cookies", acceptance.DROPPED_MARK}, False),
+    ("amd64", OTHERS | CHROMIUMS, True),
+    ("amd64", OTHERS | {"chromium/Default/Cookies"}, False),
+    ("amd64", OTHERS | CHROMIUMS | {acceptance.DROPPED_MARK}, False),
+])
+async def test_the_old_browser_data_check_wants_chromiums_profiles_gone_on_arm64_only(architecture, files, ok):
+    # R-COMP-READY-04: what an earlier layer's browsers kept, once its computer is made again on layer 14.
+    run = acceptance.Acceptance(FakeDocker())
+    asked = []
+
+    async def text(target, args):
+        asked.append(args)
+        if args == ["dpkg", "--print-architecture"]:
+            return architecture + "\n"
+        if args[:2] == ["sh", "-c"]:
+            assert args[2].startswith(f"cd {acceptance.PROFILES} && for file in ")
+            return "".join(f"{name}\n" for name in sorted(files))
+        assert args == ["cat", vm.GUEST + "/browser-data-kept.txt"]
+        return "kept\n"
+    run.text = text
+    if ok:
+        detail = await run.old_browser_data(object())
+        assert ("removed once" in detail) == (architecture == "arm64")
+    else:
+        with pytest.raises(AssertionError):
+            await run.old_browser_data(object())
+    assert asked[0] == ["dpkg", "--print-architecture"]
 
 
 def tiny_build(context, args, steps):
@@ -800,6 +865,7 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
 
 @pytest.mark.parametrize("args", [
     ["system", "prune"], ["container", "prune"], ["pull", vm.BASE],
+    ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v13"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v12"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v11"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v9"],
@@ -807,11 +873,12 @@ async def test_start_retries_slow_engine_once_after_pause(error, tmp_path, monke
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v7"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v6"],
     ["image", "rm", "raphael/cua-local-vm:driver-0.37.0-v5"],
-    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v13"],
+    ["image", "inspect", "raphael/cua-local-vm:driver-0.37.0-v14"],
     ["ps", "-a", "--filter", "label=org.raphael.computer", "--format", "{{.ID}}"],
     ["container", "inspect", "someone-elses-container"],
     ["exec", "-u", "root", "ours", "true"],
     ["stop", "foreign", "ours"], ["rm", "foreign", "ours"], ["start", "foreign", "ours"],
+    ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v13", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v12", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v11", "image"],
     ["build", "--tag", "raphael/cua-local-vm:driver-0.37.0-v9", "image"],
@@ -1104,7 +1171,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             if command[1] == "-l":
                 return vm.Result(0, "\n".join(f'0x{row["window_id"]:08x}  0 host {row["title"]}' for row in rows))
             if command[1] == "-lp":
-                return vm.Result(0, "\n".join(f'0x{row["window_id"]:08x}  0 {99 if "chromium" in row["app_name"].lower() else 1} host {row["title"]}' for row in rows))
+                return vm.Result(0, "\n".join(f'0x{row["window_id"]:08x}  0 {99 if "chrom" in row["app_name"].lower() else 1} host {row["title"]}' for row in rows))
             if command[1] == "-lx":
                 return vm.Result(0, "0x00a00028 -1 xfdesktop.Xfdesktop   host Desktop\n" + "\n".join(
                     f'0x{row["window_id"]:x} 0 {row["app_name"]}.{row["app_name"]} host {row["title"]}' for row in rows))
@@ -1120,29 +1187,30 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
                     row['bounds'].update(width=int(width), height=int(height))
         if "pgrep" in args:
             if "-af" in args:
-                return vm.Result(0, "99 /usr/lib/chromium/chromium --remote-debugging-port=0 --user-data-dir=/home/cua/workspace/"
+                return vm.Result(0, "99 /opt/google/chrome/chrome --remote-debugging-port=0 --user-data-dir=/home/cua/workspace/"
                                  ".browser-profiles/driver/main --no-sandbox --disable-blink-features=AutomationControlled "
                                  "--test-type --hide-crash-restore-bubble\n")
             return vm.Result(0, "99\n")
         guest = args[args.index(machine.shared_target("", 9201, 1).name) + 1:] if args[0] == "exec" else []
         if guest[:3] == ["sh", "-c", 'command -v "$1"']:
             return vm.Result(0, "/usr/bin/xfce4-terminal\n") if guest[4] == "xfce4-terminal" else vm.Result(1, "")
+        # This world is an arm64 computer of layer 14: the members' browser is Google's Chrome, as on amd64.
         if guest[:2] == ["test", "-x"]:
-            return vm.Result(1, "")
+            return vm.Result(0 if guest[2] == "/opt/google/chrome/chrome" else 1, "")
         if guest[:2] == ["test", "-e"] and guest[2].startswith("/usr/share/icons/"):
-            assert guest[2] == "/usr/share/icons/hicolor/48x48/apps/chromium.png", "this world's browser is Chromium"
+            assert guest[2] == "/usr/share/icons/hicolor/48x48/apps/google-chrome.png", "this world's browser is Google Chrome"
             return vm.Result(0, "")
         if guest[:1] == ["cat"] and guest[1] in owner_text:
             return vm.Result(0, owner_text[guest[1]] + "\n")
         if guest[:1] == ["cat"] and guest[1].endswith("/browser.desktop"):
             launchers.append(guest[1])
-            return vm.Result(0, "[Desktop Entry]\nType=Application\nName=Chromium\nExec=raphael-browser %U\nIcon=chromium\n")
+            return vm.Result(0, "[Desktop Entry]\nType=Application\nName=Google Chrome\nExec=raphael-browser %U\nIcon=google-chrome\n")
         if guest[:2] == ["test", "-e"]:
             return vm.Result(0 if guest[2] in owner_files else 1, "")
         if guest[:1] == ["dpkg"]:
             return vm.Result(0, "arm64\n")
         if guest[:1] == ["cat"] and guest[1].endswith("/policies/managed/raphael.json"):
-            assert guest[1].startswith("/etc/chromium/"), "this world's browser is Chromium"
+            assert guest[1].startswith("/etc/opt/chrome/"), "this world's browser is Google Chrome"
             return vm.Result(0, json.dumps({"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
                                             "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}))
         if guest[:1] == ["cat"] and guest[1].endswith("/Default/Preferences"):
@@ -1151,13 +1219,15 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         if guest[:1] == ["raphael-browser"]:
             # As layer 12's icon: a window where the screen has none, and no second one when pressed again.
             if not any(row["window_id"] == 556 for row in rows):
-                rows.append(window(556, 60, "Chromium-browser"))
+                rows.append(window(556, 60, "Google-chrome"))
             return vm.Result(0, "")
-        if guest[:1] == ["/usr/lib/chromium/chromium"]:
+        if guest == ["/usr/lib/chromium/chromium", "--version"]:
+            return vm.Result(0, "Chromium 156.0.0.0\n")
+        if guest[:1] == ["/opt/google/chrome/chrome"]:
             if "--version" in guest:
-                return vm.Result(0, "Chromium 156.0.0.0\n")
-            rows.append(window(555, 40, "Chromium-browser"))
-            rows[-1]["title"] = "raphael-webdriver-false - Chromium"
+                return vm.Result(0, "Google Chrome 157.0.0.0\n")
+            rows.append(window(555, 40, "Google-chrome"))
+            rows[-1]["title"] = "raphael-webdriver-false - Google Chrome"
             return vm.Result(0, "")
         if "xprop" in args:
             if "-root" in args:
@@ -1294,7 +1364,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
 
     async def browser(target):
         assert machine.native_busy(target)
-        row = window(300 + target.screen, (target.screen - 1) * 1280 + 20, "Chromium-browser", 99)
+        row = window(300 + target.screen, (target.screen - 1) * 1280 + 20, "Google-chrome", 99)
         rows.append(row)
         return {key: row[key] for key in ("pid", "window_id")}
     monkeypatch.setattr(machine, "seat_browser", browser)

@@ -356,6 +356,69 @@ async def test_a_member_computer_of_the_layer_before_is_made_again_once_too(per_
     assert not [args for args, _ in runtime.calls if args[0] in ("rm", "run", "create")]
 
 
+async def made_again_once(vm, target, runtime):
+    """Started once, a computer of an earlier layer is stopped, removed and made again; the next start finds it whole."""
+    original = vm.run
+
+    async def runner(args, **kwargs):
+        actual = args[2:] if args[:1] == ["--host"] else args
+        if actual[:2] == ["run", "-d"]:
+            runtime.raw = container(vm, target, runtime)
+        return await original(args, **kwargs)
+
+    vm.run = runner
+    runtime.calls.clear()
+    assert (await vm.start(target))["ready"]
+    assert [(args[0], args[1] if len(args) > 1 else "") for args, _ in runtime.calls if args[0] in ("stop", "rm", "run")] == [
+        ("stop", "--time"), ("rm", target.name), ("run", "-d")]
+    runtime.calls.clear()
+    vm.running.clear()
+    assert (await vm.start(target))["ready"]
+    assert not [args for args, _ in runtime.calls if args[0] in ("stop", "rm", "run", "create")]
+
+
+async def test_a_shared_computer_of_layer_13_is_made_again_once_on_layer_14_with_its_size_from_the_engine(desktop):
+    # Layer 14 changed only the image (Google's Chrome on arm64). A layer 13 computer has this layer's environment (the
+    # locale), its screens and its limits; a shared one its size from the engine, which no layer before 13 had.
+    vm, target, runtime = desktop
+    assert module.IMAGE.endswith("-v14") and module.IMAGE_LABELS[f"{LABEL}.layer"] == "14"
+    runtime.raw = earlier_layer(runtime.raw, "13")
+    runtime.raw["HostConfig"].update(Memory=8 * GIB, MemorySwap=8 * GIB, NanoCpus=6_000_000_000)
+    assert known_previous(runtime.raw, target, vm.owner) and not compatible(runtime.raw, target, vm.owner, runtime.image_id)
+    await made_again_once(vm, target, runtime)
+
+
+async def test_a_member_computer_of_layer_13_is_made_again_once_on_layer_14(per_bot_desktop):
+    vm, target, runtime = per_bot_desktop
+    runtime.raw = earlier_layer(runtime.raw, "13")
+    assert known_previous(runtime.raw, target, vm.owner) and not compatible(runtime.raw, target, vm.owner, runtime.image_id)
+    await made_again_once(vm, target, runtime)
+
+
+@pytest.mark.parametrize("change", ["screens", "shared size", "owner", "privileged"])
+async def test_a_shared_computer_of_layer_13_in_another_shape_is_not_made_again(desktop, change):
+    vm, target, runtime = desktop
+    raw = earlier_layer(runtime.raw, "13")
+    assert known_previous(raw, target, vm.owner)
+    if change == "screens":
+        raw["Config"]["Env"] = ["VNC_PW=private", "LANG=C.UTF-8", "LC_ALL=C.UTF-8", "RAPHAEL_SCREENS=1"]
+    elif change == "shared size":
+        raw["HostConfig"]["NanoCpus"] = 16_000_000_000  # outside the bounds any shared computer is held in
+    elif change == "owner":
+        raw["Config"]["Labels"][f"{LABEL}.owner"] = "someone-else"
+    else:
+        raw["HostConfig"]["Privileged"] = True
+    assert not known_previous(raw, target, vm.owner)
+
+
+async def test_a_member_computer_of_layer_13_of_another_size_is_not_made_again(per_bot_desktop):
+    vm, target, runtime = per_bot_desktop
+    raw = earlier_layer(runtime.raw, "13")
+    assert known_previous(raw, target, vm.owner)
+    raw["HostConfig"].update(Memory=4 * GIB, MemorySwap=4 * GIB)
+    assert not known_previous(raw, target, vm.owner)
+
+
 @pytest.mark.parametrize("layer", ["5", "7", "8", "9", "10", "11", "12"])
 async def test_every_shared_layer_before_13_is_recognised_with_its_screens_and_old_size(desktop, layer):
     vm, target, runtime = desktop

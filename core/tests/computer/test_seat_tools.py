@@ -463,9 +463,9 @@ def test_layer_seven_installs_computer_browser_and_existing_profile_grant():
     # desktop saying which browser that is, 10 is the computer without Firefox ESR, 11 the loaded PC's waits, and 12 a
     # screen a person can use (a window list, a dock's Browser icon, no marker page, tabs, windows inside their screen).
     # 13 changed no file of the image: it is the container's shape (the locale), so what it made again is
-    # the layers' own steps above, unchanged.
-    assert module.IMAGE.endswith("-v13") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "13"
-    assert 'org.raphael.computer.layer="13"' in dockerfile and "librsvg2-common" in dockerfile
+    # the layers' own steps above, unchanged. 14 is Google's Chrome on arm64 too.
+    assert module.IMAGE.endswith("-v14") and module.IMAGE_LABELS[f"{module.LABEL}.layer"] == "14"
+    assert 'org.raphael.computer.layer="14"' in dockerfile and "librsvg2-common" in dockerfile
     launcher = (image / "layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert "wmctrl -lG" in launcher and "settle_deadline" in launcher
     assert 'data:text/html,<title>$marker</title>' in launcher and 'shows=${5:-chrome://newtab/}' in launcher
@@ -566,6 +566,205 @@ def test_the_computer_starts_with_googles_chrome_the_tools_and_the_fonts():
     assert "apt-get install -y --no-install-recommends google-chrome-stable;" in dockerfile
     launcher = (image / "layer12/raphael-seat-browser").read_text(encoding="utf-8")
     assert "if [ -x /opt/google/chrome/chrome ]; then" in launcher and "chromium=/usr/lib/chromium/chromium window_class=chromium-browser" in launcher
+
+
+def layer_fourteen():
+    image = Path(module.__file__).parent / "image"
+    dockerfile = (image / "Dockerfile").read_text(encoding="utf-8")
+    start = dockerfile.index("COPY layer14/ /opt/raphael-layer14/")
+    return image, dockerfile, start, dockerfile[start:dockerfile.index("LABEL org.raphael.computer=")]
+
+
+def test_layer_fourteen_brings_googles_chrome_to_arm64_and_leaves_every_earlier_step_as_it_was():
+    # Google now builds Chrome for arm64 Linux. On arm64 the members' browser was Debian's Chromium: a blue icon and
+    # Chromium's defaults where amd64 computers have Google's own Chrome.
+    image, dockerfile, start, step = layer_fourteen()
+    # The last step: a PC that built layer 13 builds only this one. The amd64 Chrome step above is as it was.
+    assert dockerfile.index("COPY layer12/") < start and dockerfile.count("COPY layer14/") == 1
+    assert 'org.raphael.computer.layer="14"' in dockerfile[start:]
+    assert 'if [ "$(dpkg --print-architecture)" = amd64 ]; then' in dockerfile[:start]
+    assert "Google built none for arm64 Linux then: layer 14, the last step, takes it there." in dockerfile[:start]
+    assert "Google now builds its Chrome for arm64 Linux as well" in dockerfile[:start]
+    # Only where the image has no Chrome (arm64): on amd64 the step does nothing but its checks.
+    branch = step[step.index("if [ ! -x /opt/google/chrome/chrome ]; then"):step.index("    fi; \\\n    /opt/google/chrome/chrome --version;")]
+    assert step.count("if [ ! -x /opt/google/chrome/chrome ]; then") == 1
+    # Google's own build, from Google's repository and under Google's key, as the amd64 step takes it.
+    assert "curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o /usr/share/keyrings/google-linux.asc;" in branch
+    assert ("printf 'deb [arch=%s signed-by=/usr/share/keyrings/google-linux.asc] https://dl.google.com/linux/chrome/deb/ stable main\\n' "
+            '"$(dpkg --print-architecture)" > /etc/apt/sources.list.d/raphael-google-chrome.list;') in branch
+    assert "apt-get install -y --no-install-recommends google-chrome-stable;" in branch
+    assert "rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raphael-google-chrome.list;" in branch
+    # The workspace's preparation that removes Chromium's profiles is installed only there.
+    assert "install -m 0755 /opt/raphael-layer14/prepare-raphael-workspace.sh /usr/local/bin/prepare-raphael-workspace.sh;" in branch
+    assert "prepare-raphael-workspace.sh /usr/local/bin" not in step.replace(branch, "")
+    # The desktop is named for Chrome as the layer 9 step names it.
+    naming = dockerfile[dockerfile.index("if [ -x /opt/google/chrome/chrome ]; then name='Google Chrome' icon=google-chrome;"):start]
+    for line in ('sed -i -e "s/^Name=.*/Name=$name/" -e "s/^Icon=.*/Icon=$icon/" "$file";',
+                 "'X-XFCE-Binaries=raphael-browser;' 'X-XFCE-Category=WebBrowser' 'X-XFCE-Commands=%B;' 'X-XFCE-CommandsWithParameter=%B \"%s\";'",
+                 "> /usr/share/xfce4/helpers/raphael-browser.desktop;",
+                 "for entry in google-chrome com.google.Chrome chromium; do",
+                 "'Exec=raphael-browser %U' \"Icon=$icon\" 'Terminal=false' 'NoDisplay=true'",
+                 'update-alternatives --install "/usr/bin/$link" "$link" /usr/local/bin/raphael-browser 500;'):
+        assert line in naming and line in branch, line
+    # XFCE's choice of browser (helpers.rc) is raphael-browser already; only the files written here change hands.
+    assert "chown cua:cua /home/cua/.config/xfce4/panel/launcher-*/browser.desktop /home/cua/.local/share/applications/*.desktop;" in branch
+    assert "helpers.rc" not in branch
+    assert "name='Google Chrome' icon=google-chrome;" in branch and "Chromium" not in branch
+    # Checked on every architecture: Chrome and its name, the policy for Chrome as for Chromium, and Debian's Chromium,
+    # which the driver takes where there is no Chrome, still runs.
+    checks = step[step.index("    fi; \\\n    /opt/google/chrome/chrome --version;"):]
+    for line in ("test -x /usr/bin/google-chrome-stable;", "test -x /opt/google/chrome/google-chrome;",
+                 "test -e /usr/share/icons/hicolor/48x48/apps/google-chrome.png;", "grep -qx 'Name=Google Chrome' \"$file\";",
+                 "grep -qx 'Icon=google-chrome' \"$file\";", "grep -qx 'Name=Google Chrome' /usr/share/xfce4/helpers/raphael-browser.desktop;",
+                 "grep -qx 'NoDisplay=true' \"/home/cua/.local/share/applications/$entry.desktop\";",
+                 'test "$(readlink -f /usr/bin/x-www-browser)" = /usr/local/bin/raphael-browser;',
+                 "cmp /etc/opt/chrome/policies/managed/raphael.json /etc/chromium/policies/managed/raphael.json;",
+                 "sh -n /usr/local/bin/prepare-raphael-workspace.sh;", "/usr/lib/chromium/chromium --version;",
+                 "rm -rf /opt/raphael-layer14"):
+        assert line in checks, line
+    # Under `set -e` a negated command never stops a build.
+    assert step.startswith("COPY layer14/ /opt/raphael-layer14/\nRUN set -eux; \\\n") and "\n    ! " not in step
+    for path in (image / "layer14").iterdir():
+        assert b"\r\n" not in path.read_bytes(), f"{path.name} must keep LF line ends inside Linux"
+
+
+def todays_preparation(dockerfile):
+    """The workspace's preparation the image runs before layer 14: layer 8's script as layer 10 rewrote it."""
+    written = dockerfile[dockerfile.index("RUN printf '%s\\n' \\\n      '#!/bin/sh'"):dockerfile.index("> /usr/local/bin/prepare-raphael-workspace.sh")]
+    lines = [re.fullmatch(r"\s*'(.*)' \\", line)[1] for line in written.splitlines()[1:] if line.strip()]
+    sed = shutil.which("sed")
+    rewritten = subprocess.run([sed, "-e", r'/migrate_profile "\$HOME\/\.mozilla" mozilla/d', "-e", r's# "\$profiles/mozilla"##g',
+                                "-e", r"s/ -o -name \.parentlock -o -name lock -type l//"],
+                               input=("\n".join(lines) + "\n").encode(), capture_output=True, timeout=10, check=True)
+    return rewritten.stdout.decode().replace("\r\n", "\n")
+
+
+def test_layer_fourteens_preparation_is_todays_with_only_the_removal_of_chromiums_profiles_added():
+    if shutil.which("sed") is None:
+        pytest.skip("An installed sed is required to rewrite the script as the image does")
+    image, dockerfile, _, _ = layer_fourteen()
+    script = (image / "layer14/prepare-raphael-workspace.sh").read_text(encoding="utf-8")
+    block = script[script.index("# Image layer 14 installs this copy"):script.index('mkdir -p "$profiles/google-chrome"')]
+    assert script.replace(block, "") == todays_preparation(dockerfile)
+    assert 'if [ "$(dpkg --print-architecture)" = arm64 ]' in block
+    assert 'rm -rf "$profiles/driver/main" "$profiles/chromium"' in block
+    # Nothing else of the driver's, of Chrome's or of the workspace is named.
+    code = "\n".join(line for line in block.splitlines() if not line.lstrip().startswith("#"))
+    assert code.count("rm ") == 1 and "google-chrome" not in code and "team" not in code
+    assert "mozilla" not in script and "parentlock" not in script
+
+
+def run_preparation(tmp_path, architecture, workspace=None):
+    import os
+    shell = shutil.which("sh")
+    if shell is None or os.name == "nt":
+        pytest.skip("The workspace's preparation runs in the Linux image; it needs a POSIX shell whose links are links")
+    image, _, _, _ = layer_fourteen()
+    workspace = workspace or tmp_path / "workspace"
+    home, tools = tmp_path / "home", tmp_path / "bin"
+    home.mkdir(exist_ok=True)
+    tools.mkdir(exist_ok=True)
+    (tools / "dpkg").write_text(f"#!/bin/sh\necho {architecture}\n", encoding="utf-8")
+    (tools / "dpkg").chmod(0o755)
+    script = (image / "layer14/prepare-raphael-workspace.sh").read_text(encoding="utf-8")
+    script = script.replace("workspace=/home/cua/workspace", f"workspace={shlex.quote(workspace.as_posix())}")
+    assert f"workspace={shlex.quote(workspace.as_posix())}" in script
+    environment = {**os.environ, "HOME": home.as_posix(), "PATH": tools.as_posix() + os.pathsep + os.environ.get("PATH", "")}
+    return subprocess.run([shell, "-c", script], env=environment, capture_output=True, text=True, timeout=30)
+
+
+def old_workspace(tmp_path):
+    """A workspace as layer 13 left it: the members' profile (driver/main), the profiles of a browser started without
+    one (chromium, google-chrome), another folder of the driver's, a file of the workspace and the team's."""
+    workspace = tmp_path / "workspace"
+    profiles = workspace / ".browser-profiles"
+    for relative in ("driver/main/Default/Cookies", "driver/main/.cua-driver-profile.json", "chromium/Default/Cookies",
+                     "google-chrome/Default/Cookies", "driver/isolated-1/Default/Cookies", "driver/.carry-profile-1/main/x"):
+        (profiles / relative).parent.mkdir(parents=True, exist_ok=True)
+        (profiles / relative).write_text("old", encoding="utf-8")
+    (workspace / "notes").mkdir()
+    (workspace / "notes/plan.md").write_text("kept", encoding="utf-8")
+    return workspace, profiles
+
+
+def test_on_arm64_chromiums_profiles_are_removed_once_and_everything_else_stays(tmp_path):
+    workspace, profiles = old_workspace(tmp_path)
+    done = run_preparation(tmp_path, "arm64")
+    assert done.returncode == 0, done.stderr
+    # The members' sign-ins and the profile Chromium kept without one are gone; the folder for the latter is there again.
+    assert not (profiles / "driver/main").exists() and (profiles / "chromium").is_dir() and not any((profiles / "chromium").iterdir())
+    for relative in ("google-chrome/Default/Cookies", "driver/isolated-1/Default/Cookies", "driver/.carry-profile-1/main/x"):
+        assert (profiles / relative).read_text(encoding="utf-8") == "old", relative
+    assert (workspace / "notes/plan.md").read_text(encoding="utf-8") == "kept"
+    assert (profiles / ".raphael-chromium-dropped").is_dir()
+    # The home's browser folders are the workspace's, as before.
+    assert (tmp_path / "home/.config/chromium").resolve() == (profiles / "chromium").resolve()
+    assert (tmp_path / "home/.config/google-chrome").resolve() == (profiles / "google-chrome").resolve()
+    # Once: Chrome's own profile, made since, stays at every later start.
+    (profiles / "driver/main/Default").mkdir(parents=True)
+    (profiles / "driver/main/Default/Cookies").write_text("chrome", encoding="utf-8")
+    (profiles / "chromium/Default").mkdir()
+    (profiles / "chromium/Default/Cookies").write_text("by hand", encoding="utf-8")
+    again = run_preparation(tmp_path, "arm64")
+    assert again.returncode == 0, again.stderr
+    assert (profiles / "driver/main/Default/Cookies").read_text(encoding="utf-8") == "chrome"
+    assert (profiles / "chromium/Default/Cookies").read_text(encoding="utf-8") == "by hand"
+
+
+def test_on_amd64_no_profile_is_touched(tmp_path):
+    workspace, profiles = old_workspace(tmp_path)
+    done = run_preparation(tmp_path, "amd64")
+    assert done.returncode == 0, done.stderr
+    for relative in ("driver/main/Default/Cookies", "driver/main/.cua-driver-profile.json", "chromium/Default/Cookies",
+                     "google-chrome/Default/Cookies"):
+        assert (profiles / relative).read_text(encoding="utf-8") == "old", relative
+    assert not (profiles / ".raphael-chromium-dropped").exists()
+
+
+def test_a_new_workspace_on_arm64_is_marked_and_a_linked_profile_folder_is_left_alone(tmp_path):
+    done = run_preparation(tmp_path, "arm64")
+    assert done.returncode == 0, done.stderr
+    profiles = tmp_path / "workspace/.browser-profiles"
+    assert (profiles / ".raphael-chromium-dropped").is_dir() and (profiles / "chromium").is_dir()
+    # A profile folder that is a link to somewhere else is not followed into.
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "driver/main").mkdir(parents=True)
+    (elsewhere / "driver/main/Cookies").write_text("elsewhere", encoding="utf-8")
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    (linked / ".browser-profiles").symlink_to(elsewhere, target_is_directory=True)
+    run_preparation(tmp_path, "arm64", workspace=linked)
+    assert (elsewhere / "driver/main/Cookies").read_text(encoding="utf-8") == "elsewhere"
+    assert not (elsewhere / ".raphael-chromium-dropped").exists()
+
+
+def test_a_removal_that_stops_halfway_is_never_tried_again_over_what_chrome_made_since(tmp_path):
+    # The driver's folder cannot be written, the members' profile in it can: the profile is emptied but stays. The mark
+    # was made first, so once the folder can be written again Chrome's new sign-ins in it are not removed.
+    workspace, profiles = old_workspace(tmp_path)
+    (profiles / "driver").chmod(0o500)
+    try:
+        done = run_preparation(tmp_path, "arm64")
+    finally:
+        (profiles / "driver").chmod(0o700)
+    assert done.returncode == 0, done.stderr
+    assert (profiles / ".raphael-chromium-dropped").is_dir()
+    (profiles / "driver/main/Default").mkdir(parents=True, exist_ok=True)
+    (profiles / "driver/main/Default/Cookies").write_text("chrome", encoding="utf-8")
+    again = run_preparation(tmp_path, "arm64")
+    assert again.returncode == 0, again.stderr
+    assert (profiles / "driver/main/Default/Cookies").read_text(encoding="utf-8") == "chrome"
+
+
+def test_a_mark_that_is_a_link_out_of_the_workspace_is_not_followed_and_nothing_is_removed(tmp_path):
+    workspace, profiles = old_workspace(tmp_path)
+    outside = tmp_path / "team/not-yet-there"
+    (tmp_path / "team").mkdir()
+    (profiles / ".raphael-chromium-dropped").symlink_to(outside)
+    done = run_preparation(tmp_path, "arm64")
+    assert done.returncode == 0, done.stderr
+    assert not outside.exists()
+    assert (profiles / "driver/main/Default/Cookies").read_text(encoding="utf-8") == "old"
 
 
 def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens_it():

@@ -52,8 +52,19 @@ OLD_IMAGES = {"4": "raphael/cua-local-vm:driver-0.37.0-v4", "5": "raphael/cua-lo
               "6": "raphael/cua-local-vm:driver-0.37.0-v6", "7": "raphael/cua-local-vm:driver-0.37.0-v7",
               "8": "raphael/cua-local-vm:driver-0.37.0-v8", "9": "raphael/cua-local-vm:driver-0.37.0-v9",
               "10": "raphael/cua-local-vm:driver-0.37.0-v10", "11": "raphael/cua-local-vm:driver-0.37.0-v11",
-              "12": "raphael/cua-local-vm:driver-0.37.0-v12"}
+              "12": "raphael/cua-local-vm:driver-0.37.0-v12", "13": "raphael/cua-local-vm:driver-0.37.0-v13"}
 IMAGE_FOLDER = Path(vm.__file__).parent / "image"
+# What an earlier layer's browsers kept in the workspace, written in a computer of that layer: the members' own profile
+# (driver/main), the profiles of a browser started without one (google-chrome, chromium), something else of the driver's,
+# and a file of the workspace that is no browser's. `OLD_BROWSER_DATA` is what of it Chrome on arm64 does not open. No
+# earlier layer wrote the mark of its removal (the shared blocks of two layers share one workspace).
+PROFILES = vm.GUEST + "/.browser-profiles"
+OLD_BROWSER_FILES = ("driver/main/Default/Cookies", "chromium/Default/Cookies", "google-chrome/Default/Cookies",
+                     "driver/other/kept")
+OLD_BROWSER_DATA = {"driver/main/Default/Cookies", "chromium/Default/Cookies"}
+DROPPED_MARK = ".raphael-chromium-dropped"
+OLD_BROWSER_FIXTURE = (f'mkdir -p {PROFILES} && cd {PROFILES} && rm -rf {DROPPED_MARK} && for file in {" ".join(OLD_BROWSER_FILES)}; do '
+                       'mkdir -p "$(dirname "$file")" && printf old > "$file"; done && printf kept > ../browser-data-kept.txt')
 # A panel leads with its three launchers, 48 px each (146 px with its border, measured), and its window list follows
 # them (image layer 12): it is as wide as that and its windows' buttons, and its terminal launcher is 121 px from its left.
 LAUNCHERS_PX, TERMINAL_LAUNCHER_X, PANEL_HIGH = 146, 121, 49
@@ -191,7 +202,8 @@ def strip_change(before, after, area):
 def previous_args(target, owner, password, layer="4"):
     # The run arguments a release of that layer made. Layer 4 (release 1.2.0) had no screen variables yet;
     # layer 5 differs from today's only by its label and image.
-    # Layers before 13 had no locale variables, and the shared computer was always 6 GiB / 4 CPUs.
+    # Layers before 13 had no locale variables, and the shared computer was always 6 GiB / 4 CPUs (layer 13 sized it from
+    # the engine, and those are inside its bounds).
     args = vm.run_args(target, owner, password, size=vm.SHARED_SIZE)
     current = f"{vm.LABEL}.layer=" + vm.IMAGE_LABELS[f"{vm.LABEL}.layer"]
     result, index = [], 0
@@ -200,7 +212,7 @@ def previous_args(target, owner, password, layer="4"):
         if layer == "4" and value == "-e" and args[index + 1].startswith(("RAPHAEL_SCREENS=", "VNC_RESOLUTION=")):
             index += 2
             continue
-        if value == "-e" and args[index + 1].startswith(("LANG=", "LC_ALL=")):
+        if int(layer) < 13 and value == "-e" and args[index + 1].startswith(("LANG=", "LC_ALL=")):
             index += 2
             continue
         if value == current:
@@ -763,9 +775,11 @@ class Acceptance:
         return found
 
     async def browser_named(self, target):
-        """Which browser this computer has, and that every screen's launcher wears its name and its mark."""
+        """Which browser this computer has, and that every screen's launcher wears its name and its mark: Google's Chrome,
+        on arm64 as on amd64 (layer 14)."""
         chrome = not (await self.guest(target, ["test", "-x", "/opt/google/chrome/chrome"], allow_failure=True)).code
-        name, icon = ("Google Chrome", "google-chrome") if chrome else ("Chromium", "chromium")
+        require(chrome, "Expected Google Chrome in the computer")
+        name, icon = "Google Chrome", "google-chrome"
         for screen in range(1, target.screens + 1):
             entry = (await self.text(target, ["cat", f"/home/cua/.config/xfce4/panel/launcher-{screen * 3 - 2}/browser.desktop"])).splitlines()
             require({f"Name={name}", f"Icon={icon}", "Exec=raphael-browser %U"} <= set(entry),
@@ -1208,9 +1222,9 @@ class Acceptance:
                 target.workspace.mkdir(parents=True, exist_ok=True)
                 target.shared.mkdir(parents=True, exist_ok=True)
                 await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24), layer), timeout=90)
-                await self.text(target, ["sh", "-c", "printf acceptance > /home/cua/workspace/acceptance.txt"])
+                await self.text(target, ["sh", "-c", "printf acceptance > /home/cua/workspace/acceptance.txt; " + OLD_BROWSER_FIXTURE])
                 await self.command(["stop", target.name], timeout=90)
-                return f"Created a layer {layer} container with workspace file, then stopped it"
+                return f"Created a layer {layer} container with workspace file and its browsers' profiles, then stopped it"
             if await self.check(f"{name} fixture {operation}", fixture):
                 fixtures.append((target, operation))
             else:
@@ -1233,11 +1247,33 @@ class Acceptance:
                     require(raw["Image"] == await self.machine.image(target), "Expected rebuilt computer on isolated new image")
                     content = await self.text(target, ["cat", vm.GUEST + "/acceptance.txt"])
                     require(content == "acceptance", f"Expected preserved workspace file, observed {content!r}")
+                    browsers = await self.old_browser_data(target)
                     await self.machine.stop(target)
-                return f"layer {layer} {operation}: incompatible -> {'absent with workspace removed' if operation == 'erase' else 'ready on new image, workspace file preserved'}"
+                    return f"layer {layer} {operation}: incompatible -> ready on new image, workspace file preserved; {browsers}"
+                return f"layer {layer} {operation}: incompatible -> absent with workspace removed"
             await self.check(f"{name} {operation}", exercise)
-        if layer in ("7", "8", "9", "12"):
+        if layer in ("7", "8", "9", "12", "13"):
             await self.previous_shared(layer)
+
+    async def old_browser_data(self, target):
+        """What an earlier layer's browsers kept, once its computer is made again on this layer (R-COMP-READY-04). On arm64
+        the members' browser was Debian's Chromium: its profiles are removed once, the members' sign-ins with them, and
+        the workspace says so; the rest of the driver's folder, Chrome's folder and every other file stay. On amd64 the
+        browser was Chrome before, and nothing of it is touched."""
+        arm64 = (await self.text(target, ["dpkg", "--print-architecture"])).strip() == "arm64"
+        listed = await self.text(target, ["sh", "-c", f'cd {PROFILES} && for file in {" ".join(OLD_BROWSER_FILES)} {DROPPED_MARK}; do '
+                                          '[ -e "$file" ] && echo "$file"; done; true'])
+        present = set(listed.split())
+        kept = (await self.text(target, ["cat", vm.GUEST + "/browser-data-kept.txt"])).strip()
+        require(kept == "kept", f"Expected the workspace's other files kept, observed {kept!r}")
+        others = set(OLD_BROWSER_FILES) - OLD_BROWSER_DATA
+        if arm64:
+            require(not present & OLD_BROWSER_DATA and others <= present and DROPPED_MARK in present,
+                    f"Expected Chromium's profiles removed once and the rest kept on arm64, observed {sorted(present)}")
+            return "arm64: Chromium's profiles (driver/main, chromium) removed once, the rest of the driver's folder and Chrome's kept"
+        require(set(OLD_BROWSER_FILES) <= present and DROPPED_MARK not in present,
+                f"Expected every browser profile kept on amd64, observed {sorted(present)}")
+        return "amd64: every browser profile kept"
 
     async def previous_shared(self, layer):
         """The computer every member shares, as the release before this layer left it on an owner's PC (six screens,
@@ -1250,7 +1286,7 @@ class Acceptance:
             target.workspace.mkdir(parents=True, exist_ok=True)
             target.shared.mkdir(parents=True, exist_ok=True)
             await self.command(previous_args(target, self.machine.owner, secrets.token_urlsafe(24), layer), timeout=90)
-            await self.text(target, ["sh", "-c", "printf shared-acceptance > /home/cua/workspace/acceptance-shared.txt"])
+            await self.text(target, ["sh", "-c", "printf shared-acceptance > /home/cua/workspace/acceptance-shared.txt; " + OLD_BROWSER_FIXTURE])
             await self.command(["stop", target.name], timeout=90)
             return f"Created a six-screen layer {layer} shared computer with a workspace file, then stopped it"
         if not await self.check(f"{name} fixture", fixture):
@@ -1266,8 +1302,9 @@ class Acceptance:
             require(f"RAPHAEL_SCREENS={target.screens}" in raw["Config"]["Env"], "Expected six screens kept")
             content = await self.text(target, ["cat", vm.GUEST + "/acceptance-shared.txt"])
             require(content == "shared-acceptance", f"Expected the shared workspace file kept, observed {content!r}")
+            browsers = await self.old_browser_data(target)
             await self.machine.stop(target)
-            return f"layer {layer} shared computer: incompatible -> ready on the new image with six screens, workspace file kept"
+            return f"layer {layer} shared computer: incompatible -> ready on the new image with six screens, workspace file kept; {browsers}"
         await self.check(f"{name} start", exercise)
 
     async def image_update(self):
@@ -2218,10 +2255,10 @@ class Acceptance:
                 line = (await self.text(target, ["pgrep", "-af", f"^[^ ]+ --remote-debugging-port=0 --user-data-dir={profile}"])).splitlines()[0]
                 _, binary, *flags = line.split()
                 chrome = not (await self.guest(target, ["test", "-x", "/opt/google/chrome/chrome"], allow_failure=True)).code
-                amd64 = (await self.text(target, ["dpkg", "--print-architecture"])).strip() == "amd64"
-                require(chrome == amd64, f"Expected Google Chrome in the image exactly where Google builds one (amd64={amd64}), observed {chrome}")
-                require(binary == ("/opt/google/chrome/chrome" if chrome else "/usr/lib/chromium/chromium"),
-                        f"Expected the members' browser to be {'Google Chrome' if chrome else 'Chromium'}, observed {binary}")
+                architecture = (await self.text(target, ["dpkg", "--print-architecture"])).strip()
+                # Google builds its Chrome for amd64 and arm64 Linux: the members' browser is Chrome on both (layer 14).
+                require(chrome, f"Expected Google Chrome in the image on {architecture}, observed none")
+                require(binary == "/opt/google/chrome/chrome", f"Expected the members' browser to be Google Chrome, observed {binary}")
                 missing = [flag for flag in ("--disable-blink-features=AutomationControlled", "--test-type", "--hide-crash-restore-bubble")
                            if flag not in flags]
                 require(not missing, f"Expected the browser started without its warnings and automation mark, missing {missing}")
@@ -2267,8 +2304,7 @@ class Acceptance:
                 require(all(value is False for value in offers.values()), f"Expected the members' browser to keep nothing typed into it, observed {offers}")
                 # As the browser's own policy too, which holds whatever the profile says: and never signed in to as a
                 # browser, never syncing an owner's own passwords and history into the profile every member reads.
-                folder = "/etc/opt/chrome/policies/managed" if chrome else "/etc/chromium/policies/managed"
-                managed = json.loads(await self.text(target, ["cat", folder + "/raphael.json"]))
+                managed = json.loads(await self.text(target, ["cat", "/etc/opt/chrome/policies/managed/raphael.json"]))
                 wanted = {"BrowserSignin": 0, "SyncDisabled": True, "PasswordManagerEnabled": False,
                           "AutofillCreditCardEnabled": False, "AutofillAddressEnabled": False}
                 require(managed == wanted, f"Expected the members' browser policy {wanted}, observed {managed}")
@@ -2276,7 +2312,10 @@ class Acceptance:
                 # "Browser".
                 named, _ = await self.browser_named(target)
                 version = (await self.text(target, [binary, "--version"])).strip()
-                return (f"{version} ({binary}); navigator.webdriver is false; started with --test-type and no crash bubble; "
+                # Debian's Chromium stays: the driver's own browser where there is no Chrome.
+                fallback = (await self.text(target, ["/usr/lib/chromium/chromium", "--version"])).strip()
+                return (f"{version} ({binary}) on {architecture}, {fallback} kept for the driver; navigator.webdriver is false; "
+                        "started with --test-type and no crash bubble; "
                         f"every screen's launcher is {named} and opens a window of the same browser, and no second one when pressed again; "
                         "it keeps no password, card or address, "
                         "and by policy is never signed in to as a browser and never syncs")
