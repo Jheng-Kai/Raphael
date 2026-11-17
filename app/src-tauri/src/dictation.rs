@@ -1688,6 +1688,12 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 self.finish(&id, |this| this.show(notices::NOTHING_SELECTED));
                 return;
             }
+            Ok(Selection::Refused(CopyReason::NoPermission)) => {
+                log::info!("tidy: no Accessibility permission");
+                crate::hotkey::tell_accessibility_missing();
+                self.finish(&id, |this| this.show(notices::NO_TIDY_PERMISSION));
+                return;
+            }
             Ok(Selection::Refused(reason)) => {
                 log::info!("tidy: the window cannot be copied from ({reason:?})");
                 self.finish(&id, |this| this.show(notices::TIDY_FAILED));
@@ -1881,6 +1887,10 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             Some(PasteOutcome::CopiedOnly(CopyReason::Elevated)) => Some(notices::ELEVATED),
             Some(PasteOutcome::CopiedOnly(CopyReason::FocusChanged | CopyReason::NoTarget)) => {
                 Some(notices::FOCUS_CHANGED)
+            }
+            Some(PasteOutcome::CopiedOnly(CopyReason::NoPermission)) => {
+                crate::hotkey::tell_accessibility_missing();
+                Some(notices::NO_PASTE_PERMISSION)
             }
             Some(PasteOutcome::Pasted) | None => None,
         };
@@ -3624,8 +3634,8 @@ mod tests {
     use crate::hotkey::{CancelSwitch, HotkeyEvent};
     use crate::notices::{
         ASK_FAILED, BUDGET, CORE_DOWN, ELEVATED, FOCUS_CHANGED, GREETING, INCOMPLETE,
-        NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_SOUND, NOT_READY, NOTHING_SELECTED, OFFLINE,
-        TIDY_FAILED,
+        NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_PASTE_PERMISSION, NO_SOUND,
+        NO_TIDY_PERMISSION, NOT_READY, NOTHING_SELECTED, OFFLINE, TIDY_FAILED,
     };
     use crate::overlay::{Mode, OverlayApi, OverlayEvent, Progress, takes_clicks};
     use crate::paste::{CopyReason, PasteOutcome, Paster, Selection, Target};
@@ -5614,6 +5624,41 @@ mod tests {
             assert_eq!(*c.overlay().completions.lock().unwrap(), 0, "{what}");
             assert_eq!(c.phase(), Phase::Idle, "{what}");
         }
+    }
+
+    /// macOS without Accessibility (a rebuilt app whose old switch still shows on): the text stays on
+    /// the clipboard and the overlay says why and what to press, rather than a paste that never came.
+    #[tokio::test]
+    async fn a_paste_without_accessibility_says_so_and_leaves_the_text_copied() {
+        let c = controller(
+            FakeCore::with("dictation.stop", stop_result("文字", None)),
+            FakePaster::copying("com.apple.textedit", CopyReason::NoPermission),
+        );
+        run(&c, HotkeyEvent::DictationDown, 0).await;
+        run(&c, HotkeyEvent::DictationUp, 900).await;
+        assert_eq!(c.paster().delivered(), vec!["文字"]);
+        assert_eq!(
+            c.overlay().events().last().unwrap(),
+            &notice(NO_PASTE_PERMISSION.zh)
+        );
+        assert_eq!(c.phase(), Phase::Idle);
+    }
+
+    #[tokio::test]
+    async fn a_tidy_without_accessibility_says_so_and_tidies_nothing() {
+        let c = controller(
+            FakeCore::with("dictation.tidy", tidied("不該被貼上")),
+            FakePaster::pasting("com.apple.textedit")
+                .selecting(Selection::Refused(CopyReason::NoPermission)),
+        );
+        run(&c, HotkeyEvent::Tidy, 5000).await;
+        assert_eq!(c.core().count("dictation.tidy"), 0);
+        assert!(c.paster().delivered().is_empty());
+        assert_eq!(
+            c.overlay().events().last().unwrap(),
+            &notice(NO_TIDY_PERMISSION.zh)
+        );
+        assert_eq!(c.phase(), Phase::Idle);
     }
 
     #[tokio::test]
