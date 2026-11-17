@@ -2441,7 +2441,7 @@ script of native_journeys.py).
 
 A message queued behind running work is either taken by the model at its next step or sent now. Both are built: the model takes a new message at its next step, and 「立即送出」 on a
 queued bubble (a small text button in sight, first in its action row, not in the ⋯ menu; no 「排隊中」 words stand beside
-it since 2026-11-17, the button alone says the message waits) interrupts the work now and adds the message as context. R-QUEUE-05:
+it, the button alone says the message waits) interrupts the work now and adds the message as context. R-QUEUE-05:
 `agent.history.send_now {session_id, member_id, turn_id}` puts that inbox row first and ends the
 running work as Stop does, without the cancel memory (Codex `turn/interrupt`; a Claude Code or
 Antigravity child is ended and the next turn resumes its stored native session; an API loop's
