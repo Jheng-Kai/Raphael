@@ -5800,11 +5800,29 @@ export function checkRendered(name, context = {}) {
     for (const action of ["rename", "members", "delete"]) require(visible(menu?.querySelector(`[data-pick="${action}"]`)), `${action} is available from the room menu`);
     return { check: name, actions: 3 };
   }
-  if (name === "team-mentions" || name === "slash-commands") {
+  if (name === "slash-after-words-picked" || name === "slash-inside-word") {
+    // R-MENU-05: the / menu opens where a / begins a word, picking puts the name where the / was, and a / inside a word or an address opens nothing.
+    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    require(visible(input), "the composer is visible");
+    if (name === "slash-inside-word") {
+      require(!document.querySelector('#app-popover'), "a slash inside a word or an address opens no menu");
+      require(input.value === "請看 https://example.com/review 或 a/b", `the words stand as typed: ${JSON.stringify(input.value)}`);
+      return { check: name, value: input.value };
+    }
+    require(!document.querySelector('#app-popover'), "picking closes the menu");
+    require(input.value === "請幫我整理這份報告 /review ", `the name stands where the slash was, after the words: ${JSON.stringify(input.value)}`);
+    require(input.selectionStart === input.value.length && document.activeElement === input, "the caret is after the name, in the field");
+    const chip = [...document.querySelectorAll('.composer .cmp-mirror .mention-chip')].map(node => node.textContent);
+    require(chip.length === 1 && chip[0] === "/review", `the picked name is drawn as one chip: ${JSON.stringify(chip)}`);
+    return { check: name, value: input.value };
+  }
+  if (name === "team-mentions" || name === "slash-commands" || name === "slash-after-words") {
     const input = [...document.querySelectorAll('.composer textarea')].find(visible);
     const menu = document.querySelector('#app-popover');
     require(visible(input) && visible(menu), "the completion menu and its field are visible");
-    const at = name === "team-mentions" ? input.value.lastIndexOf('@', input.selectionStart) : 0;
+    // The menu stands beside the @ or / that begins the word under the caret, wherever in the words it is.
+    const at = name === "team-mentions" ? input.value.lastIndexOf('@', input.selectionStart) : name === "slash-after-words" ? input.value.lastIndexOf('/', input.selectionStart) : 0;
+    if (name === "slash-after-words") require(at > 0 && menu.classList.contains('slash-menu'), "the slash menu opens for a slash after other words");
     require(at >= 0, "a completion character is present");
     const before = input.value.slice(0, at), prefix = before.split('\n').at(-1);
     const style = getComputedStyle(input), field = input.getBoundingClientRect(), box = menu.getBoundingClientRect();

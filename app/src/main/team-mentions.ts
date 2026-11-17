@@ -1,6 +1,7 @@
 import { entryIcon } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
 import { RECALL } from "./composer-history";
+import { AT_TRIGGER } from "./completion-trigger";
 import { catalogs, getLocale, t } from "./i18n";
 import { faceHTML, primaryFirst, primaryIdOf, RAPHAEL_ID } from "./members";
 import { bindMentionField, type MentionField } from "./mention-field";
@@ -60,7 +61,7 @@ const waiting = (app: RosterEntry): boolean => app.state === "needs_sign_in" || 
  * is still a chip when it is typed. Completion always keeps the focus in the field, including during input-method composition.
  */
 export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allowed?: number[], _composing = false, options: MentionMenuOptions = {}): void {
-  const before = input.value.slice(0, input.selectionStart), match = /[@＠]([^@＠\n]*)$/.exec(before);
+  const before = input.value.slice(0, input.selectionStart), match = AT_TRIGGER.exec(before);
   if (!match || match[1].length > 40) {
     if (menuIsOpenFor(input) && document.querySelector("#app-popover.team-mentions-menu")) closeMenu();
     return;

@@ -53,9 +53,74 @@ test('a recalled command is not typing: the slash menu stays shut and the arrow 
   menu.destroy();
 });
 
-test('command filtering is limited to a slash at the start and excludes arguments', () => {
+test('command filtering follows a slash that begins a word and excludes arguments, words inside a word and addresses', () => {
   expect(matchingCommands(commands, '/REv').map(c => c.name)).toEqual(['review']);
-  for (const text of ['hello /', '/review text', ' /']) expect(matchingCommands(commands, text)).toEqual([]);
+  expect(matchingCommands(commands, 'please /REv').map(c => c.name)).toEqual(['review']);
+  for (const text of ['hello /', ' /', '第一行\n/']) expect(matchingCommands(commands, text).map(c => c.name)).toEqual(['review', 'research']);
+  for (const text of ['/review text', 'a/b', 'a/', 'https://x.com/y', 'see /usr/bin', '/usr/b', 'hello /review text']) expect(matchingCommands(commands, text)).toEqual([]);
+});
+
+const caretAt = (input: HTMLTextAreaElement, value: string, caret = value.length) => { input.value = value; input.setSelectionRange(caret, caret); input.dispatchEvent(new Event('input', { bubbles: true })); };
+
+test.each(['please look at this /', '請幫我 /', '第一行\n/', '/review text /re'])('a slash that begins a word opens the menu after other words', async text => {
+  const { input, menu } = setup(); caretAt(input, text); await flush();
+  expect(document.querySelector('.slash-menu')).not.toBeNull();
+  expect(membersCommandsList).toHaveBeenCalledWith(7);
+  menu.destroy();
+});
+
+test.each(['a/b', 'a/', 'https://x.com/y', 'https://', 'see /usr/bin', 'C:/Users/me', 'and/or'])('a slash inside a word or an address never opens the menu', async text => {
+  const { input, menu } = setup(); caretAt(input, text); await flush();
+  expect(document.querySelector('#app-popover')).toBeNull();
+  expect(membersCommandsList).not.toHaveBeenCalled();
+  menu.destroy();
+});
+
+test('the menu narrows by the name typed after a slash in the middle of the words and closes when a space ends it', async () => {
+  const { input, menu } = setup(); caretAt(input, 'please /res'); await flush();
+  expect([...document.querySelectorAll<HTMLElement>('.slash-menu [data-value]')].map(row => row.dataset.value)).toEqual(['research']);
+  caretAt(input, 'please /research '); expect(document.querySelector('#app-popover')).toBeNull();
+  caretAt(input, 'please /xyz'); await flush(); expect(document.querySelector('#app-popover')).toBeNull();
+  menu.destroy();
+});
+
+test('picking after words puts the name where the slash was and leaves the rest of the text as it was', async () => {
+  const { input, menu } = setup(); caretAt(input, 'please /re'); await flush();
+  document.querySelector<HTMLElement>('[data-slash="0"]')!.click();
+  expect(input.value).toBe('please /review '); expect(input.selectionStart).toBe(input.value.length);
+  expect(document.querySelector('#app-popover')).toBeNull();
+  // The caret is in the middle of the words: what follows it stays, with the caret after the name.
+  const text = 'first /re then more words\nand a second line';
+  caretAt(input, text, 9); await flush();
+  expect(document.querySelector('.slash-menu')).not.toBeNull();
+  document.querySelector<HTMLElement>('[data-value="research"]')!.click();
+  expect(input.value).toBe('first /research then more words\nand a second line');
+  expect(input.selectionStart).toBe('first /research '.length);
+  // A space already follows the slash: one space between the name and the next word, not two.
+  caretAt(input, 'a / b', 3); await flush();
+  document.querySelector<HTMLElement>('[data-value="review"]')!.click();
+  expect(input.value).toBe('a /review b'); expect(input.selectionStart).toBe('a /review '.length);
+  menu.destroy();
+});
+
+test('Escape and the arrow keys work for a slash after words as they do at the start', async () => {
+  const { input, menu } = setup(); caretAt(input, 'please /'); await flush();
+  const send = vi.fn(); input.addEventListener('keydown', send);
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  expect(input.value).toBe('please /research '); expect(send).not.toHaveBeenCalled();
+  caretAt(input, 'please /research and /'); await flush();
+  expect(document.querySelector('.slash-menu')).not.toBeNull();
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  expect(document.querySelector('#app-popover')).toBeNull();
+  menu.destroy();
+});
+
+test('a recalled message that holds a slash after words opens nothing', async () => {
+  const { input, menu } = setup(); caretAt(input, 'ask'); await flush();
+  input.value = 'ask /'; input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: RECALL }));
+  expect(document.querySelector('.slash-menu')).toBeNull();
+  menu.destroy();
 });
 
 test('typing slash fetches that member commands and mouse selection preserves slash text', async () => {

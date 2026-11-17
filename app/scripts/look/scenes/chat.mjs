@@ -16,6 +16,9 @@ const gear = [click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .
 const msKind = id => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`)];
 const closeSettings = [click('.ms-pane [data-ms="back"]'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
 const composer = [click(".cmp-mode"), wait("#app-popover")];
+// What the / menu lists after the words: one command and one skill, grouped as at the start.
+const slashAfterWords = { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }],
+  skills: [{ id: 71, member_id: 0, name: "outline", slash_name: "outline", description: "整理文章架構", enabled: true, source: "https://github.com/example/notes/blob/main/SKILL.md" }] };
 const dictationText = { before: "Please use Sample Too", after: "Please use SampleToolX" };
 // A key made up for the scenes: it is typed into a secret card and must reach nothing but `integrations.card_save`.
 const lookKey = "sk-look-4c9f2b7e81d3";
@@ -261,7 +264,11 @@ export default [
   scene("bot-exchange-expanded", "The line opens the two members' conversation on what was asked",
     [member(1), wait('.exchange-event'), click('.exchange-event'), wait('.mb-chat:not([hidden]) > .peer-chat'), check("bot-exchange-expanded")], { colleagues: 2 }),
   scene("slash-commands", "Slash command menu follows the slash character", [type(".composer textarea", "/"), wait(".slash-menu"), check("slash-commands")], { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }] }),
-  scene("composer-task-stop", "Running private task uses the same composer slot", [wait('.composer[data-task-state="running"] .cmp-voice'), check('p04-task-slot')], {running:true}),
+  // R-MENU-05: a / opens the menu wherever it begins a word, as an @ does; a / inside a word or an address does not.
+  scene("slash-after-words", "Slash menu opens beside a slash typed after other words", [type(".composer textarea", "請幫我整理這份報告"), type(".composer textarea", "請幫我整理這份報告 /"), wait(".slash-menu"), check("slash-after-words")], slashAfterWords),
+  scene("slash-after-words-pick", "Picking a name after words puts it where the slash was", [type(".composer textarea", "請幫我整理這份報告 /"), wait(".slash-menu"), key("Tab"), check("slash-after-words-picked")], slashAfterWords),
+  scene("slash-inside-word", "A slash inside an address or a word closes the menu and opens none", [type(".composer textarea", "請看 /"), wait(".slash-menu"), type(".composer textarea", "請看 https://example.com/review 或 a/b"), waitGone("#app-popover"), check("slash-inside-word")], slashAfterWords),
+  scene("composer-task-stop","Running private task uses the same composer slot", [wait('.composer[data-task-state="running"] .cmp-voice'), check('p04-task-slot')], {running:true}),
   scene("running", "Conversation while a reply is being prepared", [wait('.live-presence'), check("conversation-running")], { running: true }),
   { ...scene("running-motion", "A reply that has just started: its dots move inside their row, held at the top of their bounce, and it says once what is happening", [wait('.live-presence'), { action: "freeze-motion", at: 600 }, check("work-dots")], { running: "fresh" }), motion: true },
   scene("admin-approval", "Raphael's approval survives a concurrent member question", [

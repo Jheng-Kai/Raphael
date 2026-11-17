@@ -6,20 +6,24 @@
 
 ## How to get to it (user POV)
 
-Open a private conversation and type @ or / at the start. Open a group through the sidebar for the allowed-recipient consumer. With nothing typed the @ menu is one list of every other member and then every offered app, in a menu of a fixed height (seven rows and half of the next, so the cut row says it goes on) that scrolls with the mouse wheel and keeps the row the arrow keys reach in view (there is no Show all row and no pages). Oversized skill lists of the / menu still page to fit the available height. Search caps results at eight and ranks exact, prefix and substring name/alias matches (the one matcher, R-FIND-01), members before apps. The fixture contains 32 synthetic services, including unavailable connections and plugin provenance.
+Open a private conversation and type @ or /, at the start or after other words: both open where an @ stands or a / begins a word (`completion-trigger.ts` holds the two rules; a / inside a word or an address such as `a/b` or `https://x.com/y` opens nothing). Open a group through the sidebar for the allowed-recipient consumer. With nothing typed the @ menu is one list of every other member and then every offered app, in a menu of a fixed height (seven rows and half of the next, so the cut row says it goes on) that scrolls with the mouse wheel and keeps the row the arrow keys reach in view (there is no Show all row and no pages). Oversized skill lists of the / menu still page to fit the available height. Search caps results at eight and ranks exact, prefix and substring name/alias matches (the one matcher, R-FIND-01), members before apps. The fixture contains 32 synthetic services, including unavailable connections and plugin provenance.
 
 ## Driving it with look
 
 Selected look matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- mention-menu-open mention-menu-filter mention-menu-signin mention-menu-signin-pick mention-menu-room completion-mentions completion-filtered completion-scrolled completion-arrows completion-group completion-slash completion-plugin completion-clash mention-ime-open mention-ime-at mention-ime-filter mention-chip-composer mention-chip-room slash-commands room-menu --theme both --width 1120,720,1920x1080
+npm run look -- mention-menu-open mention-menu-filter mention-menu-signin mention-menu-signin-pick mention-menu-room completion-mentions completion-filtered completion-scrolled completion-arrows completion-group completion-slash completion-plugin completion-clash mention-ime-open mention-ime-at mention-ime-filter mention-chip-composer mention-chip-room slash-commands slash-after-words slash-after-words-pick slash-inside-word room-menu --theme both --width 1120,720,1920x1080
 ```
 
 The mention-menu scenes assert the 360 px floating surface, rows of the menu height, 16 px marks, the quiet word at the right of every row lining up, the sign-in tag after the name, the highlighted first row, the conversation's own member absent, and that pressing a signed-out app opens the apps dialog and leaves no address in the words. The completion scenes assert member-then-app order, all thirty-two services on the one list with the ones that need a sign-in or a key last, no show-all row, the fixed maximum height with a cut row at its foot, the wheel reaching the last row with its tag whole in view (`completion-scrolled`), ArrowUp from the first row wrapping to the last with the highlight scrolled into view and the focus still in the field (`completion-arrows`), alias cap, sign-in/key tags, group scope, descriptions, plugin small print, collision resolution, Tab selection, viewport containment, and for the / menu no inner scroll. Ready services have no status tag; only sign-in or key requirements have one. Existing IME/chip scenes cover the shared consumers. `room-menu` supplies the ordinary shared-menu consistency reference at the same theme/size.
 
+The / scenes: `slash-commands` (a / alone), `slash-after-words` (words, then a space and a /: the menu opens beside that /, checked within 24 px of it and above or below its line), `slash-after-words-pick` (Tab puts `/review` where the / was, the caret after it, one chip drawn) and `slash-inside-word` (after an open menu, an address and `a/b` close it and open none). R-MENU-05.
+
 Core coverage: `tests/evaluate/test_slash_skills.py`, `tests/integrations/test_inventory.py`, and the affected agent/background/members/worker/integrations suites. Explicit skills resolve at the shared member capability boundary and reuse existing bounded `read_skill`, including references. API/CLI user messages and background worker requests receive that guidance as untrusted data. Original conversation/task text remains the slash request. No new RPC or table is introduced; plugin-qualified internal names use the existing skills table and mirror.
 
 ## Gotchas
+
+The core expands an explicit command or skill only when the message begins with it (`resolve_slash`); a `/name` picked after words is drawn as a chip and sent as those words, for the model to read.
 
 Synthetic browser and fake-model evidence do not establish native, live or independent design acceptance.
