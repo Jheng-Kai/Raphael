@@ -1089,6 +1089,7 @@ The store is open only with a compiled public key (PUBLIC_KEYS is empty until th
 No new RPC, migration, settings registry, worker or brain loop (A-01/05/06/08/10/11/12).
 catalog-template/ holds the future public repository's schema/scan/signing CI;
 PRs never receive the signing secret. Production trust roots require owner setup.
+share-template/ holds the Cloudflare Worker behind the one-press share link: one KV namespace, unlisted links, no scripts on its page, deployed by the owner on a free account; Raphael keeps no credential for it.
 
 ## Shared owner vault
 

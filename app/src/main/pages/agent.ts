@@ -2938,6 +2938,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "template-view":
       case "template-save":
       case "template-publish":
+      case "template-share":
+      case "template-copy-link":
+      case "template-unshare":
       case "template-folder":
       case "template-open":
         chatCardAction(act);

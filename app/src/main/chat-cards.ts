@@ -13,7 +13,7 @@ import { mountTemplateReview } from "./template-review";
 import { connectionMarkHTML } from "./secret-card";
 import { slimeFaceHTML } from "./slime";
 import type { AgentTurn, PairingCard, TemplateCard } from "./types";
-import { btn, esc, ico, toaster } from "./ui";
+import { btn, copyText, esc, ico, toaster } from "./ui";
 
 const PLATFORM = { telegram: "Telegram", slack: "Slack", discord: "Discord" } as const;
 /** Where each bot is made: fixed here, never taken from a card (commands.rs allows only these). */
@@ -42,22 +42,30 @@ function templateCardHTML(card: TemplateCard): string {
   const facts = [t("cards.templateSkills", { p0: card.counts.skills }), t("cards.templateRoutines", { p0: card.counts.routines }),
     card.connections.length ? t("cards.templateNeeds", { p0: card.connections.join("、") }) : ""].filter(Boolean);
   const prepared = card.state === "published" && card.url;
-  const actions = prepared
+  const view = btn(esc(t("cards.templateView")), "sm", on("template-view"));
+  const keep = btn(esc(t("cards.templateSave")), "sm", `${on("template-save")}${blocked ? " disabled" : ""}`);
+  // A shared card keeps its link (R-SHARE-01): copying it again sends nothing. With a share service the link takes the
+  // place of the GitHub publish request; without one the card offers that request as before.
+  const actions = card.link
+    ? btn(esc(t("cards.templateCopyLink")), "sm pri", `${on("template-copy-link")} data-template-link="${esc(card.link)}"`) +
+      btn(esc(t("cards.templateUnshare")), "sm", on("template-unshare")) + view
+    : prepared
     ? btn(esc(t("cards.templateOpen")), "sm pri", `${on("template-open")} data-template-url="${esc(card.url!)}"`) +
-      (card.folder_id ? btn(esc(t("cards.templateFolder")), "sm", `${on("template-folder")} data-template-folder="${esc(card.folder_id)}"`) : "") +
-      btn(esc(t("cards.templateView")), "sm", on("template-view"))
-    : btn(esc(t("cards.templatePublish")), "sm pri", `${on("template-publish")}${blocked ? " disabled" : ""}`) +
-      btn(esc(t("cards.templateSave")), "sm", `${on("template-save")}${blocked ? " disabled" : ""}`) + btn(esc(t("cards.templateView")), "sm", on("template-view"));
+      (card.folder_id ? btn(esc(t("cards.templateFolder")), "sm", `${on("template-folder")} data-template-folder="${esc(card.folder_id)}"`) : "") + view
+    : card.shareable
+    ? btn(esc(t("cards.templateCopyLink")), "sm pri", `${on("template-share")}${blocked ? " disabled" : ""}`) + keep + view
+    : btn(esc(t("cards.templatePublish")), "sm pri", `${on("template-publish")}${blocked ? " disabled" : ""}`) + keep + view;
   return cardHTML({
     title: card.name,
     // No face inside a card (R-CARD-01): the share mark stands for the member's template.
     mark: `<span class="mono md" aria-hidden="true">${ico("share")}</span>`,
-    status: blocked ? "failed" : card.state === "draft" ? "ready" : "done",
-    statusText: blocked ? t("cards.templateBlocked") : card.state === "published" ? t("cards.templatePublished") : card.state === "saved" ? t("cards.templateSaved") : t("cards.templateReady"),
+    status: blocked ? "failed" : card.state === "draft" && !card.link ? "ready" : "done",
+    statusText: blocked ? t("cards.templateBlocked") : card.link ? t("cards.templateShared") : card.state === "published" ? t("cards.templatePublished") : card.state === "saved" ? t("cards.templateSaved") : t("cards.templateReady"),
     body: card.description || undefined,
     // A prepared publish request says what the owner does next and where the files are to be found.
     content: `<p class="card-body template-facts">${facts.map((fact) => `<span>${esc(fact)}</span>`).join("")}</p>` +
-      (prepared ? `<p class="card-body template-next">${esc(t("cards.templatePrepared"))}</p>` +
+      (card.link ? `<p class="card-body template-where" data-template-link-line><span class="template-path">${esc(card.link)}</span></p>` : "") +
+      (prepared && !card.link ? `<p class="card-body template-next">${esc(t("cards.templatePrepared"))}</p>` +
         (card.folder ? `<p class="card-body template-where" data-template-where><span>${esc(t("cards.templateWhere"))}</span><span class="template-path">${esc(card.folder)}</span></p>` : "") : ""),
     actions,
     cls: "template-card", attrs: ` data-template-card-id="${esc(card.id)}" data-card-state="${esc(card.state)}" data-template-avatar="${esc(card.avatar ?? "")}"`,
@@ -73,9 +81,9 @@ export function chatCardsHTML(turn: AgentTurn): string {
 async function viewTemplate(id: string, avatar = ""): Promise<void> {
   const { template, findings = [] } = await api.core<{ template: MemberTemplate; findings?: ScanFinding[] }>("members.template_card", { id });
   const face = avatar ? slimeFaceHTML({ id: -1, avatar }, 64) : "";
-  // The review's foot is the card's own next step, 發佈 while it is a draft, else nothing: its × closes it
+  // The review's foot is the card's own next step while it is a draft, its link or its publish request, else nothing: its × closes it
   const card = document.querySelector<HTMLElement>(`[data-template-card-id="${CSS.escape(id)}"]`);
-  const publish = card?.querySelector<HTMLButtonElement>('[data-act="template-publish"]:not(:disabled)') ?? null;
+  const publish = card?.querySelector<HTMLButtonElement>('[data-act="template-share"]:not(:disabled), [data-act="template-publish"]:not(:disabled)') ?? null;
   const dialog = openDialog({ title: t("store.review"), cls: "template-preview template-card-review", body: "",
     actions: publish ? { primary: { label: esc(publish.textContent?.trim() || t("store.publish")), attrs: ' data-dlg="publish"' } } : {},
     onAct(action) {
@@ -113,6 +121,21 @@ export function chatCardAction(act: HTMLElement): boolean {
       if ((await api.memberTemplateFile("save", text)) === null) return;
       await api.core("members.template_card_export", { id: template, saved: true });
     });
+    return true;
+  }
+  if (kind === "template-share" || kind === "template-copy-link") {
+    // The link is copied only once the service has made it; a failure leaves the card as it was and says so.
+    busy(true);
+    void (async () => {
+      const link = act.dataset.templateLink || (await api.core<{ link: string }>("members.template_card_share", { id: template })).link;
+      await copyText(link);
+      toaster.info(t("cards.templateLinkCopied"));
+    })().catch(() => toaster.info(t("cards.templateLinkFailed"))).finally(() => busy(false));
+    return true;
+  }
+  if (kind === "template-unshare") {
+    busy(true);
+    void api.core("members.template_card_unshare", { id: template }).catch(() => toaster.info(t("cards.templateUnshareFailed"))).finally(() => busy(false));
     return true;
   }
   if (kind === "template-publish") {

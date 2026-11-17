@@ -593,6 +593,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "members.template_card",
     "members.template_card_export",
     "members.template_card_publish",
+    "members.template_card_share",
+    "members.template_card_unshare",
     "connectors.label",
     "connectors.remove_account",
     "members.mark_all_read",
@@ -2547,6 +2549,8 @@ mod tests {
             "members.template_card",
             "members.template_card_export",
             "members.template_card_publish",
+            "members.template_card_share",
+            "members.template_card_unshare",
         ] {
             assert!(is_allowed_method(method));
         }

@@ -2212,6 +2212,16 @@ def _member_folders(conn):
 
 _MIGRATIONS[88] = _member_folders
 
+# A template card shared by a link keeps the link it shows and the key that takes it down (R-SHARE-01); the key never leaves
+# the core.
+_MIGRATIONS[89] = """
+BEGIN;
+ALTER TABLE member_template_cards ADD COLUMN link TEXT;
+ALTER TABLE member_template_cards ADD COLUMN link_token TEXT;
+PRAGMA user_version = 89;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
