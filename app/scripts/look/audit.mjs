@@ -275,7 +275,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     // interface copy; text marked as the window's own language is checked like any other.
     const marked = englishUI.length ? element.closest('[lang]') : null;
     const ownLanguage = Boolean(marked && marked !== doc.documentElement && !/^zh(?:-|$)/i.test(marked.getAttribute('lang') ?? ''));
-    if (englishUI.length && !ownLanguage && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt, .conversation-caption, .conversation-open') && !element.matches('.conversation-trigger')) {
+    if (englishUI.length && !ownLanguage && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt, .conversation-caption, .conversation-open, .owner-data') && !element.matches('.conversation-trigger')) {
       const copy = [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent.trim());
       for (const attribute of ['aria-label', 'placeholder', 'title']) if (element.hasAttribute(attribute)) copy.push(element.getAttribute(attribute).trim());
       const productOrKeyName = /^(?:Raphael|OpenRouter|OpenAI|ChatGPT|Codex|Claude|Gemini|Antigravity|GitHub|Telegram|Google|Google Calendar|Notion|MCP|PDF|CLI|Right Alt|Alt|Ctrl|Esc)$/;
@@ -315,7 +315,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('select,input[type="time"],video[controls],audio[controls]')) nativeControls.push(description);
     // Owner-authored text is data; labels, titles and placeholders remain UI copy. So is the name of a file a member
     // delivered (its Library's rows).
-    const authored = element.matches(".cs-info-row .v, .modal-body .data-record > .data-record-text, .output-path, .output-name, .ms-path, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    const authored = element.matches(".cs-info-row .v, .modal-body .data-record > .data-record-text, .output-path, .output-name, .ms-path, .owner-data, .template-path, .lib-title, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
     const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
     // The output folder's button names the owner's own folder in its label: that name is data too.
     for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute) && !element.matches(".output-chosen")) strings.push(element.getAttribute(attribute));

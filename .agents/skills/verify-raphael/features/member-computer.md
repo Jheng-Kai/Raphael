@@ -1660,15 +1660,22 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
 - The owner context names the member's own first folder as its output folder and the rest as its write folders
   (`brain/owner.py`). A command it starts on this computer begins in its first folder (`command_folder`).
 - Migration 88 turned the one list every member shared into each member's own list, the output folder first.
+- The composer of a member's own conversation names that folder beside the permission (`composer-folder.ts`, the
+  `.cmp-folder` button in the permission's quiet type): the member's first folder, else the output folder, else 選擇資料夾.
+  Its menu is the permission's kind of card: the member's folders with the first checked (choosing one puts it first),
+  加入資料夾 (the native picker, the pick first) and 改用輸出資料夾 (clears the member's list). Short of room its word hides
+  with the permission's and its folder icon stays (`fitComposerRow`); a room's composer has none.
 
 Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
 places and links, glob and grep, writes inside and outside, each member's own folders, an unapproved write),
-brain/test_owner.py (the prompt per member, migration 88), member-settings.test.ts and settings-view.test.ts. Look:
-`member-write-folders` (adds with the picker, removes the first) and `member-write-folders-default` (one quiet line
-naming the output folder) beside the output folder scenes:
+brain/test_owner.py (the prompt per member, migration 88), member-settings.test.ts, settings-view.test.ts and
+composer-folder.test.ts. Look: `member-write-folders` (adds with the picker, removes the first),
+`member-write-folders-default` (one quiet line naming the output folder), `composer-folder` and `composer-folder-menu`
+beside the output folder scenes; the composer row's narrow scenes prove the folder gives way with the permission:
 
 ```powershell
-npm run look -- member-write-folders member-write-folders-default owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- member-write-folders member-write-folders-default composer-folder composer-folder-menu owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- composer-row-narrow composer-row-language composer-row-owner room --theme both --width 1120,720,1920x1080
 ```
 
 Not verified: a live model choosing these tools, a real macOS privacy prompt while a walk runs, and Windows paths on a

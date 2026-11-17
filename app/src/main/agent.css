@@ -508,6 +508,18 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    to the name; last the name shortens away beside its depth and chevron. The + and the right-hand button never give way. */
 .cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .cmp-bar > .cmp-attach, .cmp-bar > .cmp-mode, .cmp-bar > .cmp-pair { flex: none; }
+/* The member's folder (composer-folder.ts) is the permission's kind of button beside it, and gives way with it; a long name ends
+   in an ellipsis, its whole path in its name and its menu. */
+.cmp-bar > .cmp-folder { flex: 0 1 auto; min-width: 0; }
+.composer .btn.cmp-folder { position: relative; overflow: hidden; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+.composer .btn.cmp-folder > span { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.composer .btn.cmp-folder[data-word-hidden] > span { position: absolute; visibility: hidden; }
+.composer .btn.cmp-folder:hover:not(:disabled) { color: var(--text); }
+.composer .btn.cmp-folder:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
+.composer .btn.cmp-folder .i { flex: none; width: 16px; height: 16px; }
+/* A folder's path is read whole, wrapped where it must. */
+.cb-folders .cb-name small.cb-path { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.cb-folders .cb-actions { border-top: 1px solid var(--line); }
 .cmp-model:empty { display: none; }
 .cmp-model:empty + .cmp-pair { margin-inline-start: auto; }
 .composer .btn.cmp-mode { position: relative; overflow: hidden; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }

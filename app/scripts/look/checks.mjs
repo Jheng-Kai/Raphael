@@ -1091,6 +1091,31 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.ms-pane [data-k="ms-folders"] .ms-empty'), "no default line beside the member's own folders");
     return {check:name};
   }
+  if (name === "composer-folder") {
+    // R-PC-05: the composer names where the member's files go, its first folder, as the permission names how it acts.
+    const folder = document.querySelector('.page-agent .composer .cmp-folder'), word = folder?.querySelector('span'), mode = document.querySelector('.page-agent .composer .cmp-mode');
+    require(visible(folder) && word?.textContent === "Notes", `the button names the member's first folder: ${word?.textContent}`);
+    require(folder.getAttribute('aria-label') === "存放資料夾：C:\\Owner\\Notes", `its whole path is in its name: ${folder.getAttribute('aria-label')}`);
+    const a = folder.getBoundingClientRect(), b = mode.getBoundingClientRect();
+    require(Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1 && a.left >= b.right - 0.5, "it stands right after the permission, on its line");
+    require(getComputedStyle(folder).color === getComputedStyle(mode).color && getComputedStyle(folder).fontSize === getComputedStyle(mode).fontSize, "it wears the permission's quiet type");
+    require(!document.querySelector('.au-room-pane:not([hidden]) .composer .cmp-folder'), "a room's composer has no folder");
+    return {check: name};
+  }
+  if (name === "composer-folder-menu") {
+    const card = document.querySelector('#app-popover .cb-folders'), button = document.querySelector('.page-agent .composer .cmp-folder');
+    require(visible(card) && card.querySelector('.cb-head h3')?.textContent === "可以寫入的資料夾", "the menu is the permission's kind of card, named for the folders");
+    const rows = [...card.querySelectorAll('[data-folder]')];
+    require(rows.length === 2 && rows[0].getAttribute('aria-checked') === "true" && rows[1].getAttribute('aria-checked') === "false", "the member's folders, the first checked");
+    require(rows[0].querySelector('.cb-path')?.textContent === "C:\\Owner\\Notes" && rows.every(row => row.querySelector('.cb-path').scrollWidth <= row.querySelector('.cb-path').clientWidth + 1), "each path is whole");
+    require(visible(card.querySelector('[data-folder-act="add"]')) && card.querySelector('[data-folder-act="default"] .cb-path')?.textContent === "C:\\Owner\\Deliveries", "adding one and going back to the output folder are offered");
+    const box = document.querySelector('#app-popover').getBoundingClientRect();
+    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, "the menu stays inside the window");
+    require(box.bottom <= button.getBoundingClientRect().top + 1, "it opens above the button");
+    const icons = [...card.querySelectorAll('.cb-actions svg')].map(node => node.innerHTML);
+    require(new Set(icons).size === icons.length, "each action has its own icon");
+    return {check: name};
+  }
   if (name === "member-write-folders-default") {
     const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), line = section?.querySelector('.ms-empty');
     require(visible(line) && line.textContent === "沒有選資料夾時，寫到輸出資料夾：C:\\Owner\\Deliveries", `one quiet line names the output folder: ${line?.textContent}`);
@@ -3430,8 +3455,18 @@ export function checkRendered(name, context = {}) {
           const shortened = modelName.scrollWidth > modelName.clientWidth + 0.5, slot = form.querySelector('.cmp-model'), gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
           const whole = shortened ? modelName.scrollWidth : box(modelName).width, size = parseFloat(getComputedStyle(modelName).fontSize);
           const modelNeed = trigger.width - box(modelName).width + Math.min(whole, 6 * size);
-          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width);
-          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          // A member's folder beside the permission (composer-folder.ts) gives way with it: its word hides with the permission's.
+          const folder = [...form.querySelectorAll('.cmp-folder')].find(visible), folderWord = folder?.querySelector('span');
+          const folderWide = folder ? box(folder).width + (wordShown ? 0 : (parseFloat(getComputedStyle(folder).columnGap) || 0) + box(folderWord).width) : 0;
+          const modeWide = own.width + (wordShown ? 0 : (parseFloat(getComputedStyle(mode).columnGap) || 0) + letters.width) + folderWide;
+          const fixed = rects.filter(rect => !['cmp-mode', 'cmp-model', 'cmp-folder'].includes(rect.control)).reduce((sum, rect) => sum + rect.width, 0);
+          if (folder) {
+            const mark = folder.querySelector('svg.i'), own_ = box(folder);
+            require(visible(mark) && box(mark).width >= 15.5 && box(mark).left >= own_.left && box(mark).right <= own_.right + 0.5, `the folder keeps its icon whole: ${JSON.stringify(round(own_))}`);
+            require(folder.hasAttribute('data-word-hidden') === !wordShown, "the folder's word shows and hides with the permission's");
+            require((folder.getAttribute('aria-label') ?? '').length > 0, "the folder is named for a screen reader whether its word shows or not");
+            Object.assign(result, { folderWord: folderWord.textContent.trim() });
+          }
           const need = fixed + (rects.length - 1) * gap + modeWide + modelNeed, room = bar.clientWidth;
           require(wordShown ? room + 1 >= need : room < need + 1.5, `the permission's word shows exactly while the row holds it beside the model's first letters: ${JSON.stringify({ room, need: Math.round(need * 10) / 10, wordShown })}`);
           const before = rects[rects.findIndex(rect => rect.control === 'cmp-model') - 1];

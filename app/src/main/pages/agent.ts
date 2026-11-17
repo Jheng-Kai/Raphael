@@ -124,6 +124,7 @@ import { askInChat } from "../chat-ask";
 import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
 import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
+import { mountComposerFolder } from "../composer-folder";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
@@ -304,6 +305,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let unreadCaptured = false;
   let openingThread = true;
   let composerBrain: ReturnType<typeof mountComposerBrain> | undefined;
+  let composerFolder: ReturnType<typeof mountComposerFolder> | undefined;
   const chosenConversations = new Map<number, number>();
   const members = createMembers({
     app,
@@ -336,6 +338,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     },
     onUpdate: () => {
       composerBrain?.draw();
+      composerFolder?.draw();
       drawComposer();
       drawDock();
       drawFaces();
@@ -405,6 +408,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const selected = conversationCache.get(memberId())?.find(c => c.id === conversationId());
     const title = selected?.kind === "quick" ? conversationTitle(selected) : "";
     composerBrain?.draw();
+    composerFolder?.draw();
     caption.textContent = title;
     caption.hidden = !title;
     const name = members.member().name;
@@ -526,13 +530,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const composer = document.createElement("form");
   composer.className = "composer";
   composer.noValidate = true;
-  composer.innerHTML = composerHTML();
+  composer.innerHTML = composerHTML(true);
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   const pageDraft = bindPageComposer(input);
   const correctionLearning = bindComposerLearning(input);
   const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
+  composerFolder = mountComposerFolder(composer.querySelector<HTMLElement>(".cmp-folder")!, memberId, { onEvent: handler => app.onEvent(handler) });
   bindComposerRow(composer);
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
