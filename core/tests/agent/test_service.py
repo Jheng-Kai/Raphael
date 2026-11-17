@@ -46,6 +46,7 @@ METHODS = [
     "agent.history.send_now",
     "agent.history.sent",
     "agent.history.stop",
+    "agent.history.version",
     "agent.react",
     "brains.cli",
     "brains.cli_disconnect",

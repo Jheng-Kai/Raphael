@@ -304,6 +304,12 @@ export interface AgentTurn {
   handoffs?: HandoffView[];
   conversation_id?: number;
   quote?: MessageQuote | null;
+  /**
+   * An owner's message edited after its member answered it (R-UI-163): which version this is and how many there are. The
+   * history's turn is always the newest; an earlier one comes from `agent.history.version`, for the owner to read again.
+   */
+  version?: number;
+  versions?: number;
   /** Ordered public lines; older cores and turns may have none. Text includes Raphael's framing. */
   messages?: TurnMessage[];
   id: number;

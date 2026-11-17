@@ -2,7 +2,8 @@
 // Taking a sent message back into the composer to edit it (R-UI-158): every kind of message crossed with every state the composer can be
 // in when 編輯 is chosen, and every way the edit can end. Whatever the composer held before comes back, nothing the owner wrote is lost,
 // and the thread shows the message exactly once. The real page and member shell run; only the native IPC boundary is faked, and the core's
-// own handling of an edit (the message replaced by the edit, with its id) is played by `core`.
+// own handling of an edit (the message replaced by the edit, with its id) is played by `core`. Since R-UI-163 the composer takes the owner's
+// last message while its member is still thinking about it and has sent no bubble for it (`asked`); an answered one is edited in its bubble.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AgentTurn, AppContext, MainEvent, Member, MembersList } from "../types";
 
@@ -22,6 +23,7 @@ vi.mock("../api", () => api);
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
 import { messageActionsHTML } from "../timeline";
+import { closeMenu } from "../ui";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -31,6 +33,8 @@ const turn = (id: number, more: Partial<AgentTurn> = {}): AgentTurn => ({
   id, created_at_ms: Date.parse("2026-10-20T10:00:00+08:00") + id * 1000, question: `問題 ${id}`, route: "chat",
   prefix: "答", text: `回答 ${id}`, detail: null, status: "done", source: "app", member_id: 3, session_id: `s${id}`, ...more,
 });
+/** The owner's message its member is still thinking about, with no bubble for it yet: the one 編輯 takes into the composer. */
+const asked = (id: number, more: Partial<AgentTurn> = {}): AgentTurn => turn(id, { status: "running", text: "", ...more });
 
 /** The thread of member 3, newest first, as the core keeps it; an edit writes into it as the core does (the replaced message's id). */
 let rows: AgentTurn[] = [];
@@ -135,7 +139,7 @@ async function finish(ending: Ending, target: number, extra: { words: string }):
 
 describe("every kind of message, edited from an empty composer", () => {
   test.each(KINDS.flatMap(kind => ENDINGS.map(ending => [kind.name, ending, kind] as const)))("%s, ending: %s", async (_name, ending, kind) => {
-    const original = turn(8, kind.turn);
+    const original = asked(8, kind.turn);
     const agent = mount([original]); await flush(); await pickMember(3);
     const words = kind.turn.question ?? "";
     await editMessage(8);
@@ -174,7 +178,7 @@ const BEFORES: Before[] = [
 
 describe("what the composer held before 編輯 is never lost", () => {
   test.each(BEFORES.flatMap(before => ENDINGS.map(ending => [before.name, ending, before] as const)))("%s, ending: %s", async (_name, ending, before) => {
-    const agent = mount([turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([asked(8, { question: "message eight" })]); await flush(); await pickMember(3);
     await before.set();
     await editMessage(8);
     expect(composerNow()).toEqual({ text: "message eight", chips: [], replacing: true, quote: null });
@@ -192,40 +196,45 @@ describe("what the composer held before 編輯 is never lost", () => {
   });
 });
 
-describe("a second edit while one is open", () => {
-  test("an untouched edit is given up for the other message, and the bubble of the first is back", async () => {
-    const agent = mount([turn(8, { question: "message eight" }), turn(7, { question: "message seven" })]); await flush(); await pickMember(3);
+// A second edit while one is open can no longer happen (R-UI-163): only the owner's last message has 編輯, so the earlier one offers none.
+describe("only the owner's last message can be edited", () => {
+  const menu = (id: number): string[] => {
+    $(`[data-id="${id}"] .owner-message [data-act="more-message"]`).click();
+    const picks = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")].map(item => item.dataset.pick!);
+    closeMenu();
+    return picks;
+  };
+
+  test("a message the owner sent something after offers no 編輯, whatever its state, and the last one does", async () => {
+    const agent = mount([asked(8, { question: "message eight" }), turn(7, { question: "message seven" }), asked(6, { question: "message six", status: "done" })]); await flush(); await pickMember(3);
+    expect(menu(7)).not.toContain("edit");
+    expect(menu(6)).not.toContain("edit");
+    expect(menu(8)).toContain("edit");
     typeInto("my own draft");
-    await editMessage(7);
     await editMessage(8);
+    // While the last one is in the composer, the earlier one is still not editable: nothing takes the composer from the edit.
+    expect(menu(7)).not.toContain("edit");
     expect(composerNow()).toEqual({ text: "message eight", chips: [], replacing: true, quote: null });
-    expect(shown("message seven")).toBe(1);
-    expect(shown("message eight")).toBe(0);
+    box().focus();
     press("Escape"); await flush();
     expect(box().value).toBe("my own draft");
     expect(shown("message seven")).toBe(1); expect(shown("message eight")).toBe(1);
     agent.hide();
   });
 
-  test.each(["sent", "Escape twice after a change"] as const)("words changed in the first edit are not lost when the other message is chosen (%s)", async ending => {
-    const agent = mount([turn(8, { question: "message eight" }), turn(7, { question: "message seven" })]); await flush(); await pickMember(3);
-    typeInto("my own draft");
-    await editMessage(7);
-    typeInto("message seven, rewritten");
-    await editMessage(8);
-    expect(composerNow()).toEqual({ text: "message eight", chips: [], replacing: true, quote: null });
-    expect(shown("message seven")).toBe(1);
-    await finish(ending, 8, { words: "eight, rewritten" });
-    // Both pieces of writing come back as the draft: nothing was swallowed, and neither message is edited twice.
-    expect(composerNow().replacing).toBe(false);
-    expect(box().value).toContain("my own draft");
-    expect(box().value).toContain("message seven, rewritten");
-    expect(shown("message seven")).toBe(1);
+  test("a message sent after it takes 編輯 away from the one before, also while it is on its way", async () => {
+    let finishSend!: () => void;
+    const agent = mount([asked(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    expect(menu(8)).toContain("edit");
+    api.agentAskText.mockImplementationOnce(() => new Promise<void>(resolve => { finishSend = resolve; }));
+    typeInto("a newer question"); press("Enter"); await flush();
+    expect(menu(8)).not.toContain("edit");
+    finishSend(); await flush();
     agent.hide();
   });
 
   test("a file still being read when 編輯 is chosen is kept for after the edit", async () => {
-    const agent = mount([turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([asked(8, { question: "message eight" })]); await flush(); await pickMember(3);
     const picker = $<HTMLInputElement>(".cmp-picker");
     Object.defineProperty(picker, "files", { value: [new File([PNG], "slow.png", { type: "image/png" })], configurable: true });
     picker.dispatchEvent(new Event("change"));
@@ -239,7 +248,7 @@ describe("a second edit while one is open", () => {
 
 describe("a recording in progress", () => {
   test.each(["sent", "another conversation and back"] as const)("編輯 keeps the edit and the recording apart (%s)", async ending => {
-    const agent = mount([turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([asked(8, { question: "message eight" })]); await flush(); await pickMember(3);
     typeInto("spoken draft");
     send({ type: "Dictation", phase: "listening", agent: true, member_id: 3 });
     await editMessage(8);
@@ -256,14 +265,17 @@ describe("a recording in progress", () => {
 });
 
 describe("work that is under way while a message is edited", () => {
-  const running = (): AgentTurn => turn(9, { question: "later question", status: "running", session_id: "run9", text: "" });
+  // Work after the owner's last message that is not a message of theirs: a routine's run (R-UI-163 keeps the edited message the last one),
+  // after a message whose turn ended with no bubble of its member's (still one the composer takes back).
+  const running = (): AgentTurn => turn(9, { question: "每天", source: "routine", route: "routine", status: "running", session_id: "run9", text: "" });
+  const ended = (): AgentTurn => asked(8, { question: "message eight", status: "done" });
   const press2 = (): void => {
     $(".cmp-voice").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     document.body.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
   };
 
   test("Stop returns the queued words after the edit: the edit is still an edit, and they come back with what it held before", async () => {
-    const agent = mount([running(), turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([running(), ended()]); await flush(); await pickMember(3);
     typeInto("my own draft");
     await editMessage(8);
     api.agentStop.mockResolvedValue({ returned: [{ session_id: "queued1", text: "queued words", attachments: [] }] });
@@ -283,7 +295,7 @@ describe("work that is under way while a message is edited", () => {
   });
 
   test("Escape in an edit belongs to the work under way: it asks to stop that work, and the edit stays until it is sent or left", async () => {
-    const agent = mount([running(), turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([running(), ended()]); await flush(); await pickMember(3);
     await editMessage(8);
     box().focus();
     press("Escape"); await flush();
@@ -296,18 +308,31 @@ describe("work that is under way while a message is edited", () => {
     agent.hide();
   });
 
+  test("Escape in the edit of a message its member is still thinking about gives the edit up, and that work goes on", async () => {
+    const agent = mount([asked(8, { question: "message eight", session_id: "run8" })]); await flush(); await pickMember(3);
+    await editMessage(8);
+    box().focus();
+    press("Escape"); await flush();
+    expect(composerNow()).toEqual({ text: "", chips: [], replacing: false, quote: null });
+    expect(shown("message eight")).toBe(1);
+    expect(api.agentStop).not.toHaveBeenCalled();
+    expect(api.agentRetract).not.toHaveBeenCalled();
+    agent.hide();
+  });
+
   test("Cancel on a running message keeps the words being written, and an edit in the composer stays an edit", async () => {
-    const agent = mount([running(), turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([turn(9, { question: "later question", status: "running", session_id: "run9", text: "" }), asked(8, { question: "message eight" })]); await flush(); await pickMember(3);
     api.agentRetract.mockImplementation(async (session: string) => { rows = rows.filter(item => item.session_id !== session); });
     typeInto("my own draft");
     pickMessage('[data-id="9"]', "cancel"); await flush();
     expect(api.agentRetract).toHaveBeenCalledTimes(1);
     expect(box().value).toBe("my own draft\n\nlater question");
-    rows = [turn(10, { question: "another later question", status: "running", session_id: "run10", text: "" }), ...rows.filter(item => item.id !== 9)];
+    box().value = ""; box().dispatchEvent(new Event("input", { bubbles: true }));
+    // Message 8 is the owner's last again: it is taken into the composer before another message of theirs comes (from their phone).
+    await editMessage(8);
+    rows = [turn(10, { question: "another later question", status: "running", session_id: "run10", text: "" }), ...rows];
     send({ type: "AgentTurn", turn_id: 10, member_id: 3 });
     await new Promise(resolve => setTimeout(resolve, 450)); await flush();
-    box().value = ""; box().dispatchEvent(new Event("input", { bubbles: true }));
-    await editMessage(8);
     pickMessage('[data-id="10"]', "cancel"); await flush();
     expect(composerNow()).toEqual({ text: "message eight", chips: [], replacing: true, quote: null });
     expect(shown("message eight")).toBe(0);
@@ -321,7 +346,7 @@ describe("work that is under way while a message is edited", () => {
 
 describe("the message being edited is gone from the conversation", () => {
   test.each(["a turn was removed", "the history was cleared"] as const)("%s: the words stay as a draft that replaces nothing, and send as a new message", async what => {
-    const agent = mount([turn(8, { question: "message eight" }), turn(7, { question: "message seven" })]); await flush(); await pickMember(3);
+    const agent = mount([asked(8, { question: "message eight" }), turn(7, { question: "message seven" })]); await flush(); await pickMember(3);
     typeInto("a half written draft");
     await editMessage(8);
     typeInto("eight, rewritten");
@@ -336,7 +361,7 @@ describe("the message being edited is gone from the conversation", () => {
   });
 
   test("a message that is still there keeps the edit through the same read", async () => {
-    const agent = mount([turn(8, { question: "message eight" })]); await flush(); await pickMember(3);
+    const agent = mount([asked(8, { question: "message eight" })]); await flush(); await pickMember(3);
     await editMessage(8);
     rows = [turn(9, { question: "later question" }), ...rows];
     send({ type: "AgentTurn", turn_id: 9, member_id: 3 });
@@ -364,6 +389,6 @@ describe("the actions of a message stand on the message, whatever it carries", (
 
   test("a group room's own message offers no edit", () => {
     expect(messageActionsHTML(1, false, undefined, false)).not.toContain("data-owner-act");
-    expect(messageActionsHTML(1, false, "edit", true)).toContain('data-owner-act="edit"');
+    expect(messageActionsHTML(1, false, "own", true)).toContain('data-owner-act="own"');
   });
 });

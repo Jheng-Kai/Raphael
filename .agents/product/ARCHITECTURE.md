@@ -264,6 +264,16 @@ agent.history.list additionally accepts bounded after_id and explicit turn_ids
 reads, scoped to the same member and conversation; dirty IDs never advance the
 forward-page cursor. Persisted history remains authoritative.
 
+An owner's message edited after its member answered it has versions (R-UI-163). `agent_turns` always holds the
+newest; migration 87's `agent_turn_versions` keeps each earlier one (words, files, quote and the reply, media and
+event lines it was answered with) under the turn's id, written in the same transaction as the edit's row
+(`AgentHistory.add(versions=...)`) and deleted with the turn by trigger. `agent.ask` with `replace_turn_id`
+snapshots the old turn after its work is stopped and before the retraction removes it, when the member had
+answered it; an unanswered one is only replaced, as before. `agent.history.list` adds `version`/`versions` to an
+edited turn, and `agent.history.version` (owner-only in management.py) returns one version in the turn's shape.
+Context, summaries, CLI resume sessions, search and memory reads use `agent_turns` alone, so a model never reads an
+earlier version; which version the owner reads is window state per conversation.
+
 Finished turn HTML is cached by its data and display version. Composio and
 mention projections are bounded presentation caches, never changes to raw tool
 results. The shared reading controller retains one anchor and invalidates queued

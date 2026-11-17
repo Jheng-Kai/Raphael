@@ -670,9 +670,14 @@ const typeInto = (field: HTMLTextAreaElement, words: string): void => { field.va
 
 describe("a sent message is taken back into the composer to be edited", () => {
   const SHOT = `${"c".repeat(32)}.png`, QUOTE = { text: "Saved passage", author: "You" };
+  // The composer takes the owner's last message while its member is still thinking about it, with no bubble for it yet (R-UI-163).
+  beforeEach(() => {
+    api.agentHistoryList.mockImplementation(async (q: { member_id?: number; limit?: number }) => ({ turns: (q.member_id === 3
+      ? [turn(31, { member_id: 3, status: "running", text: "" }), THREADS[3][1]!] : THREADS[q.member_id ?? 0]).slice(0, q.limit) }));
+  });
   /** A member's thread whose newest message carries a picture and a quote, as stored (the core hands its bytes back by id). */
   const withPicture = (): AgentTurn => {
-    const original = turn(8, { member_id: 3, session_id: "saved", attachments: [{ id: SHOT, name: "shot.png", mime: "image/png", size: 6 }], quote: QUOTE });
+    const original = turn(8, { member_id: 3, session_id: "saved", status: "running", text: "", attachments: [{ id: SHOT, name: "shot.png", mime: "image/png", size: 6 }], quote: QUOTE });
     api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
     api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "image/png", data: btoa("pixels") }
       : method === "conversations.list" ? { conversations: [{ id: 81, member_id: 3, is_default: 1, kind: "standard", title: "", created_at_ms: 1, updated_at_ms: 1 }] } : { questions: [] });
@@ -692,10 +697,10 @@ describe("a sent message is taken back into the composer to be edited", () => {
     expect($(".cmp-quote .quote-text").textContent).toBe("Saved passage");
     expect($(".composer").hasAttribute("data-replacing")).toBe(true);
     expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(false);
-    // The original bubble, its picture and its quote are gone from the thread at once; what the member answered stays.
+    // The original bubble, its picture and its quote are gone from the thread at once; the member still thinking about it stays.
     expect(document.querySelector('[data-id="8"] .owner-message')).toBeNull();
     expect(document.querySelector('[data-id="8"] .me-files')).toBeNull();
-    expect($('[data-id="8"]').textContent).toContain("回答 8");
+    expect(document.querySelector('[data-id="8"] .live-presence')).not.toBeNull();
     // Nothing was sent or taken back from the core, and the stored message is untouched.
     expect(api.agentAskText).not.toHaveBeenCalled();
     expect(api.agentRetract).not.toHaveBeenCalled();
@@ -703,7 +708,7 @@ describe("a sent message is taken back into the composer to be edited", () => {
     agent.hide();
   });
 
-  test("the editor of the bubble (R-UI-148) is gone: no field, no Cancel or Send under the bubble", async () => {
+  test("a message its member has not answered goes into the composer, never into an editor in its bubble", async () => {
     const agent = mount(); await flush(); await pick(3);
     pickMessage('[data-id="31"]', 'edit'); await flush();
     expect(document.querySelector('[data-edit-input], [data-msg-editor], .msg-editor-input, .msg-editor-under, [data-act="edit-send"], [data-act="edit-cancel"], [data-act="drop-edit-missing"]')).toBeNull();
@@ -892,7 +897,7 @@ test("Escape cancels only from an empty composer and restores a running turn", a
 });
 
 test("editing a legacy attachment without a stored copy requires reattachment, without mutating history", async () => {
-  const original = turn(8, { session_id: "saved", attachments: [{ name: "original.pdf", mime: "application/pdf" }], quote: { text: "Saved passage", author: "You" } });
+  const original = turn(8, { session_id: "saved", status: "running", text: "", attachments: [{ name: "original.pdf", mime: "application/pdf" }], quote: { text: "Saved passage", author: "You" } });
   api.agentHistoryList.mockResolvedValue({ turns: [original] });
   const agent = mount(); await flush();
   pickMessage('[data-id="8"]', 'edit'); await flush();
@@ -909,7 +914,8 @@ test("editing a legacy attachment without a stored copy requires reattachment, w
 test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored files and preserves the quote in its member thread", async action => {
   const id = `${"a".repeat(32)}.csv`;
   const quote = { text: "Saved passage", author: "You" };
-  const original = turn(8, { member_id: 3, session_id: "saved", status: action === "cancel" ? "running" : "done",
+  // 編輯 takes a message its member is still thinking about into the composer (R-UI-163); 重新產生 is a finished reply's.
+  const original = turn(8, { member_id: 3, session_id: "saved", status: action === "regenerate" ? "done" : "running", ...(action === "edit" ? { text: "" } : {}),
     attachments: [{ id, name: "report.csv", mime: "text/csv", size: 6 }], quote });
   api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
   api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") } : { questions: [] });
@@ -1905,14 +1911,28 @@ const routineTurn = (id: number, question: string): AgentTurn => turn(id, { memb
 const lineIds = (): string[] => [...document.querySelectorAll<HTMLElement>(".thread > .tn")].map(line => line.classList.contains("is-pending") ? "pending" : line.dataset.id ?? "?");
 const settle = async (): Promise<void> => { await new Promise(resolve => setTimeout(resolve, 600)); await flush(); };
 
+/**
+ * The owner's message 31 as each editor takes it (R-UI-163): one its member is still thinking about goes into the composer, one it
+ * answered is edited in its own bubble. Both send the same edit, which stands where the message stood.
+ */
+type Flow = "composer" | "bubble";
+const FLOWS: Flow[] = ["composer", "bubble"];
+const message31 = (flow: Flow): AgentTurn => flow === "composer" ? turn(31, { member_id: 3, status: "running", text: "" }) : turn(31, { member_id: 3, text: "ans 31" });
+async function editAndSend(id: number, words: string, flow: Flow): Promise<void> {
+  pickMessage(`[data-id="${id}"]`, 'edit'); await flush();
+  const field = document.querySelector<HTMLTextAreaElement>(`[data-id="${id}"] [data-edit-input]`);
+  expect(!!field).toBe(flow === "bubble");
+  if (field) { typeInto(field, words); $(`[data-id="${id}"] [data-act="edit-send"]`).click(); }
+  else { typeInto($<HTMLTextAreaElement>(".cmp-input"), words); $(".cmp-send").click(); }
+  await flush();
+}
+
 describe("an edited message stands where its message stood", () => {
-  test.each(["in place", "at the end"] as const)("a message with routine turns after it, edited against a core that writes %s: it never leaves its place before the edit is written, and never shows twice", async where => {
-    const core = editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" }), routineTurn(32, "7am"), routineTurn(33, "8am")], where);
+  test.each(FLOWS.flatMap(flow => (["in place", "at the end"] as const).map(where => [flow, where] as const)))("edited in the %s, a message with routine turns after it, against a core that writes %s: it never leaves its place before the edit is written, and never shows twice", async (flow, where) => {
+    const core = editingCore([routineTurn(30, "daily"), message31(flow), routineTurn(32, "7am"), routineTurn(33, "8am")], where);
     const agent = mount(); await flush(); await pick(3);
     expect(lineIds()).toEqual(["30", "31", "32", "33"]);
-    pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>(".cmp-input"), "corrected");
-    $(".cmp-send").click(); await flush();
+    await editAndSend(31, "corrected", flow);
     // On its way: the edit stands where the message stood, with the routine turns after it, and nothing is waiting at the end.
     expect(lineIds()).toEqual(["30", "pending", "32", "33"]);
     expect($(".tn.is-pending .message-text").textContent).toBe("corrected");
@@ -1928,12 +1948,10 @@ describe("an edited message stands where its message stood", () => {
     agent.hide();
   });
 
-  test("the newest message, edited: its edit has its id and does not vanish while the member answers", async () => {
-    const core = editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" })], "in place");
+  test.each(FLOWS)("the newest message, edited in the %s: its edit has its id and does not vanish while the member answers", async flow => {
+    const core = editingCore([routineTurn(30, "daily"), message31(flow)], "in place");
     const agent = mount(); await flush(); await pick(3);
-    pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>(".cmp-input"), "corrected");
-    $(".cmp-send").click(); await flush();
+    await editAndSend(31, "corrected", flow);
     await settle();
     // The member is answering: the message is on screen, once, with the new words.
     expect(lineIds()).toEqual(["30", "31"]);
@@ -1943,14 +1961,12 @@ describe("an edited message stands where its message stood", () => {
     agent.hide();
   });
 
-  test("the reader stays where they are while an edit of an earlier message is on its way", async () => {
-    editingCore([routineTurn(30, "daily"), turn(31, { member_id: 3, text: "ans 31" }), routineTurn(32, "7am")], "in place");
+  test.each(FLOWS)("the reader stays where they are while an edit of an earlier message is on its way (%s)", async flow => {
+    editingCore([routineTurn(30, "daily"), message31(flow), routineTurn(32, "7am")], "in place");
     const agent = mount(); await flush(); await pick(3);
     const scroller = $(".ra-scroll");
     scroller.scrollTop = 17;
-    pickMessage('[data-id="31"]', 'edit'); await flush();
-    typeInto($<HTMLTextAreaElement>(".cmp-input"), "corrected");
-    $(".cmp-send").click(); await flush();
+    await editAndSend(31, "corrected", flow);
     expect(scroller.scrollTop).toBe(17);
     agent.hide();
   });

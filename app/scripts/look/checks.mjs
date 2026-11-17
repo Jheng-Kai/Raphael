@@ -10489,8 +10489,8 @@ export function checkRendered(name, context = {}) {
     require(before, 'the sent message was measured before 編輯');
     require(composer.hasAttribute('data-replacing'), 'the composer is marked as replacing the message');
     require(!turn.querySelector('.owner-message, .me-files, .bubble'), 'the sent bubble, with its pictures, is not in the thread');
-    require(!document.querySelector('[data-edit-input], [data-msg-editor], .msg-editor-input, .msg-editor-under'), 'the editor of the bubble (R-UI-148) is gone');
-    require(turn.querySelector('.ra') && visible(turn.querySelector('.ra')), 'what the member answered stays');
+    require(!document.querySelector('[data-edit-input], [data-msg-editor], .msg-editor-input, .msg-editor-under'), 'no editor in a bubble: a message its member has not answered goes into the composer (R-UI-163)');
+    require(turn.querySelector('.ra') && visible(turn.querySelector('.ra')), "the member's line (still thinking about the message) stays");
     require(same(field.value, name === "message-edit-armed" ? '改到一半的字' : before.text), `the composer holds the words (${field.value.length} characters)`);
     require(visible(field) && document.activeElement === field, 'the composer has the focus');
     if (name === "message-edit-open") require(field.selectionStart === field.value.length && field.selectionEnd === field.value.length, 'the caret is after the words');
@@ -10560,6 +10560,79 @@ export function checkRendered(name, context = {}) {
       require(visible(field) && composer.getBoundingClientRect().bottom <= window.innerHeight + 1, 'the composer is on screen');
       return { check: name, draft: field.value.length, messages: bubbles.length };
     })();
+  }
+  if (name === "message-edit-bubble-before") {
+    // The sent bubble as it is, before 編輯 makes it the editor (R-UI-163): the editor must be this bubble, not another box.
+    const bubble = document.querySelector('.tn[data-id="8201"] .owner-message .bubble'), r = bubble.getBoundingClientRect(), style = getComputedStyle(bubble);
+    window.__look.beforeBubble = { text: bubble.querySelector('.message-text').textContent, rect: { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height },
+      style: Object.fromEntries(["backgroundColor", "color", "borderRadius", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontSize", "fontFamily", "lineHeight", "fontWeight", "borderTopWidth", "boxShadow"].map(key => [key, style[key]])) };
+    return { check: name, width: Math.round(r.width) };
+  }
+  if (name === "message-edit-bubble-open") {
+    // R-UI-163: a message its member answered is edited in its own bubble, where it stands; the composer is not touched and nothing is sent.
+    const turn = document.querySelector('.tn[data-id="8201"]'), composer = document.querySelector('.composer'), composerField = composer.querySelector('.cmp-input');
+    require(composerField.value === '' && !composer.hasAttribute('data-replacing'), 'the composer keeps its own (empty) draft: nothing of the message went into it');
+    const field = turn.querySelector('[data-edit-input]'), message = turn.querySelector('.owner-message[data-msg-editor]'), bubble = field.closest('.bubble'), me = turn.querySelector('.me');
+    require(visible(field) && visible(bubble) && message && message.classList.contains('is-editing'), 'the message is open as an editor');
+    require(!bubble.querySelector('.btn'), 'the bubble holds no button: it is not wrapped in another box');
+    require(document.activeElement === field && field.selectionStart === field.value.length && field.selectionEnd === field.value.length, 'the field has the focus, the caret after its words');
+    require(field.value === window.__look.beforeBubble.text, 'the words are the message\'s own');
+    require([...turn.querySelectorAll('.owner-message .message-actions')].every(held => held.hasAttribute('inert') && getComputedStyle(held).visibility === 'hidden'), 'no action can be pressed beside the bubble while it is edited (its room is held)');
+    require(turn.querySelector('.ra .chat-message[data-reply]') && visible(turn.querySelector('.ra .chat-message[data-reply]')), 'what the member answered stays under it');
+    const before = window.__look.beforeBubble, b = bubble.getBoundingClientRect(), style = getComputedStyle(bubble), m = me.getBoundingClientRect();
+    for (const [key, value] of Object.entries(before.style)) require(style[key] === value, `the editor is the bubble's own: ${key} is ${style[key]}, it was ${value}`);
+    require(Math.abs(b.right - before.rect.right) <= 1 && Math.abs(b.top - before.rect.top) <= 1, `the bubble stays where it stood (right ${Math.round(b.right)} vs ${Math.round(before.rect.right)}, top ${Math.round(b.top)} vs ${Math.round(before.rect.top)})`);
+    require(b.right <= m.right + 1, 'the bubble ends inside its column');
+    if (field.value.length < 40) require(Math.abs(b.width - before.rect.width) <= 2 && Math.abs(b.height - before.rect.height) <= 2, `a short message keeps its bubble's size (${Math.round(b.width)}x${Math.round(b.height)} vs ${Math.round(before.rect.width)}x${Math.round(before.rect.height)})`);
+    require(field.scrollWidth <= field.clientWidth + 1 && field.scrollHeight <= field.clientHeight + 1, 'all of the words are in view');
+    const under = turn.querySelector('.msg-editor-under'), buttons = [...under.querySelectorAll('.msg-editor-actions .btn')].filter(visible);
+    require(buttons.length === 2 && buttons[1].classList.contains('pri') && !buttons[1].disabled, '取消 and, last, the primary 送出, ready');
+    const [cancel, sendButton] = buttons.map(button => button.getBoundingClientRect()), box = getComputedStyle(under);
+    require(cancel.right <= sendButton.left && Math.abs(cancel.height - sendButton.height) < .5 && Math.abs(sendButton.height - 30) < .5, `取消 and 送出 are the thread cards' buttons: 30 px (${Math.round(cancel.height)} px high)`);
+    require(Math.abs(sendButton.right - b.right) <= 1.5 && cancel.top >= b.bottom - 1 && box.borderTopWidth === '0px' && /^rgba\(0, 0, 0, 0\)$|^transparent$/.test(box.backgroundColor), `送出 ends at the bubble's right edge and under it, in no box (${Math.round(sendButton.right)} vs ${Math.round(b.right)})`);
+    require(!buttons[0].dataset.cancelArmed, '取消 is not armed');
+    require(!document.querySelector('.tn.is-pending') && !window.__look.calls.some(call => call.command === 'agent_ask_text'), 'nothing was sent');
+    return { check: name, bubble: `${Math.round(b.width)}x${Math.round(b.height)}`, was: `${Math.round(before.rect.width)}x${Math.round(before.rect.height)}`, words: field.value.length };
+  }
+  if (name === "message-edit-version-answering" || name === "message-edit-version-earlier") {
+    // R-UI-163: an edited message stands where it stood as its newest version, ‹ n/n › under its bubble at its right edge; ‹ shows the
+    // earlier version and what the member answered it with, read only, and the pager says which is read.
+    const turn = document.querySelector('.tn[data-id="8201"]'), pager = turn.querySelector('.msg-versions'), bubble = turn.querySelector('.owner-message .bubble');
+    const words = '改過的說法：請整理這份範例研究摘要，並列出三個重點。', earlier = name === "message-edit-version-earlier";
+    require(document.querySelectorAll('.tn[data-id="8201"]').length === 1 && !document.querySelector('.tn.is-pending'), 'the message stands once, in its place, and nothing waits beside it');
+    require(pager && visible(pager) && bubble && visible(bubble), 'the pager stands under the message');
+    const [previous, next] = [...pager.querySelectorAll('button')], count = pager.querySelector('.msg-versions-count').textContent;
+    require(count === (earlier ? '1/2' : '2/2'), `the pager says which version is read (${count})`);
+    require(previous.getAttribute('aria-label') && next.getAttribute('aria-label') && !pager.querySelector('[title]'), 'the buttons have their names, and no native tooltip');
+    require(previous.disabled === earlier && next.disabled === !earlier, `the end it reached is not pressable (‹ ${previous.disabled ? 'off' : 'on'}, › ${next.disabled ? 'off' : 'on'})`);
+    const p = pager.getBoundingClientRect(), b = bubble.getBoundingClientRect();
+    require(p.top >= b.bottom - 1 && Math.abs(p.right - b.right) <= 1.5, `the pager is under the bubble, at its right edge (${Math.round(p.right)} vs ${Math.round(b.right)})`);
+    require(p.height <= 30.5 && [previous, next].every(button => button.getBoundingClientRect().height <= 28.5), `the pager is small (${Math.round(p.height)} px)`);
+    const text = bubble.querySelector('.message-text').textContent.trim(), replies = [...turn.querySelectorAll('.ra .chat-message[data-reply] .message-text')].map(node => node.textContent.trim());
+    if (earlier) {
+      require(text !== words && text.includes('請整理這份範例研究摘要'), `the first version's words are read (${text.slice(0, 24)})`);
+      require(replies.length === 1 && !replies[0].includes('照新的說法'), `with what the member answered them with (${replies.join(' | ').slice(0, 40)})`);
+      require(!turn.querySelector('[data-act="more-message"], [data-act="react-message"], [data-act="reply-message"]'), 'the earlier version is read only: no ⋯, no reaction, no reply');
+      require(document.activeElement === next, 'the keyboard stays on the pager: ‹ reached its end, so › has the focus');
+      const reads = window.__look.calls.filter(call => call.command === 'core_call' && call.method === 'agent.history.version');
+      require(reads.length === 1 && reads[0].params.version === 1 && reads[0].params.turn_id === 8201, 'the first version was read from the core once');
+    } else {
+      require(text === words, 'the new words stand in the message\'s bubble');
+      require(turn.dataset.status === 'running' && turn.querySelector('.live-presence') && visible(turn.querySelector('.live-presence')), 'the member answers the new version');
+      require(replies.length === 0, 'the first answer is not under the new version: ‹ shows it');
+      const asks = window.__look.calls.filter(call => call.command === 'agent_ask_text');
+      require(asks.length === 1 && asks[0].replaceTurnId === 8201 && asks[0].text === words, 'Enter asked once, with the new words and the message they replace');
+      require(!turn.querySelector('[data-edit-input]') && document.querySelector('.cmp-input').value === '', 'the editor is gone and the composer was not touched');
+    }
+    return { check: name, count, pager: `${Math.round(p.width)}x${Math.round(p.height)}` };
+  }
+  if (name === "message-edit-menu-edit" || name === "message-edit-not-last") {
+    // R-UI-163: only the owner's last message offers 編輯; one they sent something after has Reply and Copy alone.
+    const picks = [...document.querySelectorAll('#app-popover [data-pick]')].filter(visible).map(item => item.dataset.pick);
+    require(picks.includes('reply') && picks.includes('copy'), `the menu has 回覆 and 複製 (${picks.join(',')})`);
+    if (name === "message-edit-menu-edit") require(picks.includes('edit'), `the last message offers 編輯 (${picks.join(',')})`);
+    else require(!picks.includes('edit'), `the earlier message offers no 編輯 (${picks.join(',')})`);
+    return { check: name, picks: picks.join(',') };
   }
   if (name === "owner-picture-actions") {
     // R-UI-159: the actions of a message with pictures above its bubble stand beside the bubble, centred on it and as far from it as on a message

@@ -27,7 +27,7 @@ class AgentInbox:
             route="answer", prefix="", text="", status="queued", source=ask.source,
             member_id=ask.speaker.id, conversation_id=ask.conversation_id,
             attachments=[a.metadata() for a in ask.attachments], quote=ask.quote,
-            admission=json.dumps(payload, ensure_ascii=False), place=ask.place,
+            admission=json.dumps(payload, ensure_ascii=False), place=ask.place, versions=ask.versions,
         )
         return self.get(turn_id), True
 

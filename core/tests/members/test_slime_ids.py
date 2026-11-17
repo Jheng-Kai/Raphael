@@ -100,6 +100,13 @@ def at_85(path):
         return db.connect(path)
 
 
+def to_86(conn):
+    """The migrations up to the renaming (86), not the ones that came after it."""
+    from unittest.mock import patch
+    with patch.object(db, "LATEST_VERSION", 86):
+        db.migrate(conn)
+
+
 def test_the_migration_rewrites_every_stored_face_and_runs_again_without_changing_anything(renamed, tmp_path):
     conn = at_85(tmp_path / "v85.db")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 85
@@ -111,8 +118,8 @@ def test_the_migration_rewrites_every_stored_face_and_runs_again_without_changin
                          (identifier, f"m{identifier}", "m", identifier, 1, avatar))
         conn.execute("INSERT INTO member_template_cards (id,turn_id,member_id,template,findings,avatar,state) VALUES ('a',1,1,'{}','[]',?,'draft')", (f"slime:{OLD}",))
         conn.execute("INSERT INTO member_template_cards (id,turn_id,member_id,template,findings,avatar,state) VALUES ('b',1,2,'{}','[]','slime:cat-ears','draft')")
-    db.migrate(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 86 == db.LATEST_VERSION
+    to_86(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 86
     expected = {1: f"slime:{NEW}", 2: "slime:cat-ears", 3: "slime:color:teal", 4: "", 5: "file:picture.png", 6: f"slime:{NEW}:coral",
                 7: "slime:no-such-face", 8: "slime:horn-lavender"}
     assert dict(conn.execute("SELECT id,avatar FROM members").fetchall()) == expected
@@ -127,7 +134,7 @@ def test_the_migration_rewrites_every_stored_face_and_runs_again_without_changin
 
 def test_the_migration_leaves_a_database_without_faces_alone(tmp_path):
     conn = at_85(tmp_path / "empty.db")
-    db.migrate(conn)
+    to_86(conn)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 86
     assert conn.execute("SELECT COUNT(*) FROM members").fetchone()[0] == 0
     conn.close()
