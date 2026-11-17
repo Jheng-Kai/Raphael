@@ -2,8 +2,9 @@
 
 ## Opening the store: the two steps that are the owner's
 
-Until both are done the store in Raphael says "The store is not open yet" and asks the network for nothing:
-`PUBLIC_KEYS` in `core/src/raphael_core/members/member_catalog.py` is empty, and no key is generated or kept by Raphael or by this repository.
+Both are done for `Jheng-Kai/SlimesStore`: its public key is in `PUBLIC_KEYS` of `core/src/raphael_core/members/member_catalog.py`.
+The steps stay here for another catalogue or a new key. A Raphael with an empty `PUBLIC_KEYS` says "The store is not open yet" and
+asks the network for nothing, and no key is generated or kept by Raphael or by this repository.
 
 1. **Create the catalogue repository.** Make the public repository `Jheng-Kai/SlimesStore` on GitHub (or another HTTPS root, see
    `RAPHAEL_CATALOG_URL` below) and copy this directory into it. Turn on branch protection for `main` that requires the validation

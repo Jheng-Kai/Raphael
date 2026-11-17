@@ -1333,8 +1333,8 @@ What it does, and how to see it:
   manager (member-template-published). The shell resolves the 16-character folder id through the core; the window names no path.
 - A file Notepad saved (byte-order mark) opens (member-template-notepad-file); a file cut short, or no template, or from a newer Raphael, says so in
   words (member-template-bad-file); an empty name is marked in the field (member-template-name-empty). The name field takes the core's NAME_MAX.
-- A store with no catalogue key says it is not open yet (store-closed); the app holds no key until the owner has made the catalogue
-  (catalog-template/README.md).
+- A store with no catalogue key says it is not open yet (store-closed). The app holds the key of the owner's catalogue
+  `Jheng-Kai/SlimesStore` (catalog-template/README.md), so the real store opens; offline tests give their own keys and never reach it.
 - `.raphael-member` files are registered by the installer (tauri.conf.json `bundle.fileAssociations`); `template_file.rs` and `template-open.ts` carry a double-clicked
   file to the import review, and `verify-windows-install.ps1` checks the registry entry and the hand-over on the disposable runner. Only an installed release shows the double-click itself.
 
