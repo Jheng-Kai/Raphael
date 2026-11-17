@@ -69,13 +69,13 @@ export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping
   cancelGesture(el.ownerDocument).sync();
 }
 
-/** The composer's markup; `folder` adds the member's folder beside the permission (composer-folder.ts), in a member's own
- *  conversation only: a room speaks for several members. */
+/** The composer's markup; `folder` marks a member's own conversation: it adds the member's folder beside the permission
+ *  (composer-folder.ts) and makes the + a menu (composer-plus.ts), where a room, speaking for several members, has the picker. */
 export function composerHTML(folder = false): string {
   // The files wait in one row that scrolls sideways under the mouse wheel, with an arrow and a fade at an end with more (chip-scroll.ts, R-ATTACH-01).
   return `<div class="cmp-quote" hidden></div><div class="cmp-files" data-chip-row><div class="cmp-file" data-chip-scroll hidden></div>${chipSteps()}</div><div class="cmp-row">` +
     `<div class="cmp-field"><textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea><div class="cmp-mirror" aria-hidden="true"></div></div>` +
-    `<div class="cmp-bar"><button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
+    `<div class="cmp-bar"><button type="button" class="btn cmp-attach"${folder ? ' aria-haspopup="menu" aria-expanded="false"' : ' data-act="attach"'}>${ico("plus")}</button>` +
     `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
     (folder ? `<button type="button" class="btn sm cmp-folder" aria-haspopup="menu" aria-expanded="false" hidden>${ico("folder")}<span class="owner-data"></span></button>` : "") +
     `<span class="cmp-model"></span>` +

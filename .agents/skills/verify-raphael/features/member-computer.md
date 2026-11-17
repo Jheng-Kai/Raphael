@@ -1729,6 +1729,7 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   whole path under the pointer), the chosen one checked (choosing one puts it first), and 加入資料夾 alone at its foot
   (the native picker; the pick goes at the end). Short of room its word hides with the permission's and its folder icon
   stays (`fitComposerRow`); a room's composer has none.
+  The composer's + menu offers the same 加入資料夾 (R-UI-166, `composer-plus.ts`): it is `composer-folder.ts`'s own `add()`, shown while the folder button is.
 
 Offline: core/tests/agent/test_owner_files.py (lists in every mode, reads from app, Telegram and Slack, a CLI brain, kept
 places and links, glob and grep, writes inside and outside, each member's own folders, an unapproved write),

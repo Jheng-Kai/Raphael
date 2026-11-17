@@ -23,6 +23,7 @@ import { pickPicture, readPicture } from "./member-dialogs";
 import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, RAPHAEL_ID, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, stableMember } from "./members";
 import { entryIcon } from "./service-mark";
 import { rememberAppLogos } from "./app-logos";
+import { connectedApps, toolOn, toolsAfterToggle, type ToolChoices } from "./member-tools";
 import { skillOriginLabel } from "./skill-source";
 import { slimeColorOf } from "./slime";
 import type { AppContext, BrainSettings, Member, MemberCommand, MemberPatch, MemberSkill, MembersList } from "./types";
@@ -60,7 +61,6 @@ export interface MemberSettings {
 type View = { kind: "main" } | { kind: "skill"; id: number } | { kind: "command"; id: number | null };
 type Field = "personality" | "instructions";
 type Loaded<T> = T | "loading" | "failed";
-interface ToolChoices { tools: string[]; connections: { id: string; name: string; enabled: boolean; logo?: string }[] }
 
 /** The kinds of settings in the page's left column, in the owner's order, the same for every member. */
 type Category = "tools" | "skills" | "soul" | "notify";
@@ -237,10 +237,10 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     if (toolChoices === "loading") rows = spinner();
     else if (toolChoices === "failed") rows = muted(t("mem.loadFailed"));
     else {
-      const apps = toolChoices.connections.filter(connection => connection.enabled);
+      const apps = connectedApps(toolChoices);
       rows = apps.map(app =>
         `<div class="ms-row ms-app" data-k="ms-app:${esc(app.id)}">${entryIcon({ name: app.name, icon: app.id, logo: app.logo }, "md")}<span class="ms-label">${esc(app.name)}</span>` +
-        `${tg(member.tools === null || member.tools.includes(app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
+        `${tg(toolOn(member.tools, app.id), app.name, ` data-ms="tool" data-id="${esc(app.id)}" data-k="ms-tool:${esc(app.id)}"`)}</div>`).join("") || muted(t("memberSettings.noTools"));
     }
     return section("", rows, "", "ms-tools") +
       section("", row(t("members.profile.draft"), tg(member.draft_first ?? true, t("members.profile.draft"), ' data-ms="draft" data-k="ms-draft"')), "", "ms-draft") +
@@ -528,13 +528,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
   async function toggleTool(id: string): Promise<void> {
     const member = host.member();
     if (typeof toolChoices !== "object") return;
-    const everything = [...toolChoices.tools, ...toolChoices.connections.filter(connection => connection.enabled).map(connection => connection.id)];
-    const on = !(member.tools === null || member.tools.includes(id));
-    const base = member.tools ?? everything;
-    const next = on ? [...new Set([...base, id])] : base.filter(item => item !== id);
-    // Everything on again is the core's own default, 「every one that is on」, which later connections join too.
-    const all = everything.every(item => next.includes(item)) && next.every(item => everything.includes(item));
-    await host.update(member.id, { tools: all ? null : next });
+    await host.update(member.id, { tools: toolsAfterToggle(member.tools, toolChoices, id) });
   }
 
   async function saveField(input: HTMLInputElement | HTMLTextAreaElement): Promise<void> {

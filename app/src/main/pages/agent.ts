@@ -125,6 +125,7 @@ import { createRoomPane, currentRoomId, openGroupChat } from "../group-chats";
 import { bindActionMode, bindComposerRow, bindPageComposer, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
 import { mountComposerFolder } from "../composer-folder";
+import { mountComposerPlus } from "../composer-plus";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
@@ -544,6 +545,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
   const picker = composer.querySelector<HTMLInputElement>(".cmp-picker")!;
+  // The + opens the menu of what can be added (composer-plus.ts); its first row, and Ctrl+U (⌘U), open the picker the + opened before.
+  mountComposerPlus(attachButton, {
+    input, member: () => members.member(), update: (id, patch) => members.update(id, patch),
+    pickFiles: () => { picker.value = ""; picker.click(); },
+    folder: { shown: () => composerFolder?.shown() ?? false, add: () => composerFolder?.add() },
+    browseApps: () => app.go("settings", "connections"),
+    manage: tab => { app.go("agent", `member-settings:${memberId()}`); members.settings.showNavView(tab); },
+    skillsChanged: () => slashMenu.invalidate(),
+    onEvent: handler => app.onEvent(handler),
+  });
   const hideTooltip = messageTooltip(el);
   const quoteCard = composer.querySelector<HTMLElement>(".cmp-quote")!;
   const hideSelection = selectionQuote({ host: el, thread, active: () => visible,
@@ -823,7 +834,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
       [searchButton, t("agent.search")],
-      [attachButton, t("agent.attach")],
+      [attachButton, t("composerPlus.label")],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = label;

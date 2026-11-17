@@ -1125,6 +1125,96 @@ export function checkRendered(name, context = {}) {
     require(new Set(icons).size === icons.length, "each action has its own icon");
     return {check: name};
   }
+  if (name.startsWith("composer-plus-")) {
+    // R-UI-166: the composer's + opens one menu of what can be added; its apps and skills are submenus of switches that are the member's own settings.
+    const box = element => element.getBoundingClientRect(), plus = document.querySelector('.page-agent .composer .cmp-attach');
+    const inWindow = (panel, what) => { const b = box(panel); require(b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, `${what} lies inside the window: ${JSON.stringify([b.left, b.top, b.right, b.bottom].map(Math.round))}`); };
+    const resolved = (property, value) => { const probe = document.createElement('span'); probe.style[property] = value; document.body.append(probe); const color = getComputedStyle(probe)[property]; probe.remove(); return color; };
+    if (name === "composer-plus-apps-saved" || name === "composer-plus-skills-saved") {
+      // The switch of the + menu is the setting of the settings page: what the menu changed is what the page shows.
+      const apps = name === "composer-plus-apps-saved", pane = document.querySelector('.ms-pane:not([hidden])');
+      require(visible(pane), "the member's settings page is open");
+      require(pane.querySelector(`.ms-nav [data-cat="${apps ? 'tools' : 'skills'}"][aria-current="page"]`), `it opened on the ${apps ? '工具' : '技能與指令'} tab`);
+      if (apps) {
+        const tools = window.__look.data.members.find(item => item.id === 1).tools, off = pane.querySelectorAll('[data-ms="tool"][aria-checked="false"]');
+        require(Array.isArray(tools) && off.length === 1 && !tools.includes(off[0].dataset.id), `the app switched off in the menu is off here: ${JSON.stringify(tools)} / ${off.length}`);
+        require(pane.querySelectorAll('[data-ms="tool"][aria-checked="true"]').length === tools.length, "and the others are on");
+      } else {
+        const off = [...pane.querySelectorAll('[data-ms="skill-toggle"]')].filter(item => item.getAttribute('aria-checked') === 'false');
+        const skill = window.__look.data.skills.find(item => item.name === "research-summary");
+        require(skill && skill.enabled === false && off.some(item => item.dataset.id === String(skill.id)), "the skill switched off in the menu is off here");
+      }
+      return {check: name};
+    }
+    const root = document.querySelector('#app-popover.composer-plus'), sub = document.querySelector('#app-submenu.composer-plus-sub');
+    require(visible(root) && root.getAttribute('role') === 'menu', "the + menu is open");
+    require(plus.getAttribute('aria-expanded') === 'true' && plus.getAttribute('aria-haspopup') === 'menu' && plus.getAttribute('aria-controls') === 'app-popover', "the + says it holds a menu open");
+    inWindow(root, "the menu");
+    if (name === "composer-plus-menu") {
+      const rows = [...root.querySelectorAll(':scope > button')];
+      require(rows.map(row => row.dataset.plus).join() === 'files,folder,slash,apps,skills', `five rows in order: ${rows.map(row => row.dataset.plus)}`);
+      const icons = rows.map(row => row.querySelector('.ck svg')?.innerHTML ?? '');
+      require(icons.every(Boolean) && new Set(icons).size === 5, "a Lucide icon on every row, and no two share one");
+      require(rows.every(row => { const mark = box(row.querySelector('.ck svg')); return mark.width === 16 && mark.height === 16; }), "every icon is 16 px");
+      require(rows.every(row => visible(row) && box(row).height >= 27.5 && box(row).height <= 30 && row.querySelector('.mt').scrollWidth <= row.querySelector('.mt').clientWidth + 1 && !row.hasAttribute('title')), "every row is a menu row (28 px) with its words whole and no tooltip");
+      const left = box(rows[0].querySelector('.mt')).left;
+      require(rows.every(row => Math.abs(box(row.querySelector('.mt')).left - left) <= 0.5), "the words of every row start at one place");
+      const shortcut = rows[0].querySelector('.mtrail'), edge = box(root).right - 4;
+      require(/^(Ctrl\+U|⌘U)$/.test(shortcut?.textContent ?? ''), `加入檔案或圖片 shows its shortcut: ${shortcut?.textContent}`);
+      require(Math.abs(box(shortcut).right - edge) <= 12, "the shortcut ends its row, quietly");
+      const chevrons = rows.filter(row => row.hasAttribute('aria-haspopup')).map(row => row.querySelector(':scope > svg.i'));
+      require(chevrons.length === 2 && chevrons.every(visible) && chevrons.every(chevron => Math.abs(box(chevron).right - edge) <= 12), "the two rows that open a submenu end with a chevron");
+      require(rows.filter(row => !row.hasAttribute('aria-haspopup')).every(row => !row.querySelector(':scope > svg.i')), "the other rows have none");
+      const sep = [...root.querySelectorAll('.menu-sep')];
+      require(sep.length === 1 && sep[0].previousElementSibling === rows[2] && sep[0].nextElementSibling === rows[3] && box(sep[0]).height <= 1.5, "one hairline, between what is added and what the member may use");
+      require(box(root).bottom <= box(plus).top + 1 && Math.abs(box(root).left - box(plus).left) <= 10, "the menu opens above the +, their left edges together");
+      require(getComputedStyle(root).backgroundColor === resolved('backgroundColor', 'var(--float)'), "the menu wears the app's floating surface");
+      require(root.contains(document.activeElement), "the focus is in the menu");
+      return {check: name, rows: rows.length};
+    }
+    require(visible(sub) && sub.getAttribute('role') === 'menu', "the submenu is open beside the menu");
+    const row = root.querySelector(`[data-plus="${name === "composer-plus-apps" ? "apps" : "skills"}"]`), r = box(row), s = box(sub), m = box(root);
+    require(row.getAttribute('aria-expanded') === 'true', "its row says its submenu is open");
+    require((s.left >= m.right - 2 && s.left <= m.right + 12) || s.right <= m.left + 2, "the submenu stands at the menu's edge");
+    require(s.top <= r.bottom && s.bottom >= r.top, "and level with its row");
+    inWindow(sub, "the submenu");
+    const switches = [...sub.querySelectorAll('.pm-switch')];
+    require(switches.length >= 2, `there are switch rows to look at: ${switches.length}`);
+    require(switches.every(item => item.getAttribute('role') === 'menuitemcheckbox' && ['true', 'false'].includes(item.getAttribute('aria-checked'))), "every switch row is a checkable menu item");
+    require(switches.every(item => visible(item) && box(item).height >= 27.5 && box(item).height <= 30), "every switch row is a menu row (28 px)");
+    const sw = switches.map(item => ({ row: box(item), tg: box(item.querySelector('.tg')), lead: box(item.querySelector('.mlead')), mt: item.querySelector('.mt') }));
+    require(sw.every(item => Math.abs(item.tg.width - 38) <= 0.5 && Math.abs(item.tg.height - 22) <= 0.5), "every switch is the app's own 38 x 22");
+    require(sw.every(item => Math.abs(item.tg.right - sw[0].tg.right) <= 0.5 && item.tg.right <= item.row.right - 4 && item.tg.left >= item.row.left && Math.abs((item.tg.top + item.tg.bottom) / 2 - (item.row.top + item.row.bottom) / 2) <= 1), "the switches stand at one right edge, centred on their rows and inside them");
+    require(sw.every(item => Math.abs(item.lead.width - 20) <= 0.5 && Math.abs(item.lead.height - 20) <= 0.5 && Math.abs(item.lead.left - sw[0].lead.left) <= 0.5), "every mark is one 20 px box at one place");
+    require(sw.every(item => item.mt.scrollWidth <= item.mt.clientWidth + 1 || item.mt.closest('button').hasAttribute('title')), "every name shows whole, or is cut with its whole text as a tooltip");
+    require(switches.every(item => !item.hasAttribute('title') || item.querySelector('.mt').scrollWidth > item.querySelector('.mt').clientWidth), "a tooltip stands only where a name is cut, never repeating a whole one");
+    require(sw.every(item => item.tg.left >= box(item.mt).right - 1), "no name runs under its switch");
+    // The member's colour is on a switch that is on, as in its panel and settings page (R-UI-147); one that is off is as everywhere.
+    require(sub.hasAttribute('data-member-switch'), "the submenu carries the member's colour");
+    const probe = document.createElement('span'); sub.append(probe); probe.style.cssText = 'background-color: var(--member-switch); border: 1px solid var(--member-accent);';
+    const wanted = [getComputedStyle(probe).backgroundColor, getComputedStyle(probe).borderTopColor]; probe.remove();
+    const colourOf = item => { const style = getComputedStyle(item.querySelector('.tg')); return [style.backgroundColor, style.borderTopColor]; };
+    const on = switches.filter(item => item.getAttribute('aria-checked') === 'true'), off = switches.filter(item => item.getAttribute('aria-checked') === 'false');
+    require(on.every(item => colourOf(item).join() === wanted.join()), `a switch that is on wears the member's colour: ${on.map(item => colourOf(item).join(' / '))} vs ${wanted.join(' / ')}`);
+    require(off.every(item => getComputedStyle(item.querySelector('.tg')).backgroundColor === resolved('backgroundColor', 'transparent')), "a switch that is off is as everywhere");
+    if (name === "composer-plus-apps") {
+      const ways = [...sub.querySelectorAll(':scope > button')];
+      require(ways.map(way => way.dataset.plus).join() === 'browse-apps,manage-apps', "瀏覽應用程式 and 管理應用程式 come first");
+      const sep = sub.querySelector('.menu-sep');
+      require(sep && sep.previousElementSibling === ways[1] && sep.nextElementSibling === sub.querySelector('.pm-list'), "a hairline, then the list of apps");
+      const icons = ways.map(way => way.querySelector('.ck svg')?.innerHTML ?? '');
+      require(icons.every(Boolean) && new Set(icons).size === 2, "each way in has its own icon");
+      const marks = switches.map(item => item.querySelector('.mlead .mono'));
+      require(marks.every(Boolean) && marks.every(mark => Math.abs(box(mark).width - box(marks[0]).width) <= 0.5 && Math.abs(box(mark).height - box(marks[0]).height) <= 0.5), "every app wears its own mark, at one size");
+    } else {
+      const skills = window.__look.data.skills.filter(skill => skill.member_id === 1 || skill.member_id === -1);
+      require(switches.length === skills.length, `a row for each skill of the member: ${switches.length} of ${skills.length}`);
+      const last = sub.querySelector(':scope > button[data-plus="manage-skills"]'), sep = sub.querySelector(':scope > .menu-sep');
+      require(last && sep && sep.nextElementSibling === last && last.querySelector('.ck svg'), "a hairline, then 管理技能 with its icon");
+      require(switches.every(item => item.querySelector('.mlead svg.i')), "every skill row has its icon");
+    }
+    return {check: name, switches: switches.length};
+  }
   if (name === "member-write-folders-default") {
     const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...(section?.querySelectorAll('.ms-folder') ?? [])];
     require(rows.length === 1 && rows[0].querySelector('.ms-path')?.textContent === "C:\\Owner\\Deliveries", `a member with no folder of its own lists the output folder alone: ${rows.map(row => row.textContent).join(" | ")}`);

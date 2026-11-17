@@ -115,7 +115,7 @@ describe("buttons", () => {
   const ALLOWED_CLASS = [
     "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-choice", "menu-action", "lang-item", "lm-main", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color", "message-quote",
   ];
-  const ALLOWED_ROLE = ["option", "menuitem", "menuitemradio", "radio", "checkbox", "switch", "tab"];
+  const ALLOWED_ROLE = ["option", "menuitem", "menuitemradio", "menuitemcheckbox", "radio", "checkbox", "switch", "tab"];
   const classOf = (tag: string): string[] => (/\bclass="([^"]*)"/.exec(tag)?.[1] ?? "").split(/\s+/).filter(Boolean);
   const roleOf = (tag: string): string => /\brole="([^"]*)"/.exec(tag)?.[1] ?? "";
 

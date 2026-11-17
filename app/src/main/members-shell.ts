@@ -117,6 +117,8 @@ export interface MembersShell {
   select(id: number): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
+  /** Changes member `id` and reads the list again, as the settings page does; false (with a toast) when the core refused. */
+  update(id: number, patch: MemberPatch): Promise<boolean>;
   /** Whether the list has been read at least once: the open member's unread boundary is known only then. */
   loaded(): boolean;
   /** Local navigation changed which destination is selected. */
@@ -640,6 +642,7 @@ export function createMembers(host: MembersHost): MembersShell {
     column: column.el,
     details: details.el,
     settings,
+    update,
     // The settings page takes the room: the details panel folds away while it is open, at every width, and comes back
     // as it was when the page is left for the conversation.
     openSettings() {

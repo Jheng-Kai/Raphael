@@ -18,7 +18,7 @@ const MAP = {
   repeat: "repeat", mail: "mail", swap: "arrow-left-right", report: "file-chart-column", pinOff: "pin-off", store: "store",
   fileDown: "file-down", fileArchive: "file-archive", fileText: "file-text", gauge: "gauge", gridPlus: "grid-2x2-plus",
   alert: "circle-alert", success: "circle-check", volume: "volume-2", volumeOff: "volume-x",
-  app: "blocks",
+  app: "blocks", slash: "square-slash",
 };
 
 const root = new URL("../../", import.meta.url);
