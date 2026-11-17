@@ -13,7 +13,7 @@ import { mountTemplateReview } from "./template-review";
 import { connectionMarkHTML } from "./secret-card";
 import { slimeFaceHTML } from "./slime";
 import type { AgentTurn, PairingCard, TemplateCard } from "./types";
-import { btn, copyText, esc, ico, toaster } from "./ui";
+import { btn, copyButton, esc, ico, toaster } from "./ui";
 
 const PLATFORM = { telegram: "Telegram", slack: "Slack", discord: "Discord" } as const;
 /** Where each bot is made: fixed here, never taken from a card (commands.rs allows only these). */
@@ -46,8 +46,8 @@ function templateCardHTML(card: TemplateCard): string {
   const keep = btn(esc(t("cards.templateSave")), "sm", `${on("template-save")}${blocked ? " disabled" : ""}`);
   // A shared card keeps its link (R-SHARE-01): copying it again sends nothing. With a share service the link takes the
   // place of the GitHub publish request; without one the card offers that request as before.
-  const actions = card.link
-    ? btn(esc(t("cards.templateCopyLink")), "sm pri", `${on("template-copy-link")} data-template-link="${esc(card.link)}"`) +
+  const actions = card.share_url
+    ? btn(esc(t("cards.templateCopyLink")), "sm pri", `${on("template-copy-link")} data-template-link="${esc(card.share_url)}"`) +
       btn(esc(t("cards.templateUnshare")), "sm", on("template-unshare")) + view
     : prepared
     ? btn(esc(t("cards.templateOpen")), "sm pri", `${on("template-open")} data-template-url="${esc(card.url!)}"`) +
@@ -59,13 +59,13 @@ function templateCardHTML(card: TemplateCard): string {
     title: card.name,
     // No face inside a card (R-CARD-01): the share mark stands for the member's template.
     mark: `<span class="mono md" aria-hidden="true">${ico("share")}</span>`,
-    status: blocked ? "failed" : card.state === "draft" && !card.link ? "ready" : "done",
-    statusText: blocked ? t("cards.templateBlocked") : card.link ? t("cards.templateShared") : card.state === "published" ? t("cards.templatePublished") : card.state === "saved" ? t("cards.templateSaved") : t("cards.templateReady"),
+    status: blocked ? "failed" : card.state === "draft" && !card.share_url ? "ready" : "done",
+    statusText: blocked ? t("cards.templateBlocked") : card.share_url ? t("cards.templateShared") : card.state === "published" ? t("cards.templatePublished") : card.state === "saved" ? t("cards.templateSaved") : t("cards.templateReady"),
     body: card.description || undefined,
     // A prepared publish request says what the owner does next and where the files are to be found.
     content: `<p class="card-body template-facts">${facts.map((fact) => `<span>${esc(fact)}</span>`).join("")}</p>` +
-      (card.link ? `<p class="card-body template-where" data-template-link-line><span class="template-path">${esc(card.link)}</span></p>` : "") +
-      (prepared && !card.link ? `<p class="card-body template-next">${esc(t("cards.templatePrepared"))}</p>` +
+      (card.share_url ? `<p class="card-body template-where" data-template-link-line><span class="template-path">${esc(card.share_url)}</span></p>` : "") +
+      (prepared && !card.share_url ? `<p class="card-body template-next">${esc(t("cards.templatePrepared"))}</p>` +
         (card.folder ? `<p class="card-body template-where" data-template-where><span>${esc(t("cards.templateWhere"))}</span><span class="template-path">${esc(card.folder)}</span></p>` : "") : ""),
     actions,
     cls: "template-card", attrs: ` data-template-card-id="${esc(card.id)}" data-card-state="${esc(card.state)}" data-template-avatar="${esc(card.avatar ?? "")}"`,
@@ -123,14 +123,18 @@ export function chatCardAction(act: HTMLElement): boolean {
     });
     return true;
   }
-  if (kind === "template-share" || kind === "template-copy-link") {
-    // The link is copied only once the service has made it; a failure leaves the card as it was and says so.
+  if (kind === "template-copy-link") {
+    void copyButton(act, act.dataset.templateLink ?? "");
+    return true;
+  }
+  if (kind === "template-share") {
+    // The link is copied only once the service has made it; a failure leaves the card as it was and says so. The card is
+    // drawn again with its link, so the toast, not the pressed button, says it is on the clipboard.
     busy(true);
-    void (async () => {
-      const link = act.dataset.templateLink || (await api.core<{ link: string }>("members.template_card_share", { id: template })).link;
-      await copyText(link);
-      toaster.info(t("cards.templateLinkCopied"));
-    })().catch(() => toaster.info(t("cards.templateLinkFailed"))).finally(() => busy(false));
+    void api.core<{ share_url: string }>("members.template_card_share", { id: template })
+      .then(async ({ share_url }) => { if (await copyButton(act, share_url)) toaster.info(t("cards.templateLinkCopied")); },
+        () => toaster.info(t("cards.templateLinkFailed")))
+      .finally(() => busy(false));
     return true;
   }
   if (kind === "template-unshare") {

@@ -98,7 +98,7 @@ describe("cards a member shows in its conversation for the panel's buttons", () 
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const host = dom(chatCardsHTML(turn({ templates: [template({ shareable: true })] })));
-    api.core.mockResolvedValueOnce({ link: "https://share.example/s/Ab3dE5gH9k" });
+    api.core.mockResolvedValueOnce({ share_url: "https://share.example/s/Ab3dE5gH9k" });
     expect(chatCardAction(host.querySelector<HTMLElement>('[data-act="template-share"]')!)).toBe(true);
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("https://share.example/s/Ab3dE5gH9k"));
     expect(api.core).toHaveBeenCalledWith("members.template_card_share", { id: "tpl-1" });
@@ -114,7 +114,7 @@ describe("cards a member shows in its conversation for the panel's buttons", () 
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const link = "https://share.example/s/Ab3dE5gH9k";
-    const host = dom(chatCardsHTML(turn({ templates: [template({ shareable: true, link })] })));
+    const host = dom(chatCardsHTML(turn({ templates: [template({ shareable: true, share_url: link })] })));
     expect(host.querySelector("[data-template-link-line]")!.textContent).toBe(link);
     expect(host.textContent).toContain(t("cards.templateShared"));
     expect([...host.querySelectorAll<HTMLButtonElement>(".card-actions button")].map((button) => button.dataset.act)).toEqual(["template-copy-link", "template-unshare", "template-view"]);

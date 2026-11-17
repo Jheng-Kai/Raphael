@@ -2025,13 +2025,13 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.template_card_share": {
         const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
-        turn.templates[0].link ??= "https://raphael-share.example.workers.dev/s/Ab3dE5gH9k";
+        turn.templates[0].share_url ??= "https://raphael-share.example.workers.dev/s/Ab3dE5gH9k";
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
-        return { link: turn.templates[0].link };
+        return { share_url: turn.templates[0].share_url };
       }
       case "members.template_card_unshare": {
         const turn = data.turns.find(item => item.templates?.some(card => card.id === p.id));
-        delete turn.templates[0].link;
+        delete turn.templates[0].share_url;
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         return {};
       }

@@ -614,7 +614,7 @@ export interface TemplateCard {
   folder_id?: string;
   /** True when the owner's share service is set, so the card offers a link (R-SHARE-01); the link once it is made. */
   shareable?: boolean;
-  link?: string;
+  share_url?: string;
 }
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */

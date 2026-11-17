@@ -512,7 +512,7 @@ async def test_without_a_share_service_no_card_offers_a_link_and_nothing_is_sent
     transport, seen = share_service([])
     rig.team.members._share_transport = transport
     turn, view = await shared_card(rig)
-    assert view["shareable"] is False and "link" not in view
+    assert view["shareable"] is False and "share_url" not in view
     with pytest.raises(RpcError, match="Sharing by link is not set up"):
         await rig.agent.call("members.template_card_share", {"id": view["id"]})
     assert not seen
@@ -525,21 +525,21 @@ async def test_a_shared_card_keeps_one_link_until_the_owner_takes_it_down(rig, m
                                      (201, {"id": "Zz0yY1xX2w", "url": f"{SHARE}/s/Zz0yY1xX2w", "token": "b" * 64})])
     rig.team.members._share_transport = transport
     turn, view = await shared_card(rig)
-    assert view["shareable"] is True and "link" not in view
+    assert view["shareable"] is True and "share_url" not in view
     review = await rig.agent.call("members.template_card", {"id": view["id"]})
-    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"link": f"{SHARE}/s/Ab3dE5gH9k"}
+    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"share_url": f"{SHARE}/s/Ab3dE5gH9k"}
     assert seen[0].method == "POST" and str(seen[0].url) == f"{SHARE}/v1/slimes"
     assert json.loads(seen[0].content) == {"template": review["template"]}
     # The same card answers with the same link and sends nothing more; the key to take it down never reaches the page.
-    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"link": f"{SHARE}/s/Ab3dE5gH9k"}
+    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"share_url": f"{SHARE}/s/Ab3dE5gH9k"}
     assert len(seen) == 1
     latest = rig.team.members.template_cards.views([turn])[turn][0]
-    assert latest["link"] == f"{SHARE}/s/Ab3dE5gH9k" and token not in json.dumps(latest)
+    assert latest["share_url"] == f"{SHARE}/s/Ab3dE5gH9k" and token not in json.dumps(latest)
     assert await rig.agent.call("members.template_card_unshare", {"id": view["id"]}) == {}
     assert seen[1].method == "DELETE" and str(seen[1].url) == f"{SHARE}/v1/slimes/Ab3dE5gH9k"
     assert seen[1].headers["authorization"] == f"Bearer {token}"
-    assert "link" not in rig.team.members.template_cards.views([turn])[turn][0]
-    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"link": f"{SHARE}/s/Zz0yY1xX2w"}
+    assert "share_url" not in rig.team.members.template_cards.views([turn])[turn][0]
+    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"share_url": f"{SHARE}/s/Zz0yY1xX2w"}
 
 
 @pytest.mark.parametrize("answer", [
@@ -556,7 +556,7 @@ async def test_a_share_service_that_answers_anything_else_leaves_the_card_unshar
     turn, view = await shared_card(rig)
     with pytest.raises(RpcError):
         await rig.agent.call("members.template_card_share", {"id": view["id"]})
-    assert len(seen) == 1 and "link" not in rig.team.members.template_cards.views([turn])[turn][0]
+    assert len(seen) == 1 and "share_url" not in rig.team.members.template_cards.views([turn])[turn][0]
 
 
 async def test_an_unreachable_share_service_and_a_plain_address_are_refused(rig, monkeypatch):

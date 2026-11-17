@@ -93,7 +93,7 @@ class TemplateCards:
         row = self._row(params)
         value = self._safe(row)
         if row["link"]:
-            return {"link": row["link"]}
+            return {"share_url": row["link"]}
         try:
             url = share_link.address()
         except ValueError as error:
@@ -107,7 +107,7 @@ class TemplateCards:
         with self.conn:
             self.conn.execute("UPDATE member_template_cards SET link=?, link_token=? WHERE id=?", (link, token, row["id"]))
         self._changed(row)
-        return {"link": link}
+        return {"share_url": link}
 
     async def unshare(self, params):
         """Takes the card's link down at the service, then forgets it; the card can be shared again with a new link."""
@@ -136,7 +136,7 @@ class TemplateCards:
             result.setdefault(row["turn_id"], []).append({"id": row["id"], "state": row["state"], "name": value["name"], "avatar": row["avatar"],
                 "description": value.get("description", ""), "counts": {"skills": len(value["skills"]), "routines": len(value["routines"])},
                 "connections": value["connections"], "findings": json.loads(row["findings"]), **({"url": row["url"]} if row["url"] else {}),
-                "shareable": shareable, **({"link": row["link"]} if row["link"] else {}),
+                "shareable": shareable, **({"share_url": row["link"]} if row["link"] else {}),
                 **(self._prepared(value) if row["state"] == "published" else {})})
         return result
 
