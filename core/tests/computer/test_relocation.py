@@ -266,3 +266,39 @@ async def test_every_start_waits_for_a_move_under_way(tmp_path):
     target = await seated
     assert vm.relocation.result() == "moved"
     assert target.workspace.parent == local.resolve() / "vm-homes"
+
+async def test_a_move_that_waited_for_a_running_computer_happens_once_that_computer_stops(tmp_path):
+    data, local = earlier_install(tmp_path)
+    engine = Engine()
+    vm = machine(data, local, engine)
+    key = "a1b2c3d4e5f60718"
+    name = engine.add(vm, key, running=True)
+    vm.task = asyncio.get_running_loop().create_future()  # the core runs its monitor
+    assert await vm.relocate_soon() == "running"
+    assert (data / "vm-homes" / key / "notes.txt").exists() and not (local / "vm-homes").exists()
+    # The computer stops while the core runs (idle, the owner's press, a member's stop): the move is tried again now.
+    engine.containers[name]["State"]["Running"] = False
+    retry = vm.relocate_again()
+    assert retry is not None and await retry == "moved"
+    assert (local / "vm-homes" / key / "notes.txt").read_text(encoding="utf-8") == "kept"
+    assert vm.relocate_again() is None  # a move that is done is not tried again
+    vm.task.cancel()
+
+
+@pytest.mark.parametrize("why", ["closing", "volume", "under way"])
+async def test_a_stop_tries_no_move_for_a_closing_core_another_reason_or_one_under_way(tmp_path, why):
+    data, local = earlier_install(tmp_path)
+    vm = machine(data, local, Engine())
+    loop = asyncio.get_running_loop()
+    vm.task = None if why == "closing" else loop.create_future()
+    vm.relocation = loop.create_future()
+    if why != "under way":
+        vm.relocation.set_result("running" if why == "closing" else "volume")
+    before = vm.relocation
+
+    assert vm.relocate_again() is None
+    assert vm.relocation is before
+    if vm.task is not None:
+        vm.task.cancel()
+    if not before.done():
+        before.cancel()

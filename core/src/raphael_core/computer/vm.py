@@ -827,6 +827,19 @@ class LocalVm:
             self.relocation = asyncio.create_task(relocate())
         return self.relocation
 
+    # What a move waits for that a computer stopping can end: a computer of the old place still running, or one in use.
+    MOVE_WAITS_FOR_A_STOP = ("running", "busy")
+
+    def relocate_again(self):
+        """A computer stopped while the core runs: a move that waited only for such a computer is tried again now, instead
+        of at the next start, which may find the computer running again (one left running by an app that did not stop it
+        on its way out is only stopped later, idle). A core that is closing tries nothing: its monitor is gone."""
+        task = self.relocation
+        if self.task is None or task is None or not task.done() or task.cancelled() or task.result() not in self.MOVE_WAITS_FOR_A_STOP:
+            return None
+        self.relocation = None
+        return self.relocate_soon()
+
     async def settled(self):
         """Wait for a move of the computers' folders under way: a computer is never prepared on a folder being moved."""
         if self.relocation is not None and not self.relocation.done():
@@ -1713,6 +1726,7 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
             if remove and (await self.run_for(target, ["rm", target.name])).code:
                 raise VmError("remove_failed")
             await self.close_viewer(target)
+        self.relocate_again()
 
     async def close_viewer(self, target):
         tunnel = self.tunnels.pop((target.remote, target.name), None)
