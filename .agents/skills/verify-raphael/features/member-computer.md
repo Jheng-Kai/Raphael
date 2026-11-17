@@ -1271,8 +1271,9 @@ SSH/macOS/driver compatibility or latency.
 Image layer 8 (R-COMP-READY-01, R-COMP-SIGNIN-01, R-COMP-OWNER-INPUT-01). A member's computer has Chrome and the usual tools from its first start, not only the driver's browser; and signing in to
 Google for a member failed with "This browser or app may not be secure".
 
-- The members' browser is Google Chrome on amd64 (from Google's repository when the image is built), Chromium on
-  arm64. It is started without the automation mark a page can read, with no warning bar and no "Restore pages?".
+- The members' browser is Google Chrome (from Google's repository when the image is built): on amd64 from layer 8, on
+  arm64 from layer 14 (Chromium before, "Google's Chrome on arm64 too" below). It is started without the automation mark
+  a page can read, with no warning bar and no "Restore pages?".
 - The image adds git, wget, zip, unzip, jq, ripgrep, npm, sqlite3, poppler-utils, build-essential, less, nano, tree,
   file, and the Noto CJK and colour emoji fonts. Nothing in a computer is root: what is missing is added here.
 - The shared computer has one browser. Its Browser icon opens a window of the members' own.
@@ -1295,7 +1296,7 @@ layer 7 was 2.7 GB (measured), and its first build downloads Chrome and the pack
 Image layer 9 (R-COMP-READY-02). On layer 8 the panel did not show Chrome as the browser.
 
 - The panel's launcher on every screen, and the menu's one browser entry, are named Google Chrome under Chrome's
-  mark on amd64 (Chromium under its own on arm64). Until then a globe named "Browser" opened Chrome.
+  mark (on arm64 Chromium under its own until layer 14). Until then a globe named "Browser" opened Chrome.
 - XFCE's "Web Browser", the menu's Chrome and Chromium entries and `x-www-browser` start the computer's browser.
   On layer 8 the first asked which application to prefer, and the menu's Chrome entry could not start at all.
 - Firefox stayed installed and left the menu (layer 10 removes it, below).
@@ -1311,7 +1312,8 @@ Image layer 10 (R-COMP-READY-03). Firefox is of no use in a computer, so the ima
 
 - Firefox ESR is purged from the image: the package, its `x-www-browser` alternative, its menu entry and mime
   registrations, `/etc/firefox-esr`, `/usr/lib/mozilla`, XFCE's own Firefox entry in its list of preferred applications. `which firefox firefox-esr` finds nothing.
-- Google Chrome (the members' browser on amd64) and Chromium (the driver's, and the members' on arm64) stay. The
+- Google Chrome (the members' browser; on arm64 from layer 14) and Chromium (the driver's where there is no Chrome, and
+  the members' on arm64 until layer 14) stay. The
   launcher, the menu, XFCE's Web Browser and `x-www-browser` still open the members' own browser; the last fallback
   of `raphael-browser` is now an error line and not Firefox.
 - Layer 9 computers, the shared six-screen one among them, are made again on layer 10 at their next start, workspace
@@ -1323,6 +1325,60 @@ Image layer 10 (R-COMP-READY-03). Firefox is of no use in a computer, so the ima
   layer 10 when a layer 9 image is on the PC.
 
 Stated limit: a `.browser-profiles/mozilla` folder that an existing workspace already has stays in it.
+
+## Google's Chrome on arm64 too
+
+Image layer 14 (R-COMP-READY-04). On an Apple-silicon Mac (arm64 Docker) the members' browser was Debian's Chromium:
+Chromium's blue mark and Debian's build of it (measured in a layer 13 profile: DuckDuckGo is the first of its search
+engines; in Chrome's own profile it is Google), where an amd64 computer has Google's own Chrome. Google's repository now
+lists arm64 beside amd64 (`dists/stable/Release`, `binary-arm64/Packages` has `google-chrome-stable`). Debian's Chromium
+also writes its own command line with spaces where Chrome keeps each word apart, so `raphael-browser-tabs` could not
+find its profile on arm64 ("process ... names no profile", and a seat's window kept its marker page); with Chrome it can.
+
+- The members' browser is Google's own Chrome on every computer, taken as on amd64: from Google's repository, under
+  Google's key, at the version current when the image is built. Layer 14 is one step after layer 12's (`COPY layer14/`);
+  every step before it, `desktop/`, `layer11/` and `layer12/` are as they were, so a PC that built layer 13 builds only
+  this step. On amd64, where Chrome is there already, the step changes nothing and only checks. Measured on an arm64
+  Mac: a layer 13 image built from the same steps came wholly from the build cache, the step took 15 s (140 MB from
+  Google's repository), and the image is 4.06 GB where layer 12 was 3.38 GB. Editing a comment above a step re-ran none.
+- Where it installs Chrome it names the desktop for it as layer 9's step does: every screen's launcher and the menu's one
+  browser are Google Chrome under Chrome's mark; XFCE's Web Browser, the menu's Chrome and Chromium entries and
+  `x-www-browser` start `raphael-browser`. `raphael-browser`, `raphael-seat-browser` and `raphael-browser-tabs` (layer 12)
+  take Chrome wherever it is installed, with the flags they give it on amd64 (`--no-sandbox --test-type`, the seat
+  browser's own list). The managed policy (no browser sign-in, no sync, nothing typed kept) was already written for
+  Chrome's folder as for Chromium's; the step checks the two are the same file.
+- Debian's Chromium stays installed. The driver takes the first root-owned of `/opt/google/chrome/google-chrome`,
+  `/usr/lib/chromium/chromium`, ... for a browser it starts itself (cua-driver 0.37.0, `isolated_browser_candidates` in
+  `platform-linux/src/browser_platform.rs`), so on a computer of a member's own its browser is Chrome on arm64 as on
+  amd64, and Chromium is what it would take where there is no Chrome. The driver's own data is not a profile of its own:
+  `CUA_DRIVER_BROWSER_PROFILE_ROOT` is `.browser-profiles/driver`, and its browser's profile is `driver/main`.
+- Chromium's profiles are not carried into Chrome. The members' own profile is `.browser-profiles/driver/main`: the
+  shared computer's browser is started on it by `raphael-seat-browser` and the driver attaches to it; on a computer of a
+  member's own it is the driver's browser (`browser_prepare`, profile `main`). `.browser-profiles/chromium` is what
+  Chromium kept when it was started without a profile (the desktop's browser on a computer of a member's own);
+  `.browser-profiles/google-chrome` is Chrome's. On arm64, the workspace's preparation that layer 14 installs
+  (`layer14/prepare-raphael-workspace.sh`, run before the driver starts) removes `driver/main` and `chromium` once in each
+  workspace, before any browser starts, and leaves `.browser-profiles/.raphael-chromium-dropped`: the members sign in
+  again. The rest of `driver/` (the driver's other profiles, carry-over staging), `google-chrome`, every other file of the
+  workspace and the team folder stay; a `.browser-profiles` or `driver` that is a link is left as it is. The driver makes
+  `driver/main` again, with its own mark, the next time it starts its browser; the shared computer's launcher makes it as
+  before. On amd64 that copy of the script is not installed and nothing is removed.
+- Layer 13 computers, a member's own and the shared one (whose size is the engine's), are named in `vm.known_previous`
+  in the shape they have, which is layer 14's, and are made again on layer 14 at their next start, workspace kept. The
+  layer 13 image is then removed as any older layer's is (R-COMP-IMAGE-02).
+- Check: `npm run verify -- --computer` requires Google Chrome on every architecture ("N screens browser mark", "shared
+  browser is a person's", which also runs Chromium for its version); its previous-layer blocks write an earlier layer's
+  browsers' profiles into that layer's workspace and, once it is made again, require on arm64 that `driver/main` and
+  `chromium` are gone, the rest kept and the mark there, and on amd64 that everything is kept.
+
+```powershell
+cd core; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_seat_tools.py tests/computer/test_housekeeping.py tests/computer/test_seat_windows.py tests/computer/test_image_workflow.py tests/evaluate/test_computer_acceptance.py -q
+```
+
+Stated limits: the carry-over of a historical home (R-COMP-SEAT-01) still copies a home's `driver/main` into a shared
+home that has none, so a member's own home of an arm64 PC that the carry record does not yet call handled would bring
+its Chromium profile along (a home carried before is handled and is never carried again). Whether Google lets a
+sign-in through stays Google's decision; no test signs in.
 
 ## Responsive computer tools
 

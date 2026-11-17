@@ -663,8 +663,10 @@ async def test_layer_four_upgrade_refuses_foreign_weakened_busy_or_multiscreen_t
     ('11', ['VNC_PW=private'], False),
     ('12', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], True),     # released with 13: the screen a person can use
     ('12', ['VNC_PW=private'], False),
-    ('13', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),    # the current layer on another image is not a previous one
-    ('14', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
+    ('13', ['VNC_PW=private', 'LANG=C.UTF-8', 'LC_ALL=C.UTF-8', 'RAPHAEL_SCREENS=1'], True),  # released with 14: Chrome on arm64
+    ('13', ['VNC_PW=private', 'LANG=C.UTF-8', 'LC_ALL=C.UTF-8'], False),
+    ('14', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),    # the current layer on another image is not a previous one
+    ('15', ['VNC_PW=private', 'RAPHAEL_SCREENS=1'], False),
 ])
 async def test_layer_five_is_a_previous_layer_only_in_the_shape_it_was_released_in(per_bot_desktop, layer, env, recognised):
     # A member's own computer: on this branch the plain `desktop` is the six-screen shared one.
@@ -691,7 +693,7 @@ def test_image_installs_screen_views_and_preserves_the_single_token_port():
     assert 'install -d -o cua -g cua /home/cua/.config/xfce4/panel;' in dockerfile
     assert '[program:raphael-screens]' in dockerfile
     assert 'command=/usr/bin/python3 /opt/raphael-desktop/screens.py' in dockerfile
-    assert 'org.raphael.computer.layer="13"' in dockerfile
+    assert 'org.raphael.computer.layer="14"' in dockerfile
     assert 'stopasgroup' not in dockerfile and 'killasgroup' not in dockerfile
     assert 'supervisor only restarts what exits; the helper ends its own children' in dockerfile
     assert 'Nothing may call supervisorctl stop or restart in a computer' in dockerfile
