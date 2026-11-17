@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), ownerClipboardText:vi.fn() }));
+const api = vi.hoisted(() => ({ core:vi.fn(), settingsGet:vi.fn(), settingsSet:vi.fn(), desktopMaintain:vi.fn(), desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), ownerClipboardText:vi.fn(), ownerClipboardSequence:vi.fn(), desktopClipboard:vi.fn(), desktopPutFile:vi.fn() }));
 vi.mock("./api", () => api);
 import { defaultWallpaper, mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
@@ -124,6 +124,7 @@ beforeEach(() => {
   api.settingsGet.mockResolvedValue({settings:{computer_ssh_alias:""}});
   api.desktopStatus.mockResolvedValue(running); api.desktopRenew.mockResolvedValue(running); api.desktopClose.mockResolvedValue({});
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
+  api.ownerClipboardSequence.mockResolvedValue(null); api.desktopClipboard.mockResolvedValue({put:true});
   host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
   mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,trySkill:trySent,changed:waitChanged});
 });
@@ -1070,6 +1071,7 @@ let peer: { postMessage: ReturnType<typeof vi.fn> };
 const wire = (): void => { peer = { postMessage: vi.fn() }; Object.defineProperty(frame(), 'contentWindow', { value: peer, configurable: true }); };
 const holdControl = async (): Promise<void> => { panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); api.desktopControl.mockResolvedValue({ ...running, control: 'owner' }); await takeOver(); message('interactive', { held: true }); await flush(); };
 const pasteReplies = (sent: { mock: { calls: unknown[][] } }): unknown[][] => sent.mock.calls.filter(([data]) => (data as { type?: string }).type === 'raphael-desktop-paste');
+const lastReply = (sent: { mock: { calls: unknown[][] } }): unknown[] | undefined => { const replies = pasteReplies(sent); return replies[replies.length - 1]; };
 
 test('the owner pasting into the screen they hold sends their clipboard text to the page, and to that page alone', async () => {
   await holdControl();
@@ -1116,4 +1118,112 @@ test('a clipboard that cannot be read answers with no text, and the page pastes 
   const sent = peer.postMessage;
   askPaste(3); await flush();
   expect(pasteReplies(sent)).toEqual([[{ type: 'raphael-desktop-paste', id: 3, text: null }, 'http://127.0.0.1:5000']]);
+});
+
+const fromPage = (data: unknown): void => { window.dispatchEvent(new MessageEvent('message', { source: frame().contentWindow, origin: 'http://127.0.0.1:5000', data })); };
+
+test('their paste goes to the computer through the core first, and a clipboard they have not changed since is not sent again', async () => {
+  await holdControl();
+  api.ownerClipboardText.mockResolvedValue('from the PC'); api.ownerClipboardSequence.mockResolvedValue(41);
+  const sent = peer.postMessage;
+  askPaste(7); await flush();
+  expect(api.desktopClipboard).toHaveBeenCalledWith('one', 'put', 'from the PC');
+  expect(lastReply(sent)).toEqual([{ type: 'raphael-desktop-paste', id: 7, text: 'from the PC' }, 'http://127.0.0.1:5000']);
+  // Nothing copied on the PC since: the computer pastes its own clipboard, which may hold a copy made in it.
+  api.desktopClipboard.mockClear();
+  askPaste(8); await flush();
+  expect(api.desktopClipboard).not.toHaveBeenCalled();
+  expect(lastReply(sent)).toEqual([{ type: 'raphael-desktop-paste', id: 8, text: null }, 'http://127.0.0.1:5000']);
+  // A new copy on the PC goes again.
+  api.ownerClipboardSequence.mockResolvedValue(42); api.ownerClipboardText.mockResolvedValue('newer');
+  askPaste(9); await flush();
+  expect(api.desktopClipboard).toHaveBeenCalledWith('one', 'put', 'newer');
+});
+
+test('a paste the core could not hand over still gives the page the text, as before, and is tried again next time', async () => {
+  await holdControl();
+  api.ownerClipboardText.mockResolvedValue('kept'); api.ownerClipboardSequence.mockResolvedValue(5);
+  api.desktopClipboard.mockResolvedValue({ put: false });
+  const sent = peer.postMessage;
+  askPaste(1); await flush();
+  expect(lastReply(sent)).toEqual([{ type: 'raphael-desktop-paste', id: 1, text: 'kept' }, 'http://127.0.0.1:5000']);
+  api.desktopClipboard.mockClear();
+  askPaste(2); await flush();
+  expect(api.desktopClipboard).toHaveBeenCalledWith('one', 'put', 'kept');
+});
+
+test("their copy in the screen they hold brings the computer's copy to their PC, and that copy is not pasted back", async () => {
+  await holdControl();
+  api.desktopClipboard.mockImplementation(async (_session: string, action: string) => action === 'take' ? { copied: true } : { put: true });
+  api.ownerClipboardSequence.mockResolvedValue(77);
+  fromPage({ type: 'raphael-desktop-copied' }); await flush();
+  expect(api.desktopClipboard).toHaveBeenCalledWith('one', 'take');
+  // Their next paste finds the PC clipboard as the copy left it: the computer pastes its own.
+  api.ownerClipboardText.mockResolvedValue('copied in the computer');
+  api.desktopClipboard.mockClear();
+  askPaste(4); await flush();
+  expect(api.desktopClipboard).not.toHaveBeenCalled();
+  expect(lastReply(peer.postMessage)?.[0]).toEqual({ type: 'raphael-desktop-paste', id: 4, text: null });
+});
+
+test('a copy while they only watch, or from another window, brings nothing', async () => {
+  panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush();
+  fromPage({ type: 'raphael-desktop-copied' }); await flush();
+  window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'http://127.0.0.1:5000', data: { type: 'raphael-desktop-copied' } }));
+  await flush();
+  expect(api.desktopClipboard).not.toHaveBeenCalled();
+});
+
+const uploads = (): void => {
+  api.core.mockImplementation(async (method: string, params: { action?: string }) => {
+    if (method !== 'attachments.upload') return {};
+    if (params.action === 'begin') return { token: 'upload-1' };
+    if (params.action === 'finish') return { name: 'notes.txt', mime: 'text/plain', data: '', stored_id: 'stored-1' };
+    return {};
+  });
+};
+
+test("files the page passes on go to the computer's team folder, and one quiet line says where", async () => {
+  await holdControl(); uploads();
+  api.desktopPutFile.mockResolvedValue({ name: 'notes (2).txt', path: '/home/cua/team/notes (2).txt' });
+  fromPage({ type: 'raphael-desktop-files', files: [new File(['hello'], 'notes.txt', { type: 'text/plain' }), 'not a file'] }); await flush();
+  expect(api.core).toHaveBeenCalledWith('attachments.upload', expect.objectContaining({ action: 'begin', name: 'notes.txt', size: 5 }));
+  expect(api.desktopPutFile).toHaveBeenCalledTimes(1);
+  expect(api.desktopPutFile).toHaveBeenCalledWith('one', 'stored-1', 'notes.txt');
+  const line = panel().querySelector<HTMLElement>('.desktop-error')!;
+  expect(line.hidden).toBe(false);
+  expect(line.getAttribute('role')).toBe('status');
+  expect(line.textContent).toBe(t('desktop.filePlaced', { p0: 'notes (2).txt' }));
+});
+
+test('a file dropped while only watching goes in too, and a file over the limit or one that fails says so', async () => {
+  panelOpen = true; mounted.show(); await flush(); wire(); message('connected'); await flush(); uploads();
+  const screenBox = panel().querySelector<HTMLElement>('.desktop-screen')!;
+  const drop = (files: File[]): Event => {
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { files, types: ['Files'] } });
+    screenBox.dispatchEvent(event);
+    return event;
+  };
+  api.desktopPutFile.mockResolvedValue({ name: 'photo.png', path: '/home/cua/team/photo.png' });
+  expect(drop([new File(['png'], 'photo.png', { type: 'image/png' })]).defaultPrevented).toBe(true); await flush();
+  expect(api.desktopPutFile).toHaveBeenCalledWith('one', 'stored-1', 'photo.png');
+  const huge = new File(['x'], 'huge.mp4'); Object.defineProperty(huge, 'size', { value: 251 * 1024 * 1024 });
+  api.desktopPutFile.mockClear();
+  drop([huge]); await flush();
+  expect(api.desktopPutFile).not.toHaveBeenCalled();
+  expect(panel().querySelector('.desktop-error')!.textContent).toBe(t('desktop.fileTooLarge', { p0: 'huge.mp4' }));
+  api.desktopPutFile.mockRejectedValue(new Error('engine'));
+  drop([new File(['a'], 'a.txt')]); await flush();
+  expect(panel().querySelector('.desktop-error')!.textContent).toBe(t('desktop.fileFailed', { p0: 'a.txt' }));
+  expect(panel().querySelector('.desktop-error')!.getAttribute('role')).toBe('alert');
+});
+
+test("the computer's menu offers to send a file, with its own icon", async () => {
+  await holdControl();
+  host.querySelector<HTMLButtonElement>('[data-desktop="menu"]')!.click(); await flush();
+  const item = document.querySelector<HTMLElement>('#app-popover [data-pick="send-file"]');
+  expect(item?.textContent).toContain(t('desktop.sendFile'));
+  const icons = [...document.querySelectorAll('#app-popover [data-pick] svg')].map(node => node.innerHTML);
+  expect(new Set(icons).size).toBe(icons.length);
 });

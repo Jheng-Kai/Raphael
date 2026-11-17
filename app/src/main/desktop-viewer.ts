@@ -5,6 +5,7 @@ import * as api from "./api";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import { esc, ico, iconButton, btn, patchHTML } from "./ui";
 import { openActions } from "./member-column";
+import { FILE_MAX_BYTES, fileMime, storeUpload } from "./attachments";
 import "./desktop-viewer.css";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 import { mountMemberResources } from "./member-profile-resources";
@@ -313,20 +314,76 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     clearTimeout(lingering);
     lingering = setTimeout(closeStream, LINGER_MS);
   }
-  /** The owner's own Ctrl+V in the live screen: their clipboard text goes to the screen's page, which pastes it into the computer.
-   *  Only while they hold this screen; a member at work, or the owner only watching, reads nothing of their clipboard. */
+  /** The PC clipboard's change number when it last matched the computer's (a paste handed it over, or a copy brought it back). */
+  let syncedClipboard: number | null | undefined;
+  const holding = (held: DesktopSession): boolean => session === held && interactive && state?.control === 'owner';
+  /** The owner's own Ctrl+V in the live screen: their clipboard text goes to the computer's clipboard through the core, and the
+   *  screen's page then sends the paste's keys. Only while they hold this screen; a member at work, or the owner only watching,
+   *  reads nothing of their clipboard. A clipboard they have not changed since it last matched the computer's is not sent: the
+   *  computer pastes its own, which may hold a copy made in it (R-PASTE-01). */
   async function answerPaste(id: unknown): Promise<void> {
     if (typeof id !== 'number' || !session || !interactive || state?.control !== 'owner') return;
     const target = frame.contentWindow, origin = new URL(session.url).origin, held = session;
-    let text: string | null = null;
-    try { text = await api.ownerClipboardText(); } catch { text = null; }
+    let text: string | null = null, sequence: number | null = null;
+    try { [text, sequence] = await Promise.all([api.ownerClipboardText(), api.ownerClipboardSequence().catch(() => null)]); } catch { text = null; }
     // Control may have ended, or the screen changed, while the clipboard was read: then it is told nothing.
-    if (session !== held || !interactive || state?.control !== 'owner') return;
+    if (!holding(held)) return;
+    if (sequence !== null && sequence === syncedClipboard) text = null;
+    else if (text) {
+      const handed = await api.desktopClipboard(held.session, 'put', text).catch(() => undefined);
+      if (!holding(held)) return;
+      if (handed?.put) syncedClipboard = sequence;
+    }
     target?.postMessage({ type: 'raphael-desktop-paste', id, text }, origin);
   }
+  /** The owner's own copy key in the screen they hold: what the computer copied comes to their PC's clipboard (R-PASTE-02). */
+  async function bringCopy(): Promise<void> {
+    if (!session || !interactive || state?.control !== 'owner') return;
+    const held = session;
+    const taken = await api.desktopClipboard(held.session, 'take').catch(() => undefined);
+    if (taken?.copied && session === held) syncedClipboard = await api.ownerClipboardSequence().catch(() => null);
+  }
+  /** Files the owner dropped on the screen or chose for it: each goes into the computer's team folder, and one quiet line says
+   *  where (R-COMP-FILE-01). Watching is enough. */
+  async function sendFiles(files: readonly File[]): Promise<void> {
+    const held = session;
+    if (!held) return;
+    for (const file of files) {
+      if (!file.size || file.size > FILE_MAX_BYTES) { showNotice(t(file.size ? 'desktop.fileTooLarge' : 'desktop.fileFailed', { p0: file.name })); continue; }
+      try {
+        const stored = await storeUpload(file, fileMime(file), () => session === held);
+        if (!stored.stored_id) throw new Error('not stored');
+        const placed = await api.desktopPutFile(held.session, stored.stored_id, file.name);
+        if (session === held) showNotice(t('desktop.filePlaced', { p0: placed.name }), true);
+      } catch {
+        if (session === held) showNotice(t('desktop.fileFailed', { p0: file.name }));
+      }
+    }
+  }
+  const picker = document.createElement('input');
+  picker.type = 'file'; picker.multiple = true; picker.hidden = true;
+  picker.addEventListener('change', () => { const files = [...picker.files ?? []]; picker.value = ''; void sendFiles(files); });
+  panel.append(picker);
+  // A drop on the screen while only watching lands here (the stream takes no pointer then); while held, the page passes it on.
+  const screenBox = panel.querySelector<HTMLElement>('.desktop-screen')!;
+  screenBox.addEventListener('dragover', event => {
+    if (!session || !event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy';
+  });
+  screenBox.addEventListener('drop', event => {
+    if (!session || !event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault(); event.stopPropagation();
+    void sendFiles([...event.dataTransfer.files]);
+  });
   function message(event: MessageEvent): void {
     if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin) return;
     if (event.data?.type === 'raphael-desktop-paste-request') { void answerPaste(event.data.id); return; }
+    if (event.data?.type === 'raphael-desktop-copied') { void bringCopy(); return; }
+    if (event.data?.type === 'raphael-desktop-files') {
+      const files = Array.isArray(event.data.files) ? event.data.files.filter((file: unknown): file is File => file instanceof File) : [];
+      void sendFiles(files);
+      return;
+    }
     if (event.data?.type !== 'raphael-desktop') return;
     if (event.data.state === 'frame') {
       if (state?.control === 'owner' || pending()) return;
@@ -630,7 +687,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   panel.addEventListener('click', event => { if ((event.target as Element).closest('[data-desktop-location]')) location.open(); });
   panel.querySelector('[data-desktop="menu"]')!.addEventListener('click', event => openActions(event.currentTarget as HTMLElement, [
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
-  ], () => teach.click()));
+    { id: 'send-file', label: t('desktop.sendFile'), icon: 'attach' },
+  ], id => { if (id === 'send-file') picker.click(); else teach.click(); }));
   backButton.addEventListener('click', () => {
     review.hidden = true;
     draw();

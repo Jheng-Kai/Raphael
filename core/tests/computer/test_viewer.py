@@ -189,7 +189,7 @@ def test_the_page_holds_back_the_owners_paste_only_while_they_hold_control_and_n
     # R-PASTE-01. What the page does is run against a stand-in for noVNC in app/src/main/desktop-paste-page.test.ts.
     from raphael_core.computer.viewer import BOOTSTRAP
     script = BOOTSTRAP.decode()
-    assert "if (!rfb || rfb.viewOnly || event.code !== 'KeyV'" in script
+    assert "if (!rfb || rfb.viewOnly || !Object.hasOwn(KEYS, event.code)" in script
     assert "raphael-desktop-paste-request" in script and "rfb.clipboardPasteFrom(text)" in script
     assert "if (!rfb || rfb.viewOnly) return;" in script
     assert "navigator.clipboard" not in script and "readText" not in script

@@ -22,6 +22,11 @@ export function attachRefusal(count: number, mime: string, size: number, total =
 
 export async function readComposerFile(file: File, mime: string, current: () => boolean = () => true): Promise<import("./types").WireAttachment> {
   if (file.size <= 4 * 1024 * 1024) return { name: file.name, mime, data: base64Of(new Uint8Array(await file.arrayBuffer())) };
+  return storeUpload(file, mime, current);
+}
+
+/** `file` put in the core's upload store a megabyte at a time, whatever its size: the stored copy, with its `stored_id`. */
+export async function storeUpload(file: File, mime: string, current: () => boolean = () => true): Promise<import("./types").WireAttachment> {
   const { token } = await api.core<{ token: string }>("attachments.upload", { action: "begin", name: file.name, mime, size: file.size });
   try {
     for (let offset = 0; offset < file.size; offset += 1024 * 1024) {

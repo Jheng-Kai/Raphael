@@ -7,7 +7,7 @@ const take = [...entry, click('[data-desktop="enlarge"]'), click('[data-desktop=
 const teachComputer = () => ({desktop:{state:'running',ready:true,control:'member'}});
 const teaching = [member(1),{action:'open-details'},wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="enlarge"]'),click('[data-desktop="take"]'),wait('.desktop-panel[data-interactive="true"]'),click('[data-desktop="menu"]'),click('#app-popover [data-pick="teach"]'),wait('.desktop-recording:not([hidden])')];
 const draft = [...teaching,click('[data-desktop="teach"]'),wait('.desktop-review #mp-skill-text')];
-const menu = [click('[data-desktop="menu"]'),wait('#app-popover [data-pick="files"]')];
+const menu = [click('[data-desktop="menu"]'),wait('#app-popover [data-pick="send-file"]')];
 const boot = (state, desktopHour = 9, extra = {}) => ({desktopHour, desktop:{state,ready:false,control:'member',...extra}});
 // A booting computer says nothing: the scene waits for the panel's own state in data, not for words.
 const bootEntry = (state = 'starting') => [member(1), {action:'open-details'}, wait(`.desktop-panel:not([hidden])[data-desktop-state="${state}"]`)];
@@ -77,6 +77,8 @@ export default [
   scene("desktop-viewer", "Open the existing stream large without a new dialog or session", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],computer()),
   scene("desktop-viewer-night", "The larger view at night streams the computer with its dark default picture", [...entry,click('[data-desktop="enlarge"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],{...computer(),desktopHour:22}),
   scene("desktop-owner", "A screen click acquires the lease immediately without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),
+  scene("desktop-send-file-menu", "The held computer's ⋯ offers 傳送檔案到電腦 beside teaching, each with its own icon", [...take,click('[data-desktop="menu"]'),wait('#app-popover [data-pick="send-file"]'),check("desktop-send-file-menu")],computer()),
+  scene("desktop-file-dropped", "A file dropped on the screen while watching goes into the team folder and one quiet line says where", [...entry,{action:'desktop-drop-file'},wait('.desktop-panel .desktop-error[role="status"]:not([hidden])'),check("desktop-file-dropped")],computer()),
   scene("desktop-handback", "Stop hands the computer back, the view keeps watching, and folding back restores the conversation", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-expanded] .desktop-mode-label[data-mode="watching"]'),click('[data-desktop="collapse"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check("desktop-handback")],computer()),
   // R-COMP-RELEASE-01: ending control is not ending watching.
   scene('computer-release-keeps-watching', 'Stop in the larger view hands the computer back and the view stays open on the same live stream: the pill says Watching and Take control is offered again', [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-expanded] .desktop-mode-label[data-mode="watching"]'),wait('[data-desktop="take"]:not([hidden]):not(:disabled)'),check('release-keeps-watching')],computer()),

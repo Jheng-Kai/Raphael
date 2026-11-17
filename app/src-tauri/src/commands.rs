@@ -446,6 +446,9 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_renew",
     "computer.viewer_control",
     "computer.viewer_close",
+    // The owner's paste into and copy out of the computer they hold, and a file they hand it (R-PASTE-02, R-COMP-FILE-01).
+    "computer.viewer_clipboard",
+    "computer.viewer_put_file",
     "computer.lifecycle",
     "computer.wallpaper",
     "pages.open",
@@ -2284,6 +2287,26 @@ pub fn owner_clipboard_text(webview: Webview) -> Result<Option<String>, String> 
     }
 }
 
+/// A number that changes whenever the owner's clipboard does (Windows' clipboard sequence number, the Mac pasteboard's change
+/// count), so the viewer's paste can tell whether they copied anything since the member's computer last had their clipboard:
+/// if not, the computer pastes its own, which may hold a copy made in it. `None` on other systems.
+#[tauri::command]
+pub fn owner_clipboard_sequence(webview: Webview) -> Result<Option<i64>, String> {
+    require_main(&webview)?;
+    #[cfg(windows)]
+    {
+        Ok(Some(i64::from(crate::paste::clipboard_sequence_number())))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Ok(i64::try_from(crate::macos::pasteboard::current_change_count()).ok())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        Ok(None)
+    }
+}
+
 /// The keyboard layout of the window that has focus: the one the user is typing with.
 #[cfg(windows)]
 fn foreground_layout() -> windows::Win32::UI::Input::KeyboardAndMouse::HKL {
@@ -2629,6 +2652,7 @@ mod tests {
                 "open_library_file",
                 "open_link",
                 "open_team_file",
+                "owner_clipboard_sequence",
                 "owner_clipboard_text",
                 "pick_output_folder",
                 "repair_accessibility",
@@ -2973,6 +2997,8 @@ mod tests {
             "computer.viewer_renew",
             "computer.viewer_control",
             "computer.viewer_close",
+            "computer.viewer_clipboard",
+            "computer.viewer_put_file",
             "computer.lifecycle",
             "computer.wallpaper",
         ] {
