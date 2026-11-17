@@ -253,6 +253,34 @@ async def test_a_turn_in_a_thread_that_is_not_on_screen_is_unread_until_it_is_re
     assert not listed[member["id"]]["unread"] and listed[0]["unread"]
 
 
+async def test_the_column_shows_what_the_member_last_said_once_it_spoke_after_the_question(rig, conn):
+    # R-SIDE-06: the owner's own words stay under the name only until the member says something back.
+    member = (await rig.call("members.create", {"name": "A"}))["member"]["id"]
+    history = AgentHistory(conn)
+    turn_id = history.add(session_id="s", question="我沒有要商業化沒有關係", route="chat", prefix="", text="", status="running",
+                          member_id=member)
+
+    async def line():
+        listed = {m["id"]: m for m in (await rig.call("members.list"))["members"]}
+        viewed = rig.service.view_of(rig.service.store.member(member))
+        assert viewed["preview"] == listed[member]["preview"]
+        return listed[member]["preview"]
+
+    assert await line() == "我沒有要商業化沒有關係"
+    # Its thinking and the conversation's own lines are no words of its own.
+    history.add_message(turn_id, "thinking", "planning")
+    history.add_message(turn_id, "event", json.dumps({"type": "computer", "action": "woken"}))
+    assert await line() == "我沒有要商業化沒有關係"
+    history.add_message(turn_id, "progress", "電腦恢復正常，v12 的工作資料夾也還在。")
+    assert await line() == "電腦恢復正常，v12 的工作資料夾也還在。"
+    history.add_message(turn_id, "reply", "onetake 下載好了。")
+    history.add_message(turn_id, "progress", "   ")
+    assert await line() == "onetake 下載好了。"
+    # The answer, once written, is the line.
+    history.publish_terminal(turn_id, prefix="", text="準備齊了。", detail=None, status="done", cost_usd=0, replies=[], model=None)
+    assert await line() == "準備齊了。"
+
+
 async def test_an_unseen_members_voice_reply_is_unread_because_it_is_text_only(rig, conn):
     member = (await rig.call("members.create", {"name": "Voice recipient"}))["member"]
     await rig.call("members.viewing", {"id": 0})

@@ -477,6 +477,23 @@ class AgentHistory:
             turn.colleague_answers = [exchange for exchange in asked.get(turn.id, []) if exchange.status == "done"]
         return turns
 
+    def last_words(self, turn_ids: Iterable[int]) -> dict[int, str]:
+        """What the member last said in each turn, a reply or a line it sent while it worked: the member column's line for
+        a turn that has no answer yet but already spoke after the question. A turn that said nothing has no entry."""
+        found: dict[int, str] = {}
+        ids = sorted({turn_id for turn_id in turn_ids if turn_id is not None})
+        for start in range(0, len(ids), 500):
+            chunk = ids[start : start + 500]
+            rows = self._conn.execute(
+                "SELECT turn_id, text FROM agent_messages"
+                f" WHERE turn_id IN ({','.join('?' * len(chunk))}) AND kind IN ('reply', 'progress') AND trim(text) <> ''"
+                " ORDER BY turn_id, seq",
+                chunk,
+            )
+            for row in rows:
+                found[row["turn_id"]] = row["text"]
+        return found
+
     def messages(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
         """The visible messages of each turn, in insertion order."""
         found: dict[int, list[dict]] = {}

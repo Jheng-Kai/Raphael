@@ -197,10 +197,11 @@ def _line(text: str) -> str:
     return one if len(one) <= PREVIEW_CHARS else one[: PREVIEW_CHARS - 1] + "…"
 
 
-def _preview(turn: Turn) -> str:
-    """The last line of a thread as the member column shows it: what was answered, or what was
-    asked while there is no answer yet (a routine's title, while it runs)."""
-    return _line(turn.text or turn.question)
+def _preview(turn: Turn, said: dict[int, str] | None = None) -> str:
+    """The last line of a thread as the member column shows it: what was answered; while there is no answer yet, what the
+    member last said after the question (a reply or a line sent while it works, from `AgentHistory.last_words`), and only
+    when it has said nothing, what was asked (a routine's title, while it runs)."""
+    return _line(turn.text or (said or {}).get(turn.id, "") or turn.question)
 
 
 def routine_view(routine: Routine) -> dict[str, Any]:
@@ -670,7 +671,7 @@ class MembersService:
 
     def _member_view(
         self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None,
-        kinds: dict[int, str] | None = None,
+        kinds: dict[int, str] | None = None, said: dict[int, str] | None = None,
     ) -> dict[str, Any]:
         last = latest.get(member.id)
         activity, activity_label = self.activity.describe(member.id, waiting, tasks=tasks)
@@ -694,7 +695,7 @@ class MembersService:
             "waiting": member.id in waiting,
             "activity": activity,
             "activity_label": activity_label,
-            "preview": "" if last is None else _preview(last),
+            "preview": "" if last is None else _preview(last, self._said(latest) if said is None else said),
             "last_at": None if last is None else last.created_at_ms,
         }
         # The picture itself is `members.picture`: a roster with the pictures in it was ten megabytes.
@@ -707,7 +708,7 @@ class MembersService:
 
     def _raphael_view(
         self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn], *, tasks=None,
-        kinds: dict[int, str] | None = None,
+        kinds: dict[int, str] | None = None, said: dict[int, str] | None = None,
     ) -> dict[str, Any]:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting, tasks=tasks)
@@ -732,7 +733,7 @@ class MembersService:
             "waiting": 0 in waiting,
             "activity": activity,
             "activity_label": activity_label,
-            "preview": "" if last is None else _preview(last),
+            "preview": "" if last is None else _preview(last, self._said(latest) if said is None else said),
             "last_at": None if last is None else last.created_at_ms,
         }
         picture = self._raphael_picture()
@@ -744,6 +745,10 @@ class MembersService:
         if cover := self._covers.view(0):
             view["cover"] = cover
         return view
+
+    def _said(self, latest: dict[int, Turn]) -> dict[int, str]:
+        """What each member last said in its latest turn that has no answer yet: the column's line until the answer comes."""
+        return self._history.last_words(turn.id for turn in latest.values() if not turn.text)
 
     def view_of(self, member: Member) -> dict[str, Any]:
         """One member as `members.list` shows it."""
@@ -983,12 +988,13 @@ class MembersService:
         unread = self.store.unread_from()
         waiting = self.waiting_members()
         latest = self._history.latest_by_member()
+        said = self._said(latest)
         roster = self.store.members()
         task_source = self.activity.task_batch_source
         tasks = task_source([0, *(m.id for m in roster)]) if task_source else None
         kinds = self.unread_kinds(unread)
-        members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None, kinds=kinds)]
-        members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None, kinds=kinds) for m in roster]
+        members = [self._raphael_view(language, unread, waiting, latest, tasks=tasks.get(0, []) if tasks is not None else None, kinds=kinds, said=said)]
+        members += [self._member_view(m, unread, waiting, latest, tasks=tasks.get(m.id, []) if tasks is not None else None, kinds=kinds, said=said) for m in roster]
         return {"members": members, "groups": [group_view(g) for g in self.store.groups()],
                 "team_context": self.team_context(0, language)}
 
