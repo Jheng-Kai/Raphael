@@ -612,6 +612,9 @@ export interface TemplateCard {
   /** Where the files of a prepared publish request are (a published card only), and the 16 characters that name that folder. */
   folder?: string;
   folder_id?: string;
+  /** True when the owner's share service is set, so the card offers a link (R-SHARE-01); the link once it is made. */
+  shareable?: boolean;
+  share_url?: string;
 }
 
 /** A computer card: the owner's turn at the computer for a sign-in, a password or a payment. Never what was on screen. */

@@ -181,6 +181,22 @@ export function checkRendered(name, context = {}) {
       require(buttons.map(button => button.dataset.act).join() === "template-open,template-folder,template-view" && buttons.every(visible), "open the GitHub page, show the files, view");
       require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "the GitHub page is the one primary button");
     }
+    if (name === "colleague-shareable") {
+      const card = document.querySelector('[data-template-card-id="tpl-1"]');
+      const buttons = [...card.querySelectorAll(".card-actions button")];
+      require(buttons.map(button => button.dataset.act).join() === "template-share,template-save,template-view" && buttons.every(visible), "copy link, save to a file, view: no GitHub request");
+      require(buttons[0].classList.contains("pri") && buttons[0].textContent.trim() === "複製連結", "copying the link is the one primary button");
+    }
+    if (name === "colleague-shared") {
+      const card = document.querySelector('[data-template-card-id="tpl-1"]'), line = card.querySelector("[data-template-link-line]");
+      require(visible(line) && line.textContent.trim() === "https://raphael-share.example.workers.dev/s/Ab3dE5gH9k", "the card shows the link it shares");
+      require(line.getBoundingClientRect().right <= card.getBoundingClientRect().right + 0.5, "the link wraps inside the card");
+      require(card.querySelector("[data-card-status-text]")?.textContent === "已分享", "the card says it is shared");
+      const buttons = [...card.querySelectorAll(".card-actions button")];
+      require(buttons.map(button => button.dataset.act).join() === "template-copy-link,template-unshare,template-view" && buttons.every(visible), "copy the link again, stop sharing, view");
+      require(buttons[0].classList.contains("pri") && !buttons[1].classList.contains("pri"), "copying the link stays the one primary button");
+      require(document.querySelector(".toast")?.textContent.includes("已複製連結"), "the owner is told the link is on the clipboard");
+    }
     if (name === "colleague-bad-file") {
       const toast = document.querySelector(".toast");
       require(visible(toast) && toast.textContent.includes("損壞或不完整"), "the file is said to be damaged, in the owner's words");

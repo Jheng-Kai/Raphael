@@ -86,6 +86,46 @@ describe("cards a member shows in its conversation for the panel's buttons", () 
     expect(draft.querySelector("[data-template-where], .template-next, [data-act=\"template-folder\"]")).toBeNull();
   });
 
+  test("with a share service the card copies a link first, and a key inside stops it", () => {
+    const host = dom(chatCardsHTML(turn({ templates: [template({ shareable: true })] })));
+    expect([...host.querySelectorAll<HTMLButtonElement>(".card-actions button")].map((button) => button.dataset.act)).toEqual(["template-share", "template-save", "template-view"]);
+    expect(host.querySelector(".card-actions .pri")!.textContent!.trim()).toBe(t("cards.templateCopyLink"));
+    const blocked = dom(chatCardsHTML(turn({ templates: [template({ shareable: true, findings: [{ kind: "secret", path: "template.instructions" }] })] })));
+    expect(blocked.querySelector<HTMLButtonElement>('[data-act="template-share"]')!.disabled).toBe(true);
+  });
+
+  test("sharing copies the link the core made, and a failure copies nothing and says so", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const host = dom(chatCardsHTML(turn({ templates: [template({ shareable: true })] })));
+    api.core.mockResolvedValueOnce({ share_url: "https://share.example/s/Ab3dE5gH9k" });
+    expect(chatCardAction(host.querySelector<HTMLElement>('[data-act="template-share"]')!)).toBe(true);
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("https://share.example/s/Ab3dE5gH9k"));
+    expect(api.core).toHaveBeenCalledWith("members.template_card_share", { id: "tpl-1" });
+    await vi.waitFor(() => expect(document.querySelector(".toast")?.textContent).toContain(t("cards.templateLinkCopied")));
+    writeText.mockClear();
+    api.core.mockRejectedValueOnce(new Error("The share service answered 500"));
+    chatCardAction(host.querySelector<HTMLElement>('[data-act="template-share"]')!);
+    await vi.waitFor(() => expect(document.body.textContent).toContain(t("cards.templateLinkFailed")));
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  test("a shared card shows its link, copies it again without asking the core, and stops sharing", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const link = "https://share.example/s/Ab3dE5gH9k";
+    const host = dom(chatCardsHTML(turn({ templates: [template({ shareable: true, share_url: link })] })));
+    expect(host.querySelector("[data-template-link-line]")!.textContent).toBe(link);
+    expect(host.textContent).toContain(t("cards.templateShared"));
+    expect([...host.querySelectorAll<HTMLButtonElement>(".card-actions button")].map((button) => button.dataset.act)).toEqual(["template-copy-link", "template-unshare", "template-view"]);
+    chatCardAction(host.querySelector<HTMLElement>('[data-act="template-copy-link"]')!);
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(link));
+    expect(api.core).not.toHaveBeenCalled();
+    api.core.mockResolvedValueOnce({});
+    chatCardAction(host.querySelector<HTMLElement>('[data-act="template-unshare"]')!);
+    expect(api.core).toHaveBeenCalledWith("members.template_card_unshare", { id: "tpl-1" });
+  });
+
   test("publishing opens the GitHub page and the card shows the files once the core says so", async () => {
     const host = dom(chatCardsHTML(turn({ templates: [template()] })));
     api.core.mockResolvedValue({ folder: "C:/x", folder_id: "0123456789abcdef", url: "https://github.com/x/compare" });

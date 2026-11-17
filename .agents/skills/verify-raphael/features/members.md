@@ -1322,6 +1322,18 @@ sidebar's 「連接應用程式」 is an icon in the rail's foot and is pressed 
 npm run look -- opener-toggle-connect-apps opener-toggle-settings opener-toggle-add-menu opener-toggle-search-card opener-toggle-model-menu opener-toggle-permission-menu opener-toggle-slime-picker opener-toggle-member-maker opener-toggle-message-menu opener-toggle-reaction-bar opener-toggle-emoji-picker opener-toggle-details opener-toggle-row-menu opener-toggle-row-again opener-toggle-keyboard --theme both --width 1120,720,1920x1080
 ```
 
+## A member shared by one link
+
+R-SHARE-01. With the owner's share service set (`SHARE_URL`, share-template/), the template card's primary button is 複製連結: the core
+sends the recipe to the service and keeps the link and its key; the page copies the link and says 已複製連結. The shared card shows its
+link, 複製連結 again (nothing is sent) and 停止分享. With no service the card keeps 準備發布請求 and sends nothing. Whoever opens the link
+sees the service's preview page and downloads the .raphael-member file, which opens in the import review.
+
+npm run look -- member-template-shared --theme both --width 1120,720,1920x1080
+
+Inspect the contact sheet and, at light 720 and dark 1120, the shared card: the link wraps inside the card and 複製連結 is the one primary button.
+Only a deployed service shows the link's own page and a real download; the offline tests drive the Worker with an in-memory store.
+
 ## Sharing finished: cancelled saves, where the files are, files from the file manager, the store before it opens
 
 R-STORE-05, R-STORE-06, R-STORE-07, R-COLLEAGUE-07. Sharing is finished end to end, remote computers included.

@@ -1,0 +1,7 @@
+name = "raphael-share"
+main = "worker.mjs"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "SLIMES"
+id = "PASTE_THE_NAMESPACE_ID_HERE"
