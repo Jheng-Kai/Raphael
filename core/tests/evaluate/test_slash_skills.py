@@ -106,3 +106,64 @@ async def test_explicit_skill_keeps_the_skill_read_untrusted_boundary(tmp_path, 
         assert marks and all(marks)
     finally:
         await owner.aclose()
+
+
+async def test_a_skill_called_after_other_words_loads_with_the_rest_as_the_request(tmp_path, monkeypatch):
+    owner = Stage(tmp_path, monkeypatch, "A", lambda user, tools, results: ("Finished", []))
+    try:
+        cap = owner.app.members.capabilities
+        cap.keep_skill(0, "owner", "---\nname: outline\ndescription: Outline notes\n---\nSKILL-BODY-5518")
+        cap.save_command(0, None, "weekly", "Weekly template", "WEEKLY: {input}")
+        start, skill_loaded = cap.resolve_slash(0, "/outline the quarterly report")
+        assert skill_loaded and start.startswith("the quarterly report\n\n") and "SKILL-BODY-5518" in start
+        # Mid-text: the words before and after, the token taken out, are the request as at the start.
+        mid, skill_loaded = cap.resolve_slash(0, "please /outline the quarterly report")
+        assert skill_loaded and mid.startswith("please the quarterly report\n\n") and "SKILL-BODY-5518" in mid
+        assert "/outline" not in mid.split("\n\n", 1)[0]
+        end, skill_loaded = cap.resolve_slash(0, "the quarterly report /outline")
+        assert skill_loaded and end.startswith("the quarterly report\n\n") and "SKILL-BODY-5518" in end
+        line, skill_loaded = cap.resolve_slash(0, "first line\n/OUTLINE\nsecond line")
+        assert skill_loaded and line.startswith("first line\nsecond line\n\n")
+        assert cap.resolve_slash(0, "請幫我整理 /outline 這份報告")[0].startswith("請幫我整理 這份報告\n\n")
+        # A custom command is expanded the same way, and wins over a skill of its name.
+        assert cap.resolve_slash(0, "so /weekly the news and more") == ("WEEKLY: so the news and more", False)
+        cap.save_command(0, None, "outline", "Outline template", "TEMPLATE-ONLY {input}")
+        assert cap.resolve_slash(0, "now /outline notes") == ("TEMPLATE-ONLY now notes", False)
+        # The loaded text reaches the model as the first request, the original stays the message.
+        await owner.driver.ask("please /weekly the news", session="mid-text")
+        assert "WEEKLY: please the news" in owner.prompts[-1]
+    finally:
+        await owner.aclose()
+
+
+async def test_a_slash_word_that_is_no_known_call_stays_words(tmp_path, monkeypatch):
+    owner = Stage(tmp_path, monkeypatch, "A", lambda user, tools, results: ("Finished", []))
+    try:
+        cap = owner.app.members.capabilities
+        cap.keep_skill(0, "owner", "---\nname: outline\ndescription: Outline notes\n---\nSKILL-BODY-5518")
+        disabled = cap.keep_skill(0, "owner", "---\nname: sleeper\ndescription: Off\n---\nSLEEPER-BODY")
+        cap.update_skill(0, disabled["id"], False)
+        for text in ["see /unknown words", "open /usr/bin/outline now", "a/outline b", "go to https://example.com/outline today",
+                     "C:/outline/notes", "and/or /outlines", "an /outline. sentence", "use /sleeper here", "/unknown /nothing", "no slash at all"]:
+            assert cap.resolve_slash(0, text) == (text, False), text
+        # Another member has no such skill.
+        other = (await owner.app.call("members.create", {"name": "Other Reader"}))["member"]["id"]
+        assert cap.resolve_slash(other, "please /outline notes") == ("please /outline notes", False)
+        # Start of the message: unchanged, and an unknown name there does not stop a known one later.
+        assert cap.resolve_slash(0, "/unknown /outline notes")[1] is True
+    finally:
+        await owner.aclose()
+
+
+async def test_only_the_first_call_in_a_message_loads_and_the_others_stay_words(tmp_path, monkeypatch):
+    owner = Stage(tmp_path, monkeypatch, "A", lambda user, tools, results: ("Finished", []))
+    try:
+        cap = owner.app.members.capabilities
+        cap.keep_skill(0, "owner", "---\nname: outline\ndescription: Outline notes\n---\nSKILL-BODY-5518")
+        cap.save_command(0, None, "weekly", "Weekly template", "WEEKLY: {input}")
+        expanded, loaded = cap.resolve_slash(0, "first /outline then /weekly")
+        assert loaded and "SKILL-BODY-5518" in expanded and expanded.startswith("first then /weekly\n\n")
+        assert cap.resolve_slash(0, "first /weekly then /outline") == ("WEEKLY: first then /outline", False)
+        assert cap.resolve_slash(0, "/weekly then /outline") == ("WEEKLY: then /outline", False)
+    finally:
+        await owner.aclose()

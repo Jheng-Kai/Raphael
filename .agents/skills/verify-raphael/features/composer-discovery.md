@@ -24,6 +24,6 @@ Core coverage: `tests/evaluate/test_slash_skills.py`, `tests/integrations/test_i
 
 ## Gotchas
 
-The core expands an explicit command or skill only when the message begins with it (`resolve_slash`); a `/name` picked after words is drawn as a chip and sent as those words, for the model to read.
+`MemberCapabilities.resolve_slash` (the one place every turn, API, CLI and background task expands a command or skill) loads a `/name` that begins a word anywhere in the message, when its whole token is a command or an enabled skill of that member. The first such call loads; any other `/word` (unknown, disabled, `/name.` with punctuation, a second call), a path and an address (`a/b`, `https://x.com/y`) stay words. The request is the message without the token (words before and after joined, as the words after it at the start): a custom command fills `{input}` with it, a skill sends it ahead of the skill document. A custom command wins over a skill of the same name, as at the start. Core tests: `tests/evaluate/test_slash_skills.py` (mid-text load, unknown words and paths, two calls).
 
 Synthetic browser and fake-model evidence do not establish native, live or independent design acceptance.
