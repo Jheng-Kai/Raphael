@@ -3,9 +3,9 @@
 // place it had, it does not read as "at the bottom". What stands under the thread growing or shrinking is the thread's one stick
 // to the bottom (message-rich.test.ts).
 import { afterEach, expect, test, vi } from "vitest";
-import { keepReadingPlace } from "./reading-place";
+import { keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 test("a conversation hidden and drawn again at the same width comes back where it was read", () => {
   let notify: () => void = () => {};
@@ -36,4 +36,98 @@ test("a conversation hidden and drawn again at the same width comes back where i
   Object.assign(view, { width: 800, client: 600, height: 4000, top: 1200 });
   notify();
   expect(scroller.scrollTop).toBe(1200);
+});
+
+/** A scroller at `top` of a 4000 px thread in a 600 px view, whose ResizeObserver this hands back. */
+function scrollerAt(top: number): { scroller: HTMLElement; view: { width: number; client: number; height: number; top: number }; notify: () => void; tops: number[]; frames: (() => void)[] } {
+  let notify: () => void = () => {};
+  const frames: (() => void)[] = [];
+  vi.stubGlobal("ResizeObserver", class { constructor(callback: () => void) { notify = callback; } observe() {} disconnect() {} });
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => { frames.push(run); return frames.length; });
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+  const view = { width: 800, client: 600, height: 4000, top }, tops: number[] = [];
+  const scroller = document.createElement("div");
+  Object.defineProperties(scroller, {
+    clientWidth: { configurable: true, get: () => view.width },
+    clientHeight: { configurable: true, get: () => view.client },
+    scrollHeight: { configurable: true, get: () => view.height },
+    scrollTop: { configurable: true, get: () => view.top, set: (value: number) => { view.top = Math.max(0, Math.min(value, view.height - view.client)); tops.push(view.top); } },
+  });
+  scroller.getBoundingClientRect = () => ({ top: 0 } as DOMRect);
+  return { scroller, view, notify: () => notify(), tops, frames };
+}
+const frame = (frames: (() => void)[]): void => { frames.splice(0).forEach(run => run()); };
+/** The width changes, the keeper's own frame runs, and what is written from then on is recorded. */
+function widen(at: ReturnType<typeof scrollerAt>, width = 700): void {
+  at.view.width = width; at.notify(); frame(at.frames); at.tops.length = 0;
+}
+
+test("on a Mac, once a width change has settled, the view scrolls up and back in two frames, which WebKit paints afresh", () => {
+  vi.useFakeTimers();
+  const at = scrollerAt(3400);
+  keepReadingPlace(at.scroller, ".item", 4, true);
+  // The details panel is dragged: three widths in a row, the view at the bottom.
+  for (const width of [760, 700]) { at.view.width = width; at.notify(); }
+  widen(at, 640);
+  vi.advanceTimersByTime(SETTLE_MS - 1);
+  frame(at.frames);
+  expect(at.tops).toEqual([]);
+  vi.advanceTimersByTime(1);
+  frame(at.frames);
+  expect(at.tops).toEqual([3400 - NUDGE_PX]);
+  frame(at.frames);
+  expect(at.tops).toEqual([3400 - NUDGE_PX, 3400]);
+});
+
+test("a view at the very top steps down instead, and a thread with nothing to scroll is left alone", () => {
+  vi.useFakeTimers();
+  const top = scrollerAt(0);
+  keepReadingPlace(top.scroller, ".item", 4, true);
+  widen(top);
+  vi.advanceTimersByTime(SETTLE_MS);
+  frame(top.frames); frame(top.frames);
+  expect(top.tops).toEqual([NUDGE_PX, 0]);
+  const short = scrollerAt(0);
+  short.view.height = 600;
+  keepReadingPlace(short.scroller, ".item", 4, true);
+  widen(short);
+  vi.advanceTimersByTime(SETTLE_MS);
+  frame(short.frames); frame(short.frames);
+  expect(short.tops).toEqual([]);
+});
+
+test("a view a few px short of the bottom, where its reader may have stopped on purpose, is not scrolled", () => {
+  // Any scroll there would hand a held place back to following (message-rich.ts readingAnchor).
+  vi.useFakeTimers();
+  for (const gap of [1, 2, 4]) {
+    const at = scrollerAt(3400 - gap);
+    keepReadingPlace(at.scroller, ".item", 4, true);
+    widen(at);
+    at.view.top = 3400 - gap;
+    vi.advanceTimersByTime(SETTLE_MS);
+    frame(at.frames); frame(at.frames);
+    expect(at.tops, `${gap}`).toEqual([]);
+  }
+});
+
+test("on Windows a width change never nudges the view", () => {
+  vi.useFakeTimers();
+  const at = scrollerAt(3400);
+  keepReadingPlace(at.scroller, ".item", 4, false);
+  widen(at);
+  vi.advanceTimersByTime(SETTLE_MS * 4);
+  frame(at.frames); frame(at.frames);
+  expect(at.tops).toEqual([]);
+});
+
+test("a scroll of the person's own in the nudge's frame is not taken back", () => {
+  vi.useFakeTimers();
+  const at = scrollerAt(3400);
+  keepReadingPlace(at.scroller, ".item", 4, true);
+  widen(at);
+  vi.advanceTimersByTime(SETTLE_MS);
+  frame(at.frames);
+  at.scroller.scrollTop = 2000;
+  frame(at.frames);
+  expect(at.scroller.scrollTop).toBe(2000);
 });
