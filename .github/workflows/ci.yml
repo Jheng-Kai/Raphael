@@ -122,7 +122,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: windows-2025
-    timeout-minutes: 25
+    # A share ran 24.5 minutes of tests on a busy runner and was cancelled at 25 with every test passed.
+    timeout-minutes: 35
     strategy:
       # Every share reports, so one red run names all the failures.
       fail-fast: false

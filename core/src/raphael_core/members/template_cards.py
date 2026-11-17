@@ -8,6 +8,7 @@ from ..protocol import invalid_params
 from .templates import checked, description
 from .template_author import write
 from .member_catalog import export_files
+from . import share_link
 
 
 class TemplateCards:
@@ -19,6 +20,8 @@ class TemplateCards:
         router.register("members.template_card", self.review)
         router.register("members.template_card_export", self.save)
         router.register("members.template_card_publish", self.publish)
+        router.register("members.template_card_share", self.share)
+        router.register("members.template_card_unshare", self.unshare)
 
     def _row(self, params):
         identifier = params.get("id")
@@ -85,14 +88,55 @@ class TemplateCards:
         self._changed(row)
         return result
 
+    async def share(self, params):
+        """The card's link (R-SHARE-01): made once, the same link every later press. Refused while the recipe holds a credential."""
+        row = self._row(params)
+        value = self._safe(row)
+        if row["link"]:
+            return {"share_url": row["link"]}
+        try:
+            url = share_link.address()
+        except ValueError as error:
+            raise invalid_params(str(error)) from None
+        if not url:
+            raise invalid_params("Sharing by link is not set up")
+        try:
+            link, token = await share_link.create(value, url=url, transport=getattr(self.service, "_share_transport", None))
+        except ValueError as error:
+            raise invalid_params(str(error)) from None
+        with self.conn:
+            self.conn.execute("UPDATE member_template_cards SET link=?, link_token=? WHERE id=?", (link, token, row["id"]))
+        self._changed(row)
+        return {"share_url": link}
+
+    async def unshare(self, params):
+        """Takes the card's link down at the service, then forgets it; the card can be shared again with a new link."""
+        row = self._row(params)
+        if not row["link"]:
+            return {}
+        try:
+            await share_link.remove(row["link"], row["link_token"], url=share_link.address() or row["link"].rsplit("/s/", 1)[0],
+                                    transport=getattr(self.service, "_share_transport", None))
+        except ValueError as error:
+            raise invalid_params(str(error)) from None
+        with self.conn:
+            self.conn.execute("UPDATE member_template_cards SET link=NULL, link_token=NULL WHERE id=?", (row["id"],))
+        self._changed(row)
+        return {}
+
     def views(self, ids):
         from ..brain.db import rows_for_turns
         result = {}
+        try:
+            shareable = bool(share_link.address())
+        except ValueError:
+            shareable = False
         for row in rows_for_turns(self.conn, "member_template_cards", ids):
             value = json.loads(row["template"])
             result.setdefault(row["turn_id"], []).append({"id": row["id"], "state": row["state"], "name": value["name"], "avatar": row["avatar"],
                 "description": value.get("description", ""), "counts": {"skills": len(value["skills"]), "routines": len(value["routines"])},
                 "connections": value["connections"], "findings": json.loads(row["findings"]), **({"url": row["url"]} if row["url"] else {}),
+                "shareable": shareable, **({"share_url": row["link"]} if row["link"] else {}),
                 **(self._prepared(value) if row["state"] == "published" else {})})
         return result
 

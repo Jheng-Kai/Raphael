@@ -300,7 +300,7 @@ async def test_secret_findings_block_snapshot_export_and_publish_even_after_live
     assert len(rig.brain.json_calls) == 2
     assert "gate_reasons" in rig.brain.json_calls[1]["user"]
     rig.team.members.store.update_member(rig.member.id, instructions="Clean now")
-    for method in ("members.template_card_export", "members.template_card_publish"):
+    for method in ("members.template_card_export", "members.template_card_publish", "members.template_card_share"):
         with pytest.raises(RpcError, match="Remove private credentials from the member recipe first"):
             await rig.agent.call(method, {"id": view["id"]})
     assert rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]][0]["state"] == "draft"
@@ -484,3 +484,91 @@ def test_migration_preserves_pending_secret_cards_and_adds_conversation_cleanup(
     history.delete(turn)
     assert conn.execute("SELECT COUNT(*) FROM secret_cards").fetchone()[0] == 0
     conn.close()
+
+
+SHARE = "https://share.example"
+
+
+def share_service(answers):
+    """A share service that answers each request with the next of `answers` and records what it was sent."""
+    import httpx
+    seen = []
+    def handle(request):
+        seen.append(request)
+        status, body = answers.pop(0)
+        return httpx.Response(status, json=body) if body is not None else httpx.Response(status)
+    return httpx.MockTransport(handle), seen
+
+
+async def shared_card(rig):
+    rig.brain.chats = [chat("", ("share_template", {"description": "I clarify public guides."})), live_said("Review my recipe.")]
+    result = await rig.ask("share-template")
+    [view] = rig.team.members.template_cards.views([result["turn_id"]])[result["turn_id"]]
+    return result["turn_id"], view
+
+
+async def test_without_a_share_service_no_card_offers_a_link_and_nothing_is_sent(rig, monkeypatch):
+    monkeypatch.delenv("RAPHAEL_SHARE_URL", raising=False)
+    transport, seen = share_service([])
+    rig.team.members._share_transport = transport
+    turn, view = await shared_card(rig)
+    assert view["shareable"] is False and "share_url" not in view
+    with pytest.raises(RpcError, match="Sharing by link is not set up"):
+        await rig.agent.call("members.template_card_share", {"id": view["id"]})
+    assert not seen
+
+
+async def test_a_shared_card_keeps_one_link_until_the_owner_takes_it_down(rig, monkeypatch):
+    monkeypatch.setenv("RAPHAEL_SHARE_URL", SHARE + "/")
+    token = "a" * 64
+    transport, seen = share_service([(201, {"id": "Ab3dE5gH9k", "url": f"{SHARE}/s/Ab3dE5gH9k", "token": token}), (204, None),
+                                     (201, {"id": "Zz0yY1xX2w", "url": f"{SHARE}/s/Zz0yY1xX2w", "token": "b" * 64})])
+    rig.team.members._share_transport = transport
+    turn, view = await shared_card(rig)
+    assert view["shareable"] is True and "share_url" not in view
+    review = await rig.agent.call("members.template_card", {"id": view["id"]})
+    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"share_url": f"{SHARE}/s/Ab3dE5gH9k"}
+    assert seen[0].method == "POST" and str(seen[0].url) == f"{SHARE}/v1/slimes"
+    assert json.loads(seen[0].content) == {"template": review["template"]}
+    # The same card answers with the same link and sends nothing more; the key to take it down never reaches the page.
+    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"share_url": f"{SHARE}/s/Ab3dE5gH9k"}
+    assert len(seen) == 1
+    latest = rig.team.members.template_cards.views([turn])[turn][0]
+    assert latest["share_url"] == f"{SHARE}/s/Ab3dE5gH9k" and token not in json.dumps(latest)
+    assert await rig.agent.call("members.template_card_unshare", {"id": view["id"]}) == {}
+    assert seen[1].method == "DELETE" and str(seen[1].url) == f"{SHARE}/v1/slimes/Ab3dE5gH9k"
+    assert seen[1].headers["authorization"] == f"Bearer {token}"
+    assert "share_url" not in rig.team.members.template_cards.views([turn])[turn][0]
+    assert await rig.agent.call("members.template_card_share", {"id": view["id"]}) == {"share_url": f"{SHARE}/s/Zz0yY1xX2w"}
+
+
+@pytest.mark.parametrize("answer", [
+    (201, {"id": "Ab3dE5gH9k", "url": "https://elsewhere.example/s/Ab3dE5gH9k", "token": "a" * 64}),
+    (201, {"id": "Ab3dE5gH9k", "url": f"{SHARE}/s/Ab3dE5gH9k", "token": "short"}),
+    (201, {"id": "../admin", "url": f"{SHARE}/s/../admin", "token": "a" * 64}),
+    (429, {"error": "Too many shares today."}),
+    (500, None),
+])
+async def test_a_share_service_that_answers_anything_else_leaves_the_card_unshared(rig, monkeypatch, answer):
+    monkeypatch.setenv("RAPHAEL_SHARE_URL", SHARE)
+    transport, seen = share_service([answer])
+    rig.team.members._share_transport = transport
+    turn, view = await shared_card(rig)
+    with pytest.raises(RpcError):
+        await rig.agent.call("members.template_card_share", {"id": view["id"]})
+    assert len(seen) == 1 and "share_url" not in rig.team.members.template_cards.views([turn])[turn][0]
+
+
+async def test_an_unreachable_share_service_and_a_plain_address_are_refused(rig, monkeypatch):
+    import httpx
+    def offline(request):
+        raise httpx.ConnectError("offline", request=request)
+    rig.team.members._share_transport = httpx.MockTransport(offline)
+    turn, view = await shared_card(rig)
+    monkeypatch.setenv("RAPHAEL_SHARE_URL", SHARE)
+    with pytest.raises(RpcError, match="could not be reached"):
+        await rig.agent.call("members.template_card_share", {"id": view["id"]})
+    monkeypatch.setenv("RAPHAEL_SHARE_URL", "http://share.example")
+    assert rig.team.members.template_cards.views([turn])[turn][0]["shareable"] is False
+    with pytest.raises(RpcError, match="HTTPS"):
+        await rig.agent.call("members.template_card_share", {"id": view["id"]})

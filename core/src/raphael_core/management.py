@@ -345,8 +345,9 @@ def destructive(name, arguments, retention=None):
 OWNER_ONLY = {
     "members.avatar_generate": "Only an explicit owner press requests one paid image candidate using the chosen image model.",
     "members.template": "The owner previews, imports and exports portable member recipes.",
-    **dict.fromkeys(("members.template_card", "members.template_card_export", "members.template_card_publish"),
-                   "Only the owner reviews, saves and publishes member recipe snapshot cards."),
+    **dict.fromkeys(("members.template_card", "members.template_card_export", "members.template_card_publish",
+                     "members.template_card_share", "members.template_card_unshare"),
+                   "Only the owner reviews, saves, publishes and shares member recipe snapshot cards."),
     "messaging.pairing.answer": "Only the owner approves or rejects a messaging pairing card.",
     "connectors.label": "The owner names a connected account after sign-in.",
     "connectors.remove_account": "Only the owner removes one account of an app, after the question an active one asks.",

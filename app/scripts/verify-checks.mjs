@@ -11,7 +11,7 @@ export const CORE_CONTRACT = ["tests/evaluate", "tests/members/test_management_d
 
 // The repository's own rule tests, which read the whole tree (RULES.md and its named tests, feature maps, tokens, focus
 // rings, layout, UI rules, every locale, history marks): --changed runs them whatever changed, as Vitest filters.
-export const RULE_TESTS = ["src/architecture", "guardian-contract", "feature-map", "src/design-tokens", "src/focus-rings", "src/layout.test", "src/ui-rules", "i18n/i18n.test", "scripts/repo-clean"];
+export const RULE_TESTS = ["src/architecture", "guardian-contract", "feature-map", "src/design-tokens", "src/focus-rings", "src/layout.test", "src/ui-rules", "src/main/ui.test", "i18n/i18n.test", "scripts/repo-clean"];
 
 /** The core tests --changed runs for the files a change touched, from the core folder: the test folder of each core
  *  package it changed (`raphael_core/members/…` → `tests/members`), the test file of a changed top-level module
