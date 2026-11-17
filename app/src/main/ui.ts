@@ -731,8 +731,13 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   el.innerHTML = html;
   document.body.append(el);
   if (at) at.until = Infinity;
+  // A submenu dismissed closes itself alone: a press outside everything closes the menu under it by that menu's own dismissal,
+  // and a press on the row that opened it (its toggle, R-UI-124) leaves the menu under it open.
+  const dismiss = parent
+    ? () => { while (menu && menu !== parent) closeMenuLevel(); }
+    : () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); };
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); }, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   placeMenu();

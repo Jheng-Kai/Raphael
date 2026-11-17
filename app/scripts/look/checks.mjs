@@ -4075,6 +4075,29 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector('.desktop-panel')?.dataset.interactive !== 'true', "dropping a file takes no control");
     return {check: name};
   }
+  if (name === "language-rows") {
+    // R-UI-165: a row is one button, its whole width lit under the pointer; the chip of a language with several written forms
+    // stands on it, chosen or not, and never covers the language's name.
+    const rows = [...document.querySelectorAll('.lang-panel .lang-row')];
+    require(rows.length > 5 && !document.querySelector('.lang-panel').textContent.includes("種寫法"), "every language is a row, and none says how many forms it has instead of its chip");
+    for (const row of rows.filter(row => row.classList.contains("has-variants"))) {
+      const chip = row.querySelector('.lang-variant-chip'), name_ = row.querySelector('.lang-item .mt'), box = row.getBoundingClientRect();
+      require(visible(chip), `the chip of ${name_.textContent} shows whether it is chosen or not`);
+      const c = chip.getBoundingClientRect(), n = name_.getBoundingClientRect();
+      require(c.left >= box.left && c.right <= box.right + 0.5 && c.top >= box.top - 0.5 && c.bottom <= box.bottom + 0.5, `the chip of ${name_.textContent} stands on its row`);
+      require(n.right <= c.left - 4, `the chip does not cover ${name_.textContent}`);
+    }
+    const hovered = document.querySelector('.lang-panel [data-language="zh"]').closest('.lang-row');
+    const lit = getComputedStyle(hovered).backgroundColor, button = getComputedStyle(hovered.querySelector('.lang-item')).backgroundColor;
+    require(!/rgba\(0, 0, 0, 0\)|transparent/.test(lit) && /rgba\(0, 0, 0, 0\)|transparent/.test(button), `the whole row lights, not the button alone: row ${lit}, button ${button}`);
+    return {check: name};
+  }
+  if (name === "language-variants-toggle") {
+    require(visible(document.querySelector('.lang-panel')), "the picker stays open when the chip is pressed again");
+    require(!document.querySelector('.lang-variant-menu'), "the written forms are folded away");
+    require(document.querySelector('.lang-panel [data-variant-menu="zh"]').getAttribute('aria-expanded') === "false", "the chip says its forms are closed");
+    return {check: name};
+  }
   if (name === "desktop-frame") {
     const shell = document.querySelector('.desktop-shell');
     const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');

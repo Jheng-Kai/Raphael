@@ -66,7 +66,7 @@ What proves it: `tests/brain/test_cleanup.py`, `test_dictation_finish.py`, `test
 and `tests/test_packaging.py` from core/.
 
 ```powershell
-npm run look -- dictation-languages dictation-language-variants --theme both --width 1120,720,1920x1080
+npm run look -- dictation-languages dictation-language-variants dictation-language-variants-toggle --theme both --width 1120,720,1920x1080
 ```
 
 ## The tidy key: Right Alt+T tidies the text that is selected
