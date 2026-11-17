@@ -2213,14 +2213,17 @@ def _member_folders(conn):
 _MIGRATIONS[88] = _member_folders
 
 # A template card shared by a link keeps the link it shows and the key that takes it down (R-SHARE-01); the key never leaves
-# the core.
-_MIGRATIONS[89] = """
-BEGIN;
-ALTER TABLE member_template_cards ADD COLUMN link TEXT;
-ALTER TABLE member_template_cards ADD COLUMN link_token TEXT;
-PRAGMA user_version = 89;
-COMMIT;
-"""
+# the core. Running it again on a database that has the columns changes nothing.
+def _template_card_links(conn):
+    with conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(member_template_cards)")}
+        for column in ("link", "link_token"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE member_template_cards ADD COLUMN {column} TEXT")
+        conn.execute("PRAGMA user_version = 89")
+
+
+_MIGRATIONS[89] = _template_card_links
 
 LATEST_VERSION = max(_MIGRATIONS)
 
