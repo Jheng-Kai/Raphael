@@ -202,7 +202,7 @@ def test_the_versions_table_and_its_trigger_come_with_migration_87(tmp_path):
                     " VALUES (5, 1, 's', 'kept', 'chat', '', 'answer', 'done')")
     old.close()
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 87
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION >= 87
     assert conn.execute("SELECT question FROM agent_turns WHERE id=5").fetchone()[0] == "kept"
     assert conn.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='agent_turn_versions_delete'").fetchone()
     with conn:
