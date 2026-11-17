@@ -1,3 +1,3 @@
 """Raphael's Python core: the device side and the brain, talking through a JSON-RPC router."""
 
-__version__ = "1.4.0"
+__version__ = "2.0.0"
