@@ -143,6 +143,12 @@ export const desktopOpen = (member_id: number, options?: { conversation_id?: num
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
+/** The owner's paste into the computer they hold (`put`, its text) and their copy out of it (`take`, to their PC's clipboard). */
+export const desktopClipboard = (session: string, action: "put" | "take", text?: string): Promise<{ put?: boolean; copied?: boolean }> =>
+  core("computer.viewer_clipboard", { session, action, ...(text === undefined ? {} : { text }) });
+/** A copy of an uploaded file into the computer's team folder: the name it got there. */
+export const desktopPutFile = (session: string, stored_id: string, name: string): Promise<{ name: string; path: string }> =>
+  core("computer.viewer_put_file", { session, stored_id, name });
 export const desktopMaintain = (member_id: number, action: import('./computer-lifecycle').ComputerMaintenance, captured: DesktopState, confirmed = false): Promise<DesktopState> =>
   core('computer.lifecycle', { member_id, action, host: captured.host, target: captured.target, confirmed });
 export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }
@@ -605,6 +611,8 @@ export const deviceComputerAppRemove = (exe: string): Promise<DeviceSettings> =>
 export const keyboardHasAltgr = (): Promise<boolean> => invoke("keyboard_has_altgr");
 /** The text on the owner's clipboard, read once for the desktop viewer's paste while the owner holds the screen; null when there is none. */
 export const ownerClipboardText = (): Promise<string | null> => invoke("owner_clipboard_text");
+/** A number that changes whenever the owner's clipboard does; null where the system has none. */
+export const ownerClipboardSequence = (): Promise<number | null> => invoke("owner_clipboard_sequence");
 /** Pauses the global hotkeys while the page records a new one. */
 export const hotkeysPause = (paused: boolean): Promise<void> =>
   withWindowHotkeyPause(paused, () => invoke("hotkeys_pause", { paused }));

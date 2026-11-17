@@ -372,6 +372,8 @@ OWNER_ONLY = {
                    "Messaging authentication and access approval belong to the owner."),
     **dict.fromkeys(("computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close",
                      "computer.teach"), "Owner computer viewing, takeover and teaching."),
+    **dict.fromkeys(("computer.viewer_clipboard", "computer.viewer_put_file"),
+                   "The owner's own paste, copy and files through the computer's screen they view."),
     "computer.lifecycle": "Restarting, updating, repairing or resetting a member computer is the owner's maintenance; reset removes a workspace.",
     **dict.fromkeys(("audio.monitor", "models.ensure", "models.local_use", "models.local_cancel", "models.local_delete"),
                    "Device and downloaded speech-model settings belong to the owner."),

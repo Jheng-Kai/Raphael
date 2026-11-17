@@ -24,6 +24,14 @@ async function waitForIdle() {
     await new Promise(resolve => setTimeout(resolve, 20000));
   }
 }
+/** The repository paths a change touched: everything that differs from where it left origin/main (committed or not), and
+ *  new files git does not ignore. */
+async function changedFiles() {
+  const root = resolve(app, ".."), git = async (...parameters) => (await execute("git", ["-C", root, ...parameters], { windowsHide: true, maxBuffer: 16 << 20 })).stdout;
+  const base = (await git("merge-base", "HEAD", "origin/main")).trim();
+  const lists = await Promise.all([git("diff", "--name-only", base), git("ls-files", "--others", "--exclude-standard")]);
+  return [...new Set(lists.flatMap(list => list.split(/\r?\n/)).filter(Boolean))].sort();
+}
 const args = process.argv.slice(2);
 const outIndex = args.indexOf("--out");
 const outValue = outIndex < 0 ? undefined : args[outIndex + 1];
@@ -32,17 +40,20 @@ const output = outValue && !outValue.startsWith("--") ? resolve(outValue) : join
 const judgeIndex = args.indexOf("--judge");
 const judgeValue = judgeIndex < 0 ? undefined : args[judgeIndex + 1];
 if (judgeValue && !judgeValue.startsWith("--")) args.splice(judgeIndex, 2);
-const allowed = ["--quick", "--core", "--contract", "--rust", "--live", "--computer", "--help"];
+const allowed = ["--quick", "--changed", "--core", "--contract", "--rust", "--live", "--computer", "--help"];
 const unknown = args.find(arg => !allowed.includes(arg));
-if (unknown || (args.includes("--quick") && (args.includes("--core") || args.includes("--contract") || args.includes("--rust")))) {
-  console.error(unknown ? `Unknown option: ${unknown}` : "--quick cannot be combined with --core, --contract or --rust");
+if (unknown || (args.includes("--quick") && (args.includes("--core") || args.includes("--contract") || args.includes("--rust") || args.includes("--changed")))) {
+  console.error(unknown ? `Unknown option: ${unknown}` : "--quick cannot be combined with --changed, --core, --contract or --rust");
   process.exitCode = 1;
 } else if (args.includes("--help")) {
-  console.log("npm run verify -- [--quick] [--contract] [--core] [--rust] [--live] [--computer] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast, and cargo fmt --check outside CI. --quick: tsc + vitest only.\n--contract: also run the core scenario drivers and the default prompt budget (about ten minutes on an idle machine; before a core change is handed back).\n--core: also run offline core pytest with warnings as errors, as CI does (CI runs it on every push; locally it takes far longer).\n--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied, as CI does.\n--live: paid brain/tool matrix. --computer: isolated real-container acceptance; requires running Linux Docker, never starts Docker and never runs in CI or --core. Image builds may download dependencies.\n--judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live, --computer and --judge explicitly opt in. No installs on the host.");
+  console.log("npm run verify -- [--quick | --changed] [--contract] [--core] [--rust] [--live] [--computer] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast, and cargo fmt --check outside CI. --quick: tsc + vitest only.\n--changed: only what the change touched since it left origin/main (AGENTS.md, Test what changed): tsc, the Vitest tests related to changed frontend files, the repository's rule tests, the core test folders of changed core packages, and contrast or formatting only when CSS or Rust changed. The whole suites are CI's.\n--contract: also run the core scenario drivers and the default prompt budget (about ten minutes on an idle machine; before a core change is handed back).\n--core: also run offline core pytest with warnings as errors, as CI does (CI runs it on every push; locally it takes far longer).\n--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied, as CI does.\n--live: paid brain/tool matrix. --computer: isolated real-container acceptance; requires running Linux Docker, never starts Docker and never runs in CI or --core. Image builds may download dependencies.\n--judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live, --computer and --judge explicitly opt in. No installs on the host.");
 } else {
   await mkdir(output, { recursive: true });
   const directory = await mkdtemp(join(output, "verify-"));
-  const checks = verifyChecks({ args, directory, judge: judgeValue && !judgeValue.startsWith("--") ? judgeValue : undefined });
+  const changed = args.includes("--changed") ? await changedFiles() : [];
+  if (args.includes("--changed")) console.log(`Changed since origin/main: ${changed.length ? changed.join(", ") : "nothing"}`);
+  const checks = verifyChecks({ args, directory, changed, judge: judgeValue && !judgeValue.startsWith("--") ? judgeValue : undefined });
+  if (args.includes("--changed")) for (const check of checks) console.log(`  ${check.name}: ${check.args.filter(arg => !arg.startsWith("-") && arg !== "runner" && arg !== "pytest" && !arg.includes("node_modules") && !arg.includes("vitest-cache")).join(" ")}`);
   const results = [];
   let activeChild, activeCheck;
   const interrupted = signal => {

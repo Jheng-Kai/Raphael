@@ -19,10 +19,13 @@ import httpx
 
 from ..protocol import invalid_params
 from .vm import OWNER_IDLE_S, SHARED, VmError
+from .owner_transfer import CLIPBOARD_MAX, REMOTE_FILE_MAX, clipboard_text, numbered, place_copy, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from ..paths import local_storage_root
 
 LEASE_SECONDS = 15
+# One call of the computer's driver for the owner's paste or copy: the page sends the paste's keys after at most PASTE_WAIT_MS.
+DRIVER_CALL_S = 3
 # The owner's press on Take control gives an action a member already has under way this long to end (the member's
 # next action is refused from the moment the press lands): a press that fell between two of a working member's
 # actions used to be answered "desktop busy" and leave them with no way to try again.
@@ -78,7 +81,7 @@ addEventListener('message', event => {
     if (!rfb || rfb.viewOnly) return;
     const text = event.data.text;
     if (typeof text === 'string' && text && text.length <= PASTE_MAX) rfb.clipboardPasteFrom(text);
-    setTimeout(() => chord(ask.shift), 60);
+    setTimeout(() => chord('KeyV', ask.shift), 60);
     return;
   }
   if (event.data?.type !== 'raphael-desktop-control' || !rfb) return;
@@ -109,34 +112,51 @@ addEventListener('message', event => {
 // the computer would paste its own clipboard; on a Mac their paste is Command+V, and the computer is told Ctrl+V with its Super
 // (their Command, which noVNC sends as one) let go first. The app, which alone reads their clipboard, is asked for its text; it goes
 // to the computer's clipboard and only then are the keys of the paste sent. Watching, or a member at work, never asks.
-const PASTE_WAIT_MS = 1500, PASTE_MAX = 1000000, mods = {ctrl:false, shift:false, meta:false};
+// Their copy (Ctrl+C, Ctrl+X, a terminal's Ctrl+Shift+C, or Command+C and Command+X told as Ctrl) reaches the computer as typed;
+// a moment later the app is told, and brings what the computer copied to their PC's clipboard.
+const PASTE_WAIT_MS = 4000, PASTE_MAX = 1000000, COPY_SETTLE_MS = 250, mods = {ctrl:false, shift:false, meta:false};
+const KEYS = {KeyV:[0x76, 0x56], KeyC:[0x63, 0x43], KeyX:[0x78, 0x58]};
 let pasteAsks = 0, pasting = null;
 function track(event) {
   if (event.key === 'Control') mods.ctrl = event.type === 'keydown';
   else if (event.key === 'Shift') mods.shift = event.type === 'keydown';
   else if (event.key === 'Meta') mods.meta = event.type === 'keydown';
 }
-function chord(shift) {
+function chord(code, shift) {
   if (!rfb || rfb.viewOnly) return;
   if (mods.meta) { rfb.sendKey(0xFFEB, 'MetaLeft', false); mods.meta = false; }
   if (!mods.ctrl) rfb.sendKey(0xFFE3, 'ControlLeft', true);
   if (shift && !mods.shift) rfb.sendKey(0xFFE1, 'ShiftLeft', true);
-  rfb.sendKey(shift ? 0x56 : 0x76, 'KeyV');
+  rfb.sendKey(KEYS[code][shift ? 1 : 0], code);
   if (shift && !mods.shift) rfb.sendKey(0xFFE1, 'ShiftLeft', false);
   if (!mods.ctrl) rfb.sendKey(0xFFE3, 'ControlLeft', false);
 }
 screen.addEventListener('keyup', track, true);
 screen.addEventListener('keydown', event => {
   track(event);
-  // The owner's paste: Ctrl+V, or Command+V on a Mac; one of the two, never both.
-  if (!rfb || rfb.viewOnly || event.code !== 'KeyV' || event.ctrlKey === event.metaKey || event.altKey) return;
+  // The owner's own chord: with Ctrl, or Command on a Mac; one of the two, never both, and never with Alt.
+  if (!rfb || rfb.viewOnly || !Object.hasOwn(KEYS, event.code) || event.ctrlKey === event.metaKey || event.altKey) return;
+  if (event.code !== 'KeyV') {
+    if (event.metaKey) { event.preventDefault(); event.stopImmediatePropagation(); if (!event.repeat) chord(event.code, event.shiftKey); }
+    if (!event.repeat) setTimeout(() => { if (rfb && !rfb.viewOnly) parent.postMessage({type:'raphael-desktop-copied'}, '*'); }, COPY_SETTLE_MS);
+    return;
+  }
   event.preventDefault(); event.stopImmediatePropagation();
   if (event.repeat || pasting) return;
   const id = ++pasteAsks, shift = event.shiftKey;
   pasting = {id, shift};
   parent.postMessage({type:'raphael-desktop-paste-request', id}, '*');
   // An app that does not answer leaves the paste as it was: the computer's own clipboard.
-  setTimeout(() => { if (pasting?.id === id) { pasting = null; chord(shift); } }, PASTE_WAIT_MS);
+  setTimeout(() => { if (pasting?.id === id) { pasting = null; chord('KeyV', shift); } }, PASTE_WAIT_MS);
+}, true);
+// Files dropped on the screen go to the app, which puts copies in the computer's team folder; the page opens none of them.
+addEventListener('dragover', event => {
+  if (event.dataTransfer?.types?.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }
+}, true);
+addEventListener('drop', event => {
+  event.preventDefault();
+  const files = [...(event.dataTransfer?.files ?? [])];
+  if (files.length) parent.postMessage({type:'raphael-desktop-files', files}, '*');
 }, true);
 addEventListener('blur', () => { mods.ctrl = mods.shift = mods.meta = false; });
 screen.addEventListener('mousedown', () => {
@@ -195,11 +215,16 @@ class Session:
     # The last time their input reached the screen while this view held it, read from the relay's count of forwarded input.
     input_at: float = 0.0
     seen_input: int = 0
+    # What the computer's clipboard was last known to hold through this view (the owner's paste or copy), never logged: a
+    # copy that leaves it as it was (Ctrl+C in a terminal) does not replace what the owner has on their PC.
+    clipboard: str | None = field(default=None, repr=False)
 
 
 class DesktopViewer:
-    def __init__(self, vm, *, member_exists=lambda member: True):
+    def __init__(self, vm, *, member_exists=lambda member: True, copy_to_owner=None, stored_path=None):
         self.vm, self.member_exists = vm, member_exists
+        # The owner's PC clipboard (device actions), and where the store keeps an upload by its stored id.
+        self.copy_to_owner, self.stored_path = copy_to_owner, stored_path
         self.sessions, self.owners = {}, {}
         self.remembered = {}
         self.status_cache, self.status_locks = {}, {}
@@ -217,7 +242,8 @@ class DesktopViewer:
 
     def register(self, router):
         for name, handler in (("status", self.status), ("open", self.open), ("renew", self.renew),
-                              ("control", self.control), ("close", self.close)):
+                              ("control", self.control), ("close", self.close), ("clipboard", self.clipboard),
+                              ("put_file", self.put_file)):
             router.register(f"computer.viewer_{name}", handler)
         router.register("computer.lifecycle", self.lifecycle)
         router.register("computer.team_file", self.team_file)
@@ -268,6 +294,90 @@ class DesktopViewer:
             return local_storage_root(path)
         except (OSError, ValueError):
             raise invalid_params("no such member file") from None
+
+    async def held_session(self, params):
+        """The view that holds its computer's screen now: the owner's own paste and copy need their hands on it."""
+        token, session = self.session(params)
+        await self.check_session_target(token, session)
+        if session.preview or self.owners.get(session.target.key) != token:
+            raise invalid_params("the owner does not hold this screen")
+        return session
+
+    async def driver_call(self, target, name, arguments):
+        """One call of the computer's driver for the owner's own paste or copy; None when it fails or says it failed."""
+        from .vm_bridge import CuaBridge
+        try:
+            async with asyncio.timeout(DRIVER_CALL_S), CuaBridge(self.vm, target) as bridge:
+                result = await bridge.request("tools/call", {"name": name, "arguments": arguments})
+        except (VmError, OSError, ConnectionError, TimeoutError, ValueError, RuntimeError):
+            return None
+        return result if isinstance(result, dict) and not result.get("isError") else None
+
+    async def clipboard(self, params):
+        """The owner's paste into the computer and copy out of it, while they hold its screen (R-PASTE-01, R-PASTE-02). `put`
+        hands the text of their paste to the computer's clipboard; `take`, after their own copy key in the screen, brings
+        what the computer copied to their PC's clipboard, unless the computer's clipboard is what it was. Nothing is logged."""
+        session = await self.held_session(params)
+        action = params.get("action")
+        if action == "put":
+            text = params.get("text")
+            if type(text) is not str or not text or len(text) > CLIPBOARD_MAX:
+                raise invalid_params("text must be 1 to 1000000 characters")
+            put = await self.driver_call(session.target, "clipboard_write", {"text": text}) is not None
+            if put:
+                session.clipboard = text
+            return {"put": put}
+        if action != "take":
+            raise invalid_params("action must be put or take")
+        text = clipboard_text(await self.driver_call(session.target, "clipboard_read", {"include_text": True}))
+        if self.copy_to_owner is None or not text or len(text) > CLIPBOARD_MAX or text == session.clipboard:
+            return {"copied": False}
+        try:
+            await asyncio.to_thread(self.copy_to_owner, text)
+        except OSError:
+            return {"copied": False}
+        session.clipboard = text
+        return {"copied": True}
+
+    async def put_file(self, params):
+        """A file the owner dropped on the computer's screen or chose for it, already in the upload store: a copy goes into
+        the computer's team folder under its own name, a number added when that name is taken, and the name it got comes
+        back (R-COMP-FILE-01). Watching is enough: a file goes into a folder, not under anyone's hands."""
+        token, session = self.session(params)
+        await self.check_session_target(token, session)
+        if session.preview:
+            raise invalid_params("preview is read only")
+        try:
+            name = safe_name(params.get("name"))
+            source = self.stored_path(params.get("stored_id")) if self.stored_path else None
+        except (ValueError, OSError, KeyError, TypeError):
+            raise invalid_params("no such upload") from None
+        if source is None:
+            raise invalid_params("no such upload")
+        target = session.target
+        try:
+            if not target.remote and target.shared is not None:
+                placed = await asyncio.to_thread(place_copy, source, self.file_root(target.shared), name)
+            else:
+                placed = await self.put_remote(target, source, name)
+        except (OSError, VmError):
+            raise invalid_params("file not placed") from None
+        return {"name": placed, "path": f"{SHARED}/{placed}"}
+
+    async def put_remote(self, target, source, name):
+        """A file for a computer on another machine, which has no folder on this PC: one write over the engine each name."""
+        size = await asyncio.to_thread(lambda: source.stat().st_size)
+        if size > REMOTE_FILE_MAX:
+            raise invalid_params("file too large for a remote computer")
+        data = base64.b64encode(await asyncio.to_thread(source.read_bytes)).decode("ascii")
+        for candidate in numbered(name):
+            answer = await self.vm.file_request(target, {"action": "write", "path": f"{SHARED}/{candidate}", "data": data, "expected": "absent"})
+            if answer.get("error") == "changed":
+                continue
+            if "error" in answer:
+                raise VmError("file_unavailable")
+            return candidate
+        raise VmError("file_unavailable")
 
     async def lifecycle(self, params):
         from .lifecycle import maintain

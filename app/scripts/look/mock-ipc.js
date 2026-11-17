@@ -1338,6 +1338,12 @@ export function installMock(fixture, config = {}, target = window) {
         if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
         desktopSessions.delete(p.session); return {};
       }
+      // No look touches a clipboard: a paste is not handed over and a copy brings nothing.
+      case "computer.viewer_clipboard": return p.action === "put" ? { put: false } : { copied: false };
+      case "computer.viewer_put_file": {
+        if (!desktopSessions.get(p.session)) throw new Error("desktop viewer expired");
+        return { name: p.name, path: `/home/cua/team/${p.name}` };
+      }
       case "settings.get": return { settings: data.settings };
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
@@ -1347,6 +1353,16 @@ export function installMock(fixture, config = {}, target = window) {
         // A well-formed id with no stored copy is what the core answers for a file that is gone (`attachment is unavailable`).
         if (STORED_ID.test(p.id ?? "")) throw new Error("attachment is unavailable");
         return unsupported(method);
+      }
+      // A file stored a megabyte at a time, as the core's upload store takes it: the stored copy keeps only its name and size.
+      case "attachments.upload": {
+        if (p.action === "begin") { const token = `upload-${(data.uploadCount = (data.uploadCount ?? 0) + 1)}`; (data.uploads ??= {})[token] = { name: p.name, mime: p.mime, size: p.size }; return { token }; }
+        const upload = data.uploads?.[p.token];
+        if (!upload) throw new Error("unknown upload");
+        if (p.action === "append") return {};
+        delete data.uploads[p.token];
+        if (p.action === "abort") return {};
+        return { name: upload.name, mime: upload.mime, data: "", size: upload.size, stored_id: `${"0".repeat(31)}${data.uploadCount}` };
       }
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
@@ -2445,6 +2461,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "keyboard_has_altgr") return false;
       // The owner's clipboard is never read by a look: the live view's paste asks only while they hold a real screen.
       if (command === "owner_clipboard_text") return null;
+      if (command === "owner_clipboard_sequence") return null;
       // The shell's read of the clipboard (macOS, where the page may not read it): a scene's clipboard is the browser's own.
       if (command === "clipboard_text") return navigator.clipboard.readText().catch(() => "");
       if (command === "mic_access") return { allowed: true, blocked_by: null };

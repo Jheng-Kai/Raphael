@@ -1476,7 +1476,7 @@ export function checkRendered(name, context = {}) {
       require(!document.querySelector('.side, [data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
       const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
-      if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="files"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds files and teaching');
+      if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="send-file"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds sending a file and teaching');
     } else if (name === 'level-reopen') {
       const frame = desktop.querySelector('iframe'), current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(desktop.hasAttribute('data-expanded') && desktop.dataset.interactive === 'true' && frame.contentWindow.__desktopConnections === 1, 'the same connected stream accepts the new takeover');
@@ -4060,6 +4060,32 @@ export function checkRendered(name, context = {}) {
     requireBareScreen(document.querySelector('.desktop-panel .desktop-screen'), 'the absent computer screen');
     require(visible(document.querySelector('.desktop-panel [data-desktop="enlarge"]')), "the screen itself is the press that tries again");
     return { check: name };
+  }
+  if (name === "desktop-send-file-menu") {
+    // R-COMP-FILE-01: the held computer's ⋯ offers to send a file, beside teaching, each with its own icon, inside the window.
+    const items = [...document.querySelectorAll('#app-popover [data-pick]')];
+    const picks = items.map(item => item.dataset.pick);
+    require(picks.includes("teach") && picks.includes("send-file"), `the menu has teaching and sending a file: ${picks}`);
+    const send = items.find(item => item.dataset.pick === "send-file");
+    require(visible(send) && send.textContent.trim() === "傳送檔案到電腦", `sending a file is named plainly: ${send?.textContent}`);
+    const icons = items.map(item => item.querySelector('svg')?.innerHTML);
+    require(icons.every(Boolean) && new Set(icons).size === icons.length, "each action has its own icon");
+    const box = document.querySelector('#app-popover').getBoundingClientRect();
+    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, "the menu stays inside the window");
+    return {check: name, picks};
+  }
+  if (name === "desktop-file-dropped") {
+    // A file dropped on the screen while only watching goes into the team folder, and one quiet line under it says where.
+    const put = window.__look.calls.filter(call => call.method === "computer.viewer_put_file");
+    require(put.length === 1 && put[0].params.name === "notes.txt" && put[0].params.stored_id, `one stored file is sent: ${JSON.stringify(put.map(call => call.params))}`);
+    const line = document.querySelector('.desktop-panel .desktop-error');
+    require(visible(line) && line.getAttribute('role') === 'status', "the line is a quiet status, not an alert");
+    require(line.textContent.trim() === "已放進電腦的 team 資料夾：notes.txt", `the line says where the file went: ${line.textContent}`);
+    require(line.scrollWidth <= line.clientWidth + 1, "the line is not cut");
+    const screen = document.querySelector('.desktop-panel .desktop-screen').getBoundingClientRect(), box = line.getBoundingClientRect();
+    require(box.top >= screen.bottom - 1 && box.right <= innerWidth && box.left >= 0, "the line stands under the screen, inside the window");
+    require(document.querySelector('.desktop-panel')?.dataset.interactive !== 'true', "dropping a file takes no control");
+    return {check: name};
   }
   if (name === "desktop-frame") {
     const shell = document.querySelector('.desktop-shell');

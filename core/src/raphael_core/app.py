@@ -903,7 +903,8 @@ class App(Router):
         self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), conn=self._conn, machine_dir=paths.machine_dir(data_dir),
                           enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
         from .computer.viewer import DesktopViewer
-        self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
+        self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None,
+                                            copy_to_owner=getattr(agent_actions, "copy_to_clipboard", None), stored_path=self.attachment_store.path)
         self.desktop_viewer.register(self)
         self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
         self.tool_hub.logins = self.login_vault
