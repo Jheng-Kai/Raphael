@@ -308,7 +308,7 @@ class DesktopViewer:
         from .vm_bridge import CuaBridge
         try:
             async with asyncio.timeout(DRIVER_CALL_S), CuaBridge(self.vm, target) as bridge:
-                result = await bridge.request("tools/call", {"name": name, "arguments": arguments})
+                result = await bridge.request("tools/call", {"name": name, "arguments": arguments}, owner_hands=True)
         except (VmError, OSError, ConnectionError, TimeoutError, ValueError, RuntimeError):
             return None
         return result if isinstance(result, dict) and not result.get("isError") else None

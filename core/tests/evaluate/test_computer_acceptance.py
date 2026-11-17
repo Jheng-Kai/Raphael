@@ -1108,11 +1108,15 @@ async def test_guard_authorizes_real_bridge_exec_without_running_it_and_keeps_ow
 # launch_failure: "unrunnable" sends each launch as `env ... sh -c '<command>'`, which the real driver split apart and
 # refused on its first real-engine run (launch_handoff_timeout); "untied" is a product that ties no window to its launch, so every
 # window stays where the window manager opened it.
-@pytest.mark.parametrize("browser_failure,stop_failure,launch_failure", [(False, False, None), (True, False, None),
-                                                                         (False, True, None), (False, False, "unrunnable"),
-                                                                         (False, False, "untied")])
+# transfer: the owner's clipboard and files. "xclip" is an image with a clipboard program of its own, "none" one with neither
+# xclip nor xsel (read and written through the driver), "refused" a driver that refuses both clipboard tools, "corrupt" a
+# placing that changes a byte of the file it copies.
+@pytest.mark.parametrize("browser_failure,stop_failure,launch_failure,transfer", [(False, False, None, "xclip"), (True, False, None, "xclip"),
+                                                                                  (False, True, None, "xclip"), (False, False, "unrunnable", "xclip"),
+                                                                                  (False, False, "untied", "xclip"), (False, False, None, "none"),
+                                                                                  (False, False, None, "refused"), (False, False, None, "corrupt")])
 async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(tmp_path, monkeypatch, browser_failure, stop_failure,
-                                                                                launch_failure):
+                                                                                launch_failure, transfer):
     """Fake only transport, guest programs and the viewer listener; product seat/tool logic runs."""
     from copy import deepcopy
     from types import SimpleNamespace
@@ -1141,6 +1145,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     active = [None]
     launches, attachments = [], []
     viewers, owner_files, owner_text = [], set(), {}
+    clipboard = [""]
     launchers = []
     # xfce4-terminal as the real driver launches it (computer.test_seat_tools.OneCopyTerminal): with --disable-server, or
     # with no copy running, its own process opens its window; else the copy does. Each window carries its launch's startup id.
@@ -1238,6 +1243,20 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             identifier = int(args[args.index("-id") + 1])
             assert any(row["window_id"] == identifier for row in rows)
             return vm.Result(0, "Map State: IsViewable\n")
+        if guest[:2] == ["sh", "-c"] and guest[2] == acceptance.CLIPBOARD_TOOL:
+            return vm.Result(0, ("none" if transfer == "none" else "xclip") + "\n")
+        if guest[:2] == ["sh", "-c"] and "| base64 -d | xclip -selection clipboard -i >/dev/null 2>&1" in guest[2]:
+            clipboard[0] = base64.b64decode(guest[2].split()[1]).decode("utf-8")
+            return vm.Result(0, "")
+        if guest == ["xclip", "-selection", "clipboard", "-o"]:
+            return vm.Result(0, clipboard[0])
+        if guest[:2] == ["python3", "-c"] and guest[2] == acceptance.TEAM_LISTING:
+            folder, mark = guest[3:5]
+            entries = {}
+            for path in sorted(machine.target(9202).shared.iterdir()) if folder == "/home/cua/team" else []:
+                if mark in path.name or path.name.startswith(".raphael-"):
+                    entries[path.name] = ["dir"] if path.is_dir() else [hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_size]
+            return vm.Result(0, json.dumps(entries))
         return await original_runtime(args, **kwargs)
     run.docker.runner = runner
 
@@ -1308,6 +1327,13 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             files[path] = text.split(" ")[-1] + "\n"
         elif name == 'hotkey' and args['keys'] == ['CTRL', 'w']:
             closed_windows.add(args['window_id'])
+        elif name in ("clipboard_write", "clipboard_read"):
+            if transfer == "refused":
+                return {"isError": True, "content": [dict(type="text", text="Synthetic clipboard refusal")]}
+            if name == "clipboard_write":
+                clipboard[0] = args["text"]
+            else:
+                state = dict(types=["text/plain"], text=clipboard[0])
         elif name == "browser_prepare":
             if browser_failure:
                 return {"isError": True, "content": [dict(type="text", text="Synthetic browser failure")]}
@@ -1523,6 +1549,31 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
             assert "to name its window on its own screen" in landed["detail"] and "nothing ties to it" in landed["detail"]
         assert next(row for row in run.results if row["name"] == "shared pointer wall")["result"] == "skipped"
         return
+    if transfer in ("refused", "corrupt"):
+        from raphael_core.computer import owner_transfer, viewer as viewer_module
+        if transfer == "corrupt":
+            def damaged(source, root, name):
+                placed = owner_transfer.place_copy(source, root, name)
+                (root / placed).write_bytes((root / placed).read_bytes()[:-1] + b"?")
+                return placed
+            monkeypatch.setattr(viewer_module, "place_copy", damaged)
+        with pytest.raises(AssertionError, match="One or more shared checks failed"):
+            await run.shared()
+        outcome = {row["name"]: row for row in run.results if row["name"].startswith("shared owner ") and row["name"] != "shared owner control"
+                   and row["name"] != "shared owner input"}
+        if transfer == "corrupt":
+            assert {name: row["result"] for name, row in outcome.items()} == {"shared owner paste": "ok", "shared owner copy": "ok", "shared owner files": "failed"}
+            assert "Expected the guest to read exactly" in outcome["shared owner files"]["detail"]
+        else:
+            assert {name: row["result"] for name, row in outcome.items()} == {"shared owner paste": "failed", "shared owner copy": "failed", "shared owner files": "ok"}
+            assert "observed {'put': False}" in outcome["shared owner paste"]["detail"]
+            assert "clipboard_write refused or failed" in outcome["shared owner paste"]["detail"]
+            assert "screen held by the owner: True" in outcome["shared owner copy"]["detail"]
+            assert "observed {'copied': False} and []" in outcome["shared owner copy"]["detail"]
+            assert "clipboard_read refused or failed" in outcome["shared owner copy"]["detail"]
+        # What was placed in the team folder is taken away again, a failed step or not.
+        assert not [path for path in machine.target(9202).shared.iterdir() if "報告" in path.name or "rép" in path.name]
+        return
     if browser_failure:
         with pytest.raises(AssertionError, match="One or more shared checks failed"):
             await run.shared()
@@ -1538,8 +1589,14 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     assert [row["name"] for row in run.results] == ["shared carry seed", "shared prepares", "shared window lists", "shared member datasets", "shared terminal wall",
         "shared launches land on their own screens", "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
         "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared browser is a person's", "shared seat windows", "shared page text", "shared clipped product pictures", "shared owner control", "shared owner input",
-        "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
+        "shared owner paste", "shared owner copy", "shared owner files", "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
     assert seed_calls == [9201] and len(carry_checks) == 1 and seat_windows == [(1, 9201)]
+    paste, copy, dropped = (next(row for row in run.results if row["name"] == f"shared owner {step}")["detail"] for step in ("paste", "copy", "files"))
+    # The two texts of each are read and written by the guest's own program, or by the driver when the image has none.
+    assert ("the driver's own clipboard_read" if transfer == "none" else "xclip") in paste
+    assert ("by the driver" if transfer == "none" else "by xclip") in copy and clipboard == [acceptance.OWNER_TEXTS[0]]
+    assert "報告 ✓ (2).bin" in dropped and "rép_ort__.txt" in dropped and "3 drops placed" in dropped
+    assert not [path for path in machine.target(9202).shared.iterdir() if "報告" in path.name or "rép" in path.name]
     # The terminal wall launches once a seat; the launch check twice together and once more at the second seat.
     assert launches[:2] == [1, 2] and sorted(launches[2:]) == [1, 2, 2] and launches[-1] == 2
     landed = next(row for row in run.results if row["name"] == "shared launches land on their own screens")

@@ -85,6 +85,59 @@ async def test_a_copy_with_no_text_a_clipboard_that_cannot_be_written_or_no_hold
         await bridge.clipboard({**opened, "action": "take"})
 
 
+async def test_the_viewers_own_driver_call_reaches_the_driver_while_the_owner_holds_the_screen(viewer, monkeypatch):
+    from raphael_core.computer.vm_bridge import CuaBridge
+    bridge, _, _ = viewer
+    sent = []
+
+    async def enter(self):
+        self.process = type("Process", (), {"returncode": None})()
+        return self
+
+    async def leave(self, *exc):
+        self.process = None
+
+    async def write(self, packet):
+        sent.append(packet)
+        self.pending[packet["id"]].set_result({"content": [{"type": "text", "text": "ok"}]})
+    monkeypatch.setattr(CuaBridge, "__aenter__", enter)
+    monkeypatch.setattr(CuaBridge, "__aexit__", leave)
+    monkeypatch.setattr(CuaBridge, "_write", write)
+    opened = await held(bridge)
+    assert bridge.vm.target(1).key in bridge.vm.held
+    assert await bridge.driver_call(bridge.vm.target(1), "clipboard_write", {"text": "pasted"}) is not None
+    assert [packet["params"]["name"] for packet in sent if packet["method"] == "tools/call"] == ["clipboard_write"]
+    await bridge.close(opened)
+
+
+async def test_a_held_computer_still_refuses_every_other_call_and_every_call_without_the_owners_hands(viewer, monkeypatch):
+    from raphael_core.computer.vm_bridge import CuaBridge
+    bridge, _, _ = viewer
+    sent = []
+
+    async def enter(self):
+        self.process = type("Process", (), {"returncode": None})()
+        return self
+
+    async def leave(self, *exc):
+        self.process = None
+
+    async def write(self, packet):
+        sent.append(packet)
+        self.pending[packet["id"]].set_result({"content": [{"type": "text", "text": "ok"}]})
+    monkeypatch.setattr(CuaBridge, "__aenter__", enter)
+    monkeypatch.setattr(CuaBridge, "__aexit__", leave)
+    monkeypatch.setattr(CuaBridge, "_write", write)
+    opened = await held(bridge)
+    target = bridge.vm.target(1)
+    async with CuaBridge(bridge.vm, target) as client:
+        # A member's own clipboard call, and any other call with the owner's hands, meet the owner's note, not the driver.
+        assert (await client.request("tools/call", {"name": "clipboard_write", "arguments": {"text": "x"}}))["isError"]
+        assert (await client.request("tools/call", {"name": "click", "arguments": {"x": 1, "y": 1}}, owner_hands=True))["isError"]
+    assert not [packet for packet in sent if packet["method"] == "tools/call"]
+    await bridge.close(opened)
+
+
 def test_the_driver_answer_gives_its_text_only_from_a_text_field():
     assert clipboard_text({"structuredContent": {"text": "a"}}) == "a"
     assert clipboard_text({"content": [{"type": "text", "text": json.dumps({"text": "b", "types": []})}]}) == "b"
