@@ -717,8 +717,9 @@ export interface BrainSettings {
   owner_name?: string;
   owner_about?: string;
   owner_output_folder?: string;
-  /** Folders on the owner's computer members may write to, beside the output folder (R-PC-05). */
-  owner_write_folders?: string[];
+  /** The folders on the owner's computer each member may write to, by member id (R-PC-05); a member with none writes to
+   *  the output folder. */
+  member_write_folders?: Record<string, string[]>;
   routine_timezone?: string;
   routine_detected_timezone?: string;
   owner_photo?: string;

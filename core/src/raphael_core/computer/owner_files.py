@@ -113,8 +113,9 @@ DEFINITIONS = {
 KEPT_WORDS = ("This place holds keys or passwords (SSH or cloud keys, the keychain, a browser's profile, a password "
               "manager, a .env file or a private key), so it is kept from members' file tools. Tell the owner plainly; "
               "they can open it themselves.")
-NOT_WRITABLE = ("Members may write only inside the folders the owner chose in Settings › General ({folders}). Save it there, "
-                "or attach the file to your reply; tell the owner if it must go elsewhere.")
+NOT_WRITABLE = ("You may write only inside the folders the owner chose for you ({folders}); without a choice that is the "
+                "output folder of Settings › General. Save it there, or attach the file to your reply; tell the owner if it "
+                "must go elsewhere: the owner adds folders in your settings.")
 NO_FOLDERS = "no folder is chosen yet"
 PROTECTED = "This is Raphael's own data, which members do not search."
 MAC_PRIVATE = (" macOS keeps this place private: the owner can allow Raphael in System Settings › Privacy & Security › "
@@ -226,10 +227,10 @@ def kept_place(path, home=None):
     return judge(asked) or judge(os.path.realpath(asked))
 
 
-def writable_folders(settings):
-    """The folders members may write to: the ones the owner listed, and the output folder."""
-    folders = [settings.get("owner_output_folder") or "", *(settings.get("owner_write_folders") or [])]
-    return list(dict.fromkeys(folder for folder in folders if folder))
+def writable_folders(settings, member_id=0):
+    """The folders `member_id` may write to: the ones the owner chose for it, else the output folder (`member_folders`)."""
+    from ..brain.owner import member_folders
+    return member_folders(settings, member_id)
 
 
 class HostIO:
@@ -570,25 +571,25 @@ class OwnerFileTools:
                 return False
         return protected
 
-    def writable(self, arguments):
-        """Whether a write's path is inside a folder the owner lets members write to."""
+    def writable(self, arguments, member_id=0):
+        """Whether a write's path is inside a folder the owner lets `member_id` write to."""
         try:
             path = place(arguments.get("path"))
         except VmError:
             return False
         folders = []
-        for folder in writable_folders(self.settings):
+        for folder in writable_folders(self.settings, member_id):
             try:
                 folders.append(os.path.realpath(folder))
             except (OSError, ValueError):
                 continue
         return any(_under(path, folder) for folder in folders) and not kept_place(arguments["path"])
 
-    async def call(self, name, arguments, *, approver, run):
+    async def call(self, name, arguments, *, approver, run, member_id=0):
         try:
             if name in WRITES:
-                if not self.writable(arguments):
-                    folders = writable_folders(self.settings)
+                if not self.writable(arguments, member_id):
+                    folders = writable_folders(self.settings, member_id)
                     return PluginResult(False, "not_writable", NOT_WRITABLE.format(
                         folders=", ".join(folders) if folders else NO_FOLDERS))
                 if approver == "none":

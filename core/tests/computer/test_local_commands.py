@@ -28,10 +28,10 @@ def local(conn):
 
 # The contexts a command is asked from (`local_tools.ask_context`, `run_context`): who runs it, outside content read, a card
 # can be shown, the session, and the owner's screen in reach.
-CHAT = (("chat", 1, 10), False, True, "local-session", False)
-TASK = (("task", 7), False, True, "", False)
-PHONE = (("chat", 1, 11), True, False, "phone", False)  # a phone, Telegram or an exchange between members: no card
-QUICK = (("chat", 1, 12), False, False, "quick", True)  # a quick question: the owner's screen, no card
+CHAT = (("chat", 1, 10), False, True, "local-session", False, 1)
+TASK = (("task", 7), False, True, "", False, 1)
+PHONE = (("chat", 1, 11), True, False, "phone", False, 1)  # a phone, Telegram or an exchange between members: no card
+QUICK = (("chat", 1, 12), False, False, "quick", True, 1)  # a quick question: the owner's screen, no card
 MODES = ["ask", "always", "never", "bypass"]
 
 
@@ -218,7 +218,7 @@ async def test_job_output_and_stop_are_scoped_to_the_conversation(local):
     job_id = json.loads(result.text)["job_id"]
     await asyncio.wait_for(started.wait(), 1)
     assert hub.audit.recent()[0].tool == 'local_exec'
-    token = _CONTEXT.set((("chat", 2, 10), False, True, "other", True))
+    token = _CONTEXT.set((("chat", 2, 10), False, True, "other", True, 2))
     try:
         assert (await gate.call_plugin("mcp:local/local_job", {"job_id": job_id, "stop": True})).kind == "not_found"
         assert not stopped.is_set()

@@ -43,7 +43,7 @@ def test_the_defaults_are_the_documented_ones():
         "owner_name": "",
         "owner_about": "",
         "owner_output_folder": "",
-        "owner_write_folders": [],
+        "member_write_folders": {},
         "routine_timezone": "",
         "routine_detected_timezone": "",
         "routine_owner_seen_ms": 0,

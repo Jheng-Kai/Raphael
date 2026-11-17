@@ -15,6 +15,7 @@ const gear = [click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .
 // The member settings page shows one kind at a time, chosen in its left column.
 const msKind = id => [click(`.ms-pane .ms-nav [data-cat="${id}"]`), wait(`.ms-pane .ms-nav [data-cat="${id}"][aria-current="page"]`)];
 const closeSettings = [click('.ms-pane [data-ms="back"]'), wait('.page-agent:not([hidden]) .mb-chat .composer')];
+const msFolders = [member(1), { action: "open-details" }, click('.mb-det [data-det="gear"]'), wait('.ms-pane:not([hidden]) .ms-name'), click('.ms-pane .ms-nav [data-cat="tools"]'), wait('.ms-pane [data-k="ms-folders"]')];
 const composer = [click(".cmp-mode"), wait("#app-popover")];
 // What the / menu lists after the words: one command and one skill, grouped as at the start.
 const slashAfterWords = { commands: [{ id: 1, member_id: 0, name: "review", description: "整理研究重點", template: "整理研究重點" }],
@@ -241,6 +242,8 @@ export default [
   scene("primary-contact-menu", "The primary's own menu (Raphael's) ends with 換成其他成員 after a hairline, without a star", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="0"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
   scene("member-row-menu", "A member's row menu is grouped: 釘選, 移到分組, 標為未讀 | 編輯 | 分享為範本 | 隱藏, 刪除 in red", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="delete"]'), check("member-menu")]),
   scene("primary-contact-picker", "換成其他成員 in 小晴's menu opens 選擇主要成員: Raphael and the other members as buttons, and choosing 小森 readies the primary action", [...primaryMenu(1), click('.mb-primary-picker [data-id="2"]'), check("primary-picker")], { primaryMember: 1 }),
+  scene("member-write-folders", "A member's folders are added with the picker and removed one by one in its settings, each a row with its whole path", [...msFolders, wait('[data-k="ms-folder:1"]'), click('[data-ms="folder-add"]'), wait('[data-k="ms-folder:2"]'), click('[data-ms="folder-menu"][data-index="0"]'), click('#app-popover [data-confirm-item]'), click('#app-popover [data-confirm-item]'), waitGone('[data-k="ms-folder:2"]'), check("member-write-folders")], { ownerOutputFolder: true, memberWriteFolders: true }),
+  scene("member-write-folders-default", "A member with no folder of its own says, in one quiet line, that it writes to the output folder", [...msFolders, check("member-write-folders-default")], { ownerOutputFolder: true }),
   scene("primary-contact-set", "換成其他成員, then 小晴, exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu(), click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, ...gear, wait(".ms-pane .ms-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),

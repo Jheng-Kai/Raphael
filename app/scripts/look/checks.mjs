@@ -1072,18 +1072,30 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name};
   }
-  if (name === "owner-write-folders") {
+  if (name === "member-write-folders") {
+    // R-PC-05: the folders are member 1's own, picked with the native picker, each removed from its own ⋯.
     const sample = window.__look.data.colleagueSample.path, calls = window.__look.calls;
-    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "owner_write_folders").map(call => call.params.value);
-    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "R-PC-05: the picker adds a folder and its ⋯ removes one");
-    require(sets[0].length === 3 && sets[0][2] === sample && JSON.stringify(sets[1]) === JSON.stringify(sets[0].slice(1)), "the first folder is the one removed, the picked one kept");
-    const head = document.querySelector('[data-row="write-folders"]'), rows = [...document.querySelectorAll('[data-row="write-folder"]')];
-    require(visible(head) && !document.querySelector('[data-row^="write-folder"] input, [data-row^="write-folder"] textarea'), "folders are picked, never typed");
+    const sets = calls.filter(call => call.method === "settings.set" && call.params.key === "member_write_folders").map(call => call.params.value);
+    require(calls.some(call => call.command === "pick_output_folder") && sets.length === 2, "the picker adds a folder and its ⋯ removes one");
+    require(Object.keys(sets[0]).join() === "1" && sets[0]["1"].length === 3 && sets[0]["1"][2] === sample, "the picked folder is the member's own");
+    require(JSON.stringify(sets[1]["1"]) === JSON.stringify(sets[0]["1"].slice(1)), "the first folder is the one removed, the picked one kept");
+    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), rows = [...section.querySelectorAll('.ms-folder')];
+    require(visible(section) && !section.querySelector('input, textarea'), "folders are picked, never typed");
+    require(section.querySelector('h2')?.textContent === "可以寫入的資料夾" && visible(section.querySelector('[data-ms="folder-add"]')), "the section is named and its + adds");
     require(rows.length === 2 && rows.every(row => visible(row)), "each folder is a row of its own");
     for (const row of rows) {
-      const path = row.querySelector('.output-path'), more = row.querySelector('[data-act="write-folder-menu"]');
+      const path = row.querySelector('.ms-path'), more = row.querySelector('[data-ms="folder-menu"]');
       require(visible(path) && visible(more) && path.getBoundingClientRect().right <= more.getBoundingClientRect().left + 0.5, "the whole path never runs under its ⋯");
+      require(path.scrollWidth <= path.clientWidth + 1, "the whole path is shown, wrapped, never cut");
     }
+    require(!document.querySelector('.ms-pane [data-k="ms-folders"] .ms-empty'), "no default line beside the member's own folders");
+    return {check:name};
+  }
+  if (name === "member-write-folders-default") {
+    const section = document.querySelector('.ms-pane [data-k="ms-folders"]'), line = section?.querySelector('.ms-empty');
+    require(visible(line) && line.textContent === "沒有選資料夾時，寫到輸出資料夾：C:\\Owner\\Deliveries", `one quiet line names the output folder: ${line?.textContent}`);
+    require(!section.querySelector('.ms-folder'), "a member with no folder of its own lists none");
+    require(!document.querySelector('[data-row="write-folders"]'), "Settings › General has no list of folders for every member");
     return {check:name};
   }
   if (name === "owner-output-folder") {

@@ -150,7 +150,7 @@ async def test_a_command_that_would_open_something_is_refused_by_the_door_under_
     rig = rig_with_pc(make_rig, conn)
     rig.settings.set("action_mode", "bypass")
     from raphael_core.computer.local_tools import _CONTEXT
-    token = _CONTEXT.set((("chat", 0, 1), False, True, "s", False))
+    token = _CONTEXT.set((("chat", 0, 1), False, True, "s", False, 0))
     try:
         refused = await rig.service._gate.call_plugin("mcp:local/local_exec", {"command": "Start-Process https://www.youtube.com"})
         hidden = await rig.service._gate.call_plugin("mcp:local/local_exec", {"command": "Get-Process"})

@@ -329,17 +329,11 @@ describe("一般", () => {
     expect(buttons(chosen)).toHaveLength(1);
     expect(chosen).not.toMatch(/title="/);
   });
-  test("the folders members may write to are added with the picker and each is removed from its own ⋯", () => {
-    const none = tab("general");
-    expect(rowOf(none, "成員可以寫入的資料夾")).toContain('data-act="write-folder-add"');
-    expect(none).not.toContain('data-row="write-folder"');
-    const two = tab("general", { brain: { ...brain, owner_write_folders: ["/Users/owner/Notes", "C:\\Owner\\工作\\"] } });
-    expect(two).not.toMatch(/<input[^>]*write-folder/);
-    expect(two.match(/data-row="write-folder"/g)).toHaveLength(2);
-    expect(two).toContain('<span class="output-path">/Users/owner/Notes</span>');
-    // Removing one waits in its ⋯ (R-UI-56).
-    expect(two).toContain('data-act="write-folder-menu" data-folder-index="1"');
-    expect(two).not.toContain("write-folder-remove");
+  test("General keeps only the output folder: where else a member may write is chosen in its own settings", () => {
+    const html = tab("general", { brain: { ...brain, member_write_folders: { "1": ["/Users/owner/Notes"] } } });
+    expect(html).toContain('data-row="output-folder"');
+    expect(html).not.toContain("write-folder");
+    expect(html).not.toContain("/Users/owner/Notes");
   });
   test("General groups its sections: you, appearance and Raphael, the bots live elsewhere, and no way back into the guide", () => {
     const html = tab("general");
