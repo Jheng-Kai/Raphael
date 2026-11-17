@@ -21,6 +21,13 @@ anything; from then on nothing moves the line they read, however near the bottom
 while still going up) or they press the latest button. A thread that cannot scroll up is not let go. Explicit navigation (search, quote,
 unread line, the settings page's way back) keeps its own place as before (`releaseRichScroll`). No timer and no smooth scrolling.
 
+A width change of the thread (the details panel dragged, the window resized) keeps the reading place (`keepReadingPlace` in
+`reading-place.ts`). On a Mac it then scrolls the view one pixel and back once the width has stayed the same for 150 ms: WebKit could
+leave part of a thread whose place was set while its width changed unpainted, a hard cut over the background that only a scroll
+cleared, seen with the panel dragged wide over its Computer tab. The pixel is a programmatic scroll, not a wheel, so it never lets go
+of the bottom, and a scroll of the person's own in that frame is kept. Windows never nudges. The look harness renders in Chromium,
+so it runs the nudge without proving the WebKit repaint; that is checked in the Mac app.
+
 ```powershell
 npm run look -- follow-reply-bottom follow-reply-reading follow-reply-near follow-open-pictures chat send-prompt busy-team-follow busy-team-anchor generated-image picture-message picture-message-menu picture-message-reply page-composer-grows member-settings-back-bottom member-settings-back-kept conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom owner-question-brought owner-question-pending-page owner-question-pending-room --theme both --width 1120,720,1920x1080
 ```
