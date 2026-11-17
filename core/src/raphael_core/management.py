@@ -352,6 +352,7 @@ OWNER_ONLY = {
     "connectors.label": "The owner names a connected account after sign-in.",
     "connectors.remove_account": "Only the owner removes one account of an app, after the question an active one asks.",
     "pages.export": "Only the owner's press saves a report or an HTML page as a file, through the shell, which names no folder the window gives.",
+    "agent.history.version": "Only the owner reads an earlier version of a message they edited; a model reads the newest alone.",
     **dict.fromkeys(("vault.list", "vault.add", "vault.update", "vault.remove", "vault.preview", "vault.cancel", "vault.import"),
                    "Owner-only vault metadata, private value writes, sharing and transient CSV import; no private value read or export RPC exists."),
     **dict.fromkeys(("owner_questions.answer", "owner_questions.bring", "background.answer", "pages.tool_call",

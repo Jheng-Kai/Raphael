@@ -73,6 +73,7 @@ import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
 import { TYPED, VOICE, delegatedTurn, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
+import { carryEditor, lastOwnerTurnId, ownerEditOf, type OwnerEdit } from "../message-edit";
 import { chatCardAction } from "../chat-cards";
 import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
@@ -660,6 +661,19 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const sendingNow = new Set<number>();
   /** What the composer was given when a message was taken back to be edited, to tell an untouched edit from a changed one (Esc). */
   let editOrigin: { turnId: number; draft: ComposerDraft; before?: ComposerDraft } | null = null;
+  /**
+   * The owner's answered message open as an editor in its own bubble (`state.bubbleEditing` draws it, R-UI-163): the conversation it
+   * belongs to and what it carries (its files and quote), as the composer would send them. The composer is not touched.
+   */
+  let bubbleEdit: { key: string; draft: ComposerDraft } | null = null;
+  /**
+   * The version of an edited message the owner chose to read in each conversation (‹ and › under its bubble), with how many it had
+   * then, by `${conversation}:${turn}`; the newest when none is chosen. It only changes what the owner reads, never what the member does.
+   */
+  const shownVersions = new Map<string, { version: number; versions: number }>();
+  /** Earlier versions read from the core (`agent.history.version`), by `${conversation}:${turn}:${versions}:${version}`. */
+  const versionTurns = new Map<string, AgentTurn>();
+  const versionKey = (turnId: number): string => `${draftKey()}:${turnId}`;
   const retracted = new Set<string>();
   let attachmentEpoch = 0;
   let attaching = 0;
@@ -963,6 +977,27 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     noButton.disabled = alwaysButton.disabled = yesButton.disabled = answering;
   }
 
+  /**
+   * The turn as the owner reads it: the newest version of an edited message, or the earlier one they chose with ‹ (R-UI-163). A
+   * choice made before the message was edited again is forgotten: a new version is read first.
+   */
+  function shownTurn(turn: AgentTurn): AgentTurn {
+    const versions = turn.versions ?? 1, key = versionKey(turn.id);
+    const pick = versions > 1 ? shownVersions.get(key) : undefined;
+    if (!pick) return turn;
+    if (pick.versions !== versions || pick.version >= versions) { shownVersions.delete(key); return turn; }
+    return versionTurns.get(`${key}:${versions}:${pick.version}`) ?? turn;
+  }
+
+  /** The owner's last message in the open conversation (`lastOwnerTurnId`): none while something they sent is still on its way. */
+  function lastOwnerId(): number | undefined {
+    const chronological = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
+    return lastOwnerTurnId(chronological, outgoing.some(sent => belongs(sent) && !sent.replaces));
+  }
+
+  /** How 編輯 edits this message now (`ownerEditOf`): asked when its ⋯ opens and again when 編輯 is chosen. */
+  const ownerEditFor = (turn: AgentTurn): OwnerEdit | null => ownerEditOf(turn, lastOwnerId() === turn.id);
+
   /** One line of the thread as HTML, with the key it keeps across draws. */
   const renderedTurns = new ThreadRenderCache();
   let presentationVersion = 0;
@@ -1006,15 +1041,18 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const turn = item.turn, waiting = placed.get(turn.id);
           // The edit is on its way and the history still has the message as it was, or has it no more: the edit stands in its place.
           if (waiting && turn.session_id !== waiting.requestId) return pendingTurnHTML(waiting.text, TYPED, shape, waiting.files, { id: waiting.requestId, time: waiting.sentAt, quote: waiting.quote }, state.nowMs, state.expandedMessages.has(`pending:${waiting.requestId}:question`), !tail && turnLook.presenceTurnId === null, tailWords);
-          const view = pacing.view(turn), task = turn.task?.id;
+          // An edited message is drawn as the version the owner chose to read (‹ ›), with what its member answered it with.
+          const shown = shownTurn(turn);
+          const view = shown === turn ? pacing.view(turn) : shown, task = turn.task?.id;
+          const editing = state.bubbleEditing?.turnId === turn.id ? `${state.bubbleEditing.missing.length}:${state.bubbleEditing.sendable}:${state.bubbleEditing.text}` : "";
           const expanded = [...state.expandedMessages].filter(key => key.startsWith(`${turn.id}:`)).join("\0");
           const live = turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting" || pacing.waiting(turn.id);
-          return renderedTurns.line(item.key, historyRevisions.get(turn) ?? turn, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
+          return renderedTurns.line(item.key, shown === turn ? historyRevisions.get(turn) ?? turn : shown, [presentationVersion, getLocale(), shape.mentions, turnLook.query ?? "", details.has(turn.id),
             state.open.get(turn.id), state.thinkingOpen.get(turn.id), expanded, task !== undefined && state.stopping.has(task), task !== undefined && state.rerunning.has(task),
             state.workStartedAt.get(turn.id), state.signin.get(turn.id), view.messages?.length, pacing.waiting(turn.id), desktop.waitingForOwner(turn.id),
             turnLook.presenceTurnId === turn.id, fileLinks(turn, state.files), live ? shape.activityLabel : "", live ? members.member().activity ?? "" : "", turn.permissions?.some(card => shape.answerable?.(card.id)), turn.id === latestFailedTurnId, turn.id === signinTurnId,
             item.together?.map(earlier => `${earlier.id}:${earlier.status}:${earlier.messages?.length ?? 0}`).join(",") ?? "",
-            state.editingTurnId === turn.id ? "editing" : "",
+            state.editingTurnId === turn.id ? "editing" : "", editing, shown.version ?? 0,
             item.part ? `${item.part.from ?? ""}-${item.part.until ?? ""}` : ""],
             () => turnHTML(view, state, details.has(turn.id), { ...turnLook, regenerateTurnId: turn.id, latestFailedTurnId, signinTurnId, exchangeTogether: item.together, part: item.part }));
         })(), turnId: item.turn.id },
@@ -1060,8 +1098,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const changed = patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
-        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
-        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
+        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made), restoreEditor = carryEditor(node, made);
+        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); restoreEditor(); };
       },
     });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
@@ -1109,6 +1147,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The message the composer holds for editing is not drawn while it is there; it is drawn again as soon as the composer lets it go.
     state.editingTurnId = replacing !== undefined && turns.some(turn => turn.id === replacing) ? replacing : null;
     composer.toggleAttribute("data-replacing", state.editingTurnId !== null);
+    // An editor in a bubble stands only where it was opened, while its message is still there and still the owner's last one.
+    if (state.bubbleEditing) {
+      const edited = turns.find(turn => turn.id === state.bubbleEditing!.turnId);
+      if (bubbleEdit?.key !== draftKey() || !edited || ownerEditFor(edited) !== "bubble") { state.bubbleEditing = null; bubbleEdit = null; }
+    }
     drawComposer();
     // An open conversation between members follows the turns it is read from, and closes with its conversation.
     if (peer) queueMicrotask(() => peer?.update());
@@ -2070,7 +2113,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean; picture?: TurnAttachment; video?: TurnAttachment } | null {
     const id = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id);
-    const turn = turns.find(item => item.id === id);
+    // What the owner reads there: an earlier version of an edited message when they chose one (Copy copies its words).
+    const live = turns.find(item => item.id === id), turn = live && shownTurn(live);
     const key = control.closest<HTMLElement>("[data-message]")?.dataset.message;
     if (!turn || !key) return null;
     if (key === "question") return { turn, key, text: turn.question, markdown: false };
@@ -2129,7 +2173,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // A greeting that came through stays: only a failed one is written again (its rerun button), never a second.
     if (source && !owner && control.dataset.regenerate === "true" && look().regenerateTurnId === source.turn.id && source.turn.route !== "greeting") items.push({ id: "regenerate", label: t("chat.regenerate"), icon: "refresh" });
     const ownerAct = pending ? "cancel" : control.dataset.ownerAct;
-    if (ownerAct === "edit") items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
+    // 編輯 only on the owner's last message, decided now by the one rule (`ownerEditOf`, R-UI-163); 取消 while its work goes on.
+    if (source && ownerAct && owner && ownerEditFor(source.turn) !== null) items.push({ id: "edit", label: t("chat.edit"), icon: "pencil" });
     // 立即送出 stands beside 「排隊中」 itself, not in this menu (R-QUEUE-05).
     if (ownerAct === "cancel") items.push({ id: "cancel", label: t("common.cancel"), icon: "x" });
     const reactions = source && !owner && message?.querySelector('[data-act="react-message"]') ? ownReaction(source.turn.reactions?.[source.key]) : null;
@@ -2250,6 +2295,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   async function editMessage(control: HTMLElement): Promise<void> {
     const source = messageSource(control);
     if (!source || source.key !== "question") return;
+    // The rule decides again now, as the ⋯ offered it (R-UI-163): none for a message that is not the owner's last, the message's own
+    // bubble for one its member answered, the composer for one it has not answered yet.
+    const how = ownerEditFor(source.turn);
+    if (how === null) return;
+    if (how === "bubble") { await editInBubble(source.turn); return; }
     if (replacing === source.turn.id) { focusComposer(); return; }
     // A file still being read would be dropped when the composer is given the message: it is in the composer first.
     if (attaching) await attachQueue;
@@ -2337,6 +2387,124 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     render();
     focusComposer();
     resumeDraft(before);
+  }
+
+  /** Whether the editor's 送出 has something to send: the composer's rule, with every file of the original there. */
+  const editSendable = (text: string, draft: ComposerDraft): boolean => draft.missing.length === 0 && typedQuestion(text, draft.files.length > 0) !== null;
+
+  /**
+   * 編輯 on a message its member already answered (R-UI-163): the message's own bubble becomes the editor, where it stands, with its
+   * words, its files and its quote; the composer is not touched. Sending it keeps the first exchange as a version of the message.
+   */
+  async function editInBubble(turn: AgentTurn): Promise<void> {
+    if (state.bubbleEditing?.turnId === turn.id) { focusEditor(); return; }
+    const member = memberId(), key = draftKey();
+    const draft = await draftFor(turn);
+    if (memberId() !== member || draftKey() !== key || !turns.some(item => item.id === turn.id)) return;
+    openEditor(turn.id, draft);
+  }
+
+  /** The owner's message turns into an editor where it stands; the newest version is the one edited. */
+  function openEditor(turnId: number, draft: ComposerDraft): void {
+    const carried: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: turnId };
+    bubbleEdit = { key: draftKey(), draft: carried };
+    shownVersions.delete(versionKey(turnId));
+    state.bubbleEditing = { turnId, text: carried.text, missing: carried.missing, sendable: editSendable(carried.text, carried) };
+    render();
+    focusEditor();
+  }
+
+  function closeEditor(redraw = true): void {
+    if (!state.bubbleEditing && !bubbleEdit) return;
+    state.bubbleEditing = null; bubbleEdit = null;
+    if (redraw) render();
+  }
+
+  /** The focus in the editor, the caret at the end of its words, and the editor in view. */
+  function focusEditor(): void {
+    const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
+    if (!field) return;
+    field.focus({ preventScroll: true });
+    field.setSelectionRange(field.value.length, field.value.length);
+    field.closest("[data-msg-editor]")?.scrollIntoView({ block: "nearest" });
+  }
+
+  /**
+   * Sends the words of the editor in the bubble as the message's new version: the same call as the composer's edit (`replaceTurnId`,
+   * the same files and quote), and the core keeps the first exchange as version 1. The edit stands in the message's place while it
+   * is on its way; a send that fails opens the editor again with the words as they were typed.
+   */
+  async function sendBubbleEdit(): Promise<void> {
+    const editing = state.bubbleEditing, held = bubbleEdit;
+    if (!editing || !held || held.key !== draftKey()) return;
+    if (held.draft.missing.length > 0) { toaster.info(t("chat.reattach")); return; }
+    const text = typedQuestion(wholeLinks(editing.text), held.draft.files.length > 0);
+    if (text === null) {
+      if (editing.text.trim() !== "") toaster.info(t("agent.tooLong"));
+      return;
+    }
+    const member = memberId(), sentConversation = conversationId(), requestId = crypto.randomUUID(), sending = held.draft.files;
+    const draft: ComposerDraft = { ...held.draft, text: editing.text, missing: [], replacing: editing.turnId };
+    rememberDraft(requestId, draft);
+    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), quote: draft.quote,
+      files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })),
+      replaces: turns.find(turn => turn.id === editing.turnId) };
+    outgoing.push(mine);
+    closeEditor(false);
+    // The edit stands where its message stood: the reader stays where they are.
+    render();
+    askingMember = member;
+    try {
+      await api.agentAskText(text, wireAttachments(sending), member, { requestId, ...destinationOf(member, sentConversation), replaceTurnId: editing.turnId, ...(draft.quote ? { quote: draft.quote } : {}) });
+    } catch (err) {
+      if (retracted.has(requestId)) return;
+      if (askingMember === member) askingMember = null;
+      outgoing = outgoing.filter(item => item !== mine);
+      toaster.info(describeError(err));
+      // Its place is back, open again with the words as they were typed.
+      if (memberId() === member && conversationId() === sentConversation && turns.some(turn => turn.id === editing.turnId)) openEditor(editing.turnId, draft);
+      else render();
+      return;
+    }
+    if (retracted.has(requestId)) return;
+    if (askingMember === member) askingMember = null;
+    if (memberId() === member && conversationId() === sentConversation) await load(false, true);
+    else members.changed();
+    outgoing = outgoing.filter(item => item !== mine);
+    render();
+  }
+
+  /**
+   * ‹ or › under an edited message's bubble (R-UI-163): the version before or after it, the message and what its member answered it
+   * with, for the owner to read. An earlier version is read from the core once; the newest is the history's own turn. What the member
+   * reads is never changed by it. The pressed button keeps the focus (the other one when it reached an end).
+   */
+  async function showVersion(control: HTMLElement, step: -1 | 1): Promise<void> {
+    const id = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id);
+    const live = turns.find(turn => turn.id === id), versions = live?.versions ?? 1;
+    if (!live || versions < 2) return;
+    const key = versionKey(id), member = memberId(), conversation = conversationId();
+    const target = (shownTurn(live).version ?? versions) + step;
+    if (target < 1 || target > versions) return;
+    if (target < versions && !versionTurns.has(`${key}:${versions}:${target}`)) {
+      try {
+        const got = await api.core<{ turn: AgentTurn }>("agent.history.version", { member_id: member, conversation_id: conversation, turn_id: id, version: target });
+        versionTurns.set(`${key}:${versions}:${target}`, got.turn);
+      } catch (err) { toaster.info(describeError(err)); return; }
+      if (memberId() !== member || conversationId() !== conversation || turns.find(turn => turn.id === id)?.versions !== versions) return;
+    }
+    if (target === versions) shownVersions.delete(key); else shownVersions.set(key, { version: target, versions });
+    render();
+    const pager = thread.querySelector<HTMLElement>(`.tn[data-id="${id}"] .msg-versions`);
+    const wanted = pager?.querySelector<HTMLButtonElement>(`[data-act="${step < 0 ? "version-previous" : "version-next"}"]:not(:disabled)`)
+      ?? pager?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    wanted?.focus({ preventScroll: true });
+  }
+
+  /** Whether the work the composer's slot stands for is the one of the message the composer holds for editing (its member still thinking). */
+  function editHoldsTask(): boolean {
+    const edited = replacing !== undefined ? turns.find(turn => turn.id === replacing) : undefined, task = edited && composerTask();
+    return !!task && (task.key === `request:${edited.session_id}` || (edited.task !== undefined && edited.task !== null && task.key === `task:${edited.task.id}`));
   }
 
   /** The displayed slot and its action always refer to the same reply in this conversation. */
@@ -2568,6 +2736,22 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const inputs = field?.closest(".secret-card")?.querySelectorAll<HTMLInputElement>("input");
     if (inputs && save) save.disabled = [...inputs].some(input => !input.value.trim());
   });
+  // The words of an editor in a bubble are kept where a redraw can find them; 送出 follows the composer's rule, and Enter sends
+  // with the composer's own newline rule (Shift+Enter, never while an input method composes).
+  thread.addEventListener("input", (e) => {
+    const field = (e.target as Element).closest<HTMLTextAreaElement>("[data-edit-input]");
+    if (!field || !state.bubbleEditing || !bubbleEdit) return;
+    state.bubbleEditing.text = field.value;
+    state.bubbleEditing.sendable = editSendable(field.value, bubbleEdit.draft);
+    const button = field.closest("[data-msg-editor]")?.querySelector<HTMLButtonElement>('[data-act="edit-send"]');
+    if (button) button.disabled = !state.bubbleEditing.sendable;
+  });
+  thread.addEventListener("keydown", (e) => {
+    const editor = (e.target as Element).closest<HTMLTextAreaElement>("[data-edit-input]");
+    if (!editor || !sendsOnEnter(e)) return;
+    e.preventDefault();
+    void sendBubbleEdit();
+  });
   thread.addEventListener("keydown", (e) => {
     const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");
     if (!field || e.key !== "Enter" || e.isComposing) return;
@@ -2634,6 +2818,26 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "edit-message":
         void editMessage(act);
+        break;
+      case "edit-send":
+        void sendBubbleEdit();
+        break;
+      case "edit-cancel":
+        closeEditor();
+        break;
+      case "drop-edit-missing":
+        if (state.bubbleEditing && bubbleEdit) {
+          bubbleEdit.draft.missing.splice(Number(act.dataset.index), 1);
+          state.bubbleEditing.missing = [...bubbleEdit.draft.missing];
+          state.bubbleEditing.sendable = editSendable(state.bubbleEditing.text, bubbleEdit.draft);
+          render(); focusEditor();
+        }
+        break;
+      case "version-previous":
+        void showVersion(act, -1);
+        break;
+      case "version-next":
+        void showVersion(act, 1);
         break;
       case "cancel-message":
         void cancelMessage(act);
@@ -2784,11 +2988,22 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   // Escape in the composer that holds a message taken back for editing gives the edit up: at once while the composer still holds what 編輯
   // gave it, and as the app's other cancels (a task's Stop) once it changed: the first press arms the slot's cancel, the second within 1.5 s
-  // gives it up. A task that works (or a recording) keeps its own Escape; this one is for the composer when nothing else is.
+  // gives it up. A task that works (or a recording) keeps its own Escape; this one is for the composer when nothing else is, or when
+  // the work is the edited message's own (its member still thinking about it, R-UI-163): the edit is what the owner is doing then.
   cancelGesture().register(() => {
-    return visible && !roomPane.active && replacing !== undefined && document.activeElement === input && composerTask() === null ? {
+    return visible && !roomPane.active && replacing !== undefined && document.activeElement === input && (composerTask() === null || editHoldsTask()) ? {
       key: `edit:${replacing}`, immediate: editUntouched(), button: voiceButton, hint: t("common.cancelAgain"),
       cancel: abandonEdit,
+    } : null;
+  });
+  // Escape in the editor of a bubble leaves it: at once while its words are the original's, and as the app's other cancels once they
+  // changed (the first press arms 取消, the second within 1.5 s leaves). It comes before the composer's while the focus is in it.
+  cancelGesture().register(() => {
+    const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
+    const cancel = field?.closest("[data-msg-editor]")?.querySelector<HTMLElement>('[data-act="edit-cancel"]');
+    return visible && !roomPane.active && state.bubbleEditing && bubbleEdit && field && cancel && document.activeElement === field ? {
+      key: `bubble-edit:${state.bubbleEditing.turnId}`, immediate: field.value === bubbleEdit.draft.text, button: cancel, hint: t("common.cancelAgain"),
+      cancel: () => closeEditor(),
     } : null;
   });
   input.addEventListener("input", () => { fit(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (el.isConnected) saveComposerDraft(); }, 300); });

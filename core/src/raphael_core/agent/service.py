@@ -531,6 +531,8 @@ class _Ask:
     turn_id: int = 0
     # Where an edited message stands: the id and time of the turn it replaces, which it takes over (`_ask`).
     place: tuple[int, int] | None = None
+    # The earlier versions of an edited message (`AgentHistory.versions`), kept with the turn written in its place.
+    versions: list[dict] = field(default_factory=list)
     page_call: str | None = None
     recorded_cost: float = 0.0
     recorded_steps: int = 0
@@ -1041,6 +1043,7 @@ class AgentService:
             "agent.history.sent": self._history_sent,
             "agent.history.clear": self._history_clear,
             "agent.history.retract": self._history_retract,
+            "agent.history.version": self._history_version,
             "agent.history.stop": self._history_stop,
             "agent.history.send_now": self._history_send_now,
             "agent.history.delete": self._history_delete,
@@ -1252,21 +1255,40 @@ class AgentService:
             raise invalid_params("quotes are supported for composer requests")
         replacement = _opt_int(params, "replace_turn_id")
         place = None
+        versions: list[dict] = []
         if replacement is not None and not self._was_cancelled(session):
             if not text.strip() and not attachments:
                 raise invalid_params("a replacement must contain text or attachments")
             if self._speaker(member_id) is None:
                 raise invalid_params("there is no such member")
             old = self._history.get(replacement)
-            if (old is None or old.member_id != member_id or old.conversation_id != conversation_id or old.status in ("running", "confirm")
-                    or old.source in ("member", "routine") or params.get("source") != "app"):
-                raise invalid_params("replace_turn_id must name a completed owner message in this thread")
-            await self._history_retract({"session_id": old.session_id, "turn_id": replacement, "member_id": member_id})
+            if (old is None or old.member_id != member_id or old.conversation_id != conversation_id or old.status == "withdrawn"
+                    or old.scope != "private" or old.source in ("member", "routine") or params.get("source") != "app"):
+                raise invalid_params("replace_turn_id must name an owner message in this thread")
+
+            # Whether its member had answered it, as the owner saw it when they sent the edit: a turn stopped now gets the
+            # stop's own words as its answer, which are not the member's.
+            answered = self._history.answered(replacement)
+
+            def keep(stopped: list[Turn]) -> None:
+                # Read once the old work has stopped, before it goes: a message its member had answered stays as a version of
+                # the message, with every line of that answer up to the stop; one it had not answered is only replaced.
+                kept = self._history.versions(replacement)
+                turn = next((item for item in stopped if item.id == replacement), None)
+                if turn is not None and answered:
+                    kept.append(self._history.snapshot(turn, len(kept) + 1))
+                versions[:] = kept
+
+            # Work still under way for the message (thinking, a reply on its way, a card that waits) is stopped as Stop stops it.
+            await self._history_retract({"session_id": old.session_id, "turn_id": replacement, "member_id": member_id}, keep=keep)
             # An edited message is the same message with new words: it takes the place of the one it replaces (its
             # id and its time), so it stands where it stood among what came after it, never at the end of the
-            # thread. A turn that is still there (it was only withdrawn) leaves the new one to be written at the end.
+            # thread. A turn that is still there (it was only withdrawn) leaves the new one to be written at the end,
+            # with the versions the withdrawn one had.
             if self._history.get(replacement) is None:
                 place = (replacement, old.created_at_ms)
+            else:
+                versions[:] = self._history.versions(replacement)
         return await self.ask(
             session,
             text,
@@ -1280,6 +1302,7 @@ class AgentService:
             intent=intent,
             transcript_ms=params.get("transcript_ms"),
             place=place,
+            versions=versions,
         )
 
     def _destination(self, member_id: int, conversation_id: int | None, source: object, *, quick: bool) -> int:
@@ -1351,6 +1374,7 @@ class AgentService:
         resumption: Resumption | None = None,
         intent: str | None = None,
         place: tuple[int, int] | None = None,
+        versions: Sequence[dict] = (),
     ) -> dict:
         """One request, as `agent.ask` answers it. `attachments` are the files handed with it
         (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), saved on typed admission; with
@@ -1389,6 +1413,7 @@ class AgentService:
             resumption=resumption,
             source_turn_id=resumption.turn_id if resumption is not None else None,
             place=place,
+            versions=list(versions),
         )
         if resumption is not None and resumption.report is not None:
             ask.steps.extend(resumption.report.steps)
@@ -5958,8 +5983,9 @@ class AgentService:
             for table in ("connect_cards", "secret_cards", "handback_cards", "permission_cards", "email_drafts"):
                 self._conn.execute(f"DELETE FROM {table} WHERE conversation_id = ?", (conversation_id,))
 
-    async def _history_retract(self, params: dict) -> dict:
-        """Stop one owner's request and permanently remove its turn, including partial lines."""
+    async def _history_retract(self, params: dict, keep: Callable[[list[Turn]], None] | None = None) -> dict:
+        """Stop one owner's request and permanently remove its turn, including partial lines. `keep` is told the turns once
+        their work has stopped and before they go (an edit keeps an answered message as a version, `_ask`)."""
         member = self._member_param(params)
         session = _str(params, "session_id")
         turn_id = _opt_int(params, "turn_id")
@@ -5982,6 +6008,8 @@ class AgentService:
         # Read again after stopping: a request may have written its first row before cancellation.
         own = [turn for turn in self._history.for_session(session)
                if turn.scope == "private" and turn.member_id == member and turn.source not in ("member", "routine")]
+        if keep is not None:
+            keep(own)
         deleted = sum(self._history.delete(turn.id) for turn in own if turn.id is not None)
         if deleted:
             for conversation_id in {turn.conversation_id for turn in own}:
@@ -5995,6 +6023,26 @@ class AgentService:
                     forget(turn.id)
                 self._turn_changed(turn.id or 0, member)
         return {"deleted": deleted}
+
+    async def _history_version(self, params: dict) -> dict:
+        """`agent.history.version`: one version of an owner's message they edited, as the app reads a turn, for the owner to
+        read again with what its member answered it with (`turn`, `version`, `versions`). The newest is the turn itself; an
+        earlier one is kept beside it (`AgentHistory.version_view`) and is never read by a model."""
+        member_id = self._member_param(params)
+        conversation_id = self.conversations.resolve(member_id, _opt_int(params, "conversation_id"))
+        turn_id, version = _opt_int(params, "turn_id"), _opt_int(params, "version")
+        if turn_id is None or version is None or version < 1:
+            raise invalid_params("turn_id and a version of 1 or more are required")
+        turn = self._history.get(turn_id)
+        if turn is None or turn.member_id != member_id or turn.conversation_id != conversation_id or turn.scope != "private":
+            raise invalid_params("turn_id must name a message in this conversation")
+        versions = self._history.version_counts([turn_id]).get(turn_id, 1)
+        if version > versions:
+            raise invalid_params("there is no such version of the message")
+        view = self._turn_views([turn])[0] if version == versions else self._history.version_view(turn, version, versions)
+        if view is None:
+            raise invalid_params("there is no such version of the message")
+        return {"turn": view, "version": version, "versions": versions}
 
     def _member_param(self, params: dict) -> int:
         """The thread a method of the history is about: `member_id`, 0 (Raphael's) by default. One
@@ -6107,6 +6155,8 @@ class AgentService:
             questions = {turn: [{**item, "created_at_ms": asked_at[item["id"]]} if item["id"] in asked_at else item for item in items]
                          for turn, items in questions.items()}
         handoffs_by_turn = self._background.handoff_views_for_turns(ids)
+        # An owner's message edited after it was answered: the turn is its newest version, of these many.
+        edited = self._history.version_counts(ids)
         work_ids = {int(turn.session_id.removeprefix("handoff:")) for turn in turns
                     if turn.scope == "exchange" and turn.session_id.startswith("handoff:")
                     and turn.session_id.removeprefix("handoff:").isdigit()}
@@ -6157,6 +6207,7 @@ class AgentService:
                     # The files handed with the request: their names and types, never more.
                     "attachments": list(turn.attachments or []),
                     **({"quote": turn.quote} if turn.quote else {}),
+                    **({"version": edited[turn.id], "versions": edited[turn.id]} if edited.get(turn.id) else {}),
                     # What the fast tier did, then what the worker did for the task it was given.
                     "steps": turn_steps,
                     "task": task,

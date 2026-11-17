@@ -401,7 +401,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 86
+LATEST = 87
 
 
 def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
@@ -712,8 +712,13 @@ SCHEMA_V84 = {**SCHEMA_V83,
     "routines": [*SCHEMA_V83["routines"], "precheck_json TEXT", "precheck_hash TEXT", "last_skipped_ms INTEGER"]}
 SCHEMA_V85 = SCHEMA_V84  # the CHECKs of secret_cards.kind and vault_entries.kind widened; no column changed
 SCHEMA_V86 = SCHEMA_V85  # renamed slime ids only; no column changed
+SCHEMA_V87 = {**SCHEMA_V86, "agent_turn_versions": [  # the earlier versions of an edited message
+    "turn_id INTEGER PK NOT NULL", "version INTEGER PK NOT NULL", "created_at_ms INTEGER NOT NULL", "replaced_at_ms INTEGER NOT NULL",
+    "session_id TEXT NOT NULL", "question TEXT NOT NULL", "attachments TEXT", "quote TEXT", "source TEXT NOT NULL", "route TEXT NOT NULL",
+    "prefix TEXT NOT NULL", "text TEXT NOT NULL", "detail TEXT", "status TEXT NOT NULL", "model TEXT", "failure TEXT",
+    "messages TEXT NOT NULL DEFAULT '[]'"]}
 
-@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85)])
+@pytest.mark.parametrize("start_version, expected_steps", [(version, [step for step in (63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87) if step > version]) for version in (62, 63, 64, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86)])
 def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries(monkeypatch, tmp_path, start_version, expected_steps):
     path = tmp_path / f"v{start_version}-to-latest.db"
     with monkeypatch.context() as old:
@@ -735,7 +740,7 @@ def test_latest_upgrade_runs_only_pending_migrations_and_preserves_vault_entries
     db.migrate(conn)
     assert steps == expected_steps
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V86.items():
+    for table, columns in SCHEMA_V87.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     entry = conn.execute("SELECT kind,label,hint,origin,members,credential FROM vault_entries WHERE id='legacy-login'").fetchone()
@@ -905,7 +910,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V85) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V87) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -926,7 +931,7 @@ def test_connect_creates_the_latest_schema(conn):
         "one_standard_conversation",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V85.items():
+    for table, columns in SCHEMA_V87.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

@@ -35,6 +35,11 @@ with `exchanges`), each drawn as one line; context and search also include its o
 
 The conversation is not pruned: unlike the dictations, which go after the retention setting, the
 turns stay until the user clears them (`clear`). Nothing here logs a question or an answer.
+
+An owner's message edited after its member answered it has versions (`agent_turn_versions`): the turn is always the
+newest, standing in the place every version holds (its id and its time), and each earlier version is kept beside it with
+its words, files and quote and the lines its member answered it with (`snapshot`). Only the turn is read as the
+conversation; an earlier version is read for the owner alone (`version_view`), never by a model, a summary or the search.
 """
 
 # Postponed annotations: AgentHistory has a method called `list`, which would otherwise hide the
@@ -146,6 +151,15 @@ _COLUMNS = (
     " source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id, failure"
 )
 _STEP_COLUMNS = "turn_id, kind, tool, server, outcome, ms, reason, at_ms, detail"
+_VERSION_COLUMNS = (
+    "version, created_at_ms, replaced_at_ms, session_id, question, attachments, quote, source, route, prefix, text, detail,"
+    " status, model, failure, messages"
+)
+# The lines of a turn a version keeps: what its member said and showed (and what it did, in the conversation's own lines).
+# Its progress and thinking lines were work, not words to read again.
+_VERSION_KINDS = ("reply", "media", "event")
+# The statuses of work an edit stopped: the version it leaves behind is one that did not finish.
+_STOPPED_BY_EDIT = ("running", "confirm", "queued")
 _TURN_COLUMNS = ", ".join(f"t.{name.strip()}" for name in _COLUMNS.split(","))
 # The most turns a search returns to the model (the conversation page asks for more).
 SEARCH_MAX = 10
@@ -291,12 +305,14 @@ class AgentHistory:
         admission: str | None = None,
         failure: dict | None = None,
         place: tuple[int, int] | None = None,
+        versions: Sequence[Mapping[str, object]] = (),
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
         request; `peer_id` is the other member of an exchange. `place` is `(id, created_at_ms)` of a
         turn that was removed: the new turn stands where that one stood (an edited message keeps its
-        place in the thread). The id must be free."""
+        place in the thread). The id must be free. `versions` are the earlier versions of an edited message
+        (`versions`, `snapshot`), kept with the new turn, which is the newest, in the same transaction."""
         files = [{key: item[key] for key in ("name", "mime", "id", "size") if key in item} for item in attachments]
         if scope == "private" and (source == "member" or route == "exchange"):
             scope = "exchange"
@@ -340,6 +356,7 @@ class AgentHistory:
             turn_id = cursor.lastrowid
             assert turn_id is not None
             self._insert_steps(turn_id, steps)
+            self._insert_versions(turn_id, versions)
             self._index(turn_id, question, text, detail)
             if conversation_id is not None:
                 conversations.touch(conversation_id, question)
@@ -777,6 +794,118 @@ class AgentHistory:
             self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
             cursor = self._conn.execute("DELETE FROM agent_turns WHERE id = ?", (turn_id,))
         return cursor.rowcount > 0
+
+    # --- the versions of an edited message ------------------------------------------------------------
+
+    def answered(self, turn_id: int) -> bool:
+        """Whether the member answered the turn with a message the owner reads: a reply or something it showed (a picture,
+        a card of a link), or the answer of a turn that has no reply lines. The app draws the same messages (timeline.ts),
+        and the owner's edit of an answered message keeps it as a version (`snapshot`)."""
+        row = self._conn.execute(
+            "SELECT status, route, text FROM agent_turns WHERE id = ?", (turn_id,)
+        ).fetchone()
+        if row is None:
+            return False
+        said = self._conn.execute(
+            "SELECT 1 FROM agent_messages WHERE turn_id = ? AND kind IN ('reply', 'media') AND trim(text) <> '' LIMIT 1",
+            (turn_id,),
+        ).fetchone()
+        if said is not None:
+            return True
+        replies = self._conn.execute(
+            "SELECT 1 FROM agent_messages WHERE turn_id = ? AND kind = 'reply' LIMIT 1", (turn_id,)
+        ).fetchone()
+        return not replies and row["status"] != "confirm" and row["route"] != "draft" and (row["text"] or "").strip() != ""
+
+    def versions(self, turn_id: int) -> list[dict]:
+        """The earlier versions of a turn, oldest first, as stored: each to be kept again with the turn that takes its
+        place (`add`)."""
+        rows = self._conn.execute(
+            f"SELECT {_VERSION_COLUMNS} FROM agent_turn_versions WHERE turn_id = ? ORDER BY version", (turn_id,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def snapshot(self, turn: Turn, version: int) -> dict:
+        """`turn` as a version of its message: its words, files and quote, and the lines its member answered it with,
+        kept when an edit takes its place. Work that the edit stopped is kept as a turn that did not finish."""
+        lines = [
+            {"seq": item["seq"], "kind": item["kind"], "text": item["text"], "at_ms": item["at_ms"]}
+            for item in self.messages([turn.id or 0]).get(turn.id or 0, [])
+            if item["kind"] in _VERSION_KINDS
+        ]
+        return {
+            "version": version,
+            "created_at_ms": turn.created_at_ms,
+            "replaced_at_ms": self._now_ms(),
+            "session_id": turn.session_id,
+            "question": turn.question,
+            "attachments": json.dumps(turn.attachments, ensure_ascii=False) if turn.attachments else None,
+            "quote": json.dumps(turn.quote, ensure_ascii=False) if turn.quote else None,
+            "source": turn.source,
+            "route": turn.route,
+            "prefix": turn.prefix,
+            "text": turn.text,
+            "detail": turn.detail,
+            "status": "cancelled" if turn.status in _STOPPED_BY_EDIT else turn.status,
+            "model": turn.model,
+            "failure": json.dumps(turn.failure) if turn.failure and turn.status == "error" else None,
+            "messages": json.dumps(lines, ensure_ascii=False),
+        }
+
+    def _insert_versions(self, turn_id: int, versions: Sequence[Mapping[str, object]]) -> None:
+        for number, kept in enumerate(versions, start=1):
+            self._conn.execute(
+                f"INSERT INTO agent_turn_versions (turn_id, {_VERSION_COLUMNS})"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (turn_id, number, kept["created_at_ms"], kept["replaced_at_ms"], kept["session_id"], kept["question"],
+                 kept.get("attachments"), kept.get("quote"), kept["source"], kept["route"], kept["prefix"], kept["text"],
+                 kept.get("detail"), kept["status"], kept.get("model"), kept.get("failure"), kept.get("messages") or "[]"),
+            )
+
+    def version_counts(self, turn_ids: Iterable[int]) -> dict[int, int]:
+        """How many versions each of `turn_ids` has, the turn itself the newest; only turns with more than one."""
+        ids = sorted({int(turn_id) for turn_id in turn_ids})
+        found: dict[int, int] = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start : start + 500]
+            for row in self._conn.execute(
+                f"SELECT turn_id, COUNT(*) FROM agent_turn_versions WHERE turn_id IN ({','.join('?' * len(chunk))})"
+                " GROUP BY turn_id", chunk,
+            ):
+                found[row[0]] = row[1] + 1
+        return found
+
+    def version_view(self, turn: Turn, version: int, versions: int) -> dict | None:
+        """An earlier version of `turn` as the app reads a turn (the shape of `agent.history.list`), for the owner to read
+        again: in the turn's place, with the words, files and quote it had and what its member answered it with. It has
+        no steps, task or cards: it is not work that goes on. None when there is no such version."""
+        row = self._conn.execute(
+            f"SELECT {_VERSION_COLUMNS} FROM agent_turn_versions WHERE turn_id = ? AND version = ?", (turn.id, version)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            lines = json.loads(row["messages"] or "[]")
+        except ValueError:
+            lines = []
+        try:
+            quote = quote_from_wire(json.loads(row["quote"])) if row["quote"] else None
+        except (ValueError, TypeError, RpcError):
+            quote = None
+        try:
+            failure = public_failure(json.loads(row["failure"])) if row["failure"] and row["status"] == "error" else None
+        except (ValueError, TypeError):
+            failure = None
+        return {
+            "id": turn.id, "created_at_ms": row["created_at_ms"], "session_id": row["session_id"], "source": row["source"],
+            "question": row["question"], "route": row["route"], "prefix": row["prefix"], "text": row["text"],
+            "detail": row["detail"], "status": row["status"], "failure": failure, "cost_usd": 0.0, "model": row["model"],
+            "member_id": turn.member_id, "conversation_id": turn.conversation_id, "scope": turn.scope, "room_id": None,
+            "thread_id": None, "reactions": {}, "peer_id": None, "attachments": _attachments(row["attachments"]) or [],
+            **({"quote": quote} if quote else {}), "steps": [], "task": None, "pages": [],
+            "messages": [line for line in lines if isinstance(line, dict) and line.get("kind") in _VERSION_KINDS],
+            "version": version, "versions": versions,
+        }
 
     def clear_member(self, member_id: int) -> int:
         """Remove all of this member's rows and peer exchanges outside room history."""

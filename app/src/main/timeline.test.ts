@@ -735,7 +735,8 @@ describe("a turn", () => {
   test("the person on the right without 「」 with where and when; Raphael on the left with its face and plain words", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
-    expect(html).toContain('data-owner-act="edit"');
+    // The owner's own finished message: its ⋯ decides 編輯 when it opens (R-UI-163).
+    expect(html).toContain('data-owner-act="own"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).not.toContain('class="ra-face"');
     expect(html).not.toContain("查看過程");

@@ -38,6 +38,7 @@ import { fileLinkStamp, linkedText, messageHTML, replyContentHTML, type KnownFil
 import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { mediaPicture, mediaVideo } from "./picture-message";
+import { earlierVersion, ownerEditorHTML, versionPagerHTML, type OwnerEditing } from "./message-edit";
 import { formatUsd } from "./format";
 import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
@@ -324,6 +325,11 @@ export interface TimelineState {
    * comes back when the edit is given up. What the turn answered stays as it was.
    */
   editingTurnId: number | null;
+  /**
+   * The owner's message open as an editor in its own bubble, if any (R-UI-163, message-edit.ts): a message its member already
+   * answered, edited where it stands, so that the first exchange stays as a version of it.
+   */
+  bubbleEditing?: OwnerEditing | null;
   /** The files of the open conversation by stored id (`knownFiles`): what an `attachment:<id>` link in a reply may open. Left out, none. */
   files?: KnownFiles;
 }
@@ -341,6 +347,7 @@ export const emptyTimelineState = (): TimelineState => ({
   nowMs: Date.now(),
   expandedMessages: new Set(),
   editingTurnId: null,
+  bubbleEditing: null,
 });
 
 /** Whether a turn's steps are open: as the reader left them, else open while its task runs and closed once it is done. */
@@ -691,9 +698,11 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
  * Beside the bubble, under the pointer, only react, reply and ⋯; Copy, the work, Edit and Cancel live in
  * the ⋯ menu and the right-click menu (agent.ts messageMenu), and the time lives in the thread's dividers. `extra` holds
  * the few controls a message needs in sight: a failed reply's Run again and a voice memo's play. A message with no menu
- * (a group's or a side thread's) keeps Copy in sight instead.
+ * (a group's or a side thread's, or an earlier version of an edited message) keeps Copy in sight instead. `owner` marks the
+ * owner's own message: `cancel` while its work goes on, `own` once it is over. Whether its ⋯ offers 編輯, and which editor, is
+ * decided when the menu opens (`ownerEditOf`, message-edit.ts), so a message that stops being the owner's last is not drawn again.
  */
-export function messageActionsHTML(_time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, extra = "", queued = false): string {
+export function messageActionsHTML(_time: number, regenerate = false, owner?: "own" | "cancel", actionable = true, extra = "", queued = false): string {
   // A message that waits its turn says so and offers 立即送出 in sight: it is the exception, not a menu item
   //.
   const waiting = queued ? `<span class="queued-mark">${esc(t("agent.queued"))}</span>${btn(esc(t("chat.sendNow")), "sm queued-send-now", ' data-act="send-now"')}` : "";
@@ -702,6 +711,15 @@ export function messageActionsHTML(_time: number, regenerate = false, owner?: "e
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     (actionable ? "" : action("copy", t("chat.copy"), "copy-message")) +
     (actionable ? action("more", t("chat.more"), "more-message").replace('data-act="more-message"', `data-act="more-message" data-regenerate="${regenerate}"${owner ? ` data-owner-act="${owner}"` : ""}${queued ? ' data-queued="true"' : ""} aria-haspopup="menu"`) : "") + `</div>`;
+}
+
+/**
+ * The actions beside a bubble take their share of the message's width, so a bubble is as wide as that share allows. While the
+ * message is edited in its bubble they are not there to press, but their room is held (hidden, inert), so opening the editor
+ * changes neither the bubble's width nor the size of a picture above it.
+ */
+function heldActionsHTML(time: number): string {
+  return messageActionsHTML(time).replace('class="message-actions"', 'class="message-actions is-held" inert aria-hidden="true"');
 }
 
 /** One bare action beside a message: its icon, its name for a screen reader and the hover, its `data-act`. */
@@ -721,13 +739,15 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   if (reply) text = plainReplies([text])[0];
   text = composioText(text, composioAction(turn));
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
-  const retry = reply && last ? rerunActionHTML(turn, state, regenerate) : "";
+  // An earlier version of an edited message is read again, not answered: its replies keep Copy alone, no menu, no Run again.
+  const earlier = earlierVersion(turn);
+  const retry = reply && last && !earlier ? rerunActionHTML(turn, state, regenerate) : "";
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply && origin && sourceOf(turn) === "routine" ? routineLineHTML(turn) : "") +
     withReactions(reply ? replyContentHTML(text, query, turn.status === "running", undefined, state.files) : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`, turn.reactions?.[key]) +
-    (reply && last ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
+    (reply && last && !earlier ? usageActionHTML(turn) + signinActionHTML(turn, state, latestFailure) : "") +
     // Its links are chips in its words, with no row of cards under it.
-    messageActionsHTML(time, regenerate, undefined, reply, reply ? retry : "") + `</div>`;
+    messageActionsHTML(time, regenerate, undefined, reply && !earlier, reply ? retry : "") + `</div>`;
 }
 
 /** The plans whose usage page the app knows: ChatGPT's, which Codex signs in with too. */
@@ -1072,7 +1092,7 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
     if (message.kind === "media") {
       // Under a reply that speaks, a missing setup is only its repair, drawn below the reply (prerequisitesHTML).
       if (replySpeaks(turn) && mediaMissing(text)) return "";
-      const artifact = artifactHTML(text, message.seq, false, { actions: messageActionsHTML(message.at_ms), reactions: turn.reactions?.[String(message.seq)] });
+      const artifact = artifactHTML(text, message.seq, false, { actions: messageActionsHTML(message.at_ms, false, undefined, !earlierVersion(turn)), reactions: turn.reactions?.[String(message.seq)] });
       if (artifact) return artifact;
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
@@ -1242,10 +1262,18 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     // The message the composer holds for editing is not drawn: it is taken back into the composer, and returns if the edit is given up.
     (asked && state.editingTurnId === turn.id
       ? ""
+      // A message its member answered is edited in its own bubble (R-UI-163): the bubble is the editor, 取消 and 送出 under it.
+      : asked && state.bubbleEditing?.turnId === turn.id && !earlierVersion(turn)
+      ? `<div class="me"><div class="chat-message owner-message is-editing" data-message="question" data-msg-editor>${ownerEditorHTML(state.bubbleEditing, filesHTML(turn.attachments), turn.quote ? quoteHTML(turn.quote, true) : "")}${heldActionsHTML(turn.created_at_ms)}</div></div>`
       : asked
       ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))), turn.reactions?.owner) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit", true, "", turn.status === "queued") + `</div>` +
+        withReactions(bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))), turn.reactions?.owner) +
+        // An earlier version shown again is read only: Copy in sight, no menu. The newest offers 取消 while its work goes on, and its
+        // ⋯ decides 編輯 when it opens (the owner's last message only).
+        (earlierVersion(turn) ? messageActionsHTML(turn.created_at_ms, false, undefined, false)
+          : messageActionsHTML(turn.created_at_ms, false, live || turn.status === "queued" || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "own", true, "", turn.status === "queued")) +
+        versionPagerHTML(turn) + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look) + mailHandedLinesHTML(turn, look);

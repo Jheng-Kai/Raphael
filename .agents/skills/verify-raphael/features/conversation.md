@@ -330,20 +330,21 @@ npm run look -- slime-one-working composer-stop-background composer-queued compo
 
 ## The owner edits a sent message in the composer; the edit stands where it stood (R-UI-158)
 
-A sent message is edited by taking it back into the composer with its files, and its bubble leaves the thread while the edit is on its way. This replaces the earlier edit in the message's own bubble (R-UI-148).
+A sent message its member has not answered yet is edited by taking it back into the composer with its files, and its bubble leaves the thread while the edit is on its way. This replaced the earlier edit in the message's own bubble (R-UI-148); since R-UI-163 the composer takes only the owner's last message while its member has sent no bubble for it, and an answered one is edited in its own bubble again, with versions (the next section).
 
-**編輯 takes the message into the composer.** Choosing 編輯 in a private conversation's ⋯ (a room's messages have no edit) calls `editMessage` in `pages/agent.ts`:
+**編輯 takes the message into the composer.** Choosing 編輯 in a private conversation's ⋯ (a room's messages have no edit) calls `editMessage` in `pages/agent.ts`, which asks
+`ownerEditFor` (R-UI-163) and goes on here for `"composer"`:
 `draftFor` reads the message's words, quote and files (a stored copy by its id; a missing one shows as a chip to drop), `restoreDraft` puts them in the composer
 with `replacing` set to the turn and `render()` marks the composer `data-replacing`. While `replacing` names a turn of the thread, `render` sets
-`TimelineState.editingTurnId` and `turnHTML` leaves that turn's owner bubble (its pictures and quote with it) out; what the member answered stays. The
-`data-edit-input` field, `message-edit.ts`, `.msg-editor-*` and 取消/送出 under the bubble no longer exist. Sending is the composer's own `send`: the edited words,
+`TimelineState.editingTurnId` and `turnHTML` leaves that turn's owner bubble (its pictures and quote with it) out; the member's line (still thinking) stays. No
+editor opens in the bubble for such a message. Escape gives the edit up even while the message's own work runs (`editHoldsTask`): the work goes on. Sending is the composer's own `send`: the edited words,
 the files and the quote, `replaceTurnId`; `Outgoing.replaces` keeps the message's place for the edit on its way. A failed send gives the words back in the composer, still
 replacing, with the failure card. Giving the edit up (`abandonEdit`) empties the composer and draws the bubble again: Escape in the composer, at once while it holds what
 編輯 gave it (`editUntouched`), and through the app's cancel gesture once it changed (the voice slot shows Esc and 「再按一次取消」); a running task or a recording keeps its own
 Escape. `saveComposerDraft` never keeps a draft that replaces a message, so leaving the conversation gives the edit up and nothing of it comes back as a second copy.
 An unsent draft the composer held is kept aside (`editOrigin.before`) and comes back once the edit is sent or given up (`resumeDraft`), unless something newer is in the composer; words typed or a file added while the message's files are read stop 編輯 from writing over them. Not covered: small files (4 MB or less) are read back and sent as bytes again, not by stored id.
 
-**Nothing the composer held is swallowed by an edit (verified against every kind of message, state and ending, `pages/agent-edit.test.ts`).** The held draft is also the conversation's saved draft while the message is in the composer (`keepDraft`, called by `saveComposerDraft` and by `send`), so leaving the conversation, a refresh of the conversation list or closing the window does not lose it, and it is there again when the conversation is opened. Choosing 編輯 on a second message while one is open gives the first up: words changed in it come back as a draft with the held one (`mergeDrafts`); a file still being read is waited for first. Words that return from elsewhere while the composer holds an edit (Stop handing back queued messages, Cancel on a running one, 重新產生 of a reply whose files are gone) wait with the held draft and come back after the edit (`giveBack`); the composer of no edit takes them after what it holds, never in place of it. A message that leaves the conversation while the composer holds it (removed, or the history cleared) ends the edit: the words stay as an ordinary draft after the held one and send as a new message (`releaseLostEdit`), since the core refuses a replacement of a message that is not there. The kinds checked: words only, one picture, several pictures, a file, pictures without words, a quote, a mention, a skill, a spoken question; the states: an empty composer, words, words with a picture, a picture only, another edit (untouched or changed), a recording; the endings: sent, Escape, Escape after a change, another conversation and back, new turns from the core.
+**Nothing the composer held is swallowed by an edit (verified against every kind of message, state and ending, `pages/agent-edit.test.ts`, each with the message still being thought about).** The held draft is also the conversation's saved draft while the message is in the composer (`keepDraft`, called by `saveComposerDraft` and by `send`), so leaving the conversation, a refresh of the conversation list or closing the window does not lose it, and it is there again when the conversation is opened. A second message cannot be taken while one is open (only the last has 編輯); a file still being read is waited for first. Words that return from elsewhere while the composer holds an edit (Stop handing back queued messages, Cancel on a running one, 重新產生 of a reply whose files are gone) wait with the held draft and come back after the edit (`giveBack`); the composer of no edit takes them after what it holds, never in place of it. A message that leaves the conversation while the composer holds it (removed, or the history cleared) ends the edit: the words stay as an ordinary draft after the held one and send as a new message (`releaseLostEdit`), since the core refuses a replacement of a message that is not there. The kinds checked: words only, one picture, several pictures, a file, pictures without words, a quote, a mention, a skill, a spoken question; the states: an empty composer, words, words with a picture, a picture only, another edit (untouched or changed), a recording; the endings: sent, Escape, Escape after a change, another conversation and back, new turns from the core.
 
 **The edit stands where its message stood.** Found by reading, then by running the real core with a member, its own conversation id and routine turns
 newer than the owner's message: the core removed the message and wrote the edit at the end of the thread, and when the message was the newest the new row
@@ -361,6 +362,7 @@ place as a message without a reply of its own. While a later message works, Esca
 npm run look -- message-edit-open message-edit-long message-edit-armed message-edit-cancelled message-edit-sent message-edit-placed message-edit-picture message-edit-draft message-edit-draft-sent chat actions message-hugs-bubble reaction-owner reaction-row member-text --theme both --width 1120,720,1920x1080
 ```
 
+These scenes open member 1's conversation with its message 8201 still being thought about (`ownerThinking` in the mock: running, no reply), so 編輯 takes it into the composer.
 `message-edit-before` (a step of the scenes) records the sent message (its words, its pictures, its bubble's box). `message-edit-open` and `message-edit-long` (a message of
 several lines) assert, after 編輯: the composer marked `data-replacing`, holding the words (the caret after them, the focus in it), one chip with a loaded thumbnail for each
 picture, no `.owner-message`, `.me-files` or `.bubble` in the message's line, the member's answer still there, no editor of R-UI-148 anywhere, the composer on screen and nothing
@@ -373,6 +375,54 @@ place with the member answering) and `message-edit-answered`. `message-edit-pict
 `owner-picture-actions` on the sent message. `message-edit-draft` writes words in the composer first, takes the message in (`message-edit-draft-held`: the composer holds the message, not the words) and gives
 the edit up with Escape (`message-edit-draft-back`: the words are back, the message is in the thread once, nothing was sent); `message-edit-draft-sent` sends the edit instead
 (`message-edit-draft-sent`: the words are back, the edited message stands once in its place, one call naming it).
+
+## An answered message is edited in its own bubble, and keeps its first exchange as a version (R-UI-163)
+
+Once the member has answered the owner's last message, 編輯 opens an editor in that message's own bubble, and sending it makes the edit the message's second
+version: the first exchange stays, and ‹ 2/2 › under the bubble shows either one. Only the owner's last message can be edited at all.
+
+**One rule decides 編輯.** `ownerEditOf(turn, last)` in `message-edit.ts`: none when the message is not the owner's last (`lastOwnerTurnId`: the newest turn
+that opens with their own words; a routine's run after it does not count, a message still on its way does), none for a queued one (取消 and 立即送出 stay) or an
+earlier version, `"composer"` while the member has sent no bubble for it, `"bubble"` once it has (`answeredTurn`: a reply or media line with words, or the
+answer of a turn without reply lines, as `turnHTML` draws them; the core's `AgentHistory.answered` is the same rule). `messageMenu` asks it when the ⋯ opens and
+`editMessage` asks it again, so the thread's lines do not carry it (a message that stops being the last is not drawn again; `data-owner-act` is `own` or `cancel`).
+Still working with a bubble already sent counts as answered: the edit is in the bubble and the core stops the old work as Stop does.
+
+**The editor in the bubble.** `editInBubble` reads the message as the composer would (`draftFor`), `openEditor` keeps it as `bubbleEdit` (the conversation's
+key and the files and quote) and sets `TimelineState.bubbleEditing`; `turnHTML` draws `ownerEditorHTML` in place of the bubble (`.owner-message.is-editing[data-msg-editor]`,
+the `.bubble` with a `[data-edit-input]` textarea sized by `field-sizing: content`, `.msg-editor-under` with 取消 and the primary 送出), the actions beside it held
+(`is-held`, `inert`) so nothing moves. `carryEditor` keeps the words, the caret and the focus across redraws. Enter (`sendsOnEnter`, the composer's rule) or
+送出 runs `sendBubbleEdit`: the same `agentAskText` call as the composer's edit (`replaceTurnId`, the files by their stored copies, the quote) with an `Outgoing`
+that `replaces` the message, so the edit stands in its place on its way; a failure opens the editor again with the words as typed. Escape is a cancel gesture of
+its own (immediate on the original words, armed on 取消 once they changed). `render` closes the editor when the conversation changes, the message goes, or it
+is no longer the owner's last (the owner sent something from the composer). The composer is never touched.
+
+**Versions.** The core keeps each earlier version in `agent_turn_versions` (migration 87, `AgentHistory.snapshot`/`versions`): the words, files and quote and
+the reply, media and event lines its member answered with, taken after the old work was stopped and before the old turn goes (`_history_retract(keep=...)`).
+`AgentHistory.add(versions=...)` writes them back with the new turn in one transaction (the `agent_turn_versions_delete` trigger takes them with any deleted
+turn, so an id the table gives again never shows them). `_turn_views` adds `version`/`versions`; `agent.history.version {member_id, conversation_id, turn_id,
+version}` returns one version in the shape of a turn (an earlier one with no steps, task or cards). `versionPagerHTML` draws ‹ n/n › under the bubble
+(`.msg-versions`, `role="group"`, the message actions' bare icon buttons with their names and app tooltips, `aria-live` on the count). `showVersion` reads an
+earlier version once (`versionTurns`), keeps the choice per conversation (`shownVersions`, forgotten when a newer version comes) and keeps the focus on the
+pager; `shownTurn` puts the chosen version in the line, and `messageSource` reads it (Copy copies its words). An earlier version is read only: `earlierVersion`
+gives its bubble and replies Copy alone (`messageActionsHTML(…, actionable=false)`), no ⋯, reaction, Run again or sign-in. The member reads the newest alone:
+the retraction forgets the brain's resume session and the summaries, and only `agent.history.version` reads the kept rows (`core/tests/agent/test_edit_versions.py`
+checks the model's own messages for the second run and the next one, the search and `recent`; `core/tests/test_e2e_edit_versions.py` drives it over stdio).
+Not covered: a member's own memory notes written while it answered the first version stay (as after any retraction), and the search no longer finds the
+first version's words.
+
+```powershell
+npm run look -- message-edit-bubble-open message-edit-version-answering message-edit-version-earlier message-edit-not-last message-edit-open message-edit-sent message-edit-placed chat actions --theme both --width 1120,720,1920x1080
+```
+
+`message-edit-bubble-before` records the answered message's bubble (its box and its computed colour, shape, padding and type). `message-edit-bubble-open` presses
+編輯 on it and checks the bubble is the editor with the same style and place (a short message keeps its size), the field focused with the caret after the words,
+the held actions hidden and inert, 取消 and 送出 30 px under the bubble at its right edge in no box, the answer still under it, the composer empty and nothing sent.
+`message-edit-version-answering` types new words and presses Enter against the mock's `ownerEdit: 'answering'` (the first exchange kept, the edit written as
+version 2, running): the new words once in the message's place, ‹ 2/2 › under the bubble at its right edge with › off, the member's slime, no old answer, one call
+naming 8201. `message-edit-version-earlier` (`ownerVersions`) presses ‹ and checks 1/2 with the first words and answer, ‹ off and › focused, no ⋯ or reaction in
+the line, and one `agent.history.version` read. `message-edit-not-last` (`ownerLater`, a later answered message 8205) opens the later message's ⋯ (編輯 there),
+then the earlier one's: 回覆 and 複製, no 編輯.
 
 ## A message with a picture keeps the bubble's own width (R-UI-149)
 

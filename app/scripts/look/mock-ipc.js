@@ -50,7 +50,18 @@ export function installMock(fixture, config = {}, target = window) {
       const shots = Array.from({ length: variant.ownerPictures }, (_, i) => ({ id: `${String(i + 1).padStart(2, '0').repeat(16)}.png`, name: `畫面-${i + 1}.png`, mime: 'image/png', size: 48_000 }));
       turn.attachments = variant.ownerFile ? [shots[0], { id: `${'d'.repeat(32)}.pdf`, name: '研究摘要.pdf', mime: 'application/pdf', size: 182_000 }, ...shots.slice(1)] : shots;
     }
+    // R-UI-163: the member is still thinking about the owner's message and has sent no bubble for it, so 編輯 takes it into the composer.
+    if (variant.ownerThinking) Object.assign(turn, { status: 'running', prefix: '', text: '', messages: [], reactions: {} });
+    // The owner's message was edited after its member answered it: the history's turn is its second version, the first is kept
+    // beside it for `agent.history.version` (the core's `agent_turn_versions`).
+    if (variant.ownerVersions) {
+      const first = structuredClone(turn);
+      Object.assign(turn, { question: '改過的說法：請整理這份範例研究摘要，並列出三個重點。', text: '好，照新的說法整理好了：來源、日期和不確定的地方分開列出，最後三個重點。', reactions: {}, version: 2, versions: 2 });
+      data.turnVersions = { [turn.id]: [first] };
+    }
     data.turns = data.turns.filter(item=>item.member_id!==1).concat(turn);
+    // Something the owner sent after that message, answered: the earlier one is no longer their last, and offers no 編輯.
+    if (variant.ownerLater) data.turns.push({ ...structuredClone(turn), id: 8205, session_id: 'look-later', question: '再幫我把時程表也加進去。', text: '好，時程表也加進去了。', created_at_ms: data.now + 60_000, reactions: {} });
     if (variant.ownerEdit === 'placed') {
       // A member's thread as the owner's has it: routine turns posted after their message (07:00 and 08:00), so an edit that
       // went to the end of the thread would be seen far from where they edited.
@@ -1633,6 +1644,14 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "agent.history.search": case "messages.search": return { turns: byMember(data.turns, p).filter(turn => `${turn.question} ${turn.text} ${turn.messages.map(message => message.text).join(" ")}`.includes(p.query)).map(turn => ({ ...turn, conversation_title: data.conversations.find(c => c.id === turn.conversation_id)?.title })) };
       case "agent.history.delete": data.turns = data.turns.filter(item => item.id !== p.id); notify("AgentTurn", { turn_id: p.id, member_id: p.member_id ?? 0 }); return { deleted: true };
+      // One version of an edited message (R-UI-163): the newest is the turn itself, an earlier one what the core kept beside it.
+      case "agent.history.version": {
+        const live = data.turns.find(turn => turn.id === p.turn_id && (turn.member_id ?? 0) === (p.member_id ?? 0) && (p.conversation_id === undefined || turn.conversation_id === p.conversation_id));
+        const kept = data.turnVersions?.[p.turn_id] ?? [], versions = kept.length + 1;
+        if (!live || !(p.version >= 1 && p.version <= versions)) throw new Error("there is no such version of the message");
+        const turn = p.version === versions ? live : { ...structuredClone(kept[p.version - 1]), id: live.id, steps: [], task: null, reactions: {}, drafts: [], permissions: [], owner_questions: [], version: p.version, versions };
+        return { turn, version: p.version, versions };
+      }
       case "agent.history.stop": {
         pendingReplies.get(p.session_id)?.();
         pendingReplies.delete(p.session_id);
@@ -2236,15 +2255,26 @@ export function installMock(fixture, config = {}, target = window) {
         // app), then writes the edit with the id and the time of the turn it replaces; the call lasts until the member has answered.
         if (variant.ownerEdit && args.replaceTurnId !== undefined) {
           const old = data.turns.find(turn => turn.id === args.replaceTurnId);
-          if (!old) throw new Error("replace_turn_id must name a completed owner message in this thread");
+          if (!old) throw new Error("replace_turn_id must name an owner message in this thread");
+          // A message its member answered keeps that first exchange as a version (R-UI-163, `AgentHistory.answered` and `snapshot`);
+          // one it had not answered is only replaced.
+          const lines = old.messages ?? [];
+          const answered = lines.some(line => (line.kind === "reply" || line.kind === "media") && line.text.trim())
+            || (!lines.some(line => line.kind === "reply") && old.status !== "confirm" && (old.text ?? "").trim() !== "");
+          const kept = [...(data.turnVersions?.[old.id] ?? []), ...(answered ? [structuredClone(old)] : [])];
           data.turns = data.turns.filter(turn => turn.id !== old.id);
           notify("AgentTurn", { turn_id: old.id, member_id: old.member_id });
           const write = () => {
-            const edit = { ...structuredClone(old), session_id: args.requestId, question: args.text, reactions: {}, ...(variant.ownerEdit === 'placed' ? { status: "running", text: "", prefix: "", messages: [] } : {}) };
+            const { version: _version, versions: _versions, ...rest } = structuredClone(old);
+            const edit = { ...rest, session_id: args.requestId, question: args.text, reactions: {}, ...(kept.length ? { version: kept.length + 1, versions: kept.length + 1 } : {}),
+              ...(variant.ownerEdit === 'placed' || variant.ownerEdit === 'answering' ? { status: "running", text: "", prefix: "", messages: [] } : {}) };
+            data.turnVersions = { ...data.turnVersions, [old.id]: kept };
             data.turns.push(edit);
             notify("AgentTurn", { turn_id: edit.id, member_id: old.member_id });
             return edit;
           };
+          // The member is answering the new version: the call lasts as long as the scene looks at it.
+          if (variant.ownerEdit === 'answering') { write(); return new Promise(() => {}); }
           if (variant.ownerEdit !== 'placed') { write(); return null; }
           // The scene looks at the edit on its way, then lets the core write it, then lets the member answer.
           return new Promise(resolve => {

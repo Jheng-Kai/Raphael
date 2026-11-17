@@ -2155,6 +2155,40 @@ def _rename_slimes(conn):
 
 _MIGRATIONS[86] = _rename_slimes
 
+# The owner's message edited after it was answered keeps what came before (`agent/history.py` versions): each earlier version of
+# the message, with the words, files and quote it had and the lines the member answered it with, under the id of the turn
+# whose place every version holds. The turn itself is always the newest version, so nothing that reads the conversation (the
+# model's context, its summaries, the search) ever reads an earlier one; only `agent.history.version` shows one to the owner.
+# A turn that goes takes its versions with it, so a later turn given the same id never shows them.
+_MIGRATIONS[87] = """
+BEGIN;
+CREATE TABLE agent_turn_versions (
+    turn_id INTEGER NOT NULL,
+    version INTEGER NOT NULL CHECK (version >= 1),
+    created_at_ms INTEGER NOT NULL,
+    replaced_at_ms INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    attachments TEXT,
+    quote TEXT,
+    source TEXT NOT NULL,
+    route TEXT NOT NULL,
+    prefix TEXT NOT NULL,
+    text TEXT NOT NULL,
+    detail TEXT,
+    status TEXT NOT NULL,
+    model TEXT,
+    failure TEXT,
+    messages TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (turn_id, version)
+);
+CREATE TRIGGER agent_turn_versions_delete AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM agent_turn_versions WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 87;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
