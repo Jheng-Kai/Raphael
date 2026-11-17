@@ -63,7 +63,7 @@ OLD_BROWSER_FILES = ("driver/main/Default/Cookies", "chromium/Default/Cookies", 
                      "driver/other/kept")
 OLD_BROWSER_DATA = {"driver/main/Default/Cookies", "chromium/Default/Cookies"}
 DROPPED_MARK = ".raphael-chromium-dropped"
-OLD_BROWSER_FIXTURE = (f'mkdir -p {PROFILES} && cd {PROFILES} && rm -f {DROPPED_MARK} && for file in {" ".join(OLD_BROWSER_FILES)}; do '
+OLD_BROWSER_FIXTURE = (f'mkdir -p {PROFILES} && cd {PROFILES} && rm -rf {DROPPED_MARK} && for file in {" ".join(OLD_BROWSER_FILES)}; do '
                        'mkdir -p "$(dirname "$file")" && printf old > "$file"; done && printf kept > ../browser-data-kept.txt')
 # A panel leads with its three launchers, 48 px each (146 px with its border, measured), and its window list follows
 # them (image layer 12): it is as wide as that and its windows' buttons, and its terminal launcher is 121 px from its left.

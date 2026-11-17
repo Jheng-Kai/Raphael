@@ -696,7 +696,7 @@ def test_on_arm64_chromiums_profiles_are_removed_once_and_everything_else_stays(
     for relative in ("google-chrome/Default/Cookies", "driver/isolated-1/Default/Cookies", "driver/.carry-profile-1/main/x"):
         assert (profiles / relative).read_text(encoding="utf-8") == "old", relative
     assert (workspace / "notes/plan.md").read_text(encoding="utf-8") == "kept"
-    assert (profiles / ".raphael-chromium-dropped").is_file()
+    assert (profiles / ".raphael-chromium-dropped").is_dir()
     # The home's browser folders are the workspace's, as before.
     assert (tmp_path / "home/.config/chromium").resolve() == (profiles / "chromium").resolve()
     assert (tmp_path / "home/.config/google-chrome").resolve() == (profiles / "google-chrome").resolve()
@@ -725,7 +725,7 @@ def test_a_new_workspace_on_arm64_is_marked_and_a_linked_profile_folder_is_left_
     done = run_preparation(tmp_path, "arm64")
     assert done.returncode == 0, done.stderr
     profiles = tmp_path / "workspace/.browser-profiles"
-    assert (profiles / ".raphael-chromium-dropped").is_file() and (profiles / "chromium").is_dir()
+    assert (profiles / ".raphael-chromium-dropped").is_dir() and (profiles / "chromium").is_dir()
     # A profile folder that is a link to somewhere else is not followed into.
     elsewhere = tmp_path / "elsewhere"
     (elsewhere / "driver/main").mkdir(parents=True)
@@ -736,6 +736,35 @@ def test_a_new_workspace_on_arm64_is_marked_and_a_linked_profile_folder_is_left_
     run_preparation(tmp_path, "arm64", workspace=linked)
     assert (elsewhere / "driver/main/Cookies").read_text(encoding="utf-8") == "elsewhere"
     assert not (elsewhere / ".raphael-chromium-dropped").exists()
+
+
+def test_a_removal_that_stops_halfway_is_never_tried_again_over_what_chrome_made_since(tmp_path):
+    # The driver's folder cannot be written, the members' profile in it can: the profile is emptied but stays. The mark
+    # was made first, so once the folder can be written again Chrome's new sign-ins in it are not removed.
+    workspace, profiles = old_workspace(tmp_path)
+    (profiles / "driver").chmod(0o500)
+    try:
+        done = run_preparation(tmp_path, "arm64")
+    finally:
+        (profiles / "driver").chmod(0o700)
+    assert done.returncode == 0, done.stderr
+    assert (profiles / ".raphael-chromium-dropped").is_dir()
+    (profiles / "driver/main/Default").mkdir(parents=True, exist_ok=True)
+    (profiles / "driver/main/Default/Cookies").write_text("chrome", encoding="utf-8")
+    again = run_preparation(tmp_path, "arm64")
+    assert again.returncode == 0, again.stderr
+    assert (profiles / "driver/main/Default/Cookies").read_text(encoding="utf-8") == "chrome"
+
+
+def test_a_mark_that_is_a_link_out_of_the_workspace_is_not_followed_and_nothing_is_removed(tmp_path):
+    workspace, profiles = old_workspace(tmp_path)
+    outside = tmp_path / "team/not-yet-there"
+    (tmp_path / "team").mkdir()
+    (profiles / ".raphael-chromium-dropped").symlink_to(outside)
+    done = run_preparation(tmp_path, "arm64")
+    assert done.returncode == 0, done.stderr
+    assert not outside.exists()
+    assert (profiles / "driver/main/Default/Cookies").read_text(encoding="utf-8") == "old"
 
 
 def test_the_desktop_names_the_browser_it_opens_and_every_way_to_a_browser_opens_it():

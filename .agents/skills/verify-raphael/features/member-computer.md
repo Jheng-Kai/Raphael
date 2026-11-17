@@ -1358,8 +1358,10 @@ find its profile on arm64 ("process ... names no profile", and a seat's window k
   Chromium kept when it was started without a profile (the desktop's browser on a computer of a member's own);
   `.browser-profiles/google-chrome` is Chrome's. On arm64, the workspace's preparation that layer 14 installs
   (`layer14/prepare-raphael-workspace.sh`, run before the driver starts) removes `driver/main` and `chromium` once in each
-  workspace, before any browser starts, and leaves `.browser-profiles/.raphael-chromium-dropped`: the members sign in
-  again. The rest of `driver/` (the driver's other profiles, carry-over staging), `google-chrome`, every other file of the
+  workspace, before any browser starts: the members sign in again. Its mark, the folder
+  `.browser-profiles/.raphael-chromium-dropped`, is made before anything is removed, so a removal that stops halfway is
+  never tried again over what Chrome made since, a workspace where the mark cannot be made loses nothing, and the mark
+  never follows a link out of the workspace. The rest of `driver/` (the driver's other profiles, carry-over staging), `google-chrome`, every other file of the
   workspace and the team folder stay; a `.browser-profiles` or `driver` that is a link is left as it is. The driver makes
   `driver/main` again, with its own mark, the next time it starts its browser; the shared computer's launcher makes it as
   before. On amd64 that copy of the script is not installed and nothing is removed.
@@ -1372,7 +1374,7 @@ find its profile on arm64 ("process ... names no profile", and a seat's window k
   `chromium` are gone, the rest kept and the mark there, and on amd64 that everything is kept.
 
 ```powershell
-cd core; ..\..\..\core\.venv\Scripts\python.exe -m pytest tests/computer/test_seat_tools.py tests/computer/test_housekeeping.py tests/computer/test_seat_windows.py tests/computer/test_image_workflow.py tests/evaluate/test_computer_acceptance.py -q
+cd core; .\.venv\Scripts\python.exe -m pytest tests/computer/test_seat_tools.py tests/computer/test_housekeeping.py tests/computer/test_seat_windows.py tests/computer/test_image_workflow.py tests/evaluate/test_computer_acceptance.py -q
 ```
 
 Stated limits: the carry-over of a historical home (R-COMP-SEAT-01) still copies a home's `driver/main` into a shared

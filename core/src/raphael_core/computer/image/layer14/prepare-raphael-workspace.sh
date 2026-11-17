@@ -7,14 +7,14 @@ profiles="$workspace/.browser-profiles"
 # removed and the members sign in again. They are the members' own profile, driver/main (the shared computer's browser
 # and the driver of a computer of a member's own both open it; the driver makes it again, with its own mark in it, the
 # next time it starts its browser), and the profile Chromium kept when it was started without one. The rest of driver/,
-# google-chrome and every other file of the workspace stay. The mark file says it was done; a workspace whose
-# profile folder is a link is left as it is.
+# google-chrome and every other file of the workspace stay. The mark is a folder made before anything is removed: a
+# removal that stops halfway is never tried again over what Chrome made since, a workspace where the mark cannot be made
+# loses nothing, and making it never follows a link out of the workspace. A workspace whose profile folder is a link is
+# left as it is.
 dropped="$profiles/.raphael-chromium-dropped"
-if [ "$(dpkg --print-architecture)" = arm64 ] && [ ! -e "$dropped" ] && [ ! -L "$profiles" ] && [ ! -L "$profiles/driver" ]; then
-  if rm -rf "$profiles/driver/main" "$profiles/chromium"; then
-    mkdir -p "$profiles"
-    : > "$dropped"
-  fi
+if [ "$(dpkg --print-architecture)" = arm64 ] && [ ! -L "$profiles" ] && [ ! -L "$profiles/driver" ] \
+  && mkdir -p "$profiles" 2>/dev/null && mkdir "$dropped" 2>/dev/null; then
+  rm -rf "$profiles/driver/main" "$profiles/chromium" || true
 fi
 mkdir -p "$profiles/google-chrome" "$profiles/chromium" "$HOME/.config"
 if ! chmod 0700 "$workspace" "$profiles" "$profiles/google-chrome" "$profiles/chromium" 2>/dev/null; then
