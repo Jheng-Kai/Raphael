@@ -60,6 +60,15 @@ test("the thumbnails are squares of one token size in rows that wrap at the bubb
   expect(css).toContain(".attachment-thumbs .attachment-picture img { height: 100%; max-height: none; object-fit: cover; }");
 });
 
+test("one picture keeps its own shape within 420 by 420 px, never enlarged, and its button is the picture's own size (R-UI-149)", () => {
+  // A phone's screenshot was drawn as a narrow strip in a 420 by 300 box that showed grey under the pointer, and a small
+  // picture was enlarged to 420 px wide.
+  const css = readFileSync("src/main/agent.css", "utf8");
+  expect(css).toContain(".attachment-grid:not(.is-multiple) > .attachment-image { justify-self: end; width: fit-content; max-width: 100%; }");
+  expect(css).toContain(".attachment-grid:not(.is-multiple) .attachment-picture img { width: auto; height: auto; max-width: 100%; max-height: 420px; }");
+  expect(css).toContain(".btn.attachment-picture:hover:not(:disabled), .btn.attachment-picture:active:not(:disabled) { background: transparent; }");
+});
+
 test("the actions of a message with pictures stand against its bubble, never against the pictures (R-UI-159)", () => {
   const css = readFileSync("src/main/agent.css", "utf8");
   // The actions are anchored to the bubble (CSS anchor positioning), out of the message's grid, so a wider picture never moves them and the

@@ -441,12 +441,19 @@ words wrapped at 420 px and a long text was cut with 顯示全部 far earlier th
 and the message is as wide as the wider of the picture and the bubble, both at its right edge: the bubble is as wide as the same words without a picture.
 The group room's messages and threads draw the same markup and follow.
 
+One picture keeps its own shape and size within 420 by 420 px (or the column), never enlarged, at the column's right
+(`.attachment-grid:not(.is-multiple)`): a phone's screenshot stood as a narrow strip in a 420 by 300 box (the picture was 100% wide,
+at most 300 px high, `object-fit: contain`), small enough to read as blurred, and the box showed grey under the pointer (the
+button's hover fill); a small picture was enlarged to 420 px wide. The picture's button is now the picture's own size and keeps no
+fill under the pointer. `owner-picture-portrait` sends a 480 by 1040 px screenshot and ends with the pointer on it.
+
 ```powershell
-npm run look -- owner-picture-short owner-picture-long owner-picture-pending owner-pictures-four message-edit-picture message-edit-open room-files-sent room-files-words-sent chat --theme both --width 1120,720,1920x1080
+npm run look -- owner-picture-short owner-picture-portrait owner-picture-long owner-picture-pending owner-pictures-four message-edit-picture message-edit-open room-files-sent room-files-words-sent chat --theme both --width 1120,720,1920x1080
 ```
 
-`owner-picture-bubble` (the check of the first three) draws the same words in a bubble without a picture in the
-same line, measures it and requires the bubble to be as wide (±1 px), the picture to keep its size (200 to 420 px), a short
+`owner-picture-bubble` (the check of the first four) draws the same words in a bubble without a picture in the
+same line, measures it and requires the bubble to be as wide (±1 px), one picture to keep its own shape and size within 420 by
+420 px or the column and never enlarged, its button to be the picture's own size, a short
 message's bubble not to equal the picture's width, a long one to be wider than the picture, and the bubble to stand under the picture at its right edge.
 `owner-picture-short` is a sent message, `owner-picture-long` a message of several lines, `owner-picture-pending` a message on its way (a pasted picture and
 Enter, the call held), `message-edit-picture` the message taken into the composer by 編輯 (R-UI-158).

@@ -10573,9 +10573,18 @@ export function checkRendered(name, context = {}) {
     line.querySelector('.me').after(reference);
     const bare = reference.querySelector('.bubble').getBoundingClientRect().width;
     reference.remove();
-    const b = bubble.getBoundingClientRect(), p = picture.getBoundingClientRect(), tolerance = 1;
+    // One picture is measured as itself: it keeps its own proportions, as large as it is up to 420 by 420 px (or the column),
+    // never enlarged, and its button is its own size, with no empty box around it.
+    const single = picture.matches('.attachment-grid');
+    const b = bubble.getBoundingClientRect(), p = (single ? image : picture).getBoundingClientRect(), tolerance = 1;
     require(Math.abs(b.width - bare) <= tolerance, `the bubble is as wide as the same words without a picture (${b.width.toFixed(1)} vs ${bare.toFixed(1)} px)`);
-    if (picture.matches('.attachment-grid')) require(p.width >= 200 && p.width <= 421, `the picture keeps its own size (${Math.round(p.width)} px)`);
+    if (single) {
+      const column = Math.min(420, line.querySelector('.me-files').getBoundingClientRect().width), scale = Math.min(1, column / image.naturalWidth, 420 / image.naturalHeight);
+      require(Math.abs(p.width - image.naturalWidth * scale) <= 1.5 && Math.abs(p.height - image.naturalHeight * scale) <= 1.5,
+        `the picture keeps its own shape and size within 420 by 420 px (${Math.round(p.width)} by ${Math.round(p.height)}, its own ${image.naturalWidth} by ${image.naturalHeight})`);
+      const button = image.closest('.attachment-picture').getBoundingClientRect();
+      require(Math.abs(button.width - p.width) <= 1 && Math.abs(button.height - p.height) <= 1, `the picture's button is the picture's own size (${Math.round(button.width)} by ${Math.round(button.height)})`);
+    }
     if (bare < p.width - 20) require(Math.abs(b.width - p.width) > 4, `a short message's bubble is not stretched to the picture (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     if (bare > p.width + 20) require(b.width > p.width + 4, `a long message's bubble is not held to the picture's width (${Math.round(b.width)} vs ${Math.round(p.width)} px)`);
     require(Math.abs(b.right - p.right) <= 1.5 && b.top >= p.bottom - 1, `the bubble is under the picture, at its right edge (${Math.round(b.right)} vs ${Math.round(p.right)} px)`);

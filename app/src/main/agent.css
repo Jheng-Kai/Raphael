@@ -624,6 +624,12 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 /* A member's picture is a message of its own (R-UI-156): the picture keeps its own shape, so the actions beside it stand against
    what is seen, as they stand against a bubble, never across an empty band of a box wider than the picture. */
 .chat-message[data-picture] .attachment-picture img { width: auto; max-width: 100%; }
+/* The owner's one picture keeps its own proportions within 420 by 420 px (R-UI-149), at the column's right: a tall screenshot
+   stands as tall as a wide one is wide, never a strip in a wide empty box, and the button is the picture's own size, so what
+   is pressed and what is seen under the pointer are the picture. */
+.attachment-grid:not(.is-multiple) > .attachment-image { justify-self: end; width: fit-content; max-width: 100%; }
+.attachment-grid:not(.is-multiple) .attachment-picture img { width: auto; height: auto; max-width: 100%; max-height: 420px; }
+.btn.attachment-picture:hover:not(:disabled), .btn.attachment-picture:active:not(:disabled) { background: transparent; }
 /* Its reaction stands on the picture's top-right corner, over its edge: the frame lets it out (the picture's button keeps the corners). */
 .chat-message[data-picture] .attachment-image { overflow: visible; }
 .attachment-video video { display: block; width: 100%; max-height: 300px; border-radius: var(--r-lg); background: var(--surface-2); cursor: pointer; }
