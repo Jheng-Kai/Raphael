@@ -14,6 +14,10 @@ from .vm import DRIVER, SOCKET, VmError, exec_args
 from .desktop_host import NO_WINDOW
 from .vm_catalog import SCREEN_READS
 
+# The owner's own paste into a computer and copy out of it while they hold its screen (R-PASTE-01, R-PASTE-02): their hands,
+# not a member's, so a held computer still takes these two from the screen's viewer. No member call ever passes `owner_hands`.
+OWNER_HANDS = frozenset({"clipboard_write", "clipboard_read"})
+
 
 def normalize_schema(value):
     if not isinstance(value, dict):
@@ -102,9 +106,10 @@ class CuaBridge:
         self.process.stdin.write(json.dumps(packet).encode() + b"\n")
         await self.process.stdin.drain()
 
-    async def request(self, method, params=None, *, owner_observation=False):
+    async def request(self, method, params=None, *, owner_observation=False, owner_hands=False):
         if method == "ping":
             return {}
+        owners = owner_hands and method == "tools/call" and (params or {}).get("name") in OWNER_HANDS
         observing = owner_observation and method == "tools/call" and params in (
             {"name": "get_desktop_state", "arguments": {}}, {"name": "get_accessibility_tree", "arguments": {}})
         if owner_observation and self.vm is not None and self.target.container == 'shared':
@@ -118,7 +123,7 @@ class CuaBridge:
                 raise VmError('observation_only')
         if self.observation_command is not None and method not in ("initialize", "ping") and not observing:
             raise VmError("observation_only")
-        if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
+        if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not (observing or owners):
             return {"content": [{"type": "text", "text": self.vm.owner_note(self.target)}], "isError": True}
         self.sequence += 1
         identifier = self.sequence
@@ -130,7 +135,7 @@ class CuaBridge:
         try:
             async with asyncio.timeout(timeout):
                 async with self.lock:
-                    if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not observing:
+                    if self.vm is not None and method == "tools/call" and self.target.key in self.vm.held and not (observing or owners):
                         return {"content": [{"type": "text", "text": self.vm.owner_note(self.target)}], "isError": True}
                     await self._write({"jsonrpc": "2.0", "id": identifier, "method": method, "params": params or {}})
                 if self.reader is None or self.reader.done():
