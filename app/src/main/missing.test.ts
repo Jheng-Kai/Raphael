@@ -105,15 +105,25 @@ test("a dictionary notice that could not be delivered names the dictionary and o
   expect(root.querySelector("[data-missing-repair]")).toBeNull();
 });
 
-test("the keys waiting for Accessibility on a Mac say so and open the right privacy pane", async () => {
+test("the keys waiting for Accessibility on a Mac say so, and the button repairs the permission rather than only opening its pane", async () => {
+  // A rebuilt or updated app finds its old switch showing on while it no longer counts, so the keys do nothing outside the
+  // window and nothing pastes: the shell clears that entry, asks again and opens the pane.
   const api = await import("./api");
+  const repair = vi.spyOn(api, "repairAccessibility").mockResolvedValue(false);
   const open = vi.spyOn(api, "openLink").mockResolvedValue(undefined);
   document.body.innerHTML = missingHTML({ resource: "hotkeys", requirement: "accessibility", state: "missing", repair: null });
   expect(document.body.textContent).toContain(t("missing.accessibility"));
   const go = vi.fn();
   const stop = bindMissing(document, go);
   document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
-  expect(open).toHaveBeenCalledWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+  await Promise.resolve();
+  expect(repair).toHaveBeenCalledTimes(1);
+  expect(open).not.toHaveBeenCalled();
   expect(go).not.toHaveBeenCalled();
-  stop(); open.mockRestore();
+  // A shell that cannot repair (an older build) still opens the pane.
+  repair.mockRejectedValueOnce(new Error("unknown command"));
+  document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(open).toHaveBeenCalledWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+  stop(); repair.mockRestore(); open.mockRestore();
 });

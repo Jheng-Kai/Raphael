@@ -564,6 +564,8 @@ export const modelsEnsure = (names: string[]): Promise<{ ok: boolean }> => core(
 
 /** Opens a fixed settings/login link or registered provider documentation. */
 export const openLink = (url: string): Promise<void> => invoke("open_link", { url });
+/** macOS: clears an Accessibility entry that no longer counts, asks again and opens its pane; whether the app may use it now. */
+export const repairAccessibility = (): Promise<boolean> => invoke("repair_accessibility");
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
 /** What the clipboard holds, for a paste button: WKWebView (macOS) does not let the page read it, so the shell does there. */

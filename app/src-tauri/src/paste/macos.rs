@@ -16,11 +16,11 @@ use std::thread;
 use std::time::Duration;
 
 use super::{
-    COPY_POLL, COPY_WAIT, Decision, PasteDelivery, PasteOutcome, PasteReceipt, Paster, Selection,
-    Target, changed_within, decide,
+    COPY_POLL, COPY_WAIT, CopyReason, Decision, PasteDelivery, PasteOutcome, PasteReceipt, Paster,
+    Selection, Target, changed_within, decide,
 };
 use crate::macos::pasteboard::{self, Session};
-use crate::macos::{ax, keys, workspace};
+use crate::macos::{ax, keys, permissions, workspace};
 
 /// How long ⌘ stays down after the V click.
 const CHORD_HOLD: Duration = Duration::from_millis(40);
@@ -101,10 +101,16 @@ fn paste(text: &str, at_stop: Option<&Target>) -> PasteDelivery {
     // The key is found first: reading the layout may wait for the main thread, and nothing may stand between the
     // focus check and the chord, or ⌘V could reach a window the person switched to meanwhile.
     let v = keys::key_for('v').unwrap_or(keys::code::ANSI_V);
+    // Without Accessibility macOS drops a posted key unseen: the text then stays on the pasteboard
+    // and the person is told, instead of a paste that never arrives.
+    let trusted = permissions::accessibility(false);
     let session =
         Session::begin().and_then(|mut session| session.publish_text(text).map(|()| session));
     // Decided once the text is on the pasteboard: as late as possible before the chord.
-    let decision = decide(at_stop, foreground_target().as_ref(), false);
+    let decision = match decide(at_stop, foreground_target().as_ref(), false) {
+        Decision::Paste(_) if !trusted => Decision::CopyOnly(CopyReason::NoPermission),
+        decision => decision,
+    };
     let session = match session {
         Ok(session) => session,
         Err(e) => {
@@ -148,6 +154,11 @@ fn copy(at_key: Option<&Target>) -> Selection {
     // snapshot of the pasteboard (an app that offers its data lazily is asked for it then), so that ⌘C goes to the
     // window just checked and not to one the person switched to meanwhile.
     let c = keys::key_for('c').unwrap_or(keys::code::ANSI_C);
+    // Without Accessibility macOS drops the posted ⌘C unseen, and the selection could never be read.
+    if !permissions::accessibility(false) {
+        log::info!("copy: not copying (no Accessibility permission)");
+        return Selection::Refused(CopyReason::NoPermission);
+    }
     let session = Session::begin();
     let count = || pasteboard::current_change_count() as u32;
     let before = count();

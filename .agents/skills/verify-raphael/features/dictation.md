@@ -16,9 +16,14 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   threads' own reading stopped the app (a libdispatch assertion in `TSMGetInputSourceProperty`) after every dictation
   and every tidy. A main thread that does not answer within 500 ms means the ANSI V and C keys.
 - Permissions follow the app's signature: a rebuilt ad hoc app is another app to macOS, whose old switch under
-  Accessibility still shows on but no longer counts. The hotkeys notice (`missing.accessibility`) says to remove
-  Raphael with − and add it again. A local build signed with one Apple Development identity keeps its permissions
-  across rebuilds.
+  Accessibility still shows on but no longer counts, and macOS never asks again. The hotkeys notice
+  (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`) carries a button that repairs it
+  (`commands.rs` `repair_accessibility`): when the app may not use Accessibility, its own entry is cleared
+  (`tccutil reset Accessibility <identifier>`), macOS asked again, and the pane opened. A permission that counts is left
+  alone. A local build signed with one Apple Development identity keeps its permissions across rebuilds.
+- Without Accessibility macOS drops a posted key unseen: `paste` keeps
+  the text on the pasteboard and says `NO_PASTE_PERMISSION` (press ⌘V), the tidy key says `NO_TIDY_PERMISSION`, and
+  both tell the main window again (at most once a minute) so its repair button is at hand.
 - Learning from corrections: `learn/ax.rs` reads the focused text element through the accessibility API; terminals are
   not watched on macOS.
 - Media: `media/macos.rs`, MediaRemote where macOS answers, else Music, Spotify, TV and VLC through `osascript`.

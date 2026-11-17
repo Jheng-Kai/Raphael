@@ -119,6 +119,10 @@ pub enum CopyReason {
     FocusChanged,
     /// No window had focus when the key was released.
     NoTarget,
+    /// macOS has not given the app Accessibility, so a posted key would be dropped unseen: the
+    /// chord is not sent (paste/macos.rs).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    NoPermission,
 }
 
 /// What [`decide`] says to do with the text.

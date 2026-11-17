@@ -2,6 +2,82 @@
 
 pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
     match source {
+        "《Notice. Raphael has no Accessibility permission and cannot paste. The text is copied. Press Command+V.》" => {
+            match language {
+                "zh-CN" => {
+                    Some("《告。拉斐尔没有“辅助功能”权限，无法粘贴。文字已拷贝，请按 ⌘V。》")
+                }
+                "ko" => Some(
+                    "《알림. Raphael에 손쉬운 사용 권한이 없어 붙여 넣을 수 없습니다. 텍스트를 복사했습니다. ⌘V를 눌러 주세요.》",
+                ),
+                "es" => Some(
+                    "《Aviso. Raphael no tiene permiso de Accesibilidad y no puede pegar. El texto está copiado. Pulsa ⌘V.》",
+                ),
+                "fr" => Some(
+                    "《Avis. Raphael n’a pas l’autorisation Accessibilité et ne peut pas coller. Le texte est copié. Appuyez sur ⌘V.》",
+                ),
+                "de" => Some(
+                    "《Hinweis. Raphael hat keine Berechtigung für Bedienungshilfen und kann nicht einfügen. Der Text wurde kopiert. Drücke ⌘V.》",
+                ),
+                "pt-BR" => Some(
+                    "《Aviso. O Raphael não tem permissão de Acessibilidade e não pode colar. O texto foi copiado. Pressione ⌘V.》",
+                ),
+                "it" => Some(
+                    "《Avviso. Raphael non ha il permesso Accessibilità e non può incollare. Il testo è copiato. Premi ⌘V.》",
+                ),
+                "ru" => Some(
+                    "《Уведомление. У Raphael нет разрешения «Универсальный доступ», вставить нельзя. Текст скопирован. Нажмите ⌘V.》",
+                ),
+                "tr" => Some(
+                    "《Bildirim. Raphael’in Erişilebilirlik izni yok, yapıştıramıyor. Metin kopyalandı. ⌘V tuşlarına basın.》",
+                ),
+                "vi" => Some(
+                    "《Thông báo. Raphael chưa có quyền Trợ năng nên không thể dán. Văn bản đã được sao chép. Hãy nhấn ⌘V.》",
+                ),
+                "th" => Some("《แจ้ง Raphael ไม่มีสิทธิ์การช่วยการเข้าถึงจึงวางไม่ได้ คัดลอกข้อความแล้ว กด ⌘V》"),
+                "id" => Some(
+                    "《Pemberitahuan. Raphael tidak punya izin Aksesibilitas dan tidak bisa menempel. Teks sudah disalin. Tekan ⌘V.》",
+                ),
+                _ => None,
+            }
+        }
+        "《Negative. Raphael has no Accessibility permission and cannot read the selected text.》" => {
+            match language {
+                "zh-CN" => Some("《否。拉斐尔没有“辅助功能”权限，无法读取选中的文字。》"),
+                "ko" => Some(
+                    "《거부. Raphael에 손쉬운 사용 권한이 없어 선택한 텍스트를 읽을 수 없습니다.》",
+                ),
+                "es" => Some(
+                    "《Negativo. Raphael no tiene permiso de Accesibilidad y no puede leer el texto seleccionado.》",
+                ),
+                "fr" => Some(
+                    "《Négatif. Raphael n’a pas l’autorisation Accessibilité et ne peut pas lire le texte sélectionné.》",
+                ),
+                "de" => Some(
+                    "《Negativ. Raphael hat keine Berechtigung für Bedienungshilfen und kann den markierten Text nicht lesen.》",
+                ),
+                "pt-BR" => Some(
+                    "《Negativo. O Raphael não tem permissão de Acessibilidade e não consegue ler o texto selecionado.》",
+                ),
+                "it" => Some(
+                    "《Negativo. Raphael non ha il permesso Accessibilità e non può leggere il testo selezionato.》",
+                ),
+                "ru" => Some(
+                    "《Отказ. У Raphael нет разрешения «Универсальный доступ», выделенный текст прочитать нельзя.》",
+                ),
+                "tr" => Some(
+                    "《Olumsuz. Raphael’in Erişilebilirlik izni yok, seçili metni okuyamıyor.》",
+                ),
+                "vi" => Some(
+                    "《Từ chối. Raphael chưa có quyền Trợ năng nên không đọc được văn bản đã chọn.》",
+                ),
+                "th" => Some("《ปฏิเสธ Raphael ไม่มีสิทธิ์การช่วยการเข้าถึงจึงอ่านข้อความที่เลือกไม่ได้》"),
+                "id" => Some(
+                    "《Negatif. Raphael tidak punya izin Aksesibilitas dan tidak bisa membaca teks yang dipilih.》",
+                ),
+                _ => None,
+            }
+        }
         "《Notice. The focus moved to another window. The text is copied. Press Command+V.》" => {
             match language {
                 "zh-CN" => Some("《告。检测到窗口切换。文字已拷贝，请按 ⌘V。》"),

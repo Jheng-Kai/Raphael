@@ -88,6 +88,21 @@ const FOCUS_CHANGED_MAC: Notice = Notice {
     ja: "《告。ウィンドウの切り替えを検知しました。コピー済みです。⌘V で貼り付けてください。》",
 };
 
+/// macOS has not given Raphael Accessibility (a rebuilt or updated app is another app to it), so the
+/// text was only copied: a posted ⌘V would have been dropped unseen. macOS only.
+pub const NO_PASTE_PERMISSION: Notice = Notice {
+    zh: "《告。拉斐爾沒有「輔助使用」權限，無法貼上。文字已複製，請按 ⌘V。》",
+    en: "《Notice. Raphael has no Accessibility permission and cannot paste. The text is copied. Press Command+V.》",
+    ja: "《告。アクセシビリティの許可がないため貼り付けできません。コピー済みです。⌘V で貼り付けてください。》",
+};
+
+/// The same for the tidy key, which cannot read the selection without Accessibility. macOS only.
+pub const NO_TIDY_PERMISSION: Notice = Notice {
+    zh: "《否。拉斐爾沒有「輔助使用」權限，無法讀取選取的文字。》",
+    en: "《Negative. Raphael has no Accessibility permission and cannot read the selected text.》",
+    ja: "《否。アクセシビリティの許可がないため、選択したテキストを読み取れません。》",
+};
+
 /// The monthly limit is reached: the raw text is pasted without cleanup.
 pub const BUDGET: Notice = Notice {
     zh: "《告。本月額度已用盡。聽寫暫不整理，直接貼上原文。》",
@@ -284,8 +299,10 @@ mod tests {
     use super::*;
 
     /// Every notice, with the Windows and the macOS wording of those that differ.
-    const ALL: [Notice; 19] = [
+    const ALL: [Notice; 21] = [
         NOTHING_SELECTED,
+        NO_PASTE_PERMISSION,
+        NO_TIDY_PERMISSION,
         TIDY_FAILED,
         NOT_CLEANED,
         CORE_RECOVERED,

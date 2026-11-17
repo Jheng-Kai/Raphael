@@ -226,6 +226,27 @@ pub struct HotkeyService {
     closed: tauri::async_runtime::JoinHandle<()>,
 }
 
+/// Tells the main window that macOS has not given Accessibility, with the button that repairs it
+/// (`repair_accessibility`): macOS asks only once, and a rebuilt or updated app (a new signature) is
+/// a new app to it, whose old switch still shows on. Said when the hotkeys start without it, and
+/// again whenever a paste or a tidy could not be made for want of it, at most once a minute.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn tell_accessibility_missing() {
+    static LAST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+    let mut last = LAST
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if last.is_some_and(|told| told.elapsed() < std::time::Duration::from_secs(60)) {
+        return;
+    }
+    *last = Some(std::time::Instant::now());
+    crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
+        missing: serde_json::json!({
+            "resource": "hotkeys", "requirement": "accessibility", "state": "missing", "repair": null,
+        }),
+    });
+}
+
 impl HotkeyService {
     /// Installs the keyboard hook and registers the dictation, paste-last and agent keys. Key
     /// events arrive on `events`; the service stops by itself if the receiving end is dropped.
@@ -250,16 +271,7 @@ impl HotkeyService {
             crate::macos::permissions::accessibility(true);
             let service = Self::start_with(late::LateManager::default(), wanted, events)?;
             log::info!("global hotkeys wait for the accessibility permission: {bindings:?}");
-            // The window says so once, with the way to the setting: macOS asks only once, and a
-            // rebuilt app (a new signature) is a new app to it, whose permission is gone.
-            static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-            if !TOLD.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
-                    missing: serde_json::json!({
-                        "resource": "hotkeys", "requirement": "accessibility", "state": "missing", "repair": null,
-                    }),
-                });
-            }
+            tell_accessibility_missing();
             return Ok(service);
         }
         // Blocking mode: a plain `HotkeyManager::new()` would watch the keys without swallowing
