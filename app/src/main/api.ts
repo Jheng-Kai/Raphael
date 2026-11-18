@@ -47,6 +47,7 @@ import type {
   LocalModels,
   MainEvent,
   MicAccess,
+  MicrophonePermission,
   ModelCatalog,
   ChatGptStatus,
   ModelProvider,
@@ -628,6 +629,10 @@ export const hotkeysPractice = (on: boolean): Promise<void> => invoke("hotkeys_p
 export const cancelSession = (): Promise<void> => invoke("window_hotkey", { kind: "cancel" });
 /** Whether the privacy settings of Windows let desktop apps use the microphone. */
 export const micAccess = (): Promise<MicAccess> => invoke("mic_access");
+/** macOS: the owner's answer for the microphone, read without asking; null on Windows. */
+export const microphonePermission = (): Promise<MicrophonePermission | null> => invoke("microphone_permission");
+/** macOS: asks for the microphone (macOS's own question) and waits for the answer; whether it may be used now. */
+export const microphoneAsk = (): Promise<boolean> => invoke("microphone_ask");
 
 /** Starts hearing the events of the core. Call once; a page that calls again replaces the first. */
 export async function subscribeMainEvents(handler: (event: MainEvent) => void): Promise<void> {

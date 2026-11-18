@@ -159,6 +159,8 @@ export async function run(options) {
       try {
         await page.setViewport({ width, height: options.heights[width] ?? 900, deviceScaleFactor: scaled ? 0 : 1 });
         await page.emulateTimezone("Asia/Taipei");
+        // A scene about a Mac (`mac`) runs as on one whatever the host: the page tells its platform from the user agent.
+        if (scene.fixture?.mac) await page.setUserAgent((await browser.userAgent()).replace(/\([^)]*\)/, "(Macintosh; Intel Mac OS X 10_15_7)"));
         // Still frames by default; a scene about something that moves turns motion on and holds it with `freeze-motion`.
         await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: scene.motion ? "no-preference" : "reduce" }, { name: "prefers-color-scheme", value: theme }]);
         await page.setRequestInterception(true);

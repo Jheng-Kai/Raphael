@@ -3,6 +3,7 @@ import * as api from "./api";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { PageArgument, PageId } from "./types";
 import { btn, esc } from "./ui";
+import { IS_MAC } from "../shared/platform";
 import "./missing.css";
 
 export interface Missing {
@@ -63,10 +64,13 @@ export function missingText(value: Missing): string {
 /** The macOS privacy pane each of its permissions is allowed in (commands.rs OPENABLE_LINKS). */
 const SYSTEM_PANES: Record<string, string> = {
   accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
 };
+/** Panes of macOS alone: Windows' microphone note keeps the words it has, with no button. */
+const MAC_ONLY_PANES = new Set(["microphone"]);
 
 export function missingHTML(value: Missing, text = missingText(value), action = ""): string {
-  const pane = SYSTEM_PANES[value.requirement];
+  const pane = MAC_ONLY_PANES.has(value.requirement) && !IS_MAC ? undefined : SYSTEM_PANES[value.requirement];
   const repair = repairButton(value) || (pane ? btn(esc(t("missing.open")), "sm", ` data-missing-pane="${esc(pane)}"`) : "");
   return `<div class="missing-note" role="status"><span>${esc(text)}</span>` + (repair || action) + `</div>`;
 }

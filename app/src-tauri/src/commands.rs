@@ -27,6 +27,8 @@
 //!   computer; the page asks only while the owner holds that screen's control.
 //! - `hotkeys_practice` lets the first-run guide's lessons hear the keys without a dictation
 //!   starting; `mic_access` says whether the privacy settings let desktop apps use the microphone.
+//! - `microphone_permission` reads macOS's answer for the microphone without asking, and
+//!   `microphone_ask` asks it when the owner presses 測試麥克風 on the settings page.
 //! - `main_events` is the channel on which the main window hears the core and the app (the
 //!   microphone's loudness, a model's download, a turn of the conversations written or completed, a
 //!   background task that moved on, learning that is limited, the tray's pages, the hotkeys that
@@ -834,6 +836,16 @@ pub async fn core_call(
         return Err(format!("the main window may not call {method}"));
     }
     validate_core_call(&method, &params)?;
+    // macOS: the settings page's meter never opens the microphone before the owner has allowed it, so
+    // macOS's question never comes up while they only change a key (`microphone_ask` asks it).
+    #[cfg(target_os = "macos")]
+    if method == "audio.monitor"
+        && params.get("on").and_then(Value::as_bool) == Some(true)
+        && crate::macos::permissions::microphone()
+            != crate::macos::permissions::Microphone::Authorized
+    {
+        return Err("the microphone is not allowed for this app".to_owned());
+    }
     #[cfg(debug_assertions)]
     if crate::startup_journey() && method == "rooms.list" {
         static FIRST_READ: AtomicBool = AtomicBool::new(true);
@@ -2225,6 +2237,28 @@ fn launch_link(url: &str) -> Result<(), String> {
     }
 }
 
+/// macOS: what the owner decided about the microphone for this app, read without asking: `allowed`,
+/// `undecided`, `denied` or `restricted`. `None` on Windows, whose meter opens it as before. The
+/// settings page listens to the microphone only when it is allowed.
+#[tauri::command]
+pub fn microphone_permission(webview: Webview) -> Result<Option<&'static str>, String> {
+    require_main(&webview)?;
+    #[cfg(target_os = "macos")]
+    {
+        use crate::macos::permissions::{self, Microphone};
+        Ok(Some(match permissions::microphone() {
+            Microphone::Authorized => "allowed",
+            Microphone::NotDetermined => "undecided",
+            Microphone::Denied => "denied",
+            Microphone::Restricted => "restricted",
+        }))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(None)
+    }
+}
+
 /// Whether macOS lets the app use Accessibility (the global keys, pasting and tidying), read without
 /// asking; `None` where there is no such permission (Windows). The settings page shows its note while it
 /// is `false`, the one place the owner finds it again after Deny: without it no global key is heard, so
@@ -2239,6 +2273,26 @@ pub fn accessibility_access(webview: Webview) -> Result<Option<bool>, String> {
     #[cfg(not(target_os = "macos"))]
     {
         Ok(None)
+    }
+}
+
+/// macOS: the settings page's 測試麥克風, pressed by the owner: macOS's own question, once, and its
+/// answer (at most two minutes are waited for). Whether the microphone may be used now. Windows has
+/// no such question: true.
+#[tauri::command]
+pub async fn microphone_ask(webview: Webview) -> Result<bool, String> {
+    require_main(&webview)?;
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(|| {
+            crate::macos::permissions::request_microphone(std::time::Duration::from_secs(120))
+        })
+        .await
+        .map_err(|err| format!("the microphone question failed: {err}"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(true)
     }
 }
 
@@ -2651,6 +2705,8 @@ mod tests {
                 "member_template_file",
                 "member_template_pending",
                 "mic_access",
+                "microphone_ask",
+                "microphone_permission",
                 "open_attachment",
                 "open_external_url",
                 "open_library_file",

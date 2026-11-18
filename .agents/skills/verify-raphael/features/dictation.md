@@ -24,6 +24,14 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   of the app (a build folder, an older disk image) may not match the entry allowed, and opening the app again can bring
   forward a copy still running: quit every copy before allowing the one in Applications. A local build signed with
   one Apple Development identity keeps its permissions across rebuilds.
+- The microphone on macOS (R-PRIV-MIC-01): a recording starts only once macOS lets the app use it, read without waiting
+  before anything shows 聆聽中 (`dictation.rs` `macos_microphone_gate`). Not decided yet, macOS's question comes up and
+  the overlay says `MIC_ASKED` (allow Raphael, then press the key again); refused, it says `MIC_DENIED` with the pane.
+  Nothing is recorded meanwhile: a recording that waited for the question showed 聆聽中 before it could hear, and a key
+  let go meanwhile stopped it the moment it started. Settings > 聽寫 listens to the microphone for its meter only once it
+  is allowed (`microphone_permission`, read without asking, again when the window comes to the front; the shell also
+  refuses `audio.monitor` on until then); not decided, 測試麥克風 (`microphone_ask`) asks macOS once; refused, the
+  `missing.microphone` note opens the Microphone pane.
 - Without Accessibility macOS drops a posted key unseen: `paste` keeps
   the text on the pasteboard and says `NO_PASTE_PERMISSION` (press ⌘V), the tidy key says `NO_TIDY_PERMISSION`, and
   both tell the main window (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`, at most once a minute),
@@ -100,7 +108,7 @@ nothing, keeps the selection and the clipboard, and says 《否。這次沒有�
 if it were tidied, and the answer of the core carries no `text` unless it was tidied.
 
 ```powershell
-npm run look -- settings-tidy-key settings-accessibility-off dictation-overview dictation --theme both --width 1120,720,1920x1080
+npm run look -- settings-tidy-key settings-mic-undecided settings-mic-denied settings-accessibility-off dictation-overview dictation --theme both --width 1120,720,1920x1080
 ```
 
 The other layers, each from its own folder (the core's tests, the shell's):
@@ -115,7 +123,12 @@ cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_set
 the page scroll sideways, and that no Accessibility note shows where that permission is not missing;
 `settings-accessibility-off` is a Mac without Accessibility (the look mock's `accessibility_access` answers false): 聽寫
 shows the `missing.accessibility` note above the shortcuts, saying to add Raphael with +, no wider than them, with the one
-button that opens the Accessibility pane (R-PRIV-AX-01); `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
+button that opens the Accessibility pane (R-PRIV-AX-01);
+`settings-mic-undecided` and `settings-mic-denied` are a Mac whose microphone macOS has not asked
+about, or refused (the look mock's `microphone_permission`): 聽寫 shows the note above the shortcuts, no wider than them,
+the meter never sends `audio.monitor` on, 測試麥克風 calls `microphone_ask` once, and a refused one has the button that
+opens the Microphone pane and no 測試麥克風 (R-PRIV-MIC-01), run as on a Mac whatever the host (the scene's `mac`), since
+only a Mac has that pane; `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
 selection in a real app. A test cannot press keys or use the clipboard, so the owner tries it in a chat box, a document and
 a terminal: the selection is replaced, Ctrl+Z undoes it, what they had copied is still on the clipboard, Win+V shows their copied
 text once (the program's own copy is the one thing that cannot be kept out of clipboard history), nothing selected shows the

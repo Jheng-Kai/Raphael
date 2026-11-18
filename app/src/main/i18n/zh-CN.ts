@@ -1236,6 +1236,8 @@ export const zhCN = {
   "settings.050": "拉斐尔本月花费",
   "settings.052": "内核目前没有回应，请稍后重新打开设置，若仍无法使用请重新启动拉斐尔。",
   "settings.054": "你的键盘配置把右 Alt 当 AltGr 用，建议换一个快捷键。",
+  "settings.micUndecided": "拉斐尔还没有取得麦克风权限。按“测试麦克风”，macOS 会询问一次。",
+  "settings.micAsk": "测试麦克风",
   "settings.055": "听写方式",
   "settings.059": "界面语言",
   "settings.067": "主题",

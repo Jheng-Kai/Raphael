@@ -1227,6 +1227,9 @@ export interface MicAccess {
   blocked_by: "system" | "user" | "desktop_apps" | null;
 }
 
+/** macOS's answer for this app's microphone (`microphone_permission`), read without asking. */
+export type MicrophonePermission = "allowed" | "undecided" | "denied" | "restricted";
+
 /** The pages the tray's menu can open. */
 export type TrayPage = "agent" | "history" | "dictionary" | "settings";
 

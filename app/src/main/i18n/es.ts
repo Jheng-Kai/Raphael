@@ -1236,6 +1236,8 @@ export const es = {
   "settings.050": "Gasto de Raphael este mes",
   "settings.052": "El núcleo no responde. Reabre Configuración en breve; si sigue sin estar disponible, reinicia Raphael.",
   "settings.054": "Tu teclado usa Alt derecho como AltGr. Elige otro atajo.",
+  "settings.micUndecided": "Raphael aún no tiene permiso para el micrófono. Pulsa Probar micrófono y macOS lo preguntará una vez.",
+  "settings.micAsk": "Probar micrófono",
   "settings.055": "Modo de dictado",
   "settings.059": "Idioma de la interfaz",
   "settings.067": "Tema",

@@ -2498,6 +2498,9 @@ export function installMock(fixture, config = {}, target = window) {
       // The shell's read of the clipboard (macOS, where the page may not read it): a scene's clipboard is the browser's own.
       if (command === "clipboard_text") return navigator.clipboard.readText().catch(() => "");
       if (command === "mic_access") return { allowed: true, blocked_by: null };
+      // macOS's answer for the microphone (a scene says "undecided" or "denied"); Windows has none.
+      if (command === "microphone_permission") return variant.microphone ?? null;
+      if (command === "microphone_ask") return false;
       if (command === "schedule_keep_awake_get") return data.awake ?? false;
       if (command === "schedule_keep_awake_set") return data.awake = args.enabled;
       if (["open_external_url", "open_link"].includes(command)) {

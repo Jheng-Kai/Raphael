@@ -174,6 +174,23 @@ const NO_SOUND_MAC: Notice = Notice {
     ja: "《否。音声を受信できません。ミュートを解除し、「システム設定 › プライバシーとセキュリティ › マイク」でラファエルを許可してください。》",
 };
 
+/// macOS has refused this app the microphone (or a profile restricts it): nothing was recorded.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub const MIC_DENIED: Notice = Notice {
+    zh: "《否。麥克風未獲允許。請到「系統設定 › 隱私權與安全性 › 麥克風」允許拉斐爾。》",
+    en: "《Negative. The microphone is not allowed. Allow Raphael in System Settings > Privacy & Security > Microphone.》",
+    ja: "《否。マイクが許可されていません。「システム設定 › プライバシーとセキュリティ › マイク」でラファエルを許可してください。》",
+};
+
+/// macOS is asking for the microphone for the first time: nothing is recorded meanwhile, and the
+/// next press records once it is allowed.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub const MIC_ASKED: Notice = Notice {
+    zh: "《否。尚未取得麥克風權限。請在 macOS 的詢問中允許拉斐爾，再按一次快捷鍵。》",
+    en: "《Negative. The microphone is not allowed yet. Allow Raphael when macOS asks, then press the key again.》",
+    ja: "《否。マイクの許可がまだありません。macOS の確認でラファエルを許可し、もう一度キーを押してください。》",
+};
+
 /// The cloud speech model's credentials are missing.
 pub const CLOUD_STT_MISSING: Notice = Notice {
     zh: "《否。雲端語音辨識尚未連接。請到「設定 › 模型與用量 › 用量」設定 OpenRouter 金鑰，或到「設定 › 聽寫與快捷鍵」下載本機模型。》",
@@ -299,8 +316,10 @@ mod tests {
     use super::*;
 
     /// Every notice, with the Windows and the macOS wording of those that differ.
-    const ALL: [Notice; 21] = [
+    const ALL: [Notice; 23] = [
         NOTHING_SELECTED,
+        MIC_DENIED,
+        MIC_ASKED,
         NO_PASTE_PERMISSION,
         NO_TIDY_PERMISSION,
         TIDY_FAILED,
