@@ -1383,6 +1383,12 @@ reads 已儲存 and then 工作已繼續; when the resume failed it reads 金鑰
 the failed attempt did. A replayed save does not touch the vault and resumes nothing; Stop, expiry (24 hours) and a
 cancelled card never resume; a resume cut off by a restart is saved with `interrupted`.
 
+**The watch on the owner's input (macOS).** A run on the owner's PC is operated only while the owner's keys and mouse
+reach the shell's watch (`computer/watch.rs`), so that any input of theirs stops it. macOS takes the events it does not
+allow out of an event tap and refuses only a tap left with none: without Input Monitoring a tap of keys and mouse is made
+and sees the mouse alone. The watch first makes a tap of the keys alone (`keys_delivered`); without it no run starts, every
+request fails with `watch`, and the core says `computer_watch` (allow Raphael under Input Monitoring) (R-COMP-WATCH-01).
+
 **The computer card.** A computer task (`computer`) that reaches a password field, a sign-in or a payment does not end
 with the hand-off line: it pauses and the turn shows 電腦 · 你正在控制 with 請在「Google Chrome」登入你的帳號，完成後交還控制,
 停止 and the primary 我完成了. The computer is the owner's own PC, so the card names the window to use and there is no
