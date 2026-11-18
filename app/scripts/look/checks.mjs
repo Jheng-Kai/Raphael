@@ -1079,9 +1079,14 @@ export function checkRendered(name, context = {}) {
           && calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1, 'one earlier take and one failed give-back');
         require(visible(panel.querySelector('.desktop-error')), 'the failed take says so under the screen');
       }
-      if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
-        const stop = panel.querySelector('[data-desktop="stop"]');
-        require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
+      // The work is stopped from the conversation; the larger view has no Stop of its own.
+      require(!panel.querySelector('[data-desktop="stop"]'), 'the larger view has no Stop of the work');
+      if (name === 'desktop-watch') {
+        // The screen takes the window's height but for the pill: the gaps above and below it stay small.
+        const screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), shell = panel.querySelector('.desktop-shell').getBoundingClientRect();
+        const pill = panel.querySelector('.desktop-mode').getBoundingClientRect();
+        require(screen.top - shell.top <= 16 && shell.bottom - pill.bottom <= 16 || shell.right - screen.right <= 32,
+          `the screen is as large as the window allows (${Math.round(screen.top - shell.top)} px above, ${Math.round(shell.bottom - pill.bottom)} px under the pill)`);
       }
       const frame = panel.querySelector('iframe');
       if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
