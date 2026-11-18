@@ -137,7 +137,8 @@ async def test_a_result_is_cut_to_the_limit(connector, notes):
     big = await current(connector, notes, "big")
     outcome = await connector.call_tool(notes, "big", {}, expected=big.fingerprint)
     assert outcome.truncated is True
-    assert len(outcome.text) == MAX_RESULT_CHARS + 1 and outcome.text.endswith("…")
+    assert outcome.text.startswith(outcome.text[:MAX_RESULT_CHARS]) and outcome.text.endswith("more characters left out]")
+    assert len(outcome.text) <= MAX_RESULT_CHARS
 
 
 async def test_a_tool_that_is_not_the_one_that_was_listed_is_called_and_the_outcome_says_so(

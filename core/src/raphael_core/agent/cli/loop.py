@@ -535,7 +535,7 @@ class CliLoop:
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
             shown = wrap_untrusted(name, (result.instruction or result.content or result.kind or "") if result.ok
-                                   else failure_text(result), ok=result.ok)
+                                   else failure_text(result), ok=result.ok, structured=result.ok)
             receipt.update(status="completed" if result.ok else "failed", result=shown)
             self.tool_messages.extend([
                 {"role": "assistant", "content": None, "tool_calls": [{"id": identifier, "type": "function",

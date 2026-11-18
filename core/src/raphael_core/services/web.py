@@ -35,7 +35,7 @@ import httpx
 from .attachments import PDF_TYPE, checked
 from .common import ServiceError, fit
 from .fetch import PageFetcher, checked_url, decoded
-from .html import html_to_text
+from ..worker.html import html_to_text
 
 SEARCH_RESULTS = 5
 SNIPPET_CHARS = 400

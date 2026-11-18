@@ -13,8 +13,9 @@ left running when the task or the app ends.
   environment the user gave it on top of the few variables a program needs (the SDK's list), not
   with the core's own, and its error output is thrown away: it is the server's, and could hold
   anything.
-- What a tool returns is cut to `MAX_RESULT_CHARS` before it goes anywhere, and only its text is
-  kept: an image or a file is replaced by a note that it was left out.
+- What a tool returns is made to fit `MAX_RESULT_CHARS` before it goes anywhere (worker/fit.py: HTML as its
+  text, whole items left out of a long list with a note), and only its text is kept: an image or a
+  file is replaced by a note that it was left out.
 - Before a tool is called its server is asked for the tool list once more: a tool that is gone is
   not called, and one that is described differently since is called all the same, the outcome
   carrying the new description to keep (a tool is on unless the user turned it off).
@@ -47,6 +48,7 @@ from typing import TYPE_CHECKING, Any
 
 from .. import __version__
 from .config import ServerConfig, ToolRecord, tool_record
+from ..worker.fit import fit
 from .vault import SecretVault, secret_name
 
 if TYPE_CHECKING:
@@ -512,8 +514,8 @@ def result_payload(result):
 
 
 def render_result(result: Any, limit: int = MAX_RESULT_CHARS) -> tuple[str, bool]:
-    """The text of a tool's result, cut to MAX_RESULT_CHARS, and whether it was cut. Other kinds
-    of content (an image, audio, a file) are named and left out."""
+    """The text of a tool's result, made to fit MAX_RESULT_CHARS (worker/fit.py), and whether any of it was left out.
+    Other kinds of content (an image, audio, a file) are named and left out."""
     parts: list[str] = []
     for item in getattr(result, "content", None) or []:
         kind = getattr(item, "type", "")
@@ -528,7 +530,4 @@ def render_result(result: Any, limit: int = MAX_RESULT_CHARS) -> tuple[str, bool
     if not parts and structured:
         with contextlib.suppress(TypeError, ValueError):
             parts.append(json.dumps(structured, ensure_ascii=False))
-    text = "\n".join(parts).strip()
-    if len(text) > limit:
-        return text[:limit] + "…", True
-    return text, False
+    return fit("\n".join(parts).strip(), limit)

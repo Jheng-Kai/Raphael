@@ -594,7 +594,7 @@ def result_text(name: str, outcome: ToolOutcome, window: int | None = None) -> s
     the call a paused task waited on."""
     if outcome.ok:
         text = outcome.content + (SOURCE_CUT if outcome.truncated else "")
-        return wrap_untrusted(name, text, ok=True, limit=result_limit(name, window))
+        return wrap_untrusted(name, text, ok=True, limit=result_limit(name, window), structured=True)
     return wrap_untrusted(name, failure_text(outcome), ok=False)
 
 
