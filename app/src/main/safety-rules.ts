@@ -165,6 +165,7 @@ export interface RulesPanel {
   key(e: KeyboardEvent): boolean;
   /** The panel is closed or leaves the tab: the rule being changed is closed, what was typed stays. */
   reset(): void;
+  cancelEdit(): void;
 }
 
 export function createRules(host: RulesHost): RulesPanel {
@@ -332,8 +333,7 @@ export function createRules(host: RulesHost): RulesPanel {
         remove(id);
         return true;
       case "cancel":
-        editing = null;
-        redraw();
+        cancelEdit();
         return true;
       case "save":
         void save();
@@ -361,6 +361,8 @@ export function createRules(host: RulesHost): RulesPanel {
     return false;
   }
 
+  function cancelEdit(): void { editing = null; redraw(); }
+
   function key(e: KeyboardEvent): boolean {
     const field = (e.target as HTMLElement | null)?.id;
     if (field !== "rule-new" && field !== "rule-edit") return false;
@@ -372,8 +374,7 @@ export function createRules(host: RulesHost): RulesPanel {
     if (e.key === "Escape" && field === "rule-edit") {
       e.preventDefault();
       e.stopPropagation();
-      editing = null;
-      redraw();
+      cancelEdit();
       return true;
     }
     return false;
@@ -384,6 +385,6 @@ export function createRules(host: RulesHost): RulesPanel {
     if (draft.error) draft = { ...draft, error: null };
   }
 
-  return { view, load, menuFor, click, input, key, reset };
+  return { view, load, menuFor, click, input, key, reset, cancelEdit };
 }
 

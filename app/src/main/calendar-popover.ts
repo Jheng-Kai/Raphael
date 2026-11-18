@@ -71,7 +71,8 @@ function openPanel(rect: Pick<DOMRect, "left" | "right" | "top">, cls: string, l
     if (!isTopLayer(el)) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); panel.close(); }
   };
-  const stop = registerDismissal(el, () => panel.close(), () => o.canClose?.() ?? true);
+  const stop = registerDismissal(el, () => panel.close(), () => o.canClose?.() ?? true, undefined,
+    direction => { if (direction === "back") panel.close(); return true; });
   document.addEventListener("keydown", onKey, true);
   current = panel;
   place(panel, rect);

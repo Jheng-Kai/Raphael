@@ -3,6 +3,7 @@
 // touched, and sending keeps the first exchange as version 1 of the message; ‹ 2/2 › under the bubble shows either version and what the
 // member answered it with. The real page and member shell run; only the native IPC boundary is faked, and the core's own handling of
 // an edit (the edit written with the message's id as its newest version) is played here.
+import { navInputs, pressLayer } from "../test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AgentTurn, AppContext, MainEvent, Member, MembersList } from "../types";
 
@@ -154,6 +155,19 @@ describe("the owner's answered message is edited in its own bubble", () => {
     expect(words(8)).toBe("問題 8，說得更清楚");
     expect(pager(8)!.count).toBe("2/2");
     expect(composer().value).toBe("my own draft");
+    agent.hide();
+  });
+
+  test.each(navInputs)("%s leaves a bubble edit only after confirming changed words", async input => {
+    const agent = mount([turn(8)]); await flush(); await pickMember(3);
+    await edit(8);
+    typeInto(field()!, "Changed");
+    pressLayer(input, "forward");
+    pressLayer(input);
+    expect($('[data-act="edit-cancel"]').dataset.cancelArmed).toBe("true");
+    pressLayer(input);
+    expect(field()).toBeNull();
+    expect(api.agentAskText).not.toHaveBeenCalled();
     agent.hide();
   });
 

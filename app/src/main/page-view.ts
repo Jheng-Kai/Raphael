@@ -9,6 +9,7 @@
 // The page (R-PAGE-11) runs to the window's
 // foot and the composer floats over it: the view measures what stands over the page's foot (the composer's dock
 // and the answer line over it) so the page can scroll its last line clear of them.
+import { bindNavLayer } from "./nav-layers";
 import "./page-view.css";
 import { cancelGesture } from "../shared/cancel-gesture";
 import * as api from "./api";
@@ -195,6 +196,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     status.replaceChildren();
     delete status.dataset.drawn;
     host.hidden = false;
+    bindNavLayer(host, close);
     shell?.fold();
     stage.classList.add("is-page");
     watchFoot();

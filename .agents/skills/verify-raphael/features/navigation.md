@@ -108,3 +108,22 @@ forward buttons (`sideButton`).
 ```powershell
 npm run look -- nav-steps-member-settings nav-steps-skill-arrow nav-steps-settings nav-steps-conversations --theme both --width 1120,720,1920x1080
 ```
+
+## Navigation inside open layers
+
+R-NAV-04. Back and forward go to the uppermost dialog, menu, popover or inline editor first.
+Back retraces its own pages or closes one layer. Forward can return to a view just left.
+A forward press at the end stays in the layer. A changed message uses the same two presses
+to abandon the edit as Escape. The main window receives mouse buttons 3 and 4, left Alt
+with an arrow on Windows, and Command with a bracket on macOS.
+
+```powershell
+npm run look -- nav-layer-settings --theme both --width 1120,720,1920x1080
+npm run look -- nav-layer-plus --theme both --width 1120,720,1920x1080
+npm run look -- nav-layer-picture --theme both --width 1120,720,1920x1080
+npm run look -- nav-layer-maker --theme both --width 1120,720,1920x1080
+```
+
+The four scenes end on Models after leaving Usage, the composer menu after leaving its apps
+submenu, the group draft after closing its picture, and the maker's first avatar tab with
+the name still entered. The maker has one form with a tabbed avatar picker.

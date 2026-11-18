@@ -20,9 +20,11 @@ export class CancelGesture {
   private armed: CancelTarget | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   constructor(doc: Document) {
-    doc.addEventListener("keydown", event => { if (event.key !== "Escape") this.clear(); }, true);
+    const navModifier = (event: KeyboardEvent): boolean => !!this.armed && /^(edit|bubble-edit):/.test(this.armed.key)
+      && ["AltLeft", "MetaLeft", "MetaRight"].includes(event.code);
+    doc.addEventListener("keydown", event => { if (event.key !== "Escape" && !navModifier(event)) this.clear(); }, true);
     doc.defaultView?.addEventListener("keydown", event => {
-      if (event.key !== "Escape") { this.clear(); return; }
+      if (event.key !== "Escape") { if (!navModifier(event)) this.clear(); return; }
       if (event.defaultPrevented || event.isComposing || event.repeat) return;
       if (this.press()) { event.preventDefault(); event.stopImmediatePropagation(); }
     });
@@ -53,7 +55,10 @@ export class CancelGesture {
     if (this.armed && (target?.key !== this.armed.key || target.button !== this.armed.button)) this.clear();
   }
   press(): boolean {
-    const target = this.current();
+    return this.pressTarget(this.current());
+  }
+  /** Apply the same two-press policy to an editor selected by layer navigation instead of focus. */
+  pressTarget(target: CancelTarget | null): boolean {
     if (!target) { this.clear(); return false; }
     if (target.immediate) { this.clear(); target.cancel(); return true; }
     if (this.armed?.key === target.key && this.armed.button === target.button) {

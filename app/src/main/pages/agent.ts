@@ -1,3 +1,4 @@
+import { bindNavLayer } from "../nav-layers";
 import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
@@ -2298,6 +2299,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     files = [...draft.files];
     missingFiles = draft.missing.map(file => ({ ...file }));
     replacing = draft.replacing;
+    if (replacing !== undefined) bindNavLayer(input, () => cancelGesture().pressTarget(composerEditTarget()), {
+      active: () => composerEditTarget() !== null,
+    });
     composerQuote = draft.quote;
     drawQuote();
     drawFile(); fit(); if (focus) focusComposer();
@@ -2424,6 +2428,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function openEditor(turnId: number, draft: ComposerDraft): void {
     const carried: ComposerDraft = { ...draft, files: [...draft.files], missing: draft.missing.map(file => ({ ...file })), replacing: turnId };
     bubbleEdit = { key: draftKey(), draft: carried };
+    bindNavLayer(thread, () => cancelGesture().pressTarget(bubbleEditTarget(false)), {
+      active: () => bubbleEdit !== null && state.bubbleEditing != null && !roomPane.active && visible,
+    });
     shownVersions.delete(versionKey(turnId));
     state.bubbleEditing = { turnId, text: carried.text, missing: carried.missing, sendable: editSendable(carried.text, carried) };
     render();
@@ -3009,22 +3016,22 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // gave it, and as the app's other cancels (a task's Stop) once it changed: the first press arms the slot's cancel, the second within 1.5 s
   // gives it up. A task that works (or a recording) keeps its own Escape; this one is for the composer when nothing else is, or when
   // the work is the edited message's own (its member still thinking about it, R-UI-163): the edit is what the owner is doing then.
-  cancelGesture().register(() => {
-    return visible && !roomPane.active && replacing !== undefined && document.activeElement === input && (composerTask() === null || editHoldsTask()) ? {
+  const composerEditTarget = () => visible && !roomPane.active && replacing !== undefined && (composerTask() === null || editHoldsTask()) ? {
       key: `edit:${replacing}`, immediate: editUntouched(), button: voiceButton, hint: t("common.cancelAgain"),
       cancel: abandonEdit,
     } : null;
-  });
+  cancelGesture().register(() => document.activeElement === input ? composerEditTarget() : null);
   // Escape in the editor of a bubble leaves it: at once while its words are the original's, and as the app's other cancels once they
   // changed (the first press arms 取消, the second within 1.5 s leaves). It comes before the composer's while the focus is in it.
-  cancelGesture().register(() => {
+  const bubbleEditTarget = (focused: boolean) => {
     const field = thread.querySelector<HTMLTextAreaElement>("[data-edit-input]");
     const cancel = field?.closest("[data-msg-editor]")?.querySelector<HTMLElement>('[data-act="edit-cancel"]');
-    return visible && !roomPane.active && state.bubbleEditing && bubbleEdit && field && cancel && document.activeElement === field ? {
+    return visible && !roomPane.active && state.bubbleEditing && bubbleEdit && field && cancel && (!focused || document.activeElement === field) ? {
       key: `bubble-edit:${state.bubbleEditing.turnId}`, immediate: field.value === bubbleEdit.draft.text, button: cancel, hint: t("common.cancelAgain"),
       cancel: () => closeEditor(),
     } : null;
-  });
+  };
+  cancelGesture().register(() => bubbleEditTarget(true));
   input.addEventListener("input", () => { fit(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (el.isConnected) saveComposerDraft(); }, 300); });
   members.bindMentions(input);
   bindComposerHistory(input, () => api.agentSent());

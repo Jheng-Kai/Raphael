@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setLocale, t } from "./i18n";
 
@@ -29,6 +30,21 @@ function mount() {
 }
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 function click(selector: string) { const el = root.querySelector<HTMLButtonElement>(selector); expect(el, selector).not.toBeNull(); el!.click(); }
+
+test.each(navInputs)("%s retraces provider setup and restores the same kind", async input => {
+  const panel = mount();
+  await panel.load();
+  click('[data-pv="directory"]');
+  click('[data-pv="add"][data-id="openai_compatible"]');
+  expect(panel.navView()).toBe("pv:openai_compatible:new");
+  pressLayer(input);
+  expect(panel.navView()).toBe("pv:dir");
+  pressLayer(input, "forward");
+  expect(panel.navView()).toBe("pv:openai_compatible:new");
+  pressLayer(input);
+  pressLayer(input);
+  expect(root.querySelector("#pv-dialog")).toBeNull();
+});
 
 function connect(selector: string) {
   if (!root.querySelector(selector)) click('[data-pv="directory"]');

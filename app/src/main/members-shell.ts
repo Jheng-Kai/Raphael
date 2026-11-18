@@ -13,6 +13,7 @@
 // What the core cannot answer (a core from before the members, or one that is starting again)
 // leaves Raphael alone in the column: the page works as it did before.
 
+import { bindNavLayer, LayerViews } from "./nav-layers";
 import * as api from "./api";
 import { settleAsks } from "./chat-ask";
 import { shortcut, openCommandPalette, type Command } from "./shortcuts";
@@ -418,8 +419,21 @@ export function createMembers(host: MembersHost): MembersShell {
     void readThread();
   }
 
+  let stopPanelTabs: (() => void) | undefined;
+  function bindPanelNavigation(initialColumn = false): void {
+    const trail = new LayerViews<DetailsTab>("details");
+    const noteTab = (): void => trail.visit(details.el.dataset.detailsTab as DetailsTab);
+    details.el.addEventListener("member-panel-tab", noteTab);
+    stopPanelTabs = () => details.el.removeEventListener("member-panel-tab", noteTab);
+    bindNavLayer(details.el, () => setDetails(false), {
+      active: () => open && (!initialColumn || innerWidth < DETAILS_COLUMN_MIN_PX || trail.canStep("back") || trail.canStep("forward")),
+      step: direction => trail.step(direction, details.select),
+    });
+  }
+
   function setDetails(next: boolean, overview = false): void {
     if (next === open) { if (next && overview) details.overview(); return; }
+    stopPanelTabs?.();
     open = next;
     host.onDetailsChange?.(open);
     const page = details.el.parentElement;
@@ -427,6 +441,7 @@ export function createMembers(host: MembersHost): MembersShell {
     stopLeaving = null;
     if (next) {
       details.el.hidden = false;
+      bindPanelNavigation();
       placePanel();
       page?.setAttribute("data-det", "open");
       details.el.classList.remove("is-in");
@@ -636,6 +651,7 @@ export function createMembers(host: MembersHost): MembersShell {
   // A group chat comes where the conversation is: the settings page gives way to it.
   window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });
   details.el.hidden = !open;
+  if (open) bindPanelNavigation(true);
   drawAll();
 
   return {

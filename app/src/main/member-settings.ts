@@ -11,6 +11,7 @@
 // owner gives the member about how to be and what to do, so each is one quiet row of its words, whole, with a pencil: a press
 // turns the row into a field in place. A skill opens in a view of its own; no row has a text button where
 // an icon says it.
+import { bindNavLayer } from "./nav-layers";
 import "./member-panel.css";
 import "./member-settings.css";
 import * as api from "./api";
@@ -312,6 +313,8 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     const scale = Math.max(box.width / img.naturalWidth, box.height / img.naturalHeight);
     return Math.max(0, img.naturalHeight * scale - box.height);
   }
+
+  bindNavLayer(cover, () => endReposition(false), { active: () => reposition !== null });
 
   function endReposition(save: boolean): void {
     const moved = reposition;
@@ -650,6 +653,12 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     else if (target.id === "ms-command-template") command.template = target.value;
   });
 
+  function cancelField(target: HTMLInputElement | HTMLTextAreaElement): void {
+    const member = host.member();
+    target.value = target instanceof HTMLInputElement ? (target.id === "ms-name" ? member.name : member.role) : member[target.dataset.field as Field] ?? "";
+    target.blur();
+  }
+
   el.addEventListener("keydown", (event) => {
     const target = event.target as HTMLElement;
     const field = target instanceof HTMLInputElement && (target.id === "ms-name" || target.id === "ms-role") || target instanceof HTMLTextAreaElement && !!target.dataset.field;
@@ -667,10 +676,14 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
       // Leaving a field with Escape puts back what it held and keeps the page.
       event.preventDefault();
       event.stopPropagation();
-      const member = host.member();
-      if (target instanceof HTMLInputElement) target.value = target.id === "ms-name" ? member.name : member.role;
-      else { const name = (target as HTMLTextAreaElement).dataset.field as Field; (target as HTMLTextAreaElement).value = member[name] ?? ""; }
-      target.blur();
+      cancelField(target as HTMLInputElement | HTMLTextAreaElement);
+    }
+  });
+  el.addEventListener("focusin", event => {
+    const field = event.target;
+    if (field instanceof HTMLElement && field.matches("#ms-name, #ms-role, textarea[data-field]")) {
+      bindNavLayer(field, () => cancelField(field as HTMLInputElement | HTMLTextAreaElement),
+        { active: () => document.activeElement === field });
     }
   });
   el.addEventListener("focusout", (event) => {
@@ -697,6 +710,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
+      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer() });
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
       drawn = ""; drawnFor = null;

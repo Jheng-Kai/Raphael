@@ -388,6 +388,7 @@ interface MenuState {
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
   stopHover?: () => void;
+  reopen?: HTMLElement;
 }
 let menu: MenuState | null = null;
 let menuListening = false;
@@ -721,7 +722,10 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   const previous = !parent && sameAnchor && !menu!.at && !o.anchorRect ? menu!.rect : undefined;
   const rect = at ? pointRect(at) : o.anchorRect?.() ?? (parentRect ? { top: rowRect.top, bottom: rowRect.bottom, height: rowRect.height,
     left: parentRect.left, right: parentRect.right, width: parentRect.width } as DOMRect : previous ?? rowRect);
-  if (parent) while (menu && menu !== parent) closeMenuLevel();
+  if (parent) {
+    parent.reopen = undefined;
+    while (menu && menu !== parent) closeMenuLevel();
+  }
   if (!parent) closeMenu();
   const el = document.createElement("div");
   el.className = o.className;
@@ -738,7 +742,16 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
     ? () => { while (menu && menu !== parent) closeMenuLevel(); }
     : () => { const root = menuRootAnchor(); closeMenu(); if (!pressWentThrough()) root?.focus({ preventScroll: true }); };
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, dismiss, undefined, parent?.el ?? anchor, direction => {
+      if (direction === "back" && parent) {
+        dismiss();
+        parent.reopen = anchor;
+        anchor.focus({ preventScroll: true });
+        return true;
+      }
+      if (direction === "forward" && menu?.reopen?.isConnected) menu.reopen.click();
+      return false;
+    }), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   placeMenu();

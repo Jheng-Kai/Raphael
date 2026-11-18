@@ -1,3 +1,4 @@
+import { bindNavLayer } from "./nav-layers";
 import { t } from "./i18n";
 import { quotedPicture, quotedVideo } from "./picture-message";
 import type { MessageQuote } from "./types";
@@ -50,6 +51,7 @@ export function selectionQuote(options: {
     if (!end) { hide(); return; }
     selected = { text, author: options.author(message) };
     pill.innerHTML = ico("copy") + `<span>${esc(t("chat.quote"))}</span>`;
+    if (pill.hidden) bindNavLayer(pill, hide);
     pill.hidden = false;
     const size = pill.getBoundingClientRect();
     const top = Math.min(...rects.map(rect => rect.top)) - Math.max(size.height, 32) - 8;
@@ -64,7 +66,9 @@ export function selectionQuote(options: {
   });
   document.addEventListener("selectionchange", update);
   thread.addEventListener("pointerup", update);
-  thread.addEventListener("keyup", update);
+  thread.addEventListener("keyup", event => {
+    if (!event.altKey && !event.metaKey && !["Alt", "Meta", "Escape", "[", "]"].includes(event.key)) update();
+  });
   host.addEventListener("scroll", hide, true);
   document.addEventListener("keydown", event => { if (event.key === "Escape") hide(); });
   document.addEventListener("pointerdown", event => { if (!pill.contains(event.target as Node)) hide(); });

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "../test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -72,6 +73,26 @@ const open = async (): Promise<void> => {
   await flush();
 };
 const text = (selector: string): string => root.querySelector(selector)?.textContent ?? "";
+
+test.each(navInputs)("%s can retrace guide steps without finishing onboarding", async input => {
+  await open();
+  pressLayer(input, "forward");
+  expect(root.dataset.step).toBe("welcome");
+  await press('[data-ob="next"]');
+  pressLayer(input);
+  expect(root.dataset.step).toBe("welcome");
+  pressLayer(input, "forward");
+  expect(root.dataset.step).toBe("tools");
+  await press('[data-item="openrouter"] [data-ob="key-replace"]');
+  expect(root.querySelector("#ob-key-input")).not.toBeNull();
+  pressLayer(input);
+  expect(root.querySelector("#ob-key-input")).toBeNull();
+  expect(root.dataset.step).toBe("tools");
+  pressLayer(input);
+  pressLayer(input);
+  expect(done).toHaveBeenCalledWith({ finished: false });
+  expect(setDevice).not.toHaveBeenCalledWith({ onboarded: true });
+});
 
 beforeEach(() => {
   setLocale("en");
