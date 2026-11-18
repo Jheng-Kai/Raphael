@@ -3060,6 +3060,16 @@ export function checkRendered(name, context = {}) {
       require(getComputedStyle(scroller).overflowX === 'auto', "wide table has a local horizontal scrollport");
       if (innerWidth < 1920) require(scroller.scrollWidth > scroller.clientWidth, "many columns use the card's local fallback scrolling");
     }
+    if (name === "rich-line-breaks") {
+      // A label's <br/>, <br> or <br /> is a line break: the two halves are drawn one under the other, never the tag as words.
+      const svg = diagram.querySelector('.diagram-view svg'), words = svg.textContent;
+      require(!/<br/i.test(words), `no tag is drawn as words: ${words.slice(0, 120)}`);
+      const top = text => [...svg.querySelectorAll('text, tspan')].filter(node => node.childElementCount === 0 && node.textContent.includes(text)).map(node => node.getBoundingClientRect().top)[0];
+      for (const [first, second] of [["收集資料", "整理來源"], ["撰寫摘要", "交給主人"], ["確認", "無誤"]]) {
+        const above = top(first), below = top(second);
+        require(above !== undefined && below !== undefined && below > above + 4, `「${first}」 stands over 「${second}」: ${above} / ${below}`);
+      }
+    }
     if (name === "rich-fallback") require(diagram && !diagram.querySelector('pre').hidden && visible(diagram.querySelector('.rich-note')) && !diagram.querySelector('.diagram-view svg'), "incomplete or invalid diagram keeps source and a quiet note");
     return { check:name, cards:cards.length, diagram:diagram?.dataset.diagramState ?? null };
   }
@@ -3691,7 +3701,7 @@ export function checkRendered(name, context = {}) {
     return {check:name, width:Math.round(width)};
   }
   if (name === "reading-place-before" || name === "reading-place-kept") {
-    // The details panel dragged wider rewraps the conversation without moving what is read.
+    // The details panel dragged wider or closed rewraps the conversation without moving what is read.
     const scroller = [...document.querySelectorAll('.page-agent .ra-scroll')].find(visible);
     const top = scroller.getBoundingClientRect().top, items = [...scroller.querySelectorAll('.thread > li')];
     if (name === "reading-place-before") {

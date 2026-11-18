@@ -12,6 +12,15 @@ test("Mermaid refuses configuration, click handlers, HTML and network resources 
   expect(mock.parse).not.toHaveBeenCalled();
 });
 
+test("a line break in a label is allowed, written any of the usual ways, and every other tag beside it is still refused", () => {
+  for (const source of ["flowchart TD\nA[第一行<br/>第二行] --> B", "flowchart TD\nA[one<br>two]", "flowchart TD\nA[one<BR />two] -->|step<br/>two| B"]) {
+    expect(diagramSourceAllowed(source)).toBe(true);
+  }
+  for (const source of ["flowchart TD\nA[one<br/><img src=x>]", "flowchart TD\nA[<b>bold</b><br/>]", "flowchart TD\nA[<br/onload=x>]"]) {
+    expect(diagramSourceAllowed(source)).toBe(false);
+  }
+});
+
 test("invalid Mermaid keeps source; strict token-themed rendering strips all active SVG content", async () => {
   mock.parse.mockResolvedValueOnce(false);
   expect(await renderDiagram("invalid diagram", {})).toBeNull();

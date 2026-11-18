@@ -5,6 +5,11 @@ import { messageUrl, tablePlainText } from "./message-content";
 import { copyButton, esc, toaster } from "./ui";
 import "./message-rich.css";
 import { mountShimmers } from './shimmer';
+import { repaintView, SETTLE_MS } from "./reading-place";
+import { IS_MAC } from "../shared/platform";
+
+/** While a following thread keeps growing (a long reply arriving), a Mac still repaints it at least this often (R-FOLLOW-03). */
+export const REPAINT_MAX_MS = 600;
 
 /** The first of `nodes`, in reading order, whose bottom is below `y`. Lines stack down the thread, so a
  * halving search reads a few positions where reading them all took a long thread most of a frame. */
@@ -83,13 +88,32 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
   }, { passive: true });
   // The owner asked for the newest turn: the thread follows it from this press on.
   root.addEventListener("conversation-latest", () => { state.held = false; state.follows = true; state.node = undefined; state.position = undefined; });
+  // A width change put the owner's place in the middle back (reading-place.ts): it stays theirs, even if the narrower thread
+  // was clamped to its new end for a moment.
+  root.addEventListener("conversation-hold", () => {
+    state.follows = false; state.held = true; state.scrollTop = root.scrollTop; state.height = root.scrollHeight;
+    state.node = undefined; state.position = undefined;
+  });
   // One place keeps a following thread at its bottom, whatever changed its height or its scroller's: words drawn, a picture
   // or a card that loads late, the work line or the slime going, the composer growing or shrinking under it. A ResizeObserver is
   // told after layout and before paint, so the correction lands in the frame of the change and no frame is seen above the
   // bottom. A clamped write, no geometry read.
   if (typeof ResizeObserver === "function") {
+    // On a Mac, WebKit left a thread kept at its bottom black when a long reply landed in one frame (the longer, the surer), until
+    // a scroll: once the following settles, or every REPAINT_MAX_MS while the reply keeps coming, the view is painted afresh
+    // (reading-place.ts repaintView). No geometry is read here; the repaint reads it in its own frame.
+    let settle = 0, since = 0, cancel = (): void => {};
+    const repaintSoon = (): void => {
+      const now = performance.now();
+      if (!settle) since = now;
+      clearTimeout(settle);
+      settle = window.setTimeout(() => { settle = 0; cancel(); cancel = repaintView(root); }, Math.max(0, Math.min(SETTLE_MS, since + REPAINT_MAX_MS - now)));
+    };
     const stick = new ResizeObserver(() => {
-      if (state.follows && !Number(root.dataset.windowLater) && root.isConnected && !root.closest("[hidden]")) root.scrollTop = 1e9;
+      if (state.follows && !Number(root.dataset.windowLater) && root.isConnected && !root.closest("[hidden]")) {
+        root.scrollTop = 1e9;
+        if (IS_MAC) repaintSoon();
+      }
     });
     const watch = (node: Node): void => { if (node instanceof Element) stick.observe(node); };
     stick.observe(root);

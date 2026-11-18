@@ -1,8 +1,12 @@
 // Mermaid is isolated from startup and runs without directives, links, HTML or external resources.
 import mermaid from "mermaid";
 
+/** A line break in a label, `<br>`, `<br/>` or `<br />`: Mermaid's own way to break a line, drawn as SVG text with HTML labels off. */
+const LINE_BREAK = /<br\s*\/?>/gi;
+
 export function diagramSourceAllowed(source: string): boolean {
-  return source.length <= 25000 && !/(?:%%\{|^\s*---|^\s*(?:click|style|classDef|linkStyle)\s|[a-z][\w+.-]*:\/\/|\/\/|data:|file:|\b(?:img|image|icon)\s*:|(?:href|src)\s*=|url\s*\(|@import|<\/?[a-z])/im.test(source);
+  // A line break is the one tag a diagram may hold (models write it in flowchart labels); every other tag is refused.
+  return source.length <= 25000 && !/(?:%%\{|^\s*---|^\s*(?:click|style|classDef|linkStyle)\s|[a-z][\w+.-]*:\/\/|\/\/|data:|file:|\b(?:img|image|icon)\s*:|(?:href|src)\s*=|url\s*\(|@import|<\/?[a-z])/im.test(source.replace(LINE_BREAK, "\n"));
 }
 
 let serial = 0;

@@ -12,6 +12,26 @@ export const SETTLE_MS = 150;
 export const NUDGE_PX = 2;
 
 /**
+ * Scrolls `scroller` one nudge and back in two frames, which makes WebKit paint the whole view afresh: it can leave part of a
+ * thread unpainted after a change of its layout, a hard cut (or the whole thread black) that only a scroll clears. The nudge
+ * goes up, which never ends a held place (message-rich.ts readingAnchor), and down only from the very top; a view a few px short
+ * of the bottom, where the person may have stopped on purpose, is left as it is, since any scroll there would hand it back to
+ * following. A person who scrolls in the nudge's frame keeps where they scrolled to. Gives a way to cancel it.
+ */
+export function repaintView(scroller: HTMLElement, slack = 4): () => void {
+  let nudge = requestAnimationFrame(() => {
+    const was = scroller.scrollTop, gap = scroller.scrollHeight - scroller.clientHeight - was;
+    if (gap > 0.5 && gap <= slack) return;
+    const to = was >= NUDGE_PX ? was - NUDGE_PX : gap > NUDGE_PX + slack ? was + NUDGE_PX : null;
+    if (to === null) return;
+    scroller.scrollTop = to;
+    const nudged = scroller.scrollTop;
+    nudge = requestAnimationFrame(() => { if (scroller.scrollTop === nudged) scroller.scrollTop = was; });
+  });
+  return () => cancelAnimationFrame(nudge);
+}
+
+/**
  * Keeps `scroller`'s reading place across width changes of it; `items` are the messages, in order. With `repaint` (on a
  * Mac), once the width has settled the view scrolls one pixel and back: WebKit can leave part of a thread whose place was
  * set while its width changed unpainted, a hard cut over the background that only a scroll clears (seen with the details
@@ -34,19 +54,8 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
       if (box.bottom > top) { anchor = item; offset = box.top - top; break; }
     }
   };
-  let frame = 0, settle = 0, nudge = 0;
-  const paint = (): void => {
-    nudge = requestAnimationFrame(() => {
-      const was = scroller.scrollTop, gap = scroller.scrollHeight - scroller.clientHeight - was;
-      if (gap > 0.5 && gap <= slack) return;
-      const to = was >= NUDGE_PX ? was - NUDGE_PX : gap > NUDGE_PX + slack ? was + NUDGE_PX : null;
-      if (to === null) return;
-      scroller.scrollTop = to;
-      const nudged = scroller.scrollTop;
-      // A person who scrolled in that frame keeps where they scrolled to.
-      nudge = requestAnimationFrame(() => { if (scroller.scrollTop === nudged) scroller.scrollTop = was; });
-    });
-  };
+  let frame = 0, settle = 0, cancelNudge = (): void => {};
+  const paint = (): void => { cancelNudge(); cancelNudge = repaintView(scroller, slack); };
   const resized = (): void => {
     const now = scroller.clientWidth;
     // Not drawn: the width it had stays the one to compare with when it is drawn again, and the place it had with it.
@@ -55,7 +64,12 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
     const keep = anchor, want = offset, atBottom = bottom;
     const place = (): void => {
       if (atBottom) scroller.scrollTop = scroller.scrollHeight;
-      else if (keep?.isConnected) scroller.scrollTop += keep.getBoundingClientRect().top - scroller.getBoundingClientRect().top - want;
+      else if (keep?.isConnected) {
+        scroller.scrollTop += keep.getBoundingClientRect().top - scroller.getBoundingClientRect().top - want;
+        // The thread follows the newest turn only from its bottom (message-rich.ts readingAnchor): a place in the middle,
+        // which a narrower thread may have had clamped to the new end for a moment, is still the owner's.
+        scroller.dispatchEvent(new CustomEvent("conversation-hold"));
+      }
     };
     // Now, and again once the thread has measured its messages for the new width (a long one folds or unfolds).
     place();
@@ -63,9 +77,13 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
     frame = requestAnimationFrame(() => { place(); take(); });
     if (repaint) { clearTimeout(settle); settle = window.setTimeout(paint, SETTLE_MS); }
   };
-  scroller.addEventListener("scroll", take, { passive: true });
+  // A thread made wider is shorter: the place read can lie past its new end, and the browser clamps it to the bottom with a
+  // scroll that may come before the width is reported (the details panel closed). That scroll is the width change, not the
+  // owner's: the place read before it is the one kept.
+  const scrolled = (): void => { if (scroller.clientWidth && scroller.clientWidth !== width) resized(); else take(); };
+  scroller.addEventListener("scroll", scrolled, { passive: true });
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(resized) : null;
   observer?.observe(scroller);
   take();
-  return () => { scroller.removeEventListener("scroll", take); observer?.disconnect(); clearTimeout(settle); cancelAnimationFrame(nudge); };
+  return () => { scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelNudge(); };
 }

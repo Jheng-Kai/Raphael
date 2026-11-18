@@ -76,12 +76,14 @@ export function installMock(fixture, config = {}, target = window) {
       data.roomExchanges = []; data.roomHandoffs = [];
     }
   }
-  // A conversation long enough to read in the middle of (panel-drag-keeps-place).
+  // A conversation long enough to read in the middle of (panel-drag-keeps-place); a number is how many turns, more than the
+  // thread draws at once (panel-close-keeps-place).
   if (variant.longThread) {
     const base = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11);
     const words = "這段回覆夠長，欄寬一變就會重新換行，看得出閱讀的位置有沒有跟著跑掉。".repeat(4);
-    data.turns = data.turns.concat(Array.from({ length: 12 }, (_, i) => {
-      const at = base.created_at_ms - (12 - i) * 60000;
+    const count = typeof variant.longThread === "number" ? variant.longThread : 12;
+    data.turns = data.turns.concat(Array.from({ length: count }, (_, i) => {
+      const at = base.created_at_ms - (count - i) * 60000;
       return { ...structuredClone(base), id: 9300 + i, session_id: `long-${i}`, created_at_ms: at, question: `第 ${i + 1} 個問題`, text: `${i + 1}. ${words}`,
         messages: [{ seq: 1, kind: "reply", text: `${i + 1}. ${words}`, at_ms: at }], steps: [], attachments: [] };
     }));

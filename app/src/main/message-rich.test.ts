@@ -305,6 +305,24 @@ test("a thread the owner scrolled up stays where they read, near the bottom or f
   expect(thread.gap()).toBe(0);
 });
 
+test("a place in the middle that a width change put back is the owner's: the end in view for a moment does not make the thread follow", async () => {
+  const thread = stickThread({ height: 7000, client: 600, top: 4600 });
+  // The thread was following (nothing let it go), then the details panel closed: a shorter thread clamped the view to its end and
+  // the end observer said "near"; the reading place put the line read back and says so.
+  thread.change({ height: 5100 });
+  thread.root.dispatchEvent(new CustomEvent("conversation-near-bottom", { detail: true }));
+  thread.root.scrollTop = 3360;
+  thread.root.dispatchEvent(new CustomEvent("conversation-hold"));
+  expect(richScrollFollows(thread.root)).toBe(false);
+  thread.change({ height: 5120 });
+  thread.root.dispatchEvent(new CustomEvent("conversation-near-bottom", { detail: true }));
+  thread.change({ height: 5140 });
+  expect(thread.view.top).toBe(3360);
+  // Back at the very bottom by their own scroll, it follows again.
+  await thread.scroll(4540);
+  expect(richScrollFollows(thread.root)).toBe(true);
+});
+
 test("a scroll still going up does not take the bottom again, a thread that cannot scroll is not let go, and the latest button follows", async () => {
   const thread = stickThread();
   thread.root.dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp", bubbles: true }));

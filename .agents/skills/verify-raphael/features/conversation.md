@@ -1893,7 +1893,7 @@ conversation's whole column, as wide as the composer, and a table's columns take
 `reply-measure` and `rich-table-example` measure it). Selected acceptance:
 
 ```powershell
-npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 ## Small core regressions
@@ -2129,7 +2129,7 @@ address (@) and a skill (/) stay one unit (`mention-field.test.ts`).
 ```powershell
 npm run look -- composer-long-link composer-long-link-sent composer-link-edit room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
 npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
-npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 Links: a link in the composer and in a sent message shows its whole address in the link colour (`--link`, blue), never a shortened name; the field's words are the address itself, so copy, cut and send give the same text. `composer-url-chip` requires the whole address, the link colour, a matching field and copy and no sideways overflow; `composer-link-sent` requires the whole address to go out with the words after it, and `room-link-sent` also requires the group's sent message to show the whole address in the link colour (the member conversation's mock does not echo the sent bubble; message-content.test.ts covers its HTML). A bubble that wears a member's colour keeps its own words colour for a link so that it reads (R-UI-81); a neutral bubble shows the link colour. The look driver's `clipboard-paste` does the browser's default insertion of pasted words when no page code took the paste.
@@ -2156,7 +2156,7 @@ background reports, spoken text and dictated captions get readable values; histo
 keeps the original fences. Existing tables retain their conversion behavior.
 
 ```powershell
-npm run look -- form-forecast form-board form-chart-bar form-chart-line form-invalid form-streaming form-truncated form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
+npm run look -- form-forecast form-board form-chart-bar form-chart-line form-invalid form-streaming form-truncated form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
 ```
 
 There are no message-* scenes in this branch: message-content/message-rich tests,
@@ -3217,5 +3217,5 @@ composer's ground at any whole-pixel offset (it skips an emblem under the panel'
 Run the emblem at other ratios with `--scale 1.25` and `--scale 1.5`.
 
 ```powershell
-npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
+npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-close-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
 ```
