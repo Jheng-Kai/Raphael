@@ -82,6 +82,8 @@ async def test_native_catalog_script_reaches_real_discovery_and_card_through_age
     monkeypatch.setenv('RAPHAEL_TEST_NATIVE', '1')
     monkeypatch.setenv('RAPHAEL_TEST_NATIVE_CATALOG', '1')
     monkeypatch.setattr(CredentialVault, 'get', lambda _, name: 'ak_fixture' if name == 'connectors:composio:key' else None)
+    monkeypatch.setattr(CredentialVault, 'has', lambda _, name: name == 'connectors:composio:key')
+    monkeypatch.setattr(CredentialVault, 'filled', lambda _, name: name == 'connectors:composio:key')
     driver = RpcDriver(tmp_path, 'fake/echo', EchoClient(), Budget(10))
     try:
         platform = CatalogPlatform()
