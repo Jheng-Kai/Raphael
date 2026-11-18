@@ -83,7 +83,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption" role="status" hidden></p><div class="desktop-review" hidden></div>` +
     `<div class="desktop-foot"><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
-    `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
+    `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
     `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
@@ -214,12 +214,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (location.control.parentElement !== locationHost) locationHost.append(location.control);
     paint(locationHeader, 'hidden', expanded);
     location.status(!!state?.error);
-    const currentWork = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
     placeStripButtons(expanded);
     attr(collapseButton, 'title', t('desktop.collapse')); attr(collapseButton, 'aria-label', t('desktop.collapse'));
-    const stop = panel.querySelector<HTMLElement>('[data-desktop="stop"]')!;
-    paint(stop, 'hidden', !watching || !currentWork || !options.stop);
-    attr(stop, 'title', t('agent.stop')); attr(stop, 'aria-label', t('agent.stop'));
     paint(collapseButton, 'hidden', !watching);
     paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
     paint(backButton, 'hidden', !skillEditor || review.hidden);
@@ -553,10 +549,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (!connected) void openStream();
   });
   collapseButton.addEventListener('click', collapseWatch);
-  panel.querySelector('[data-desktop="stop"]')!.addEventListener('click', () => {
-    const work = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
-    if (work) void options.stop?.(work.turn_id);
-  });
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape' && watching) { event.preventDefault(); collapseWatch(); }
   });

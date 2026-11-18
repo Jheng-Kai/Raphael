@@ -181,15 +181,14 @@ test('a screen still connecting opens large at once and connects there', async (
   expect(handback().hidden).toBe(false); expect(take().hidden).toBe(true);
 });
 
-test('watching shows one pill with Stop beside it under its translated tooltip', async () => {
+test('watching shows one pill and no Stop of the work beside it: the conversation stops work', async () => {
   panelOpen=true;
   api.desktopStatus.mockResolvedValue({...running,works:[{...work,state:'running',tool:'type_text'}]});
   mounted.show(); await flush(); message('connected');
   enlarge().click();
   expect(panel().querySelector('.desktop-dock .desktop-mode-label')?.textContent).toBe('觀看中');
-  const stop = panel().querySelector<HTMLButtonElement>('.desktop-dock [data-desktop="stop"]')!;
-  expect(stop.title).toBe(t('agent.stop'));
-  expect(stop.getAttribute('aria-label')).toBe(stop.title);
+  expect(panel().querySelector('[data-desktop="stop"]')).toBeNull();
+  expect([...panel().querySelectorAll<HTMLElement>('.desktop-dock > .btn')].map(button => button.dataset.desktop)).toEqual(['menu']);
 });
 
 test("a sign-in card's 接手 opens the same stream large under the owner's hands, and 我完成了 in its pill hands the nonce back once", async () => {
