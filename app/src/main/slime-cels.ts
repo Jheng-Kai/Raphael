@@ -10,8 +10,12 @@ const bodyPose = (state: LoopState, phase: number): ReturnType<typeof sample> =>
   return pose;
 };
 const aboutBase = (pose: ReturnType<typeof sample>): string => `translate(50 86) ${poseTransform(pose)} translate(-50 -86)`;
-const cssTransform = (value: string): string => value.replace(/(translate|rotate|scale)\(([^)]+)\)/g, (_, kind, numbers: string) =>
-  `${kind}(${numbers.trim().split(/[ ,]+/).map(number => number+(kind==='translate'?'px':kind==='rotate'?'deg':'')).join(',')})`);
+const fixed = (value: number): string => String(+value.toFixed(3));
+/** A drop of `y` down the strip, as it reads inside a body pose (the inverse of the pose's rotation and scale applied to it). */
+function dropWithin(pose: ReturnType<typeof sample>, y: number): [number, number] {
+  const angle = (pose.rotate[0] ?? 0) * Math.PI / 180;
+  return [y * Math.sin(angle) / (pose.scale[0] ?? 1), y * Math.cos(angle) / (pose.scale[1] ?? pose.scale[0] ?? 1)];
+}
 function staticMarks(markup: string): string {
   const skipped: boolean[] = [];
   return markup.replace(/<\/?g\b[^>]*>/g, tag => {
@@ -22,7 +26,7 @@ function staticMarks(markup: string): string {
 }
 
 /** Independent strip axes retain the body's and the eyes' original periods without scaling a raster. */
-export function motionStrips(state: LoopState, body: string, eyes: string, face: string, back = '', worn = ''): [string, string] {
+export function motionStrips(state: LoopState, body: string, eyes: string, back = '', worn = ''): [string, string] {
   const key = `${state}|${back}|${worn}`;
   const cached = cache.get(key); if (cached) return cached;
   back=staticMarks(back);worn=staticMarks(worn);
@@ -42,19 +46,24 @@ export function motionStrips(state: LoopState, body: string, eyes: string, face:
   };
   const strip = (kind: string, cells: string, height = FRAME): string => `<span class="slime-loop slime-loop-${kind}${blink ? ' has-blink' : ''}" data-state="${state}" style='--loop-body:${timing.body}s;--loop-eyes:${timing.eyes}s;--loop-props:${propPeriod}s;--loop-prop-delay:${propDelay}ms;--loop-cels:${cels};--loop-gaze:${gazes};--loop-prop-rows:${PROP_ROWS};--loop-rows:${gazes*(blink?4:1)};${eyeStyle(state)}'><span class="slime-cels">${kind === 'eyes' ? '<span class="slime-eye-cels"><span class="slime-blink-cels">' : independent ? '<span class="slime-prop-cels">' : ''}<svg width="${FRAME*cels}" height="${height}" viewBox="-19 -12 ${FRAME*cels} ${height}">${cells}</svg>${kind === 'eyes' ? '</span></span>' : independent ? '</span>' : ''}</span></span>`;
   const bodyCells = Array.from({length:independent?PROP_ROWS:1},(_,row) => Array.from({length:cels},(_,index) => { const pose=poses[index]!; return `<g transform="translate(${index*FRAME} ${row*FRAME})"><g transform="${aboutBase(pose)}">${back}<path class="slime-cel-body" d="${body}" fill="var(--slime-color)"/>${wornAt(independent?row/PROP_ROWS:index/cels)}</g></g>`; }).join('')).join('');
-  // What does not change from one eye path to the next is worked out once: a strip has some 1,500 of them.
-  const about = poses.map(pose => cssTransform(aboutBase(pose))), faceFit = `var(--slime-face-fit,${cssTransform(face)})`;
-  const eyeCells = Array.from({length:gazes}, (_, gazeIndex) => {
+  // An eye cel is its body cel's place and pose (the group's transform attribute), then the face (slime.css: the separate
+  // translate and scale of .slime-cel-eye), then its gaze and blink (the path's own transform attribute). WebKit (macOS)
+  // multiplies the lengths of an SVG element's CSS `transform` by the page zoom (the window's ⌘+ and ⌘-), and the attribute
+  // and the separate properties keep the drawing's units: placed by CSS transforms, the eyes of cel n stood n tenths of a
+  // cel off at 110 %, so in a looping strip they slid out of the body and back. One group per body cel, so a strip of some
+  // 1,500 eye paths gains a few dozen nodes; a row of gaze or blink is a drop down the strip, carried inside the pose.
+  const looks = Array.from({length:gazes}, (_, gazeIndex) => {
     const gaze = sample(`slime-${state}-gaze`,gazeIndex/gazes,timing.gaze);
     if (state === 'blocked') gaze.translate = [0,-6];
-    const look = cssTransform(poseTransform(gaze));
-    return poses.flatMap((_pose,bodyIndex) => (blink ? blinkPoses : [[1,1]]).map(([sx,sy],blinkIndex) => {
-      const origin = 50;
-      // These transforms are static poses; a single path avoids collecting two transient groups per cel.
-      const transform=`translate(${bodyIndex*FRAME}px,${(gazeIndex*(blink?4:1)+blinkIndex)*FRAME}px) ${about[bodyIndex]} ${faceFit} ${look} translate(50px,${origin}px) scale(${sx},${sy}) translate(-50px,-${origin}px)`;
-      return `<path class="slime-cel-eye" d="${eyes}" fill="none" stroke="#fff" stroke-linecap="round" style="transform:${transform}"/>`;
-    })).join('');
-  }).join('');
+    return poseTransform(gaze);
+  });
+  const origin = 50;
+  const eyeCells = poses.map((pose, bodyIndex) => `<g class="slime-cel-pose" transform="translate(${bodyIndex*FRAME} 0) ${aboutBase(pose)}">` +
+    looks.flatMap((look, gazeIndex) => (blink ? blinkPoses : [[1,1]]).map(([sx,sy], blinkIndex) => {
+      const [x, y] = dropWithin(pose, (gazeIndex*(blink?4:1)+blinkIndex)*FRAME);
+      const row = x || y ? ` style="--cel-row-x:${fixed(x)};--cel-row-y:${fixed(y)}"` : '';
+      return `<path class="slime-cel-eye" d="${eyes}" fill="none" stroke="#fff" stroke-linecap="round" transform="${look} translate(50 ${origin}) scale(${sx} ${sy}) translate(-50 -${origin})"${row}/>`;
+    })).join('') + '</g>').join('');
   const strips: [string,string] = [strip('body',bodyCells,FRAME*(independent?PROP_ROWS:1)),strip('eyes',eyeCells,FRAME*gazes*(blink?4:1))];
   cache.set(key,strips); return strips;
 }

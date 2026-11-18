@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
-import { GAZE_ROWS, PROP_ROWS, celCount, eyePath, loopState } from "./slime-motion";
+import { GAZE_ROWS, PROP_ROWS, celCount, eyePath, gazeRows, loopState } from "./slime-motion";
 import { crownedId, crownPrimary } from "./crown";
 import { catalogs } from "./i18n";
 import { defaultSlimeAvatar, followSlimeRoster, handOver, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeCharactersHTML, slimeColorOf, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
@@ -430,8 +430,15 @@ test("tan(atan2()) in slime.css divides pixels: WebKit loses the unit of an atan
   for (const call of calls) {
     expect(call).not.toMatch(/\d(?:cq[a-z]*|r?em|ex|ch|[sld]?v[whib]|vmin|vmax)\b|\d%/);
     // A custom property in it must already be pixels: the registered length, or the unit made from it.
-    for (const name of call.match(/--[\w-]+/g) ?? []) expect(["--slime-size", "--slime-unit"]).toContain(name);
+    for (const name of call.match(/--[\w-]+/g) ?? []) expect(["--slime-size", "--slime-drawn", "--slime-unit"]).toContain(name);
   }
+  // At a page zoom WebKit hands a registered length on already zoomed: the size goes over a registered drawn size, so the two
+  // keep their ratio (a zoomed size over a plain 92px made a 40px face at 130 % read as 52px).
+  expect(css).toContain('@property --slime-drawn { syntax: "<length>";');
+  expect(css).toContain("--slime-drawn: 92px; --slime-unit: tan(atan2(var(--slime-size), var(--slime-drawn)));");
+  // Everything worked out from the unit is a plain number; a registered length would be zoomed again where it is used.
+  for (const name of ["--slime-face-scale", "--slime-face-dx", "--slime-face-dy", "--slime-eye-stroke"]) expect(css, name).toContain(`@property ${name} { syntax: "<number>";`);
+  expect(css).not.toMatch(/@property --slime-(?:face|eye)[\w-]* \{ syntax: "<length>"/);
 });
 
 test("each state's eyes are the drawing's own path as well, the ones slime.css gives it (WebKit has no CSS d)", () => {
@@ -468,6 +475,67 @@ test("each state's eyes are the drawing's own path as well, the ones slime.css g
     }
     expect(styled).not.toHaveBeenCalled();
   } finally { styled.mockRestore(); }
+});
+
+/** An affine matrix as SVG writes it: [a, b, c, d, e, f]. */
+type Affine = [number, number, number, number, number, number];
+const times = (m: Affine, n: Affine): Affine => [m[0]*n[0] + m[2]*n[1], m[1]*n[0] + m[3]*n[1], m[0]*n[2] + m[2]*n[3], m[1]*n[2] + m[3]*n[3], m[0]*n[4] + m[2]*n[5] + m[4], m[1]*n[4] + m[3]*n[5] + m[5]];
+const move = (x: number, y: number): Affine => [1, 0, 0, 1, x, y];
+/** A transform attribute of translate, rotate and scale, as one matrix. */
+function affine(text: string): Affine {
+  let matrix: Affine = [1, 0, 0, 1, 0, 0];
+  for (const [, kind, args] of text.matchAll(/(translate|rotate|scale)\(([^)]*)\)/g)) {
+    const [a = 0, b] = args!.trim().split(/[\s,]+/).map(Number);
+    const turn = a * Math.PI / 180;
+    matrix = times(matrix, kind === "translate" ? move(a, b ?? 0) : kind === "scale" ? [a, 0, 0, b ?? a, 0, 0] : [Math.cos(turn), Math.sin(turn), -Math.sin(turn), Math.cos(turn), 0, 0]);
+  }
+  return matrix;
+}
+const near = (a: Affine, b: Affine): boolean => a.every((value, index) => Math.abs(value - b[index]!) < 0.01);
+
+test("a strip's eyes are placed by transform attributes and the separate translate and scale, which WebKit does not multiply by the page zoom", () => {
+  // macOS: WebKit multiplied the lengths of the eye cels' CSS transforms by the window's zoom, while the body cels' transform
+  // attributes kept the drawing's units. At 110 % the eyes of cel n stood n tenths of a cel off, so a working slime's eyes
+  // slid out of its body and back in every loop.
+  for (const state of ["thinking", "working", "searching", "computer", "waiting", "blocked", "error"] as const) {
+    const host = document.createElement("div");
+    host.innerHTML = slimeSVG({ character: "horn-lavender" }, { ...plain, state });
+    expect(host.innerHTML, state).not.toMatch(/style="[^"]*transform:/);
+    const strip = host.querySelector(".slime-loop-eyes")!, svg = strip.querySelector("svg")!;
+    const frame = Number(svg.getAttribute("viewBox")!.split(" ")[2]) / celCount(state), blinks = strip.classList.contains("has-blink") ? 4 : 1;
+    const poses = [...svg.children];
+    expect(poses, state).toHaveLength(celCount(state));
+    poses.forEach((pose, index) => {
+      expect(pose.matches("g.slime-cel-pose"), state).toBe(true);
+      expect(pose.getAttribute("transform")!.startsWith(`translate(${index * frame} 0) `), state).toBe(true);
+      expect(pose.children, state).toHaveLength(gazeRows(state) * blinks);
+      const group = affine(pose.getAttribute("transform")!);
+      [...pose.children].forEach((path, row) => {
+        expect(path.matches("path.slime-cel-eye[transform]"), state).toBe(true);
+        // The row's drop down the strip, carried inside the pose, lands where the strip's own drop put it before.
+        const style = (path as SVGElement).style;
+        const drop = move(parseFloat(style.getPropertyValue("--cel-row-x")) || 0, parseFloat(style.getPropertyValue("--cel-row-y")) || 0);
+        expect(near(times(group, drop), times(move(0, row * frame), group)), `${state} cel ${index} row ${row}`).toBe(true);
+      });
+    });
+  }
+});
+
+test("a strip's eyes wear the vector's face, as a move and a scale, and no face or eye cel takes a CSS transform", () => {
+  const host = document.createElement("div");
+  host.innerHTML = slimeSVG({ color: "sky" }, { ...plain, state: "working" });
+  const face = host.querySelector(".slime-face")!.getAttribute("transform")!;
+  const [, scale, dx, dy] = /\.slime-loop-eyes \{ --slime-face-scale: ([\d.]+); --slime-face-dx: (-?[\d.]+); --slime-face-dy: (-?[\d.]+); \}/.exec(css)!.map(Number);
+  expect(near(affine(face), [scale!, 0, 0, scale!, dx!, dy!])).toBe(true);
+  // A small face moves the large face's middle to a whole pixel: the middle the vector scales about.
+  const [middleX, middleY] = /^translate\(([\d.]+) ([\d.]+)\)/.exec(face)!.slice(1).map(Number);
+  expect(css).toMatch(new RegExp(`--slime-face-dx: calc\\(4 \\+ round\\(calc\\(${middleX! - 4} \\* var\\(--slime-unit\\)\\), 1\\) / var\\(--slime-unit\\) - ${middleX} \\* var\\(--slime-face-scale\\)\\);`));
+  expect(css).toMatch(new RegExp(`--slime-face-dy: calc\\(11 \\+ round\\(calc\\(${middleY! - 11} \\* var\\(--slime-unit\\)\\), 1\\) / var\\(--slime-unit\\) - ${middleY} \\* var\\(--slime-face-scale\\)\\);`));
+  expect(css).toContain(".slime-cel-eye { translate: calc((var(--cel-row-x, 0) + var(--slime-face-dx)) * 1px) calc((var(--cel-row-y, 0) + var(--slime-face-dy)) * 1px); scale: var(--slime-face-scale); }");
+  expect(css).toContain(".slime-face { transform: none; translate: calc(var(--slime-face-dx) * 1px) calc(var(--slime-face-dy) * 1px); scale: var(--slime-face-scale); }");
+  for (const [, selector, body] of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    if (/\.slime-(?:face|cel-eye)\b/.test(selector!)) expect(body, selector).not.toMatch(/(?:^|[;\s])transform:(?!\s*none\s*;)/);
+  }
 });
 
 test("each moving state retains its body performance while idle and sleeping have no loop", () => {

@@ -261,6 +261,7 @@ const HATS: Record<Hat, string> = {
 };
 
 // The eyes carry the character at 40 px, so they are drawn larger than the sheets, about their own middle; a hat clears them.
+// A strip's eyes wear the same face from slime.css (.slime-loop-eyes), as a move and a scale.
 const FACE_SCALE = "translate(49.5 48) scale(1.25) translate(-49.5 -48)";
 
 const HAT_LIFT = -4;
@@ -268,7 +269,7 @@ const drawings = new Map<string, { back: string; worn: string }>();
 const drawingIds = new Map<string, string>();
 
 function strips(state: SlimeState, drawing: {back: string; worn: string}): [string,string] {
-  return loopState(state) ? motionStrips(state,BODY,eyePath(state),FACE_SCALE,drawing.back,drawing.worn) : ['',''];
+  return loopState(state) ? motionStrips(state,BODY,eyePath(state),drawing.back,drawing.worn) : ['',''];
 }
 
 /**

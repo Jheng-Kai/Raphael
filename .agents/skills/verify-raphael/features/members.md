@@ -100,6 +100,20 @@ from slime.css's `--eyes` through the generated data; `slime.ts` `slimeSVG`, `en
 takes `d: var(--eyes)` and eases between shapes; WebKit changes them at once. The tests in `slime.test.ts` keep both.
 The look harness renders in Chromium, so a WebKit change is checked in a WKWebView by hand.
 
+The window's zoom (⌘+ and ⌘-, `window-zoom.ts`, remembered) is a page zoom, and WebKit multiplies the lengths of an SVG
+element's CSS `transform` and `transform-origin` by it, while the `transform` attribute and the separate `translate` and
+`scale` properties keep the drawing's units. The eye cels were placed by CSS transforms and the body cels by attributes,
+so at 110 % the eyes of cel n stood n tenths of a cel off and a working slime's eyes slid out of its body and back in
+every loop (at 100 % nothing showed). Each eye strip now has a group per body cel whose `transform` attribute holds the
+cel's place and pose; a path holds its gaze and blink in its own attribute and wears the face through `translate` and
+`scale` (`.slime-cel-eye`), with its row's drop down the strip carried inside the pose (`--cel-row-x`, `--cel-row-y`,
+`slime-cels.ts`). The small face's fit (`--slime-face-dx`, `--slime-face-dy`, `--slime-face-scale`, `--slime-eye-stroke`)
+is plain numbers made into pixels only where they are worn, since WebKit hands a registered length on already zoomed and
+zooms it again where it is used; for the same reason the unit is the registered size over the registered drawn size
+(`--slime-drawn`), never over a plain 92px. The vector's small face takes `translate` and `scale` too. Checked in a
+WKWebView with `pageZoom` 0.8, 1, 1.1 and 1.3 (working and thinking strips, still faces); `slime.test.ts` checks that
+the new placement lands every eye where the strip's own drop put it and that no face or eye cel takes a CSS transform.
+
 ## Quiet resting poses
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.
