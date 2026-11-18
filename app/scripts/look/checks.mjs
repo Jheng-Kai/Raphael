@@ -1123,6 +1123,25 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.au-room-pane:not([hidden]) .composer .cmp-folder'), "a room's composer has no folder");
     return {check: name};
   }
+  if (name === "composer-folder-added") {
+    // R-PC-05: a folder added from the menu is chosen at once, and the button names it.
+    const button = document.querySelector('.page-agent .composer .cmp-folder');
+    require(button.textContent.trim() === "交付成果" && !document.querySelector('#app-popover .cb-folders'), `the button names the folder just added: ${button.textContent.trim()}`);
+    const saved = window.__look.data.settings.member_write_folders["1"];
+    require(saved[0] === "C:\\Owner\\交付成果", `the added folder is the member's first, where it writes: ${saved.join(" | ")}`);
+    return { check: name, saved: saved.length };
+  }
+  if (name === "composer-folder-many") {
+    const card = document.querySelector('#app-popover .cb-folders'), list = card.querySelector('[role="radiogroup"]'), add = card.querySelector('[data-folder-act="add"]');
+    require(list.querySelectorAll('[data-folder]').length === 15 && list.scrollHeight > list.clientHeight + 4, "fifteen folders scroll inside the list");
+    const box = document.querySelector('#app-popover').getBoundingClientRect();
+    require(visible(add) && add.getBoundingClientRect().bottom <= box.bottom + 0.5 && box.top >= 0 && box.bottom <= innerHeight, "加入資料夾 stays in view at the foot and the card stays inside the window");
+    list.scrollTop = list.scrollHeight;
+    const last = [...list.querySelectorAll('[data-folder]')].at(-1).getBoundingClientRect(), frame = list.getBoundingClientRect();
+    require(last.bottom <= frame.bottom + 1 && last.top >= frame.top - 1, "the last folder can be scrolled to");
+    list.scrollTop = 0;
+    return { check: name };
+  }
   if (name === "composer-folder-menu") {
     const card = document.querySelector('#app-popover .cb-folders'), button = document.querySelector('.page-agent .composer .cmp-folder');
     require(visible(card) && card.querySelector('.cb-head h3')?.textContent === "可以寫入的資料夾", "the menu is the permission's kind of card, named for the folders");
@@ -1130,8 +1149,11 @@ export function checkRendered(name, context = {}) {
     const names = rows.map(row => row.querySelector('.cb-name b')?.textContent);
     require(names[0] === "Deliveries" && names[1] === "Notes" && rows.length === 3, `the output folder first, then the member's own, by name: ${names.join(" | ")}`);
     require(rows.map(row => row.getAttribute('aria-checked')).join() === "false,true,false", "the chosen one, the member's first, is checked");
-    require(rows[1].dataset.tooltip === "C:\\Owner\\Notes" && !/[A-Z]:\\/.test(card.textContent), "each whole path waits under the pointer, none is written in the card");
+    const paths = rows.map(row => row.querySelector('.cb-name small'));
+    require(paths[1]?.textContent === "C:\\Owner\\Notes" && paths.every(path => visible(path) && path.scrollWidth <= path.clientWidth + 1) && !rows.some(row => row.dataset.tooltip), "each folder's whole path is written under its name, whole, with no tooltip saying it again");
     const acts = [...card.querySelectorAll('[data-folder-act]')];
+    const list = card.querySelector('[role="radiogroup"]');
+    require(getComputedStyle(list).overflowY === "auto" && list.getBoundingClientRect().bottom <= acts[0].getBoundingClientRect().top + 0.5, "the list scrolls above 加入資料夾, which stays at the foot");
     require(acts.length === 1 && acts[0].dataset.folderAct === "add" && visible(acts[0]) && acts[0].getBoundingClientRect().top >= rows.at(-1).getBoundingClientRect().bottom - 0.5, "adding one is the one action, at the card's foot");
     for (const name_ of rows.map(row => row.querySelector('.cb-name b'))) require(visible(name_) && name_.scrollWidth <= name_.clientWidth + 1, `each name is whole: ${name_.textContent}`);
     const box = document.querySelector('#app-popover').getBoundingClientRect();

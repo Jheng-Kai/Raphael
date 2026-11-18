@@ -518,6 +518,11 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
 .composer .btn.cmp-folder:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .composer .btn.cmp-folder .i { flex: none; width: 16px; height: 16px; }
 .cb-folders .cb-actions { border-top: 1px solid var(--line); }
+/* Many folders scroll inside the card as the @ menu does, 加入資料夾 staying at its foot; each path is written whole. */
+.cb-card.cb-folders { display: flex; flex-direction: column; max-height: min(420px, calc(100vh - 120px)); }
+.cb-folders > .cb-list[role="radiogroup"] { flex: 0 1 auto; scrollbar-width: thin; }
+.cb-folders > .cb-head, .cb-folders > .cb-actions { flex: none; }
+.cb-folders .cb-name small { white-space: normal; overflow-wrap: anywhere; }
 .cmp-model:empty { display: none; }
 .cmp-model:empty + .cmp-pair { margin-inline-start: auto; }
 .composer .btn.cmp-mode { position: relative; overflow: hidden; gap: var(--sp-1); min-height: var(--h-ctl); padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }

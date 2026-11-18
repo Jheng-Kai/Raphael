@@ -1725,9 +1725,10 @@ every turn and task, every source and brain (API, and CLI through its MCP list) 
   and has no ⋯ (it is changed in Settings › General alone); each added one is removed from its own ⋯, the next one chosen
   when it was the chosen one.
 - The composer of a member's own conversation names the chosen folder beside the permission (the `.cmp-folder` button in
-  the permission's quiet type), else 選擇資料夾. Its menu is the permission's kind of card: each folder by its name (the
-  whole path under the pointer), the chosen one checked (choosing one puts it first), and 加入資料夾 alone at its foot
-  (the native picker; the pick goes at the end). Short of room its word hides with the permission's and its folder icon
+  the permission's quiet type), else 選擇資料夾. Its menu is the permission's kind of card: each folder by its name with its
+  whole path written under it, the chosen one checked (choosing one puts it first), the list scrolling as the @ menu's does
+  when there are many (`composer-folder-many`), and 加入資料夾 alone at its foot: the native picker, and the folder picked is
+  chosen at once and named on the button (`composer-folder-added`). Short of room its word hides with the permission's and its folder icon
   stays (`fitComposerRow`); a room's composer has none.
   The composer's + menu offers the same 加入資料夾 (R-UI-166, `composer-plus.ts`): it is `composer-folder.ts`'s own `add()`, shown while the folder button is.
 
@@ -1739,7 +1740,7 @@ the chosen one), `member-write-folders-default` (the output folder alone), `comp
 beside the output folder scenes; the composer row's narrow scenes prove the folder gives way with the permission:
 
 ```powershell
-npm run look -- member-write-folders member-write-folders-default composer-folder composer-folder-menu owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
+npm run look -- member-write-folders member-write-folders-default composer-folder composer-folder-menu composer-folder-added composer-folder-many owner-output-folder output-folder-picker output-folder-picker-cancel --theme both --width 1120,720,1920x1080
 npm run look -- composer-row-narrow composer-row-language composer-row-owner room --theme both --width 1120,720,1920x1080
 ```
 
