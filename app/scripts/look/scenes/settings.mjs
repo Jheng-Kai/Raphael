@@ -32,7 +32,9 @@ export default [
   scene("settings-tidy-key", "The 聽寫 tab lists 整理選取文字 with its key and a pencil beside the other shortcuts, as wide as theirs", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
   // R-PRIV-MIC-01: a Mac's meter never opens the microphone before the owner allows it; 測試麥克風 asks macOS, once.
   scene("settings-mic-undecided", "A Mac whose microphone macOS has not asked about: 聽寫 says so with 測試麥克風, and the meter stays closed until it is pressed", [...settings("dictation"), wait('.modal-scrim [data-act="mic-ask"]'), check("settings-mic-undecided")], { microphone: "undecided" }),
-  scene("settings-mic-denied", "A Mac whose microphone was refused: 聽寫 says where to allow it, its button opens that pane, and the meter stays closed", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-mic-denied")], { microphone: "denied" }),
+  scene("settings-mic-denied", "A Mac whose microphone was refused: 聽寫 says where to allow it, its button opens that pane, and the meter stays closed", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-mic-denied")], { microphone: "denied", mac: true }),
+  // R-PRIV-AX-01: on a Mac without Accessibility no global key is heard, so no paste or tidy fails to say so; 聽寫 says it instead.
+  scene("settings-accessibility-off", "A Mac without Accessibility: 聽寫 says so above the shortcuts, and its one button opens the pane", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-accessibility-off")], { accessibility: false }),
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),

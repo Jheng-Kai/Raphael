@@ -482,7 +482,7 @@ export const it = {
   "missing.urlRead": "Impossibile leggere direttamente questo URL. Fornisci una pagina pubblica o un file scaricato; apri personalmente le pagine riservate o con accesso.",
   "missing.unknown": "La causa dell’errore è sconosciuta. Conserva questa conversazione e riprova una volta; segnala se persiste.",
   "missing.microphone": "Accesso al microfono non riuscito. Consenti l’uso a Raphael e alle app desktop nelle impostazioni privacy del microfono Windows.",
-  "missing.accessibility": "I tasti di dettatura richiedono Accessibilità. Consenti Raphael in Impostazioni di Sistema > Privacy e sicurezza > Accessibilità. Se è già attivo, rimuovi Raphael con − e aggiungilo di nuovo.",
+  "missing.accessibility": "I tasti di dettatura richiedono Accessibilità. Attiva Raphael in Impostazioni di Sistema > Privacy e sicurezza > Accessibilità. Se Raphael non è nell’elenco, o è attivo ma non funziona, aggiungilo da Applicazioni con + (rimuovi prima con − quello in elenco).",
   "ownerQuestion.submit": "Invia risposta",
   "ownerQuestion.answered": "Risposto",
   "ownerQuestion.skip": "Salta",

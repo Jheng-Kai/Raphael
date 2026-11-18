@@ -226,7 +226,7 @@ pub fn run() {
             commands::device_settings_set,
             commands::device_computer_app_remove,
             commands::keyboard_has_altgr,
-            commands::repair_accessibility,
+            commands::accessibility_access,
             commands::owner_clipboard_text,
             commands::owner_clipboard_sequence,
             commands::open_link,

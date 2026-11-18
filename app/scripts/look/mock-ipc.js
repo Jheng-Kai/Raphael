@@ -2490,6 +2490,8 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "keyboard_has_altgr") return false;
+      // A Mac's Accessibility (R-PRIV-AX-01): a scene says false to show it off; elsewhere there is no such permission.
+      if (command === "accessibility_access") return variant.accessibility ?? null;
       // The owner's clipboard is never read by a look: the live view's paste asks only while they hold a real screen.
       if (command === "owner_clipboard_text") return null;
       if (command === "owner_clipboard_sequence") return null;

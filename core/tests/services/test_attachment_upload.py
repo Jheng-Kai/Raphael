@@ -59,6 +59,32 @@ async def test_chunked_upload_is_atomic_mapped_and_read_by_existing_text_reader(
         attachment.data.close()
 
 
+def test_a_copy_saved_with_a_message_and_sent_again_by_its_id_keeps_the_name_the_request_gives_it(tmp_path):
+    store = AttachmentStore(tmp_path)
+    saved = store.save(checked("image.png", "image/png", b"\x89PNG\r\n\x1a\nsynthetic"))
+    for item, name in [({"stored_id": saved.stored_id, "name": "  image.png "}, "image.png"),
+                       ({"stored_id": saved.stored_id}, saved.stored_id),
+                       ({"stored_id": saved.stored_id, "name": 7}, saved.stored_id)]:
+        attachment = from_wire([item], store.resolve)[0]
+        try:
+            assert (attachment.name, attachment.mime, attachment.stored_id) == (name, "image/png", saved.stored_id)
+        finally:
+            attachment.data.close()
+
+
+@pytest.mark.asyncio
+async def test_a_chunked_upload_keeps_its_own_name_whatever_a_later_request_calls_it(tmp_path):
+    store = AttachmentStore(tmp_path)
+    token = (await store.upload({"action": "begin", "name": "notes.txt", "mime": "text/plain", "size": 3}))["token"]
+    await store.upload({"action": "append", "token": token, "offset": 0, "data": base64.b64encode(b"abc").decode()})
+    item = await store.upload({"action": "finish", "token": token})
+    attachment = from_wire([{**item, "name": "other.txt"}], store.resolve)[0]
+    try:
+        assert attachment.name == "notes.txt"
+    finally:
+        attachment.data.close()
+
+
 @pytest.mark.asyncio
 async def test_upload_refuses_replays_wrong_sizes_and_unfinished_publication(tmp_path):
     store = AttachmentStore(tmp_path)

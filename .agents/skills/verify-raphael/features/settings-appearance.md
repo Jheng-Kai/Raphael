@@ -71,7 +71,9 @@ npm run look -- about-no-updater-key update-found update-ready update-auto setti
 With a compiled public key, About checks https://github.com/Jheng-Kai/Raphael/releases/latest/download/latest.json on opening.
 The release-assets test rejects the former owner in updater configurations and publication.
 Release verification also covers both owner updater keys, neither key and either key alone.
-Only both keys enable version-bound signing and latest.json; otherwise one warning accompanies
+With both keys the Windows builder signs the installer and the Apple silicon builder verifies the signed .app.tar.gz
+archive and the version inside the app. Publication assembles their windows-x86_64 and darwin-aarch64 entries
+in one latest.json. Otherwise one warning accompanies
 the verified installer, notices, BUILD-INFO and checksums, with no .sig or feed. The disabled
 mode uses a small config override and records its reason in BUILD-INFO. Publication reads the
 checked version job output in both modes. Signed mode refuses missing or malformed signatures
@@ -85,7 +87,8 @@ no update request. The configured-key UI remains unchanged. about-no-updater-key
 real settings entry, native opener boundary and absence of another update check.
 A newer version shows escaped notes
 and Download and restart. Auto update is off by default; opt-in downloads in the background,
-then installs only after ten minutes of native idle and a complete idle roster. The signed
+then installs only after ten minutes of native idle and a complete idle roster on either platform. On a Mac the
+updater replaces the app bundle and the shell requests a restart. The signed
 artifact must include the manifest's version. One startup receipt reports the installed
 version when the main page is visible; hidden startup retains the receipt. Unknown state,
 missing core, active or waiting members prevent installation.

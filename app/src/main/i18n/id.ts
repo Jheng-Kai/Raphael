@@ -482,7 +482,7 @@ export const id = {
   "missing.urlRead": "URL ini tidak dapat dibaca langsung. Berikan halaman publik atau lampirkan berkas unduhan; buka sendiri halaman terbatas atau yang memerlukan login.",
   "missing.unknown": "Penyebab kegagalan tidak diketahui. Simpan percakapan ini dan coba sekali lagi; laporkan jika berlanjut.",
   "missing.microphone": "Akses mikrofon gagal. Izinkan Raphael dan aplikasi desktop memakai mikrofon di pengaturan privasi mikrofon Windows.",
-  "missing.accessibility": "Tombol dikte memerlukan izin Aksesibilitas. Izinkan Raphael di Pengaturan Sistem > Privasi & Keamanan > Aksesibilitas. Jika sudah aktif, hapus Raphael dengan − lalu tambahkan lagi.",
+  "missing.accessibility": "Tombol dikte memerlukan izin Aksesibilitas. Aktifkan Raphael di Pengaturan Sistem > Privasi & Keamanan > Aksesibilitas. Jika Raphael tidak ada di daftar, atau sudah aktif tetapi tidak berfungsi, tambahkan dari Aplikasi dengan + (hapus dulu yang ada di daftar dengan −).",
   "ownerQuestion.submit": "Kirim jawaban",
   "ownerQuestion.answered": "Dijawab",
   "ownerQuestion.skip": "Lewati",

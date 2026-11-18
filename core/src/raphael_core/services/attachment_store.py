@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..protocol import invalid_params
 from ..paths import local_storage_root
-from .attachments import Attachment, AttachmentError, MAX_VIDEO_BYTES, checked, file_limit
+from .attachments import Attachment, AttachmentError, MAX_NAME_CHARS, MAX_VIDEO_BYTES, checked, file_limit
 
 ID = re.compile(r"[a-f0-9]{32}\.[a-z0-9]{1,12}")
 # Native opening invokes the owner's file association. Unknown extensions must not
@@ -70,15 +70,18 @@ class AttachmentStore:
         router.register("attachments.info", self.info)
 
     def resolve(self, item):
-        """Map a validated stored copy; readers slice their existing bounded excerpts."""
+        """Map a validated stored copy; readers slice their existing bounded excerpts. A copy saved with a message keeps only its
+        type, so a message sent again by its stored copies (重新產生) names each file as the request names it."""
         try:
             path = self.path(item.get("stored_id"))
             meta = json.loads(path.with_name(path.name + ".json").read_text(encoding="utf-8"))
             if path.stat().st_size > file_limit(meta["mime"]):
                 raise AttachmentError("size")
+            asked = item.get("name")
+            name = meta.get("name") or (" ".join(asked.split())[:MAX_NAME_CHARS] if isinstance(asked, str) else "") or path.name
             with path.open("rb") as source:
                 data = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
-            return Attachment(meta.get("name", path.name), meta["mime"], data, path.name, path)
+            return Attachment(name, meta["mime"], data, path.name, path)
         except (OSError, ValueError, KeyError):
             raise AttachmentError("data") from None
 

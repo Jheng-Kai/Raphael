@@ -99,9 +99,8 @@ export function noticeHTML(requirement: string, repair: string | null = null, re
 export function bindMissing(root: Document | HTMLElement, go: (page: PageId, arg?: PageArgument) => void): () => void {
   const click = (event: Event): void => {
     const pane = (event.target as Element).closest<HTMLButtonElement>("[data-missing-pane]");
-    // Accessibility is repaired, not only opened: a rebuilt or updated app finds its old switch showing on while it no longer
-    // counts, so the shell clears that entry, macOS asks again and the pane opens (commands.rs `repair_accessibility`).
-    if (pane?.dataset.missingPane === SYSTEM_PANES.accessibility) { void api.repairAccessibility().catch(() => api.openLink(SYSTEM_PANES.accessibility)).catch(() => {}); return; }
+    // A pane is only opened. Accessibility's entry is never cleared: cleared while macOS's own question was up, the app was
+    // missing from the list that question opened. The note says how to add it there with + (missing.accessibility).
     if (pane && Object.values(SYSTEM_PANES).includes(pane.dataset.missingPane ?? "")) { void api.openLink(pane.dataset.missingPane!); return; }
     const button = (event.target as Element).closest<HTMLButtonElement>("[data-missing-repair]");
     if (!button || button.disabled || !repairs.has(button.dataset.missingRepair ?? "")) return;

@@ -5657,7 +5657,11 @@ class AgentService:
             " WHERE i.request_id=? AND i.state!='terminal' ORDER BY (i.state='started'),i.seq", (session,),
         ).fetchall()
         if not rows:
-            rows = self._conn.execute("SELECT member_id,scope,conversation_id FROM agent_turns WHERE session_id=?", (session,)).fetchall()
+            # An exchange the work had with a colleague (ask_member) is written under the same session in that colleague's
+            # thread: it is not a message of this conversation, and counting it refused every Stop of the work that asked
+            # (seen on a real computer: the owner's Stop did nothing while a member waited on Raphael's answer).
+            rows = self._conn.execute("SELECT member_id,scope,conversation_id FROM agent_turns WHERE session_id=? AND scope!='exchange'",
+                                      (session,)).fetchall()
         if any(row['member_id'] != member or row['scope'] != 'private' for row in rows):
             raise invalid_params('stop must identify this private conversation')
         returned = []

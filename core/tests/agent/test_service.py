@@ -1819,6 +1819,25 @@ async def test_stop_keeps_history_and_cancels_only_the_named_session(rig):
     assert rig.service._was_cancelled('typed-stop')
 
 
+async def test_stop_of_work_that_asked_a_colleague_is_not_refused_by_the_exchange_it_wrote(rig):
+    # Seen on a real computer: a member's work asked Raphael (ask_member), the exchange was written under the work's session in
+    # Raphael's thread, and every Stop of that work was refused as "not this private conversation", so nothing stopped.
+    stopped=[]
+    async def cancel_session(session):
+        stopped.append(session)
+    rig.service._background.cancel_session=cancel_session
+    rig.history.add(session_id='asked',question='Make v14',route='answer',prefix='',text='',status='error',source='app')
+    rig.history.add(session_id='asked',question='Who uses the computer?',route='exchange',prefix='',text='Nobody',status='done',source='member',
+                    scope='exchange',member_id=7)
+    assert (await rig.call('agent.history.stop',{'session_id':'asked','member_id':0}))['stopped']
+    assert stopped==['asked'] and rig.service._was_cancelled('asked')
+    # Another member's private conversation is still refused.
+    rig.history.add(session_id='theirs',question='Private',route='answer',prefix='',text='',status='running',source='app',member_id=7)
+    with pytest.raises(RpcError):
+        await rig.call('agent.history.stop',{'session_id':'theirs','member_id':0})
+    assert not rig.service._was_cancelled('theirs')
+
+
 async def test_private_stop_rejects_a_room_source(rig):
     with rig.conn:
         room=rig.conn.execute("INSERT INTO rooms(name,created) VALUES ('Stop scope',1)").lastrowid

@@ -8709,6 +8709,7 @@ export function checkRendered(name, context = {}) {
     const list = tidy.closest('.list') ?? tidy.parentElement;
     require(list.scrollWidth <= list.clientWidth + 1, "the shortcuts fit their list");
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    require(!scrim.querySelector('.missing-note [data-missing-pane]'), "no Accessibility note where that permission is not missing");
     return { check: name, keys: caps.join(" + ") };
   }
   if (name === "settings-mic-undecided" || name === "settings-mic-denied") return (async () => {
@@ -8738,6 +8739,19 @@ export function checkRendered(name, context = {}) {
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
     return { check: name };
   })();
+  if (name === "settings-accessibility-off") {
+    const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
+    const note = scrim.querySelector('.missing-note'), button = note?.querySelector('[data-missing-pane]');
+    require(visible(note) && visible(button), "the Accessibility note and its button are on the 聽寫 tab");
+    require(note.compareDocumentPosition(scrim.querySelector('.sgroup')) & Node.DOCUMENT_POSITION_FOLLOWING, "the note stands above the shortcuts");
+    require(/[+＋]/.test(note.textContent), "it says to add Raphael with + when Raphael is not listed");
+    require(button.dataset.missingPane.endsWith("Privacy_Accessibility"), "its button opens the Accessibility pane");
+    const words = note.querySelector('span'), box = note.getBoundingClientRect(), list = scrim.querySelector('.sgroup').getBoundingClientRect();
+    require(words.scrollWidth <= words.clientWidth + 1, "its words wrap inside the tab");
+    require(box.left >= list.left - 1 && box.right <= list.right + 1, "it is no wider than the shortcuts under it");
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    return { check: name };
+  }
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");

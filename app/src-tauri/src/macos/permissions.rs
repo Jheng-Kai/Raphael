@@ -96,38 +96,11 @@ pub fn ask_microphone() {
 }
 
 /// Whether the app may use the accessibility API; with `prompt`, macOS shows its own question
-/// once if it has not been decided.
+/// once if it has not been decided. macOS 26 asks again for an entry given to another signature (a
+/// rebuilt or updated ad hoc app). The app never clears its own entry: cleared while that question
+/// was up, the app was missing from the list the question opened, with no switch to turn on.
 pub fn accessibility(prompt: bool) -> bool {
     ax::trusted(prompt)
-}
-
-/// Makes Accessibility askable again when the app may not use it: macOS keeps one entry per app,
-/// tied to the signature it was given to, so a rebuilt or updated app (ad hoc signed) finds its old
-/// switch showing on while it no longer counts, and macOS never asks again. The entry is cleared
-/// (`tccutil reset Accessibility <identifier>`, the app's own entry only) and macOS asked, which lists
-/// the app afresh with its switch off. A permission that counts is left alone. Gives whether the app
-/// may use the accessibility API now.
-pub fn repair_accessibility(identifier: &str) -> bool {
-    if accessibility(false) {
-        return true;
-    }
-    let plain = !identifier.is_empty()
-        && identifier
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
-    if plain {
-        match std::process::Command::new("/usr/bin/tccutil")
-            .args(["reset", "Accessibility", identifier])
-            .output()
-        {
-            Ok(done) if done.status.success() => {
-                log::info!("accessibility: the app's entry was cleared, to be asked again")
-            }
-            Ok(done) => log::warn!("accessibility: tccutil said no ({})", done.status),
-            Err(err) => log::warn!("accessibility: tccutil could not run: {err}"),
-        }
-    }
-    accessibility(true)
 }
 
 /// Whether the app may watch keyboard and mouse input (Input Monitoring); with `prompt`, macOS

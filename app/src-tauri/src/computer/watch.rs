@@ -296,8 +296,11 @@ pub mod hook {
     //! The owner's keyboard and mouse on macOS: a listen-only event tap on a thread of its own with
     //! its run loop, put in by [`Watch::start`] and taken out by [`Watch::stop`] (or when it is
     //! dropped). The tap only reads: every event goes on, whatever the judge says. It needs the
-    //! Input Monitoring permission (or Accessibility); without it the tap cannot be made, the watch
-    //! does not start, and the run is refused (`watch`), as on Windows.
+    //! Input Monitoring permission (or Accessibility) for the keys: macOS takes the events it does
+    //! not allow out of a tap's mask and refuses only a tap left with none, so a tap of keys and mouse
+    //! together is made without it and sees the mouse alone. The keys are tried first, in a tap of
+    //! their own ([`keys_delivered`]); without them the watch does not start and the run is refused
+    //! (`watch`), as on Windows.
 
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -451,6 +454,40 @@ pub mod hook {
         .fold(0, |mask, kind| mask | event_mask(kind))
     }
 
+    /// The keys alone, which the owner presses to stop a run. A modifier's change is left out: were
+    /// it delivered without Input Monitoring, a tap of it alone would still be made.
+    fn key_mask() -> CGEventMask {
+        [kCGEventKeyDown, kCGEventKeyUp]
+            .into_iter()
+            .fold(0, |mask, kind| mask | event_mask(kind))
+    }
+
+    /// Whether macOS delivers the keyboard to a listening tap: a tap of the keys alone is made only
+    /// then. Made and taken out at once, on the thread that then makes the watch's tap.
+    ///
+    /// # Safety
+    ///
+    /// The caller is the thread that would own the tap.
+    unsafe fn keys_delivered() -> bool {
+        // SAFETY: the probe is this thread's, released here and never put on a run loop.
+        unsafe {
+            let probe = CGEventTapCreate(
+                kCGSessionEventTap,
+                kCGHeadInsertEventTap,
+                kCGEventTapOptionListenOnly,
+                key_mask(),
+                callback,
+                std::ptr::null_mut(),
+            );
+            if probe.is_null() {
+                return false;
+            }
+            CFMachPortInvalidate(probe);
+            CFRelease(probe.cast_const());
+            true
+        }
+    }
+
     /// The tap's thread, while it is in.
     pub struct Watch {
         stop: Arc<AtomicBool>,
@@ -461,7 +498,7 @@ pub mod hook {
         /// Puts the tap in, unarmed; `told` is called (on the tap's thread, so it must be quick)
         /// when the owner's input stops the run.
         pub fn start(told: Box<dyn Fn() + Send>) -> Option<Watch> {
-            // macOS asks the owner once, the first time; until then the tap cannot be made.
+            // macOS asks the owner once, the first time; until the keys are allowed no run is watched.
             crate::macos::permissions::input_monitoring(true);
             *lock(&WATCHING) = Some(Watching {
                 judge: Judge::new(),
@@ -476,6 +513,11 @@ pub mod hook {
                     // SAFETY: the tap, its source and the run loop are this thread's; everything
                     // made here is released here, the tap last.
                     unsafe {
+                        // A tap of the mouse alone would leave the owner's keys unable to stop it.
+                        if !keys_delivered() {
+                            let _ = ready.send(false);
+                            return;
+                        }
                         let tap = CGEventTapCreate(
                             kCGSessionEventTap,
                             kCGHeadInsertEventTap,
@@ -520,7 +562,7 @@ pub mod hook {
             } else {
                 log::warn!(
                     "computer: the watch on the owner's input could not start \
-                     (no Input Monitoring permission)"
+                     (no Input Monitoring permission: the keys are not delivered)"
                 );
                 let _ = thread.join();
                 *lock(&WATCHING) = None;
@@ -565,6 +607,23 @@ pub mod hook {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn a_run_is_watched_only_once_the_keys_alone_are_delivered() {
+            // A tap of keys and mouse is made without Input Monitoring and sees the mouse alone.
+            assert_eq!(mask() & key_mask(), key_mask());
+            assert_eq!(key_mask() & event_mask(kCGEventMouseMoved), 0);
+            assert_eq!(key_mask() & event_mask(kCGEventLeftMouseDown), 0);
+            assert_eq!(key_mask() & event_mask(kCGEventFlagsChanged), 0);
+            let source = include_str!("watch.rs");
+            let start = &source[source.find("pub fn start(told").unwrap()..];
+            let tried = start.find("if !keys_delivered()").unwrap();
+            let made = start.find("let tap = CGEventTapCreate(").unwrap();
+            assert!(
+                tried < made,
+                "the keys are tried before the watch's tap is made"
+            );
+        }
 
         #[test]
         fn esc_is_the_judges_esc_and_no_other_key_ever_is() {

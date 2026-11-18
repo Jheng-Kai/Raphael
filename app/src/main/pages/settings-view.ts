@@ -124,6 +124,8 @@ export interface SettingsView {
   altgr: boolean;
   /** macOS's answer for the microphone, read without asking; null on Windows or while it is not known. */
   microphone?: import("../types").MicrophonePermission | null;
+  /** macOS: whether the app may use Accessibility; null on Windows or while it is not known. */
+  accessibility?: boolean | null;
   /** The app's version, as Tauri gives it; empty while it is not known. */
   version: string;
   /** The key field is shown although there is a key (「變更」). */
@@ -409,6 +411,13 @@ const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
   v.altgr && bindings.some((binding) => binding.split("+").includes("AltRight")) ? [note(st("warn", t("settings.054")))] : [];
 
 /**
+ * A Mac's Accessibility while it is off: no global key is heard, so no paste or tidy fails to say so, and macOS asks only
+ * once. This note is where the owner finds the pane again (R-PRIV-AX-01); while the permission is on it is not drawn.
+ */
+const accessibilityNote = (v: SettingsView): string =>
+  v.accessibility === false ? missingHTML({ resource: "hotkeys", requirement: "accessibility", state: "missing", repair: null }) : "";
+
+/**
  * A Mac's microphone while the meter may not open it: not decided yet (測試麥克風 asks macOS, once), or refused (its pane is
  * a press away). Nothing is drawn while it is allowed, or on Windows.
  */
@@ -472,6 +481,7 @@ function dictationHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
     coreNote(v) +
+    accessibilityNote(v) +
     microphoneNote(v) +
     section(t("home.shortcuts"), [
       shortcutRow(t("settings.agentKeys"), v.device.agent_keys ?? [], { act: "rec-agent", field: "agent_keys" }),
