@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { FLYER_GAP_PX, FLYER_PX, VoiceMode, flightPath, spotTransform } from "./voice-mode";
+import { FLYER_GAP_PX, FLYER_PX, VoiceMode, flightPath, onWholePixels, spotTransform } from "./voice-mode";
 
 const box = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
 
@@ -27,6 +27,18 @@ describe("the voice mode's flight", () => {
   test("a place is a translation of the flyer's box and a scale", () => {
     expect(spotTransform({ x: 400, y: 300, s: 1 })).toBe("translate(334px, 234px) scale(1)");
     expect(spotTransform({ x: 66, y: 66, s: 34 / 132 })).toBe("translate(0px, 0px) scale(0.258)");
+  });
+
+  test("landed, the emblem starts on a whole screen pixel at any scale, moved by less than one", () => {
+    for (const ratio of [1, 1.25, 1.5, 1.75, 2.25]) {
+      const box = { left: 648.0234, top: 617.2961 };
+      const spot = onWholePixels({ x: 400, y: 334, s: 1 }, box, ratio);
+      const left = (box.left + spot.x - 400) * ratio, top = (box.top + spot.y - 334) * ratio;
+      expect(Math.abs(left - Math.round(left))).toBeLessThan(1e-9);
+      expect(Math.abs(top - Math.round(top))).toBeLessThan(1e-9);
+      expect(Math.abs(spot.x - 400) * ratio).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(spot.y - 334) * ratio).toBeLessThanOrEqual(0.5);
+    }
   });
 });
 

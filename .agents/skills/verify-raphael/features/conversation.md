@@ -3028,6 +3028,8 @@ This core-only change does not alter calm-thread presentation or require look/ju
 When the owner speaks to Raphael from the composer and it has no picture of the owner's own, the flyer above the
 composer is the overlay's own `Emblem` renderer on a canvas (voice-mode.ts `live`), set to listening and fed the
 same `VoiceLevel` the corner gets, so it looks and moves exactly like the emblem over the desktop when Alt is held.
+Landed, its canvas lies on whole device pixels at its own size, as sharp as the corner's (R-UI-171): the look check
+measures it. Run the scene again with `--scale 1.25` to judge its sharpness.
 A picture of the owner's own keeps the ringed circle. The sidebar drag between rows shows one insertion line, no box.
 
 ```powershell
