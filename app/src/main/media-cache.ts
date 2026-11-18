@@ -98,8 +98,36 @@ export function keepDecoded(id: string, image: HTMLImageElement): void {
   }
 }
 
+/** Pictures sent from their own bytes and drawn from them under their stored id: at most this many characters of data URLs. */
+const MAX_ADOPTED_CHARS = 48 * 1024 * 1024;
+const adopted = new Map<string, string>();
+let adoptedChars = 0;
+
+/**
+ * A picture the owner just sent, drawn from its own bytes (`url`, a data URL) while the message was on its way, under the stored id
+ * its turn now has: the thread draws the turn's picture at once from what it already decoded, and the shell is not asked for it.
+ * Without this the turn's picture stood empty, its name showing, until its stored copy loaded. Past the bound the oldest are asked
+ * for as any other id.
+ */
+export function adoptPicture(id: string, url: string, image: HTMLImageElement): void {
+  if (!STORED_ID.test(id) || urls.has(id) || !image.naturalWidth) return;
+  remember(id, url);
+  keepDecoded(id, image);
+  adopted.set(id, url);
+  adoptedChars += url.length;
+  while (adoptedChars > MAX_ADOPTED_CHARS && adopted.size > 1) {
+    const [oldest, old] = adopted.entries().next().value!;
+    adopted.delete(oldest);
+    adoptedChars -= old.length;
+    if (urls.get(oldest) !== old) continue;
+    urls.delete(oldest);
+    const entry = kept.get(oldest);
+    if (entry) { kept.delete(oldest); keptBytes -= entry.bytes; }
+  }
+}
+
 /** For tests: forget everything. */
 export function resetMediaCache(): void {
   for (const [id, url] of urls) forgetBlob(id, url);
-  urls.clear(); asking.clear(); blobs.clear(); kept.clear(); keptBytes = 0;
+  urls.clear(); asking.clear(); blobs.clear(); kept.clear(); keptBytes = 0; adopted.clear(); adoptedChars = 0;
 }

@@ -2,7 +2,7 @@
 // Stored attachments are immutable, so the window asks for each id once a session and keeps what it drew (R-MEDIA-03).
 import { attachmentSource } from "./api";
 import { beforeEach, expect, test, vi } from "vitest";
-import { isKept, keepDecoded, knownMediaUrl, mediaUrl, resetMediaCache } from "./media-cache";
+import { adoptPicture, isKept, keepDecoded, knownMediaUrl, mediaUrl, resetMediaCache } from "./media-cache";
 
 vi.mock("./api", () => ({ attachmentSource: vi.fn(async (id: string) => `http://raphael-media.localhost/${id}`) }));
 beforeEach(() => { resetMediaCache(); vi.mocked(attachmentSource).mockClear(); });
@@ -44,4 +44,28 @@ test("pictures kept decoded are bounded by count and by decoded size, the oldest
   // A picture that has not decoded is not kept.
   keepDecoded(ID(300), picture(0, 0));
   expect(isKept(ID(300))).toBe(false);
+});
+
+test("a picture just sent is drawn from its own bytes under its stored id, without asking the shell, within a bound", async () => {
+  const url = `data:image/png;base64,${"A".repeat(16)}`;
+  adoptPicture(ID(1), url, picture(10, 10));
+  expect(knownMediaUrl(ID(1))).toBe(url);
+  expect(isKept(ID(1))).toBe(true);
+  expect(await mediaUrl(ID(1))).toBe(url);
+  expect(attachmentSource).not.toHaveBeenCalled();
+  // One that has not decoded, an id already known and a malformed id are left as they are.
+  adoptPicture(ID(2), url, picture(0, 0));
+  expect(knownMediaUrl(ID(2))).toBeUndefined();
+  adoptPicture(ID(1), "data:image/png;base64,B", picture(10, 10));
+  expect(knownMediaUrl(ID(1))).toBe(url);
+  adoptPicture("C:/secret.png", url, picture(10, 10));
+  expect(knownMediaUrl("C:/secret.png")).toBeUndefined();
+  // Past 48 MiB of data URLs the oldest is asked for as any other id again.
+  const big = `data:image/png;base64,${"A".repeat(30 * 1024 * 1024)}`;
+  adoptPicture(ID(3), big, picture(10, 10));
+  adoptPicture(ID(4), big.slice(0, -1), picture(10, 10));
+  expect(knownMediaUrl(ID(3))).toBeUndefined();
+  expect(isKept(ID(3))).toBe(false);
+  expect(knownMediaUrl(ID(4))).toBeDefined();
+  expect(await mediaUrl(ID(3))).toBe(`http://raphael-media.localhost/${ID(3)}`);
 });

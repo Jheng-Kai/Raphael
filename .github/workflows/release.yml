@@ -41,8 +41,9 @@ jobs:
           set -euo pipefail
           # A push run on main only checks the Rust dependencies, so it never counts. Pull request,
           # manual and merge queue runs check all three layers, and then "Guardian required gates" passes.
-          runs=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&status=completed&per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "success" and .event != "push") | .id')
+          # The API's status filter leaves out a run whose failed jobs were re-run and passed, so the run's own status is read.
+          runs=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$COMMIT&per_page=100" \
+            --jq '.workflow_runs[] | select(.status == "completed" and .conclusion == "success" and .event != "push") | .id')
           for id in $runs; do
             gate=$(gh api "repos/$GH_REPO/actions/runs/$id/jobs?per_page=100" \
               --jq '[.jobs[] | select(.name == "Guardian required gates" and .conclusion == "success")] | length')

@@ -918,11 +918,20 @@ test.each(["edit", "cancel", "regenerate"])("%s after reload retrieves stored fi
   const original = turn(8, { member_id: 3, session_id: "saved", status: action === "regenerate" ? "done" : "running", ...(action === "edit" ? { text: "" } : {}),
     attachments: [{ id, name: "report.csv", mime: "text/csv", size: 6 }], quote });
   api.agentHistoryList.mockImplementation(async ({ member_id }: { member_id?: number }) => ({ turns: member_id === 3 ? [original] : [] }));
-  api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") } : { questions: [] });
+  api.core.mockImplementation(async (method: string) => method === "attachments.get" ? { mime: "text/csv", data: btoa("report") }
+    : method === "attachments.info" ? { mime: "text/csv", size: 6 } : { questions: [] });
   const agent = mount(); await flush(); await pick(3);
   // Edit, Cancel and Regenerate all live in the message's ⋯ menu.
   $(`[data-id="8"] ${action === "regenerate" ? ".ra" : ".me"} [data-act="more-message"]`).click(); await flush();
   $(`[data-pick="${action}"]`).click(); await flush();
+  // 重新產生 sends the message's files as the stored copies they are, in the message's own place, never their bytes again.
+  if (action === "regenerate") {
+    expect(api.core).toHaveBeenCalledWith("attachments.info", { id });
+    expect(api.core).not.toHaveBeenCalledWith("attachments.get", expect.anything());
+    expect(api.agentAskText).toHaveBeenCalledWith("問題 8", [{ name: "report.csv", mime: "text/csv", data: "", stored_id: id }], 3, expect.objectContaining({ quote, replaceTurnId: 8 }));
+    agent.hide();
+    return;
+  }
   expect(api.core).toHaveBeenCalledWith("attachments.get", { id });
   if (action === "edit" || action === "cancel") {
     expect($<HTMLTextAreaElement>(".cmp-input").value).toBe("問題 8");
@@ -1059,7 +1068,7 @@ test("regenerating the latest member reply asks the same question in that member
   document.querySelector<HTMLButtonElement>('.tn[data-id="31"] .ra [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush();
-  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 31", [], 3, expect.objectContaining({ requestId: expect.any(String) }));
+  expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 31", [], 3, expect.objectContaining({ requestId: expect.any(String), replaceTurnId: 31 }));
   agent.hide();
 });
 
