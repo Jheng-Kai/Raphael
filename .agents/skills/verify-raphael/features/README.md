@@ -12,12 +12,12 @@ the move's real-engine proof is the computer acceptance's `folders move` step.
 
 R-COPY-01 to R-COPY-05 and R-DEFAULT-01 to R-DEFAULT-04 (RULES.md, "Designed for everyone"). Words and defaults that fit only the first user, changed
 where no control a person chose moves: every 「設定 › …」 path names a place Settings has
-(`settings-paths.test.ts`, which also reads the core and the shell's notices), the OpenRouter key row says whose key it
-is and no longer shows milliseconds, prices are counted in words, a failed connection and a stopped program are told
+(`settings-paths.test.ts`, which also reads the core and the shell's notices), an OpenRouter key is managed on its provider card
+like any other and nothing shows milliseconds, prices are counted in words, a failed connection and a stopped program are told
 without MCP or CLI, a model is named by its catalogue name, 保持喚醒 has its line, and a new person starts with no city,
 no search service that needs a key they have not got, the dictation language of the language they picked in the guide and
 no shipped model shown as chosen while its connection is missing. Selected scenes: usage, usage-empty, usage-allowances-chatgpt,
-usage-owner, usage-key-menu, usage-key-removed, quick-model-menu, model-sync, model-choices-local, settings-chatgpt-row,
+usage-owner, quick-model-menu, model-sync, model-choices-local, settings-chatgpt-row,
 missing-search, missing-search-repair, missing-vision, missing-pdf, missing-card, missing-card-repair, missing-provider,
 missing-model-list, automations-calendar, automations-tools-awake, calendar-week-fit, onboarding-tools, onboarding-abilities,
 connect-apps-categories and plugins-store (the store rows check now knows a connected app's 已連結 lives inside its one

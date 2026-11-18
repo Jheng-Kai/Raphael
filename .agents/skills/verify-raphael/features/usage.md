@@ -55,7 +55,7 @@ subscription's window reaches nine-tenths used.
 ## Driving it with look
 
 ```powershell
-npm run look -- usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly usage-key-menu usage-key-removed --theme both --width 1120,720,1920x1080
+npm run look -- usage usage-owner usage-allowances-chatgpt usage-empty usage-opens-quietly --theme both --width 1120,720,1920x1080
 ```
 
 `usage-owner` is the owner's own mix (Codex live, Claude whose window has reset, the ChatGPT sign-in, OpenRouter) and checks `usage-owner-cards`: four cards in that order, Claude with no number or bar.

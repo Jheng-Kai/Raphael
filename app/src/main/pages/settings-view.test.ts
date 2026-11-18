@@ -103,9 +103,9 @@ const LOCAL_MODELS: LocalModel[] = [
   { name: "sensevoice", title: "SenseVoice", languages: ["zh", "en"], note: "fast", size: 163_002_883, ready: true },
 ];
 const view = (over: Partial<SettingsView> = {}): SettingsView => ({
-  pane: "general", device, brain, hasKey: true, openrouter, spend, catalog, checkingOpenrouter: false,
+  pane: "general", device, brain, hasKey: true, openrouter, spend, catalog,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
-  altgr: false, version: "0.1.0", replacingKey: false, keyBusy: false, keyError: null, limitDraft: null, limitError: null,
+  altgr: false, version: "0.1.0", limitDraft: null, limitError: null,
   languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(),
   localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
@@ -305,7 +305,7 @@ describe("the rules for every tab, in every language", () => {
     expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
     expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
-    expect(described(tab("usage"))).toEqual(["OpenRouter API 金鑰"]);
+    expect(described(tab("usage"))).toEqual([]);
   });
 });
 
@@ -508,8 +508,8 @@ describe("Models", () => {
     expect(html).not.toContain("data-fallback");
     const usage = tab("usage");
     // This month's spending of the app is the spending card above the allowances; an OpenRouter account's own usage is
-    // read on OpenRouter.
-    expect(names(usage)).toEqual(["OpenRouter API 金鑰"]);
+    // read on OpenRouter. An OpenRouter key is its provider card's, on Models.
+    expect(names(usage)).toEqual([]);
     expect(usage.indexOf('data-row="raphael-spend"')).toBeLessThan(usage.indexOf("data-usage-host"));
     expect(usage).toContain("<h2>拉斐爾本月花費</h2>");
     expect(usage).not.toContain("OpenRouter 帳號本月用量");
@@ -531,39 +531,13 @@ describe("Models", () => {
     expect(unknown).not.toContain("progressbar");
   });
 
-  test("shows how OpenRouter took the key, with a button to check again and a pencil to change it", () => {
-    const key = rowOf(tab("usage"), "OpenRouter API 金鑰");
-    expect(key).toContain("已連線");
-    // No latency: how many milliseconds the check took tells a first-time user nothing (R-COPY-02).
-    expect(key).not.toMatch(/ms|延遲/);
-    expect(tab("usage")).toContain("<h2>OpenRouter</h2>");
-    expect(tab("usage")).not.toContain("<h2>金鑰</h2>");
-    expect(buttons(key).slice(0, 2)).toEqual(['<button type="button" class="btn" data-act="or-check">', '<button type="button" class="btn icon row" aria-label="變更" title="變更" data-act="key-replace" data-k="key">']);
-    expect(key).toContain(`data-k="key">${ico("pencil")}</button>`);
-    const bad = rowOf(tab("usage", { openrouter: { ...openrouter, state: "error", error: "auth" } }), "OpenRouter API 金鑰");
-    expect(bad).toContain("金鑰無效，請更換");
-  });
-
-  test("removing the key waits in its row's ⋯, only while a key is set (R-UI-56)", () => {
-    const key = rowOf(tab("usage"), "OpenRouter API 金鑰");
-    expect(key).toContain('data-act="key-menu"');
-    expect(key).not.toContain("移除金鑰");
-    expect(key).not.toContain("danger");
-    for (const over of [{ hasKey: false }, { replacingKey: true }]) {
-      expect(rowOf(tab("usage", over), "OpenRouter API 金鑰")).not.toContain("key-menu");
+  test("usage asks for no OpenRouter key, with or without one: that key is OpenRouter's card among the providers", () => {
+    for (const over of [{}, { hasKey: false }, { openrouter: { ...openrouter, state: "error" as const, error: "auth" } }]) {
+      const usage = tab("usage", over);
+      expect(usage).not.toContain("<h2>OpenRouter</h2>");
+      expect(usage).not.toContain('id="key-input"');
+      expect(usage).not.toMatch(/data-act="(key-paste|key-replace|key-menu|or-check)"/);
     }
-  });
-
-  test("asks for a key when there is none, or while it is being changed", () => {
-    for (const over of [{ hasKey: false }, { replacingKey: true }]) {
-      const key = rowOf(tab("usage", over), "OpenRouter API 金鑰");
-      expect(key).toContain('id="key-input" type="password"');
-      expect(key).toContain('class="btn pri" data-act="key-paste"');
-      expect(key).not.toContain('data-act="key-replace"');
-    }
-    expect(rowOf(tab("usage", { replacingKey: true }), "OpenRouter API 金鑰")).toContain('data-act="key-cancel"');
-    const replacing = rowOf(tab("usage", { replacingKey: true }), "OpenRouter API 金鑰");
-    expect(replacing.indexOf('data-act="key-cancel"')).toBeLessThan(replacing.indexOf('data-act="key-paste"'));
   });
 
   test("puts the price of what is chosen under each model's name, its picker beside, one self-contained row each", () => {

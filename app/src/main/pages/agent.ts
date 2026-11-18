@@ -130,7 +130,6 @@ import { mountComposerPlus } from "../composer-plus";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
-import { createProblemNotice } from "../problem-notice";
 import { VoiceMode } from "../voice-mode";
 import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
@@ -395,7 +394,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let targetQuiet = false;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
   quotaHost.hidden = true;
-  const problemNotice = createProblemNotice(app, () => { if (!problemNotice.el.hidden) composer.before(problemNotice.el); });
   let quotas: { provider: string; reset_at_ms: number | null }[] = [];
   let quotaTimer: ReturnType<typeof setTimeout> | undefined;
   const conversationId = (): number | undefined => chosenConversations.get(memberId());
@@ -951,7 +949,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
     if (!quotaHost.hidden && quotaHost.nextElementSibling !== composer) home.insertBefore(quotaHost, composer);
-    if (!problemNotice.el.hidden) home.insertBefore(problemNotice.el, composer);
     const asking = question !== null;
     const waitingTurn = [...turns].reverse().find((turn) => turn.status === "confirm");
     const inline = asking && waitingTurn ? thread.querySelector<HTMLElement>(`[data-question-turn="${waitingTurn.id}"]`) : null;
@@ -3403,7 +3400,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();
-      problemNotice.show();
       messageResize?.observe(scroller);
       dropResize?.observe(stage);
       dropResize?.observe(composer);
@@ -3438,7 +3434,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       loadedThread = false;
       visible = false;
       cancelGesture().sync();
-      problemNotice.hide();
       closeMediaLightbox();
       resetDrop();
       attachmentMedia.reset();

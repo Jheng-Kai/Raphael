@@ -21,7 +21,7 @@ import { ownerProfileHTML } from "../owner-settings";
 import { brandIcon } from "../brand";
 import { type ConnectionsView, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
-import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
+import { KEEP_FOREVER_DAYS, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { bindingLabels } from "../keys";
 import { type RulesView, rulesHTML } from "../safety-rules";
@@ -36,8 +36,8 @@ import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from
 import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
-import { keyEntryRow, micRow } from "../setup-rows";
-import { type Choice, type IconName, actionRow, btn, esc, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs } from "../ui";
+import { micRow } from "../setup-rows";
+import { type Choice, type IconName, btn, esc, ico, iconBtn, keys, note, row, sel, st, tabs } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -118,7 +118,6 @@ export interface SettingsView {
   spend: Status["spend"] | null;
   /** OpenRouter's catalog of models (`models.catalog`): being read (`loading`), read, or not to be had (`failed`). */
   catalog: ModelCatalog | "loading" | "failed";
-  checkingOpenrouter: boolean;
   devices: AudioDevices | null;
   /** The keyboard layout makes Right Alt an AltGr. */
   altgr: boolean;
@@ -126,10 +125,6 @@ export interface SettingsView {
   accessibility?: boolean | null;
   /** The app's version, as Tauri gives it; empty while it is not known. */
   version: string;
-  /** The key field is shown although there is a key (「變更」). */
-  replacingKey: boolean;
-  keyBusy: boolean;
-  keyError: (() => string) | null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
   limitDraft: string | null;
   limitError: (() => string) | null;
@@ -314,54 +309,6 @@ const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[numbe
   row(label(), role === "image" || role === "video" ? `<span data-media-price="${role}">${priceHTML(mediaRowPrice(v, role))}</span>` : priceSpan(v, k, "price num"),
     modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
 
-// ---------- the OpenRouter rows ----------
-
-/** How the latest contact with OpenRouter went: a dot and a word, and the latency or the time of the check. */
-function keyStatus(v: SettingsView): string {
-  const { openrouter } = v;
-  if (openrouter === null) return "";
-  const more = (text: string): string => `<span class="status-more">${esc(text)}</span>`;
-  switch (openrouter.state) {
-    case "ok":
-      // Connected is all it says: how many milliseconds the check took tells nobody anything.
-      return st("ok", t("settings.040"));
-    case "error":
-      return (
-        st("err", openrouter.error === "auth" ? t("settings.036") : t("settings.042")) +
-        (openrouter.checked_at_ms !== null ? more(t("settings.043", { p0: formatClock(openrouter.checked_at_ms) })) : "")
-      );
-    default:
-      return st("idle", t("settings.044"));
-  }
-}
-
-/** The key: with one, how OpenRouter took it and the buttons to check again or change it; without, the field to paste one. */
-function keyRow(v: SettingsView): string {
-  const attrs = ' data-row="openrouter-key"';
-  if (v.hasKey && !v.replacingKey) {
-    return row(
-      t("common.apiKeyField"),
-      keyStatus(v),
-      actionRow({
-        secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
-          // Changing it is the pencil, as everywhere.
-          iconBtn("pencil", t("home.018"), ' data-act="key-replace" data-k="key"'),
-      }) + iconButton("more", t("members.more", { p0: t("common.apiKeyField") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
-      { attrs, cls: "row-key" },
-    );
-  }
-  return keyEntryRow({
-    desc: t("settings.039"),
-    fieldWidth: 200,
-    inputId: "key-input",
-    hook: (name) => ` data-act="${name}"`,
-    busy: v.keyBusy,
-    invalid: v.keyError !== null,
-    canCancel: v.hasKey,
-    row: { attrs, cls: "row-key" },
-  });
-}
-
 /**
  * What this app spent this month, in a card: the amount, how much of the monthly limit
  * it is, as a bar in a member's colour, and where the month ends at this pace. Only the app's own spending: an OpenRouter
@@ -538,10 +485,8 @@ function modelsHTML(v: SettingsView): string {
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
   const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
-    spendCardHTML(v) + `<div data-usage-host></div>` + section(t("settings.keySection"), [
-      keyRow(v),
-      ...(v.keyError ? [note(st("err", v.keyError()), ' role="alert"')] : []),
-    ]);
+    // An OpenRouter key is that provider's, on its card among the others (模型 › 供應商), never a section of its own here.
+    spendCardHTML(v) + `<div data-usage-host></div>`;
   // No refresh of its own: opening Settings reads it all again, unseen (settings.ts `refreshInBackground`).
   return headingHTML(v) + coreNote(v) + `<div class="models-page">` +
     tabs((["models", "usage"] as const).map((id) => ({

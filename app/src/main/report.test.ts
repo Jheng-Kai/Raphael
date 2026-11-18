@@ -24,20 +24,30 @@ function status(openrouter: Partial<Status["openrouter"]>, month: number, limit:
   };
 }
 
-test("no key comes first", () => {
-  expect(buildReport(status({ state: "no_key" }, 0, 10), now).text).toBe(
-    "《告。尚未設定 OpenRouter 金鑰。設定前，聽寫只會貼上未整理的文字。》",
+test("no model that can tidy comes first, and names no provider", () => {
+  expect(buildReport({ ...status({ state: "no_key" }, 0, 10), cleanup_ready: false }, now).text).toBe(
+    "《告。還沒有可以整理文字的模型。設定前，聽寫只會貼上未整理的文字。》",
   );
 });
 
-test("no key: the action", () => {
-  const r = buildReport(status({ state: "no_key" }, 0, 10), now);
-  expect(r.action).toEqual({ label: "設定金鑰", target: "settings" });
+test("no model: the action opens the models", () => {
+  const r = buildReport({ ...status({ state: "no_key" }, 0, 10), cleanup_ready: false }, now);
+  expect(r.action).toEqual({ label: "設定模型", target: "settings" });
 });
 
-test("no key beats everything else", () => {
-  const r = buildReport(status({ state: "no_key", error: "network" }, 25, 10), now);
-  expect(r.text).toContain("尚未設定 OpenRouter 金鑰");
+test("no model beats the budget", () => {
+  const r = buildReport({ ...status({ state: "no_key" }, 25, 10), cleanup_ready: false }, now);
+  expect(r.text).toContain("還沒有可以整理文字的模型");
+});
+
+test("no OpenRouter key is nothing to report when another provider tidies", () => {
+  const r = buildReport({ ...status({ state: "no_key" }, 3.42, 20), cleanup_ready: true }, now);
+  expect(r.text).not.toContain("OpenRouter");
+  expect(r.action).toBeUndefined();
+});
+
+test("a core too old to say whether it can tidy falls back to the OpenRouter key", () => {
+  expect(buildReport(status({ state: "no_key" }, 0, 10), now).text).toContain("還沒有可以整理文字的模型");
 });
 
 test("offline offers a retry", () => {
@@ -137,7 +147,7 @@ describe("one language only: the language of the window", () => {
   test("Japanese", () => {
     setLocale("ja");
     expect(buildReport(status({ state: "no_key" }, 0, 10), now).text).toBe(
-      "《告。OpenRouter のキーが未設定です。整形前のテキストのみ貼り付けます。》",
+      "《告。テキストを整えるモデルがまだありません。設定するまで、整形前のテキストのみ貼り付けます。》",
     );
     expect(buildReport(status({ state: "error", error: "network" }, 3.42, 20), now).text).toBe(
       "《告。OpenRouter に接続できません。整形前のテキストを貼り付けます。》",
