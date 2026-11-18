@@ -20,9 +20,9 @@
 @property --slime-wide { syntax: "<number>"; inherits: false; initial-value: 1; }
 @property --slime-high { syntax: "<number>"; inherits: false; initial-value: 1; }
 @property --slime-face-scale { syntax: "<number>"; inherits: true; initial-value: 1; }
-@property --slime-face-x { syntax: "<length>"; inherits: true; initial-value: 0px; }
-@property --slime-face-y { syntax: "<length>"; inherits: true; initial-value: 0px; }
-@property --slime-eye-stroke { syntax: "<length>"; inherits: true; initial-value: 3.5px; }
+@property --slime-face-dx { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --slime-face-dy { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --slime-eye-stroke { syntax: "<number>"; inherits: true; initial-value: 3.5; }
 .slime-correction { transform-box: view-box; transform-origin: var(--slime-origin-x) var(--slime-origin-y); }
 .slime-counterturn { transform-box: view-box; transform-origin: inherit; }
 .slime-settle, .slime-look, .slime-correction, .slime-counterturn { transition-property: --slime-dx, --slime-dy, --slime-angle, --slime-counterangle, --slime-wide, --slime-high; transition-duration: var(--slime-settle-time, 320ms); transition-timing-function: cubic-bezier(0.25, 0.8, 0.3, 1); }
@@ -53,22 +53,32 @@
 .slime[data-state="sleeping"] { --eye-y: 50px; --eye-w: 3.5; --eyes: path("M 38.51 50.31 Q 43 50 47.49 49.69 M 52.51 49.69 Q 57 50 61.49 50.31"); }
 
 /* At small sizes, fit the eye spacing, centre and stroke to physical pixels rather than shrinking a large face. */
-/* The face's size reaches tan(atan2()) as pixels, through a registered length: WebKit (macOS) loses the unit of an atan2()
+/* The face's size reaches tan(atan2()) as pixels, through registered lengths: WebKit (macOS) loses the unit of an atan2()
    whose length is relative (cqw, em), so tan() read its degrees as radians. A 22px face got 1.215 for 0.239 and eyes seven
-   times too large, and every size another wrong one, so the eyes jumped about with the window. */
+   times too large, and every size another wrong one, so the eyes jumped about with the window. Both lengths are registered:
+   at a page zoom (the window's ⌘+ and ⌘-) WebKit hands a registered length on already zoomed, so a zoomed size over a plain
+   92px made a 40px face at 130 % read as 52px; over the registered drawn size, the two keep their ratio. */
 @property --slime-size { syntax: "<length>"; inherits: false; initial-value: 92px; }
-.slime-surface { --slime-size: min(100cqw, 100cqh); --slime-unit: tan(atan2(var(--slime-size), 92px)); }
+@property --slime-drawn { syntax: "<length>"; inherits: false; initial-value: 92px; }
+.slime-surface { --slime-size: min(100cqw, 100cqh); --slime-drawn: 92px; --slime-unit: tan(atan2(var(--slime-size), var(--slime-drawn))); }
 .mb-preset-slime .slime-surface { --slime-size: round(84cqw, 1px); }
+/* The face is a move and a scale in the drawing's units (--slime-face-dx, --slime-face-dy, --slime-face-scale: plain numbers,
+   since WebKit zooms a registered length again where it is used), worn through the separate translate and scale properties,
+   never through a CSS transform: WebKit multiplies the lengths of an SVG element's CSS transform (and its transform-origin)
+   by the page zoom, while the transform attribute and the separate properties keep the drawing's units. A strip's eyes wear
+   the large face (slime.ts FACE_SCALE: 1.25 about 49.5 48) unless a small face is fitted below. */
+.slime-loop-eyes { --slime-face-scale: 1.25; --slime-face-dx: -12.375; --slime-face-dy: -12; }
+.slime-cel-eye { translate: calc((var(--cel-row-x, 0) + var(--slime-face-dx)) * 1px) calc((var(--cel-row-y, 0) + var(--slime-face-dy)) * 1px); scale: var(--slime-face-scale); }
 @container (width <= 48px) {
-  /* Resolve typed geometry once per face/atlas; all sampled paths inherit computed values. */
+  /* Resolve typed geometry once per face/atlas; all sampled paths inherit computed values. The face's middle (49.5, 48)
+     goes to the nearest whole pixel from the drawing's corner (4, 11), at the scale near 1.25 that makes 13 units whole pixels. */
   .slime-face, .slime-loop-eyes {
-    --slime-face-scale: tan(atan2(round(calc(16.25px * var(--slime-unit)), 1px), calc(13px * var(--slime-unit))));
-    --slime-face-x: calc(4px + round(calc(45.5px * var(--slime-unit)), 1px) / var(--slime-unit));
-    --slime-face-y: calc(11px + round(calc(37px * var(--slime-unit)), 1px) / var(--slime-unit));
-    --slime-face-fit: translate(var(--slime-face-x), var(--slime-face-y)) scale(var(--slime-face-scale)) translate(-49.5px, -48px);
-    --slime-eye-stroke: calc(max(1px, round(calc(var(--eye-w) * 1px * var(--slime-face-scale) * var(--slime-unit)), 1px)) / var(--slime-unit) / var(--slime-face-scale));
+    --slime-face-scale: calc(round(calc(16.25 * var(--slime-unit)), 1) / (13 * var(--slime-unit)));
+    --slime-face-dx: calc(4 + round(calc(45.5 * var(--slime-unit)), 1) / var(--slime-unit) - 49.5 * var(--slime-face-scale));
+    --slime-face-dy: calc(11 + round(calc(37 * var(--slime-unit)), 1) / var(--slime-unit) - 48 * var(--slime-face-scale));
+    --slime-eye-stroke: calc(max(1, round(calc(var(--eye-w) * var(--slime-face-scale) * var(--slime-unit)), 1)) / var(--slime-unit) / var(--slime-face-scale));
   }
-  .slime-face { transform: var(--slime-face-fit); }
+  .slime-face { transform: none; translate: calc(var(--slime-face-dx) * 1px) calc(var(--slime-face-dy) * 1px); scale: var(--slime-face-scale); }
   .slime-eyes, .slime-cel-eye { stroke-width: var(--slime-eye-stroke); }
   .slime:is([data-state="idle"], [data-state="thinking"], [data-state="searching"], [data-state="arriving"]) { --eyes: path("M 42.5 44.5 Q 43 48 43.5 51.5 M 55.5 44.5 Q 56 48 56.5 51.5"); }
   .slime[data-state="working"] { --eye-w: 6; }

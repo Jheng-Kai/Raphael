@@ -22,8 +22,9 @@ export function paintedSlime(svg) {
     const count=bodyStrip.parentElement.classList.contains('has-blink')?4:1;
     const gazeIndex=Math.round(-new DOMMatrix(getComputedStyle(eye).transform).f/(frame*count));
     const blinkIndex=Math.round(-new DOMMatrix(getComputedStyle(blink).transform).f/frame);
-    const eyeCell=blink.firstElementChild.children[(gazeIndex*cels+eyeIndex)*count+blinkIndex];
-    return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell.matches('.slime-cel-eye')?eyeCell:eyeCell.querySelector('.slime-cel-eye'),marks:[...bodyCell.querySelectorAll('.slime-mark')]};
+    // The eye strip holds a group per body cel (its place and pose) with that cel's eyes for every gaze and blink in it.
+    const eyeCell=blink.firstElementChild.children[eyeIndex].children[gazeIndex*count+blinkIndex];
+    return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell,marks:[...bodyCell.querySelectorAll('.slime-mark')]};
   }
   return fallback();
 }
