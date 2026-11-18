@@ -1079,7 +1079,7 @@ export function checkRendered(name, context = {}) {
           && calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1, 'one earlier take and one failed give-back');
         require(visible(panel.querySelector('.desktop-error')), 'the failed take says so under the screen');
       }
-      // The work is stopped from the conversation; the larger view has no Stop of its own (the owner, 2026-11-18).
+      // The work is stopped from the conversation; the larger view has no Stop of its own.
       require(!panel.querySelector('[data-desktop="stop"]'), 'the larger view has no Stop of the work');
       if (name === 'desktop-watch') {
         // The screen takes the window's height but for the pill: the gaps above and below it stay small.
