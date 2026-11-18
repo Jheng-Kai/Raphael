@@ -1,3 +1,4 @@
+import { bindNavFrame, bindNavLayer } from "./nav-layers";
 import { visibilityGate, windowVisible } from "./window-visibility";
 /** One persistent noVNC stream shared by the card, preview and takeover. */
 import { noticeHTML } from "./missing";
@@ -83,11 +84,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-open" data-desktop="enlarge" hidden><span class="desktop-open-pill">${ico("open")}<span></span></span></button></div><p class="desktop-caption" role="status" hidden></p><div class="desktop-review" hidden></div>` +
     `<div class="desktop-foot"><div class="desktop-notes"><p class="desktop-request" role="status" hidden></p><p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div></div>` +
-    `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("stop", t("agent.stop"), ' data-desktop="stop" hidden')}${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
+    `<div class="desktop-bar"><div class="desktop-dock"><div class="desktop-mode"><span class="desktop-mode-label" role="status">${ico("eye")}<span></span></span>${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="return"')}</div>${iconButton("more", t("chat.more"), ' data-desktop="menu" aria-haspopup="menu" aria-expanded="false"')}</div>` +
     `<div class="desktop-actions">${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}</div></div></div></div>`;
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
+  bindNavFrame(frame, panel);
   frame.dataset.desktopStream = "";
   frame.remove();
   const tabBar = host.querySelector('.mb-tabs');
@@ -214,12 +216,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (location.control.parentElement !== locationHost) locationHost.append(location.control);
     paint(locationHeader, 'hidden', expanded);
     location.status(!!state?.error);
-    const currentWork = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
     placeStripButtons(expanded);
     attr(collapseButton, 'title', t('desktop.collapse')); attr(collapseButton, 'aria-label', t('desktop.collapse'));
-    const stop = panel.querySelector<HTMLElement>('[data-desktop="stop"]')!;
-    paint(stop, 'hidden', !watching || !currentWork || !options.stop);
-    attr(stop, 'title', t('agent.stop')); attr(stop, 'aria-label', t('agent.stop'));
     paint(collapseButton, 'hidden', !watching);
     paint(panel.querySelector<HTMLElement>('.desktop-takeover-bar')!, 'hidden', !expanded);
     paint(backButton, 'hidden', !skillEditor || review.hidden);
@@ -486,11 +484,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (current === generation) { closeStream(); state = { state:'unavailable', ready:false, control:'member' }; draw(); }
     } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(pollGate.run, pollDelay); } }
   }
-  async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
+  async function control(held: boolean, pointer?: { x:number; y:number }, answerRequest = true): Promise<void> {
     if (!session || changing || held && !connected) return;
     changing = true; error.hidden = true; clearTimeout(takeTimer);
     // A renewal started before this click must not overwrite the new lease state.
-    const current = ++generation, opened = session, request = pending()?.request_id;
+    const current = ++generation, opened = session, request = answerRequest ? pending()?.request_id : undefined;
     if (held) { clickedAt = performance.now(); delete panel.dataset.controlLatencyMs; delete panel.dataset.acceptedInputLatencyMs; }
     interactive = false; send(false); draw();
     try {
@@ -522,6 +520,20 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const expand = (on: boolean): void => {
     if (on && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
     panel.toggleAttribute('data-expanded', on);
+    // Back does what Escape does: it folds the view while the owner only watches. While the owner holds the controls it does
+    // nothing here (inside the screen the computer has the side buttons): ending control is the pill's own button.
+    if (on) bindNavLayer(panel, () => {
+      if (!changing && watching) collapseWatch();
+    }, {
+      active: () => panel.hasAttribute('data-expanded'),
+      step: direction => {
+        if (direction !== 'forward' || !skillEditor || !review.hidden) return false;
+        review.hidden = false;
+        draw();
+        review.querySelector('textarea')?.focus();
+        return true;
+      },
+    });
     document.documentElement.toggleAttribute('data-desktop-expanded', on);
     draw();
   };
@@ -553,10 +565,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (!connected) void openStream();
   });
   collapseButton.addEventListener('click', collapseWatch);
-  panel.querySelector('[data-desktop="stop"]')!.addEventListener('click', () => {
-    const work = state?.works?.find(work => work.state === 'running' || work.state === 'waiting_control');
-    if (work) void options.stop?.(work.turn_id);
-  });
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape' && watching) { event.preventDefault(); collapseWatch(); }
   });
@@ -651,11 +659,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** 停止 hands the computer back and nothing else: the larger view stays open on the same stream, watching, with Take
    *  control offered again. Only 我完成了, which answers a
    *  sign-in request, goes back to the conversation (handback). */
-  async function release(): Promise<void> {
+  async function release(answerRequest = true): Promise<void> {
     if (changing || !session) return;
     const opened = session;
     watching = true; document.documentElement.setAttribute('data-desktop-watch', '');
-    await control(false);
+    await control(false, undefined, answerRequest);
     if (session !== opened) return;
     // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes their input again.
     if (state?.control === 'owner') { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); send(true); }
@@ -689,6 +697,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
     { id: 'send-file', label: t('desktop.sendFile'), icon: 'attach' },
   ], id => { if (id === 'send-file') picker.click(); else teach.click(); }));
+  bindNavLayer(review, () => backButton.click());
   backButton.addEventListener('click', () => {
     review.hidden = true;
     draw();

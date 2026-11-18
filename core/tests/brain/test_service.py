@@ -1412,6 +1412,13 @@ async def test_a_key_check_that_hangs_gives_up(make_brain, fake_client, keys):
     assert r == {"valid": False, "reason": "timeout"} and keys.get() is None
 
 
+async def test_the_status_says_whether_dictation_can_be_tidied_by_whichever_provider_its_model_has(router, keys):
+    # The window's notice asks for a model only when none can tidy, and names no provider.
+    assert (await router.call("status.get", {}))["cleanup_ready"] is False
+    keys.set(KEY)
+    assert (await router.call("status.get", {}))["cleanup_ready"] is True
+
+
 async def test_clearing_the_key_forgets_the_status(router, fake_client, keys):
     keys.set(KEY)
     fake_client.next_error = OpenRouterError(0, "network", "offline")
@@ -1483,7 +1490,8 @@ async def test_status_reports_a_failing_key_store_as_an_auth_error(conn, fake_cl
     router = routed(Brain(conn, fake_client, BrokenKeyStore(), now_ms=Clock()))
     status = await router.call("status.get", {})
     assert (status["openrouter"]["state"], status["openrouter"]["error"]) == ("error", "auth")
-    assert set(status) == {"openrouter", "spend", "last"}
+    assert set(status) == {"openrouter", "cleanup_ready", "spend", "last"}
+    assert status["cleanup_ready"] is False
 
 
 # --- status -------------------------------------------------------------------------------------
@@ -1511,6 +1519,7 @@ async def test_status_without_a_key_or_history(router):
             "key": None,
             "usage": None,
         },
+        "cleanup_ready": False,
         "spend": {
             "month_usd": 0.0,
             "today_usd": 0.0,

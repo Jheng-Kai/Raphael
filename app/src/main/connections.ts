@@ -6,6 +6,7 @@
 // and how many are on, its information, and removal in the overflow menu. Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
 
+import { bindLayerSteps, bindNavLayer, LayerViews } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, connectedCount, isConnected, whyNot } from "./apps-inventory";
@@ -1199,6 +1200,15 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (group) void loadTools(group.id);
   }
 
+  function editServer(id: string): void {
+    const group = groupById(id);
+    if (!group || group.catalog_id) return;
+    open = null;
+    form = { ...emptyForm(), id, type: group.transport, name: group.name, command: group.command, args: group.args.join("\n"), url: group.url, limit: group.result_size_limit ?? 8000,
+      pairLines: (group.transport === "stdio" ? group.env : group.headers).map(name => `${name}=`).join("\n") };
+    redraw(); focusOn("#conn-name");
+  }
+
   /** The key's dialog closes, and the focus goes back to what opened it. */
   function closeDialog(): void {
     loginError = null;
@@ -1221,6 +1231,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       auditOpen = false;
     } else if (screen === "connected") screen = "apps";
     else return;
+    views.step("back", () => {});
     redraw();
     // The focus returns to the row (or the chip) that was pressed.
     if (from) focusOn(`[data-k="${from.kind === "group" ? "cs-open" : "cs-store"}:${typeof CSS !== "undefined" ? CSS.escape(from.id) : from.id}"]`);
@@ -1484,12 +1495,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         void api.integrationsTest({ id }).then(result => notify(result.ok ? t("mcp.testOk") + ` (${result.tools.length})` : t("mcp.testFailed") + `: ${result.error ?? ""}`, result.ok ? "ok" : "err"), error => notify(describeError(error), "err"));
         break;
       case "edit-server": {
-        const group = groupById(id);
-        if (!group || group.catalog_id) return true;
-        open = null;
-        form = { ...emptyForm(), id, type: group.transport, name: group.name, command: group.command, args: group.args.join("\n"), url: group.url, limit: group.result_size_limit ?? 8000,
-          pairLines: (group.transport === "stdio" ? group.env : group.headers).map(name => `${name}=`).join("\n") };
-        redraw(); focusOn("#conn-name");
+        editServer(id);
         break;
       }
       case "test-draft": void testDraft(); break;
@@ -1707,7 +1713,14 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   /** Fits the row of chips to the width the dialog has now. */
+  let views = new LayerViews("");
   function painted(): void {
+    const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>(".cs") : null;
+    if (panel) {
+      views.visit(navView());
+      if (form?.busy) bindNavLayer(panel, () => {});
+      else bindLayerSteps(panel, views, showNavView);
+    }
     const row = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-chips]") : null;
     if (row) fitChips(row);
   }
@@ -1780,6 +1793,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     auditOpen = false;
     search = "";
     screen = "apps";
+    views = new LayerViews("");
     loginError = null;
     dialogNotice = null;
     drawn = null; // whatever stands on the page is not this view's: the next reading draws
@@ -1790,13 +1804,23 @@ export function createConnections(host: ConnectionsHost): Connections {
   function navView(): string {
     const parts: string[] = [];
     if (screen === "connected") parts.push("connected");
-    if (open) parts.push(`${open.kind}:${open.id}`);
+    if (form) parts.push("form:" + (form.id ?? ""));
+    else if (open) parts.push(`${open.kind}:${open.id}`);
     return parts.join("/");
   }
   function showNavView(key: string): void {
     const parts = key ? key.split("/") : [];
     const nextScreen: Screen = parts[0] === "connected" ? "connected" : "apps";
     const page = /^(app|group):(.+)$/.exec(parts.find(part => /^(app|group):/.test(part)) ?? "");
+    const editor = parts.find(part => part.startsWith("form:"));
+    if (editor) {
+      screen = nextScreen;
+      const id = editor.slice(5);
+      if (form && (form.id ?? "") === id) return;
+      if (id && groupById(id)) { editServer(id); return; }
+      if (!id) { open = null; form = emptyForm(); redraw(); focusOn("#conn-name"); return; }
+    }
+    form = null;
     const wanted: OpenApp | null = page && (page[1] === "app" ? entryById(page[2]) : groupById(page[2])) ? { kind: page[1] as OpenApp["kind"], id: page[2] } : null;
     if (wanted && open?.kind === wanted.kind && open.id === wanted.id && screen === nextScreen) return;
     screen = nextScreen;

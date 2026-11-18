@@ -1042,6 +1042,9 @@ class Brain:
         latest = self._history.latest(kind="dictation")
         return {
             "openrouter": self._openrouter_view(has_key),
+            # Whether dictation can be tidied at all: its model's own provider, whichever it is, is ready. A notice about it
+            # names no provider, since most people use none of OpenRouter.
+            "cleanup_ready": self._cleanup_ready(has_key),
             "spend": {
                 "month_usd": self._spend.month_total(),
                 "today_usd": self._spend.today_total(),
@@ -1059,6 +1062,16 @@ class Brain:
                 "llm_ms": latest.llm_ms,
             },
         }
+
+    def _cleanup_ready(self, has_key: bool | None) -> bool:
+        """Whether a dictation could be tidied now. A key store that cannot be read is not ready, and says nothing more
+        here than `openrouter` already does."""
+        if not isinstance(self._client, ProviderRouter):
+            return bool(has_key)
+        try:
+            return self._model_available("cleanup_model")
+        except Exception:
+            return False
 
     async def _status_check_openrouter(self, params: dict) -> dict:
         has_key = self._has_key_or_none()

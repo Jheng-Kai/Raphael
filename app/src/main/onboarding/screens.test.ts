@@ -18,7 +18,6 @@ const cli = (id: CliBrain["id"], over: Partial<CliBrain> = {}): CliBrain => ({
 const accounts = (over: Partial<CliBrainsView> = {}): CliBrainsView => ({
   ...emptyCliBrainsView(), state: "ready", clis: [cli("claude"), cli("codex", { available: false, logged_in: false }), cli("gemini", { installed: false, available: false })], ...over,
 });
-const noKey = { has: false, name: null, replacing: false, busy: false, error: null };
 
 const dom = (html: string): HTMLElement => {
   const host = document.createElement("div");
@@ -34,7 +33,7 @@ describe("every screen", () => {
   test("is real buttons and the app's own switches: no native select and no link-looking text", () => {
     const html = [
       welcomeHTML(),
-      toolsHTML(accounts(), noKey, ""),
+      toolsHTML(accounts(), ""),
       servicesHTML({ services: [service("notion", "Notion")], waiting: null, failed: null }),
       abilitiesHTML('<section class="sgroup svc"></section>'),
     ].join("");
@@ -43,7 +42,7 @@ describe("every screen", () => {
   });
 
   test("has a headline of its own and no line of purpose under it", () => {
-    for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
+    for (const html of [toolsHTML(accounts(), ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
       const host = dom(html);
       expect(host.querySelectorAll("h2")).toHaveLength(1);
       expect(host.querySelector(".ob-sub, .ob-line")).toBeNull();
@@ -52,7 +51,7 @@ describe("every screen", () => {
 
   test("three of the team's characters float by each step's title, others on every step and in other places, as decoration only", () => {
     const seen = new Set<string>(), places = new Set<string>();
-    for (const html of [toolsHTML(accounts(), noKey, ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
+    for (const html of [toolsHTML(accounts(), ""), servicesHTML({ services: "loading", waiting: null, failed: null }), abilitiesHTML("")]) {
       const host = dom(html);
       const floaters = host.querySelector(".ob-floaters")!;
       expect(floaters.getAttribute("aria-hidden")).toBe("true");
@@ -82,9 +81,9 @@ describe("the welcome", () => {
 
 describe("step 1: the AI tools", () => {
   test("is a store: 熱門 is the same for everyone, the rest by kind and name, every tile alike with one control", () => {
-    const host = dom(toolsHTML(accounts(), noKey, ""));
+    const host = dom(toolsHTML(accounts(), ""));
     expect([...host.querySelectorAll("[data-ob-group]")].map((el) => el.getAttribute("data-ob-group"))).toEqual(["popular", "accounts"]);
-    expect(items(host.querySelector<HTMLElement>('[data-ob-group="popular"]')!)).toEqual(["chatgpt", "claude", "codex", "openrouter"]);
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="popular"]')!)).toEqual(["chatgpt", "claude", "codex"]);
     expect(items(host.querySelector<HTMLElement>('[data-ob-group="accounts"]')!)).toEqual(["gemini"]);
     expect([...host.querySelectorAll(".ob-section")].map((el) => el.textContent)).toEqual(["Popular", "Subscription accounts"]);
     for (const el of host.querySelectorAll(".ob-tile")) expect(el.querySelector(".ob-ctl")!.children.length).toBeGreaterThan(0);
@@ -93,21 +92,21 @@ describe("step 1: the AI tools", () => {
   });
 
   test("what one owner has set up never moves a tile", () => {
-    const none = items(dom(toolsHTML(accounts({ clis: [cli("claude", { available: false }), cli("codex", { available: false }), cli("gemini", { available: false })] }), noKey, "")));
-    const all = items(dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "me@example.test", plan_scope_granted: true }, clis: [cli("claude"), cli("codex"), cli("gemini")] }), { ...noKey, has: true }, "")));
+    const none = items(dom(toolsHTML(accounts({ clis: [cli("claude", { available: false }), cli("codex", { available: false }), cli("gemini", { available: false })] }), "")));
+    const all = items(dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "me@example.test", plan_scope_granted: true }, clis: [cli("claude"), cli("codex"), cli("gemini")] }), "")));
     expect(all).toEqual(none);
   });
 
   test("the search finds tools by name, forgiving a typo, in one grid", () => {
-    const host = dom(toolsHTML(accounts(), noKey, "", emptyProvidersView(), "codx"));
+    const host = dom(toolsHTML(accounts(), "", emptyProvidersView(), "codx"));
     expect(items(host)[0]).toBe("codex");
     expect(items(host)).not.toContain("openrouter");
     expect(host.querySelector("[data-ob-found]")).not.toBeNull();
-    expect(dom(toolsHTML(accounts(), noKey, "", emptyProvidersView(), "zzzz")).querySelector(".ob-state")!.textContent).toBe("No tool matches");
+    expect(dom(toolsHTML(accounts(), "", emptyProvidersView(), "zzzz")).querySelector(".ob-state")!.textContent).toBe("No tool matches");
   });
 
   test("each tile is one row: its mark in a square, a name over one line, the control on the right", () => {
-    const host = dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "someone.with.a.long.address@example.test", plan_scope_granted: true } }), noKey, ""));
+    const host = dom(toolsHTML(accounts({ chatgpt: { signed_in: true, email: "someone.with.a.long.address@example.test", plan_scope_granted: true } }), ""));
     for (const el of host.querySelectorAll(".ob-tile")) {
       expect([...el.children].map((child) => child.className)).toEqual(["ob-ic", "ob-tx", "ob-ctl"]);
       expect(el.querySelectorAll(".ob-tx > span")).toHaveLength(2);
@@ -117,7 +116,7 @@ describe("step 1: the AI tools", () => {
   });
 
   test("what is ready says so and has the check; what is not has the button the account controller listens to", () => {
-    const host = dom(toolsHTML(accounts(), noKey, ""));
+    const host = dom(toolsHTML(accounts(), ""));
     const control = (id: string) => host.querySelector(`[data-item="${id}"] .ob-ctl`)!;
     expect(control("claude").querySelector('.ob-tick[role="img"]')!.getAttribute("aria-label")).toBe("Signed in");
     expect(control("claude").querySelector("button")).toBeNull();
@@ -141,28 +140,10 @@ describe("step 1: the AI tools", () => {
     expect(cards.every((card) => card.action === null && !card.ready)).toBe(true);
   });
 
-  test("the key: 連線 opens a masked field with 貼上 across its row; a set key shows its state and a way to replace it", () => {
-    const empty = dom(toolsHTML(accounts(), noKey, ""));
-    expect(empty.querySelector("#ob-key-input")).toBeNull();
-    expect(empty.querySelector('[data-item="openrouter"] [data-ob="key-replace"]')!.textContent).toBe("Connect");
-    const entering = dom(toolsHTML(accounts(), { ...noKey, replacing: true }, ""));
-    expect(entering.querySelector('#ob-key-input[type="password"]')).not.toBeNull();
-    expect(entering.querySelector('[data-ob="key-paste"]')).not.toBeNull();
-    expect(entering.querySelector('[data-ob="key-cancel"]')).not.toBeNull();
-    expect(entering.querySelector('[data-item="openrouter"]')!.classList.contains("wide")).toBe(true);
-    const set = dom(toolsHTML(accounts(), { ...noKey, has: true }, ""));
-    expect(set.querySelector("#ob-key-input")).toBeNull();
-    expect(set.querySelector('[data-item="openrouter"].on .ob-tick')!.getAttribute("aria-label")).toBe("Set up");
-    expect(set.querySelector('[data-ob="key-replace"]')).not.toBeNull();
-    const replacing = dom(toolsHTML(accounts(), { ...noKey, has: true, replacing: true }, ""));
-    expect(replacing.querySelector("#ob-key-input")).not.toBeNull();
-    expect(replacing.querySelector('[data-ob="key-cancel"]')).not.toBeNull();
-  });
-
-  test("a refused key and a failed sign-in are told as alerts, the key's beside its field", () => {
-    const host = dom(toolsHTML(accounts(), { ...noKey, error: "That key was refused" }, "Sign-in did not finish"));
-    expect([...host.querySelectorAll('[role="alert"]')].map((el) => el.textContent)).toEqual(["Sign-in did not finish", "That key was refused"]);
-    expect(host.querySelector("#ob-key-input")!.getAttribute("aria-invalid")).toBe("true");
+  test("OpenRouter has no key tile of its own: it is a gateway among the providers, connected in the same editor", () => {
+    const host = dom(toolsHTML(accounts(), "Sign-in did not finish"));
+    expect(host.querySelector("#ob-key-input, [data-ob=\"key-replace\"], [data-item=\"openrouter\"]")).toBeNull();
+    expect([...host.querySelectorAll('[role="alert"]')].map((el) => el.textContent)).toEqual(["Sign-in did not finish"]);
   });
 
   test("one tile each: the accounts, then every provider of the catalog, connected ones to manage, others to connect", () => {
@@ -171,11 +152,13 @@ describe("step 1: the AI tools", () => {
     const providers = { ...emptyProvidersView(), state: "ready" as const,
       kinds: [kind("ollama", "Ollama", "local"), kind("openrouter", "OpenRouter", "gateway"), kind("xai", "xAI", "official"), kind("anthropic", "Anthropic", "official"), kind("future", "Future AI", "official", false)],
       providers: [{ id: "p1", kind: "anthropic", name: "Anthropic", enabled: true, status: "ok", models: 3 } as unknown as ModelProvider] };
-    const host = dom(toolsHTML(accounts(), noKey, "", providers));
-    // Anthropic is popular; the rest of the catalog follows by group, each group by name, under its own label
-    expect(items(host.querySelector<HTMLElement>('[data-ob-group="popular"]')!)).toEqual(["chatgpt", "claude", "codex", "openrouter", "provider:anthropic"]);
-    expect([...host.querySelectorAll("[data-ob-group]")].map((el) => el.getAttribute("data-ob-group"))).toEqual(["popular", "accounts", "official", "local"]);
+    const host = dom(toolsHTML(accounts(), "", providers));
+    // Anthropic is popular, OpenRouter a gateway like the others; the rest of the catalog follows by group, each group by name, under its own label
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="popular"]')!)).toEqual(["chatgpt", "claude", "codex", "provider:anthropic"]);
+    expect([...host.querySelectorAll("[data-ob-group]")].map((el) => el.getAttribute("data-ob-group"))).toEqual(["popular", "accounts", "official", "gateway", "local"]);
     expect(items(host.querySelector<HTMLElement>('[data-ob-group="official"]')!)).toEqual(["provider:future", "provider:xai"]);
+    expect(items(host.querySelector<HTMLElement>('[data-ob-group="gateway"]')!)).toEqual(["provider:openrouter"]);
+    expect(host.querySelector('[data-item="provider:openrouter"] [data-pv="add"][data-id="openrouter"]')).not.toBeNull();
     expect(items(host.querySelector<HTMLElement>('[data-ob-group="local"]')!)).toEqual(["provider:ollama"]);
     expect(host.querySelector('[data-item="provider:anthropic"].on [data-pv="open"][data-id="p1"]')).not.toBeNull();
     expect(host.querySelector('[data-item="provider:xai"] [data-pv="add"][data-id="xai"]')).not.toBeNull();

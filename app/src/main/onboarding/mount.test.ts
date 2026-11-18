@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "../test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -72,6 +73,23 @@ const open = async (): Promise<void> => {
   await flush();
 };
 const text = (selector: string): string => root.querySelector(selector)?.textContent ?? "";
+
+test.each(navInputs)("%s can retrace guide steps, and back at the first step leaves the guide where it is", async input => {
+  await open();
+  pressLayer(input, "forward");
+  expect(root.dataset.step).toBe("welcome");
+  await press('[data-ob="next"]');
+  pressLayer(input);
+  expect(root.dataset.step).toBe("welcome");
+  pressLayer(input, "forward");
+  expect(root.dataset.step).toBe("tools");
+  pressLayer(input);
+  pressLayer(input);
+  // One stray press never skips the first-run guide (R-NAV-02).
+  expect(root.dataset.step).toBe("welcome");
+  expect(done).not.toHaveBeenCalled();
+  expect(setDevice).not.toHaveBeenCalledWith({ onboarded: true });
+});
 
 beforeEach(() => {
   setLocale("en");
@@ -210,49 +228,23 @@ describe("the guide", () => {
 });
 
 describe("step 1: the AI tools", () => {
-  test("shows the accounts as the settings do, and the key's field once 連線 is pressed", async () => {
+  test("shows the accounts as the settings do, and asks for no OpenRouter key of its own", async () => {
     await open();
     await press('[data-ob="next"]');
-    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "openrouter", "gemini"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["chatgpt", "claude", "codex", "gemini"]);
     expect(root.querySelector('[data-item="claude"].on .ob-tick')).not.toBeNull();
-    expect(root.querySelector("#ob-key-input")).toBeNull();
-    await press('[data-item="openrouter"] [data-ob="key-replace"]');
-    expect(root.querySelector("#ob-key-input")).not.toBeNull();
+    expect(root.querySelector('#ob-key-input, [data-ob="key-replace"]')).toBeNull();
+    expect(api.secretsSetOpenrouterKey).not.toHaveBeenCalled();
   });
 
   test("the search narrows the tools in place and keeps its caret", async () => {
     await open();
     await press('[data-ob="next"]');
     const find = root.querySelector<HTMLInputElement>("#ob-tools-find")!;
-    find.value = "open";
+    find.value = "clau";
     find.dispatchEvent(new Event("input", { bubbles: true }));
-    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["openrouter"]);
+    expect([...root.querySelectorAll(".ob-tile")].map((el) => (el as HTMLElement).dataset.item)).toEqual(["claude"]);
     expect(root.querySelector("#ob-tools-find")).toBe(find);
-  });
-
-  test("a key that is checked and valid is kept, the field goes and the key is not left on the page", async () => {
-    api.secretsSetOpenrouterKey.mockResolvedValue({ valid: true, label: "my-key" });
-    await open();
-    await press('[data-ob="next"]');
-    await press('[data-item="openrouter"] [data-ob="key-replace"]');
-    const input = root.querySelector<HTMLInputElement>("#ob-key-input")!;
-    input.value = "sk-or-v1-secret";
-    await press('[data-ob="key-paste"]');
-    expect(api.secretsSetOpenrouterKey).toHaveBeenCalledWith("sk-or-v1-secret");
-    expect(root.querySelector("#ob-key-input")).toBeNull();
-    expect(text('[data-item="openrouter"] .ds')).toContain("my-key");
-    expect(root.innerHTML).not.toContain("sk-or-v1-secret");
-  });
-
-  test("a refused key is told and the field stays", async () => {
-    api.secretsSetOpenrouterKey.mockResolvedValue({ valid: false, reason: "invalid" });
-    await open();
-    await press('[data-ob="next"]');
-    await press('[data-item="openrouter"] [data-ob="key-replace"]');
-    root.querySelector<HTMLInputElement>("#ob-key-input")!.value = "nope";
-    await press('[data-ob="key-paste"]');
-    expect(root.querySelector('[role="alert"]')).not.toBeNull();
-    expect(root.querySelector("#ob-key-input")).not.toBeNull();
   });
 
   test("a command-line tool that is installed but signed out connects through the account controller", async () => {

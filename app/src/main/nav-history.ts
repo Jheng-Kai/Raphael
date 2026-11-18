@@ -92,6 +92,21 @@ export class NavHistory {
     return this.move(this.at + 1);
   }
 
+  /** A layer reached its parent directly, including when a repair link skipped the parent on the way in. */
+  followLayer(direction: NavStep, shown: Place): void {
+    if (this.at < 0 || samePlace(this.places[this.at], shown)) return;
+    const adjacent = this.adjacent(direction);
+    if (adjacent && samePlace(adjacent, shown)) this[direction]();
+    else if (direction === "back") {
+      this.places.splice(this.at, 0, { ...shown });
+      if (this.places.length > this.limit) this.places.pop();
+    } else this.arrive(shown);
+  }
+
+  adjacent(direction: NavStep): Place | undefined {
+    return this.places[this.at + (direction === "back" ? -1 : 1)];
+  }
+
   private move(to: number): Place | null {
     if (to < 0 || to >= this.places.length) return null;
     this.at = to;
@@ -103,6 +118,8 @@ export class NavHistory {
 export interface NavTarget {
   /** The first-run guide is on screen. It takes the place of every page, and is no part of the history. */
   inGuide(): boolean;
+  stepLayer?(direction: NavStep, withinLayer: () => boolean): boolean;
+  sameLayer?(here: Place, next: Place): boolean;
   /** Where the window is now; null before its first page. */
   where(): Place | null;
   /** Puts the window at `place`. The history has stepped to it already: this must not record it again. */
@@ -138,6 +155,7 @@ export class Navigation {
    * a read.
    */
   heard(back: boolean): void {
+    this.note();
     this.pressBack = back;
     setTimeout(() => {
       this.note(back);
@@ -156,8 +174,28 @@ export class Navigation {
 
   /** Takes one step. The window shows the place it lands on and nothing is recorded. */
   step(direction: NavStep): void {
-    if (this.target.inGuide()) return;
     this.note();
+    const withinLayer = (): boolean => {
+      const here = this.target.where(), next = this.history.adjacent(direction);
+      if (!here || !next) return false;
+      const inside = here.pane ? !!next.pane && samePage(here, next) : this.target.sameLayer?.(here, next);
+      if (!inside) return false;
+      this.walk(direction);
+      return true;
+    };
+    this.restoring = true;
+    let handled: boolean | undefined;
+    try { handled = this.target.stepLayer?.(direction, withinLayer); }
+    finally { this.restoring = false; }
+    if (handled) {
+      const shown = !this.target.inGuide() && this.target.where();
+      if (shown) this.history.followLayer(direction, shown);
+      return;
+    }
+    if (!this.target.inGuide()) this.walk(direction);
+  }
+
+  private walk(direction: NavStep): void {
     const place = this.history[direction]();
     if (!place) return;
     this.restoring = true;

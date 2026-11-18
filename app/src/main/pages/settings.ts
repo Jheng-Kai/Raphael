@@ -7,6 +7,7 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { bindLayerCancels, bindNavLayer } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
@@ -24,8 +25,7 @@ import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
 import { createConnections } from "../connections";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
-import { describeError, keyReasonText, parseLimit } from "../format";
-import { wireKeyField } from "../keyfield";
+import { describeError, parseLimit } from "../format";
 import {
   type LanguageGroup,
   chooseLanguageVariant,
@@ -52,7 +52,6 @@ import {
   esc,
   iconBtn,
   menuIsOpenFor,
-  openConfirmMenu,
   openMenu,
   openMenuOnArrow,
   openPopover,
@@ -209,17 +208,12 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The speech models of this computer, and the download of one that is under way. */
   let localModels: LocalModel[] | "loading" | "failed" = "loading";
   let localDownload: { name: string; done: number; total: number } | null = null;
-  let checkingOpenrouter = false;
   let devices: AudioDevices | null = null;
   let altgr = false;
   /** macOS's answer for the microphone (null on Windows, or before it is read): the meter opens it only once allowed. */
   let microphone: import("../types").MicrophonePermission | null = null;
   let accessibility: boolean | null = null;
   let version = "";
-  /** The key field is shown although there is a key (「變更」). */
-  let replacingKey = false;
-  let keyBusy = false;
-  let keyError: (() => string) | null = null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
   let limitDraft: string | null = null;
   let limitError: (() => string) | null = null;
@@ -268,8 +262,8 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update,
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, microphone, accessibility, version,
-    replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, microphone, accessibility, version,
+    limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
@@ -423,7 +417,6 @@ export function createSettings(app: AppContext): SettingsPage {
     const focusedId = active?.id;
     const ownerFocus = active?.dataset?.owner;
     const ownerDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-owner]:not(:disabled)')).filter(input => input === active).map(input => [input.dataset.owner!, input.value] as const);
-    const keyDraft = el.querySelector<HTMLInputElement>("#key-input")?.value;
     const activeLimit = focusedId === "limit-input" ? el.querySelector<HTMLInputElement>("#limit-input")?.value : undefined;
     // What is being typed in 服務's fields stays through a drawing (a status that came in, say): it
     // is carried from the old field to the new one here, and kept nowhere else.
@@ -441,6 +434,9 @@ export function createSettings(app: AppContext): SettingsPage {
       slot.replaceWith(usageHost);
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
+    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]', { secret: true });
+    const ruleField = body.querySelector<HTMLElement>("#rule-edit");
+    if (ruleField) bindNavLayer(ruleField, rules.cancelEdit);
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
     mountPickers();
     for (const [key, value] of ownerDrafts) {
@@ -448,8 +444,6 @@ export function createSettings(app: AppContext): SettingsPage {
       if (input && !input.disabled) input.value = value;
     }
     if (ownerFocus) el.querySelector<HTMLElement>(`[data-owner="${ownerFocus}"]`)?.focus({ preventScroll: true });
-    const keyInput = el.querySelector<HTMLInputElement>("#key-input");
-    if (keyInput && keyDraft !== undefined) keyInput.value = keyDraft;
     const limitInput = el.querySelector<HTMLInputElement>("#limit-input");
     if (limitInput && activeLimit !== undefined) limitInput.value = activeLimit;
     for (const [id, value] of serviceDrafts) {
@@ -660,31 +654,6 @@ export function createSettings(app: AppContext): SettingsPage {
       toaster.info(describeError(err));
     }
     render();
-  }
-
-  /** Reads the connection and the spend again (after a new key, or 「重新檢查」). */
-  async function readStatus(): Promise<void> {
-    try {
-      const status = await api.statusGet();
-      openrouter = status.openrouter;
-      spend = status.spend;
-    } catch {
-      openrouter = null;
-    }
-  }
-
-  async function checkOpenrouter(): Promise<void> {
-    if (checkingOpenrouter) return;
-    checkingOpenrouter = true;
-    render();
-    try {
-      await api.statusCheckOpenrouter();
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    await readStatus();
-    checkingOpenrouter = false;
-    if (visible) render();
   }
 
   /**
@@ -915,65 +884,6 @@ export function createSettings(app: AppContext): SettingsPage {
     render();
   }
 
-  async function submitKey(text: string): Promise<void> {
-    const key = text.trim();
-    if (!key || keyBusy) return;
-    keyBusy = true;
-    keyError = null;
-    render();
-    try {
-      const result = await api.secretsSetOpenrouterKey(key);
-      if (result.valid) {
-        hasKey = true;
-        replacingKey = false;
-        toaster.info(t("common.keySaved"));
-        await readStatus();
-      } else {
-        keyError = () => keyReasonText(result.reason);
-      }
-    } catch (err) {
-      keyError = () => describeError(err);
-    }
-    keyBusy = false;
-    render();
-  }
-
-  async function removeKey(): Promise<void> {
-    if (keyBusy) return;
-    keyBusy = true;
-    render();
-    try {
-      await api.secretsClearOpenrouterKey();
-      hasKey = false;
-      replacingKey = false;
-      keyError = null;
-      openrouter = null;
-      toaster.info(t("settings.keyRemoved"));
-      await readStatus();
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    keyBusy = false;
-    render();
-    el.querySelector<HTMLElement>("#key-input")?.focus();
-  }
-
-  async function pasteKey(): Promise<void> {
-    if (keyBusy) return;
-    const input = el.querySelector<HTMLInputElement>("#key-input");
-    if (input?.value.trim()) {
-      void submitKey(input.value);
-      return;
-    }
-    try {
-      void submitKey(await api.clipboardText());
-    } catch {
-      // the webview does not let the page read the clipboard: the field takes Ctrl+V
-      input?.focus();
-      toaster.info(t("common.keyPasteHint"));
-    }
-  }
-
   function commitLimit(input: HTMLInputElement): void {
     const limit = parseLimit(input.value);
     if (limit === null) {
@@ -1150,27 +1060,6 @@ export function createSettings(app: AppContext): SettingsPage {
         if (cell) void recording.start(field, cell);
         break;
       }
-      case "key-replace":
-        replacingKey = true;
-        keyError = null;
-        render();
-        el.querySelector<HTMLElement>("#key-input")?.focus();
-        break;
-      case "key-cancel":
-        replacingKey = false;
-        keyError = null;
-        render();
-        el.querySelector<HTMLElement>('[data-act="key-replace"]')?.focus();
-        break;
-      case "key-menu":
-        openConfirmMenu(target.closest<HTMLElement>('[data-act]')!, { label: t("settings.keyRemove"), ask: t("settings.keyRemoveConfirm"), run: () => void removeKey() });
-        break;
-      case "key-paste":
-        void pasteKey();
-        break;
-      case "or-check":
-        void checkOpenrouter();
-        break;
       case "help":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1239,7 +1128,6 @@ export function createSettings(app: AppContext): SettingsPage {
       trapSettingsFocus(e, items, active, el.querySelector<HTMLElement>("#set-title"));
     }
   };
-  wireKeyField(el, { inputId: "key-input", pasteSelector: '[data-act="key-paste"]', submit: (value) => void submitKey(value) });
 
   /** Reads macOS's answer for the microphone again; the page and the meter follow a change. */
   async function readMicrophone(): Promise<void> {
@@ -1347,13 +1235,12 @@ export function createSettings(app: AppContext): SettingsPage {
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       visible = true;
       stopOutside();
-      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active());
+      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active(), undefined,
+        (_direction, withinSettings) => recording.active() || withinSettings());
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;
       loading = !readOnce;
-      replacingKey = false;
-      keyError = null;
       limitDraft = null;
       limitError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import httpx
 
+from ..frame_navigation import FRAME_NAVIGATION
 from ..protocol import invalid_params
 from .vm import OWNER_IDLE_S, SHARED, VmError
 from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
@@ -178,7 +179,7 @@ addEventListener('pagehide', () => {snapshot(); clearInterval(framesTimer); fram
 document.documentElement.classList.remove('noVNC_loading');
 connect();
 setInterval(() => { if (!rfb) connect(); }, 2000);
-'''
+''' + b"window.raphaelOwnsInput = () => !!rfb && !rfb.viewOnly;\n" + FRAME_NAVIGATION.encode()
 
 
 def embedded_page(content):

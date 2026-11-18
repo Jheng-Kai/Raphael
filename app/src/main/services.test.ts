@@ -3,6 +3,7 @@
 // capability with the list of its services and the page of one service, and what its buttons and
 // fields send. The core is faked; a key typed here must leave the field the moment it is sent, and
 // be drawn nowhere.
+import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
 
@@ -476,6 +477,18 @@ describe("what the section does", () => {
     third.host.querySelector<HTMLElement>('.cs-item[data-id="vision"] .svc-now')!.click();
     expect(dlg(again.host)).toBeNull();
     expect(titleOf(third.host)).toBe("看圖片");
+  });
+
+  test.each(navInputs)("%s retraces a service inside its dialog", async input => {
+    const { host } = await opened("search");
+    press(host, '[data-k="svc-svc:brave"]');
+    pressLayer(input);
+    expect(host.querySelector(".svc-srv")).not.toBeNull();
+    pressLayer(input, "forward");
+    expect(titleOf(host)).toBe("Brave");
+    pressLayer(input);
+    pressLayer(input);
+    expect(dlg(host)).toBeNull();
   });
 
   test("a click on a service opens its page, the back chevron returns to the list with the focus on the service", async () => {

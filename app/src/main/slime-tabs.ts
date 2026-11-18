@@ -2,6 +2,7 @@
 // small pill tabs, and under it only the open group's slimes. The panels stand on one another in one place (slime.ts
 // `slimePickerHTML`), so a press on a tab changes what shows and nothing about the size or the place of the picker.
 
+import { bindLayerSteps, LayerViews } from "./nav-layers";
 import { chipSteps } from "./chip-scroll";
 import { t } from "./i18n";
 import { SLIME_GROUPS, slimeGroupName, slimeGroupOf, slimePickerHTML as slimePanelsHTML, type SlimeGroup } from "./slime";
@@ -24,8 +25,22 @@ export function slimePickerHTML(avatar: string | null | undefined, esc: (text: s
   return slimeTabsHTML(open) + `<div class="mb-slime-panels">${slimePanelsHTML(avatar, esc, open)}</div>`;
 }
 
+const tabViews = new WeakMap<HTMLElement, LayerViews<string>>();
+
 /** Shows `group`: its tab is the chosen one and its panel the open one. Nothing is measured, so nothing moves. */
 export function selectSlimeTab(root: ParentNode, group: string, focus = false): void {
+  const row = root.querySelector<HTMLElement>(".mb-slime-tablist");
+  if (row) {
+    let trail = tabViews.get(row);
+    if (!trail) {
+      const first = row.querySelector<HTMLElement>('[aria-selected="true"]')?.dataset.slimeTab ?? group;
+      trail = new LayerViews(first);
+      tabViews.set(row, trail);
+      const panels = root.querySelector<HTMLElement>(".mb-slime-panels");
+      if (panels) bindLayerSteps(panels, trail, tab => selectSlimeTab(root, tab, true));
+    }
+    trail.visit(group);
+  }
   for (const tab of root.querySelectorAll<HTMLElement>("[data-slime-tab]")) {
     const on = tab.dataset.slimeTab === group;
     tab.setAttribute("aria-selected", String(on));

@@ -48,7 +48,16 @@ export function flightPath(stage: Box, button: Box, composer: Box, target?: Box 
 
 /** The transform that puts the flyer (a `FLYER_PX` box at the stage's top left) at `spot`. */
 export const spotTransform = (spot: FlyerSpot): string =>
-  `translate(${Math.round((spot.x - FLYER_PX / 2) * 10) / 10}px, ${Math.round((spot.y - FLYER_PX / 2) * 10) / 10}px) scale(${Math.round(spot.s * 1000) / 1000})`;
+  `translate(${Math.round((spot.x - FLYER_PX / 2) * 1000) / 1000}px, ${Math.round((spot.y - FLYER_PX / 2) * 1000) / 1000}px) scale(${Math.round(spot.s * 1000) / 1000})`;
+
+/**
+ * `spot` moved by less than a screen pixel so that what the flyer shows, now at `box`, starts on a whole screen pixel. The
+ * screen resamples a canvas that lies between two pixels, which blurs the emblem's letters.
+ */
+export function onWholePixels(spot: FlyerSpot, box: Pick<DOMRect, "left" | "top">, ratio: number): FlyerSpot {
+  const nudge = (at: number): number => (Math.round(at * ratio) - at * ratio) / ratio;
+  return { ...spot, x: spot.x + nudge(box.left), y: spot.y + nudge(box.top) };
+}
 
 export interface VoiceModeParts {
   /** The positioned box the flyer flies in. */
@@ -121,7 +130,14 @@ export class VoiceMode {
     button.classList.add(AWAY);
     this.hidden = target ? [target] : [];
     for (const el of this.hidden) el.style.visibility = "hidden";
-    if (!reduced()) flyer.animate([{ transform: spotTransform(from) }, { transform: spotTransform(to) }], { ...OUT, fill: "backwards" });
+    // Landed, the flyer moves by less than a pixel so that what it shows starts on a whole screen pixel.
+    const land = (): void => {
+      if (this.flyer !== flyer) return;
+      const box = (flyer.firstElementChild ?? flyer).getBoundingClientRect();
+      flyer.style.transform = spotTransform(onWholePixels(to, box, window.devicePixelRatio || 1));
+    };
+    if (reduced()) land();
+    else flyer.animate([{ transform: spotTransform(from) }, { transform: spotTransform(to) }], { ...OUT, fill: "backwards" }).finished.then(land, () => undefined);
   }
 
   /** The picture flies back into the composer and is gone. */

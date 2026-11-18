@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { setLocale, t } from "./i18n";
 
@@ -29,6 +30,21 @@ function mount() {
 }
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 function click(selector: string) { const el = root.querySelector<HTMLButtonElement>(selector); expect(el, selector).not.toBeNull(); el!.click(); }
+
+test.each(navInputs)("%s retraces provider setup and restores the same kind", async input => {
+  const panel = mount();
+  await panel.load();
+  click('[data-pv="directory"]');
+  click('[data-pv="add"][data-id="openai_compatible"]');
+  expect(panel.navView()).toBe("pv:openai_compatible:new");
+  pressLayer(input);
+  expect(panel.navView()).toBe("pv:dir");
+  pressLayer(input, "forward");
+  expect(panel.navView()).toBe("pv:openai_compatible:new");
+  pressLayer(input);
+  pressLayer(input);
+  expect(root.querySelector("#pv-dialog")).toBeNull();
+});
 
 function connect(selector: string) {
   if (!root.querySelector(selector)) click('[data-pv="directory"]');
@@ -338,21 +354,26 @@ test("editing a saved regional provider preserves unknown public configuration u
   expect(api.providersUpdate).toHaveBeenCalledWith({ id: "p3", name: "My Bedrock" });
 });
 
-test("connected cards show status, a switch and a dialog button; the add dialog groups all kinds", async () => {
+test("connected cards show status and open their editor, with no switch; the add dialog groups all kinds", async () => {
   const panel = mount(); await panel.load();
   expect(root.textContent).toContain("42 models");
-  expect(root.querySelector('[role="switch"]')?.getAttribute("aria-checked")).toBe("true");
+  expect(root.querySelector('[role="switch"], [data-pv="toggle"], [data-pv="enable"]')).toBeNull();
   expect(root.querySelector('.pv-grid .pv-card [data-pv="open"]')).not.toBeNull();
   expect(root.querySelector('[role="dialog"]')).toBeNull();
   click('[data-pv="directory"]');
   for (const title of ["Providers", "Add a provider", "Official", "Gateways and cloud", "Local"]) expect(root.textContent).toContain(title);
   expect(root.querySelector<HTMLButtonElement>('[data-pv="add"][data-id="bedrock"]')?.disabled).toBe(true);
   expect(root.querySelector('[data-pv="open"] .ic')?.textContent).toBe("");
-  // One press on the switch behind the open directory closes it and flips the switch (R-UI-121).
-  click('[data-pv="toggle"]'); await flush();
-  expect(root.querySelector('[role="dialog"]')).toBeNull();
-  expect(api.providersUpdate).toHaveBeenCalledOnce();
-  expect(api.providersUpdate).toHaveBeenCalledWith({ id: "p3", enabled: false });
+});
+
+test("a provider turned off in an earlier version says so, and 啟用 turns it on again", async () => {
+  api.providersList.mockResolvedValueOnce({ providers: [{ ...(await api.providersList()).providers[0], enabled: false }] });
+  const panel = mount(); await panel.load();
+  expect(root.querySelector(".pv-grid .pv-card .ds")?.textContent).toBe("Off");
+  const enable = root.querySelector<HTMLButtonElement>('.pv-grid .pv-card [data-pv="enable"]')!;
+  expect(enable.textContent).toBe("Turn on");
+  enable.click(); await flush();
+  expect(api.providersUpdate).toHaveBeenCalledWith({ id: "p3", enabled: true });
 });
 
 test.each([

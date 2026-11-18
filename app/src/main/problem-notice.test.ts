@@ -8,7 +8,7 @@ import type { AppContext, MainEvent } from "./types";
 const healthy = { openrouter: { state: "ok" }, spend: { month_usd: 1, limit_usd: 10 } };
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 afterEach(() => { vi.clearAllMocks(); document.body.replaceChildren(); setLocale("zh-TW"); });
-test("only actionable status is shown, it updates with settings, and key problems open usage settings", async () => {
+test("only actionable status is shown, it updates with settings, and a missing model opens the models", async () => {
   let emit: (event: MainEvent) => void = () => {};
   const go = vi.fn();
   const notice = createProblemNotice({ go, onEvent(handler: (event: MainEvent) => void) { emit = handler; return () => {}; } } as unknown as AppContext);
@@ -20,7 +20,7 @@ test("only actionable status is shown, it updates with settings, and key problem
   emit({ type: "SettingsChanged" } as MainEvent); await flush();
   expect(notice.el.hidden).toBe(false);
   notice.el.querySelector<HTMLButtonElement>("button")!.click();
-  expect(go).toHaveBeenCalledWith("settings", "usage");
+  expect(go).toHaveBeenCalledWith("settings", "models");
   const chinese = notice.el.textContent;
   setLocale("en"); expect(notice.el.textContent).not.toBe(chinese);
   api.statusGet.mockResolvedValue(healthy); emit({ type: "SettingsChanged" } as MainEvent); await flush();

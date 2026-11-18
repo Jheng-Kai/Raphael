@@ -7,13 +7,14 @@
 //
 // Never kept or logged here: the key that is pasted. It is sent once and the field is emptied.
 
+import { bindLayerCancels, bindNavLayer, LayerViews } from "../nav-layers";
 import { onLocaleChange, t } from "../i18n";
 import { Emblem } from "../../overlay/emblem";
 
 import * as api from "../api";
 import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
-import { describeError, keyReasonText } from "../format";
+import { describeError } from "../format";
 import { wireKeyField } from "../keyfield";
 import { UI_LANGUAGES } from "../pages/settings-view";
 import { languageButtonHTML, openLanguagePicker } from "../language-picker";
@@ -56,17 +57,21 @@ function focusSelector(host: HTMLElement): string {
 
 export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: AppContext): void {
   let flow: FlowState = initialState();
+  const steps = new LayerViews(flow.step);
+  // Back at the first step does nothing: one stray press must not drop a new person into an app nobody set up (R-NAV-02).
+  bindNavLayer(root, () => {}, {
+    active: () => !destroyed,
+    step: direction => finishing || steps.step(direction, step => {
+      flow = { ...flow, step };
+      render();
+    }),
+  });
   let finishing = false;
   let destroyed = false;
   /** Every listener on the root ends with the guide: a guide opened again on the same root is a new one. */
   const lifetime = new AbortController();
   const { signal } = lifetime;
 
-  // the OpenRouter key
-  let key = { has: false, name: null as string | null, replacing: false, busy: false };
-  let keyError: (() => string) | null = null;
-  let keyLoaded = false;
-  const keyView = () => ({ ...key, error: keyError?.() ?? null });
   /** What the AI tools' search box holds. */
   let toolsQuery = "";
 
@@ -151,7 +156,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "welcome":
         return welcomeHTML();
       case "tools":
-        return toolsHTML(accounts.view(), keyView(), accountsError(), providers.view(), toolsQuery);
+        return toolsHTML(accounts.view(), accountsError(), providers.view(), toolsQuery);
       case "services":
         return servicesHTML(servicesView());
       case "abilities":
@@ -185,6 +190,10 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   }
 
   /** Draws the whole screen. */
+  function bindEditors(): void {
+    bindLayerCancels(root, '[data-ob="key-cancel"], [data-ob="composio-cancel"], [data-ob="server-cancel"]');
+  }
+
   function render(): void {
     closeMenu();
     stopEmblem();
@@ -198,6 +207,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       `<div class="ob-foot">${footHTML()}</div>` +
       `</div></div>`;
     enterScreen();
+    bindEditors();
     mountVisionPicker();
     showEmblem();
     startTyping();
@@ -253,6 +263,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     const focus = focusSelector(col);
     closeMenu();
     col.innerHTML = bodyHTML();
+    bindEditors();
     for (const [id, value] of typed) {
       const input = id ? col.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`) : null;
       if (input) input.value = value;
@@ -273,7 +284,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
         break;
       case "tools":
         accounts.start();
-        void loadKey();
         void providers.load();
         break;
       case "services":
@@ -288,11 +298,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   // ---------- the flow ----------
 
-  function go(event: { type: "NEXT" | "BACK" }): void {
+  function goNext(): void {
     if (destroyed) return;
-    const after = reduce(flow, event);
+    const after = reduce(flow, { type: "NEXT" });
     if (after === flow) return;
     flow = after;
+    steps.visit(flow.step);
     render();
   }
 
@@ -302,12 +313,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       await finish();
       return;
     }
-    go({ type: "NEXT" });
+    goNext();
   }
 
   function back(): void {
     if (flow.step === "welcome") return;
-    go({ type: "BACK" });
+    steps.step("back", step => { flow = { ...flow, step }; render(); });
   }
 
   async function finish(): Promise<void> {
@@ -344,43 +355,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   }
 
   // ---------- the AI tools ----------
-
-  async function loadKey(): Promise<void> {
-    if (keyLoaded) return;
-    try {
-      const stored = await api.secretsStatus();
-      if (destroyed) return;
-      keyLoaded = true;
-      if (stored.has_key !== key.has) {
-        key = { ...key, has: stored.has_key };
-        if (flow.step === "tools") repaintBody();
-      }
-    } catch {
-      // not read: the field stays, and the next visit asks again
-    }
-  }
-
-  async function submitKey(text: string): Promise<void> {
-    const typed = text.trim();
-    if (!typed || key.busy) return;
-    key = { ...key, busy: true };
-    keyError = null;
-    repaintBody();
-    try {
-      const result = await api.secretsSetOpenrouterKey(typed);
-      if (result.valid) {
-        key = { has: true, name: result.label, replacing: false, busy: false };
-        toaster.info(t("common.keySaved"));
-      } else {
-        key = { ...key, busy: false };
-        keyError = () => keyReasonText(result.reason);
-      }
-    } catch (err) {
-      key = { ...key, busy: false };
-      keyError = () => describeError(err);
-    }
-    if (!destroyed && flow.step === "tools") repaintBody();
-  }
 
   /** 貼上 sends what the field holds, or else the clipboard; a webview that cannot read it asks for Ctrl+V. */
   async function pasteInto(inputId: string, submit: (text: string) => Promise<void>): Promise<void> {
@@ -593,20 +567,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       case "back":
         back();
         break;
-      case "key-paste":
-        if (!key.busy) void pasteInto("ob-key-input", submitKey);
-        break;
-      case "key-replace":
-        key = { ...key, replacing: true };
-        keyError = null;
-        repaintBody();
-        root.querySelector<HTMLElement>("#ob-key-input")?.focus();
-        break;
-      case "key-cancel":
-        key = { ...key, replacing: false };
-        keyError = null;
-        repaintBody();
-        break;
       case "conn-login":
         void connectService(button.dataset.service ?? "");
         break;
@@ -668,7 +628,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     if (flow.step === "tools" && e.target.id === "ob-tools-find") {
       toolsQuery = e.target.value;
       const list = root.querySelector<HTMLElement>("[data-ob-tools]");
-      if (list) list.innerHTML = toolsListHTML(accounts.view(), keyView(), providers.view(), toolsQuery);
+      if (list) list.innerHTML = toolsListHTML(accounts.view(), providers.view(), toolsQuery);
     }
     if (flow.step === "services" && e.target.id === "ob-find") {
       query = e.target.value;
@@ -676,7 +636,6 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       if (list) list.innerHTML = servicesListHTML(servicesView());
     }
   }, { signal });
-  wireKeyField(root, { inputId: "ob-key-input", pasteSelector: '[data-ob="key-paste"]', submit: (value) => void submitKey(value), signal });
   wireKeyField(root, { inputId: "ob-composio-input", pasteSelector: '[data-ob="composio-paste"]', submit: (value) => void submitComposioKey(value), signal });
   // Enter in an own-server app's address or key adds it, as its 「連接」 does.
   root.addEventListener("keydown", (e) => {

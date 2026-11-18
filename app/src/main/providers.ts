@@ -1,10 +1,11 @@
 // Settings > Models: provider metadata is public; credentials live only in the input until sent.
+import { LayerViews } from "./nav-layers";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import type { MainEvent, ModelProvider, ProviderKind, ProviderField, ProviderPatch, ProviderModel, ProviderTest } from "./types";
-import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, iconButton, openMenu, sel, tg } from "./ui";
+import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, iconButton, openMenu, sel } from "./ui";
 import { findsName } from "./find-match";
 
 export interface ProvidersView {
@@ -137,15 +138,17 @@ function modelsHTML(v: ProvidersView): string {
 }
 
 function statusNote(provider: ModelProvider): string {
+  if (!provider.enabled) return t("providers.off");
   if (provider.status === "ok") return t("providers.count", { p0: provider.models });
   return t(provider.status === "auth" ? "providers.auth" : provider.status === "offline" ? "providers.offline" : "providers.unknown");
 }
 
 export function providersHTML(v: ProvidersView): string {
-  // ChatGPT is a sign-in, shown with the subscription accounts rather than as an API key.
+  // ChatGPT is a sign-in, shown with the subscription accounts rather than as an API key. A card has no switch: it opens the
+  // provider's editor (test, replace the key, remove). A provider turned off in an earlier version says so and offers 啟用.
   const rows = v.providers.filter((p) => p.id !== "chatgpt").map((p) => `<div class="pv-card pv-item">` +
     btn(`<span class="ic">${providerMark(p.kind)}</span><span class="tx"><span class="nm">${esc(p.name)}</span><span class="ds">${esc(statusNote(p))}</span></span><span class="chev" aria-hidden="true">${ico("right")}</span>`, "cs-open", ` data-pv="open" data-id="${esc(p.id)}" data-k="pv-open:${esc(p.id)}" aria-haspopup="dialog"`) +
-    tg(p.enabled, t("providers.switch", { p0: p.name }), ` data-pv="toggle" data-id="${esc(p.id)}" data-k="pv-toggle:${esc(p.id)}"${v.busy ? " disabled" : ""}`) +
+    (p.enabled ? "" : btn(esc(t("providers.enable")), "sm", ` data-pv="enable" data-id="${esc(p.id)}" data-k="pv-enable:${esc(p.id)}" aria-label="${esc(t("providers.switch", { p0: p.name }))}"${v.busy ? " disabled" : ""}`)) +
     `</div>`).join("");
   const add = btn(`<span class="ic">${ico("plus")}</span><span class="tx"><span class="nm">${esc(t("providers.add"))}</span><span class="ds">${esc(t("providers.addNote"))}</span></span>`, "pv-card pv-create", ` data-pv="directory" data-k="pv-directory" aria-haspopup="dialog"${v.state === "ready" && !v.busy ? "" : " disabled"}`);
   return `<section class="sgroup pv"><h2>${esc(t("models.providers"))}</h2>` +
@@ -163,6 +166,7 @@ export function providersAddHTML(v: ProvidersView): string {
 export interface ProvidersHost { root: HTMLElement; visible(): boolean; redraw(): void; }
 export function createProviders(host: ProvidersHost) {
   let state = emptyProvidersView();
+  let views: LayerViews<string> | undefined;
   let stopOutside: (() => void) | null = null;
   let loads = 0;
   let modelLoads = 0;
@@ -213,9 +217,13 @@ export function createProviders(host: ProvidersHost) {
     const scroll = host.root.querySelector(".pv-body")?.scrollTop;
     const selection = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? [active.selectionStart, active.selectionEnd] : null;
     host.redraw();
+    const key = navView();
     if ((state.open || state.adding) && !stopOutside) {
-      stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close);
+      views = new LayerViews(state.open?.id ? key : "pv:dir");
+      stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, undefined, undefined,
+        direction => state.busy || views!.step(direction, showNavView));
     } else if (!state.open && !state.adding) { stopOutside?.(); stopOutside = null; }
+    if (state.open || state.adding) views?.visit(key);
     for (const input of host.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.pv-field input:not([type="file"]), .pv-field textarea')) {
       if (drafts.has(input.id)) input.value = drafts.get(input.id)!;
       if (active?.id === input.id) { input.focus(); if (selection) input.setSelectionRange(selection[0], selection[1]); }
@@ -346,13 +354,27 @@ export function createProviders(host: ProvidersHost) {
     } catch { if (state.open === open) state.error = "error"; }
     finally { state.busy = false; redraw(); }
   }
-  async function toggle(id: string) {
+  async function enable(id: string) {
     const provider = state.providers.find((p) => p.id === id);
-    if (!provider || state.busy) return;
+    if (!provider || provider.enabled || state.busy) return;
     state.busy = true; state.error = null; redraw();
-    try { await api.providersUpdate({ id, enabled: !provider.enabled }); await load(); }
+    try { await api.providersUpdate({ id, enabled: true }); await load(); }
     catch { state.error = "error"; }
     finally { state.busy = false; redraw(); }
+  }
+  /** The dialog on screen in words the way back keeps: the list of kinds (`pv:dir`) or one provider (`pv:openai:4`, `pv:openai:new`). */
+  function navView(): string {
+    if (state.open) return `pv:${state.open.kind}:${state.open.id ?? "new"}`;
+    return state.adding ? "pv:dir" : "";
+  }
+  /** Shows the dialog `navView` named, or closes it for "". */
+  function showNavView(key: string): void {
+    if (!key) { if (state.open || state.adding) close(); return; }
+    if (key === "pv:dir") { if (!state.adding || state.open) directory(); return; }
+    const found = /^pv:([^:]+):(.+)$/.exec(key);
+    if (!found) return;
+    const id = found[2] === "new" ? null : found[2];
+    if (state.open?.kind !== found[1] || state.open.id !== id) show(found[1], id);
   }
   return {
     view: () => state, load,
@@ -368,8 +390,9 @@ export function createProviders(host: ProvidersHost) {
       if (!button) return false;
       if (button instanceof HTMLButtonElement && button.disabled) return true;
       if (button.dataset.pv !== "remove") clearConfirmation();
-      if (button.dataset.pv === "directory" || button.dataset.pv === "back") directory();
-      if (button.dataset.pv === "toggle") void toggle(button.dataset.id!);
+      if (button.dataset.pv === "directory") directory();
+      if (button.dataset.pv === "back" && !views?.step("back", showNavView)) directory();
+      if (button.dataset.pv === "enable") void enable(button.dataset.id!);
       if (button.dataset.pv === "add") {
         const existing = state.providers.find((p) => p.kind === button.dataset.id);
         if (existing || state.kinds.some((k) => k.kind === button.dataset.id && k.available)) show(button.dataset.id!, existing?.id ?? null);
@@ -454,20 +477,7 @@ export function createProviders(host: ProvidersHost) {
       }
       return false;
     },
-    /** The dialog on screen in words the way back keeps: the list of kinds (`pv:dir`) or one provider (`pv:openai:4`, `pv:openai:new`). */
-    navView(): string {
-      if (state.open) return `pv:${state.open.kind}:${state.open.id ?? "new"}`;
-      return state.adding ? "pv:dir" : "";
-    },
-    /** Shows the dialog `navView` named, or closes it for "". */
-    showNavView(key: string): void {
-      if (!key) { if (state.open || state.adding) close(); return; }
-      if (key === "pv:dir") { if (!state.adding || state.open) directory(); return; }
-      const found = /^pv:([^:]+):(.+)$/.exec(key);
-      if (!found) return;
-      const id = found[2] === "new" ? null : found[2];
-      if (state.open?.kind !== found[1] || state.open.id !== id) show(found[1], id);
-    },
+    navView, showNavView,
     reset(): void {
       stopOutside?.(); stopOutside = null;
       accountDraft = null; accountReads++; state.accountSet = false;

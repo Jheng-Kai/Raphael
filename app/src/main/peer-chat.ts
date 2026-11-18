@@ -2,6 +2,7 @@
 // the real conversation in place of the thread, with a pill 「A ⇄ X」 on top, each message under its speaker's face and
 // coloured name, day dividers, and 「關閉對話」 where the composer was. A hand-off is two messages: what one member sent
 // (`request`) and what the other answered (`result`, with its files); an unfinished one ends on the other's state.
+import { bindNavLayer } from "./nav-layers";
 import { dayLabel } from "./format";
 import { getLocale, t } from "./i18n";
 import { messageHTML } from "./message-content";
@@ -190,6 +191,7 @@ export function openPeerChat(container: HTMLElement, trigger: HTMLElement, all: 
   paint();
   container.dataset.peerOpen = "";
   container.append(el);
+  bindNavLayer(el, close);
   document.addEventListener("keydown", key, true);
   const scroll = el.querySelector<HTMLElement>(".peer-scroll")!;
   const first = el.querySelector<HTMLElement>(`[data-peer-key="${CSS.escape(focus)}"]`);

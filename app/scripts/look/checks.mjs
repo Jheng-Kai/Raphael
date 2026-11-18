@@ -1079,9 +1079,14 @@ export function checkRendered(name, context = {}) {
           && calls.filter(call => call.method === 'computer.viewer_control' && call.params.held === false).length === 1, 'one earlier take and one failed give-back');
         require(visible(panel.querySelector('.desktop-error')), 'the failed take says so under the screen');
       }
-      if (name === 'desktop-watch' && window.__look.data.desktop.works?.some(work => work.state === 'running')) {
-        const stop = panel.querySelector('[data-desktop="stop"]');
-        require(visible(stop) && stop.title === stop.getAttribute('aria-label') && stop.title.trim(), 'Stop has its translated tooltip');
+      // The work is stopped from the conversation; the larger view has no Stop of its own.
+      require(!panel.querySelector('[data-desktop="stop"]'), 'the larger view has no Stop of the work');
+      if (name === 'desktop-watch') {
+        // The screen takes the window's height but for the pill: the gaps above and below it stay small.
+        const screen = panel.querySelector('.desktop-screen').getBoundingClientRect(), shell = panel.querySelector('.desktop-shell').getBoundingClientRect();
+        const pill = panel.querySelector('.desktop-mode').getBoundingClientRect();
+        require(screen.top - shell.top <= 16 && shell.bottom - pill.bottom <= 16 || shell.right - screen.right <= 32,
+          `the screen is as large as the window allows (${Math.round(screen.top - shell.top)} px above, ${Math.round(shell.bottom - pill.bottom)} px under the pill)`);
       }
       const frame = panel.querySelector('iframe');
       if (frame && visible(frame)) require(getComputedStyle(frame).pointerEvents === 'none', 'watch stays view-only');
@@ -3362,7 +3367,9 @@ export function checkRendered(name, context = {}) {
     require(visible(flyer)&&canvas&&!flyer.querySelector('img'),"the voice flyer draws the emblem live on a canvas, not a picture of it");
     const a=flyer.getBoundingClientRect(),b=canvas.getBoundingClientRect();
     require(Math.abs((a.left+a.right)/2-(b.left+b.right)/2)<=1&&Math.abs((a.top+a.bottom)/2-(b.top+b.bottom)/2)<=1,"the emblem is centred in the flyer");
-    return {check:name,canvas:Math.round(b.width)};
+    const ratio=devicePixelRatio,device=v=>Math.round(v*ratio*100)/100,off=v=>Math.abs(v*ratio-Math.round(v*ratio));
+    require(off(b.left)<0.02&&off(b.top)<0.02&&Math.abs(b.width*ratio-canvas.width)<0.02,`the emblem's canvas lies on whole screen pixels at its own size, so its letters are never resampled (at ${device(b.left)}, ${device(b.top)}, ${device(b.width)} device px for a ${canvas.width} px bitmap)`);
+    return {check:name,canvas:Math.round(b.width),at:[device(b.left),device(b.top)]};
   }
   if(name==='messaging-paired-aligned'){
     const card=document.querySelector('[data-msg-kind="telegram"]'),mark=card?.querySelector('.msg-head .msg-mark'),face=card?.querySelector('.msg-sub .msg-avatar'),title=[...(card?.querySelectorAll('.row:not(.msg-head):not(.msg-sub) > .lbl')??[])].find(visible);
@@ -4387,11 +4394,6 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(call => destroying.includes(call.method)), "nothing is destroyed before the second press");
     return { check: name };
   }
-  if (name === "usage-key-removed") {
-    require(window.__look.calls.some(call => call.method === "secrets.clear_openrouter_key"), "the key was removed through the core");
-    require(visible(document.querySelector("#key-input")) && !document.querySelector('[data-act="key-menu"]'), "the row asks for a key and has nothing left to remove");
-    return { check: name };
-  }
   if (name === "messaging-user-removed") {
     require(window.__look.calls.some(call => call.method === "messaging.telegram.remove_user" && call.params.user_id === "42"), "the person was removed through the core");
     return { check: name };
@@ -4622,7 +4624,7 @@ export function checkRendered(name, context = {}) {
     const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"]):not([data-item="composio"])')].filter(visible);
     const searched = !!document.querySelector('#ob-find')?.value.trim();
     items.forEach(item => { item.dataset.item ??= item.dataset.id; });
-    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "openrouter", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf"] }[name];
+    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf"] }[name];
     if (name === "onboarding-tools") {
       // A store: a search box, 熱門 first and the same for everyone, then every other tool by kind.
       const find = document.querySelector('.ob-find input#ob-tools-find');
@@ -4630,8 +4632,10 @@ export function checkRendered(name, context = {}) {
       const groups = [...document.querySelectorAll('[data-ob-group]')].map(group => group.dataset.obGroup);
       require(groups[0] === "popular" && groups.includes("accounts"), `熱門 comes first, then the kinds (${groups.join(", ")})`);
       const popular = [...document.querySelectorAll('[data-ob-group="popular"] .ob-tile')].map(item => item.dataset.item);
-      require(popular.slice(0, 4).join() === "chatgpt,claude,codex,openrouter", `熱門 is ChatGPT, Claude Code, Codex and OpenRouter first (${popular.join(", ")})`);
-      if (!document.querySelector('#ob-key-input')) require(!document.querySelector('.ob-tile.wide'), "no tile is wider than the others while nothing is being typed");
+      require(popular.slice(0, 3).join() === "chatgpt,claude,codex", `熱門 is ChatGPT, Claude Code and Codex first (${popular.join(", ")})`);
+      // OpenRouter is a gateway among the providers, with no key tile or key field of its own (R-COPY-02).
+      require(!popular.includes("openrouter") && !document.querySelector('#ob-key-input, [data-ob="key-replace"], [data-item="openrouter"]'), "the guide asks for no OpenRouter key of its own");
+      require(!document.querySelector('.ob-tile.wide'), "no tile is wider than the others while nothing is being typed");
     }
     if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
     else if (searched) require(items.length >= 1, "a search shows what it finds");
@@ -9418,12 +9422,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, cards: named };
   }
   if (name === "usage-plain") {
-    // Plain usage summary: what each subscription has left, then the key and what was spent.
+    // Plain usage summary: what each subscription has left, then what was spent. An OpenRouter key is its provider card's.
     const panel = document.querySelector('#models-panel-usage');
     require(visible(panel), "the usage tab is open");
     require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
-    const rows = ["raphael-spend", "openrouter-key"].map(row => panel.querySelector(`[data-row="${row}"]`));
-    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"]'), "this month's spending of the app and the key show; the key's own usage is a card above them, not a row");
+    const rows = ["raphael-spend"].map(row => panel.querySelector(`[data-row="${row}"]`));
+    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"], [data-row="openrouter-key"], #key-input'), "this month's spending of the app shows; no OpenRouter key row asks for or shows a key here");
     const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.status.spend.limit_usd;
     if (limit > 0) {
       require(visible(spend.querySelector('.spend-bar')) && bar, "the spending has a bar against the monthly limit");

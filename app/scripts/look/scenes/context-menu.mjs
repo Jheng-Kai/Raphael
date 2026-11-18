@@ -11,7 +11,6 @@ const keyed = [{ action: "focus", selector: '.mb-col [data-member="2"]' }, { act
 const item = '#app-popover [data-confirm-item]';
 const asked = more => [click(more), wait(item), check("confirm-menu-label"), click(item), check("confirm-menu-asks")];
 const confirmed = more => [...asked(more), click(item), waitGone("#app-popover")];
-const usageKey = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-act="key-menu"]')];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
 // Raphael's Telegram is in its panel.
 const raphaelBots = [member(0), { action: "open-details" }, wait('.mb-panel-suggest [data-msg-kind="telegram"] [data-msg="expand"]')];
@@ -29,9 +28,6 @@ export default [
   ])),
   scene("context-menu-message", "A right click on Raphael's answer opens the menu of its ⋯", rightClicked(".ra .chat-message[data-reply]")),
   scene("context-menu-key", "Shift+F10 on a focused member row opens the menu of its ⋯ under that button", [column, ...keyed, check("context-menu-key"), ...keyed]),
-  scene("context-menu-api-key", "A right click on the key's row opens the menu of its ⋯, which holds 移除金鑰", rightClicked('.row-key', usageKey)),
-  scene("usage-key-menu", "移除金鑰 waits in the key row's ⋯; its first press asks once more", [...usageKey, ...asked('[data-act="key-menu"]')]),
-  scene("usage-key-removed", "The second press removes the key and the row asks for one", [...usageKey, ...confirmed('[data-act="key-menu"]'), wait("#key-input"), check("usage-key-removed")]),
   scene("messaging-paired-aligned", "A paired person's face and name start on the bot's left edge, not set in", [...raphaelBots, click('[data-msg="expand"]'), wait('[data-msg="user-menu"]'), check("messaging-paired-aligned")], paired),
   scene("messaging-user-menu", "Removing a person from Telegram waits in their row's ⋯", pairedUser, paired),
   scene("messaging-user-removed", "移除 in the ⋯ takes the person off the list", [...pairedUser, click('#app-popover [data-pick="remove"]'), waitGone('[data-msg="user-menu"]'), check("messaging-user-removed")], paired),

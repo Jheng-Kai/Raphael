@@ -3,6 +3,7 @@
 // services.set_key and never retained in view state. The core returns configuration status only.
 // servicesHTML draws snapshots; createServices owns actions.
 
+import { LayerViews } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
@@ -407,14 +408,20 @@ export function createServices(host: ServicesHost): ServicesPanel {
   let loads = 0;
   /** The dialog is on its way out (140 ms): a second close waits for the first. */
   let closing = false;
+  let views: LayerViews<string | null> | undefined;
   let stopOutside: (() => void) | null = null;
 
   const redraw = (): void => {
     if (host.visible()) host.redraw();
     if (open && !stopOutside && typeof document !== "undefined") {
       const root = host.root ?? document.querySelector("#svc-dialog")?.parentElement?.parentElement;
-      if (root) stopOutside = registerDismissal(() => root.querySelector<HTMLElement>("#svc-dialog"), closeDialog);
+      if (root) {
+        views = new LayerViews<string | null>(null);
+        stopOutside = registerDismissal(() => closing ? null : root.querySelector<HTMLElement>("#svc-dialog"), closeDialog, undefined, undefined,
+          direction => views!.step(direction, service => service ? showService(service) : showList()));
+      }
     } else if (!open) { stopOutside?.(); stopOutside = null; }
+    if (open) views?.visit(open.service);
   };
   const view = (): ServicesView => ({ status, busy, open, slide });
   const current = (): ServicesStatus | null => (typeof status === "object" ? status : null);
@@ -620,7 +627,7 @@ export function createServices(host: ServicesHost): ServicesPanel {
         showService(service);
         return true;
       case "back":
-        showList();
+        if (!views?.step("back", service => service ? showService(service) : showList())) showList();
         return true;
       case "use":
         void use(service);

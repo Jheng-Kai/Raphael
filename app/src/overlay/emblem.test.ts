@@ -350,6 +350,19 @@ test("the canvas is sized from the diameter", () => {
   expect(canvas.width).toBe(195); // device pixel ratio 1 outside a browser
 });
 
+test("at a ratio that does not divide it, the canvas box is its bitmap exactly, never resampled to the rounded side", () => {
+  vi.stubGlobal("window", { devicePixelRatio: 1.1 });
+  try {
+    const canvas = fakeCanvas();
+    new Emblem(canvas, 132);
+    expect(canvas.width).toBe(189); // 172 × 1.1 = 189.2
+    expect(parseFloat(canvas.style.width) * 1.1).toBeCloseTo(189, 9);
+    expect(parseFloat(canvas.style.height) * 1.1).toBeCloseTo(189, 9);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 test("a new emblem is hidden", () => {
   expect(new Emblem(fakeCanvas(), 150).phase).toBe("hidden");
 });

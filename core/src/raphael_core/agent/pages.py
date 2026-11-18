@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from ..clock import wall_clock_ms
+from ..frame_navigation import FRAME_NAVIGATION
 from ..memory.scan import find_secret
 from ..protocol import INTERNAL_ERROR, NOT_FOUND, RpcError, invalid_params
 from .page_style import BASE
@@ -139,7 +140,7 @@ FONT = '"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei UI","Microsoft 
 
 
 # A page open in the whole area is as tall as its content (up to 20000 px, R-PAGE-08): the area scrolls, the frame does not.
-_HELPER = """<script>
+_HELPER = "<script>" + FRAME_NAVIGATION + """
 (() => {
   const post = (type, data) => parent.postMessage({raphaelPage: 1, type, ...data}, '*');
   window.raphael = Object.freeze({

@@ -813,10 +813,12 @@ export class Emblem {
     this.diameter = px;
     this.dpr = devicePixelRatioNow();
     this.side = canvasSize(px);
-    this.canvas.style.width = this.side + "px";
-    this.canvas.style.height = this.side + "px";
     this.canvas.width = Math.round(this.side * this.dpr);
     this.canvas.height = Math.round(this.side * this.dpr);
+    // The box is exactly the bitmap on the screen. A box a fraction of a pixel larger or smaller would be resampled to fit,
+    // which blurs the letters.
+    this.canvas.style.width = this.canvas.width / this.dpr + "px";
+    this.canvas.style.height = this.canvas.height / this.dpr + "px";
     this.dirty = true;
     wake();
   }
@@ -912,7 +914,7 @@ export class Emblem {
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     const k = this.dpr;
-    ctx.setTransform(k, 0, 0, k, (this.side * k) / 2, (this.side * k) / 2);
+    ctx.setTransform(k, 0, 0, k, this.canvas.width / 2, this.canvas.height / 2);
     const ph = this._phase;
     if (this.picture) {
       this.drawPicture(ctx, this.picture);

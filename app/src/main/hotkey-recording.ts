@@ -2,6 +2,7 @@
 // are paused, shown in the row's key caps as they are held, and saved when they are let go. The
 // settings record the dictation keys with it and the 拉斐爾 page the key that asks Raphael.
 
+import { bindNavLayer } from "./nav-layers";
 import { t } from "./i18n";
 
 import * as api from "./api";
@@ -108,6 +109,16 @@ export function createHotkeyRecording(app: AppContext, ended: () => void): Hotke
     }
     recording = { recorder: new KeyRecorder(), field, cell, finishing: false };
     cell.innerHTML = t("settings.084");
+    bindNavLayer(cell, () => void end(), {
+      active: () => recording?.cell === cell,
+      step(direction) {
+        if (direction !== "forward" || !recording) return false;
+        // The navigation chord may already have supplied its modifier to the recorder.
+        recording.recorder = new KeyRecorder();
+        cell.innerHTML = t("settings.084");
+        return true;
+      },
+    });
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("keyup", onKeyUp, true);
     window.addEventListener("blur", onBlur);

@@ -10,25 +10,31 @@ import type { Status } from "./types";
 export interface Report {
   /** The sentence as it is spoken, 《告。…》, in the interface language. */
   text: string;
-  /** The button next to the report. `settings` goes to the settings page, `retry` asks OpenRouter again. */
+  /** The button next to the report. `settings` goes to Settings' models, `retry` asks OpenRouter again. */
   action?: { label: string; target: "settings" | "retry" };
 }
 
 const SET_KEY = { get label() { return t("report.001"); }, target: "settings" } as const;
+const SET_MODEL = { get label() { return t("report.setModel"); }, target: "settings" } as const;
 const RETRY = { get label() { return t("report.002"); }, target: "retry" } as const;
 const ADJUST_LIMIT = { get label() { return t("report.003"); }, target: "settings" } as const;
 
 
-/** The report for a `status.get` result. First that applies: no key, OpenRouter does not work, the budget is used up or nearly, all well. */
+/**
+ * The report for a `status.get` result. First that applies: an OpenRouter key the owner set does not work, no model can tidy
+ * dictation, the budget is used up or nearly, all well. Having no OpenRouter key is nothing to report: most people use another
+ * provider, and the core says whether the model that tidies has one ready (`cleanup_ready`; a core too old to say falls back to
+ * the OpenRouter key).
+ */
 export function buildReport(s: Status, nowMs: number): Report {
   const { openrouter, spend } = s;
-
-  if (openrouter.state === "no_key") return { text: t("report.noKey"), action: SET_KEY };
 
   if (openrouter.state === "error") {
     if (openrouter.error === "auth") return { text: t("report.badKey"), action: SET_KEY };
     return { text: t("report.offline"), action: RETRY };
   }
+
+  if (s.cleanup_ready === false || s.cleanup_ready === undefined && openrouter.state === "no_key") return { text: t("report.noKey"), action: SET_MODEL };
 
   const { month_usd: month, limit_usd: limit } = spend;
   // As in the core: being at the limit is being over it.

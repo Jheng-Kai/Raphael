@@ -3,6 +3,7 @@
 // own and 「匯入」 for many from a .csv or .txt, after a confirmation. A word joins by itself only when
 // the user corrected it in a pasted dictation, never for being said often.
 
+import { bindNavLayer } from "../nav-layers";
 import { onLocaleChange, t } from "../i18n";
 
 import * as api from "../api";
@@ -174,13 +175,16 @@ export function createDictionary(app: AppContext): DictionaryPage {
   function showAdd(open: boolean): void {
     addBox.hidden = !open;
     newButton.setAttribute("aria-expanded", String(open));
-    if (open) wordInput.focus();
+    if (open) { bindNavLayer(addBox, () => showAdd(false)); wordInput.focus(); }
     else newButton.focus();
   }
+
+  function cancelImport(): void { staged = null; renderImport(); }
 
   function renderImport(): void {
     importBox.hidden = staged === null;
     if (!staged) return;
+    bindNavLayer(importBox, cancelImport);
     const fresh = staged.words.length - staged.known;
     importMessage.textContent = staged.known > 0 ? t("dictionary.026", { p0: fresh, p1: staged.known }) : t("dictionary.027", { p0: fresh });
   }
@@ -279,8 +283,7 @@ export function createDictionary(app: AppContext): DictionaryPage {
     } else if (e.key === "Escape" && addBox.contains(target)) {
       showAdd(false);
     } else if (e.key === "Escape" && importBox.contains(target)) {
-      staged = null;
-      renderImport();
+      cancelImport();
     }
   });
   importFile.addEventListener("change", () => {
