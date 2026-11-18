@@ -57,6 +57,14 @@ describe("the page's responsive sizes", () => {
     expect(agent).toMatch(/\.composer \{[^}]*max-width: var\(--layout-thread-max\)/);
   });
 
+  test("a reply's table, diagram or code takes the composer's width, and a table's columns take the room their contents need", () => {
+    const rich = strip(read("message-rich.css"));
+    expect(rich).toContain(".chat-message:has(> .rich-block) > .rich-block { width: var(--layout-thread-max); max-width: 100%; }");
+    expect(rich).toContain(".message-table table { width: 100%; border-collapse: collapse; table-layout: auto; }");
+    // Words keep the reading measure.
+    expect(rich).toContain(".chat-message[data-reply] { grid-template-columns: fit-content(var(--layout-reading-max)) auto; }");
+  });
+
   test("every token a rule reads is set, and every token set is read", () => {
     const set = new Set([...block![2].matchAll(/--(pa-[\w-]+):/g)].map((m) => m[1]));
     const used = new Set([...both.matchAll(/var\(--(pa-[\w-]+)\)/g)].map((m) => m[1]));

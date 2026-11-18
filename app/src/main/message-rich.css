@@ -1,10 +1,10 @@
-/* Rich reply cards share the message column and existing surface/control tokens. Every part of a reply has one measure,
-   the reading column: plain words grow up to it and a part holding a table or code fills it, so a long reply's parts stand
-   equally wide, instead of words beside a code block running the thread's whole width. */
+/* Rich reply cards share the message column and existing surface/control tokens (R-UI-167). Plain words grow up
+   to the reading column, where a line stays easy to read; a part holding a table, a diagram or code takes the conversation's
+   whole column, as wide as the composer, since squeezing a table into the reading column stood its cells many lines tall. */
 .chat-message[data-reply] { grid-template-columns: fit-content(var(--layout-reading-max)) auto; }
-/* The message stays as wide as its parts and actions (R-UI-104): the card itself takes the reading measure. */
+/* The message stays as wide as its parts and actions (R-UI-104): the card itself takes the conversation's column. */
 .chat-message[data-reply]:has(> .rich-block), .chat-message:has(> .rich-block) { width: fit-content; grid-template-columns: minmax(0, max-content) auto; gap: var(--sp-3); }
-.chat-message:has(> .rich-block) > .rich-block { width: var(--layout-reading-max); max-width: 100%; }
+.chat-message:has(> .rich-block) > .rich-block { width: var(--layout-thread-max); max-width: 100%; }
 .chat-message > .ans { max-width: 100%; }
 .rich-block { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; overflow: hidden; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--panel); color: var(--text); font: var(--fs-sm)/1.6 var(--ui); white-space: normal; }
 .rich-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); min-height: 38px; padding: var(--sp-1) var(--sp-3); border-bottom: 1px solid var(--edge); color: var(--text-2); font-size: var(--fs-xs); }
@@ -12,8 +12,12 @@
 .rich-head > div { display: flex; flex-shrink: 0; gap: var(--sp-1); }
 .rich-head .i { width: 16px; height: 16px; }
 .rich-scroll { overflow-x: auto; max-width: 100%; }
-.message-table table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* Columns take the room their contents need: a number column stays narrow and the long text gets the rest. */
+.message-table table { width: 100%; border-collapse: collapse; table-layout: auto; }
 .message-table th, .message-table td { padding: var(--sp-2) var(--sp-3); vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
+/* Chinese may break between any two characters, so a column of short words (a number, a level, a label) would give its room
+   away to the long text and stand each word in pieces: such a column keeps every cell on one line (`short`, message-content.ts). */
+.message-table .short { white-space: nowrap; }
 .message-table th { background: var(--surface-2); font-weight: var(--weight-semibold); }
 .message-table tr:last-child td { border-bottom: 0; }
 .message-table th:not(:last-child), .message-table td:not(:last-child) { border-inline-end: 1px solid var(--line); }

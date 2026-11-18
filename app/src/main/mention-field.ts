@@ -2,14 +2,16 @@
 // chip cannot live inside it. While the words hold an address, the textarea stops painting its text and a copy of it is drawn over
 // it with each address as a chip (`.cmp-mirror`, aria-hidden, never taking a click); the caret, selection and input method are the
 // textarea's own. A chip is derived from the words, not stored: change a letter of it and it is plain text again, which is the
-// rule the core applies. Deleting, moving over and selecting treat it as one unit. A link is the same kind of chip: the words hold
-// its whole address (composer-links.ts), drawn in the link colour, and copying or sending gives the same text.
+// rule the core applies. Deleting, moving over and selecting treat an address or a skill as one unit. A link is drawn the same
+// way, in the link colour, but stays ordinary words (R-UI-168): a mistyped address is corrected a letter at a time, so
+// backspace takes one letter and the caret rests anywhere in it. The words hold its whole address (composer-links.ts), and
+// copying or sending gives the same text.
 import { esc } from "./ui";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
 
-/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link or a skill. */
-interface ChipRange { start: number; end: number; target?: MentionTarget }
+/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link (`url`) or a skill. */
+interface ChipRange { start: number; end: number; target?: MentionTarget; url?: true }
 
 /** A skill or command called by its name, `/name`, at the start of the words or after a space, in any script (「/每日新聞摘要」 too) and with a plugin's prefix (`/field-notes:review`). A path
  * such as /usr/bin is not one: the name ends at a space or the end of the words, and holds no other slash. */
@@ -26,6 +28,8 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   const field = input.closest<HTMLElement>(".cmp-field"), mirror = field?.querySelector<HTMLElement>(".cmp-mirror");
   if (!field || !mirror) return { refresh() {} };
   let ranges: ChipRange[] = [];
+  /** The chips that move, select and delete as one unit: every one but a link. */
+  let units: ChipRange[] = [];
   /** The words an input method has not committed yet, drawn underlined as the field would draw them. */
   let composing: { start: number; end: number } | null = null, composed = "";
 
@@ -41,11 +45,12 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   const draw = (): void => {
     const text = input.value;
     // Long restored/typed drafts use the textarea's own paint instead of a second large DOM.
-    if (text.length >= 2000) { ranges = []; field.classList.remove("has-mentions"); mirror.textContent = ""; return; }
-    const links = linkRanges(text), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
+    if (text.length >= 2000) { ranges = []; units = []; field.classList.remove("has-mentions"); mirror.textContent = ""; return; }
+    const links: ChipRange[] = linkRanges(text).map(range => ({ ...range, url: true })), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
     const free = (item: ChipRange, taken: readonly ChipRange[]): boolean => !taken.some(other => other.start < item.end && item.start < other.end);
     const chips = [...links, ...mentions.filter(item => free(item, links))];
     ranges = [...chips, ...(text.includes("/") ? skillRanges(text).filter(item => free(item, chips)) : [])].sort((a, b) => a.start - b.start);
+    units = ranges.filter(range => !range.url);
     field.classList.toggle("has-mentions", ranges.length > 0);
     if (!ranges.length) { mirror.textContent = ""; return; }
     let html = "", at = 0;
@@ -98,10 +103,11 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   });
   input.addEventListener("scroll", place);
 
-  const inside = (at: number): ChipRange | undefined => ranges.find(range => range.start < at && at < range.end);
-  /** A caret or selection edge never rests inside a chip: it goes to the nearer edge, a selection takes the whole chip. */
+  const inside = (at: number): ChipRange | undefined => units.find(range => range.start < at && at < range.end);
+  /** A caret or selection edge never rests inside an address or a skill: it goes to the nearer edge, a selection takes the whole
+   * chip. A link is words, and the caret rests anywhere in it. */
   const snap = (): void => {
-    if (composing || !ranges.length || document.activeElement !== input) return;
+    if (composing || !units.length || document.activeElement !== input) return;
     const { selectionStart: from, selectionEnd: to, selectionDirection: direction } = input;
     const first = inside(from), last = inside(to);
     if (!first && !last) return;
@@ -112,10 +118,10 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   document.addEventListener("selectionchange", follow);
 
   input.addEventListener("keydown", event => {
-    if (event.isComposing || event.keyCode === 229 || !ranges.length || event.altKey || event.metaKey) return;
+    if (event.isComposing || event.keyCode === 229 || !units.length || event.altKey || event.metaKey) return;
     const { selectionStart: from, selectionEnd: to } = input, collapsed = from === to;
     if ((event.key === "Backspace" || event.key === "Delete") && collapsed) {
-      const range = ranges.find(item => (event.key === "Backspace" ? item.end : item.start) === from);
+      const range = units.find(item => (event.key === "Backspace" ? item.end : item.start) === from);
       if (!range) return;
       event.preventDefault();
       input.setSelectionRange(range.start, range.end);
@@ -128,7 +134,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
     const forward = input.selectionDirection !== "backward", anchor = forward ? from : to, focus = forward ? to : from;
     const step = event.key === "ArrowLeft" ? -1 : 1;
     if (!event.shiftKey && !collapsed) return;
-    const range = ranges.find(item => (step < 0 ? item.end : item.start) === focus);
+    const range = units.find(item => (step < 0 ? item.end : item.start) === focus);
     if (!range) return;
     event.preventDefault();
     const moved = step < 0 ? range.start : range.end;

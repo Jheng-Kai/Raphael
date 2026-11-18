@@ -3044,6 +3044,16 @@ export function checkRendered(name, context = {}) {
     if (name === "rich-table-example") {
       require(scope.querySelectorAll('th').length === 3 && scope.querySelector('.message-table a') && scope.querySelector('.message-table td code'), "owner example has three aligned columns, links and inline code");
       require(getComputedStyle(scope.querySelector('.message-table td')).overflowWrap === 'anywhere', "long Chinese cells wrap within the column");
+      // R-UI-167: columns take the room their contents need, so the long description gets the most of it.
+      const widths = [...scope.querySelectorAll('.message-table th')].map(th => th.getBoundingClientRect().width);
+      require(widths[1] > widths[0] && widths[1] > widths[2], `the long column is the widest: ${widths.map(Math.round)}`);
+      // A column of short words keeps each on one line (「會議摘要」 once stood as 「會議摘」 over 「要」).
+      for (const cell of scope.querySelectorAll('.message-table tbody td.short')) {
+        const range = document.createRange(); range.selectNodeContents(cell);
+        const lines = new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size;
+        require(lines === 1, `a short cell stays on one line: 「${cell.textContent.trim()}」 took ${lines}`);
+      }
+      require(scope.querySelectorAll('.message-table tbody td.short').length >= 2, "the label column counts as short words");
     }
     if (name === "rich-wide-table") {
       const scroller = scope.querySelector('.message-table .rich-scroll');
@@ -4870,6 +4880,14 @@ export function checkRendered(name, context = {}) {
     require(Math.abs(input.scrollHeight - mirror.scrollHeight) <= 1, `the field and its copy wrap alike: ${input.scrollHeight} / ${mirror.scrollHeight}`);
     require(mirror.scrollWidth <= mirror.clientWidth + 1, `the address wraps inside the field: ${mirror.scrollWidth} / ${mirror.clientWidth}`);
     return { check: name, name: chip.textContent, height: input.scrollHeight };
+  }
+  if (name === "composer-link-edit") {
+    // R-UI-168: "…status-notes" lost its last letter, then the "o" two letters in; the rest stands, still drawn as a link.
+    const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), chip = field.querySelector(".cmp-mirror .url-chip");
+    require(input.value.startsWith("https://x.com/someone/status/") && input.value.endsWith("sample-project-status-nte"), `one letter went each time: ${input.value}`);
+    require(chip && visible(chip) && chip.textContent === input.value, `the corrected address is still a link: ${chip?.textContent}`);
+    require(input.selectionStart === input.value.length - 2 && input.selectionEnd === input.selectionStart, `the caret stays inside the link: ${input.selectionStart} of ${input.value.length}`);
+    return { check: name, address: input.value };
   }
   if (name === "composer-link-sent") {
     const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
@@ -9850,26 +9868,28 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "reply-measure") {
-    // Every part of a reply has one measure, the reading column: a part holding a table
-    // or code fills it, plain words grow up to it, and none runs past it.
-    const probe = document.createElement("div"); probe.style.cssText = "position:absolute;visibility:hidden;width:var(--layout-reading-max)";
-    document.body.append(probe); const measure = probe.getBoundingClientRect().width; probe.remove();
+    // Plain words grow up to the reading column and never run past it; a part holding a table, a diagram or code takes
+    // the conversation's column, as wide as the composer (R-UI-167).
+    const width = token => { const probe = document.createElement("div"); probe.style.cssText = `position:absolute;visibility:hidden;width:var(${token})`; document.body.append(probe); const measured = probe.getBoundingClientRect().width; probe.remove(); return measured; };
+    const measure = width("--layout-reading-max"), column = width("--layout-thread-max");
     // A room draws its members' words in its own thread; a private conversation marks each part of a reply.
     const parts = [...document.querySelectorAll(".thread .chat-message[data-reply], :is(.au-room-thread, .room-side-thread) .ra .chat-message")].filter(visible);
     require(parts.length > 0, "the reply has parts to measure");
     for (const part of parts) {
-      const body = [...part.querySelectorAll(":scope > .ans, :scope > .rich-block")].filter(visible);
-      for (const element of body) require(element.getBoundingClientRect().width <= measure + 1, `a reply part is no wider than the reading column (${Math.round(element.getBoundingClientRect().width)} > ${Math.round(measure)})`);
+      for (const words of [...part.querySelectorAll(":scope > .ans")].filter(visible)) {
+        require(words.getBoundingClientRect().width <= measure + 1, `words are no wider than the reading column (${Math.round(words.getBoundingClientRect().width)} > ${Math.round(measure)})`);
+      }
       const rich = part.querySelector(":scope > .rich-block");
       if (rich && visible(rich)) {
         // Its actions keep their column beside it (R-UI-104), out of a narrow window's room.
         const actions = part.querySelector(":scope > .message-actions");
         const reserve = actions ? actions.getBoundingClientRect().width + (parseFloat(getComputedStyle(part).columnGap) || 0) : 0;
-        const room = part.parentElement.getBoundingClientRect().width - reserve, width = rich.getBoundingClientRect().width;
-        require(width >= Math.min(measure, room) - 2, `a part holding a table or code fills the reading column (${Math.round(width)} of ${Math.round(Math.min(measure, room))})`);
+        const room = part.parentElement.getBoundingClientRect().width - reserve, wide = rich.getBoundingClientRect().width;
+        require(wide <= column + 1, `a part holding a table or code is no wider than the conversation's column (${Math.round(wide)} > ${Math.round(column)})`);
+        require(wide >= Math.min(column, room) - 2, `a part holding a table or code fills the conversation's column (${Math.round(wide)} of ${Math.round(Math.min(column, room))})`);
       }
     }
-    return { check: name, measure: Math.round(measure) };
+    return { check: name, measure: Math.round(measure), column: Math.round(column) };
   }
   if (name === "store-in-chat") {
     // More than a sign-in or one key is set up in the conversation: 加入 leaves for it with the owner's words.

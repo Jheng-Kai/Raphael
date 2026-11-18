@@ -1888,7 +1888,9 @@ question key down and up and no cancellation. `composer-voice-attachment-quick` 
 
 ## Rich replies
 
-See the feature map. Selected acceptance:
+See the feature map. A reply's words grow up to the reading column; a table, a diagram or code takes the
+conversation's whole column, as wide as the composer, and a table's columns take the room their contents need (R-UI-167,
+`reply-measure` and `rich-table-example` measure it). Selected acceptance:
 
 ```powershell
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
@@ -2120,8 +2122,12 @@ ja and en, including start_date, until and max_runs. Evidence:
 core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 ## Existing composer and file consumers (feature-map sync)
 
+A link in the composer is drawn in the link colour but stays words (R-UI-168): `composer-link-edit` pastes one, presses
+Backspace at its end and again two letters in, and checks one letter went each time and it is still drawn as a link. An
+address (@) and a skill (/) stay one unit (`mention-field.test.ts`).
+
 ```powershell
-npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
+npm run look -- composer-long-link composer-long-link-sent composer-link-edit room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
 npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```

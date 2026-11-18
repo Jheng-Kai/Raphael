@@ -12,7 +12,8 @@ test("typed replies preserve ordered text, aligned tables, code, diagrams and im
   expect(el.querySelectorAll(".ans")).toHaveLength(3);
   expect(el.querySelector(".ans .rich-block")).toBeNull();
   expect(el.querySelectorAll(".message-table th")).toHaveLength(3);
-  expect([...el.querySelectorAll("th")].map(cell => cell.className)).toEqual(["align-left", "align-center", "align-right"]);
+  // The first column holds a long cell; the other two hold only short words, which stay on one line.
+  expect([...el.querySelectorAll("th")].map(cell => cell.className)).toEqual(["align-left", "align-center short", "align-right short"]);
   expect(el.querySelector("td code")?.textContent).toBe("a|b");
   expect(el.querySelectorAll(".message-table strong, .message-table a")).toHaveLength(2);
   expect(el.querySelector("img,script,[onerror]")).toBeNull();
@@ -22,6 +23,16 @@ test("typed replies preserve ordered text, aligned tables, code, diagrams and im
   expect(messagePlainText(source, true)).toContain(table);
   expect(messagePlainText(source, true)).toContain("flowchart LR\nA-->B");
   expect(tablePlainText(table)).toContain("Alpha\ta|b\tsite (https://example.com/)");
+});
+
+test("a table column of short words keeps them on one line, counted as shown, and a column with long text wraps", () => {
+  const review = "| # | 等級 | 位置 | 問題 |\n| --- | --- | --- | --- |\n| 1 | 🟠 MUST（資安） | [報告](https://example.com/a/very/long/path/to/report.md) | 範例把動態 JSON 值放在 shell 單引號裡，只教人做 JSON 跳脫。 |\n| 2 | 🟡 SHOULD | `report.md:80` | 附件路徑直接塞進 Python 原始碼的雙引號字串。 |";
+  const el = document.createElement("div"); el.innerHTML = replyContentHTML(review);
+  const shortColumns = [...el.querySelectorAll("thead th")].map(cell => cell.classList.contains("short"));
+  expect(shortColumns).toEqual([true, true, true, false]);
+  for (const row of el.querySelectorAll("tbody tr")) {
+    expect([...row.children].map(cell => cell.classList.contains("short"))).toEqual(shortColumns);
+  }
 });
 
 test("a finished reply drawn again follows the language and the search, and a reply still arriving is never kept", () => {
