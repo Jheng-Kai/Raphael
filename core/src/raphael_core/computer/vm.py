@@ -553,7 +553,15 @@ class LocalVm:
             owner = screen_of(window["bounds"], target.screens)
             return owner not in (None, target.screen) and owner in self.seats.holders(target.remote)
         async def clean():
-            raw = await self.inspect(target)
+            try:
+                raw = await self.inspect(target)
+            except VmError as error:
+                # No engine runs (Docker Desktop is closed), so no computer and no window of it: the screen is empty, and the
+                # member who takes it starts the computer as any first use does. Refusing here told every member "every
+                # screen of the computer is in use" while nobody used it (seen on a real computer).
+                if str(error) == "unavailable":
+                    return True
+                raise
             if raw is None or raw.get("State", {}).get("Running") is False:
                 return True
             for attempt in range(10):

@@ -1083,6 +1083,10 @@ member and says 快速提問 under it when those are open.
 
 A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
 reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
+重新產生 answers the same message again where it stands (R-UI-170): the thread keeps one message,
+the answer before stays as its version (‹ ›), and its pictures go as their stored copies, drawn at
+once. A picture the owner sends is drawn from its own bytes until its stored copy takes its place,
+never an empty square with its name between them (R-ATTACH-06).
 The jump-to-latest button sits centred just above the composer (R-UI-105). There are no voice
 calls (R-UI-106): the voice button records voice messages only.
 

@@ -455,3 +455,60 @@ describe("a turn with files in the conversation", () => {
     expect(html).not.toContain("「」");
   });
 });
+
+describe("a picture between being sent and being stored", () => {
+  const decodedWidth = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "naturalWidth");
+  beforeEach(() => { Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", { configurable: true, get: () => 11 }); });
+  afterEach(() => {
+    if (decodedWidth) Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", decodedWidth);
+    else delete (HTMLImageElement.prototype as { naturalWidth?: number }).naturalWidth;
+  });
+  const stored = (n: number): string => `${n.toString(16).padStart(32, "0")}.png`;
+  const answered = (over: Partial<AgentTurn>): AgentTurn => ({
+    id: 5, created_at_ms: Date.now() - 60_000, question: "這是什麼？", route: "chat", prefix: "答", text: "是一張收據", detail: null, status: "done", source: "app", ...over,
+  });
+
+  test("the turn's stored copy is drawn at once from the picture that was sent, never an empty square with its name", async () => {
+    let finish!: () => void;
+    api.agentAskText.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    const { agent, pick } = mount();
+    await flush();
+    await pick(png());
+    agent.el.querySelector<HTMLFormElement>(".composer")!.requestSubmit();
+    await flush();
+    const bytes = `data:image/png;base64,${base64Of(PNG)}`;
+    expect(agent.el.querySelector(".tn.is-pending .attachment-picture img")?.getAttribute("src")).toBe(bytes);
+    const { requestId } = api.agentAskText.mock.calls[0]![3] as { requestId: string };
+    api.agentHistoryList.mockResolvedValue({ turns: [answered({ id: 9, session_id: requestId, attachments: [{ id: stored(901), name: "photo.png", mime: "image/png", size: PNG.length }] })] });
+    finish();
+    await flush();
+    expect(agent.el.querySelector(".tn.is-pending")).toBeNull();
+    expect(agent.el.querySelector(`img[data-attachment="${stored(901)}"]`)?.getAttribute("src")).toBe(bytes);
+    expect(api.core).not.toHaveBeenCalledWith("attachments.get", expect.anything());
+    agent.hide();
+  });
+
+  test("重新產生 answers the same message in its place, one message with its pictures by their stored copies", async () => {
+    const id = stored(902);
+    const picture = { id, name: "photo.png", mime: "image/png", size: PNG.length };
+    api.agentHistoryList.mockResolvedValue({ turns: [answered({ session_id: "first", attachments: [picture] })] });
+    api.core.mockImplementation(async (method: string) => method === "attachments.info" ? { mime: "image/png", size: PNG.length } : { questions: [] });
+    let finish!: () => void;
+    api.agentAskText.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    const { agent } = mount();
+    await flush();
+    agent.el.querySelector<HTMLButtonElement>('.tn[data-id="5"] .ra [data-act="more-message"]')!.click(); await flush();
+    document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click(); await flush();
+    expect(api.agentAskText).toHaveBeenCalledWith("這是什麼？", [{ name: "photo.png", mime: "image/png", data: "", stored_id: id }], 0, expect.objectContaining({ replaceTurnId: 5 }));
+    // While the answer is on its way the message stands where it stood, once, with its picture by its stored id; the old answer is gone.
+    expect(agent.el.querySelectorAll(".owner-message")).toHaveLength(1);
+    expect(agent.el.querySelector(".tn.is-pending img")?.getAttribute("data-attachment")).toBe(id);
+    expect(agent.el.textContent).not.toContain("是一張收據");
+    api.agentHistoryList.mockResolvedValue({ turns: [answered({ session_id: (api.agentAskText.mock.calls[0]![3] as { requestId: string }).requestId, text: "另一個回答", attachments: [picture] })] });
+    finish();
+    await flush();
+    expect(agent.el.querySelectorAll(".owner-message")).toHaveLength(1);
+    expect(agent.el.textContent).toContain("另一個回答");
+    agent.hide();
+  });
+});
