@@ -71,6 +71,22 @@ function New-AppLaunch {
     return $launch
 }
 
+# What a failed start leaves to read: the app's exit code, the end of its log and of the core's logs, and
+# every process still running from the install folder (another instance would take a launch's place).
+function Show-AppState {
+    param($Application, [string]$Description)
+    Write-Host "Desktop app ($Description): exited $($Application.HasExited), exit code $(if ($Application.HasExited) { $Application.ExitCode } else { 'none' })."
+    foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installDirectory) })) {
+        Write-Host "Still running from the install folder: $($process.ProcessId) (parent $($process.ParentProcessId)) $($process.CommandLine)"
+    }
+    $logs = @($logFile) + @(Get-ChildItem -LiteralPath $dataDirectory -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    foreach ($log in $logs) {
+        if (-not (Test-Path -LiteralPath $log)) { Write-Host "No log at $log."; continue }
+        Write-Host "--- the last lines of $log"
+        Get-Content -LiteralPath $log -Tail 80 | ForEach-Object { Write-Host $_ }
+    }
+}
+
 # Starts the installed desktop app with isolated data, waits for its own core handshake and checks
 # that the one child it launched is the installed core. The caller stops it with Stop-InstalledApp.
 function Start-InstalledApp {
@@ -105,6 +121,7 @@ function Start-InstalledApp {
         $instance.Core = Get-Process -Id $children[0].ProcessId
     } catch {
         if (-not $application.HasExited) { $application.Kill($true); $application.WaitForExit(10000) | Out-Null }
+        Show-AppState -Application $application -Description $Description
         throw
     }
     Write-Host "Installed desktop app ($Description): bundled core launched and protocol 1 handshake passed."
