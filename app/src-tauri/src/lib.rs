@@ -152,7 +152,7 @@ pub fn run() {
         data_layout::migrate_at_start,
     );
 
-    builder
+    early_state(builder)
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .arg("--autostart")
@@ -205,9 +205,6 @@ pub fn run() {
         })
         // Tauri keeps only the last `invoke_handler` call, so every command of the app goes into
         // this one list.
-        .manage(overlay::mouse::Windows::default())
-        // A stored attachment under a stable, cacheable URL for the main window (media_protocol.rs).
-        .manage(media_protocol::MediaGrants::default())
         .register_asynchronous_uri_scheme_protocol(media_protocol::SCHEME, media_protocol::handle)
         .invoke_handler(tauri::generate_handler![
             commands::floating_controls,
@@ -541,6 +538,19 @@ pub fn startup_plugins_for_tests<R: Runtime>(
     })
 }
 
+/// The state a page may ask for from its first moment, managed on the builder before any window
+/// exists. A page that asks before `setup` has managed a state panics in `state()`, and the
+/// release build aborts: the sidebar's update notice asks `update_control` as soon as it loads,
+/// which on a warm webview (the second start, after an upgrade) came before `setup` reached
+/// `updates::start`. The device settings had the same race once (`load_device_settings`).
+fn early_state<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
+        .manage(overlay::mouse::Windows::default())
+        // A stored attachment under a stable, cacheable URL for the main window (media_protocol.rs).
+        .manage(media_protocol::MediaGrants::default())
+        .manage(updates::Updates::default())
+}
+
 /// Takes what the data migration did; a later call gets nothing to do.
 fn take_migration<R: Runtime>(app: &AppHandle<R>) -> data_layout::Outcome {
     app.try_state::<Migration>()
@@ -661,6 +671,22 @@ fn log_plugin<R: Runtime>() -> TauriPlugin<R> {
         .rotation_strategy(RotationStrategy::KeepSome(3))
         .timezone_strategy(TimezoneStrategy::UseLocal)
         .build()
+}
+
+#[cfg(test)]
+mod early_state_tests {
+    use super::*;
+
+    /// A page may ask for these before `setup` has run: they are there as soon as the app is built.
+    #[test]
+    fn a_page_finds_the_update_state_before_setup_runs() {
+        let app = early_state(tauri::test::mock_builder())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("the mock app builds");
+        assert!(app.try_state::<updates::Updates>().is_some());
+        assert!(app.try_state::<overlay::mouse::Windows>().is_some());
+        assert!(app.try_state::<media_protocol::MediaGrants>().is_some());
+    }
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
 }
 
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
+$verificationStarted = Get-Date
 $verificationRoot = Join-Path $env:RUNNER_TEMP ("raphael-install-" + [guid]::NewGuid())
 $installDirectory = Join-Path $verificationRoot 'Installed Raphael'
 $dataDirectory = Join-Path $verificationRoot 'data'
@@ -71,6 +72,41 @@ function New-AppLaunch {
     return $launch
 }
 
+# What a failed start leaves to read: the app's exit code, the end of its log and of the core's logs, and
+# every process still running from the install folder (another instance would take a launch's place).
+function Show-AppState {
+    param($Application, [string]$Description)
+    Write-Host "Desktop app ($Description): exited $($Application.HasExited), exit code $(if ($Application.HasExited) { $Application.ExitCode } else { 'none' })."
+    foreach ($process in @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($installDirectory) })) {
+        Write-Host "Still running from the install folder: $($process.ProcessId) (parent $($process.ParentProcessId)) $($process.CommandLine)"
+    }
+    $logs = @($logFile) + @(Get-ChildItem -LiteralPath $dataDirectory -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    foreach ($log in $logs) {
+        if (-not (Test-Path -LiteralPath $log)) { Write-Host "No log at $log."; continue }
+        Write-Host "--- panics and errors in $log"
+        Select-String -LiteralPath $log -Pattern 'panic|ERROR' | Select-Object -Last 20 | ForEach-Object { Write-Host $_.Line }
+        Write-Host "--- the last lines of $log"
+        Get-Content -LiteralPath $log -Tail 80 | ForEach-Object { Write-Host $_ }
+    }
+    # How Windows saw the process end: the faulting module and exception code of a crash or an abort.
+    $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Application Error', 'Windows Error Reporting'; StartTime = $verificationStarted } -ErrorAction SilentlyContinue)
+    foreach ($record in $events | Select-Object -First 6) { Write-Host "--- $($record.ProviderName) $($record.TimeCreated)"; Write-Host $record.Message }
+}
+
+# Fails when the app that is running stops on its own within $Seconds, showing why.
+function Assert-KeepsRunning {
+    param($Instance, [int]$Seconds, [string]$Description)
+    $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if ($Instance.Application.HasExited) {
+            Show-AppState -Application $Instance.Application -Description $Description
+            throw "The installed desktop app stopped on its own within $Seconds seconds of its handshake ($Description)."
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    Write-Host "Installed desktop app ($Description): still running $Seconds seconds after its handshake."
+}
+
 # Starts the installed desktop app with isolated data, waits for its own core handshake and checks
 # that the one child it launched is the installed core. The caller stops it with Stop-InstalledApp.
 function Start-InstalledApp {
@@ -105,6 +141,7 @@ function Start-InstalledApp {
         $instance.Core = Get-Process -Id $children[0].ProcessId
     } catch {
         if (-not $application.HasExited) { $application.Kill($true); $application.WaitForExit(10000) | Out-Null }
+        Show-AppState -Application $application -Description $Description
         throw
     }
     Write-Host "Installed desktop app ($Description): bundled core launched and protocol 1 handshake passed."
@@ -198,6 +235,7 @@ try {
 
     $first = Start-InstalledApp -Description 'fresh install'
     $running += $first
+    Assert-KeepsRunning -Instance $first -Seconds 20 -Description 'fresh install'
 
     # Upgrade path: the same installer run again, silently, over the running app. The installer must
     # close the app (and with it the core) to replace their files, and keep the user's data.
@@ -234,6 +272,9 @@ try {
     }
     if (Test-Path -LiteralPath $uninstallKey) { throw 'The silent uninstall left its Apps & features entry behind.' }
     if (-not (Test-Path -LiteralPath $userDataMarker)) { throw 'A silent uninstall removed user data; only the ticked "delete app data" box may.' }
+} catch {
+    foreach ($instance in $running) { Show-AppState -Application $instance.Application -Description 'when the check failed' }
+    throw
 } finally {
     foreach ($instance in $running) {
         if (-not $instance.Application.HasExited) { $instance.Application.Kill($true); $instance.Application.WaitForExit(10000) | Out-Null }
