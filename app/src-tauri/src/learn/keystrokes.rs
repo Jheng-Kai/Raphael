@@ -8,7 +8,7 @@ use std::ops::Range;
 
 use handy_keys::EditEvent;
 
-use super::corrections::{Correction, Tracker};
+use super::corrections::{Revision, Tracker};
 
 /// Reconstructs only the pasted region, initially selected nowhere with its caret at the end.
 /// A successful ordinary paste establishes that starting position. A custom editor moving the
@@ -230,11 +230,10 @@ impl Keystrokes {
         self.state.as_ref().map(|state| state.text.as_str())
     }
 
-    pub fn corrections(&self) -> Vec<Correction> {
+    pub fn revision(&self) -> Option<Revision> {
         self.state
             .as_ref()
-            .map(|state| state.tracker.corrections())
-            .unwrap_or_default()
+            .and_then(|state| state.tracker.revision())
     }
 
     pub fn is_complete(&self) -> bool {
@@ -246,6 +245,14 @@ impl Keystrokes {
 mod tests {
     use super::*;
 
+    /// The dictated span changed, from a text holding `misheard` to one holding `word`.
+    fn assert_revised(revision: Option<Revision>, misheard: &str, word: &str) {
+        let revision = revision.expect("a revision");
+        assert!(revision.pasted.contains(misheard), "{revision:?}");
+        assert!(revision.sent.contains(word), "{revision:?}");
+        assert_ne!(revision.pasted, revision.sent);
+    }
+
     #[test]
     fn word_backspace_and_selection_replacement_preserve_the_original_term() {
         let mut keys = Keystrokes::new("Please use Sample Tool Ex").unwrap();
@@ -254,25 +261,13 @@ mod tests {
         }
         typed(&mut keys, "SampleToolX");
         keys.apply(EditEvent::Enter);
-        assert_eq!(
-            keys.corrections(),
-            [Correction {
-                word: "SampleToolX".into(),
-                misheard: "Sample Tool Ex".into()
-            }]
-        );
+        assert_revised(keys.revision(), "Sample Tool Ex", "SampleToolX");
         let mut keys = Keystrokes::new("Please use Sample Tool Ex").unwrap();
         for _ in 0..14 {
             keys.apply(EditEvent::Left { shift: true });
         }
         typed(&mut keys, "SampleToolX");
-        assert_eq!(
-            keys.corrections(),
-            [Correction {
-                word: "SampleToolX".into(),
-                misheard: "Sample Tool Ex".into()
-            }]
-        );
+        assert_revised(keys.revision(), "Sample Tool Ex", "SampleToolX");
     }
 
     const PASTED: &str = "Please ask Allice about the release plan today.";
@@ -331,7 +326,7 @@ mod tests {
             state.anchor = 2;
             keys.apply(event);
             assert_eq!(keys.text(), None, "{event:?}");
-            assert!(keys.corrections().is_empty());
+            assert!(keys.revision().is_none());
         }
         for (caret, anchor) in [(99, 99), (0, 99), (99, 0)] {
             let mut keys = Keystrokes::new("abc").unwrap();
@@ -358,13 +353,7 @@ mod tests {
             keys.text(),
             Some("Please ask Alice about the release plan today.")
         );
-        assert_eq!(
-            keys.corrections(),
-            [Correction {
-                word: "Alice".into(),
-                misheard: "Allice".into()
-            }]
-        );
+        assert_revised(keys.revision(), "Allice", "Alice");
         assert!(keys.is_complete());
         typed(&mut keys, "ignored");
         assert_eq!(
@@ -386,7 +375,7 @@ mod tests {
         typed(&mut keys, "Ali");
         keys.apply(EditEvent::Enter);
         assert_eq!(keys.text(), None);
-        assert!(keys.corrections().is_empty());
+        assert!(keys.revision().is_none());
         assert!(!keys.is_complete());
     }
 
@@ -400,13 +389,7 @@ mod tests {
             keys.apply(EditEvent::Left { shift: true });
         }
         typed(&mut keys, "Alice");
-        assert_eq!(
-            keys.corrections(),
-            [Correction {
-                word: "Alice".into(),
-                misheard: "Allice".into()
-            }]
-        );
+        assert_revised(keys.revision(), "Allice", "Alice");
     }
 
     #[test]
@@ -443,13 +426,7 @@ mod tests {
                 keys.text(),
                 Some("Please ask Alice about the release plan today.")
             );
-            assert_eq!(
-                keys.corrections(),
-                [Correction {
-                    word: "Alice".into(),
-                    misheard: "Allice".into()
-                }]
-            );
+            assert_revised(keys.revision(), "Allice", "Alice");
         }
     }
 
@@ -463,7 +440,7 @@ mod tests {
         keys.apply(EditEvent::Enter);
         keys.apply(EditEvent::Invalidated);
         assert_eq!(keys.text(), None);
-        assert!(keys.corrections().is_empty());
+        assert!(keys.revision().is_none());
     }
 
     #[test]
@@ -495,7 +472,7 @@ mod tests {
             keys.apply(EditEvent::Left { shift: false });
             keys.apply(event);
             assert_eq!(keys.text(), None);
-            assert!(keys.corrections().is_empty());
+            assert!(keys.revision().is_none());
         }
         let mut keys = Keystrokes::new("a").unwrap();
         keys.apply(EditEvent::Right { shift: false });
@@ -523,7 +500,7 @@ mod tests {
             let mut keys = Keystrokes::new(PASTED).unwrap();
             keys.apply(event);
             assert_eq!(keys.text(), None);
-            assert!(keys.corrections().is_empty());
+            assert!(keys.revision().is_none());
         }
     }
 
@@ -544,13 +521,7 @@ mod tests {
                 "\u{4eca}\u{5929}\u{8acb}Alice\u{6aa2}\u{67e5}\u{767c}\u{4f48}\u{8a08}\u{756b}\u{4e26}\u{56de}\u{5831}\u{7d50}\u{679c}\u{3002}"
             )
         );
-        assert_eq!(
-            keys.corrections(),
-            [Correction {
-                word: "Alice".into(),
-                misheard: "Allice".into()
-            }]
-        );
+        assert_revised(keys.revision(), "Allice", "Alice");
     }
 
     #[test]
@@ -600,7 +571,7 @@ mod tests {
                     keys.apply(event);
                     // Whatever was left is still a whole string, and its pairs can be asked for.
                     let _ = keys.text().map(str::len);
-                    let _ = keys.corrections();
+                    let _ = keys.revision();
                 }
             }
         }

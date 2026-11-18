@@ -19,8 +19,8 @@ A key that an older version saved but that is no longer a setting stays in the t
 read: `all` lists only the keys of DEFAULTS, and `get` and `set` refuse the others, so nothing has
 to be rewritten at start-up. Such keys are `agent_router` (whether Jev or the language model
 routed the assistant's requests; Jev always does now, so a saved "luna" changes nothing),
-`learn_corrections` (whether the words corrected after a paste were learned; they always are now,
-so a saved false changes nothing) and `language`, the single language that `languages` replaced
+`learn_corrections` (whether the words corrected after a paste were learned; that is the app's
+device setting `auto_learn` now, so a saved false here changes nothing) and `language`, the single language that `languages` replaced
 before the first release.
 """
 

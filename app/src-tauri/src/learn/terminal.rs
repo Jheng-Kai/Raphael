@@ -19,7 +19,7 @@
 
 use std::ops::Range;
 
-use super::corrections::{Correction, MIN_KEPT_SHARE, Tracker, is_cjk};
+use super::corrections::{MIN_KEPT_SHARE, Revision, Tracker, is_cjk};
 
 mod panes;
 
@@ -240,11 +240,11 @@ impl TerminalTracker {
         self.places.last().map_or("", |place| place.text.as_str())
     }
 
-    /// What was corrected in the input. Nothing while several copies are still unedited.
-    pub fn corrections(&self) -> Vec<Correction> {
+    /// What the user changed in the input. Nothing while several copies are still unedited.
+    pub fn revision(&self) -> Option<Revision> {
         match self.places.as_slice() {
-            [only] => only.tracker.corrections(),
-            _ => Vec::new(),
+            [only] => only.tracker.revision(),
+            _ => None,
         }
     }
 
@@ -647,11 +647,8 @@ mod tests {
             TerminalDecision::Continue
         );
         assert_eq!(
-            tracker.corrections(),
-            [Correction {
-                word: "SampleToolX".into(),
-                misheard: "Sample Tool Ex".into()
-            }],
+            pairs(&tracker),
+            [("Sample Tool Ex".to_owned(), "SampleToolX".to_owned())],
             "{tracker:?}"
         );
         tracker.submitted();
@@ -659,9 +656,9 @@ mod tests {
             tracker.observe_input("> Please use WrongOutput", true),
             TerminalDecision::Sent
         );
-        assert_eq!(tracker.corrections()[0].word, "SampleToolX");
+        assert_eq!(pairs(&tracker)[0].1, "SampleToolX");
         tracker.invalidate();
-        assert!(tracker.corrections().is_empty());
+        assert!(tracker.revision().is_none());
     }
 
     #[test]
@@ -675,9 +672,12 @@ mod tests {
                 tracker.observe_input(&format!("> {fixed}"), true),
                 TerminalDecision::Continue
             );
-            let learned: Vec<String> = tracker.corrections().into_iter().map(|c| c.word).collect();
-            let expected = vec![new.to_owned()];
-            assert_eq!(learned, expected, "{old} -> {new}");
+            let revision = tracker.revision().expect("an edited input");
+            assert_eq!(
+                (revision.pasted, revision.sent),
+                (pasted.clone(), fixed),
+                "{old} -> {new}"
+            );
         }
     }
 
@@ -691,10 +691,9 @@ mod tests {
 
     fn pairs(tracker: &TerminalTracker) -> Vec<(String, String)> {
         tracker
-            .corrections()
-            .into_iter()
-            .map(|c| (c.misheard, c.word))
-            .collect()
+            .revision()
+            .map(|revision| super::super::corrections::changed_words(&revision))
+            .unwrap_or_default()
     }
 
     fn sample_word() -> (String, String) {
@@ -1486,7 +1485,7 @@ mod tests {
                 let below = rng.text(&alphabet, 60);
                 let _ = tracker.observe(&format!("{above}\n{edited}\n{below}"));
                 let _ = tracker.region();
-                let _ = tracker.corrections();
+                let _ = tracker.revision();
             }
             let _ = tracker.submitted();
         }
@@ -1544,17 +1543,15 @@ mod tests {
                 tracker.observe(&screen(&history, &input, &next_status));
             }
             let finally = input.join(" ");
-            for correction in tracker.corrections() {
+            for (misheard, word) in pairs(&tracker) {
                 learned += 1;
                 assert!(
-                    pasted.contains(&correction.misheard),
-                    "{} is not in what was pasted: {pasted}",
-                    correction.misheard
+                    pasted.contains(&misheard),
+                    "{misheard} is not in what was pasted: {pasted}"
                 );
                 assert!(
-                    finally.contains(&correction.word),
-                    "{} is not in the input: {finally}",
-                    correction.word
+                    finally.contains(&word),
+                    "{word} is not in the input: {finally}"
                 );
             }
         }

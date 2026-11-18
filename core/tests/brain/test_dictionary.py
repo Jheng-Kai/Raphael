@@ -228,16 +228,15 @@ def test_pairs_that_may_not_be_rules_stay_hints_however_often_they_are_seen(
     assert apply_replacements(sentence, d.replacements()) == sentence
 
 
+# Whether an edit is a misheard term or rewording is the cleanup model's judgement
+# (`learn_review`, tests/brain/test_learn_review.py); the store only checks the shape of a pair.
 @pytest.mark.parametrize(("word", "misheard"), [
-    ("two", "to"), ("them", "the"), ("which", "this"),
-    ("他", "我"), ("後天", "明天"),
-    ("但是", "單是"), ("今天", "津天"),
     ("release", "release，please review the remaining notes"),
-    ("明日再討論", "等待完成後再來討論"),
     ("release", "release review"), ("Claude Code", "Claude Code today"),
     ("Delta!", "Dalta"), ("Delta", "Dalta!"),
+    ("please review this clause", "please review the clause"),
 ])
-def test_automatic_learning_rejects_common_words_clauses_punctuation_and_shortening(conn, word, misheard):
+def test_automatic_learning_rejects_clauses_punctuation_and_shortening(conn, word, misheard):
     d = DictionaryStore(conn)
     for _ in range(3):
         assert d.learn_pair(word, misheard) is Learned.NOTHING
@@ -257,19 +256,6 @@ def test_automatic_learning_keeps_corrected_names_and_technical_terms(conn, word
     d = DictionaryStore(conn)
     assert d.learn_pair(word, misheard) is Learned.TERM
     assert [(entry.word, entry.source) for entry in d.list()] == [(word, "learned")]
-
-
-@pytest.mark.parametrize(("word", "misheard"), [("workshop", "meeting"), ("parser", "widget"),
-                                               ("today", "tomorrow"), ("cron", "box")])
-def test_a_lower_case_word_that_neither_sounds_nor_looks_like_what_was_heard_is_rewording(
-    conn, word, misheard
-):
-    # Learning keeps names and jargon the recogniser gets wrong, never
-    # colloquial rewording. A word in lower case carries no mark of a name, so it must be a
-    # plausible mishearing of what speech-to-text wrote.
-    d = DictionaryStore(conn)
-    assert d.learn_pair(word, misheard) is Learned.NOTHING
-    assert d.list() == []
 
 
 @pytest.mark.parametrize(("word", "misheard"), [
@@ -298,7 +284,7 @@ def test_a_correction_of_a_word_the_owner_added_is_kept_and_becomes_a_rule_when_
 
 def test_direct_learned_add_cannot_bypass_term_acceptance(conn):
     d = DictionaryStore(conn)
-    for word in ("please review this clause", "但是", "Name!"):
+    for word in ("please review this clause", "Name!", "x" * 41):
         with pytest.raises(ValueError, match="single terms"):
             d.add(word, source="learned")
     assert d.list() == []

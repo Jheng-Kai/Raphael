@@ -1,63 +1,36 @@
-"""Persistence validation for learned terms selected by the native pure capture rule."""
+"""Shape checks for learned dictionary entries.
 
-from .mishearing import _CJK_FUNCTION_WORDS, _LATIN_FUNCTION_WORDS, _is_cjk, is_plausible
+Which edit is a misheard term and which is rewording is judged by the cleanup model
+(`learn_review`), in whatever language was spoken. What is stored here is only checked for shape,
+the same in every language and script: a short term on one line without sentence punctuation, and
+a misheard form that is not merely the term with letters cut off.
+"""
 
-
-_COMMON_CJK = _CJK_FUNCTION_WORDS | frozenset("後天 明日 再 討論 真的 很好 謝謝 ありがとう こんにちは".split())
+_SENTENCE_MARKS = "，。！？、；：,.!?;:\r\n\u2028\u2029"
+# The longest learned word, and the longest form it may be heard as.
+MAX_TERM_CHARS = 40
+MAX_FORM_CHARS = 60
+# The most space-separated parts of a learned word: a name of a few words, never a clause.
+MAX_TERM_PARTS = 3
 
 
 def term(text: str, *, target: bool = True) -> bool:
-    # Capture owns term selection. Persistence validates its shape without an OS dictionary,
-    # so the same captured name works on every machine and language.
-    if not text or len(text) > (24 if target else 60):
+    """Whether `text` has the shape of a dictionary term (`target`) or of a form one is heard as."""
+    if not text or len(text) > (MAX_TERM_CHARS if target else MAX_FORM_CHARS):
         return False
-    if any(c in text for c in "，。！？、；：,.!?;:\r\n\u2028\u2029"):
+    if any(c in _SENTENCE_MARKS for c in text):
         return False
-    if not target:
-        return True
-    if all(_is_cjk(c) for c in text):
-        return 2 <= len(text) <= 8
-    latin_words = 0
-    in_word = False
-    for c in text:
-        letter = c.isalnum() and not _is_cjk(c)
-        latin_words += letter and not in_word
-        in_word = letter
-    return latin_words <= 3 and any(c.isalpha() for c in text)
+    return not target or (any(c.isalpha() for c in text) and len(text.split()) <= MAX_TERM_PARTS)
 
 
 def target_term(word: str) -> bool:
-    if not term(word) or all(part.casefold() in _LATIN_FUNCTION_WORDS for part in word.split()):
-        return False
-    remaining = word
-    while remaining:
-        prefix = max((part for part in _COMMON_CJK if remaining.startswith(part)), key=len, default="")
-        if not prefix:
-            return True
-        remaining = remaining[len(prefix):]
-    return False
+    return term(word)
 
 
 def accepted(word: str, misheard: str) -> bool:
-    """Validate a captured pair without a model or a platform word dictionary."""
+    """Whether a reviewed pair may be stored."""
     if not target_term(word) or not term(misheard, target=False) or word.casefold() == misheard.casefold():
         return False
-    # A pure shortening carries no replacement term, even when a caller expands its bounds.
+    # A pure shortening carries no replacement term.
     old, new = misheard.casefold(), word.casefold()
-    if len(new) < len(old) and (old.startswith(new) or old.endswith(new)):
-        return False
-    if not 0.4 <= len(misheard) / len(word) <= 2.5:
-        return False
-    if _plain_latin(word) and _plain_latin(misheard) and not is_plausible(word, misheard):
-        # A word in lower case letters only carries no mark of a name, so only a correction that
-        # sounds or is spelled like what was heard is a recognition error ("Pine Bus" for
-        # "pinebot"); "meeting" for "workshop" is rewording, never a dictionary term.
-        return False
-    return True
-
-
-def _plain_latin(text: str) -> bool:
-    """Whether `text` is Latin words in lower case only: no capital, digit or CJK character."""
-    return any(c.isalpha() for c in text) and not any(
-        c.isupper() or c.isdigit() or _is_cjk(c) for c in text
-    )
+    return not (len(new) < len(old) and (old.startswith(new) or old.endswith(new)))

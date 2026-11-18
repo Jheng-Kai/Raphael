@@ -1453,6 +1453,8 @@ export const ru = {
   "data.retention": "Хранить историю диктовки",
   "settings.groupStart": "Как начать",
   "settings.groupListen": "Как слушает",
+  "settings.autoLearn": "Автоматически добавлять исправленные слова",
+  "settings.autoLearnHelp": "Когда вы правите вставленный текст диктовки, ИИ находит неверно распознанные слова и добавляет их в словарь. Каждая проверка расходует немного токенов.",
   "settings.searchingMicrophones": "Поиск…",
   "mic.automaticShort": "Автоматически ({p0})",
   "languages.variantsOf": "Как пишется {p0}: {p1}",

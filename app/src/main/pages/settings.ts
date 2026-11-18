@@ -5,7 +5,8 @@
 // the brain (limit, models, languages, speech-to-text, how Raphael answers) go to the core with
 // `settings.set`; the settings of this computer (hotkeys, microphone, emblem, theme, autostart) go
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
-// Raphael listens, learning from corrections) has no switch: it is simply on.
+// Raphael listens) has no switch: it is simply on. Learning from corrections asks the cleanup
+// model, so it is a device setting (`auto_learn`), off until the owner turns it on.
 
 import { bindLayerCancels, bindNavLayer } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
@@ -987,6 +988,10 @@ export function createSettings(app: AppContext): SettingsPage {
  el.addEventListener("click", (e) => {
     const target = e.target as Element;
     if (ownerControls.click(target)) return;
+    if (target.closest('.tg[data-k="auto-learn"]')) {
+      void changeDevice({ auto_learn: !app.device().auto_learn });
+      return;
+    }
     if (target.closest('.tg[data-k="auto-update"]')) {
       void changeDevice({ auto_update: !app.device().auto_update }).then(() => { if (app.device().auto_update) void checkUpdate(); });
       return;

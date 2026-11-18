@@ -275,8 +275,8 @@ def test_a_saved_selection_that_is_no_longer_valid_reads_as_the_default(conn):
 
 
 def test_learning_corrections_is_no_longer_a_setting_and_a_saved_off_is_ignored(conn):
-    # Learning is always on. A database from a version with the switch may hold it off: it is
-    # neither read nor offered, and it cannot be set again.
+    # The switch is the app's device setting now (`auto_learn`). A database from a version with
+    # the core's old switch may hold it off: it is neither read nor offered, and cannot be set.
     conn.execute("INSERT INTO settings (key, value) VALUES ('learn_corrections', 'false')")
     s = SettingsStore(conn)
     assert "learn_corrections" not in s.all()

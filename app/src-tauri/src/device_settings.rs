@@ -147,6 +147,9 @@ pub struct DeviceSettings {
     pub autostart: bool,
     /// Download signed updates and install only after ten idle minutes without active members.
     pub auto_update: bool,
+    /// Learn the words the owner corrects in pasted dictations (`learn`): the cleanup model judges
+    /// each edit, which costs a little, so it is off until the owner turns it on.
+    pub auto_learn: bool,
     /// Internal receipt consumed once by the first main page after the installed version starts.
     pub update_receipt: String,
     /// The first-run guide has been done.
@@ -172,6 +175,7 @@ impl Default for DeviceSettings {
             autostart: true,
             // On by default: a new version is checked for hourly and installed while idle.
             auto_update: true,
+            auto_learn: false,
             update_receipt: String::new(),
             onboarded: false,
             computer_apps: Vec::new(),
@@ -237,6 +241,7 @@ impl DeviceSettings {
                 "ui_language" => next.ui_language = parse_value(name, value)?,
                 "autostart" => next.autostart = parse_value(name, value)?,
                 "auto_update" => next.auto_update = parse_value(name, value)?,
+                "auto_learn" => next.auto_learn = parse_value(name, value)?,
                 "onboarded" => next.onboarded = parse_value(name, value)?,
                 "computer_apps" => next.computer_apps = parse_value(name, value)?,
                 other => return Err(format!("unknown setting \"{other}\"")),
@@ -683,6 +688,18 @@ mod tests {
     }
 
     #[test]
+    fn learning_from_corrections_is_off_until_the_owner_turns_it_on() {
+        let mut settings = DeviceSettings::default();
+        assert!(!settings.auto_learn);
+        settings.apply_patch(&json!({"auto_learn": true})).unwrap();
+        assert!(settings.auto_learn);
+        assert!(settings.apply_patch(&json!({"auto_learn": "yes"})).is_err());
+        assert!(settings.auto_learn, "a refused patch changes nothing");
+        settings.apply_patch(&json!({"auto_learn": false})).unwrap();
+        assert!(!settings.auto_learn);
+    }
+
+    #[test]
     fn automatic_updates_are_on_by_default_and_receipts_cannot_be_forged_by_a_page() {
         let mut settings = DeviceSettings::default();
         assert!(settings.auto_update);
@@ -819,6 +836,7 @@ mod tests {
                 "ui_language": "zh-TW",
                 "autostart": true,
                 "auto_update": true,
+                "auto_learn": false,
                 "update_receipt": "",
                 "onboarded": false,
                 "computer_apps": [],
@@ -1184,6 +1202,7 @@ mod tests {
             ("emblem_size", json!(-1)),
             ("autostart", json!("yes")),
             ("auto_update", json!("yes")),
+            ("auto_learn", json!("yes")),
             ("update_receipt", json!(7)),
             ("onboarded", json!(1)),
             ("microphone", json!(7)),
@@ -1207,6 +1226,7 @@ mod tests {
                 "ui_language": "ja",
                 "autostart": false,
                 "auto_update": true,
+                "auto_learn": true,
                 "update_receipt": "2.0.0",
                 "onboarded": true,
                 "computer_apps": [{"exe": "calc.exe", "name": "Calculator"}],

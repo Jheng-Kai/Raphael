@@ -3389,6 +3389,9 @@ mod app {
         // The same for the interface language, which Raphael's notices follow.
         let language = LanguageCell::default();
         app.manage(language.clone());
+        // And whether the owner turned on learning from corrections (`learn`).
+        let learn_switch = crate::learn::LearnSwitch::default();
+        app.manage(learn_switch.clone());
         // The overlay page answers its questions with `overlay_confirm`, which sends here.
         let (confirmations, confirmation_rx) = tokio::sync::mpsc::unbounded_channel();
         app.manage(ConfirmSender(confirmations));
@@ -3403,7 +3406,8 @@ mod app {
                 // Learns from the user's corrections after a paste (`learn`).
                 let probe = Arc::new(crate::learn::SystemProbe {});
                 let learner = Learner::new(core.clone(), overlay.clone(), probe)
-                    .with_language(language.clone());
+                    .with_language(language.clone())
+                    .with_switch(learn_switch.clone());
                 let controller = DictationController::new(
                     core,
                     overlay.clone(),
@@ -6793,7 +6797,7 @@ mod tests {
         assert_eq!(c.core().count("dictionary.learn"), 1);
         assert_eq!(
             c.core().call_params("dictionary.learn"),
-            json!({"undoable": true, "corrections": [{"word": "手提電話", "misheard": "首機"}]})
+            json!({"undoable": true, "revision": {"pasted": pasted, "sent": fixed}})
         );
         assert_eq!(
             probe.reads(),

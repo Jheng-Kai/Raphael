@@ -1175,6 +1175,8 @@ export const en = {
   "data.retention": "Keep dictation history",
   "settings.groupStart": "How to start",
   "settings.groupListen": "How it listens",
+  "settings.autoLearn": "Add corrected words automatically",
+  "settings.autoLearnHelp": "When you edit pasted dictation, AI picks out misheard words and adds them to the dictionary. Each check uses a few tokens.",
   "settings.sttLocalPrice": "Free",
   "settings.searchingMicrophones": "Searching…",
   "mic.automaticShort": "Automatic ({p0})",

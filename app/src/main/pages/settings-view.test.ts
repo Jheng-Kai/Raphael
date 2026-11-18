@@ -302,7 +302,8 @@ describe("the rules for every tab, in every language", () => {
 
   test("a line under a row's name only where the setting would otherwise be set wrong", () => {
     expect(described(tab("general"))).toEqual(["時區", "輸出資料夾"]);
-    expect(described(tab("dictation"))).toEqual([]);
+    // Learning from corrections says that it pays the model for each check.
+    expect(described(tab("dictation"))).toEqual(["自動加入字典"]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
     expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
     expect(described(tab("usage"))).toEqual([]);
@@ -352,10 +353,19 @@ describe("一般", () => {
 });
 
 describe("聽寫", () => {
-  test("is how a dictation starts, how Raphael listens, then how long the history is kept", () => {
+  test("is how a dictation starts, how Raphael listens, what it learns, then how long the history is kept", () => {
     const html = tab("dictation");
-    expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式", "聽寫紀錄"]);
-    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "整理選取文字", "取消", "聽寫方式", "你說的語言", "麥克風", "保留聽寫紀錄"]);
+    expect(groups(html)).toEqual(["快捷鍵", "開始方式", "聆聽方式", "字典", "聽寫紀錄"]);
+    expect(names(html)).toEqual(["問拉斐爾", "聽寫", "貼上上一次", "整理選取文字", "取消", "聽寫方式", "你說的語言", "麥克風", "自動加入字典", "保留聽寫紀錄"]);
+  });
+
+  test("learning from corrections is a switch that is off until the owner turns it on", () => {
+    const off = rowOf(tab("dictation"), "自動加入字典");
+    expect(off).toMatch(/class="tg"[^>]*data-k="auto-learn"/);
+    expect(off).toContain('aria-checked="false"');
+    expect(off).toContain("token");
+    const on = rowOf(tab("dictation", { device: { ...device, auto_learn: true } }), "自動加入字典");
+    expect(on).toContain('aria-checked="true"');
   });
 
   test("shows each shortcut as key caps, with a pencil (變更) on the one that can be changed here", () => {
@@ -416,10 +426,11 @@ describe("聽寫", () => {
     expect(choices[choices.length - 1]).toEqual({ value: "USB Mic (C-Media)", label: "USB Mic (C-Media)（未連接）", short: "USB Mic（未連接）" });
   });
 
-  test("has no switch for pausing the media or for learning: both are always on", () => {
+  test("has no switch for pausing the media; learning from corrections is the one switch", () => {
     const html = tab("dictation");
-    expect(html).not.toContain('class="tg"');
-    expect(html).not.toMatch(/pause-media|data-k="learn"|字典/);
+    expect(html.match(/class="tg"/g)).toHaveLength(1);
+    expect(html).toContain('data-k="auto-learn"');
+    expect(html).not.toMatch(/pause-media|data-k="learn"/);
   });
 });
 
