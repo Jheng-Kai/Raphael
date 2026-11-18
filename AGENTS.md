@@ -7,10 +7,11 @@
   Shared components need representative affected consumers, not every unrelated page.
   Drive the real app entry, inspect every generated contact sheet and relevant full-size
   image, and report the selected scope, failures and evidence.
-- Reserve `look -- --all` and the complete Guardian matrix for integration/release
-  acceptance, explicit requests, or changes whose impact genuinely spans the app
-  (for example global tokens, navigation or the shared layout). Do not expand a local
-  change to the whole project solely because it is a UI change.
+- Reserve `look -- --all` and the complete Guardian matrix for explicit requests or changes
+  whose impact genuinely spans the app (for example global tokens, navigation or the shared
+  layout). Not for a release: on this PC the whole matrix takes about twelve hours, and each
+  merged pull request already ran its own scenes. Do not expand a local change to the whole
+  project solely because it is a UI change.
 - A passing build or test suite alone never proves user-facing behavior.
 - Put deterministic steps in scripts. Extend the existing `verify` and `look`
   workflow instead of creating another feature-specific harness.
@@ -61,9 +62,11 @@ run and why. A check that could not run is reported as not run, never as passed.
 Follow [product rules](.agents/product/RULES.md), [architecture](.agents/product/ARCHITECTURE.md)
 and [verify-raphael](.agents/skills/verify-raphael/SKILL.md). Run the checks of "Test what changed" for the
 change, explain omissions and tool blockers, and merge on CI green on the exact commit.
-Full integration acceptance, before a release, uses
-`npm run verify -- --contract --rust`, CI green on the exact commit (it runs the whole core suite),
-and `npm run look -- --all --theme both --width 1120,720,1920x1080`.
+Before a release, test only what changed since the merged pull requests' own checks (the last
+fixes and any failure), with `--contract` when the core loop, a prompt or the tool list changed; CI
+green on the exact commit runs the whole core, frontend and Rust suites, and the release workflow
+builds and verifies both installers. No whole look matrix and no local
+`--rust` unless the change calls for them.
 CI enforces repository contracts and the offline suites on every PR; the rendered matrix,
 judge and live checks run locally and never in CI. A Windows release starts only after CI has
 passed on its exact commit (run CI by hand on it when no pull request did). Use the [PR contract](.github/pull_request_template.md)
