@@ -900,6 +900,8 @@ export const vi = {
   "providers.unknown": "Chưa thử",
   "providers.count": "{p0} mô hình",
   "providers.switch": "Bật {p0}",
+  "providers.enable": "Bật",
+  "providers.off": "Đã tắt",
   "providers.name": "Tên",
   "picker.sortName": "Tên",
   "conn.form.name": "Tên",

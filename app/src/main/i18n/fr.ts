@@ -900,6 +900,8 @@ export const fr = {
   "providers.unknown": "Pas encore testé",
   "providers.count": "{p0} modèles",
   "providers.switch": "Activer {p0}",
+  "providers.enable": "Activer",
+  "providers.off": "Désactivé",
   "providers.name": "Nom",
   "picker.sortName": "Nom",
   "conn.form.name": "Nom",

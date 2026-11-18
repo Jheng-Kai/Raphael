@@ -604,6 +604,8 @@ export const zhTW = {
   "providers.unknown": "尚未測試",
   "providers.count": "{p0} 個模型",
   "providers.switch": "啟用 {p0}",
+  "providers.enable": "啟用",
+  "providers.off": "已停用",
   "providers.name": "名稱",
   "providers.key": "API 金鑰",
   "providers.secret": "秘密存取金鑰",

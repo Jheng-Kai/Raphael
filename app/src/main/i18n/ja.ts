@@ -605,6 +605,8 @@ export const ja = {
   "providers.unknown": "未テスト",
   "providers.count": "{p0} 個のモデル",
   "providers.switch": "{p0} を有効にする",
+  "providers.enable": "有効にする",
+  "providers.off": "オフ",
   "providers.name": "名前",
   "providers.key": "API キー",
   "providers.secret": "シークレットアクセスキー",

@@ -900,6 +900,8 @@ export const ko = {
   "providers.unknown": "아직 테스트하지 않았습니다",
   "providers.count": "모델 {p0}개",
   "providers.switch": "{p0} 활성화",
+  "providers.enable": "켜기",
+  "providers.off": "꺼짐",
   "providers.name": "이름",
   "picker.sortName": "이름",
   "conn.form.name": "이름",

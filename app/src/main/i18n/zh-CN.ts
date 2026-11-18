@@ -900,6 +900,8 @@ export const zhCN = {
   "providers.unknown": "尚未测试",
   "providers.count": "{p0} 个模型",
   "providers.switch": "激活 {p0}",
+  "providers.enable": "启用",
+  "providers.off": "已停用",
   "providers.name": "名称",
   "picker.sortName": "名称",
   "conn.form.name": "名称",

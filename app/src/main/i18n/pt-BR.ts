@@ -900,6 +900,8 @@ export const ptBR = {
   "providers.unknown": "Ainda não testado",
   "providers.count": "{p0} modelos",
   "providers.switch": "Ativar {p0}",
+  "providers.enable": "Ativar",
+  "providers.off": "Desativado",
   "providers.name": "Nome",
   "picker.sortName": "Nome",
   "conn.form.name": "Nome",

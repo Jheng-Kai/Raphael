@@ -900,6 +900,8 @@ export const tr = {
   "providers.unknown": "Henüz test edilmedi",
   "providers.count": "{p0} model",
   "providers.switch": "{p0} etkinleştir",
+  "providers.enable": "Aç",
+  "providers.off": "Kapalı",
   "providers.name": "Ad",
   "picker.sortName": "Ad",
   "conn.form.name": "Ad",

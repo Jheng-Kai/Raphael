@@ -900,6 +900,8 @@ export const ru = {
   "providers.unknown": "Ещё не проверено",
   "providers.count": "Моделей: {p0}",
   "providers.switch": "Включить {p0}",
+  "providers.enable": "Включить",
+  "providers.off": "Отключён",
   "providers.name": "Название",
   "picker.sortName": "Название",
   "conn.form.name": "Название",

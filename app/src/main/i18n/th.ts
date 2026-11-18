@@ -900,6 +900,8 @@ export const th = {
   "providers.unknown": "ยังไม่ทดสอบ",
   "providers.count": "{p0} โมเดล",
   "providers.switch": "เปิดใช้ {p0}",
+  "providers.enable": "เปิด",
+  "providers.off": "ปิดอยู่",
   "providers.name": "ชื่อ",
   "picker.sortName": "ชื่อ",
   "conn.form.name": "ชื่อ",

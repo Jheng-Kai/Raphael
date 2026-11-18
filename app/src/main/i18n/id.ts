@@ -900,6 +900,8 @@ export const id = {
   "providers.unknown": "Belum diuji",
   "providers.count": "{p0} model",
   "providers.switch": "Aktifkan {p0}",
+  "providers.enable": "Aktifkan",
+  "providers.off": "Nonaktif",
   "providers.name": "Nama",
   "picker.sortName": "Nama",
   "conn.form.name": "Nama",

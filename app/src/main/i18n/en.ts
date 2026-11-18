@@ -605,6 +605,8 @@ export const en = {
   "providers.unknown": "Not tested yet",
   "providers.count": "{p0} models",
   "providers.switch": "Enable {p0}",
+  "providers.enable": "Turn on",
+  "providers.off": "Off",
   "providers.name": "Name",
   "providers.key": "API key",
   "providers.secret": "Secret access key",
