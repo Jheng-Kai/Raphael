@@ -209,6 +209,7 @@ export function createSettings(app: AppContext): SettingsPage {
   let localDownload: { name: string; done: number; total: number } | null = null;
   let devices: AudioDevices | null = null;
   let altgr = false;
+  let accessibility: boolean | null = null;
   let version = "";
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
   let limitDraft: string | null = null;
@@ -258,7 +259,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update,
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, version,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, accessibility, version,
     limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -1115,6 +1116,14 @@ export function createSettings(app: AppContext): SettingsPage {
   const onFocus = (): void => {
     windowFocused = true;
     syncMonitor();
+    // Back from System Settings: Accessibility given there takes its note away at once (R-PRIV-AX-01).
+    if (visible && pane === "dictation") {
+      void api.accessibilityAccess().then((value) => {
+        if (value === accessibility || !visible) return;
+        accessibility = value;
+        render();
+      }).catch(() => {});
+    }
   };
   const onBlur = (): void => {
     windowFocused = false;
@@ -1125,7 +1134,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Reads what the settings show; the returned step keeps it and says whether anything changed. */
   async function readSettings(): Promise<() => boolean> {
-    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult] = await Promise.allSettled([
+    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, accessibilityResult] = await Promise.allSettled([
       api.settingsGet(),
       api.secretsStatus(),
       api.statusGet(),
@@ -1133,22 +1142,24 @@ export function createSettings(app: AppContext): SettingsPage {
       api.keyboardHasAltgr(),
       getVersion(),
       api.languagesList(),
+      api.accessibilityAccess(),
       // Read again: the settings may have changed since the window started. `refreshDevice` puts
       // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
       app.refreshDevice(),
     ]);
     return () => {
-      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
+      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, accessibility, version, languageGroups]);
       brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
       hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
       openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
       spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
       devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
       altgr = altgrResult.status === "fulfilled" && altgrResult.value;
+      accessibility = accessibilityResult.status === "fulfilled" ? accessibilityResult.value : null;
       version = versionResult.status === "fulfilled" ? versionResult.value : "";
       if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
       if (brainResult.status === "fulfilled") readOnce = true;
-      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
+      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, accessibility, version, languageGroups]);
     };
   }
 

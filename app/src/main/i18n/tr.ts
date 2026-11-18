@@ -482,7 +482,7 @@ export const tr = {
   "missing.urlRead": "Bu URL doğrudan okunamadı. Herkese açık sayfa veya indirilen dosya sağlayın; giriş gerektiren ya da kısıtlı sayfaları kendiniz açın.",
   "missing.unknown": "Hatanın nedeni bilinmiyor. Bu görüşmeyi saklayıp bir kez daha deneyin; sürerse bildirin.",
   "missing.microphone": "Mikrofona erişilemedi. Raphael’e izin verin ve Windows mikrofon gizlilik ayarlarında masaüstü uygulamalarını etkinleştirin.",
-  "missing.accessibility": "Dikte tuşları Erişilebilirlik iznine ihtiyaç duyar. Sistem Ayarları > Gizlilik ve Güvenlik > Erişilebilirlik bölümünde Raphael’e izin verin. Zaten açıksa Raphael’i − ile kaldırıp yeniden ekleyin.",
+  "missing.accessibility": "Dikte tuşları Erişilebilirlik iznine ihtiyaç duyar. Sistem Ayarları > Gizlilik ve Güvenlik > Erişilebilirlik bölümünde Raphael’i açın. Raphael listede yoksa ya da açık olduğu hâlde çalışmıyorsa, + ile Uygulamalar’dan ekleyin (listedekini önce − ile kaldırın).",
   "ownerQuestion.submit": "Yanıtı gönder",
   "ownerQuestion.answered": "Yanıtlandı",
   "ownerQuestion.skip": "Atla",

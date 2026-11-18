@@ -70,7 +70,8 @@ uv run --locked --no-sync python packaging/smoke.py --core dist/raphael-core/rap
 cd ../app
 RAPHAEL_RELEASE_PLATFORM=macos-arm64 node scripts/collect-release-notices.mjs
 CI=true APPLE_SIGNING_IDENTITY=- node scripts/tauri.mjs build --config src-tauri/tauri.release.conf.json \
-  --config src-tauri/tauri.release.macos.conf.json --bundles app,dmg --ci -- --locked
+  --config src-tauri/tauri.release.macos.conf.json --config src-tauri/tauri.release-no-updater.conf.json \
+  --bundles app,dmg --ci -- --locked
 ```
 
 The app and the `.dmg` are in `app/src-tauri/target/release/bundle/`. `CI=true` skips the Finder
@@ -88,24 +89,41 @@ npm run verify -- --contract   # plus the core's scenario and prompt-budget test
 npm run verify -- --rust   # plus the Rust shell
 ```
 
-### Windows releases
+### Windows and macOS releases
 
-The manually dispatched Windows release workflow builds and verifies the installer,
-dependency notices, `BUILD-INFO.txt` and `SHA256SUMS.txt`. It starts only when the CI
+The manually dispatched release workflow builds and verifies the Windows installer and
+Apple silicon disk image, with dependency notices and checksums. It starts only when the CI
 workflow has passed on the same commit (run CI manually on that commit when no pull
 request did), so the test suites run once, in CI. Publishing requires the explicit
 `publish` input and a main-branch or tag build.
 
-With both `TAURI_SIGNING_PRIVATE_KEY` and `RAPHAEL_UPDATER_PUBLIC_KEY` repository
-secrets, it also signs the installer with a version-bound trusted comment and
-publishes its `.sig` and `latest.json` updater feed. If either key is missing, it
-warns once and still releases the verified installer using the release config plus
-the small `tauri.release-no-updater.conf.json` override. That mode publishes no
-signature or updater feed and records the reason in `BUILD-INFO.txt`.
+With both updater keys, the builders sign the Windows installer and Mac `.app.tar.gz`
+with the release version. The Mac job verifies the archive against the public key and
+checks the version inside the app. Publication collects both signatures in one
+`latest.json`. If either key is absent, both installers still ship. The Windows job
+warns once and records the skipped feed in `BUILD-INFO.txt`.
 
-`prepare-release-assets.mjs` requires `--signature` by default. Only the explicit
-`--updater disabled` mode accepts its omission; signed mode still rejects missing
-signatures and signatures that do not bind the release version.
+#### One-time updater key setup (release owner)
+
+On Windows, install the locked dependencies in `app` and sign in to GitHub CLI with
+permission to set Actions secrets for `Jheng-Kai/Raphael`. From the repository root run
+the following command and enter a password at the hidden prompt.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File .\app\scripts\updater-key.ps1
+```
+
+The script creates the encrypted Tauri key in `%USERPROFILE%\.raphael-updater\` and uploads
+`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` and
+`RAPHAEL_UPDATER_PUBLIC_KEY` through standard input. If an upload fails, rerun with
+`-UploadExisting` and the same password. Back up the private key and password securely.
+Losing either prevents installed copies from updating. Use `-Force` only for an
+intentional key replacement. Existing copies trust the public key they shipped with.
+
+People on a build without an updater key install the first signed release by hand once
+(Windows installer or Mac disk image). Subsequent signed releases are available from
+About or through automatic updates. After an ad hoc–signed Mac update, Keychain asks
+for access again because macOS sees a new signing identity.
 
 ## Project layout
 

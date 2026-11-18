@@ -482,7 +482,7 @@ export const zhCN = {
   "missing.urlRead": "无法直接读取这个网址，请提供可公开读取的网页或下载后附上文件，登录与受限页面则请亲自打开。",
   "missing.unknown": "目前无法确认这次失败的原因，请保留原对话并重新尝试一次，若仍失败请回报问题。",
   "missing.microphone": "无法取得麦克风，请允许拉斐尔的麦克风访问并确认 Windows 已开放桌面应用程序使用。",
-  "missing.accessibility": "听写快捷键需要“辅助功能”权限：请在“系统设置 › 隐私与安全性 › 辅助功能”中允许拉斐尔。如果已经开启，请先用“−”移除拉斐尔再重新添加。",
+  "missing.accessibility": "听写快捷键需要“辅助功能”权限：请在“系统设置 › 隐私与安全性 › 辅助功能”中打开拉斐尔。列表中没有拉斐尔，或打开了仍不起作用时，请按“＋”从“应用程序”添加拉斐尔（列表中已有的先用“−”移除）。",
   "ownerQuestion.submit": "送出回答",
   "ownerQuestion.answered": "已回答",
   "ownerQuestion.skip": "略过",
