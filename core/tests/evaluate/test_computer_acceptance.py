@@ -365,8 +365,9 @@ async def test_live_schema_check_requires_the_kept_list_to_be_the_drivers_own(tm
             await run.driver_schema(target)
     else:
         detail = await run.driver_schema(target)
-        # 40 before the six file tools (read_file, edit_file, write_file, glob, grep, file_history) and browser_tabs (R-COMP-TABS-01).
-        assert "All 30 DRIVER_TOOLS" in detail and "left the 47 offered tools as they were" in detail
+        # 40 before the six file tools (read_file, edit_file, write_file, glob, grep, file_history), browser_tabs (R-COMP-TABS-01)
+        # and copy_from_owner (R-COMP-FILE-02).
+        assert "All 30 DRIVER_TOOLS" in detail and "left the 48 offered tools as they were" in detail
     # What the driver listed is kept beside the report: the file the two kept lists are written from.
     assert (json.dumps(snapshot(run.out / "driver-tools.json")["tools"]) == json.dumps(KEPT)) == (changed is None)
 
