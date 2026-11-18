@@ -43,7 +43,7 @@ async def catalog_apps(connectors):
     from .composio import KEY
     from .finder import search_text
     import re
-    catalog = (await connectors.catalog({}))["items"] if connectors.vault.get(KEY) else []
+    catalog = (await connectors.catalog({}))["items"] if connectors.vault.filled(KEY) else []
     before = getattr(connectors, "_finder_index", None)
     if before is not None and before[0] is catalog:
         return before[1]

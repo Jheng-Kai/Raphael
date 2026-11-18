@@ -460,6 +460,29 @@ their existing disclosure and policy. Vault kind filters use the same plain
 navigation tabs and inline counts as Connections; segmented filters remain exclusive to History and Dictionary.
 
 
+## The Keychain is asked once, and a Deny stands
+
+R-PRIV-KEYCHAIN-01. Every secret (the model keys, the service keys, the plugins' and apps' secrets, the
+vault, the members' sign-ins) goes through `core/src/raphael_core/keychain.py`; `CredentialKeyStore`,
+`CredentialVault` and `ProviderCredentialStore` are its stores. With the macOS Keychain a "has key" (Settings,
+the model lists, Connect Apps, the services, the self check) reads the item's attributes only and asks nothing;
+a secret is read when it is used, once in a run; a Deny stands until 再問一次 or a new start. The core sends
+`keychain.refused`; the shell passes `MainEvent::KeychainRefused` and lets the window call
+`keychain.ask_again`; `keychain-refused.ts` shows one toast with 再問一次 above the composer. On Windows every
+call goes straight to Credential Manager, which never asks.
+
+```powershell
+npm run look -- keychain-refused keychain-asked --theme both --width 1120,720,1920x1080
+```
+
+`keychain-refused` replays the shell's event twice and checks one toast with the exact words, its status role,
+its one button beside or under the words, the toast inside the window and clear of the composer, and that
+nothing is asked again before the press. `keychain-asked` presses it: the core is asked once, the toast goes and
+the note of what happens next stands (on a Mac it names Always Allow). The core's door has pytest (`core/tests/test_keychain.py`), the toast vitest
+(`keychain-refused.test.ts`), the shell's pass-through cargo (`commands.rs`). The real Keychain's attribute
+read is not reached by any test: it was checked by hand on a Mac with the Keychain's user interaction turned off,
+so no question could be shown.
+
 ## Attachment root and Office expansion security
 
 R-SEC-FILES-01/03: core/tests/services/test_reader_security.py verifies attachment read,

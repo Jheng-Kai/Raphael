@@ -664,3 +664,10 @@ class GmailJourneyVault(MemoryVault):
         if name == KEY:
             return CredentialVault().get(name)
         return super().get(name)
+
+    # Whether the owner's Composio key is kept is asked of the owner's vault too, without reading it (keychain.py).
+    def has(self, name: str) -> bool:
+        return CredentialVault().has(name) if name == KEY else super().has(name)
+
+    def filled(self, name: str) -> bool:
+        return CredentialVault().filled(name) if name == KEY else super().filled(name)

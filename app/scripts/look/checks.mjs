@@ -4779,6 +4779,31 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, toasts: toasts.length, targets: targets.length };
   }
+  if (name === "keychain-refused") {
+    // R-PRIV-KEYCHAIN-01: told twice, said once; the words and the one button to be asked again, inside the window.
+    const notes = [...document.querySelectorAll(".toast .keychain-refused")].filter(visible);
+    require(notes.length === 1, `one toast says the Keychain was refused: ${notes.length}`);
+    const toast = notes[0].closest(".toast"), box = toast.getBoundingClientRect();
+    require(notes[0].textContent === "你拒絕了拉斐爾讀取它存的金鑰，需要金鑰的功能先暫停，拉斐爾不會再自己詢問。", `what was refused and what it means: ${notes[0].textContent}`);
+    require(notes[0].getAttribute("role") === "status", "it is read out as a status");
+    const buttons = [...toast.querySelectorAll("button")].filter(visible);
+    require(buttons.length === 1 && buttons[0].matches("[data-keychain-ask-again]") && buttons[0].textContent === "再問一次", `its one button asks again: ${buttons.map(b => b.textContent)}`);
+    require(box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 0.5 && box.bottom <= innerHeight + 0.5, `the toast is inside the window: ${JSON.stringify(box)}`);
+    const button = buttons[0].getBoundingClientRect(), text = notes[0].getBoundingClientRect();
+    require(button.left >= text.right - 0.5 || button.top >= text.bottom - 0.5, "the button stands beside or under the words, never over them");
+    require(!window.__look.calls.some(call => call.method === "keychain.ask_again"), "nothing is asked again before the owner presses it");
+    return { check: name, width: Math.round(box.width), height: Math.round(box.height) };
+  }
+  if (name === "keychain-asked") {
+    const asked = window.__look.calls.filter(call => call.method === "keychain.ask_again");
+    require(asked.length === 1, `再問一次 asks the core once: ${asked.length}`);
+    require(![...document.querySelectorAll(".toast .keychain-refused")].some(visible), "the refusal's toast is gone");
+    const notes = [...document.querySelectorAll(".toast span")].filter(visible).map(span => span.textContent);
+    // On a Mac the note names the Keychain's own Always Allow.
+    const next = document.documentElement.dataset.platform === "macos" ? "下次需要金鑰時，macOS 會再問一次；選「永遠允許」就不再問。" : "下次需要金鑰時會再問你一次。";
+    require(notes.includes(next), `what happens next is said: ${JSON.stringify(notes)}`);
+    return { check: name, notes };
+  }
   if (name === "quota-warning-before") {
     window.__quotaCallsBefore = window.__look.calls.length;
     return { check: name, calls: window.__quotaCallsBefore };

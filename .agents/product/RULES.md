@@ -1,5 +1,16 @@
 # Raphael product rules
 
+## The Keychain is asked once, at need, and a Deny stands
+
+On a Mac the owner was asked for the Keychain at every message, could not send anything while the question stood, and Deny
+only brought the question back. The macOS Keychain asks before a program reads the secret of an item that another build
+wrote, and its Allow answers that one read; the core read every key again for each turn, list and status. Apple's own rule
+is to ask when a feature needs it, once, and to respect a refusal with a way back.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PRIV-KEYCHAIN-01 | 2026-11-18 | Every secret goes through one door, core/src/raphael_core/keychain.py. With the macOS Keychain: whether a secret is kept (a status, a list, a provider's or service's "has key", a connection's state, a self check) is answered from the item's attributes alone (`has`, `peek`, `filled`), which asks the owner nothing; a secret is read only when it is used, at most once in a run, and reads wait for one another so an item is never asked about twice at once; the owner's Deny (errSecUserCanceled or errSecAuthFailed) stands for the run: nothing more is asked and every read is refused at once (`keychain.Refused`) until the owner presses 再問一次 or Raphael starts again. The core tells the window `keychain.refused` at once and at most once a minute after while a read is turned away; the shell passes it as `MainEvent::KeychainRefused` with nothing else and lets the window call `keychain.ask_again` alone; the window shows one toast with the words and 再問一次, which lifts the refusal and says that macOS asks once more (on a Mac, to choose Always Allow). Windows Credential Manager, which never asks, and the tests' own keyrings go straight to the store as before; the real Keychain is never reached by a test. | pytest, vitest, cargo, look | hard | core/tests/test_keychain.py::test_whether_a_secret_is_kept_is_answered_without_reading_it; core/tests/test_keychain.py::test_a_secret_is_read_once_in_a_run; core/tests/test_keychain.py::test_reads_at_once_ask_one_question; core/tests/test_keychain.py::test_a_deny_stands_until_the_owner_asks_to_be_asked_again; core/tests/test_keychain.py::test_an_auth_failure_is_a_deny_and_another_failure_is_not; core/tests/test_keychain.py::test_the_providers_and_the_service_keys_never_ask_for_a_list; core/tests/test_keychain.py::test_a_test_keyring_or_windows_is_never_asked_through_the_attributes; app/src/main/keychain-refused.test.ts::one toast says so with 再問一次, however often the core tells, and goes by itself; app/src/main/keychain-refused.test.ts::再問一次 asks the core once, takes the toast away and says what happens next; app/src-tauri/src/commands.rs::a_refused_keychain_reaches_the_window_without_anything_else; features/settings-appearance.md (keychain-refused, keychain-asked) |
+
 ## A member is shared by one link
 
 The owner found the GitHub publish request too much for sharing a member: not everyone has GitHub. Grok Bot shares a bot by a link

@@ -254,7 +254,7 @@ class MessagingService:
 
     def _token_present(self, kind: str) -> bool | None:
         try:
-            return all(bool(self._vault.get(secret_name(kind, name))) for name in self._types[kind].secrets)
+            return all(self._vault.filled(secret_name(kind, name)) for name in self._types[kind].secrets)
         except Exception:
             return None
 
@@ -421,7 +421,7 @@ class MessagingService:
     def _any_left(self, kind: str) -> bool:
         for name in self._types[kind].secrets:
             try:
-                if self._vault.get(secret_name(kind, name)) is not None:
+                if self._vault.has(secret_name(kind, name)):
                     return True
             except Exception:
                 return True

@@ -1390,6 +1390,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "status.check_openrouter": data.status.openrouter.state = "ok"; return data.status.openrouter;
       case "secrets.status": return { has_key: !variant.problem && !keyRemoved };
+      case "keychain.ask_again": return { refused: false };
       case "stats.summary": return data.stats;
       case "history.list": return { total:data.history.length, items: data.history.filter(item => (!p.query || item.text.includes(p.query)) && (!p.after_ms || item.created_at_ms >= p.after_ms) && (!p.before_ms || item.created_at_ms < p.before_ms || (item.created_at_ms === p.before_ms && item.id < p.before_id))).slice(0,p.limit??50) };
       case "history.delete": data.history = data.history.filter(item => item.id !== p.id); return { deleted: true };

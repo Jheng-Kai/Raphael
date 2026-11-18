@@ -264,7 +264,8 @@ async def test_status_usage_key_store_failure_hides_cache(usage_brain):
     def locked():
         raise RuntimeError("private vault details")
 
-    keys.get = locked
+    # A store that fails fails whether it is read or only looked at (keychain.py).
+    keys.get = keys.peek = locked
     inaccessible = await status(router)
     assert inaccessible["state"] == "error" and inaccessible["error"] == "auth"
     assert inaccessible["usage"] is None

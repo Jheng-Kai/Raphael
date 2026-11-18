@@ -81,7 +81,8 @@ class VaultTokenStorage:
         self.expires_at: float | None = None
 
     def has_tokens(self) -> bool:
-        return load_long(self._vault, self._tokens_name) is not None
+        """Whether tokens are kept, without asking the owner: the count they are kept under is there (keychain.py)."""
+        return self._vault.has(self._tokens_name)
 
     def forget(self) -> None:
         delete_long(self._vault, self._tokens_name)

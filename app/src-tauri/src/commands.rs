@@ -240,6 +240,9 @@ pub enum MainEvent {
     },
     MembersChanged,
     ProvidersChanged,
+    /// The owner refused Raphael the macOS Keychain (`keychain.refused`, told at once and at most once a minute after):
+    /// the window says so and offers to be asked again (R-PRIV-KEYCHAIN-01). Nothing else passes.
+    KeychainRefused,
     SettingsChanged,
     ConnectionsChanged,
     BrainsChanged,
@@ -440,6 +443,8 @@ const ALLOWED_PREFIXES: [&str; 8] = [
 // A slice, not a fixed-length array: branches that each add a method merge without a count to fix.
 const ALLOWED_METHODS: &[&str] = &[
     "integrations.proposal",
+    // The owner chose to be asked again after refusing the macOS Keychain (R-PRIV-KEYCHAIN-01).
+    "keychain.ask_again",
     "computer.viewer_status",
     "computer.teach",
     "computer.viewer_open",
@@ -1364,6 +1369,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
         }
         "action_mode.changed" => Some(MainEvent::ActionModeChanged),
         "providers.changed" => Some(MainEvent::ProvidersChanged),
+        "keychain.refused" => Some(MainEvent::KeychainRefused),
         "settings.changed" => Some(MainEvent::SettingsChanged),
         "integrations.changed" | "connectors.changed" => Some(MainEvent::ConnectionsChanged),
         "brains.changed" => Some(MainEvent::BrainsChanged),
@@ -2845,6 +2851,21 @@ mod tests {
         assert_eq!(
             serde_json::to_value(event).unwrap(),
             json!({"type": "ProvidersChanged"})
+        );
+    }
+
+    #[test]
+    fn a_refused_keychain_reaches_the_window_without_anything_else() {
+        assert!(is_allowed_method("keychain.ask_again"));
+        assert!(!is_allowed_method("keychain.read"));
+        let event = main_event_from(
+            &notification("keychain.refused", json!({"service": "private"})),
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            json!({"type": "KeychainRefused"})
         );
     }
 

@@ -10,7 +10,14 @@ const turn = {id: 502, session_id: "look-missing", member_id: 1, conversation_id
 const search = [member(1), wait('.page-agent:not([hidden]) .turn-prerequisites .missing-note')];
 const cause = (reason, detail, missing, outcome = "error") => ({...turn, steps: [{kind: missing.requirement === "provider" ? "model" : "tool", tool: missing.resource === "openrouter" ? "provider" : "read_attachment", server: "Raphael", reason, detail, outcome, missing, ms: 20}]});
 const provider = {resource: "openrouter", requirement: "provider", state: "broken", repair: "models"};
+const keychainRefused = [member(1), {action: "main-event", event: {type: "KeychainRefused"}}, {action: "main-event", event: {type: "KeychainRefused"}},
+  wait(".toast .keychain-refused"), check("keychain-refused"), check("toast-clearance")];
 export default [
+  // The owner chose Deny on the macOS Keychain (R-PRIV-KEYCHAIN-01): one toast above the composer says so with 再問一次,
+  // which asks the core to ask again and leaves the note of what happens next. Only the shell's event is synthetic.
+  scene("keychain-refused", "A refused Keychain, told twice, is said in one toast above the composer with 再問一次", keychainRefused),
+  scene("keychain-asked", "再問一次 asks the core once and leaves the note of what happens next",
+    [...keychainRefused, click("[data-keychain-ask-again]"), wait(".toast:not(:has(.keychain-refused))"), check("keychain-asked")]),
   scene("missing-card", "The shared connection card names the exact Composio form in visible words", [member(1), wait('.connector-card .missing-note'), check("missing-card")], {composioConfigured: false, turns: [{...turn, steps: [], connectors: [{id: "missing-gmail", app: "gmail", name: "Gmail", state: "failed", error: "needs_composio_key", reconnect: false, tool_count: 0, missing: {resource: "composio", requirement: "composio_key", state: "missing", repair: "store"}}]}]}),
   scene("missing-card-repair", "The shared card opens the exact existing Composio key field", [member(1), wait('.connector-card .missing-note'), check("missing-card"), click('.connector-card [data-missing-repair="store"]'), wait('#conn-key'), check("missing-card-repair")], {composioConfigured: false, turns: [{...turn, steps: [], connectors: [{id: "missing-gmail", app: "gmail", name: "Gmail", state: "failed", error: "needs_composio_key", reconnect: false, tool_count: 0, missing: {resource: "composio", requirement: "composio_key", state: "missing", repair: "store"}}]}]}),
   scene("missing-provider", "Provider authentication keeps its real cause and account repair", [...search, check("missing-provider")], {turns: [cause("provider_broken", "openrouter", provider)]}),

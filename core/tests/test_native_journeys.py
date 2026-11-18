@@ -131,7 +131,9 @@ def test_gmail_vault_reads_only_composio_and_never_changes_owner_credentials(mon
     monkeypatch.setattr(CredentialVault, "get", lambda _self, name: reads.append(name) or "test-value")
     monkeypatch.setattr(CredentialVault, "set", lambda *_: (_ for _ in ()).throw(AssertionError("owner write")))
     monkeypatch.setattr(CredentialVault, "delete", lambda *_: (_ for _ in ()).throw(AssertionError("owner delete")))
+    monkeypatch.setattr(CredentialVault, "filled", lambda _self, name: name == KEY)
     vault = GmailJourneyVault()
+    assert vault.filled(KEY) and not vault.filled("unrelated") and not vault.has("unrelated")
     assert vault.get("unrelated") is None
     assert vault.get(KEY) == "test-value"
     vault.set("unrelated", "temporary")

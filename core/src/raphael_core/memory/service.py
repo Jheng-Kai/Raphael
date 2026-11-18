@@ -512,7 +512,7 @@ class MemoryService(Growth):
             try:
                 ref = brain_ref(quick)
                 usable = (self._cli_brains is not None and self._cli_brains.available(ref[0])) if ref else (
-                    self._base_client.available(quick) if isinstance(self._base_client, ProviderRouter) else bool(self._keys.get()))
+                    self._base_client.available(quick) if isinstance(self._base_client, ProviderRouter) else self._keys.filled())
                 if usable:
                     return quick
                 reason = "unavailable"
@@ -536,9 +536,7 @@ class MemoryService(Growth):
                 return self._cli_brains is not None and self._cli_brains.available(reference[0])
             if isinstance(self._client, ProviderRouter):
                 return self._client.available(self._model(member_id))
-            if not (self._keys.get() or "").strip():
-                return False
-            return True
+            return self._keys.filled()
         except Exception as exc:  # the key store's message could hold the key
             logger.warning("The memory could not check the key or the limit: %s", type(exc).__name__)
             return False

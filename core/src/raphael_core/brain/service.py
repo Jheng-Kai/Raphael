@@ -47,6 +47,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import tzinfo
 from typing import Any
 
+from .. import keychain
 from ..clock import wall_clock_ms
 from ..languages import chinese_variant, language_groups
 from ..protocol import INTERNAL_ERROR, RpcError, invalid_params
@@ -858,8 +859,11 @@ class Brain:
     # --- the key --------------------------------------------------------------------------------
 
     def _has_key(self) -> bool:
-        """Whether a key is stored. Raises if the key store fails; each caller decides what then."""
-        key = self._keys.get()
+        """Whether a key is stored. Raises if the key store fails; each caller decides what then. A key kept but not read
+        in this run counts without being read: reading it only to answer would ask the owner (keychain.py)."""
+        key = self._keys.peek()
+        if key is keychain.UNREAD:
+            return True
         self._remember_key(key)
         return self._key_identity is not None
 
@@ -1032,7 +1036,8 @@ class Brain:
 
     async def _status_get(self, params: dict) -> dict:
         has_key = self._has_key_or_none()
-        if has_key:
+        # The usage of a key not yet read in this run waits for its first use: reading it for a status would ask the owner.
+        if has_key and self._key_identity is not None:
             self._refresh_key_usage_if_due()
         latest = self._history.latest(kind="dictation")
         return {
