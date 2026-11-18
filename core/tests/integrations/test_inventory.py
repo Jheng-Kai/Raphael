@@ -250,7 +250,9 @@ async def test_an_inventory_that_cannot_be_read_has_no_number_and_says_so(hub, r
 
     def locked(name):
         raise OSError("the vault is locked")
-    monkeypatch.setattr(vault, "get", locked)
+    # A vault that fails fails whether a secret is read or only looked for (keychain.py).
+    for method in ("get", "has", "filled"):
+        monkeypatch.setattr(vault, method, locked)
     # One connection cannot be read: it is listed as unknown, and the others do not make a number of it.
     states, result = await listed(rpc)
     assert states["composio:github"] == "unknown" and (result["state"], result["count"]) == ("partial", None)

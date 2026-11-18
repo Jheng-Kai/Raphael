@@ -1,0 +1,17 @@
+{
+  "turns": 5000,
+  "samples": 3,
+  "before_median_ms": 57.04820808023214,
+  "after_median_ms": 0.2672085538506508,
+  "before_ms": [
+    58.1266675144434,
+    57.04820808023214,
+    56.75366707146168
+  ],
+  "after_ms": [
+    0.3872085362672806,
+    0.2659996971487999,
+    0.2672085538506508
+  ],
+  "baseline": "rebuild in-memory FTS from all permitted turn text per query"
+}

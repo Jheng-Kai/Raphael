@@ -1,4 +1,4 @@
-"""Where the secrets of the plugins are kept: Windows Credential Manager, through keyring.
+"""Where the secrets of the plugins are kept: Windows Credential Manager or the macOS Keychain, through `keychain`.
 
 A plugin's environment values and request headers are secrets (a token is the usual one). Like the
 OpenRouter key (`brain.secrets`) they live nowhere else: not in the config file, not in the
@@ -15,8 +15,9 @@ credential, so a longer value is refused up front instead of failing half way.
 import contextlib
 from typing import Protocol
 
-import keyring
 from keyring.errors import PasswordDeleteError
+
+from .. import keychain
 
 SERVICE_PREFIX = "Raphael plugin"
 # The Credential Manager's blob is 2560 bytes and keyring writes UTF-16: 1280 characters, with room
@@ -39,6 +40,14 @@ class SecretVault(Protocol):
 
     def delete(self, name: str) -> None:
         """Remove a secret. Does nothing when there is none."""
+        ...
+
+    def has(self, name: str) -> bool:
+        """Whether the secret called `name` is kept, without asking the owner."""
+        ...
+
+    def filled(self, name: str) -> bool:
+        """Whether a non-blank secret called `name` is kept, without asking the owner (`keychain.filled`)."""
         ...
 
 
@@ -108,16 +117,22 @@ class CredentialVault:
         return f"{SERVICE_PREFIX} {name}"
 
     def get(self, name: str) -> str | None:
-        return keyring.get_password(self._service(name), self._USERNAME)
+        return keychain.read(self._service(name), self._USERNAME)
+
+    def has(self, name: str) -> bool:
+        return keychain.has(self._service(name), self._USERNAME)
+
+    def filled(self, name: str) -> bool:
+        return keychain.filled(keychain.peek(self._service(name), self._USERNAME))
 
     def set(self, name: str, value: str) -> None:
         _checked(value)
         self.delete(name)
-        keyring.set_password(self._service(name), self._USERNAME, value)
+        keychain.write(self._service(name), self._USERNAME, value)
 
     def delete(self, name: str) -> None:
         with contextlib.suppress(PasswordDeleteError):
-            keyring.delete_password(self._service(name), self._USERNAME)
+            keychain.remove(self._service(name), self._USERNAME)
 
 
 class MemoryVault:
@@ -134,6 +149,12 @@ class MemoryVault:
 
     def delete(self, name: str) -> None:
         self._secrets.pop(name, None)
+
+    def has(self, name: str) -> bool:
+        return name in self._secrets
+
+    def filled(self, name: str) -> bool:
+        return keychain.filled(self._secrets.get(name))
 
     def names(self) -> list[str]:
         """What is stored (for a test to see that nothing is left behind)."""

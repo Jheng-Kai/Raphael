@@ -136,6 +136,8 @@ export const homeOverview = (refresh = false, month?: string): Promise<HomeOverv
 
 /** Asks OpenRouter again; answers with the `openrouter` part of the status. */
 export const statusCheckOpenrouter = (): Promise<Status["openrouter"]> => core("status.check_openrouter");
+/** After the owner refused the macOS Keychain: the next read that needs a key asks once more (R-PRIV-KEYCHAIN-01). */
+export const keychainAskAgain = (): Promise<{ refused: boolean }> => core("keychain.ask_again");
 
 export const desktopStatus = (member_id: number, conversation_id?: number): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id });
 export const desktopWallpaper = (): Promise<{ image?: string }> => core("computer.wallpaper");

@@ -15,6 +15,7 @@ from dataclasses import replace
 
 import httpx
 
+from ... import keychain
 from ...protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError
 from ..catalog import CatalogEntry, ModelPrice
 from ..model_ref import split_api_ref
@@ -149,7 +150,10 @@ class ProviderRegistry:
             account_id = state.get("active", "")
             tokens = self.chatgpt.auth._tokens(account_id) if account_id else {}
             return bool(tokens.get("refresh_token")) and "chatgpt.tokens.use.direct" in tokens.get("scope", "").split()
-        value = self._secret(pid).get()
+        # Kept but not read in this run: reading it only to answer "is there a key" would ask the owner (keychain.py).
+        value = self._secret(pid).peek()
+        if value is keychain.UNREAD:
+            return True
         if config["kind"] == "bedrock":
             try:
                 credentials = json.loads(value or "{}")

@@ -900,6 +900,8 @@ export type MainEvent =
   /** A subscription window is nine-tenths used: said once per window (quota-warning.ts); `resets_at` is unix seconds. */
   | { type: "QuotaWarning"; provider: "codex" | "claude" | "gemini"; period: import("./usage-analytics-types").CliAllowanceWindow["period"]; remaining_percent: number; resets_at?: number }
   | { type: "ActionModeChanged" }
+  /** The owner refused Raphael the macOS Keychain: the window says so and offers to be asked again (keychain-refused.ts). */
+  | { type: "KeychainRefused" }
   | { type: "Level"; value: number }
   | { type: "ModelProgress"; name: string; done: number; total: number }
   /** An editor hides its text from UI Automation, so corrections in it cannot be learned. */

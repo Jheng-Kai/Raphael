@@ -100,7 +100,7 @@ class Webhooks:
                 self.last_fire.pop(identifier, None)
             self.known = current
             for routine in routines:
-                if not self.vault.get(self.key(routine.id)):
+                if not self.vault.filled(self.key(routine.id)):
                     self.vault.set(self.key(routine.id), secrets.token_hex(32))
             if routines and self.server is None:
                 port = self.service._settings.get("routine_webhook_port")

@@ -276,6 +276,12 @@ class BrokenKeyStore:
     def get(self):
         raise RuntimeError(f"vault locked; the key is {SECRET}")
 
+    def peek(self):
+        raise RuntimeError(f"vault locked; the key is {SECRET}")
+
+    def filled(self):
+        raise RuntimeError(f"vault locked; the key is {SECRET}")
+
     def set(self, key):
         raise RuntimeError(f"vault locked; the key is {SECRET}")
 

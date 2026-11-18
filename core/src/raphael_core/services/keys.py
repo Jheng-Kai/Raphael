@@ -81,7 +81,13 @@ class ServiceKeys:
         return key if key and key.strip() else None
 
     def has(self, service: str) -> bool:
-        return self.get(service) is not None
+        """Whether `service` has a key, without asking the owner (keychain.py). A store that fails reads as no key."""
+        store = self._store(service)
+        try:
+            return store.filled()
+        except Exception as exc:
+            logger.warning("The key store of a service failed: %s", type(exc).__name__)
+            return False
 
     def set(self, service: str, key: str) -> None:
         """Store the key of `service` (`checked_key` first), in place of the one it had."""

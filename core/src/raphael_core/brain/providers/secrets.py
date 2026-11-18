@@ -1,4 +1,4 @@
-"""Large provider credentials stay entirely in Windows Credential Manager.
+"""Large provider credentials stay entirely in Windows Credential Manager or the macOS Keychain.
 
 Service-account JSON exceeds a single Windows generic credential's blob limit.
 Small keys retain the existing credential name; larger values use vault chunks
@@ -9,6 +9,7 @@ import json
 import re
 import uuid
 
+from ... import keychain
 from ..secrets import CredentialKeyStore
 
 PREFIX = "raphael-vault-v1:"
@@ -40,6 +41,22 @@ class ProviderCredentialStore:
         if any(chunk is None for chunk in chunks):
             raise ValueError("Incomplete provider credential")
         return "".join(chunks)
+
+    def peek(self):
+        """The credential when it can be had without asking the owner, None without one, or `keychain.UNREAD`."""
+        value = self.root.peek()
+        if value is keychain.UNREAD:
+            return value
+        parts = self._parts(value)
+        if not parts:
+            return value
+        chunks = [part.peek() for part in parts]
+        if any(chunk is keychain.UNREAD for chunk in chunks):
+            return keychain.UNREAD
+        return None if any(chunk is None for chunk in chunks) else "".join(chunks)
+
+    def filled(self):
+        return keychain.filled(self.peek())
 
     def set(self, value):
         old = self.root.get()

@@ -352,7 +352,7 @@ class ConnectorsService:
 
     async def catalog(self, params):
         # Publish only a complete snapshot; a failed refresh must not replace the last good list.
-        if not self.vault.get(KEY):
+        if not self.vault.filled(KEY):
             raise ConnectorFailure("missing_key")
         before = self._store_catalog
         if before is None and not self._catalog_read:
@@ -842,7 +842,7 @@ class ConnectorsService:
         refresh = params.get("refresh", True)
         if type(refresh) is not bool:
             raise invalid_params("refresh must be boolean")
-        if refresh and self.vault.get(KEY) and not self._lock.locked() and not self.login_pending:
+        if refresh and self.vault.filled(KEY) and not self._lock.locked() and not self.login_pending:
             async with self._lock:
                 accounts = await self.composio.pages("/connected_accounts", {"user_ids": self.store.user_id, "limit": 500})
                 by_slug = {}
@@ -864,13 +864,13 @@ class ConnectorsService:
                                           {"is_connected": "true", "limit": 50})
                 await self._patch()
                 self._save()
-        elif self.vault.get(KEY) and not self._lock.locked() and any(
+        elif self.vault.filled(KEY) and not self._lock.locked() and any(
                 self._stale(a) for c in self.store.connectors.values() if c.kind == "composio" for a in c.accounts):
             async with self._lock:
                 await self._sweep()
         return {"connectors": [self._view(c) for c in self.store.connectors.values()],
-                "composio_configured": bool(self.vault.get(KEY)),
-                "google_configured": bool(self.vault.get(PREFIX + "client_id")),
+                "composio_configured": self.vault.filled(KEY),
+                "google_configured": self.vault.filled(PREFIX + "client_id"),
                 "duplicate_google_paths": "google" in self.store.connectors and any(
                     c.id in ("composio:gmail", "composio:googlecalendar") and c.status == "ACTIVE"
                     for c in self.store.connectors.values())}
@@ -1022,7 +1022,7 @@ class ConnectorsService:
 
     def tool_available(self, server_id, name):
         if server_id == COMPOSIO_SERVER:
-            return bool(self.vault.get(KEY)) and name in META and any(
+            return self.vault.filled(KEY) and name in META and any(
                 c.kind == "composio" and c.status == "ACTIVE" and c.enabled and c.enabled_tools for c in self.store.connectors.values())
         if server_id == GOOGLE_SERVER:
             entry = self.store.connectors.get("google")

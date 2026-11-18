@@ -1,0 +1,50 @@
+[
+  {
+    "window": 200000,
+    "max_output": 8192,
+    "cap": 24000,
+    "threshold": 24000,
+    "turns": 650,
+    "history_input_tokens_after_fold": 20227,
+    "auxiliary_calls": 42,
+    "auxiliary_input_tokens_estimated": 751052,
+    "auxiliary_output_tokens_estimated": 378,
+    "real_requests": 0
+  },
+  {
+    "window": 200000,
+    "max_output": 8192,
+    "cap": 0,
+    "threshold": 143856,
+    "turns": 650,
+    "history_input_tokens_after_fold": 141547,
+    "auxiliary_calls": 34,
+    "auxiliary_input_tokens_estimated": 607988,
+    "auxiliary_output_tokens_estimated": 306,
+    "real_requests": 0
+  },
+  {
+    "window": 1000000,
+    "max_output": 8192,
+    "cap": 24000,
+    "threshold": 24000,
+    "turns": 650,
+    "history_input_tokens_after_fold": 20227,
+    "auxiliary_calls": 42,
+    "auxiliary_input_tokens_estimated": 751052,
+    "auxiliary_output_tokens_estimated": 378,
+    "real_requests": 0
+  },
+  {
+    "window": 1000000,
+    "max_output": 8192,
+    "cap": 0,
+    "threshold": 495904,
+    "turns": 650,
+    "history_input_tokens_after_fold": 490342,
+    "auxiliary_calls": 11,
+    "auxiliary_input_tokens_estimated": 196679,
+    "auxiliary_output_tokens_estimated": 99,
+    "real_requests": 0
+  }
+]

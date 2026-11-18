@@ -61,7 +61,7 @@ from typing import Any
 
 import keyring
 
-from . import __version__, paths
+from . import __version__, keychain, paths
 from .agent.device import DeviceActions, NullActions, system_actions
 from .agent.gate import ToolGate
 from .agent.safety import SafetyGuard, SafetyJudge, SafetyRules
@@ -853,6 +853,14 @@ class App(Router):
             raise
         self.brain.register(self)
         self.providers.register(self)
+        # The owner's "Deny" to the macOS Keychain stands (R-PRIV-KEYCHAIN-01): the window is told, and its notice's button
+        # is the one way, besides starting again, to be asked again (keychain.py).
+        keychain.DOOR.on_refused = lambda: self.notify("keychain.refused", {})
+
+        async def keychain_ask_again(params: dict) -> dict:
+            keychain.DOOR.ask_again()
+            return {"refused": keychain.DOOR.refused}
+        self.register("keychain.ask_again", keychain_ask_again)
         # The services the tools stand on, as the owner chose them (`services.*`). With the fake LLM
         # every one of them is offline: a run of the tests reaches no network.
         self.attachment_store = AttachmentStore(data_dir)
@@ -1262,6 +1270,7 @@ class App(Router):
         if self._closed:
             return
         self._closed = True
+        keychain.DOOR.on_refused = lambda: None
         if self._startup_handle is not None:
             self._startup_handle.cancel()
             self._startup_handle = None

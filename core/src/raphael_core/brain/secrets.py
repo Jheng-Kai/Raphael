@@ -1,4 +1,4 @@
-"""Where the OpenRouter key is kept: Windows Credential Manager, through keyring.
+"""Where the OpenRouter key is kept: Windows Credential Manager or the macOS Keychain, through `keychain`.
 
 The key lives nowhere else: not in a config file, not in the database, not in a log. Never log or
 print a key from this module or from anything that handles one.
@@ -7,8 +7,9 @@ print a key from this module or from anything that handles one.
 import contextlib
 from typing import Protocol
 
-import keyring
 from keyring.errors import PasswordDeleteError
+
+from .. import keychain
 
 
 class KeyStore(Protocol):
@@ -24,9 +25,18 @@ class KeyStore(Protocol):
         """Remove the key. Does nothing when there is none."""
         ...
 
+    def peek(self) -> "str | None | keychain._Unread":
+        """The key when it can be had without asking the owner, None without one, or `keychain.UNREAD`."""
+        ...
+
+    def filled(self) -> bool:
+        """Whether a key is kept, without asking the owner (`keychain.filled`)."""
+        ...
+
 
 class CredentialKeyStore:
-    """The key as a generic credential in Windows Credential Manager (the user's vault).
+    """The key as a generic credential in Windows Credential Manager (the user's vault), or a generic password of the
+    macOS Keychain.
 
     `service` and `username` name the credential. keyring reports "nothing to delete" as
     PasswordDeleteError, which `clear` swallows; any other failure reaches the caller, because
@@ -44,15 +54,21 @@ class CredentialKeyStore:
         self._username = username
 
     def get(self) -> str | None:
-        return keyring.get_password(self._service, self._username)
+        return keychain.read(self._service, self._username)
+
+    def peek(self) -> "str | None | keychain._Unread":
+        return keychain.peek(self._service, self._username)
+
+    def filled(self) -> bool:
+        return keychain.filled(self.peek())
 
     def set(self, key: str) -> None:
         self.clear()
-        keyring.set_password(self._service, self._username, key)
+        keychain.write(self._service, self._username, key)
 
     def clear(self) -> None:
         with contextlib.suppress(PasswordDeleteError):
-            keyring.delete_password(self._service, self._username)
+            keychain.remove(self._service, self._username)
 
 
 class MemoryKeyStore:
@@ -63,6 +79,12 @@ class MemoryKeyStore:
 
     def get(self) -> str | None:
         return self._key
+
+    def peek(self) -> str | None:
+        return self._key
+
+    def filled(self) -> bool:
+        return keychain.filled(self._key)
 
     def set(self, key: str) -> None:
         self._key = key

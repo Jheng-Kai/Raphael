@@ -57,6 +57,13 @@ provider, window and reset (core `quota_warned` setting, `MainEvent::QuotaWarnin
 the main window that changes no model. Selected scenes: quota-warning and quota-warning-weekly, both
 themes at 1120,720,1920x1080.
 
+## The Keychain is asked once, and a Deny stands
+
+See [Settings and appearance](settings-appearance.md#the-keychain-is-asked-once-and-a-deny-stands) for
+R-PRIV-KEYCHAIN-01: secrets go through `core/src/raphael_core/keychain.py`, a "has key" never asks the macOS
+Keychain, a secret is read once in a run, and the owner's Deny stands until 再問一次. Selected scenes:
+keychain-refused and keychain-asked, both themes at 1120,720,1920x1080.
+
 ## External-input security boundaries
 
 See [Agent and external-input security boundaries](security-boundaries.md) for current allowlist checks, bounded messaging/webhook/MCP ingress, nonce-bound tunnel probes, OAuth callback admission and the offline verification limits.

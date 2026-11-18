@@ -50,6 +50,7 @@ import { leave, toaster } from "./ui";
 import { firstViewShown, holdOptionalReads, optionalRead } from "./startup-reads";
 import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import { warnQuota } from "./quota-warning";
+import { warnKeychainRefused } from "./keychain-refused";
 import "./styles.css";
 import "./sidebar.css";
 
@@ -390,6 +391,7 @@ watchChipRows(document.body);
     if (event.type === "CoreReady") { console.info("main page: CoreReady"); readVideoBase(); }
     if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
     if (event.type === "QuotaWarning") warnQuota(event);
+    if (event.type === "KeychainRefused") warnKeychainRefused();
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {
       document.activeElement.dispatchEvent(new CustomEvent("dictation-pasted", { detail: event.text }));

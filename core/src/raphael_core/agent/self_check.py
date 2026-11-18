@@ -234,7 +234,7 @@ def own_connections(speaker, connections):
 
 def snapshot(service, ask):
     """No provider/CLI processes; only existing settings, vault presence and stored state."""
-    connections, keys = [], {"OpenRouter": _presence(service._keys.get)}
+    connections, keys = [], {"OpenRouter": _presence(service._keys.filled)}
     hub = getattr(service._secret_cards, "_integrations", None) or service._plugins
     if hub is not None and hasattr(hub, "connections"):
         for item in hub.connections():
@@ -245,11 +245,11 @@ def snapshot(service, ask):
             for server in hub._config.servers():
                 for kind, names in (("env", server.env), ("header", server.headers)):
                     for name in names:
-                        keys[f"{server.id}/{kind}/{name}"] = _presence(lambda: hub._vault.get(secret_name(server.id, kind, name)))
+                        keys[f"{server.id}/{kind}/{name}"] = _presence(lambda: hub._vault.filled(secret_name(server.id, kind, name)))
     connectors = getattr(service._cards, "_connectors", None)
     if connectors:
         for name, key in (("Composio", KEY), ("Google OAuth client", PREFIX + "client_id")):
-            keys[name] = _presence(lambda: connectors.vault.get(key))
+            keys[name] = _presence(lambda: connectors.vault.filled(key))
     brains = []
     registry = getattr(service._client, "registry", None)
     if registry is not None:

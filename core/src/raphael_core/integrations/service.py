@@ -805,7 +805,7 @@ class IntegrationsService:
         if server is None:
             return None
         declared = [("env", key) for key in server.env] + [("header", key) for key in server.headers]
-        return server, [(kind, key) for kind, key in declared if self._vault.get(secret_name(server.id, kind, key)) is None]
+        return server, [(kind, key) for kind, key in declared if not self._vault.has(secret_name(server.id, kind, key))]
 
     def fill_secret(self, server_id: str, kind: str, key: str, value: str) -> None:
         """Keep the value of a secret a connection of the owner's declares, in the vault and nowhere

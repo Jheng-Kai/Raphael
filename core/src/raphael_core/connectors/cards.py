@@ -481,7 +481,7 @@ class ConnectorCards:
         sign-in. A client Google refused is asked for again."""
         entry = self._connectors.store.connectors.get("google")
         try:
-            kept = bool(self._connectors.vault.get(PREFIX + "client_id"))
+            kept = self._connectors.vault.filled(PREFIX + "client_id")
         except Exception:
             kept = False
         refused = card is not None and card.state == "failed" and card.cause in ("needs_own_google", "client_rejected")
@@ -630,9 +630,9 @@ class ConnectorCards:
         if app.provider == "builtin":
             server = next((s for s in self._connectors.hub._config.servers() if s.catalog_id == app.id), None)
             return "integrations.connect", {"id": server.id} if server else {"catalog_id": app.id}
-        if app.provider == "google" and "google" in self._connectors.store.connectors and vault.get(PREFIX + "client_id"):
+        if app.provider == "google" and "google" in self._connectors.store.connectors and vault.filled(PREFIX + "client_id"):
             return "connectors.google.connect", {}
-        if vault.get(KEY):
+        if vault.filled(KEY):
             return "connectors.connect", {"toolkit": app.composio}
         return None
 
@@ -700,6 +700,8 @@ class ConnectorCards:
             if result.get("ok") is False:
                 raise self._refusal("connectors.google.configure", result)
         else:
+            # The sign-in uses the Client ID now, so it is read: a store that cannot give it (a refused Keychain) is
+            # named here, before anything is sent.
             try:
                 kept = bool(self._connectors.vault.get(PREFIX + "client_id"))
             except Exception:
@@ -725,6 +727,10 @@ class ConnectorCards:
                     else:
                         try:
                             provider = self._provider(app)
+                            # Whether a key is kept was answered without reading it; the sign-in uses it now, so it is
+                            # read: a store that cannot give it (a refused Keychain) is named before anything is sent.
+                            if provider is not None:
+                                self._connectors.vault.get(KEY if provider[0] == "connectors.connect" else PREFIX + "client_id")
                         except Exception:
                             raise _Failed("vault") from None
                         if provider is None:
