@@ -35,8 +35,9 @@ struct Pending {
     update: Option<Update>,
     bytes: Option<Vec<u8>>,
 }
+/// Managed on the builder before any window (`early_state` in lib.rs): a page asks for it at once.
 #[derive(Default)]
-struct Updates {
+pub(crate) struct Updates {
     pending: Mutex<Pending>,
     operation: Mutex<()>,
 }
@@ -256,7 +257,6 @@ pub async fn update_control(
 }
 
 pub fn start(app: &AppHandle) {
-    app.manage(Updates::default());
     if crate::native_journey() {
         return;
     }
