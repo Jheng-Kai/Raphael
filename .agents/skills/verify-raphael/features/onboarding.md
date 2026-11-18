@@ -41,20 +41,20 @@ Settings has no 導覽 entry any more;
    answer in its manner (告。/解。/否。) fades in under it, then the ask is deleted and the next typed (six
    pairs, `onboarding.demo*`); with reduced motion the first pair stands; a reader hears one sentence
    (`onboarding.demoSummary`). Then one pill, 開始.
-1. **AI tools** (`onboarding-tools`, `onboarding-tools-key`): a store (every
+1. **AI tools** (`onboarding-tools`): a store (every
    tool equal, never ordered by what one owner set up). A search box (typos forgiven, R-FIND-01),
-   then 熱門, the same for everyone (`POPULAR_TOOLS`: ChatGPT, Claude Code, Codex, OpenRouter,
+   then 熱門, the same for everyone (`POPULAR_TOOLS`: ChatGPT, Claude Code, Codex, OpenAI,
    Anthropic, Google Gemini), then every other tool under its kind (subscription accounts, official,
-   gateways and clouds, this computer), each kind by name. The two store steps use a 900 px column.
+   gateways and clouds, this computer), each kind by name. OpenRouter is a gateway among the others. The two store steps use a 900 px column.
    Every tile is one row, as a store's app is (a tile is never tall, an email never
    breaks over two lines and OpenRouter's heavy mark does not sit unevenly): the mark at 20 px in a 36 px soft
    square, the name over one quiet line that ends in … instead of wrapping (ChatGPT signed in shows
    only its account), and on the right its one button, then the check of a ready tile (black edge in
    light, lifted fill in dark; the check carries the word a reader hears). Three tiles to a row where
-   each gets at least 256 px, two in a 720 px window. OpenRouter is a tile too: 連接 (or the check
-   and 更換) opens the masked field, 取消 and 貼上 across its row while the key is typed. ChatGPT and
-   the command-line tools are driven by the same account controller as Settings > Models
-   (`createCliBrains`); the key uses the same masked field, paste button and core call.
+   each gets at least 256 px, two in a 720 px window. Every provider, OpenRouter included, has 連接,
+   which opens the same editor as Settings › 模型 › 新增供應商; the guide has no key tile of its own
+   (R-COPY-02). ChatGPT and the command-line tools are driven by the same account controller as
+   Settings > Models (`createCliBrains`).
 2. **Services** (`onboarding-services`, `onboarding-service-waiting`, `onboarding-services-composio`,
    `onboarding-composio-key`, `onboarding-composio-saved`, `onboarding-services-n8n`): a search box,
    then, when Composio has no key, Composio's card across the step (Composio is connected first, and only
@@ -91,7 +91,7 @@ state.
 ## Driving it with look
 
 ```powershell
-npm run look -- onboarding onboarding-tools onboarding-tools-key onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
+npm run look -- onboarding onboarding-tools onboarding-back-hover onboarding-back-focus settings-owner onboarding-services onboarding-service-waiting onboarding-services-composio onboarding-composio-key onboarding-composio-saved onboarding-services-n8n onboarding-abilities onboarding-abilities-choice after-onboarding --theme both --width 1120,720,1920x1080
 ```
 
 Keep the welcome and each step's PNGs, the contact sheet and the report. Each scene presses the

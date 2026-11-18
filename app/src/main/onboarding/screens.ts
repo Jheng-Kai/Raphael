@@ -105,17 +105,6 @@ export function welcomeHTML(): string {
 
 // ---------- 1. the AI tools ----------
 
-/** The OpenRouter key, as the guide knows it. The key itself is never held here. */
-export interface KeyView {
-  has: boolean;
-  /** The name the key was given at OpenRouter, once it has been checked in this run. */
-  name: string | null;
-  /** The field is open although there is a key: it is being replaced. */
-  replacing: boolean;
-  busy: boolean;
-  error: string | null;
-}
-
 type ToolId = "chatgpt" | (typeof CLIS)[number]["id"];
 
 export interface ToolCard {
@@ -173,8 +162,8 @@ const toolTile = (card: ToolCard): string =>
   tile({ id: card.id, mark: card.mark, name: card.name, line: card.line, on: card.ready ? t("brains.ready") : undefined, control: !card.ready && card.action ? btn(esc(card.action.label), "sm", card.action.attrs) : "" });
 
 /**
- * A key typed in a wide tile: the masked field, 「取消」 and 「貼上」 (「檢查中…」 while it is checked). The guide's two keys,
- * OpenRouter's and Composio's, are typed alike; a key is sent by Enter or 貼上 only.
+ * A key typed in a wide tile: the masked field, 「取消」 and 「貼上」 (「檢查中…」 while it is checked): Composio's. A key is sent
+ * by Enter or 貼上 only.
  */
 function keyEntry(o: { id: string; placeholder: string; label: string; busy: boolean; invalid: boolean; cancel: string; paste: string }): string {
   return (
@@ -185,25 +174,10 @@ function keyEntry(o: { id: string; placeholder: string; label: string; busy: boo
 }
 
 /**
- * The OpenRouter tile, one tile like the others: 「連接」 (or the check and 「更換」) until it is pressed, then it spans its row
- * with the key's field while the key is typed. A refused key keeps the field open with its alert.
- */
-function keyTile(k: KeyView): string {
-  const entering = k.replacing || k.busy || k.error !== null;
-  const control = entering
-    ? keyEntry({ id: "ob-key-input", placeholder: "sk-or-v1-…", label: t("common.apiKeyField"), busy: k.busy, invalid: k.error !== null, cancel: "key-cancel", paste: "key-paste" })
-    : k.has
-      ? btn(esc(t("onboarding.keyReplace")), "sm", ' data-ob="key-replace"')
-      : btn(esc(t("providers.connect")), "sm", ` data-ob="key-replace" aria-label="${esc(`${t("providers.connect")} OpenRouter`)}"`);
-  // One short line like every other tile's: the key's own name once it is known, otherwise what it is.
-  const line = k.has && !entering && k.name !== null ? t("onboarding.keyNamed", { p0: k.name }) : t("common.apiKey");
-  return tile({ id: "openrouter", mark: providerMark("openrouter"), name: "OpenRouter", line, control, entry: entering, on: k.has && !entering ? t("onboarding.keyIsSet") : undefined }) + (k.error ? alert(st("err", k.error)) : "");
-}
-
-/**
  * Every provider the app can connect, as tiles, from the core's catalog (the same as Settings › 模型與用量's 新增供應商):
- * the guide is for everyone, not only the providers one owner uses. A tile's button opens the same
- * editor as Settings. OpenRouter keeps its own key tile above them; ChatGPT is a sign-in among the accounts.
+ * the guide is for everyone, not only the providers one owner uses. A tile's button opens the same editor as Settings, for
+ * OpenRouter as for any other: it is one gateway among them, with no key tile of its own. ChatGPT is a sign-in among the
+ * accounts.
  */
 const GROUP_TITLE: Record<ProviderKind["group"], MessageKey> = { official: "providers.official", gateway: "providers.gateway", local: "providers.local" };
 
@@ -217,22 +191,23 @@ function providerTile(kind: ProviderKind, v: ProvidersView): string {
 
 const tr = t as unknown as (key: MessageKey) => string;
 
-/** One AI tool the guide offers, whatever kind it is: a subscription account, the OpenRouter key or a catalog provider. */
+/** One AI tool the guide offers, whatever kind it is: a subscription account or a catalog provider. */
 interface ToolTile { id: string; name: string; group: "accounts" | ProviderKind["group"]; html: string }
 
 /**
- * The tools most people reach for, the same for everyone. The guide is a store: it never orders itself by what one owner has set up.
+ * The tools most people reach for, the same for everyone: the subscription accounts most people have, then the official API
+ * keys. A gateway such as OpenRouter stands with the gateways. The guide is a store: it never orders itself by what one owner
+ * has set up.
  */
-export const POPULAR_TOOLS = ["chatgpt", "claude", "codex", "openrouter", "provider:anthropic", "provider:google"] as const;
+export const POPULAR_TOOLS = ["chatgpt", "claude", "codex", "provider:openai", "provider:anthropic", "provider:google"] as const;
 const GROUPS = ["accounts", "official", "gateway", "local"] as const;
 const groupTitle = (group: ToolTile["group"]): string => (group === "accounts" ? t("brains.accounts") : tr(GROUP_TITLE[group]));
 
-function toolTiles(accounts: CliBrainsView, key: KeyView, providers: ProvidersView): ToolTile[] {
+function toolTiles(accounts: CliBrainsView, providers: ProvidersView): ToolTile[] {
   const tiles: ToolTile[] = toolCards(accounts).map((card) => ({ id: card.id, name: card.name, group: "accounts", html: toolTile(card) }));
-  tiles.push({ id: "openrouter", name: "OpenRouter", group: "gateway", html: keyTile(key) });
   if (providers.state === "ready") {
     for (const kind of providers.kinds) {
-      if (kind.kind !== "openrouter" && kind.kind !== "chatgpt") tiles.push({ id: `provider:${kind.kind}`, name: kind.name, group: kind.group, html: providerTile(kind, providers) });
+      if (kind.kind !== "chatgpt") tiles.push({ id: `provider:${kind.kind}`, name: kind.name, group: kind.group, html: providerTile(kind, providers) });
     }
   }
   return tiles;
@@ -244,8 +219,8 @@ const toolGrid = (tiles: readonly ToolTile[], attrs: string): string => `<div cl
  * The tools as a store: 熱門 first, then every other tool under its kind, each kind by name; a search shows the tools whose
  * name it finds (typos forgiven, R-FIND-01) in one grid instead.
  */
-export function toolsListHTML(accounts: CliBrainsView, key: KeyView, providers: ProvidersView = emptyProvidersView(), query = ""): string {
-  const tiles = toolTiles(accounts, key, providers);
+export function toolsListHTML(accounts: CliBrainsView, providers: ProvidersView = emptyProvidersView(), query = ""): string {
+  const tiles = toolTiles(accounts, providers);
   const wanted = query.trim();
   if (wanted) {
     const found = tiles.map((tile) => ({ tile, score: nameScore([tile.name, tile.id.replace(/^provider:/, "")], wanted) })).filter((hit) => hit.score < Infinity).sort((a, b) => a.score - b.score);
@@ -262,12 +237,12 @@ export function toolsListHTML(accounts: CliBrainsView, key: KeyView, providers: 
     (providers.state === "failed" ? alert(st("err", t("providers.error"))) : "");
 }
 
-export function toolsHTML(accounts: CliBrainsView, key: KeyView, accountError: string, providers: ProvidersView = emptyProvidersView(), query = ""): string {
+export function toolsHTML(accounts: CliBrainsView, accountError: string, providers: ProvidersView = emptyProvidersView(), query = ""): string {
   return (
     head(t("onboarding.toolsTitle"), "tools") +
     `<div class="ob-main"><div class="ob-find">${fieldHTML(t("conn.search"), query, { icon: "search", id: "ob-tools-find" })}</div>` +
     (accountError ? alert(st("err", accountError)) : "") +
-    `<div data-ob-tools>${toolsListHTML(accounts, key, providers, query)}</div>` +
+    `<div data-ob-tools>${toolsListHTML(accounts, providers, query)}</div>` +
     `</div>` + providersAddHTML(providers)
   );
 }
