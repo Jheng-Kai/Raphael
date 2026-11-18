@@ -957,9 +957,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert CURATED <= set(DRIVER_CATALOG["names"])
     deferred = {"vault_entries", "fill_contact", "fill_card"}
     from raphael_core.computer.file_tools import DEFINITIONS as FILE_DEFINITIONS
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "browser_tabs", "run_steps", "dataset"} | deferred | set(FILE_DEFINITIONS)
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login", "browser_open", "browser_tabs", "run_steps", "dataset", "copy_from_owner"} | deferred | set(FILE_DEFINITIONS)
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "browser_tabs", "run_steps", "dataset"} | set(FILE_DEFINITIONS)
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login", "browser_open", "browser_tabs", "run_steps", "dataset", "copy_from_owner"} | set(FILE_DEFINITIONS)
     assert set(snapshot.hidden()) == {"computer__" + name for name in deferred}
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -1125,7 +1125,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
 
 async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(desktop, tmp_path):
     from raphael_core.computer.file_tools import DEFINITIONS as FILE_DEFINITIONS, FILE_TOOLS
-    from raphael_core.computer.vm_tools import ATTACH
+    from raphael_core.computer.vm_tools import ATTACH, COPY_FROM_OWNER
 
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
@@ -1151,6 +1151,10 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
             continue
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
+            continue
+        if tool.name == "copy_from_owner":
+            # Into the member's own computer, as the owner's drop: no outward act, and no rule after what it does.
+            assert tool.description == COPY_FROM_OWNER["description"]
             continue
         if tool.name in FILE_TOOLS:
             # A file in the member's own computer is no outward act: these say what they do, and no rule after it.

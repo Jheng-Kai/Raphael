@@ -137,6 +137,7 @@ _TEMPLATES = {
     "memory_log": "wrote to the daily log",
     "read_attachment": "read attachment {index} ({size:,} chars)",
     "attach_file": "copied {path} into the attachments",
+    "copy_from_owner": "copied {path} into the team folder",
     "read_file": "read {path} ({size:,} chars)",
     "write_file": "wrote {path}",
     "edit_file": "edited {path}",

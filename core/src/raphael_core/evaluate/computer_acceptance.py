@@ -2662,6 +2662,36 @@ class Acceptance:
                         "no half-written file left, nothing above the team folder")
             await self.check("shared owner files", owner_files)
 
+            async def member_copy():
+                """A member's own `copy_from_owner` (R-COMP-FILE-02): a file of this PC, by its absolute path, goes into the computer's
+                team folder through the member's tool as the owner's drop does: the guest's own user reads the same bytes, and the
+                same file again gets a numbered name beside it."""
+                target = targets[members[1]]
+                marker = secrets.token_hex(3)
+                folder = self.root / "owner-pc"
+                folder.mkdir(parents=True, exist_ok=True)
+                source = folder / f"{marker} 季報.xlsx"
+                data = b"PK\x03\x04" + bytes(range(256)) * 40
+                source.write_bytes(data)
+                expected = [f"{marker} 季報.xlsx", f"{marker} 季報 (2).xlsx"]
+                placed = []
+                try:
+                    for name in expected:
+                        answer = json.loads((await tool(members[1], "copy_from_owner", {"path": str(source)})).text)
+                        placed.append(str(answer.get("path", "")).rsplit("/", 1)[-1])
+                        require(answer == {"path": f"{vm.SHARED}/{name}", "bytes": len(data)},
+                                f"Expected the member's copy of {source.name!r} to land as {name!r}, observed {answer}")
+                    want = {name: [hashlib.sha256(data).hexdigest(), len(data)] for name in expected}
+                    found = await self.team_entries(target, vm.SHARED, marker)
+                    require(found == want, f"Expected the guest to read exactly {want} in {vm.SHARED}, observed {found}")
+                finally:
+                    for name in placed:
+                        if name:
+                            (Path(target.shared) / name).unlink(missing_ok=True)
+                return (f"Member {members[1]} copied {source.name} from this PC with copy_from_owner twice: the guest user read "
+                        f"{', '.join(expected)} in {vm.SHARED} with the same SHA-256 and size")
+            await self.check("shared member copy", member_copy)
+
             async def demonstration():
                 from ..bots.homes import BotHomes
                 from ..computer.teaching import Teaching

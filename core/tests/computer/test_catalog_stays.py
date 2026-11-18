@@ -114,6 +114,7 @@ async def test_every_computer_tool_says_what_it_is_for_first_and_is_read_whole(c
     # Shown whole, their length is the core's to keep: the whole computer, in every request of every member.
     # Measured: 17.8 thousand characters in all (18.4 at a seat); the longest is the shell's, 1304 at a seat.
     # The outward-action rule is one sentence on each tool and whole in the shared contract once (R-TOOL-03).
-    # The six member file tools fit within this 14.5 thousand character ceiling with a little room.
-    assert sum(map(len, shown.values())) <= 14_500
+    # The six member file tools fit within 14.5 thousand characters with a little room; copy_from_owner (R-COMP-FILE-02)
+    # came in at 14.5 after attach_file's line was cut to make room, and the ceiling moved by its one line.
+    assert sum(map(len, shown.values())) <= 14_600
     assert max(map(len, shown.values())) <= 1_400
