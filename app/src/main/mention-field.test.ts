@@ -179,17 +179,25 @@ test("words put back from elsewhere keep their links whole and show them as chip
   expect(chips()).toEqual([LINK]);
 });
 
-test("a link chip is one unit: backspace takes all of it, and the caret never rests inside", () => {
+test("a link is drawn as a chip but corrected a letter at a time: backspace, delete and the arrows are the field's own, and the caret rests inside it", () => {
   typeText(`${LINK} 這個`, LINK.length);
-  press("Backspace");
-  expect(input.value).toBe(" 這個");
-  typeText(`a ${LINK}`);
+  expect(press("Backspace").defaultPrevented).toBe(false);
+  expect(input.value).toBe(`${LINK} 這個`);
+  typeText(`a ${LINK}`, 2);
+  expect(press("Delete").defaultPrevented).toBe(false);
   input.setSelectionRange(5, 5);
   document.dispatchEvent(new Event("selectionchange"));
-  expect(caret()).toEqual([2, 2]);
-  input.setSelectionRange(LINK.length - 3, LINK.length - 3);
-  document.dispatchEvent(new Event("selectionchange"));
-  expect(caret()).toEqual([2 + LINK.length, 2 + LINK.length]);
+  expect(caret()).toEqual([5, 5]);
+  expect(press("ArrowLeft").defaultPrevented).toBe(false);
+  expect(press("ArrowRight", { shiftKey: true }).defaultPrevented).toBe(false);
+  // One letter changed, it is still drawn as a link.
+  const fixed = LINK.replace("x.com", "y.com");
+  typeText(`a ${fixed}`, 5);
+  expect(chips()).toEqual([fixed]);
+  // An address beside it is still one unit.
+  typeText(`@小森 ${LINK}`, 3);
+  expect(press("Backspace").defaultPrevented).toBe(true);
+  expect(input.value).toBe(` ${LINK}`);
 });
 
 test("copying or cutting a link is the browser's own and gives the same whole text", () => {

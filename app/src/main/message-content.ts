@@ -332,10 +332,17 @@ function textHTML(text: string, query: string, urls: Set<string>, depth = 0, fil
   flush(); closeList(); return out;
 }
 
+/** The most characters a cell may show for its column to count as short words (a number, a level, a label). */
+const SHORT_CELL = 12;
+/** The words a table cell shows, near enough to tell a short one: a link by its words, code and emphasis without their marks. */
+const shownWords = (cell: string): string => cell.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[`*_~]/g, "").trim();
+
 function blockHTML(block: MessageBlock, query: string, urls: Set<string>, streaming = false, files?: KnownFiles): string {
   if (block.type === "text") return textHTML(block.source, query, urls, 0, files);
   if (block.type === "table") {
-    const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}">${inline(cell, query, true, urls, 0, [], files)}</${tag}>`).join("");
+    // A column of short words keeps each on one line, and the long text wraps in the room left (R-UI-167).
+    const short = block.headers.map((header, i) => [header, ...block.rows.map(row => row[i] ?? "")].every(cell => [...shownWords(cell)].length <= SHORT_CELL));
+    const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}${short[i] ? " short" : ""}">${inline(cell, query, true, urls, 0, [], files)}</${tag}>`).join("");
     return `<section class="rich-block message-table" data-source="${esc(block.source)}"><header class="rich-head"><span>${esc(t("chat.table"))}</span>${iconBtn("copy", t("chat.copyTable"), ' data-rich-act="copy-table"')}</header><div class="rich-scroll" tabindex="0" role="region" aria-label="${esc(t("chat.table"))}"><table${block.headers.length > 6 ? ` style="min-width:${block.headers.length * 96}px"` : ""}><thead><tr>${cells(block.headers, "th")}</tr></thead><tbody>${block.rows.map(row => `<tr>${cells(row, "td")}</tr>`).join("")}</tbody></table></div></section>`;
   }
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
