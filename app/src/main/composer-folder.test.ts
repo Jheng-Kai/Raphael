@@ -75,11 +75,11 @@ test("its menu lists the output folder first and the added ones after it by name
   await mount();
   const card = await open();
   const rows = [...card.querySelectorAll<HTMLElement>("[data-folder]")];
-  expect(rows.map(row => row.textContent)).toEqual(["Deliveries", "Notes", "Archive"]);
+  expect(rows.map(row => row.querySelector(".cb-name b")!.textContent)).toEqual(["Deliveries", "Notes", "Archive"]);
   expect(rows.map(row => row.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-  // The whole path waits under the pointer; the card holds no path and one action, 加入資料夾, at its foot.
-  expect(rows[2].dataset.tooltip).toBe("E:\\Archive");
-  expect(card.textContent).not.toContain("E:\\");
+  // Each folder's whole path is written under its name, with no tooltip saying it again; one action, 加入資料夾, at its foot.
+  expect(rows.map(row => row.querySelector(".cb-name small")!.textContent)).toEqual(["C:\\Owner\\Deliveries", "D:\\Work\\Notes", "E:\\Archive"]);
+  expect(rows.some(row => row.hasAttribute("data-tooltip"))).toBe(false);
   expect([...card.querySelectorAll<HTMLElement>("[data-folder-act]")].map(act => act.dataset.folderAct)).toEqual(["add"]);
   expect(card.lastElementChild!.querySelector('[data-folder-act="add"]')!.textContent).toBe(t("writeFolders.add"));
   await press('[data-folder="2"]');
@@ -88,7 +88,7 @@ test("its menu lists the output folder first and the added ones after it by name
   expect(document.querySelector("#app-popover .cb-folders")).toBeNull();
   // The order of the menu stays; the one already chosen saves nothing.
   const again = await open();
-  expect([...again.querySelectorAll("[data-folder]")].map(row => row.textContent)).toEqual(["Deliveries", "Archive", "Notes"]);
+  expect([...again.querySelectorAll("[data-folder]")].map(row => row.querySelector(".cb-name b")!.textContent)).toEqual(["Deliveries", "Archive", "Notes"]);
   await press('[data-folder="1"]');
   expect(api.settingsSet).toHaveBeenCalledTimes(1);
 });
@@ -102,31 +102,40 @@ test("choosing the output folder puts it first in the member's list, and a membe
   member = 4;
   const card = await open();
   const rows = [...card.querySelectorAll<HTMLElement>("[data-folder]")];
-  expect(rows.map(row => [row.textContent, row.getAttribute("aria-checked")])).toEqual([["Deliveries", "true"]]);
+  expect(rows.map(row => [row.querySelector(".cb-name b")!.textContent, row.getAttribute("aria-checked")])).toEqual([["Deliveries", "true"]]);
   await press('[data-folder="0"]');
   expect(api.settingsSet).toHaveBeenCalledTimes(1);
 });
 
-test("a folder added with the picker goes at the end, the chosen one staying chosen, once, and a cancelled picker changes nothing", async () => {
+test("a folder added with the picker is chosen at once and named on the button, one already listed is chosen, and the chosen one or a cancelled picker changes nothing", async () => {
   await mount();
   await open();
   api.pickOutputFolder.mockResolvedValueOnce("F:\\New");
   await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["D:\\Work\\Notes", "E:\\Archive", "F:\\New"] });
-  expect(word()).toBe("Notes");
-  for (const picked of ["E:\\Archive", "C:\\Owner\\Deliveries", null]) {
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["F:\\New", "D:\\Work\\Notes", "E:\\Archive"] });
+  expect(word()).toBe("New");
+  const card = await open();
+  expect([...card.querySelectorAll<HTMLElement>("[data-folder]")].map(row => [row.querySelector(".cb-name b")!.textContent, row.getAttribute("aria-checked")]))
+    .toEqual([["Deliveries", "false"], ["New", "true"], ["Notes", "false"], ["Archive", "false"]]);
+  button.click(); // its own button folds it again (R-UI-124)
+  for (const picked of ["F:\\New", null]) {
     await open();
     api.pickOutputFolder.mockResolvedValueOnce(picked);
     await press('[data-folder-act="add"]');
   }
   expect(api.settingsSet).toHaveBeenCalledTimes(1);
-  // A member with none keeps the output folder chosen, and it is written first so the added one follows it.
+  await open();
+  api.pickOutputFolder.mockResolvedValueOnce("E:\\Archive");
+  await press('[data-folder-act="add"]');
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["E:\\Archive", "F:\\New", "D:\\Work\\Notes"] });
+  expect(word()).toBe("Archive");
+  // A member with none had the output folder: the added one is chosen and the output folder follows it.
   member = 4;
   await open();
   api.pickOutputFolder.mockResolvedValueOnce("G:\\Drafts");
   await press('[data-folder-act="add"]');
-  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", { "3": ["D:\\Work\\Notes", "E:\\Archive", "F:\\New"], "4": ["C:\\Owner\\Deliveries", "G:\\Drafts"] });
-  expect(word()).toBe("Deliveries");
+  expect(api.settingsSet).toHaveBeenLastCalledWith("member_write_folders", expect.objectContaining({ "4": ["G:\\Drafts", "C:\\Owner\\Deliveries"] }));
+  expect(word()).toBe("Drafts");
 });
 
 test("removing a folder chooses the next one, and the output folder left alone is the empty list, the default", () => {

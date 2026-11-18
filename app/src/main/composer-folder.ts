@@ -63,23 +63,24 @@ export function mountComposerFolder(button: HTMLElement, member: () => number, h
     } catch (error) { toaster.info(describeError(error)); }
   }
 
-  // The same card as the permission and the model beside it: its title, each folder by its name (its whole path under the
-  // pointer, the owner's own words), and 加入資料夾 at its foot.
+  // The same card as the permission and the model beside it: its title, each folder by its name with its whole path under
+  // it (the owner's own words), the list scrolling as the @ menu's does, and 加入資料夾 at its foot.
   function cardHTML(): string {
     const folders = listedFolders(mine(), output), chosen = chosenFolder(mine(), output), title = esc(t("memberSettings.folders"));
     const rows = folders.map((folder, index) =>
-      `<button type="button" role="radio" class="cb-row" data-folder="${index}" aria-checked="${folder === chosen}" data-tooltip="${esc(folder)}"><span class="cb-name"><b class="owner-data">${esc(folderName(folder))}</b></span>` +
+      `<button type="button" role="radio" class="cb-row" data-folder="${index}" aria-checked="${folder === chosen}"><span class="cb-name"><b class="owner-data">${esc(folderName(folder))}</b><small class="owner-data">${esc(folder)}</small></span>` +
       `${folder === chosen ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`).join("") ||
       `<p class="cb-empty">${esc(t("memberSettings.foldersNone"))}</p>`;
     const add = `<button type="button" role="menuitem" class="cb-row cb-action" data-folder-act="add"><span class="cb-icon" aria-hidden="true">${ico("plus")}</span><span class="cb-name"><b>${esc(t("writeFolders.add"))}</b></span></button>`;
     return `<div class="cb-card cb-folders"><header class="cb-head"><h3><span>${title}</span></h3></header><div class="cb-list" role="radiogroup" aria-label="${title}">${rows}</div><div class="cb-list cb-actions">${add}</div></div>`;
   }
 
-  /** Adds a folder with the native picker: it goes at the end of the member's list and is not chosen. The + menu's 加入資料夾 is this too. */
+  /** Adds a folder with the native picker and chooses it at once: the member writes there from now on and the button names
+   *  it. A folder already listed is chosen; the chosen one or a cancelled picker changes nothing. The + menu's 加入資料夾 is this too. */
   function add(): void {
-    const list = mine(), folders = listedFolders(list, output);
+    const list = mine();
     void api.pickOutputFolder().then(path => {
-      if (path !== null && !folders.includes(path)) return save(addFolder(list, output, path));
+      if (path !== null && path !== chosenFolder(list, output)) return save(chooseFolder(list, output, path));
     }).catch(error => toaster.info(describeError(error)));
   }
 

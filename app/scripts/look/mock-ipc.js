@@ -165,6 +165,8 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.ownerOutputFolder) data.settings.owner_output_folder = "C:\\Owner\\Deliveries";
   // Member 1's own folders (R-PC-05): a short path and one long enough to wrap.
   if (variant.memberWriteFolders) data.settings.member_write_folders = { "1": ["C:\\Owner\\Notes", "D:\\專案\\拉斐爾\\文件\\二〇二六年度規劃與市場研究資料彙整"] };
+  // Many folders: the menu's list scrolls as the @ menu's does.
+  if (variant.manyWriteFolders) data.settings.member_write_folders = { "1": Array.from({ length: 14 }, (_, index) => `C:\\Owner\\Projects\\Project ${index + 1}`) };
   if (variant.routineGuard) for (const routine of data.routines.filter(item => item.member_id === 1)) {
     Object.assign(routine, { enabled: false, next_run: null, last_error: "已暫停：擁有者超過 30 天未使用。請確認後重新開啟。" });
   }
