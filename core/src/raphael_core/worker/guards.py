@@ -16,6 +16,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from .fit import fit
+
 # Bound large tool results while retaining long pages and source files.
 # Smaller model windows receive a lower limit through result_limit.
 MAX_RESULT_CHARS = 50_000
@@ -80,13 +82,19 @@ def result_limit(tool: str, window: int | None = None) -> int:
     return max(MIN_RESULT_CHARS, min(int(window * RESULT_WINDOW_SHARE * CHARS_PER_TOKEN), MAX_RESULT_CHARS))
 
 
-def wrap_untrusted(tool: str, text: str, *, ok: bool, limit: int | None = None) -> str:
+def wrap_untrusted(tool: str, text: str, *, ok: bool, limit: int | None = None, structured: bool = False) -> str:
     """A tool's result as the model reads it: cut, neutralized and inside tags that say it is data
     from outside, never to be obeyed. Inline attachments can supply their own budget;
-    ordinary tool results retain their default limits."""
+    ordinary tool results retain their default limits. A `structured` answer (a called tool's) is
+    made to fit by what it is (worker/fit.py, R-TOOL-06): whole items of a long JSON list
+    with a note, HTML as its text; only plain text keeps its head and tail."""
     if limit is None:
         limit = result_limit(tool)
-    shown, cut = head_tail_split(neutralize(text), limit)
+    if structured:
+        shown, cut = fit(text, limit, cut=lambda rest, most: head_tail_split(rest, most)[0])
+        shown = neutralize(shown)
+    else:
+        shown, cut = head_tail_split(neutralize(text), limit)
     status = "ok" if ok else "error"
     note = " cut_short=true" if cut else ""
     return (

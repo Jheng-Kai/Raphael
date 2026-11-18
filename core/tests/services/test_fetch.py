@@ -9,7 +9,7 @@ import pytest
 
 from raphael_core.services.common import ServiceError
 from raphael_core.services.fetch import PageFetcher, decoded, is_public
-from raphael_core.services.html import html_to_text
+from raphael_core.worker.html import html_to_text
 
 PUBLIC = "93.184.216.34"
 

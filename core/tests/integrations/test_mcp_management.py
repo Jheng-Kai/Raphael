@@ -108,4 +108,4 @@ def test_result_size_limit_is_used_for_rendered_tool_output():
     from raphael_core.integrations.client import render_result
     result = SimpleNamespace(content=[SimpleNamespace(type="text", text="x" * 500)])
     text, truncated = render_result(result, 100)
-    assert truncated and text.startswith("x" * 100) and len(text) < 110
+    assert truncated and text.startswith("x" * 60) and len(text) <= 100 and text.endswith("more characters left out]")
