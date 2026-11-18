@@ -215,10 +215,10 @@ EXEC = {"description": "Run Linux shell commands (sh, not PowerShell) in the com
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
         "background": {"type": "boolean"},
         "keys": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"}, "maxItems": 8}}, "required": ["command"], "additionalProperties": False}}
-ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
+ATTACH = {"description": "Copy a file of /home/cua/workspace or /home/cua/team into Raphael's attachments; returns its attachment ID.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
 # R-COMP-FILE-02: what the owner's drop on the screen does, for the member itself.
-COPY_FROM_OWNER = {"description": "Copy a file from the owner's own computer (path absolute or from ~) into /home/cua/team, to work on it in yours. Any file the owner can open except where keys and passwords are kept, at most 250 MB. A taken name gets (2), (3); nothing is replaced. Returns its path here.",
+COPY_FROM_OWNER = {"description": "Copy a file of the owner's own computer (absolute or ~ path) into /home/cua/team to work on it; at most 250 MB.",
                    "parameters": {"type": "object", "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 4096}}, "required": ["path"], "additionalProperties": False}}
 OWN_DATA_WORDS = "This is Raphael's own data, which is never copied into a computer."
 BROWSER_OPEN = {"description": "Open an http/https URL in your browser and return its page references, no screenshot. " + NEW_TAB + "Use the typed browser tools for follow-ups. " + VM_CONTRACT,
