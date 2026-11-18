@@ -1,4 +1,5 @@
 // Settings > Models: provider metadata is public; credentials live only in the input until sent.
+import { LayerViews } from "./nav-layers";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
@@ -165,6 +166,7 @@ export function providersAddHTML(v: ProvidersView): string {
 export interface ProvidersHost { root: HTMLElement; visible(): boolean; redraw(): void; }
 export function createProviders(host: ProvidersHost) {
   let state = emptyProvidersView();
+  let views: LayerViews<string> | undefined;
   let stopOutside: (() => void) | null = null;
   let loads = 0;
   let modelLoads = 0;
@@ -215,9 +217,13 @@ export function createProviders(host: ProvidersHost) {
     const scroll = host.root.querySelector(".pv-body")?.scrollTop;
     const selection = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? [active.selectionStart, active.selectionEnd] : null;
     host.redraw();
+    const key = navView();
     if ((state.open || state.adding) && !stopOutside) {
-      stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close);
+      views = new LayerViews(state.open?.id ? key : "pv:dir");
+      stopOutside = registerDismissal(() => host.root.querySelector<HTMLElement>("#pv-dialog"), close, undefined, undefined,
+        direction => state.busy || views!.step(direction, showNavView));
     } else if (!state.open && !state.adding) { stopOutside?.(); stopOutside = null; }
+    if (state.open || state.adding) views?.visit(key);
     for (const input of host.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('.pv-field input:not([type="file"]), .pv-field textarea')) {
       if (drafts.has(input.id)) input.value = drafts.get(input.id)!;
       if (active?.id === input.id) { input.focus(); if (selection) input.setSelectionRange(selection[0], selection[1]); }
@@ -356,6 +362,20 @@ export function createProviders(host: ProvidersHost) {
     catch { state.error = "error"; }
     finally { state.busy = false; redraw(); }
   }
+  /** The dialog on screen in words the way back keeps: the list of kinds (`pv:dir`) or one provider (`pv:openai:4`, `pv:openai:new`). */
+  function navView(): string {
+    if (state.open) return `pv:${state.open.kind}:${state.open.id ?? "new"}`;
+    return state.adding ? "pv:dir" : "";
+  }
+  /** Shows the dialog `navView` named, or closes it for "". */
+  function showNavView(key: string): void {
+    if (!key) { if (state.open || state.adding) close(); return; }
+    if (key === "pv:dir") { if (!state.adding || state.open) directory(); return; }
+    const found = /^pv:([^:]+):(.+)$/.exec(key);
+    if (!found) return;
+    const id = found[2] === "new" ? null : found[2];
+    if (state.open?.kind !== found[1] || state.open.id !== id) show(found[1], id);
+  }
   return {
     view: () => state, load,
     openRepair(id: string): void {
@@ -370,7 +390,8 @@ export function createProviders(host: ProvidersHost) {
       if (!button) return false;
       if (button instanceof HTMLButtonElement && button.disabled) return true;
       if (button.dataset.pv !== "remove") clearConfirmation();
-      if (button.dataset.pv === "directory" || button.dataset.pv === "back") directory();
+      if (button.dataset.pv === "directory") directory();
+      if (button.dataset.pv === "back" && !views?.step("back", showNavView)) directory();
       if (button.dataset.pv === "enable") void enable(button.dataset.id!);
       if (button.dataset.pv === "add") {
         const existing = state.providers.find((p) => p.kind === button.dataset.id);
@@ -456,20 +477,7 @@ export function createProviders(host: ProvidersHost) {
       }
       return false;
     },
-    /** The dialog on screen in words the way back keeps: the list of kinds (`pv:dir`) or one provider (`pv:openai:4`, `pv:openai:new`). */
-    navView(): string {
-      if (state.open) return `pv:${state.open.kind}:${state.open.id ?? "new"}`;
-      return state.adding ? "pv:dir" : "";
-    },
-    /** Shows the dialog `navView` named, or closes it for "". */
-    showNavView(key: string): void {
-      if (!key) { if (state.open || state.adding) close(); return; }
-      if (key === "pv:dir") { if (!state.adding || state.open) directory(); return; }
-      const found = /^pv:([^:]+):(.+)$/.exec(key);
-      if (!found) return;
-      const id = found[2] === "new" ? null : found[2];
-      if (state.open?.kind !== found[1] || state.open.id !== id) show(found[1], id);
-    },
+    navView, showNavView,
     reset(): void {
       stopOutside?.(); stopOutside = null;
       accountDraft = null; accountReads++; state.accountSet = false;

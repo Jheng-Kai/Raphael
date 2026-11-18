@@ -3,6 +3,7 @@
 // 例行工作 (each routine opening its content and trigger) and 整合 (the apps it needs). Every field of a raphael-member is
 // shown here and no other (template-contract.test.ts); a template carries no memory. A page has a
 // back arrow and its title in the dialog's head; the dialog's own buttons stay at its foot.
+import { bindLayerSteps, LayerViews } from "./nav-layers";
 import { t } from "./i18n";
 import type { Dialog } from "./member-dialogs";
 import { linkedText } from "./message-content";
@@ -80,15 +81,16 @@ const pageOf = (go: string): ReviewPage => {
   const [kind, index] = go.split(":");
   return kind === "skill" || kind === "routine" ? { kind, index: Number(index) } as ReviewPage : { kind } as ReviewPage;
 };
-const parentOf = (page: ReviewPage): ReviewPage => page.kind === "skill" ? { kind: "context" } : page.kind === "routine" ? { kind: "routines" } : { kind: "main" };
 
 /** Runs the pages inside `dialog`: its head shows the page's title and, below the first page, a back arrow. */
 export function mountTemplateReview(dialog: Dialog, template: MemberTemplate, o: ReviewOptions = {}): void {
   const head = dialog.el.querySelector<HTMLElement>(".mb-dlg-head")!, title = head.querySelector("h2")!, body = dialog.el.querySelector<HTMLElement>(".mb-dlg-body")!;
   dialog.el.classList.add("tpr");
   let page: ReviewPage = { kind: "main" };
+  const views = new LayerViews<ReviewPage>(page);
   const show = (next: ReviewPage, focus = false): void => {
     page = next;
+    views.visit(page);
     const { title: words, body: html } = reviewPageHTML(template, page, o);
     dialog.el.dataset.page = page.kind;
     title.textContent = words;
@@ -98,9 +100,10 @@ export function mountTemplateReview(dialog: Dialog, template: MemberTemplate, o:
     body.scrollTop = 0;
     if (focus) (head.querySelector<HTMLElement>("[data-tpl-back]") ?? body.querySelector<HTMLElement>("[data-tpl-go]"))?.focus();
   };
+  bindLayerSteps(body, views, next => show(next, true));
   dialog.el.addEventListener("click", (event) => {
     const target = event.target as Element;
-    if (target.closest("[data-tpl-back]")) { show(parentOf(page), true); return; }
+    if (target.closest("[data-tpl-back]")) { views.step("back", previous => show(previous, true)); return; }
     const go = target.closest<HTMLElement>("[data-tpl-go]");
     if (go?.dataset.tplGo) show(pageOf(go.dataset.tplGo), true);
   });

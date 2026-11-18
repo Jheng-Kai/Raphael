@@ -10,6 +10,7 @@
  * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
  * first read, in the background.
  */
+import { bindLayerSteps, LayerViews } from "./nav-layers";
 import { noticeHTML } from "./missing";
 import "./composer-brain.css";
 import * as api from "./api";
@@ -221,10 +222,17 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     waitForModels(sources);
   }
 
+  let menuViews: LayerViews<"now" | "browse">;
+  function resetMenuViews(): void {
+    view = "now";
+    menuViews = new LayerViews<"now" | "browse">(view);
+    if (menu) bindLayerSteps(menu, menuViews, turnTo);
+  }
   function open(button: HTMLButtonElement): void {
     source = ""; query = ""; showAll = false; modelTries = 0; view = "now"; paintedWho = paintedDepth = paintedBody = null;
     menu = openPopover(button, `<div class="cb-card cb-body" hidden></div><div class="cb-card cb-now"><div class="cb-now-who"></div><div class="cb-depth-slot"></div></div>`,
       { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), placement: "above", onClose: () => { menu = null; clearTimeout(modelTimer); } });
+    resetMenuViews();
     menu.addEventListener("click", click);
     menu.addEventListener("input", input);
     menu.addEventListener("change", change);
@@ -236,7 +244,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
 
   /** The card shows one view at a time, and the keyboard goes where the owner would look next. */
   function turnTo(next: typeof view): void {
-    view = next; query = ""; showAll = false;
+    view = next; menuViews.visit(next); query = ""; showAll = false;
     paintMenu();
     const selected = next === "browse" ? menu?.querySelector<HTMLElement>('.cb-list [aria-checked="true"]') : null;
     selected?.scrollIntoView?.({ block: "nearest" });
@@ -247,7 +255,8 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     const target = (event.target as Element).closest<HTMLElement>("[data-cb-source], [data-model], [data-cb-act]");
     if (!target || (target as HTMLButtonElement).disabled) return;
     const act = target.dataset.cbAct;
-    if (act === "browse" || act === "back") { turnTo(act === "browse" ? "browse" : "now"); return; }
+    if (act === "back") { menuViews.step("back", turnTo); return; }
+    if (act === "browse") { turnTo("browse"); return; }
     if (act === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
     if (act === "all") { showAll = !showAll; query = ""; paintMenu(); return; }
     if (target.dataset.cbSource !== undefined) {
@@ -260,7 +269,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (!row) return;
     // The depth stays where the owner put it if the new model has that depth; else what the slider will then show.
     const { effort } = chosen(), levels = row.reasoning_efforts ?? [];
-    save(modelRefWith(row, levels.includes(effort) ? effort : row.default_effort ?? orderedEfforts(levels)[0] ?? ""), () => { view = "now"; });
+    save(modelRefWith(row, levels.includes(effort) ? effort : row.default_effort ?? orderedEfforts(levels)[0] ?? ""), resetMenuViews);
   }
 
   function saveDepth(effort: string): void {

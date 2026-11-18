@@ -23,6 +23,7 @@ import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
 import { fitGuideWindow, releaseGuideWindow } from "./guide-window";
 import { Navigation, type Place } from "./nav-history";
+import { frameNavigation, hasOpenLayer, stepOpenLayer } from "./dismissals";
 import { installNavInput, installNavNotes } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
@@ -268,6 +269,13 @@ watchChipRows(document.body);
    */
   const navigation = new Navigation({
     inGuide: () => !guide.hidden,
+    stepLayer: stepOpenLayer,
+    sameLayer(here, next) {
+      // Member settings tabs and subpages belong to the same conversation and member.
+      const member = here.view?.split(">s:")[0];
+      return here.page === "agent" && next.page === "agent" && !next.pane && !!member && !!here.view?.includes(">s:")
+        && !!next.view?.startsWith(member + ">s:");
+    },
     where,
     show(place) {
       const here = where();
@@ -285,7 +293,11 @@ watchChipRows(document.body);
       tellAgentPage();
     },
   });
-  installNavInput(window, (step) => navigation.step(step));
+  installNavInput(window, (step) => navigation.step(step), hasOpenLayer);
+  window.addEventListener("message", event => {
+    const direction = frameNavigation(event);
+    if (direction) navigation.step(direction);
+  });
   installNavNotes(window, (back) => navigation.heard(back));
 
   /**

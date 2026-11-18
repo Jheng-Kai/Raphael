@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { afterEach, expect, test } from "vitest";
 import { handoffGroupHTML } from "./handoff-line";
 import { catalogs, LOCALES, setLocale, t } from "./i18n";
@@ -19,6 +20,17 @@ const mount = (all: () => HandoffView[]): { column: HTMLElement; line: HTMLButto
   document.body.append(column);
   return { column, line: column.querySelector("button")! };
 };
+
+test.each(navInputs)("%s closes a peer conversation and restores focus", input => {
+  const all = () => [task(3)];
+  const { column, line } = mount(all);
+  const view = openPeerChat(column, line, all, people)!;
+  pressLayer(input, "forward");
+  expect(view.el.isConnected).toBe(true);
+  pressLayer(input);
+  expect(view.el.isConnected).toBe(false);
+  expect(document.activeElement).toBe(line);
+});
 
 test("an exchange is two messages: what one member sent, then the other's answer or the state it stands at", () => {
   expect(peerLines([task(1)]).map(line => [line.from, line.text, line.state])).toEqual([[1, "Question 1", undefined], [2, "Answer 1", undefined]]);

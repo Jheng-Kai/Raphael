@@ -1,3 +1,4 @@
+import { bindNavLayer } from "./nav-layers";
 import { isLocalAddress, messageUrl, urlLabel } from "./message-content";
 import { esc } from "./ui";
 
@@ -108,6 +109,7 @@ export function createLinkPreviews(root: HTMLElement, fetch: (url: string) => Pr
       hover.setAttribute("role", "tooltip");
       hover.innerHTML = previewHTML(url, usable(url, result));
       document.body.append(hover);
+      bindNavLayer(hover, hide);
       place(chip, hover);
     };
     const entry = read(url);

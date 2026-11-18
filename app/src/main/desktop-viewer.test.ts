@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "./test-support/nav-layer-input";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -129,6 +130,17 @@ beforeEach(() => {
   mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",face:()=>faceHTML({id:member,name:'Sample'},22),openPanel:()=>{panelOpen=true;},closePanel:()=>{panelOpen=false;},panelVisible:()=>panelOpen,trySkill:trySent,changed:waitChanged});
 });
 afterEach(async()=>{mounted.hide();await flush();document.body.replaceChildren();vi.useRealTimers();});
+
+test.each(navInputs)("%s folds the watching view without changing control", async input => {
+  panelOpen = true;
+  mounted.show(); await flush(); message("connected");
+  enlarge().click(); await flush();
+  pressLayer(input, "forward");
+  expect(panel().hasAttribute("data-expanded")).toBe(true);
+  pressLayer(input);
+  expect(panel().hasAttribute("data-expanded")).toBe(false);
+  expect(api.desktopControl).not.toHaveBeenCalled();
+});
 
 test('the captioned preview opens the larger view to watch the same stream, Esc folds it back without control, and another member starts small', async () => {
   panelOpen=true; mounted.show(); await flush();

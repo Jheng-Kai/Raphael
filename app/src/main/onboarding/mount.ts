@@ -7,6 +7,7 @@
 //
 // Never kept or logged here: the key that is pasted. It is sent once and the field is emptied.
 
+import { bindLayerCancels, bindNavLayer, LayerViews } from "../nav-layers";
 import { onLocaleChange, t } from "../i18n";
 import { Emblem } from "../../overlay/emblem";
 
@@ -56,6 +57,15 @@ function focusSelector(host: HTMLElement): string {
 
 export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: AppContext): void {
   let flow: FlowState = initialState();
+  const steps = new LayerViews(flow.step);
+  // Back at the first step does nothing: one stray press must not drop a new person into an app nobody set up (R-NAV-02).
+  bindNavLayer(root, () => {}, {
+    active: () => !destroyed,
+    step: direction => finishing || steps.step(direction, step => {
+      flow = { ...flow, step };
+      render();
+    }),
+  });
   let finishing = false;
   let destroyed = false;
   /** Every listener on the root ends with the guide: a guide opened again on the same root is a new one. */
@@ -180,6 +190,10 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
   }
 
   /** Draws the whole screen. */
+  function bindEditors(): void {
+    bindLayerCancels(root, '[data-ob="key-cancel"], [data-ob="composio-cancel"], [data-ob="server-cancel"]');
+  }
+
   function render(): void {
     closeMenu();
     stopEmblem();
@@ -193,6 +207,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       `<div class="ob-foot">${footHTML()}</div>` +
       `</div></div>`;
     enterScreen();
+    bindEditors();
     mountVisionPicker();
     showEmblem();
     startTyping();
@@ -248,6 +263,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     const focus = focusSelector(col);
     closeMenu();
     col.innerHTML = bodyHTML();
+    bindEditors();
     for (const [id, value] of typed) {
       const input = id ? col.querySelector<HTMLInputElement>(`#${CSS.escape(id)}`) : null;
       if (input) input.value = value;
@@ -282,11 +298,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
 
   // ---------- the flow ----------
 
-  function go(event: { type: "NEXT" | "BACK" }): void {
+  function goNext(): void {
     if (destroyed) return;
-    const after = reduce(flow, event);
+    const after = reduce(flow, { type: "NEXT" });
     if (after === flow) return;
     flow = after;
+    steps.visit(flow.step);
     render();
   }
 
@@ -296,12 +313,12 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
       await finish();
       return;
     }
-    go({ type: "NEXT" });
+    goNext();
   }
 
   function back(): void {
     if (flow.step === "welcome") return;
-    go({ type: "BACK" });
+    steps.step("back", step => { flow = { ...flow, step }; render(); });
   }
 
   async function finish(): Promise<void> {

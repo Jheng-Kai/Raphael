@@ -1,3 +1,4 @@
+import { bindNavFrame, bindNavLayer } from "./nav-layers";
 import { visibilityGate, windowVisible } from "./window-visibility";
 /** One persistent noVNC stream shared by the card, preview and takeover. */
 import { noticeHTML } from "./missing";
@@ -88,6 +89,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const locationHeader = panel.querySelector<HTMLElement>(".desktop-location-header")!;
   const location = mountComputerLocation(locationHeader, draw);
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
+  bindNavFrame(frame, panel);
   frame.dataset.desktopStream = "";
   frame.remove();
   const tabBar = host.querySelector('.mb-tabs');
@@ -486,11 +488,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if (current === generation) { closeStream(); state = { state:'unavailable', ready:false, control:'member' }; draw(); }
     } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(pollGate.run, pollDelay); } }
   }
-  async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
+  async function control(held: boolean, pointer?: { x:number; y:number }, answerRequest = true): Promise<void> {
     if (!session || changing || held && !connected) return;
     changing = true; error.hidden = true; clearTimeout(takeTimer);
     // A renewal started before this click must not overwrite the new lease state.
-    const current = ++generation, opened = session, request = pending()?.request_id;
+    const current = ++generation, opened = session, request = answerRequest ? pending()?.request_id : undefined;
     if (held) { clickedAt = performance.now(); delete panel.dataset.controlLatencyMs; delete panel.dataset.acceptedInputLatencyMs; }
     interactive = false; send(false); draw();
     try {
@@ -522,6 +524,20 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const expand = (on: boolean): void => {
     if (on && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
     panel.toggleAttribute('data-expanded', on);
+    // Back does what Escape does: it folds the view while the owner only watches. While the owner holds the controls it does
+    // nothing here (inside the screen the computer has the side buttons): ending control is the pill's own button.
+    if (on) bindNavLayer(panel, () => {
+      if (!changing && watching) collapseWatch();
+    }, {
+      active: () => panel.hasAttribute('data-expanded'),
+      step: direction => {
+        if (direction !== 'forward' || !skillEditor || !review.hidden) return false;
+        review.hidden = false;
+        draw();
+        review.querySelector('textarea')?.focus();
+        return true;
+      },
+    });
     document.documentElement.toggleAttribute('data-desktop-expanded', on);
     draw();
   };
@@ -651,11 +667,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   /** 停止 hands the computer back and nothing else: the larger view stays open on the same stream, watching, with Take
    *  control offered again. Only 我完成了, which answers a
    *  sign-in request, goes back to the conversation (handback). */
-  async function release(): Promise<void> {
+  async function release(answerRequest = true): Promise<void> {
     if (changing || !session) return;
     const opened = session;
     watching = true; document.documentElement.setAttribute('data-desktop-watch', '');
-    await control(false);
+    await control(false, undefined, answerRequest);
     if (session !== opened) return;
     // The core refused: the owner still holds the computer, so the pill goes back to saying so and the screen takes their input again.
     if (state?.control === 'owner') { watching = false; document.documentElement.removeAttribute('data-desktop-watch'); send(true); }
@@ -689,6 +705,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
     { id: 'send-file', label: t('desktop.sendFile'), icon: 'attach' },
   ], id => { if (id === 'send-file') picker.click(); else teach.click(); }));
+  bindNavLayer(review, () => backButton.click());
   backButton.addEventListener('click', () => {
     review.hidden = true;
     draw();

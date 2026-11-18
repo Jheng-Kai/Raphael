@@ -3,6 +3,11 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types";
 import { setLocale, t } from "../i18n";
+import { createHotkeyRecording } from "../hotkey-recording";
+import { Navigation } from "../nav-history";
+import { hasOpenLayer, stepOpenLayer } from "../dismissals";
+import { installNavInput } from "../nav-input";
+import { navInputs, pressLayer, sendNavInput } from "../test-support/nav-layer-input";
 import { Cleared } from "../cleared";
 import * as analytics from "../usage-analytics";
 
@@ -57,6 +62,59 @@ function create() {
   document.body.append(page.el); page.el.hidden = false;
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
+
+test.each(navInputs)("navigation in the key recorder never saves a navigation chord with %s", async input => {
+  const setDevice = vi.fn(), ended = vi.fn(), cell = document.createElement("button");
+  document.body.append(cell);
+  const recorder = createHotkeyRecording({ setDevice } as unknown as AppContext, ended);
+  await recorder.start("dictation_keys", cell);
+  cell.focus();
+  pressLayer(input, "forward");
+  expect(recorder.active()).toBe(true);
+  pressLayer(input);
+  expect(recorder.active()).toBe(false);
+  await flush();
+  expect(ended).toHaveBeenCalledOnce();
+  expect(setDevice).not.toHaveBeenCalled();
+});
+
+test.each(navInputs)("back clears a private vault draft and leaves Settings open with %s", async input => {
+  await mount("safety");
+  click('[data-vault="new"]');
+  click('#app-popover [data-value="contact"]');
+  const field = page.el.querySelector<HTMLInputElement>("#vault-value-address")!;
+  field.value = "unsaved";
+  pressLayer(input, "forward");
+  expect(field.value).toBe("unsaved");
+  pressLayer(input);
+  expect(field.value).toBe("");
+  expect(page.el.querySelector(".vault-editor")).toBeNull();
+  expect(closeSettings).not.toHaveBeenCalled();
+});
+
+test.each(navInputs)("Settings retraces Models and Usage before closing with %s", async input => {
+  await mount();
+  const navigation = new Navigation({
+    where: () => ({ page: "agent", pane: page.pane(), paneView: page.navView() }),
+    inGuide: () => false,
+    stepLayer: stepOpenLayer,
+    show(place) { expect(place.pane).toBe("models"); page.showNavView(place.pane!, place.paneView!); },
+  });
+  const stop = installNavInput(window, direction => navigation.step(direction), hasOpenLayer);
+  try {
+    navigation.note();
+    click('[data-models-tab="usage"]');
+    sendNavInput(input, "back");
+    expect(page.navView()).toBe("models");
+    sendNavInput(input, "forward");
+    expect(page.navView()).toBe("usage");
+    sendNavInput(input, "forward");
+    expect(closeSettings).not.toHaveBeenCalled();
+    sendNavInput(input, "back");
+    sendNavInput(input, "back");
+    expect(closeSettings).toHaveBeenCalledOnce();
+  } finally { stop(); }
+});
 
 test("opening Settings and navigating back to Models starts at the top and a redraw preserves its position", async () => {
   await mount();

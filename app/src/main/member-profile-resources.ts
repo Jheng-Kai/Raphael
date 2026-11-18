@@ -1,5 +1,6 @@
 // The profile and details panel share the member-owned skill and command editor. Each explicit
 // resource action is written immediately.
+import { bindLayerCancels } from "./nav-layers";
 import * as api from "./api";
 import { eventRead } from './event-read';
 import { openActions } from "./member-column";
@@ -65,6 +66,8 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       `<div class="mp-end">${command.id === undefined ? "" : btn(esc(t("common.cancel")), "sm", ` data-res="command-cancel"${off}`)}${btn(esc(t("members.profile.saveCommand")), "sm", ` data-res="command-save"${off}`)}</div></section>`;
     container.innerHTML = failed ? `<div class="mp-error" role="alert">${btn(esc(t("members.profile.retry")), "sm", ' data-res="retry"')}</div>` : !loaded ? `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>` :
       (host.tab === "skills" ? skillHTML : "") + (host.tab === "commands" || !host.standalone ? commandsHTML : "");
+    // Back on a teaching draft returns to the viewer, keeping the recording available.
+    if (!host.draft) bindLayerCancels(container, '[data-res="skill-cancel"], [data-res="command-cancel"]');
   }
   async function refresh(fromEvent = false): Promise<void> {
     const mine = ++generation;

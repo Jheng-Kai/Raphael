@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { navInputs, pressLayer } from "../test-support/nav-layer-input";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -72,6 +73,23 @@ const open = async (): Promise<void> => {
   await flush();
 };
 const text = (selector: string): string => root.querySelector(selector)?.textContent ?? "";
+
+test.each(navInputs)("%s can retrace guide steps, and back at the first step leaves the guide where it is", async input => {
+  await open();
+  pressLayer(input, "forward");
+  expect(root.dataset.step).toBe("welcome");
+  await press('[data-ob="next"]');
+  pressLayer(input);
+  expect(root.dataset.step).toBe("welcome");
+  pressLayer(input, "forward");
+  expect(root.dataset.step).toBe("tools");
+  pressLayer(input);
+  pressLayer(input);
+  // One stray press never skips the first-run guide (R-NAV-02).
+  expect(root.dataset.step).toBe("welcome");
+  expect(done).not.toHaveBeenCalled();
+  expect(setDevice).not.toHaveBeenCalledWith({ onboarded: true });
+});
 
 beforeEach(() => {
   setLocale("en");

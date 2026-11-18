@@ -9,6 +9,7 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
+import { bindNavFrame } from "./nav-layers";
 import { cancelGesture } from "../shared/cancel-gesture";
 import { mountPageView, tellPage, type PageShell, type PageView } from "./page-view";
 import { mountReportView, type ReportPeople, type ReportView } from "./report-page";
@@ -125,7 +126,9 @@ interface Live {
 /** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. A frame in
  *  a card is only a preview: nothing in it can be pressed, focused or scrolled; it works only where the page is made larger. */
 function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
-  frame.toggleAttribute("inert", !target.closest(".pgv"));
+  const viewer = target.closest<HTMLElement>(".pgv");
+  frame.toggleAttribute("inert", !viewer);
+  if (viewer) bindNavFrame(frame, viewer);
   if (target.moveBefore && frame.isConnected) target.moveBefore(frame, null);
   else target.append(frame);
 }
@@ -277,7 +280,7 @@ export function mountPages(thread: HTMLElement, o: { place(pageId: string, text:
     };
     // Once it has drawn: a frame later, so the first paint of the changed page is what takes the place.
     next.addEventListener("load", () => { requestAnimationFrame(swap); setTimeout(swap, 250); });
-    box.append(next);
+    moveFrame(next, box);
     next.src = opened.url;
   }
 

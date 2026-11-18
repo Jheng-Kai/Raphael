@@ -1,4 +1,5 @@
 // A two-phase model chooser shared by settings, services and member details.
+import { bindLayerSteps, LayerViews } from "./nav-layers";
 import * as api from "./api";
 import { noticeHTML } from "./missing";
 import "./model-picker.css";
@@ -772,6 +773,7 @@ class MountedPicker implements ModelPicker {
   private o: ModelPickerOptions;
   private dialog: Dialog | null = null;
   private source = "";
+  private sourceViews = new LayerViews("");
   private draft = "";
   private effort = "";
   private query = "";
@@ -794,6 +796,7 @@ class MountedPicker implements ModelPicker {
       const previous = opened;
       this.source = previous.source; this.draft = previous.draft; this.effort = previous.effort;
       this.query = previous.query; this.sort = previous.sort; this.maker = previous.maker; this.localDraft = previous.localDraft;
+      this.sourceViews = previous.sourceViews;
       previous.close(); this.show();
     }
   }
@@ -813,9 +816,17 @@ class MountedPicker implements ModelPicker {
     this.source = this.localDraft ? "local-speech" : models.find((m) => m.id === shown)?.provider_id ??
       (shown.startsWith("cli:") ? shown.split(":").slice(0, 2).join(":") : shown.startsWith("@") ? shown.slice(1).split(":")[0] : "openrouter");
     this.query = query; this.maker = ""; this.sort = "name";
+    this.sourceViews = new LayerViews(this.source);
     this.show();
   }
   close(): void { this.dialog?.close(); }
+  private selectSource(source: string): void {
+    this.sourceViews.visit(source);
+    this.source = source;
+    this.query = ""; this.maker = ""; this.confirm = null;
+    this.paint();
+  }
+
   private paintButton(): void {
     const face = buttonFace(this.o); this.button.innerHTML = face.inner;
     this.button.setAttribute("aria-label", face.label); this.button.disabled = !!this.o.disabled;
@@ -840,6 +851,7 @@ class MountedPicker implements ModelPicker {
       onClose: () => { this.dialog = null; if (opened === this) opened = null; this.paintButton(); if (this.button.isConnected) this.button.focus({ preventScroll: true }); },
     });
     opened = this;
+    bindLayerSteps(this.dialog.el, this.sourceViews, source => this.selectSource(source));
     this.dialog.el.querySelector(".mb-dlg-head h2")?.insertAdjacentHTML("afterend", `<span class="mc-slot">${esc(t("chooser.slot", { name: this.o.label }))}</span>`);
     this.dialog.el.addEventListener("click", (event) => this.click(event));
     this.dialog.el.addEventListener("input", (event) => {
@@ -989,7 +1001,7 @@ class MountedPicker implements ModelPicker {
     const target = (event.target as Element).closest<HTMLElement>("[data-source], [data-model], [data-act], [data-star]");
     if (!target || (target as HTMLButtonElement).disabled) return;
     if (target.dataset.source !== undefined) {
-      this.source = target.dataset.source; this.query = ""; this.maker = ""; this.confirm = null; this.paint();
+      this.selectSource(target.dataset.source);
       // the source holding the chosen model opens where that model is
       this.dialog?.el.querySelector<HTMLElement>('.mc-list .mc-row[aria-checked="true"]')?.scrollIntoView?.({ block: "center" });
     }

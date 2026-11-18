@@ -126,12 +126,14 @@ export function installNavNotes(target: EventTarget, heard: (back: boolean) => v
  * Listens on `target` (the window) for the side buttons and the keys. `step` is called once for each
  * press and decides whether there is anywhere to go. Returns how to stop listening.
  */
-export function installNavInput(target: EventTarget, step: (direction: NavStep) => void): () => void {
+export function installNavInput(target: EventTarget, step: (direction: NavStep) => void, layerOwnsKeys: () => boolean = () => false): () => void {
   let state = emptyNavKeyState();
   const mouse = (raw: Event): void => {
     const event = raw as MouseEvent;
     const direction = stepOfButton(event.button);
     if (direction === null) return;
+    event.stopImmediatePropagation();
+    if (event.type.startsWith("pointer")) return;
     // On all three events: which of them WebView2 acts on is not ours to know.
     event.preventDefault();
     // The step comes with the press, as it does with the keys: a release that began in another
@@ -146,23 +148,35 @@ export function installNavInput(target: EventTarget, step: (direction: NavStep) 
       handled: event.defaultPrevented,
     });
     state = result.state;
-    if (result.preventDefault) event.preventDefault();
+    if (result.preventDefault) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
     if (result.step) step(result.step);
   };
   // A window that lost the focus with a key down gets no release for it.
   const blur = (): void => {
     state = emptyNavKeyState();
   };
-  // The buttons are taken before any page code can see them. The keys come last, after the keys a
-  // menu, the language picker or the key recorder take for themselves.
+  // Take navigation chords before focused menus and tabs can interpret their arrows.
   const first = { capture: true };
-  const buttonEvents = ["mousedown", "mouseup", "auxclick"];
+  const buttonEvents = ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclick"];
+  const layerKey = (raw: Event): void => {
+    const event = raw as KeyboardEvent;
+    if (event.isComposing || event.keyCode === 229) return;
+    const alt = event.code === "AltLeft" || event.code === "AltRight";
+    const chord = event.type === "keydown" && (event.altKey || event.metaKey)
+      && ["ArrowLeft", "ArrowRight", "BracketLeft", "BracketRight"].includes(event.code);
+    if ((alt || chord) && layerOwnsKeys()) key(raw);
+  };
   const keyEvents = ["keydown", "keyup"];
   buttonEvents.forEach((type) => target.addEventListener(type, mouse, first));
+  keyEvents.forEach(type => target.addEventListener(type, layerKey, first));
   keyEvents.forEach((type) => target.addEventListener(type, key));
   target.addEventListener("blur", blur);
   return () => {
     buttonEvents.forEach((type) => target.removeEventListener(type, mouse, first));
+    keyEvents.forEach(type => target.removeEventListener(type, layerKey, first));
     keyEvents.forEach((type) => target.removeEventListener(type, key));
     target.removeEventListener("blur", blur);
   };

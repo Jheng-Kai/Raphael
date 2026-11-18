@@ -7,6 +7,7 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { bindLayerCancels, bindNavLayer } from "../nav-layers";
 import { openTimezoneMenu } from "../timezones";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
@@ -431,6 +432,9 @@ export function createSettings(app: AppContext): SettingsPage {
       slot.replaceWith(usageHost);
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
+    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]', { secret: true });
+    const ruleField = body.querySelector<HTMLElement>("#rule-edit");
+    if (ruleField) bindNavLayer(ruleField, rules.cancelEdit);
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.
     mountPickers();
     for (const [key, value] of ownerDrafts) {
@@ -1207,7 +1211,8 @@ export function createSettings(app: AppContext): SettingsPage {
       if (repair) open = ({ search: "tools", read: "tools", vision: "tools", pdf: "tools", store: "connections" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       visible = true;
       stopOutside();
-      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active());
+      stopOutside = registerDismissal(el.querySelector<HTMLElement>(".modal")!, () => app.closeSettings(), () => !recording.active(), undefined,
+        (_direction, withinSettings) => recording.active() || withinSettings());
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;

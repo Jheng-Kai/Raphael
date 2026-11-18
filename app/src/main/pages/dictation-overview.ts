@@ -1,3 +1,4 @@
+import { bindNavLayer } from "../nav-layers";
 import { visibilityGate } from "../window-visibility";
 // Dictation overview: four usage numbers, activity grid and shortcuts.
 
@@ -200,6 +201,7 @@ export function createDictationOverview(app: AppContext): Page {
     picked = day;
     day.classList.add("is-picked");
     dayTip.textContent = day.dataset.tip ?? "";
+    bindNavLayer(dayTip, hideDay);
     dayTip.hidden = false;
     const box = day.getBoundingClientRect(), size = dayTip.getBoundingClientRect();
     dayTip.style.left = `${Math.max(8, Math.min(window.innerWidth - size.width - 8, box.left + (box.width - size.width) / 2))}px`;
