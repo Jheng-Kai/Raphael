@@ -20,9 +20,10 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   (`permissions::accessibility(true)`; macOS 26 asks again for an entry of another signature) and the window adds no
   note beside it (R-PRIV-AX-01). The app never clears its own entry: cleared while that question was up, Raphael was
   missing from the list the question opened. Raphael missing from the list, or on without effect, is added from
-  Applications with + (the listed one removed with − first), which the note says. Several copies with the app's
-  identifier (a mounted disk image, a build folder) are each another app to macOS; the one in Applications is the one
-  to allow. A local build signed with one Apple Development identity keeps its permissions across rebuilds.
+  Applications with + (the listed one removed with − first), which the note says. Another version or signature
+  of the app (a build folder, an older disk image) may not match the entry allowed, and opening the app again can bring
+  forward a copy still running: quit every copy before allowing the one in Applications. A local build signed with
+  one Apple Development identity keeps its permissions across rebuilds.
 - Without Accessibility macOS drops a posted key unseen: `paste` keeps
   the text on the pasteboard and says `NO_PASTE_PERMISSION` (press ⌘V), the tidy key says `NO_TIDY_PERMISSION`, and
   both tell the main window (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`, at most once a minute),
