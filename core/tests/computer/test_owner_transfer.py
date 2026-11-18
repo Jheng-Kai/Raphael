@@ -1,13 +1,21 @@
 """The owner's paste into a member's computer, their copy out of it, and files they hand it (R-PASTE-01, R-PASTE-02,
-R-COMP-FILE-01), without Docker: the driver and the upload store are stand-ins."""
+R-COMP-FILE-01), and the files a member copies into it itself (R-COMP-FILE-02), without Docker: the driver and the upload
+store are stand-ins."""
 import base64
 import json
+from pathlib import Path
 
 import pytest
 
-from raphael_core.computer.owner_transfer import clipboard_text, numbered, place_copy, safe_name
+from raphael_core.agent.policy import Tier
+from raphael_core.computer import owner_files, vm_tools
+from raphael_core.computer.owner_transfer import REMOTE_FILE_MAX, clipboard_text, numbered, place_copy, place_remote, safe_name
+from raphael_core.computer.vm import VmError
+from raphael_core.computer.vm_tools import VmTools
 from raphael_core.protocol import RpcError
+from raphael_core.services.attachment_store import AttachmentStore
 from .test_viewer import viewer  # noqa: F401 (the fixture)
+from .test_vm import CatalogBridge, EmptyHub, desktop  # noqa: F401 (the fixture)
 
 
 def driver(answers):
@@ -186,10 +194,69 @@ async def test_a_file_for_a_computer_on_another_machine_travels_over_the_engine_
         requests.append(request)
         return {"error": "changed"} if request["path"].endswith("/notes.txt") else {"sha256": "x", "size": 12, "created": True}
     bridge.vm.file_request = file_request
-    placed = await bridge.put_remote(bridge.vm.target(1), stored, "notes.txt")
+    placed = await place_remote(bridge.vm, bridge.vm.target(1), stored, "notes.txt")
     assert placed == "notes (2).txt"
     assert [request["path"] for request in requests] == ["/home/cua/team/notes.txt", "/home/cua/team/notes (2).txt"]
     assert base64.b64decode(requests[-1]["data"]) == b"remote bytes" and requests[-1]["expected"] == "absent"
+    # More than one request may carry is refused before anything is sent.
+    requests.clear()
+    stored.write_bytes(b"x" * (REMOTE_FILE_MAX + 1))
+    with pytest.raises(VmError, match="file_too_large"):
+        await place_remote(bridge.vm, bridge.vm.target(1), stored, "big.bin")
+    assert requests == []
+
+
+def copy_tool(hub):
+    return next(tool for tool in hub.offered() if tool.name == "copy_from_owner")
+
+
+async def test_a_member_copies_a_file_of_the_owners_computer_into_its_team_folder_and_a_taken_name_gets_a_number(desktop, tmp_path, monkeypatch):
+    vm, target, _ = desktop
+    home = tmp_path / "owner-home"
+    (home / "Documents").mkdir(parents=True)
+    sheet = home / "Documents" / "報告.xlsx"
+    sheet.write_bytes(b"PK\x03\x04 a workbook")
+    monkeypatch.setattr(owner_files, "_home", lambda: home)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path / "attachments"), bridge=CatalogBridge)
+    await hub.prepare()
+    tool = copy_tool(hub)
+    # A member's own computer: it asks nothing, as its other commands, and it changes the computer's files.
+    assert hub.tier_of(tool.key) == Tier.T0 and hub.kind_of("computer", "copy_from_owner") == "write"
+    first = await hub.call(tool.key, {"path": "~/Documents/報告.xlsx"}, approver="auto")
+    assert first.ok, first
+    assert json.loads(first.text) == {"path": "/home/cua/team/報告.xlsx", "bytes": len(sheet.read_bytes())}
+    second = await hub.call(tool.key, {"path": str(sheet)}, approver="auto")
+    assert json.loads(second.text)["path"] == "/home/cua/team/報告 (2).xlsx"
+    team = Path(target.shared)
+    assert (team / "報告.xlsx").read_bytes() == (team / "報告 (2).xlsx").read_bytes() == sheet.read_bytes()
+    assert not [path for path in team.iterdir() if path.name.endswith(".part")]
+
+
+async def test_a_member_never_copies_where_keys_are_kept_nor_raphaels_own_data_nor_a_folder_or_a_file_too_large(desktop, tmp_path, monkeypatch):
+    vm, target, _ = desktop
+    home = tmp_path / "owner-home"
+    (home / ".ssh").mkdir(parents=True)
+    (home / ".ssh" / "config").write_text("Host *")
+    raphael = home / "AppData" / "Roaming" / "Raphael Dev"
+    raphael.mkdir(parents=True)
+    (raphael / "raphael.db").write_bytes(b"SQLite format 3\x00")
+    (home / "big.bin").write_bytes(b"x" * 8)
+    monkeypatch.setattr(owner_files, "_home", lambda: home)
+    monkeypatch.setenv("APPDATA", str(home / "AppData" / "Roaming"))
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path / "attachments"), bridge=CatalogBridge)
+    await hub.prepare()
+    tool = copy_tool(hub)
+    async def copied(path):
+        return await hub.call(tool.key, {"path": path}, approver="auto")
+    assert (await copied("~/.ssh/config")).kind == "kept"
+    assert (await copied(str(raphael / "raphael.db"))).kind == "protected_data"
+    assert (await copied("~/Documents")).kind == "file_missing"
+    assert (await copied("~/AppData")).kind == "not_a_file"
+    monkeypatch.setattr(vm_tools, "MAX_FILE_BYTES", 7)
+    too_large = await copied("~/big.bin")
+    assert too_large.kind == "file_too_large" and "8 bytes" in too_large.text
+    # The team folder's own folders (context, meetings, projects) are all it holds: no file went in.
+    assert not [path for path in Path(target.shared).rglob("*") if path.is_file()]
 
 
 @pytest.mark.parametrize("name, kept", [

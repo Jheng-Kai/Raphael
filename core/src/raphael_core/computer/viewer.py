@@ -19,7 +19,7 @@ import httpx
 
 from ..protocol import invalid_params
 from .vm import OWNER_IDLE_S, SHARED, VmError
-from .owner_transfer import CLIPBOARD_MAX, REMOTE_FILE_MAX, clipboard_text, numbered, place_copy, safe_name
+from .owner_transfer import CLIPBOARD_MAX, clipboard_text, hand_over, safe_name
 from .viewer_relay import Policy, ViewerRelay
 from ..paths import local_storage_root
 
@@ -354,30 +354,13 @@ class DesktopViewer:
             raise invalid_params("no such upload") from None
         if source is None:
             raise invalid_params("no such upload")
-        target = session.target
         try:
-            if not target.remote and target.shared is not None:
-                placed = await asyncio.to_thread(place_copy, source, self.file_root(target.shared), name)
-            else:
-                placed = await self.put_remote(target, source, name)
-        except (OSError, VmError):
+            placed = await hand_over(self.vm, session.target, source, name)
+        except VmError as error:
+            raise invalid_params("file too large for a remote computer" if str(error) == "file_too_large" else "file not placed") from None
+        except OSError:
             raise invalid_params("file not placed") from None
         return {"name": placed, "path": f"{SHARED}/{placed}"}
-
-    async def put_remote(self, target, source, name):
-        """A file for a computer on another machine, which has no folder on this PC: one write over the engine each name."""
-        size = await asyncio.to_thread(lambda: source.stat().st_size)
-        if size > REMOTE_FILE_MAX:
-            raise invalid_params("file too large for a remote computer")
-        data = base64.b64encode(await asyncio.to_thread(source.read_bytes)).decode("ascii")
-        for candidate in numbered(name):
-            answer = await self.vm.file_request(target, {"action": "write", "path": f"{SHARED}/{candidate}", "data": data, "expected": "absent"})
-            if answer.get("error") == "changed":
-                continue
-            if "error" in answer:
-                raise VmError("file_unavailable")
-            return candidate
-        raise VmError("file_unavailable")
 
     async def lifecycle(self, params):
         from .lifecycle import maintain

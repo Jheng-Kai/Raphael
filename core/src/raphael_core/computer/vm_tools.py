@@ -9,9 +9,12 @@ import itertools
 import json
 import logging
 import mimetypes
+import os
 import re
 import secrets
 import shlex
+import stat
+import sys
 import time
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
@@ -23,8 +26,11 @@ from ..agent.plugins import PluginResult, PluginTool, tool_key
 from ..agent.policy import Tier
 from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
-from .vm import VmError, engine_start_allowed
+from ..agent.data_floor import DataFloor
+from .vm import SHARED, VmError, engine_start_allowed
 from .vm_bridge import CuaBridge
+from .owner_files import KEPT_WORDS, MAC_PRIVATE, kept_place, place as owner_place
+from .owner_transfer import REMOTE_FILE_MAX, hand_over, safe_name
 from .vm_catalog import DRIVER_TOOLS, FRESH_READS, NATIVE_INPUT_TOOLS, NOTICES, PAGE_TOOLS, READS, SCREEN_READS, SHARED_ARGUMENTS, BROWSER_APPS, definition as driver_definition, offline_catalog, shared_argument_paths, shared_native_input
 from .takeover import TAKEOVER
 from .browser_tabs import BLANK, BROWSER_TABS, NEW_TAB, new_tab_of, rows as tab_rows, shown_tab
@@ -211,6 +217,10 @@ EXEC = {"description": "Run Linux shell commands (sh, not PowerShell) in the com
         "keys": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"}, "maxItems": 8}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace or /home/cua/team into Raphael's attachment store and return its attachment ID. Paths elsewhere are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
+# R-COMP-FILE-02: what the owner's drop on the screen does, for the member itself.
+COPY_FROM_OWNER = {"description": "Copy a file from the owner's own computer (path absolute or from ~) into /home/cua/team, to work on it in yours. Any file the owner can open except where keys and passwords are kept, at most 250 MB. A taken name gets (2), (3); nothing is replaced. Returns its path here.",
+                   "parameters": {"type": "object", "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 4096}}, "required": ["path"], "additionalProperties": False}}
+OWN_DATA_WORDS = "This is Raphael's own data, which is never copied into a computer."
 BROWSER_OPEN = {"description": "Open an http/https URL in your browser and return its page references, no screenshot. " + NEW_TAB + "Use the typed browser tools for follow-ups. " + VM_CONTRACT,
     "parameters": {"type": "object", "properties": {"url": {"type": "string", "pattern": "^https?://", "maxLength": 8192},
         "query": {"type": "string"}, "scope_ref": {"type": "string"}, "new_tab": {"type": "boolean"}}, "required": ["url"], "additionalProperties": False}}
@@ -514,7 +524,7 @@ class VmTools:
             self._catalog(target, offline_catalog())
 
     def _catalog(self, target, definitions):
-        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
+        definitions.update(vm_exec=EXEC, attach_file=ATTACH, copy_from_owner=COPY_FROM_OWNER, request_takeover=TAKEOVER, fill_login=FILL_LOGIN,
                            vault_entries=ENTRY_CHOICES, fill_contact=FILL_CONTACT, fill_card=FILL_CARD, browser_open=BROWSER_OPEN,
                            browser_tabs={**BROWSER_TABS, "description": BROWSER_TABS["description"] + " " + VM_CONTRACT}, run_steps=RUN_STEPS)
         definitions.update(file_tools.DEFINITIONS)
@@ -921,7 +931,7 @@ class VmTools:
                     turn = (origin["turn_id"], True, None)
             # Only the screen is shared out: a command or a file in the workspace takes nobody's turn, and no turn waits
             # for one.
-            screen = tool.name not in ("vm_exec", "attach_file", *FILE_TOOLS)
+            screen = tool.name not in ("vm_exec", "attach_file", "copy_from_owner", *FILE_TOOLS)
             if screen and (busy := await self._take_screen(target, owner)) is not None:
                 result = busy
                 return result
@@ -966,7 +976,7 @@ class VmTools:
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
             self.vm.physical_active[target.physical] = self.vm.physical_active.get(target.physical, 0) + 1
             # Not input at the screen: the owner's press to take control does not wait for these.
-            command = tool.name == "vm_exec" or tool.name in FILE_TOOLS
+            command = tool.name in ("vm_exec", "copy_from_owner") or tool.name in FILE_TOOLS
             if command:
                 self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
@@ -1022,6 +1032,8 @@ class VmTools:
                     attachment = await asyncio.to_thread(self.attachments.save,
                         Attachment(name, mimetypes.guess_type(name)[0] or "application/octet-stream", data))
                     result = PluginResult(True, text=json.dumps({"attachment": attachment.metadata()}))
+                elif tool.name == "copy_from_owner":
+                    result = await self._copy_from_owner(target, arguments["path"])
                 elif tool.name == "fill_login":
                     result = await self._fill_login(target, member, arguments)
                 elif tool.name in ("fill_contact", "fill_card"):
@@ -1195,6 +1207,43 @@ class VmTools:
                 logger.info("The computer is not ready yet (%s): looking again, %d of %d", error, attempt + 1, attempts)
                 self.vm.invalidate(target)
                 await asyncio.sleep(delay * attempt)
+
+    async def _copy_from_owner(self, target, path):
+        """A file of the owner's computer copied into the member's team folder (R-COMP-FILE-02): reached as the owner's file
+        tools reach it, so where keys are kept is refused, and Raphael's own data is never copied; placed as the owner's
+        own drop is placed (`hand_over`), never over a file that is there."""
+        try:
+            if kept_place(path):
+                return PluginResult(False, "kept", KEPT_WORDS)
+            source = owner_place(path)
+        except VmError:
+            return PluginResult(False, "bad_path", "This path is not valid.")
+        if DataFloor(self.conn).protected(source):
+            return PluginResult(False, "protected_data", OWN_DATA_WORDS)
+        try:
+            info = await asyncio.to_thread(os.stat, source)
+        except FileNotFoundError:
+            return PluginResult(False, "file_missing", "No file is at this path on the owner's computer.")
+        except PermissionError:
+            return PluginResult(False, "permission_denied", "Permission denied: the owner's account cannot open this path."
+                                + (MAC_PRIVATE if sys.platform == "darwin" else ""))
+        except (OSError, ValueError):
+            return PluginResult(False, "file_unavailable", "The file could not be opened.")
+        if stat.S_ISDIR(info.st_mode):
+            return PluginResult(False, "not_a_file", "This path is a folder: copy its files one at a time (glob lists them).")
+        if not stat.S_ISREG(info.st_mode):
+            return PluginResult(False, "not_a_file", "This path is not a file.")
+        limit = REMOTE_FILE_MAX if target.remote else MAX_FILE_BYTES
+        if info.st_size > limit:
+            return PluginResult(False, "file_too_large", f"This file is {info.st_size:,} bytes; at most {limit:,} go into "
+                                f"{'a computer on another machine' if target.remote else 'a computer'}.")
+        try:
+            name = await hand_over(self.vm, target, source, safe_name(path.strip().rstrip("/\\") or "file"))
+        except PermissionError:
+            return PluginResult(False, "permission_denied", "Permission denied: the owner's account cannot open this path.")
+        except (OSError, ValueError, VmError):
+            return PluginResult(False, "file_unavailable", "The file could not be copied into your computer.")
+        return PluginResult(True, text=json.dumps({"path": f"{SHARED}/{name}", "bytes": info.st_size}, ensure_ascii=False))
 
     async def _started(self, target, member, tool):
         """The computer up and healthy for a member's call: its start, waited for, with what is only a start in progress

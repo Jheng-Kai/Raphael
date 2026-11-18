@@ -2,15 +2,21 @@
 
 The computer's VNC servers for a shared computer's screens (x0vncserver before TigerVNC 1.15) carry no clipboard, so text goes
 through the computer's own driver (`clipboard_write`, `clipboard_read`) instead of the screen's cut text. A file goes into the
-team folder, under its own name, never over a file that is there.
+team folder, under its own name, never over a file that is there: the owner's drop and a member's own `copy_from_owner`
+place it the same way (`hand_over`).
 """
 
+import asyncio
+import base64
 import json
 import os
 import re
 import secrets
 import shutil
 from pathlib import Path
+
+from ..paths import local_storage_root
+from .vm import SHARED, VmError
 
 # The most characters of text the owner's paste or copy carries either way, the same bound as the paste's page.
 CLIPBOARD_MAX = 1_000_000
@@ -83,3 +89,31 @@ def place_copy(source, root, name):
         raise OSError("no free name")
     finally:
         partial.unlink(missing_ok=True)
+
+
+async def place_remote(vm, target, source, name):
+    """A file for a computer on another machine, which has no folder on this PC: one write over the engine each name tried."""
+    size = await asyncio.to_thread(lambda: Path(source).stat().st_size)
+    if size > REMOTE_FILE_MAX:
+        raise VmError("file_too_large")
+    data = base64.b64encode(await asyncio.to_thread(Path(source).read_bytes)).decode("ascii")
+    for candidate in numbered(name):
+        answer = await vm.file_request(target, {"action": "write", "path": f"{SHARED}/{candidate}", "data": data, "expected": "absent"})
+        if answer.get("error") == "changed":
+            continue
+        if "error" in answer:
+            raise VmError("file_unavailable")
+        return candidate
+    raise VmError("file_unavailable")
+
+
+async def hand_over(vm, target, source, name):
+    """Copy the file `source` of this PC into `target`'s team folder under the first free name after `name`, and give that
+    name: into the folder itself when it is on this PC, over the engine when the computer is on another machine."""
+    if not target.remote and target.shared is not None:
+        try:
+            root = local_storage_root(target.shared)
+        except ValueError:
+            raise VmError("file_unavailable") from None
+        return await asyncio.to_thread(place_copy, source, root, name)
+    return await place_remote(vm, target, source, name)

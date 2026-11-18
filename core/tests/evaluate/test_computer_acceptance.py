@@ -1550,13 +1550,14 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
         assert next(row for row in run.results if row["name"] == "shared pointer wall")["result"] == "skipped"
         return
     if transfer in ("refused", "corrupt"):
-        from raphael_core.computer import owner_transfer, viewer as viewer_module
+        from raphael_core.computer import owner_transfer
         if transfer == "corrupt":
+            original = owner_transfer.place_copy
             def damaged(source, root, name):
-                placed = owner_transfer.place_copy(source, root, name)
+                placed = original(source, root, name)
                 (root / placed).write_bytes((root / placed).read_bytes()[:-1] + b"?")
                 return placed
-            monkeypatch.setattr(viewer_module, "place_copy", damaged)
+            monkeypatch.setattr(owner_transfer, "place_copy", damaged)
         with pytest.raises(AssertionError, match="One or more shared checks failed"):
             await run.shared()
         outcome = {row["name"]: row for row in run.results if row["name"].startswith("shared owner ") and row["name"] != "shared owner control"
@@ -1589,7 +1590,7 @@ async def test_shared_acceptance_drives_real_tools_through_every_numbered_check(
     assert [row["name"] for row in run.results] == ["shared carry seed", "shared prepares", "shared window lists", "shared member datasets", "shared terminal wall",
         "shared launches land on their own screens", "shared pointer wall", "shared target forms", "shared native text", "shared seat-local verify", "shared global shortcuts",
         "shared simultaneous native typing", "shared computer browser", "shared typed form", "shared browser is a person's", "shared seat windows", "shared page text", "shared clipped product pictures", "shared owner control", "shared owner input",
-        "shared owner paste", "shared owner copy", "shared owner files", "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
+        "shared owner paste", "shared owner copy", "shared owner files", "shared member copy", "shared seat teaching", "shared session ends independently", "shared seat displacement", "shared carried home", "shared stop"]
     assert seed_calls == [9201] and len(carry_checks) == 1 and seat_windows == [(1, 9201)]
     paste, copy, dropped = (next(row for row in run.results if row["name"] == f"shared owner {step}")["detail"] for step in ("paste", "copy", "files"))
     # The two texts of each are read and written by the guest's own program, or by the driver when the image has none.

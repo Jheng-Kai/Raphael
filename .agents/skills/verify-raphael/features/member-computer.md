@@ -2207,7 +2207,7 @@ field, Save below, no value in the markup, text or recorded calls. Core: `tests/
 `desktop-viewer.test.ts`, `desktop-paste-page.test.ts`; Rust: `cargo test paste::clipboard`. Not proved offline: a paste
 into a real container and a real Credential Manager write.
 
-## Copy and paste with the computer, and files handed to it (R-PASTE-01, R-PASTE-02, R-COMP-FILE-01)
+## Copy and paste with the computer, and files handed to it (R-PASTE-01, R-PASTE-02, R-COMP-FILE-01, R-COMP-FILE-02)
 
 A shared computer's screens are x0vncserver, which carries no clipboard before TigerVNC 1.15, so the screen's cut text
 never reached it: the owner's paste pasted the computer's own old clipboard. Now the app hands the paste's text to the
@@ -2224,6 +2224,10 @@ to the upload store a megabyte at a time and `computer.viewer_put_file` copies i
 name, ` (2)` added when the name is taken; one quiet line under the screen says where it went. A remote computer gets it
 over the engine, at most 32 MB.
 
+A member does the same itself with `copy_from_owner {path}`, one of its computer's tools (R-COMP-FILE-02): a file of
+the owner's computer, by an absolute path or one from `~`, goes into `/home/cua/team` through the same placing
+(`owner_transfer.hand_over`). Where keys are kept, Raphael's own data, a folder and a file over the limit are refused.
+
 ```powershell
 npm run look -- desktop-owner desktop-send-file-menu desktop-file-dropped --theme both --width 1120,720,1920x1080
 ```
@@ -2231,5 +2235,5 @@ npm run look -- desktop-owner desktop-send-file-menu desktop-file-dropped --them
 Core: `tests/computer/test_owner_transfer.py`, `tests/computer/test_viewer.py`. App: `desktop-viewer.test.ts`,
 `desktop-paste-page.test.ts`. Not proved offline: the driver's clipboard in a real container (what `clipboard_read`
 answers, and that a paste lands); `npm run verify -- --computer` with Docker running proves it ("shared owner paste",
-"shared owner copy", "shared owner files" in `evaluate/computer_acceptance.py`; the offline world fakes the driver and
+"shared owner copy", "shared owner files", "shared member copy" in `evaluate/computer_acceptance.py`; the offline world fakes the driver and
 the guest's programs, so only a real run shows what the driver's clipboard does).
