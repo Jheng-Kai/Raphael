@@ -1718,8 +1718,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     const panel = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>(".cs") : null;
     if (panel) {
       views.visit(navView());
-      // A custom server's form keeps what was typed in it: back leaves it alone (its own Cancel leaves the form), as Escape did.
-      if (form) bindNavLayer(panel, () => {});
+      if (form?.busy) bindNavLayer(panel, () => {});
       else bindLayerSteps(panel, views, showNavView);
     }
     const row = typeof document !== "undefined" ? (host.root ?? document).querySelector<HTMLElement>("[data-cs-chips]") : null;

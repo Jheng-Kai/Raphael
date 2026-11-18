@@ -439,7 +439,7 @@ export function createSettings(app: AppContext): SettingsPage {
       slot.replaceWith(usageHost);
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
-    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]');
+    bindLayerCancels(body, '[data-vault="cancel"], [data-act="key-cancel"]', { secret: true });
     const ruleField = body.querySelector<HTMLElement>("#rule-edit");
     if (ruleField) bindNavLayer(ruleField, rules.cancelEdit);
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.

@@ -51,10 +51,11 @@ export function bindNavLayer(el: HTMLElement, back: () => void, options: { activ
 
 /**
  * Inline editors keep the same cancel action and busy guard as their visible button. Back never throws away words that were
- * typed (Escape never did): once a field of the editor differs from what it held when the editor was drawn, back only puts
- * the focus on it, and the editor's own Cancel is the way to drop them.
+ * typed: once a field of the editor differs from what it held when the editor was drawn, back only puts the focus on it, and
+ * the editor's own Cancel is the way to drop them. A secret's draft (`secret`: a vault entry, a key) is the exception: back
+ * drops it as its Cancel does, so a secret never stays in a field the owner has left.
  */
-export function bindLayerCancels(root: HTMLElement, selector: string): void {
+export function bindLayerCancels(root: HTMLElement, selector: string, options: { secret?: boolean } = {}): void {
   for (const button of root.querySelectorAll<HTMLButtonElement>(selector)) {
     const editor = button.closest<HTMLElement>("section, form, .ob-tile, .cs-form") ?? root;
     const fields = (): (HTMLInputElement | HTMLTextAreaElement)[] => [...editor.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input:not([type=file]), textarea")];
@@ -62,7 +63,7 @@ export function bindLayerCancels(root: HTMLElement, selector: string): void {
     bindNavLayer(button, () => {
       const now = fields();
       const changed = now.findIndex((field, at) => field.value !== drawn[at]);
-      if (changed >= 0 || now.length !== drawn.length) { now[Math.max(changed, 0)]?.focus(); return; }
+      if (!options.secret && (changed >= 0 || now.length !== drawn.length)) { now[Math.max(changed, 0)]?.focus(); return; }
       button.click();
     });
   }
