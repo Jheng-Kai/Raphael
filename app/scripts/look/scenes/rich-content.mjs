@@ -17,6 +17,7 @@ export default [
   scene("rich-invalid", "Invalid Mermaid keeps source with a quiet note", [wait('.message-diagram[data-diagram-state="source"]'), check("rich-fallback")], { richReply: "invalid" }),
   scene("rich-streaming", "Unclosed Mermaid stays readable source until finished", [wait('.message-diagram[data-complete="false"]'), check("rich-fallback")], { richReply: "streaming" }),
   scene("rich-sequence", "Sequence diagram uses the same token-derived theme", [wait(diagram), check("rich-diagram")], { richReply: "sequence" }),
+  scene("rich-line-breaks", "A flowchart whose labels break a line with <br/> is drawn, each label on two lines", [wait(diagram), check("rich-diagram"), check("rich-line-breaks")], { richReply: "breaks" }),
   ...["class", "state", "er", "architecture"].map(type => scene(`rich-${type}`, `${type} Mermaid diagram uses the same strict renderer`, [wait(diagram), check("rich-diagram")], { richReply: type })),
   scene("rich-wide-table", "Wide tables scroll inside their card as a last resort", [wait(table), check("rich-wide-table")], { richReply: "wide" }),
 ];

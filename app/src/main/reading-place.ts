@@ -12,6 +12,42 @@ export const SETTLE_MS = 150;
 export const NUDGE_PX = 2;
 
 /**
+ * Scrolls `scroller` one nudge and back in two frames, which makes WebKit paint the whole view afresh: it can leave part of a
+ * thread unpainted after a change of its layout, a hard cut (or the whole thread black) that only a scroll clears. The nudge
+ * goes up, which never ends a held place (message-rich.ts readingAnchor), and down only from the very top; a view a few px short
+ * of the bottom, where the person may have stopped on purpose, is left as it is, since any scroll there would hand it back to
+ * following. A person who scrolls in the nudge's frame keeps where they scrolled to. Gives a way to cancel it.
+ */
+export function repaintView(scroller: HTMLElement, slack = 4): () => void {
+  let nudge = requestAnimationFrame(() => {
+    const was = scroller.scrollTop, gap = scroller.scrollHeight - scroller.clientHeight - was;
+    if (gap > 0.5 && gap <= slack) return;
+    const to = was >= NUDGE_PX ? was - NUDGE_PX : gap > NUDGE_PX + slack ? was + NUDGE_PX : null;
+    if (to === null) return;
+    scroller.scrollTop = to;
+    const nudged = scroller.scrollTop;
+    nudge = requestAnimationFrame(() => { if (scroller.scrollTop === nudged) scroller.scrollTop = was; });
+  });
+  return () => cancelAnimationFrame(nudge);
+}
+
+/**
+ * Told on every draw whether a member is at work in the thread: when the work ends (the work line and the slime go, the reply is
+ * drawn and the thread kept at its bottom, all in one frame), on a Mac the view is painted afresh once that has settled. WebKit
+ * left the whole thread black there until a scroll.
+ */
+export function repaintAfterWork(scroller: HTMLElement, mac = IS_MAC): (working: boolean) => void {
+  let was = false, settle = 0, cancel = (): void => {};
+  return working => {
+    const ended = was && !working;
+    was = working;
+    if (!ended || !mac) return;
+    clearTimeout(settle); cancel();
+    settle = window.setTimeout(() => { cancel = repaintView(scroller); }, SETTLE_MS);
+  };
+}
+
+/**
  * Keeps `scroller`'s reading place across width changes of it; `items` are the messages, in order. With `repaint` (on a
  * Mac), once the width has settled the view scrolls one pixel and back: WebKit can leave part of a thread whose place was
  * set while its width changed unpainted, a hard cut over the background that only a scroll clears (seen with the details
@@ -34,19 +70,8 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
       if (box.bottom > top) { anchor = item; offset = box.top - top; break; }
     }
   };
-  let frame = 0, settle = 0, nudge = 0;
-  const paint = (): void => {
-    nudge = requestAnimationFrame(() => {
-      const was = scroller.scrollTop, gap = scroller.scrollHeight - scroller.clientHeight - was;
-      if (gap > 0.5 && gap <= slack) return;
-      const to = was >= NUDGE_PX ? was - NUDGE_PX : gap > NUDGE_PX + slack ? was + NUDGE_PX : null;
-      if (to === null) return;
-      scroller.scrollTop = to;
-      const nudged = scroller.scrollTop;
-      // A person who scrolled in that frame keeps where they scrolled to.
-      nudge = requestAnimationFrame(() => { if (scroller.scrollTop === nudged) scroller.scrollTop = was; });
-    });
-  };
+  let frame = 0, settle = 0, cancelNudge = (): void => {};
+  const paint = (): void => { cancelNudge(); cancelNudge = repaintView(scroller, slack); };
   const resized = (): void => {
     const now = scroller.clientWidth;
     // Not drawn: the width it had stays the one to compare with when it is drawn again, and the place it had with it.
@@ -76,5 +101,5 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(resized) : null;
   observer?.observe(scroller);
   take();
-  return () => { scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelAnimationFrame(nudge); };
+  return () => { scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelNudge(); };
 }

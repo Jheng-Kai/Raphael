@@ -47,7 +47,7 @@ import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
-import { keepReadingPlace } from "../reading-place";
+import { keepReadingPlace, repaintAfterWork } from "../reading-place";
 import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
@@ -286,6 +286,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // A panel dragged wider or narrower leaves the reading place where it was (reading-place.ts); a dock that grows or shrinks
   // under a thread that follows its bottom is followed by the thread's one stick to the bottom (message-rich.ts).
   keepReadingPlace(scroller, ".thread > li");
+  // The end of a member's work is painted afresh on a Mac, where WebKit left the thread black until a scroll (R-FOLLOW-03).
+  const workEnds = repaintAfterWork(scroller);
   const none = el.querySelector<HTMLElement>(".ra-none")!;
   const wait = el.querySelector<HTMLElement>(".ra-wait")!;
   const empty = el.querySelector<HTMLElement>(".ra-empty")!;
@@ -1020,6 +1022,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function lines(): { key: string; html: string; turnId?: number }[] {
     const shape = look();
     const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
+    workEnds(active !== undefined);
     // An edit stands in the place of its message, not at the end: the old message holds its place while the edit is on its way.
     const placed = new Map(outgoing.filter(sent => belongs(sent) && sent.replaces).map(sent => [sent.replaces!.id, sent]));
     const sentHere = outgoing.filter(sent => belongs(sent) && !placed.has(sent.replaces?.id ?? -1));
