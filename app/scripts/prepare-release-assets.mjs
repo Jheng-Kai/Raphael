@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { versionedSignature } from "./prepare-update-feed.mjs";
 
 const script = fileURLToPath(import.meta.url);
 const appDirectory = resolve(dirname(script), "..");
@@ -103,15 +104,9 @@ export function prepareReleaseAssets({ installer, notices, signature, updater = 
   mkdirSync(output, { recursive: true });
   copyFileSync(installer, join(output, `Raphael-${version}-windows-x64-setup.exe`));
   if (signature) {
-    const signed = readFileSync(signature, "utf8").trim();
-    const comment = Buffer.from(signed, "base64").toString("utf8").split("\n").find(line => line.startsWith("trusted comment:"));
-    if (!comment?.split("\t").includes(`version:${version}`)) throw new Error("Updater signature must bind this release version; use tauri signer sign --app-version.");
-    if (!/^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? "")) throw new Error("A GitHub repository is required for updater assets.");
+    const signed = versionedSignature(signature, version);
     const name = `Raphael-${version}-windows-x64-setup.exe`;
     writeFileSync(join(output, name + ".sig"), signed + "\n");
-    writeFileSync(join(output, "latest.json"), JSON.stringify({ version, notes: env.RELEASE_NOTES ?? "", pub_date: new Date().toISOString(), platforms: {
-      "windows-x86_64": { signature: signed, url: `https://github.com/${env.GITHUB_REPOSITORY}/releases/download/v${version}/${name}` },
-    } }, null, 2) + "\n");
   }
   copyFileSync(notices, join(output, "THIRD_PARTY_NOTICES.txt"));
   writeFileSync(join(output, "BUILD-INFO.txt"), buildInfo({ version, updater, env, tools }), "utf8");

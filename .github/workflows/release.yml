@@ -62,6 +62,7 @@ jobs:
     outputs:
       artifact-name: ${{ steps.identity.outputs.artifact-name }}
       version: ${{ steps.version.outputs.version }}
+      updater: ${{ steps.build.outputs.updater }}
     defaults:
       run:
         shell: pwsh
@@ -194,7 +195,6 @@ jobs:
       # The installer, the notices, BUILD-INFO.txt (commit, ref, run and tools) and SHA256SUMS.txt for all of them.
       - name: Prepare release assets and checksums
         env:
-          RELEASE_NOTES: ${{ inputs.release_notes }}
           UPDATER_MODE: ${{ steps.build.outputs.updater }}
         run: |
           $installers = @(Get-ChildItem app/src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' -File)
@@ -232,6 +232,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       artifact-name: ${{ steps.identity.outputs.artifact-name }}
+      updater: ${{ steps.build.outputs.updater }}
     env:
       CARGO_INCREMENTAL: "0"
       RUSTUP_TOOLCHAIN: "1.98.0"
@@ -326,8 +327,12 @@ jobs:
         run: node scripts/collect-release-notices.mjs
 
       - name: Build macOS disk image
+        id: build
         working-directory: app
         env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RAPHAEL_UPDATER_PUBLIC_KEY: ${{ secrets.RAPHAEL_UPDATER_PUBLIC_KEY }}
           APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -339,8 +344,15 @@ jobs:
           else
             unset APPLE_API_ISSUER APPLE_API_KEY
           fi
-          node scripts/tauri.mjs build --config src-tauri/tauri.release.conf.json \
-            --config src-tauri/tauri.release.macos.conf.json --bundles app,dmg --ci -- --locked
+          config=(--config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.macos.conf.json)
+          if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" && -n "$RAPHAEL_UPDATER_PUBLIC_KEY" ]]; then
+            echo "updater=signed" >> "$GITHUB_OUTPUT"
+          else
+            echo "updater=disabled" >> "$GITHUB_OUTPUT"
+            config+=(--config src-tauri/tauri.release-no-updater.conf.json)
+            unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD RAPHAEL_UPDATER_PUBLIC_KEY
+          fi
+          node scripts/tauri.mjs build "${config[@]}" --bundles app,dmg --ci -- --locked
 
       - name: Verify the app bundle
         working-directory: app/src-tauri/target/release/bundle
@@ -349,10 +361,38 @@ jobs:
           test -x macos/Raphael.app/Contents/Resources/core/raphael-core
           ls dmg/*.dmg
 
+      - name: Verify signed macOS updater archive
+        if: steps.build.outputs.updater == 'signed'
+        working-directory: app/src-tauri/target/release/bundle/macos
+        env:
+          RAPHAEL_UPDATER_PUBLIC_KEY: ${{ secrets.RAPHAEL_UPDATER_PUBLIC_KEY }}
+        run: |
+          archive=Raphael.app.tar.gz
+          command -v minisign >/dev/null || brew install minisign
+          printf '%s' "$RAPHAEL_UPDATER_PUBLIC_KEY" | /usr/bin/base64 -D > "$RUNNER_TEMP/updater.pub"
+          /usr/bin/base64 -D < "$archive.sig" > "$RUNNER_TEMP/archive.minisig"
+          minisign -Vm "$archive" -p "$RUNNER_TEMP/updater.pub" -x "$RUNNER_TEMP/archive.minisig"
+          node "$GITHUB_WORKSPACE/app/scripts/prepare-update-feed.mjs" --check-signature "$archive.sig"
+          unpacked=$(mktemp -d)
+          tar -xzf "$archive" -C "$unpacked"
+          app="$unpacked/Raphael.app"
+          codesign --verify --deep --strict "$app"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$RELEASE_VERSION"
+          executable=$(plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")
+          lipo "$app/Contents/MacOS/$executable" -verify_arch arm64
+
       - name: Prepare release assets and checksums
+        env:
+          UPDATER_MODE: ${{ steps.build.outputs.updater }}
         run: |
           mkdir release-assets
           cp app/src-tauri/target/release/bundle/dmg/*.dmg "release-assets/Raphael-$RELEASE_VERSION-macos-arm64.dmg"
+          if [[ "$UPDATER_MODE" == signed ]]; then
+            archive=app/src-tauri/target/release/bundle/macos/Raphael.app.tar.gz
+            name="release-assets/Raphael-$RELEASE_VERSION-macos-arm64.app.tar.gz"
+            cp "$archive" "$name"
+            cp "$archive.sig" "$name.sig"
+          fi
           cp app/src-tauri/release-notices/THIRD_PARTY_NOTICES.txt release-assets/THIRD_PARTY_NOTICES-macos.txt
           cd release-assets
           shasum -a 256 ./* | sed 's# \./# #' > SHA256SUMS-macos.txt
@@ -375,6 +415,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check builder updater modes
+        env:
+          WINDOWS_MODE: ${{ needs.windows-release.outputs.updater }}
+          MACOS_MODE: ${{ needs.macos-release.outputs.updater }}
+        run: '[[ "$WINDOWS_MODE" == "$MACOS_MODE" && ( "$WINDOWS_MODE" == signed || "$WINDOWS_MODE" == disabled ) ]]'
+      - name: Check out the feed writer
+        if: needs.windows-release.outputs.updater == 'signed'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: app/scripts
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.windows-release.outputs.artifact-name }}
@@ -383,16 +434,27 @@ jobs:
         with:
           name: ${{ needs.macos-release.outputs.artifact-name }}
           path: release-assets
+      - name: Assemble the signed updater feed
+        if: needs.windows-release.outputs.updater == 'signed'
+        working-directory: release-assets
+        env:
+          RELEASE_VERSION: ${{ needs.windows-release.outputs.version }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          node ../app/scripts/prepare-update-feed.mjs
+          sha256sum latest.json > SHA256SUMS-updater.txt
       - name: Publish verified release assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: Jheng-Kai/Raphael
           RELEASE_VERSION: ${{ needs.windows-release.outputs.version }}
           RELEASE_COMMIT: ${{ github.sha }}
+          UPDATER_MODE: ${{ needs.windows-release.outputs.updater }}
         run: |
           cd release-assets
           sha256sum --check --strict SHA256SUMS.txt
           sha256sum --check --strict SHA256SUMS-macos.txt
+          if [[ "$UPDATER_MODE" == signed ]]; then sha256sum --check --strict SHA256SUMS-updater.txt; fi
           version="$RELEASE_VERSION"
           # An existing tag must resolve to the exact source that built these assets.
           tag_ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$version" --jq ".[] | select(.ref == \"refs/tags/v$version\") | .ref")

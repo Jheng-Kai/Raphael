@@ -5,6 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildInfo, checksums, collectTools, main, prepareReleaseAssets } from "./prepare-release-assets.mjs";
+import { prepareUpdateFeed } from "./prepare-update-feed.mjs";
 
 const scripts = dirname(fileURLToPath(import.meta.url));
 const fixtureDirectory = join(scripts, "..", ".test-cache", "release-assets-tests");
@@ -111,12 +112,18 @@ ${workflowRun("Publish verified release assets")}
     };
     run(["generate", "--ci", "-p", "", "-w", key]);
     run(["sign", "--app-version", "0.1.0", "-p", "", "-f", key, installer]);
-    prepareReleaseAssets({ installer, notices, signature: installer + ".sig", version:"0.1.0", output, env:{...env,RELEASE_NOTES:"Synthetic release notes"}, tools });
+    prepareReleaseAssets({ installer, notices, signature: installer + ".sig", version: "0.1.0", output, env, tools });
+    expect(existsSync(join(output, "latest.json"))).toBe(false);
+    const mac = join(output, "Raphael-0.1.0-macos-arm64.app.tar.gz");
+    writeFileSync(mac, "synthetic Mac updater");
+    run(["sign", "--app-version", "0.1.0", "-p", "", "-f", key, mac]);
+    prepareUpdateFeed(output, "0.1.0", "Synthetic release notes");
     const manifest = JSON.parse(readFileSync(join(output, "latest.json"), "utf8"));
     expect(manifest.notes).toBe("Synthetic release notes");
     expect(manifest.platforms["windows-x86_64"].url).toBe("https://github.com/Jheng-Kai/Raphael/releases/download/v0.1.0/Raphael-0.1.0-windows-x64-setup.exe");
     expect(manifest.platforms["windows-x86_64"].signature).toBe(readFileSync(installer + ".sig", "utf8").trim());
-    expect(readFileSync(join(output, "SHA256SUMS.txt"), "utf8")).toContain("latest.json");
+    expect(manifest.platforms["darwin-aarch64"].url).toBe("https://github.com/Jheng-Kai/Raphael/releases/download/v0.1.0/Raphael-0.1.0-macos-arm64.app.tar.gz");
+    expect(manifest.platforms["darwin-aarch64"].signature).toBe(readFileSync(mac + ".sig", "utf8").trim());
     expect(readFileSync(join(output, "SHA256SUMS.txt"), "utf8")).toContain("Raphael-0.1.0-windows-x64-setup.exe.sig");
     expect(readFileSync(join(output, "BUILD-INFO.txt"), "utf8")).not.toContain("updater feed: skipped");
     expect(() => prepareReleaseAssets({ installer, notices, signature:installer+".sig",version:"9.9.9",output:join(root,"replay"),env,tools })).toThrow("bind this release version");
@@ -163,6 +170,33 @@ ${workflowRun("Publish verified release assets")}
     expect(workflowRun("Publish verified release assets")).toContain('gh release create "v$version" ./*');
     expect(workflow.match(/::warning::/g)).toHaveLength(1);
     expect(workflowRun("Build Windows installer")).toContain("node scripts/tauri.mjs build @config --bundles nsis --ci -- --locked");
+  });
+
+  it.each([
+    ["both keys", "test-private", "test-public", "signed"],
+    ["no keys", "", "", "disabled"],
+    ["private key only", "test-private", "", "disabled"],
+    ["public key only", "", "test-public", "disabled"],
+  ])("executes the macOS build configuration with %s", (_, privateKey, publicKey, mode) => {
+    const { root } = inputs();
+    const output = join(root, "build-output");
+    const bash = process.platform === "win32" ? join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : "bash";
+    const commands = [
+      'node() { printf "%s\\n" "$@" "public=${RAPHAEL_UPDATER_PUBLIC_KEY:+set}" "private=${TAURI_SIGNING_PRIVATE_KEY:+set}"; }',
+      workflowRun("Build macOS disk image"),
+    ].join("\n");
+    const result = spawnSync(bash, ["--noprofile", "--norc", "-ec", commands], {
+      cwd: root, encoding: "utf8", windowsHide: true,
+      env: { ...process.env, TAURI_SIGNING_PRIVATE_KEY: privateKey, RAPHAEL_UPDATER_PUBLIC_KEY: publicKey, APPLE_API_KEY_CONTENT: "", GITHUB_OUTPUT: output },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(output, "utf8").trim()).toBe(`updater=${mode}`);
+    const signed = mode === "signed";
+    expect(result.stdout.trim().split(/\r?\n/)).toEqual([
+      "scripts/tauri.mjs", "build", "--config", "src-tauri/tauri.release.conf.json", "--config", "src-tauri/tauri.release.macos.conf.json",
+      ...(!signed ? ["--config", "src-tauri/tauri.release-no-updater.conf.json"] : []), "--bundles", "app,dmg", "--ci", "--", "--locked",
+      `public=${signed ? "set" : ""}`, `private=${signed ? "set" : ""}`,
+    ]);
   });
 
   it.runIf(process.platform === "win32").each([

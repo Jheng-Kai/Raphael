@@ -179,6 +179,9 @@ fn idle_window(automatic: bool, enabled: bool, idle: u64) -> bool {
 }
 
 async fn install(app: &AppHandle, state: &Updates, automatic: bool) -> Result<(), String> {
+    if state.pending.lock().await.view.state == "installing" {
+        return Ok(());
+    }
     if !safe_to_install(app, automatic).await {
         return Err("busy".into());
     }
@@ -194,13 +197,18 @@ async fn install(app: &AppHandle, state: &Updates, automatic: bool) -> Result<()
     let mut settings = store.lock().await;
     settings.update_receipt = update.version.clone();
     settings.save(store.path()).map_err(|_| "storage")?;
+    // On Windows the installer takes over. On macOS the plugin replaces the .app in place
+    // and returns; let Tauri's event loop relaunch it after releasing the state locks.
     if let Err(error) = update.install(bytes) {
         settings.update_receipt.clear();
         let _ = settings.save(store.path());
         return Err(error_kind(&error).into());
     }
     pending.view.state = "installing";
-    app.restart();
+    drop(settings);
+    drop(pending);
+    app.request_restart();
+    Ok(())
 }
 
 async fn operate(app: &AppHandle, action: &str, automatic: bool) -> View {
@@ -325,7 +333,14 @@ mod tests {
         );
         let public = std::fs::read_to_string(key.with_extension("key.pub")).unwrap();
         let signature = std::fs::read_to_string(payload.with_extension("exe.sig")).unwrap();
-        for case in ["valid", "tampered", "unsigned", "replay", "old"] {
+        for (target, case) in [
+            ("windows-x86_64", "valid"),
+            ("darwin-aarch64", "valid"),
+            ("darwin-aarch64", "tampered"),
+            ("windows-x86_64", "unsigned"),
+            ("darwin-aarch64", "replay"),
+            ("windows-x86_64", "old"),
+        ] {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let endpoint = format!("http://{}/latest.json", listener.local_addr().unwrap());
             let version = match case {
@@ -333,7 +348,17 @@ mod tests {
                 "replay" => "9.9.9",
                 _ => "2.0.0",
             };
-            let manifest = json!({"version":version,"platforms":{"windows-x86_64":{"url":endpoint.replace("latest.json", "payload"),"signature":if case == "unsigned" { "" } else { signature.trim() }}}}).to_string();
+            let entry = |platform: &str| {
+                json!({
+                    "url": endpoint.replace("latest.json", platform),
+                    "signature": if case == "unsigned" { "" } else { signature.trim() },
+                })
+            };
+            let manifest = json!({"version":version,"platforms":{
+                "windows-x86_64":entry("windows-x86_64"),
+                "darwin-aarch64":entry("darwin-aarch64"),
+            }})
+            .to_string();
             let server = std::thread::spawn(move || {
                 for _ in 0..if case == "old" { 1 } else { 2 } {
                     let (mut socket, _) = listener.accept().unwrap();
@@ -345,7 +370,10 @@ mod tests {
                     let bytes: &[u8] =
                         if String::from_utf8_lossy(&request[..length]).contains("/latest.json") {
                             manifest.as_bytes()
-                        } else if case == "tampered" {
+                        } else if case == "tampered"
+                            || !String::from_utf8_lossy(&request[..length])
+                                .starts_with(&format!("GET /{target} "))
+                        {
                             b"changed installer"
                         } else {
                             b"synthetic installer; never executed"
@@ -372,7 +400,7 @@ mod tests {
                 .updater_builder()
                 .pubkey(public.trim())
                 .no_proxy()
-                .target("windows-x86_64")
+                .target(target)
                 .endpoints(vec![endpoint.parse().unwrap()])
                 .unwrap()
                 .timeout(Duration::from_secs(10))
