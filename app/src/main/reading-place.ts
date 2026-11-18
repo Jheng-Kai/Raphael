@@ -32,22 +32,6 @@ export function repaintView(scroller: HTMLElement, slack = 4): () => void {
 }
 
 /**
- * Told on every draw whether a member is at work in the thread: when the work ends (the work line and the slime go, the reply is
- * drawn and the thread kept at its bottom, all in one frame), on a Mac the view is painted afresh once that has settled. WebKit
- * left the whole thread black there until a scroll.
- */
-export function repaintAfterWork(scroller: HTMLElement, mac = IS_MAC): (working: boolean) => void {
-  let was = false, settle = 0, cancel = (): void => {};
-  return working => {
-    const ended = was && !working;
-    was = working;
-    if (!ended || !mac) return;
-    clearTimeout(settle); cancel();
-    settle = window.setTimeout(() => { cancel = repaintView(scroller); }, SETTLE_MS);
-  };
-}
-
-/**
  * Keeps `scroller`'s reading place across width changes of it; `items` are the messages, in order. With `repaint` (on a
  * Mac), once the width has settled the view scrolls one pixel and back: WebKit can leave part of a thread whose place was
  * set while its width changed unpainted, a hard cut over the background that only a scroll clears (seen with the details

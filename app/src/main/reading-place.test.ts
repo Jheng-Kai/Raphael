@@ -3,7 +3,7 @@
 // place it had, it does not read as "at the bottom". What stands under the thread growing or shrinking is the thread's one stick
 // to the bottom (message-rich.test.ts).
 import { afterEach, expect, test, vi } from "vitest";
-import { keepReadingPlace, NUDGE_PX, repaintAfterWork, SETTLE_MS } from "./reading-place";
+import { keepReadingPlace, NUDGE_PX, SETTLE_MS } from "./reading-place";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -71,26 +71,6 @@ test("a wider, shorter thread clamped to its new end before the width is reporte
   expect(view.top).toBe(3400 - 40);
   expect(holds.length).toBeGreaterThan(0);
   scroller.remove();
-});
-
-test("on a Mac the end of a member's work paints the thread afresh once it has settled, and work going on or Windows scrolls nothing", () => {
-  vi.useFakeTimers();
-  const at = scrollerAt(3400);
-  const mac = repaintAfterWork(at.scroller, true), windows = repaintAfterWork(at.scroller, false);
-  for (const told of [mac, windows]) { told(false); told(true); told(true); }
-  vi.advanceTimersByTime(SETTLE_MS); frame(at.frames);
-  expect(at.tops).toEqual([]);
-  // The work ends: the thread at its bottom steps up and back down in two frames, after the change has settled.
-  mac(false); windows(false);
-  frame(at.frames);
-  expect(at.tops).toEqual([]);
-  vi.advanceTimersByTime(SETTLE_MS);
-  frame(at.frames); frame(at.frames);
-  expect(at.tops).toEqual([3400 - NUDGE_PX, 3400]);
-  // Drawn again with nothing at work, nothing more is scrolled.
-  at.tops.length = 0;
-  mac(false); vi.advanceTimersByTime(SETTLE_MS); frame(at.frames);
-  expect(at.tops).toEqual([]);
 });
 
 /** A scroller at `top` of a 4000 px thread in a 600 px view, whose ResizeObserver this hands back. */
