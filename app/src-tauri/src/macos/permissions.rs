@@ -74,6 +74,27 @@ pub fn request_microphone(wait: Duration) -> bool {
     receive.recv_timeout(wait).unwrap_or(false)
 }
 
+/// Asks the person for the microphone if it has not been decided, without waiting for the answer:
+/// a recording never waits on macOS's question (the next press records once it is allowed).
+pub fn ask_microphone() {
+    if microphone() != Microphone::NotDetermined {
+        return;
+    }
+    autoreleasepool(|_| {
+        let class: &AnyClass = class!(AVCaptureDevice);
+        let media = NSString::from_str(AUDIO);
+        let block = RcBlock::new(|_granted: Bool| {});
+        // SAFETY: a class method taking a media type and a completion block, which it copies.
+        unsafe {
+            let () = msg_send![
+                class,
+                requestAccessForMediaType: &*media,
+                completionHandler: &*block
+            ];
+        }
+    });
+}
+
 /// Whether the app may use the accessibility API; with `prompt`, macOS shows its own question
 /// once if it has not been decided.
 pub fn accessibility(prompt: bool) -> bool {

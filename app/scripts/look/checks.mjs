@@ -8711,6 +8711,33 @@ export function checkRendered(name, context = {}) {
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
     return { check: name, keys: caps.join(" + ") };
   }
+  if (name === "settings-mic-undecided" || name === "settings-mic-denied") return (async () => {
+    const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
+    const note = scrim.querySelector('.missing-note'), first = scrim.querySelector('.sgroup');
+    require(visible(note), "the microphone note is on the 聽寫 tab");
+    require(note.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING, "the note stands above the shortcuts");
+    const box = note.getBoundingClientRect(), list = first.getBoundingClientRect();
+    require(box.left >= list.left - 1 && box.right <= list.right + 1, "it is no wider than the shortcuts under it");
+    const words = note.querySelector('span');
+    require(words.scrollWidth <= words.clientWidth + 1, "its words wrap inside the tab");
+    const opened = () => window.__look.calls.filter(call => call.command === "core_call" && call.method === "audio.monitor" && call.params?.on === true).length;
+    require(opened() === 0, "the meter never opened the microphone");
+    if (name === "settings-mic-denied") {
+      const button = note.querySelector('[data-missing-pane]');
+      require(visible(button) && button.dataset.missingPane.endsWith("Privacy_Microphone"), "its button opens the Microphone pane");
+      require(!scrim.querySelector('[data-act="mic-ask"]'), "a refused microphone is not asked again from here");
+    } else {
+      const ask = note.querySelector('[data-act="mic-ask"]');
+      require(visible(ask) && ask.textContent.trim().length > 0, "測試麥克風 is beside the words");
+      const before = window.__look.calls.filter(call => call.command === "microphone_ask").length;
+      ask.click();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      require(window.__look.calls.filter(call => call.command === "microphone_ask").length === before + 1, "測試麥克風 asks macOS once");
+      require(opened() === 0, "a microphone still not allowed is not opened");
+    }
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    return { check: name };
+  })();
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
     const active = tabs.filter(tab => tab.getAttribute("aria-selected") === "true");

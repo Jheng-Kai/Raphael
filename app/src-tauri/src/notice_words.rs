@@ -2,6 +2,88 @@
 
 pub(super) fn text(source: &str, language: &str) -> Option<&'static str> {
     match source {
+        "《Negative. The microphone is not allowed. Allow Raphael in System Settings > Privacy & Security > Microphone.》" => {
+            match language {
+                "zh-CN" => Some(
+                    "《否。麦克风未获允许。请在“系统设置 › 隐私与安全性 › 麦克风”允许拉斐尔。》",
+                ),
+                "ko" => Some(
+                    "《거절. 마이크가 허용되지 않았습니다. 시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Raphael을 허용해 주세요.》",
+                ),
+                "es" => Some(
+                    "《No. El micrófono no está permitido. Permite Raphael en Ajustes del Sistema › Privacidad y seguridad › Micrófono.》",
+                ),
+                "fr" => Some(
+                    "《Non. Le microphone n’est pas autorisé. Autorisez Raphael dans Réglages Système › Confidentialité et sécurité › Microphone.》",
+                ),
+                "de" => Some(
+                    "《Nein. Das Mikrofon ist nicht erlaubt. Erlaube Raphael unter Systemeinstellungen › Datenschutz & Sicherheit › Mikrofon.》",
+                ),
+                "pt-BR" => Some(
+                    "《Não. O microfone não está permitido. Permita o Raphael em Ajustes do Sistema › Privacidade e Segurança › Microfone.》",
+                ),
+                "it" => Some(
+                    "《No. Il microfono non è consentito. Consenti Raphael in Impostazioni di Sistema › Privacy e sicurezza › Microfono.》",
+                ),
+                "ru" => Some(
+                    "《Нет. Микрофон не разрешён. Разрешите Raphael в Системных настройках › Конфиденциальность и безопасность › Микрофон.》",
+                ),
+                "vi" => Some(
+                    "《Không. Micrô chưa được cho phép. Hãy cho phép Raphael trong Cài đặt hệ thống › Quyền riêng tư & Bảo mật › Micrô.》",
+                ),
+                "th" => Some(
+                    "《ไม่. ยังไม่ได้อนุญาตไมโครโฟน โปรดอนุญาต Raphael ในการตั้งค่าระบบ › ความเป็นส่วนตัวและความปลอดภัย › ไมโครโฟน》",
+                ),
+                "id" => Some(
+                    "《Tidak. Mikrofon tidak diizinkan. Izinkan Raphael di Pengaturan Sistem › Privasi & Keamanan › Mikrofon.》",
+                ),
+                "tr" => Some(
+                    "《Hayır. Mikrofona izin verilmedi. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon’da Raphael’e izin verin.》",
+                ),
+                _ => None,
+            }
+        }
+        "《Negative. The microphone is not allowed yet. Allow Raphael when macOS asks, then press the key again.》" => {
+            match language {
+                "zh-CN" => Some(
+                    "《否。尚未取得麦克风权限。请在 macOS 的询问中允许拉斐尔，再按一次快捷键。》",
+                ),
+                "ko" => Some(
+                    "《거절. 아직 마이크 권한이 없습니다. macOS가 물으면 Raphael을 허용한 뒤 단축키를 다시 눌러 주세요.》",
+                ),
+                "es" => Some(
+                    "《No. El micrófono aún no está permitido. Permite Raphael cuando macOS lo pregunte y vuelve a pulsar la tecla.》",
+                ),
+                "fr" => Some(
+                    "《Non. Le microphone n’est pas encore autorisé. Autorisez Raphael quand macOS le demande, puis appuyez de nouveau sur la touche.》",
+                ),
+                "de" => Some(
+                    "《Nein. Das Mikrofon ist noch nicht erlaubt. Erlaube Raphael, wenn macOS fragt, und drücke die Taste dann erneut.》",
+                ),
+                "pt-BR" => Some(
+                    "《Não. O microfone ainda não está permitido. Permita o Raphael quando o macOS perguntar e pressione a tecla de novo.》",
+                ),
+                "it" => Some(
+                    "《No. Il microfono non è ancora consentito. Consenti Raphael quando macOS lo chiede, poi premi di nuovo il tasto.》",
+                ),
+                "ru" => Some(
+                    "《Нет. Микрофон ещё не разрешён. Разрешите Raphael, когда macOS спросит, и нажмите клавишу ещё раз.》",
+                ),
+                "vi" => Some(
+                    "《Không. Micrô chưa được cho phép. Hãy cho phép Raphael khi macOS hỏi, rồi nhấn phím lại.》",
+                ),
+                "th" => {
+                    Some("《ไม่. ยังไม่ได้อนุญาตไมโครโฟน โปรดอนุญาต Raphael เมื่อ macOS ถาม แล้วกดปุ่มอีกครั้ง》")
+                }
+                "id" => Some(
+                    "《Tidak. Mikrofon belum diizinkan. Izinkan Raphael saat macOS bertanya, lalu tekan tombolnya lagi.》",
+                ),
+                "tr" => Some(
+                    "《Hayır. Mikrofona henüz izin verilmedi. macOS sorduğunda Raphael’e izin verin, sonra tuşa yeniden basın.》",
+                ),
+                _ => None,
+            }
+        }
         "《Notice. Raphael has no Accessibility permission and cannot paste. The text is copied. Press Command+V.》" => {
             match language {
                 "zh-CN" => {

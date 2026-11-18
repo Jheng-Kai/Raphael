@@ -212,6 +212,8 @@ export function createSettings(app: AppContext): SettingsPage {
   let checkingOpenrouter = false;
   let devices: AudioDevices | null = null;
   let altgr = false;
+  /** macOS's answer for the microphone (null on Windows, or before it is read): the meter opens it only once allowed. */
+  let microphone: import("../types").MicrophonePermission | null = null;
   let version = "";
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
@@ -265,7 +267,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update,
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, microphone, version,
     replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -996,9 +998,12 @@ export function createSettings(app: AppContext): SettingsPage {
   let windowFocused = true;
   let microphoneTimer: ReturnType<typeof setInterval> | undefined;
 
-  /** The microphone is listened to while the page is on screen and the window is in use. */
+  /**
+   * The microphone is listened to while the page is on screen and the window is in use, and on a Mac only once the owner has
+   * allowed it: the meter never brings up macOS's question (測試麥克風 does).
+   */
   function syncMonitor(): void {
-    const want = visible && pane === "dictation" && !document.hidden && windowFocused;
+    const want = visible && pane === "dictation" && !document.hidden && windowFocused && (microphone === null || microphone === "allowed");
     monitor.set(want);
     if (want && microphoneTimer === undefined) {
       microphoneTimer = setInterval(() => {
@@ -1129,6 +1134,13 @@ export function createSettings(app: AppContext): SettingsPage {
       case "close":
         app.closeSettings();
         break;
+      case "mic-ask": {
+        // The owner's own press: macOS asks, once, and the meter opens when they allow it.
+        const button = target.closest<HTMLButtonElement>('[data-act="mic-ask"]');
+        if (button) button.disabled = true;
+        void api.microphoneAsk().catch(() => false).then(() => readMicrophone()).finally(() => { if (button?.isConnected) button.disabled = false; });
+        break;
+      }
       case "rec":
       case "rec-agent":
       case "rec-tidy": {
@@ -1228,9 +1240,20 @@ export function createSettings(app: AppContext): SettingsPage {
   };
   wireKeyField(el, { inputId: "key-input", pasteSelector: '[data-act="key-paste"]', submit: (value) => void submitKey(value) });
 
+  /** Reads macOS's answer for the microphone again; the page and the meter follow a change. */
+  async function readMicrophone(): Promise<void> {
+    const value = await api.microphonePermission().catch(() => microphone);
+    if (value === microphone) return;
+    microphone = value;
+    if (visible) render();
+    syncMonitor();
+  }
+
   const onFocus = (): void => {
     windowFocused = true;
     syncMonitor();
+    // Back from System Settings: a microphone allowed there opens the meter at once.
+    if (visible && pane === "dictation") void readMicrophone();
   };
   const onBlur = (): void => {
     windowFocused = false;
@@ -1241,7 +1264,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Reads what the settings show; the returned step keeps it and says whether anything changed. */
   async function readSettings(): Promise<() => boolean> {
-    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult] = await Promise.allSettled([
+    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, microphoneResult] = await Promise.allSettled([
       api.settingsGet(),
       api.secretsStatus(),
       api.statusGet(),
@@ -1249,22 +1272,24 @@ export function createSettings(app: AppContext): SettingsPage {
       api.keyboardHasAltgr(),
       getVersion(),
       api.languagesList(),
+      api.microphonePermission(),
       // Read again: the settings may have changed since the window started. `refreshDevice` puts
       // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
       app.refreshDevice(),
     ]);
     return () => {
-      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
+      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, microphone, version, languageGroups]);
       brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
       hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
       openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
       spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
       devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
       altgr = altgrResult.status === "fulfilled" && altgrResult.value;
+      microphone = microphoneResult.status === "fulfilled" ? microphoneResult.value : null;
       version = versionResult.status === "fulfilled" ? versionResult.value : "";
       if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
       if (brainResult.status === "fulfilled") readOnce = true;
-      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
+      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, microphone, version, languageGroups]);
     };
   }
 
@@ -1346,6 +1371,8 @@ export function createSettings(app: AppContext): SettingsPage {
       if (mine !== loads || !visible) return;
       // Nothing is redrawn under the owner's hands unless the read found something new.
       if (apply() || loading) { loading = false; render(); }
+      // The microphone's answer is known now: the meter follows it.
+      syncMonitor();
       if (repair) {
         const [target, resource] = repair;
         if (["search", "read", "vision", "pdf"].includes(target)) {

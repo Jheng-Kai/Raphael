@@ -243,6 +243,8 @@ pub fn run() {
             commands::main_window_forward,
             commands::hotkeys_practice,
             commands::mic_access,
+            commands::microphone_permission,
+            commands::microphone_ask,
             commands::main_events,
             commands::agent_ask_text,
             commands::agent_retract,

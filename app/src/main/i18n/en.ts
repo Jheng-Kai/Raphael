@@ -953,6 +953,8 @@ export const en = {
   "settings.050": "Raphael spending this month",
   "settings.052": "The core is not responding. Reopen Settings shortly; restart Raphael if settings remain unavailable.",
   "settings.054": "Your keyboard uses Right Alt as AltGr. Choose another shortcut.",
+  "settings.micUndecided": "Raphael has no microphone permission yet. Press Test microphone and macOS asks once.",
+  "settings.micAsk": "Test microphone",
   "settings.055": "Dictation mode",
   "settings.059": "Interface language",
   "settings.067": "Theme",

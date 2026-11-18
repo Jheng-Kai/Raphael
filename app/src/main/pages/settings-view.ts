@@ -27,6 +27,7 @@ import { bindingLabels } from "../keys";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
+import { missingHTML } from "../missing";
 import type { LocalView } from "../local-models";
 import { type ModelPickerLook, modelDisplayName, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, priceHTML, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
@@ -121,6 +122,8 @@ export interface SettingsView {
   devices: AudioDevices | null;
   /** The keyboard layout makes Right Alt an AltGr. */
   altgr: boolean;
+  /** macOS's answer for the microphone, read without asking; null on Windows or while it is not known. */
+  microphone?: import("../types").MicrophonePermission | null;
   /** The app's version, as Tauri gives it; empty while it is not known. */
   version: string;
   /** The key field is shown although there is a key (「變更」). */
@@ -405,6 +408,17 @@ function shortcutRow(name: string, bindings: readonly string[], change?: { act: 
 const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
   v.altgr && bindings.some((binding) => binding.split("+").includes("AltRight")) ? [note(st("warn", t("settings.054")))] : [];
 
+/**
+ * A Mac's microphone while the meter may not open it: not decided yet (測試麥克風 asks macOS, once), or refused (its pane is
+ * a press away). Nothing is drawn while it is allowed, or on Windows.
+ */
+const microphoneNote = (v: SettingsView): string =>
+  v.microphone === "undecided"
+    ? `<div class="missing-note" role="status"><span>${esc(t("settings.micUndecided"))}</span>${btn(esc(t("settings.micAsk")), "sm", ' data-act="mic-ask"')}</div>`
+    : v.microphone === "denied" || v.microphone === "restricted"
+      ? missingHTML({ resource: "microphone", requirement: "microphone", state: "missing", repair: null })
+      : "";
+
 /** The pane title receives focus when settings open. A tab is its name alone: no line under it, no action beside it. */
 export const headingHTML = (v: SettingsView): string =>
   `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
@@ -458,6 +472,7 @@ function dictationHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
     coreNote(v) +
+    microphoneNote(v) +
     section(t("home.shortcuts"), [
       shortcutRow(t("settings.agentKeys"), v.device.agent_keys ?? [], { act: "rec-agent", field: "agent_keys" }),
       ...altgrNote(v, v.device.agent_keys ?? []),

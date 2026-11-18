@@ -399,11 +399,12 @@ pub struct DeskHandle(pub Arc<dyn Desk>);
 /// must be quick and must not wait for the main thread.
 pub type AppFront = Arc<dyn Fn() -> bool + Send + Sync>;
 
-/// Whether this app may record, asked before each recording starts: `None` when it may, or the
-/// notice that says why not. macOS asks the person once and then gives an app it was refused
-/// nothing but silence, so a refused microphone is said at once instead of after a recording of
-/// nothing, which the automatic microphone choice would also count against the microphone. It may
-/// block while the person answers macOS's question (`macos_microphone_gate`).
+/// Whether this app may record, asked before anything shows that a recording began: `None` when it
+/// may, or the notice that says why not. macOS asks the person once and then gives an app it was
+/// refused nothing but silence, so a refused microphone is said at once instead of after a recording
+/// of nothing, which the automatic microphone choice would also count against the microphone. It
+/// never waits for macOS's question (`macos_microphone_gate`): a recording that waited showed
+/// 「聆聽中」 before it could hear, and a key let go meanwhile stopped it the moment it started.
 pub type MicrophoneGate = Arc<dyn Fn() -> Option<Notice> + Send + Sync>;
 
 /// How often the controller looks at the window while a YES/NO question waits, to show it on the
@@ -1241,6 +1242,26 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         member: u64,
         destination: Option<(u64, bool)>,
     ) -> Option<JoinHandle<()>> {
+        // The microphone first: nothing shows that a recording began, and nothing is recorded, until
+        // macOS lets this app use it. A press that cannot start (busy) asks nothing.
+        if let Some(gate) = &self.microphone {
+            let free = {
+                let state = lock(&self.state);
+                match state.phase {
+                    Phase::Idle => true,
+                    Phase::Recording => {
+                        kind == Kind::Agent && state.kind() == Some(Kind::Dictation)
+                    }
+                    Phase::Processing => false,
+                }
+            };
+            if free && let Some(notice) = gate() {
+                log::info!("the microphone is not allowed for this app; nothing is recorded");
+                self.tell(DictationPhase::Failed, kind == Kind::Agent);
+                self.show(notice);
+                return None;
+            }
+        }
         let id = uuid::Uuid::new_v4().to_string();
         let (answered, started) = watch::channel(Started::Pending);
         let replaced = {
@@ -1303,24 +1324,6 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 // is not asked to open the microphone for it.
                 if !this.is_current(&id) {
                     log::info!("the question was cancelled before it started; no dictation.start");
-                    answered.send_replace(Started::Failed);
-                    return;
-                }
-            }
-            if let Some(gate) = this.microphone.clone() {
-                let refused = tokio::task::spawn_blocking(move || gate())
-                    .await
-                    .unwrap_or(None);
-                if let Some(notice) = refused {
-                    log::info!("the microphone is not allowed for this app; no dictation.start");
-                    this.finish(&id, |this| {
-                        this.tell(DictationPhase::Failed, kind == Kind::Agent);
-                        this.show(notice);
-                    });
-                    answered.send_replace(Started::Failed);
-                    return;
-                }
-                if !this.is_current(&id) {
                     answered.send_replace(Started::Failed);
                     return;
                 }
@@ -3614,16 +3617,19 @@ mod app {
     }
 }
 
-/// macOS's answer for this app's microphone: allowed, or the notice that says where to allow it.
-/// A question not answered yet is asked now, and the recording waits for the answer (at most two
-/// minutes), so the first dictation records once it is allowed.
+/// macOS's answer for this app's microphone, read without waiting: allowed, refused (the notice
+/// says where to allow it), or not decided yet. Then macOS's question comes up now and the notice
+/// says to press again once it is allowed: nothing is recorded while the question is up.
 #[cfg(target_os = "macos")]
 fn macos_microphone_gate() -> Option<Notice> {
-    use crate::macos::permissions::request_microphone;
-    if request_microphone(std::time::Duration::from_secs(120)) {
-        None
-    } else {
-        Some(notices::NO_SOUND)
+    use crate::macos::permissions::{self, Microphone};
+    match permissions::microphone() {
+        Microphone::Authorized => None,
+        Microphone::Denied | Microphone::Restricted => Some(notices::MIC_DENIED),
+        Microphone::NotDetermined => {
+            permissions::ask_microphone();
+            Some(notices::MIC_ASKED)
+        }
     }
 }
 
@@ -3633,8 +3639,8 @@ mod tests {
     use crate::device_settings::DeviceSettings;
     use crate::hotkey::{CancelSwitch, HotkeyEvent};
     use crate::notices::{
-        ASK_FAILED, BUDGET, CORE_DOWN, ELEVATED, FOCUS_CHANGED, GREETING, INCOMPLETE,
-        NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_PASTE_PERMISSION, NO_SOUND,
+        ASK_FAILED, BUDGET, CORE_DOWN, ELEVATED, FOCUS_CHANGED, GREETING, INCOMPLETE, MIC_ASKED,
+        MIC_DENIED, NO_LOCAL_MODEL as NO_LOCAL_NOTICE, NO_MIC, NO_PASTE_PERMISSION, NO_SOUND,
         NO_TIDY_PERMISSION, NOT_READY, NOTHING_SELECTED, OFFLINE, TIDY_FAILED,
     };
     use crate::overlay::{Mode, OverlayApi, OverlayEvent, Progress, takes_clicks};
@@ -4715,13 +4721,45 @@ mod tests {
     #[tokio::test]
     async fn a_microphone_the_app_may_not_use_is_said_at_once_and_nothing_is_recorded() {
         let c = controller(FakeCore::default(), FakePaster::pasting("notepad.exe"))
-            .with_microphone_gate(Arc::new(|| Some(NO_SOUND)));
+            .with_microphone_gate(Arc::new(|| Some(MIC_DENIED)));
         run(&c, HotkeyEvent::DictationDown, 0).await;
         run(&c, HotkeyEvent::DictationUp, 900).await;
         assert_eq!(c.core().count("dictation.start"), 0);
         assert_eq!(c.core().count("dictation.stop"), 0);
-        ends_with_notice(&c, NO_SOUND.zh);
+        assert!(
+            !c.overlay()
+                .events()
+                .iter()
+                .any(|event| event == "show:listening")
+        );
+        ends_with_notice(&c, MIC_DENIED.zh);
         assert_eq!(c.phase(), Phase::Idle);
+    }
+
+    #[tokio::test]
+    async fn a_microphone_macos_has_not_decided_yet_is_asked_and_the_press_shows_no_listening() {
+        // A recording that waited for macOS's question showed 聆聽中 before it could hear, and a key
+        // let go meanwhile stopped it the moment it started: the press is told to come again instead.
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let c = controller(FakeCore::default(), FakePaster::pasting("notepad.exe"))
+            .with_microphone_gate(Arc::new(|| Some(MIC_ASKED)))
+            .with_phase_report(Arc::new(move |phase, agent, _member| {
+                sink.lock().unwrap().push((phase, agent));
+            }));
+        run(&c, HotkeyEvent::DictationDown, 0).await;
+        run(&c, HotkeyEvent::DictationUp, 900).await;
+        assert_eq!(c.core().count("dictation.start"), 0);
+        assert_eq!(c.core().count("dictation.stop"), 0);
+        assert!(
+            !c.overlay()
+                .events()
+                .iter()
+                .any(|event| event == "show:listening")
+        );
+        ends_with_notice(&c, MIC_ASKED.zh);
+        assert_eq!(c.phase(), Phase::Idle);
+        assert_eq!(*seen.lock().unwrap(), [(DictationPhase::Failed, false)]);
     }
 
     #[tokio::test]
