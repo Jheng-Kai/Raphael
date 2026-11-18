@@ -35,21 +35,36 @@ interface InlineLayer {
   active(direction?: NavStep): boolean;
   back(): void;
   step?: LayerStep;
+  /** The layer is itself a place of the view history (a page, a member's settings, the Details column): forward with no
+   *  inner step goes on through the history instead of stopping at it. */
+  place: boolean;
 }
 
 const inline = new WeakMap<HTMLElement, InlineLayer>();
 let order = 0;
 
 /** An inline surface that owns navigation but keeps its existing outside-click policy. */
-export function bindNavLayer(el: HTMLElement, back: () => void, options: { active?: (direction?: NavStep) => boolean; step?: LayerStep } = {}): void {
+export function bindNavLayer(el: HTMLElement, back: () => void, options: { active?: (direction?: NavStep) => boolean; step?: LayerStep; place?: boolean } = {}): void {
   el.dataset.navLayer = "";
-  inline.set(el, { order: ++order, back, active: options.active ?? (() => true), step: options.step });
+  inline.set(el, { order: ++order, back, active: options.active ?? (() => true), step: options.step, place: options.place ?? false });
 }
 
-/** Inline editors keep the same cancel action and busy guard as their visible button. */
+/**
+ * Inline editors keep the same cancel action and busy guard as their visible button. Back never throws away words that were
+ * typed (Escape never did): once a field of the editor differs from what it held when the editor was drawn, back only puts
+ * the focus on it, and the editor's own Cancel is the way to drop them.
+ */
 export function bindLayerCancels(root: HTMLElement, selector: string): void {
   for (const button of root.querySelectorAll<HTMLButtonElement>(selector)) {
-    bindNavLayer(button, () => button.click());
+    const editor = button.closest<HTMLElement>("section, form, .ob-tile, .cs-form") ?? root;
+    const fields = (): (HTMLInputElement | HTMLTextAreaElement)[] => [...editor.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input:not([type=file]), textarea")];
+    const drawn = fields().map(field => field.value);
+    bindNavLayer(button, () => {
+      const now = fields();
+      const changed = now.findIndex((field, at) => field.value !== drawn[at]);
+      if (changed >= 0 || now.length !== drawn.length) { now[Math.max(changed, 0)]?.focus(); return; }
+      button.click();
+    });
   }
 }
 
@@ -61,16 +76,21 @@ export function bindLayerSteps<T>(el: HTMLElement, views: LayerViews<T>, show: (
   });
 }
 
-/** Only surfaces inside the top dialog are eligible. A child takes precedence over its parent. */
+/**
+ * Only surfaces inside the top dialog are eligible. A child takes precedence over its parent, whatever the order they were
+ * bound in; among the rest the one bound last is on top. Parents are left out before the order is compared, so the answer
+ * never depends on where an unrelated layer stands in the document.
+ */
 function topInline(scope: ParentNode, direction?: NavStep): InlineLayer | undefined {
-  let top: HTMLElement | undefined;
   const nodes = [...scope.querySelectorAll<HTMLElement>("[data-nav-layer]")];
   if (scope instanceof HTMLElement && inline.has(scope)) nodes.unshift(scope);
-  for (const el of nodes) {
+  const eligible = nodes.filter(el => {
     const layer = inline.get(el);
-    if (!layer || el.closest("[hidden], [inert]") || !layer.active(direction)) continue;
-    if (!top || top.contains(el) || (!el.contains(top) && layer.order > inline.get(top)!.order)) top = el;
-  }
+    return !!layer && !el.closest("[hidden], [inert]") && layer.active(direction);
+  });
+  const innermost = eligible.filter(el => !eligible.some(other => other !== el && el.contains(other)));
+  let top: HTMLElement | undefined;
+  for (const el of innermost) if (!top || inline.get(el)!.order > inline.get(top)!.order) top = el;
   return top && inline.get(top);
 }
 
@@ -99,6 +119,8 @@ export function stepInlineLayer(scope: ParentNode, direction: NavStep, withinLay
   const layer = topInline(scope, direction);
   if (!layer) return false;
   if (layer.step?.(direction, withinLayer)) return true;
-  if (direction === "back") layer.back();
+  // Forward never moves the page under a dialog or a menu, but a layer that is itself a place lets it go on.
+  if (direction === "forward") return !layer.place;
+  layer.back();
   return true;
 }

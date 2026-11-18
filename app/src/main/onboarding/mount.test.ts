@@ -74,7 +74,7 @@ const open = async (): Promise<void> => {
 };
 const text = (selector: string): string => root.querySelector(selector)?.textContent ?? "";
 
-test.each(navInputs)("%s can retrace guide steps without finishing onboarding", async input => {
+test.each(navInputs)("%s can retrace guide steps, and back at the first step leaves the guide where it is", async input => {
   await open();
   pressLayer(input, "forward");
   expect(root.dataset.step).toBe("welcome");
@@ -83,14 +83,11 @@ test.each(navInputs)("%s can retrace guide steps without finishing onboarding", 
   expect(root.dataset.step).toBe("welcome");
   pressLayer(input, "forward");
   expect(root.dataset.step).toBe("tools");
-  await press('[data-item="openrouter"] [data-ob="key-replace"]');
-  expect(root.querySelector("#ob-key-input")).not.toBeNull();
-  pressLayer(input);
-  expect(root.querySelector("#ob-key-input")).toBeNull();
-  expect(root.dataset.step).toBe("tools");
   pressLayer(input);
   pressLayer(input);
-  expect(done).toHaveBeenCalledWith({ finished: false });
+  // One stray press never skips the first-run guide (R-NAV-02).
+  expect(root.dataset.step).toBe("welcome");
+  expect(done).not.toHaveBeenCalled();
   expect(setDevice).not.toHaveBeenCalledWith({ onboarded: true });
 });
 

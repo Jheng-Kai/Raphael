@@ -524,14 +524,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const expand = (on: boolean): void => {
     if (on && !panel.hasAttribute('data-expanded')) { returnPanelOpen = options.panelVisible(); options.openPanel(); }
     panel.toggleAttribute('data-expanded', on);
+    // Back does what Escape does: it folds the view while the owner only watches. While the owner holds the controls it does
+    // nothing here (inside the screen the computer has the side buttons): ending control is the pill's own button.
     if (on) bindNavLayer(panel, () => {
-      if (changing) return;
-      if (watching) collapseWatch();
-      else if (!demonstration) {
-        // Fold without answering a pending sign-in request. A lease is released without its request id.
-        if (state?.control === "owner") void release(false).then(() => { if (watching) collapseWatch(); });
-        else expand(false);
-      }
+      if (!changing && watching) collapseWatch();
     }, {
       active: () => panel.hasAttribute('data-expanded'),
       step: direction => {

@@ -58,7 +58,8 @@ function focusSelector(host: HTMLElement): string {
 export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: AppContext): void {
   let flow: FlowState = initialState();
   const steps = new LayerViews(flow.step);
-  bindNavLayer(root, () => leave({ finished: false }), {
+  // Back at the first step does nothing: one stray press must not drop a new person into an app nobody set up (R-NAV-02).
+  bindNavLayer(root, () => {}, {
     active: () => !destroyed,
     step: direction => finishing || steps.step(direction, step => {
       flow = { ...flow, step };

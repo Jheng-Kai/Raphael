@@ -420,14 +420,17 @@ export function createMembers(host: MembersHost): MembersShell {
   }
 
   let stopPanelTabs: (() => void) | undefined;
-  function bindPanelNavigation(initialColumn = false): void {
+  function bindPanelNavigation(): void {
     const trail = new LayerViews<DetailsTab>("details");
     const noteTab = (): void => trail.visit(details.el.dataset.detailsTab as DetailsTab);
     details.el.addEventListener("member-panel-tab", noteTab);
     stopPanelTabs = () => details.el.removeEventListener("member-panel-tab", noteTab);
     bindNavLayer(details.el, () => setDetails(false), {
-      active: () => open && (!initialColumn || innerWidth < DETAILS_COLUMN_MIN_PX || trail.canStep("back") || trail.canStep("forward")),
+      // A column beside the conversation (wide windows) is part of the page however it was opened: back closes it only where
+      // it stands over the conversation, and walks its tabs either way.
+      active: () => open && (innerWidth < DETAILS_COLUMN_MIN_PX || trail.canStep("back") || trail.canStep("forward")),
       step: direction => trail.step(direction, details.select),
+      place: true,
     });
   }
 
@@ -651,7 +654,7 @@ export function createMembers(host: MembersHost): MembersShell {
   // A group chat comes where the conversation is: the settings page gives way to it.
   window.addEventListener("raphael:open-room", () => { panelBeforeSettings = null; settings.close(); });
   details.el.hidden = !open;
-  if (open) bindPanelNavigation(true);
+  if (open) bindPanelNavigation();
   drawAll();
 
   return {

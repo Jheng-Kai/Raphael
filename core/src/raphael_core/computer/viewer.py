@@ -179,7 +179,7 @@ addEventListener('pagehide', () => {snapshot(); clearInterval(framesTimer); fram
 document.documentElement.classList.remove('noVNC_loading');
 connect();
 setInterval(() => { if (!rfb) connect(); }, 2000);
-''' + FRAME_NAVIGATION.encode()
+''' + b"window.raphaelOwnsInput = () => !!rfb && !rfb.viewOnly;\n" + FRAME_NAVIGATION.encode()
 
 
 def embedded_page(content):

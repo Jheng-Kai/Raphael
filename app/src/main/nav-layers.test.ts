@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { frameNavigation } from "./dismissals";
-import { bindNavFrame, bindNavLayer } from "./nav-layers";
+import { bindLayerCancels, bindNavFrame, bindNavLayer, stepInlineLayer } from "./nav-layers";
 import { openEventEditor } from "./calendar-popover";
 import { mountConversationFind } from "./conversation-find";
 import { openMediaLightbox } from "./media-lightbox";
@@ -30,6 +30,49 @@ test("a focused frame can navigate only its own topmost viewer", () => {
   frame.focus();
   expect(step()).toBeUndefined();
   dialog.close();
+});
+
+test("back never throws away typed words: an edited editor only takes the focus, an untouched one cancels", () => {
+  const section = document.createElement("section");
+  section.innerHTML = '<textarea>Original</textarea><button type="button" data-cancel>Cancel</button>';
+  document.body.append(section);
+  const cancel = vi.fn();
+  section.querySelector("button")!.addEventListener("click", cancel);
+  bindLayerCancels(section, "[data-cancel]");
+  const field = section.querySelector("textarea")!;
+  field.value = "Typed instructions";
+  expect(stepInlineLayer(document, "back", () => false)).toBe(true);
+  expect(cancel).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(field);
+  field.value = "Original";
+  stepInlineLayer(document, "back", () => false);
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+test("forward goes on through a layer that is itself a place, and stops at a dialog", () => {
+  const page = document.createElement("div");
+  document.body.append(page);
+  bindNavLayer(page, vi.fn(), { place: true });
+  expect(stepInlineLayer(document, "forward", () => false)).toBe(false);
+  const dialog = document.createElement("div");
+  page.append(dialog);
+  bindNavLayer(dialog, vi.fn());
+  expect(stepInlineLayer(document, "forward", () => false)).toBe(true);
+});
+
+test("a child layer is on top of its parent whatever order they were bound in and wherever an unrelated layer stands", () => {
+  const parent = document.createElement("div"), child = document.createElement("div"), other = document.createElement("div");
+  parent.append(child);
+  const closed: string[] = [];
+  bindNavLayer(child, () => closed.push("child"));
+  bindNavLayer(other, () => closed.push("other"));
+  bindNavLayer(parent, () => closed.push("parent"));
+  document.body.append(parent, other);
+  stepInlineLayer(document, "back", () => false);
+  document.body.replaceChildren(other, parent);
+  stepInlineLayer(document, "back", () => false);
+  // The parent bound last yields to its child; the unrelated layer bound after the child is on top of it either way.
+  expect(closed).toEqual(["other", "other"]);
 });
 
 describe.each(navInputs)("%s layer navigation", input => {

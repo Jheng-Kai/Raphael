@@ -196,7 +196,7 @@ export function mountPageView(stage: HTMLElement, shell?: PageShell): PageView {
     status.replaceChildren();
     delete status.dataset.drawn;
     host.hidden = false;
-    bindNavLayer(host, close);
+    bindNavLayer(host, close, { place: true });
     shell?.fold();
     stage.classList.add("is-page");
     watchFoot();

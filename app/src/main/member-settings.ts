@@ -710,7 +710,7 @@ export function createMemberSettings(host: MemberSettingsHost): MemberSettings {
     open() {
       if (!el.hidden) { draw(); return; }
       el.hidden = false;
-      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer() });
+      bindNavLayer(el, () => view.kind === "main" ? host.back() : back(), { step: (_direction, withinLayer) => withinLayer(), place: true });
       view = { kind: "main" }; category = CATEGORIES[0].id; editing.clear(); saving.clear(); adding = false; source = ""; skillText = null; skillBusy = false;
       skills = "loading"; commands = "loading"; toolChoices = "loading"; reposition = null; delete cover.dataset.repositioning;
       drawn = ""; drawnFor = null;
