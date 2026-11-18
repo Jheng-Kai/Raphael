@@ -175,6 +175,7 @@ const NO_SOUND_MAC: Notice = Notice {
 };
 
 /// macOS has refused this app the microphone (or a profile restricts it): nothing was recorded.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const MIC_DENIED: Notice = Notice {
     zh: "《否。麥克風未獲允許。請到「系統設定 › 隱私權與安全性 › 麥克風」允許拉斐爾。》",
     en: "《Negative. The microphone is not allowed. Allow Raphael in System Settings > Privacy & Security > Microphone.》",
@@ -183,6 +184,7 @@ pub const MIC_DENIED: Notice = Notice {
 
 /// macOS is asking for the microphone for the first time: nothing is recorded meanwhile, and the
 /// next press records once it is allowed.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub const MIC_ASKED: Notice = Notice {
     zh: "《否。尚未取得麥克風權限。請在 macOS 的詢問中允許拉斐爾，再按一次快捷鍵。》",
     en: "《Negative. The microphone is not allowed yet. Allow Raphael when macOS asks, then press the key again.》",
