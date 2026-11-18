@@ -609,6 +609,8 @@ export const deviceComputerAppRemove = (exe: string): Promise<DeviceSettings> =>
   invoke("device_computer_app_remove", { exe });
 /** Whether the keyboard layout has an AltGr key (Right Alt types characters). */
 export const keyboardHasAltgr = (): Promise<boolean> => invoke("keyboard_has_altgr");
+/** macOS: whether the app may use Accessibility (the global keys, pasting, tidying), read without asking; null on Windows. */
+export const accessibilityAccess = (): Promise<boolean | null> => invoke("accessibility_access");
 /** The text on the owner's clipboard, read once for the desktop viewer's paste while the owner holds the screen; null when there is none. */
 export const ownerClipboardText = (): Promise<string | null> => invoke("owner_clipboard_text");
 /** A number that changes whenever the owner's clipboard does; null where the system has none. */
