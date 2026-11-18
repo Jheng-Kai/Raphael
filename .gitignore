@@ -43,8 +43,9 @@ coverage/
 /core/.live/
 /core/durations-out/
 
-# Test-run output that tools write into the repository root
+# Test-run output that tools write into the repository root, and the core's benchmarks into core/
 /.test-results/
+/core/.test-results/
 
 # Written by agents and tools in the repository root, never part of the project
 /.agents/briefs/
