@@ -1,6 +1,5 @@
 {
   "bundle": {
-    "createUpdaterArtifacts": false,
     "targets": ["app", "dmg"],
     "resources": {
       "../../core/dist/raphael-core/": "core/",
