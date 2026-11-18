@@ -3367,7 +3367,9 @@ export function checkRendered(name, context = {}) {
     require(visible(flyer)&&canvas&&!flyer.querySelector('img'),"the voice flyer draws the emblem live on a canvas, not a picture of it");
     const a=flyer.getBoundingClientRect(),b=canvas.getBoundingClientRect();
     require(Math.abs((a.left+a.right)/2-(b.left+b.right)/2)<=1&&Math.abs((a.top+a.bottom)/2-(b.top+b.bottom)/2)<=1,"the emblem is centred in the flyer");
-    return {check:name,canvas:Math.round(b.width)};
+    const ratio=devicePixelRatio,device=v=>Math.round(v*ratio*100)/100,off=v=>Math.abs(v*ratio-Math.round(v*ratio));
+    require(off(b.left)<0.02&&off(b.top)<0.02&&Math.abs(b.width*ratio-canvas.width)<0.02,`the emblem's canvas lies on whole screen pixels at its own size, so its letters are never resampled (at ${device(b.left)}, ${device(b.top)}, ${device(b.width)} device px for a ${canvas.width} px bitmap)`);
+    return {check:name,canvas:Math.round(b.width),at:[device(b.left),device(b.top)]};
   }
   if(name==='messaging-paired-aligned'){
     const card=document.querySelector('[data-msg-kind="telegram"]'),mark=card?.querySelector('.msg-head .msg-mark'),face=card?.querySelector('.msg-sub .msg-avatar'),title=[...(card?.querySelectorAll('.row:not(.msg-head):not(.msg-sub) > .lbl')??[])].find(visible);
