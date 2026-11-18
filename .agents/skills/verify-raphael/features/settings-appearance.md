@@ -316,14 +316,14 @@ Neither check is paid OpenRouter acceptance. See the shared look README for laun
 
 ## Hairlines on what stands apart (R-UI-162)
 
-What stands apart from the page on its own wears a hairline a shade above its fill, as Grok Bot draws it; a fill inside another surface wears
+What stands apart from the page on its own wears a hairline a shade above its fill; a fill inside another surface wears
 none. In the dark `--edge-rim` is `#2b2b2b` over the `#1f1f1f` fill (it used to be the fill's own colour, so nothing showed): the header's name
 pill, the round header buttons, the sidebar's search and plus, the page and peer pills and the Connections pill in the list draw
 `inset 0 0 0 1px var(--edge-rim)`; the Connections pill on the rail and the composer's plus draw none. A member's reply keeps the faintest
 hairline (`--ans-edge` a step above its fill). The light theme keeps its rims (`#e3e3e3` on `#efefef`). Menus, dialogs, cards and buttons
 already had their edges (R-FLOAT-01, `--edge`, `--btn-edge`) and are unchanged; rows, tabs, chips and status pills have none.
 `edges.test.ts` holds the tokens and the three rules; `chat`, `conversation-share`, `details`, `sidebar`, `sidebar-rail` and `composer` show them.
-The research behind the values is local (the owner's Grok Bot references), never in the repository.
+The research behind the values is local (the owner's references), never in the repository.
 
 ## Theme and clarity
 

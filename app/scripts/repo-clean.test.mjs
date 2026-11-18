@@ -215,6 +215,22 @@ describe("ref", () => {
   });
 });
 
+describe("name", () => {
+  it.each(["as Gro~k Bot draws it", "the gro~kbot window", "Gro~k Bot shares a bot by a link"])(
+    "the app a design was measured against hits: %s",
+    (text) => {
+      expect(rules("a.md", text)).toContain("name");
+    },
+  );
+
+  it.each(["xAI Grok Web Search", "grok-4.5", "grok-imagine-image", "a Grok model"])(
+    "a provider's model is not a mark: %s",
+    (text) => {
+      expect(rules("a.md", text)).toEqual([]);
+    },
+  );
+});
+
 describe("which files are read", () => {
   it("skips licence texts, lock files and files that are not text", () => {
     expect(isScanned("app/src/main/a.ts")).toBe(true);

@@ -112,8 +112,8 @@
   --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
   --edge: #262626; --line: #262626;
   /* No bright edges in the dark: controls are told apart by their fill. What stands apart from the page on its own (a pill,
-     a round button, the Connections pill) wears a hairline a shade above its fill (`--edge-rim`, +12, as Grok Bot draws
-     them); a fill inside another surface (a chosen row, a tab, the composer's +) wears none. */
+     a round button, the Connections pill) wears a hairline a shade above its fill (`--edge-rim`, +12);
+     a fill inside another surface (a chosen row, a tab, the composer's +) wears none. */
   --hover: #262626; --pressed: #303030; --hover-edge: #3d3d3d; --edge-rim: #2b2b2b; --rail-line: #1c1c1c;
   --danger-hover: #322023; --danger-pressed: #3c2429;
   /* Three steps of grey, a little lighter to keep the small words readable: primary, secondary, quiet.

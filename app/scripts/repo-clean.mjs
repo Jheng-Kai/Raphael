@@ -1,11 +1,13 @@
 // A repository reads as the product's own when nothing in it tells how it was made: who asked for a thing
-// and when, quoted requests, dates in comments and prose, and pointers into a tracker that a clone of the
-// repository does not have. This lint finds those four kinds of mark in every tracked text file.
+// and when, quoted requests, dates in comments and prose, pointers into a tracker that a clone of the
+// repository does not have, and the other product a design was measured against. This lint finds those five
+// kinds of mark in every tracked text file.
 //
 //   owner   a provenance mark in front of a note or a rule
 //   quote   speech quoted after such a mark
 //   dated   a calendar date in a comment, a docstring, prose or the title of a test
 //   ref     a pointer into history: a pull request, a brief, a task or a turn number
+//   name    the agent app whose windows a design was measured against (its provider's model names are data)
 //
 // "The owner" as the person who uses the app is product vocabulary and is not a mark. A date that is data
 // (a fixture, an expected value, the Date column of the rule ledger) is not a date in a comment.
@@ -72,6 +74,7 @@ const REF = new RegExp(
   ].join("|"),
   "u",
 );
+const NAME = new RegExp(`${START}Grok ?Bot${END}`, "iu");
 // A test titled with a date keeps the history in the name it reports; a Python test is named by its function.
 const TITLE_DATE = new RegExp(
   `${START}(?:it|test|describe)(?:\\.${WORD}+)*\\(\\s*["'\`][^\\n]*${DATE}|^\\s*(?:async )?def test_${WORD}*20(?:25|26)_?[01]\\d`,
@@ -218,6 +221,7 @@ export function hitsOf(path, text) {
     if (OWNER.test(line)) found.push("owner");
     if (QUOTE.test(line)) found.push("quote");
     if (REF.test(line)) found.push("ref");
+    if (NAME.test(line)) found.push("name");
     const dates = [...line.matchAll(DATE_EVERYWHERE)];
     // What is comment on this line: all of it in prose or a docstring, else the spans the markers open.
     let code = line;
