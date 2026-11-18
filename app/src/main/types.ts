@@ -24,6 +24,8 @@ export interface Status {
       limit_remaining: number | null;
     } | null;
   };
+  /** Whether the model that tidies dictation has its provider ready, whichever provider that is. A core too old to say leaves it out. */
+  cleanup_ready?: boolean;
   spend: {
     month_usd: number;
     today_usd: number;

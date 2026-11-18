@@ -1083,6 +1083,10 @@ member and says 快速提問 under it when those are open.
 
 A message's ⋯ and a right click open one menu (R-UI-104): a colleague's message has its
 reactions above 回覆 and 複製, and 重新產生 on the latest answer; the owner's has 回覆 and 複製.
+重新產生 answers the same message again where it stands (R-UI-170): the thread keeps one message,
+the answer before stays as its version (‹ ›), and its pictures go as their stored copies, drawn at
+once. A picture the owner sends is drawn from its own bytes until its stored copy takes its place,
+never an empty square with its name between them (R-ATTACH-06).
 The jump-to-latest button sits centred just above the composer (R-UI-105). There are no voice
 calls (R-UI-106): the voice button records voice messages only.
 
@@ -1382,6 +1386,12 @@ reads 已儲存 and then 工作已繼續; when the resume failed it reads 金鑰
 (`integrations.card_resume`), which carries the task on without asking for the key again and without repeating what
 the failed attempt did. A replayed save does not touch the vault and resumes nothing; Stop, expiry (24 hours) and a
 cancelled card never resume; a resume cut off by a restart is saved with `interrupted`.
+
+**The watch on the owner's input (macOS).** A run on the owner's PC is operated only while the owner's keys and mouse
+reach the shell's watch (`computer/watch.rs`), so that any input of theirs stops it. macOS takes the events it does not
+allow out of an event tap and refuses only a tap left with none: without Input Monitoring a tap of keys and mouse is made
+and sees the mouse alone. The watch first makes a tap of the keys alone (`keys_delivered`); without it no run starts, every
+request fails with `watch`, and the core says `computer_watch` (allow Raphael under Input Monitoring) (R-COMP-WATCH-01).
 
 **The computer card.** A computer task (`computer`) that reaches a password field, a sign-in or a payment does not end
 with the hand-off line: it pauses and the turn shows 電腦 · 你正在控制 with 請在「Google Chrome」登入你的帳號，完成後交還控制,

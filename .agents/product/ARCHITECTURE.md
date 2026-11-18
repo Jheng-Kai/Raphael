@@ -161,7 +161,9 @@ RAPHAEL_UPDATER_PUBLIC_KEY, with no fallback key. A missing key returns not_conf
 any feed request. updates.ts maps only that result to the current-version releases-page row;
 Settings uses its existing open_external_url plumbing. Configured-key behavior is unchanged. requireSignedVersion binds bytes to
 manifest versions. With both owner signing keys, the release workflow retains version-bound
-signing, latest.json and its published feed. If either key is absent, it warns once and layers
+signing for the Windows installer and the Apple silicon .app.tar.gz. The Mac builder verifies the archive's
+Minisign signature, signed version and bundled app version before upload. After downloading both sets of
+assets the publish job assembles latest.json with windows-x86_64 and darwin-aarch64. If either key is absent, it warns once and layers
 tauri.release-no-updater.conf.json over the release config to disable updater artifacts; the
 installer, notices, BUILD-INFO and SHA256SUMS still build, verify and publish without .sig or
 latest.json. prepare-release-assets defaults to signed mode and requires a signature; explicit
@@ -169,7 +171,8 @@ latest.json. prepare-release-assets defaults to signed mode and requires a signa
 uses the checked version job output rather than reading latest.json, and still requires the
 explicit workflow input. DeviceStore owns opt-in and a one-shot
 installed-version receipt. A native timer contacts releases only while opted in; a fail-closed
-roster read and Windows idle time gate installation. Native installation/rollback acceptance
+roster read gates installation on both platforms. Automatic installation also requires ten minutes of Windows
+session or macOS Core Graphics idle time. After macOS bundle replacement, Tauri relaunches the installed app. Native installation/rollback acceptance
 remains separate from fake-feed tests.
 
 There is no owner memory import. Moving to another PC means keeping

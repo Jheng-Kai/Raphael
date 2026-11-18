@@ -46,6 +46,7 @@ import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
 import { openRoutineView } from "../routine-view";
 import { createAttachmentMedia } from "../attachment-media";
+import { adoptPicture } from "../media-cache";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachmentLimit, readComposerFile, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
 import { keepReadingPlace } from "../reading-place";
@@ -130,7 +131,6 @@ import { mountComposerPlus } from "../composer-plus";
 import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
-import { createProblemNotice } from "../problem-notice";
 import { VoiceMode } from "../voice-mode";
 import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
@@ -395,7 +395,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let targetQuiet = false;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
   quotaHost.hidden = true;
-  const problemNotice = createProblemNotice(app, () => { if (!problemNotice.el.hidden) composer.before(problemNotice.el); });
   let quotas: { provider: string; reset_at_ms: number | null }[] = [];
   let quotaTimer: ReturnType<typeof setTimeout> | undefined;
   const conversationId = (): number | undefined => chosenConversations.get(memberId());
@@ -624,6 +623,29 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Questions typed here whose turns have not come yet. */
   let outgoing: Outgoing[] = [];
   let sent = 0;
+  /** The pictures of a message on its way, each decoded from its own bytes: its turn's stored copy is drawn from it (`adoptSentPictures`). */
+  const sentPictures = new WeakMap<TurnAttachment, HTMLImageElement>();
+  /** A message's files as the message on its way shows them: a picture or a video from its own bytes, until its turn comes. */
+  const outgoingFiles = (sending: readonly ComposerFile[]): TurnAttachment[] => sending.map(({ name, mime, data, size }) => {
+    const file: TurnAttachment = { name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined };
+    if (file.preview && fileKind(mime) === "image") {
+      const image = new Image();
+      image.src = file.preview;
+      void image.decode().catch(() => { /* One the browser cannot decode is asked for by its stored id as any other. */ });
+      sentPictures.set(file, image);
+    }
+    return file;
+  });
+  /** The turns of messages on their way have come: each picture is their stored copy, drawn at once from what is already decoded. */
+  function adoptSentPictures(got: readonly AgentTurn[]): void {
+    for (const going of outgoing) {
+      const turn = got.find(item => item.session_id === going.requestId);
+      going.files.forEach((file, at) => {
+        const stored = turn?.attachments?.[at], image = sentPictures.get(file);
+        if (image && file.preview && stored?.id && stored.name === file.name) adoptPicture(stored.id, file.preview, image);
+      });
+    }
+  }
   /** A spoken question's recipient and history boundary stay fixed across thread changes. */
   let hearing: { since: number; after: number | null; member: number; conversation?: number } | null = null;
   /** Ends `hearing` at `HEARING_MAX_MS` when neither its turn nor any other word of the core comes. */
@@ -928,7 +950,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
     if (!quotaHost.hidden && quotaHost.nextElementSibling !== composer) home.insertBefore(quotaHost, composer);
-    if (!problemNotice.el.hidden) home.insertBefore(problemNotice.el, composer);
     const asking = question !== null;
     const waitingTurn = [...turns].reverse().find((turn) => turn.status === "confirm");
     const inline = asking && waitingTurn ? thread.querySelector<HTMLElement>(`[data-question-turn="${waitingTurn.id}"]`) : null;
@@ -1421,6 +1442,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       canLoadEarlier = next.keptOlder ? canLoadEarlier : got.length === PAGE_SIZE;
       turns = next.turns;
     }
+    if (!earlier) adoptSentPictures(got);
     if (!earlier) releaseLostEdit(delta ? removed.includes(replacing ?? -1) : got.length < PAGE_SIZE || replacing !== undefined && replacing >= (oldestId(got) ?? Infinity));
     // A task that ended is no longer being stopped.
     for (const turn of turns) if (turn.task && !isLive(turn.task)) state.stopping.delete(turn.task.id);
@@ -1573,7 +1595,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     rememberDraft(requestId, draft);
     // What the composer held before 編輯 stays the conversation's draft while the edit is on its way: leaving meanwhile loses nothing.
     clearTimeout(draftTimer); keepDraft(composerKey, resume);
-    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })), quote: draft.quote };
+    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: outgoingFiles(sending), quote: draft.quote };
     // The message an edit replaces comes back to its place as the edit's own bubble, and stays there until the edit has taken its place (lines).
     if (draft.replacing !== undefined) mine.replaces = turns.find(turn => turn.id === draft.replacing);
     outgoing.push(mine);
@@ -2219,7 +2241,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     await regenerateTurn(source.turn);
   }
 
-  /** Sends a turn's question again as a new answer: the reply's own 重新產生, and what a finished sign-in does once (cli-signin.ts). */
+  /**
+   * Answers a message again where it stands: the reply's own 重新產生, and what a finished sign-in does once (cli-signin.ts). The message
+   * takes its own place as an edit does (`replaceTurnId`), so the thread keeps one message, and an answer it had stays as its version
+   * (‹ ›). Its files go as the stored copies they are: nothing is read or stored again, and its pictures draw at once.
+   */
   async function regenerateTurn(turn: AgentTurn): Promise<void> {
     const member = memberId();
     // A greeting has no question to send again: the core writes it again with the member's own model.
@@ -2236,16 +2262,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const sentConversation = conversationId();
     const requestId = crypto.randomUUID();
     const epoch = attachmentEpoch;
-    const draft = await draftFor(turn);
+    const draft = await draftFor(turn, true);
     if (memberId() !== member || attachmentEpoch !== epoch) return;
     if (draft.missing.length) { giveBack(draft); toaster.info(t("chat.reattach")); return; }
     regenerating.add(turn.id);
     rememberDraft(requestId, draft);
-    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text: turn.question, sentAt: Date.now(), files: draft.files.map(({ name, mime }) => ({ name, mime })), quote: draft.quote };
+    const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text: turn.question, sentAt: Date.now(),
+      files: draft.files.map(({ name, mime, size, stored_id }) => ({ id: stored_id, name, mime, size })), quote: draft.quote, replaces: turn };
     outgoing.push(mine); render(true);
     askingMember = member;
     try {
-      await api.agentAskText(turn.question, wireAttachments(draft.files), member, { requestId, ...destinationOf(member, sentConversation), ...(draft.quote ? { quote: draft.quote } : {}) });
+      await api.agentAskText(turn.question, wireAttachments(draft.files), member, { requestId, ...destinationOf(member, sentConversation), replaceTurnId: turn.id, ...(draft.quote ? { quote: draft.quote } : {}) });
       if (visible && memberId() === member) await load(false);
       else members.changed();
     } catch (err) { toaster.info(describeError(err)); }
@@ -2265,14 +2292,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     while (drafts.size > 1 && (drafts.size > 20 || bytes() > 64 * 1024 * 1024)) drafts.delete(drafts.keys().next().value!);
   }
 
-  async function draftFor(turn: Pick<AgentTurn, "session_id" | "question" | "attachments" | "quote">): Promise<ComposerDraft> {
-    const cached = drafts.get(turn.session_id ?? "");
+  /** A message as it was sent, for the composer or to send again; `asStored` takes every file as its stored copy, by id, without its bytes. */
+  async function draftFor(turn: Pick<AgentTurn, "session_id" | "question" | "attachments" | "quote">, asStored = false): Promise<ComposerDraft> {
+    const cached = asStored ? undefined : drafts.get(turn.session_id ?? "");
     if (cached) return cached;
     const draft: ComposerDraft = { text: turn.question, files: [], missing: [], quote: turn.quote ?? undefined };
     for (const file of turn.attachments ?? []) {
       if (file.id) {
         try {
-          if ((file.size ?? 0) > 4 * 1024 * 1024) {
+          if (asStored || (file.size ?? 0) > 4 * 1024 * 1024) {
             const stored = await api.core<{ mime: string; size: number }>("attachments.info", { id: file.id });
             draft.files.push({ id: ++fileIds, name: file.name, mime: stored.mime, data: "", stored_id: file.id, size: stored.size });
             continue;
@@ -2470,8 +2498,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const draft: ComposerDraft = { ...held.draft, text: editing.text, missing: [], replacing: editing.turnId };
     rememberDraft(requestId, draft);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), quote: draft.quote,
-      files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" && data ? `data:${mime};base64,${data}` : undefined })),
-      replaces: turns.find(turn => turn.id === editing.turnId) };
+      files: outgoingFiles(sending), replaces: turns.find(turn => turn.id === editing.turnId) };
     outgoing.push(mine);
     closeEditor(false);
     // The edit stands where its message stood: the reader stays where they are.
@@ -3380,7 +3407,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();
-      problemNotice.show();
       messageResize?.observe(scroller);
       dropResize?.observe(stage);
       dropResize?.observe(composer);
@@ -3415,7 +3441,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       loadedThread = false;
       visible = false;
       cancelGesture().sync();
-      problemNotice.hide();
       closeMediaLightbox();
       resetDrop();
       attachmentMedia.reset();

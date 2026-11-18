@@ -4387,11 +4387,6 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(call => destroying.includes(call.method)), "nothing is destroyed before the second press");
     return { check: name };
   }
-  if (name === "usage-key-removed") {
-    require(window.__look.calls.some(call => call.method === "secrets.clear_openrouter_key"), "the key was removed through the core");
-    require(visible(document.querySelector("#key-input")) && !document.querySelector('[data-act="key-menu"]'), "the row asks for a key and has nothing left to remove");
-    return { check: name };
-  }
   if (name === "messaging-user-removed") {
     require(window.__look.calls.some(call => call.method === "messaging.telegram.remove_user" && call.params.user_id === "42"), "the person was removed through the core");
     return { check: name };
@@ -4622,7 +4617,7 @@ export function checkRendered(name, context = {}) {
     const items = [...document.querySelectorAll(name === "onboarding-abilities" ? '.svc-item' : '.ob-tile:not([data-item^="provider:"]):not([data-item="composio"])')].filter(visible);
     const searched = !!document.querySelector('#ob-find')?.value.trim();
     items.forEach(item => { item.dataset.item ??= item.dataset.id; });
-    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "openrouter", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf"] }[name];
+    const expected = { "onboarding-tools": ["chatgpt", "claude", "codex", "gemini"], "onboarding-abilities": ["search", "read", "vision", "pdf"] }[name];
     if (name === "onboarding-tools") {
       // A store: a search box, 熱門 first and the same for everyone, then every other tool by kind.
       const find = document.querySelector('.ob-find input#ob-tools-find');
@@ -4630,8 +4625,10 @@ export function checkRendered(name, context = {}) {
       const groups = [...document.querySelectorAll('[data-ob-group]')].map(group => group.dataset.obGroup);
       require(groups[0] === "popular" && groups.includes("accounts"), `熱門 comes first, then the kinds (${groups.join(", ")})`);
       const popular = [...document.querySelectorAll('[data-ob-group="popular"] .ob-tile')].map(item => item.dataset.item);
-      require(popular.slice(0, 4).join() === "chatgpt,claude,codex,openrouter", `熱門 is ChatGPT, Claude Code, Codex and OpenRouter first (${popular.join(", ")})`);
-      if (!document.querySelector('#ob-key-input')) require(!document.querySelector('.ob-tile.wide'), "no tile is wider than the others while nothing is being typed");
+      require(popular.slice(0, 3).join() === "chatgpt,claude,codex", `熱門 is ChatGPT, Claude Code and Codex first (${popular.join(", ")})`);
+      // OpenRouter is a gateway among the providers, with no key tile or key field of its own (R-COPY-02).
+      require(!popular.includes("openrouter") && !document.querySelector('#ob-key-input, [data-ob="key-replace"], [data-item="openrouter"]'), "the guide asks for no OpenRouter key of its own");
+      require(!document.querySelector('.ob-tile.wide'), "no tile is wider than the others while nothing is being typed");
     }
     if (expected) require(JSON.stringify(items.map(item => item.dataset.item)) === JSON.stringify(expected), `the items are ${expected.join(", ")}: ${items.map(item => item.dataset.item).join(", ")}`);
     else if (searched) require(items.length >= 1, "a search shows what it finds");
@@ -8709,7 +8706,21 @@ export function checkRendered(name, context = {}) {
     const list = tidy.closest('.list') ?? tidy.parentElement;
     require(list.scrollWidth <= list.clientWidth + 1, "the shortcuts fit their list");
     require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    require(!scrim.querySelector('.missing-note [data-missing-pane]'), "no Accessibility note where that permission is not missing");
     return { check: name, keys: caps.join(" + ") };
+  }
+  if (name === "settings-accessibility-off") {
+    const scrim = document.querySelector('.modal-scrim[data-page="settings"]') ?? document.querySelector('.modal-scrim');
+    const note = scrim.querySelector('.missing-note'), button = note?.querySelector('[data-missing-pane]');
+    require(visible(note) && visible(button), "the Accessibility note and its button are on the 聽寫 tab");
+    require(note.compareDocumentPosition(scrim.querySelector('.sgroup')) & Node.DOCUMENT_POSITION_FOLLOWING, "the note stands above the shortcuts");
+    require(/[+＋]/.test(note.textContent), "it says to add Raphael with + when Raphael is not listed");
+    require(button.dataset.missingPane.endsWith("Privacy_Accessibility"), "its button opens the Accessibility pane");
+    const words = note.querySelector('span'), box = note.getBoundingClientRect(), list = scrim.querySelector('.sgroup').getBoundingClientRect();
+    require(words.scrollWidth <= words.clientWidth + 1, "its words wrap inside the tab");
+    require(box.left >= list.left - 1 && box.right <= list.right + 1, "it is no wider than the shortcuts under it");
+    require(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "the page does not scroll sideways");
+    return { check: name };
   }
   if (name === "dictation-navigation") {
     const nav = document.querySelector('.dictation-nav [role="tablist"]'), tabs = [...nav.querySelectorAll('[role="tab"]')];
@@ -9377,12 +9388,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, cards: named };
   }
   if (name === "usage-plain") {
-    // Plain usage summary: what each subscription has left, then the key and what was spent.
+    // Plain usage summary: what each subscription has left, then what was spent. An OpenRouter key is its provider card's.
     const panel = document.querySelector('#models-panel-usage');
     require(visible(panel), "the usage tab is open");
     require(!panel.querySelector('svg.ua-chart, .ua-chart, .run-tiles, .run-tile, .run-bill, .run-groups, table, [data-range], [data-run-act="export"], [data-run-act="period"], .foot'), "no periods, charts, breakdowns, tiles, exports or footnotes");
-    const rows = ["raphael-spend", "openrouter-key"].map(row => panel.querySelector(`[data-row="${row}"]`));
-    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"]'), "this month's spending of the app and the key show; the key's own usage is a card above them, not a row");
+    const rows = ["raphael-spend"].map(row => panel.querySelector(`[data-row="${row}"]`));
+    require(rows.every(visible) && !panel.querySelector('[data-row="openrouter-usage"], [data-row="openrouter-key"], #key-input'), "this month's spending of the app shows; no OpenRouter key row asks for or shows a key here");
     const spend = rows[0], bar = spend.querySelector('.spend-bar i'), limit = window.__look.data.status.spend.limit_usd;
     if (limit > 0) {
       require(visible(spend.querySelector('.spend-bar')) && bar, "the spending has a bar against the monthly limit");

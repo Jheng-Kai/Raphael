@@ -25,8 +25,7 @@ import { createRules } from "../safety-rules";
 import { createVault } from "../vault";
 import { createConnections } from "../connections";
 import { DICTATION_MODES, isDictationMode } from "../dictation";
-import { describeError, keyReasonText, parseLimit } from "../format";
-import { wireKeyField } from "../keyfield";
+import { describeError, parseLimit } from "../format";
 import {
   type LanguageGroup,
   chooseLanguageVariant,
@@ -53,7 +52,6 @@ import {
   esc,
   iconBtn,
   menuIsOpenFor,
-  openConfirmMenu,
   openMenu,
   openMenuOnArrow,
   openPopover,
@@ -210,14 +208,10 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The speech models of this computer, and the download of one that is under way. */
   let localModels: LocalModel[] | "loading" | "failed" = "loading";
   let localDownload: { name: string; done: number; total: number } | null = null;
-  let checkingOpenrouter = false;
   let devices: AudioDevices | null = null;
   let altgr = false;
+  let accessibility: boolean | null = null;
   let version = "";
-  /** The key field is shown although there is a key (「變更」). */
-  let replacingKey = false;
-  let keyBusy = false;
-  let keyError: (() => string) | null = null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
   let limitDraft: string | null = null;
   let limitError: (() => string) | null = null;
@@ -266,8 +260,8 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     update,
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version,
-    replacingKey, keyBusy, keyError, limitDraft, limitError, languageGroups, now: Date.now(),
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, devices, altgr, accessibility, version,
+    limitDraft, limitError, languageGroups, now: Date.now(),
     connections: connections.view(), rules: rules.view(), vault: vault.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
@@ -421,7 +415,6 @@ export function createSettings(app: AppContext): SettingsPage {
     const focusedId = active?.id;
     const ownerFocus = active?.dataset?.owner;
     const ownerDrafts = Array.from(el.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-owner]:not(:disabled)')).filter(input => input === active).map(input => [input.dataset.owner!, input.value] as const);
-    const keyDraft = el.querySelector<HTMLInputElement>("#key-input")?.value;
     const activeLimit = focusedId === "limit-input" ? el.querySelector<HTMLInputElement>("#limit-input")?.value : undefined;
     // What is being typed in 服務's fields stays through a drawing (a status that came in, say): it
     // is carried from the old field to the new one here, and kept nowhere else.
@@ -449,8 +442,6 @@ export function createSettings(app: AppContext): SettingsPage {
       if (input && !input.disabled) input.value = value;
     }
     if (ownerFocus) el.querySelector<HTMLElement>(`[data-owner="${ownerFocus}"]`)?.focus({ preventScroll: true });
-    const keyInput = el.querySelector<HTMLInputElement>("#key-input");
-    if (keyInput && keyDraft !== undefined) keyInput.value = keyDraft;
     const limitInput = el.querySelector<HTMLInputElement>("#limit-input");
     if (limitInput && activeLimit !== undefined) limitInput.value = activeLimit;
     for (const [id, value] of serviceDrafts) {
@@ -661,31 +652,6 @@ export function createSettings(app: AppContext): SettingsPage {
       toaster.info(describeError(err));
     }
     render();
-  }
-
-  /** Reads the connection and the spend again (after a new key, or 「重新檢查」). */
-  async function readStatus(): Promise<void> {
-    try {
-      const status = await api.statusGet();
-      openrouter = status.openrouter;
-      spend = status.spend;
-    } catch {
-      openrouter = null;
-    }
-  }
-
-  async function checkOpenrouter(): Promise<void> {
-    if (checkingOpenrouter) return;
-    checkingOpenrouter = true;
-    render();
-    try {
-      await api.statusCheckOpenrouter();
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    await readStatus();
-    checkingOpenrouter = false;
-    if (visible) render();
   }
 
   /**
@@ -916,65 +882,6 @@ export function createSettings(app: AppContext): SettingsPage {
     render();
   }
 
-  async function submitKey(text: string): Promise<void> {
-    const key = text.trim();
-    if (!key || keyBusy) return;
-    keyBusy = true;
-    keyError = null;
-    render();
-    try {
-      const result = await api.secretsSetOpenrouterKey(key);
-      if (result.valid) {
-        hasKey = true;
-        replacingKey = false;
-        toaster.info(t("common.keySaved"));
-        await readStatus();
-      } else {
-        keyError = () => keyReasonText(result.reason);
-      }
-    } catch (err) {
-      keyError = () => describeError(err);
-    }
-    keyBusy = false;
-    render();
-  }
-
-  async function removeKey(): Promise<void> {
-    if (keyBusy) return;
-    keyBusy = true;
-    render();
-    try {
-      await api.secretsClearOpenrouterKey();
-      hasKey = false;
-      replacingKey = false;
-      keyError = null;
-      openrouter = null;
-      toaster.info(t("settings.keyRemoved"));
-      await readStatus();
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    keyBusy = false;
-    render();
-    el.querySelector<HTMLElement>("#key-input")?.focus();
-  }
-
-  async function pasteKey(): Promise<void> {
-    if (keyBusy) return;
-    const input = el.querySelector<HTMLInputElement>("#key-input");
-    if (input?.value.trim()) {
-      void submitKey(input.value);
-      return;
-    }
-    try {
-      void submitKey(await api.clipboardText());
-    } catch {
-      // the webview does not let the page read the clipboard: the field takes Ctrl+V
-      input?.focus();
-      toaster.info(t("common.keyPasteHint"));
-    }
-  }
-
   function commitLimit(input: HTMLInputElement): void {
     const limit = parseLimit(input.value);
     if (limit === null) {
@@ -1141,27 +1048,6 @@ export function createSettings(app: AppContext): SettingsPage {
         if (cell) void recording.start(field, cell);
         break;
       }
-      case "key-replace":
-        replacingKey = true;
-        keyError = null;
-        render();
-        el.querySelector<HTMLElement>("#key-input")?.focus();
-        break;
-      case "key-cancel":
-        replacingKey = false;
-        keyError = null;
-        render();
-        el.querySelector<HTMLElement>('[data-act="key-replace"]')?.focus();
-        break;
-      case "key-menu":
-        openConfirmMenu(target.closest<HTMLElement>('[data-act]')!, { label: t("settings.keyRemove"), ask: t("settings.keyRemoveConfirm"), run: () => void removeKey() });
-        break;
-      case "key-paste":
-        void pasteKey();
-        break;
-      case "or-check":
-        void checkOpenrouter();
-        break;
       case "help":
         void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1230,11 +1116,18 @@ export function createSettings(app: AppContext): SettingsPage {
       trapSettingsFocus(e, items, active, el.querySelector<HTMLElement>("#set-title"));
     }
   };
-  wireKeyField(el, { inputId: "key-input", pasteSelector: '[data-act="key-paste"]', submit: (value) => void submitKey(value) });
 
   const onFocus = (): void => {
     windowFocused = true;
     syncMonitor();
+    // Back from System Settings: Accessibility given there takes its note away at once (R-PRIV-AX-01).
+    if (visible && pane === "dictation") {
+      void api.accessibilityAccess().then((value) => {
+        if (value === accessibility || !visible) return;
+        accessibility = value;
+        render();
+      }).catch(() => {});
+    }
   };
   const onBlur = (): void => {
     windowFocused = false;
@@ -1245,7 +1138,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** Reads what the settings show; the returned step keeps it and says whether anything changed. */
   async function readSettings(): Promise<() => boolean> {
-    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult] = await Promise.allSettled([
+    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, accessibilityResult] = await Promise.allSettled([
       api.settingsGet(),
       api.secretsStatus(),
       api.statusGet(),
@@ -1253,22 +1146,24 @@ export function createSettings(app: AppContext): SettingsPage {
       api.keyboardHasAltgr(),
       getVersion(),
       api.languagesList(),
+      api.accessibilityAccess(),
       // Read again: the settings may have changed since the window started. `refreshDevice` puts
       // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
       app.refreshDevice(),
     ]);
     return () => {
-      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
+      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, accessibility, version, languageGroups]);
       brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
       hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
       openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
       spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
       devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
       altgr = altgrResult.status === "fulfilled" && altgrResult.value;
+      accessibility = accessibilityResult.status === "fulfilled" ? accessibilityResult.value : null;
       version = versionResult.status === "fulfilled" ? versionResult.value : "";
       if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
       if (brainResult.status === "fulfilled") readOnce = true;
-      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, languageGroups]);
+      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, accessibility, version, languageGroups]);
     };
   }
 
@@ -1322,8 +1217,6 @@ export function createSettings(app: AppContext): SettingsPage {
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;
       loading = !readOnce;
-      replacingKey = false;
-      keyError = null;
       limitDraft = null;
       limitError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)

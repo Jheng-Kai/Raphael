@@ -33,6 +33,8 @@ export default [
   scene("settings-about-brand", "The about tab's mark and name cannot be selected", [...settings("about"), wait('.about-brand'), check('about-brand-unselectable')]),
   // R-TIDY-01: the key that tidies the selected text is listed and changeable with the other shortcuts, Right Alt+T by default.
   scene("settings-tidy-key", "The 聽寫 tab lists 整理選取文字 with its key and a pencil beside the other shortcuts, as wide as theirs", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
+  // R-PRIV-AX-01: on a Mac without Accessibility no global key is heard, so no paste or tidy fails to say so; 聽寫 says it instead.
+  scene("settings-accessibility-off", "A Mac without Accessibility: 聽寫 says so above the shortcuts, and its one button opens the pane", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-accessibility-off")], { accessibility: false }),
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
@@ -181,7 +183,7 @@ export default [
   scene("connections-discover", "Discover local MCP definitions", [...add, click('.menu [data-value="import"]')]),
   scene("connections-empty", "Connections without servers: the one view, with no chip of the connected apps", [...connections, check("connections-empty")], { servers: [], managedConnectors: [] }),
   scene("connections-discover-empty", "Discovery without candidates", [...add, click('.menu [data-value="import"]')], { servers: [], candidates: [] }),
-  scene("usage", "Usage: this month's spending with a coloured bar, what each subscription has left, then the key", [...usage, wait(".run-subscription"), check("usage-plain")]),
+  scene("usage", "Usage: this month's spending with a coloured bar and what each subscription has left; no OpenRouter key section", [...usage, wait(".run-subscription"), check("usage-plain")]),
   scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]'), check("usage-plain")], { chatgptSignedIn: true }),
   scene("usage-owner", "The owner's own mix: Codex live, Claude whose window has reset (已重置, no stale number or bar), the ChatGPT sign-in and OpenRouter's own spend, one card each as the account menu's blocks", [...usage, wait('[data-allowance="openrouter"]'), check("usage-plain"), check("usage-owner-cards")], { usageOwner: true }),
   scene("usage-empty", "With no subscription signed in, the rows of what was spent stand alone", [...usage, check("usage-plain")], { usageEmpty: true }),
@@ -200,7 +202,6 @@ export default [
   scene("conversation-notice", "Conversation connection notice", [], { problem: true }),
   scene("onboarding", "First-run welcome: Raphael's emblem, its name, one promise, the language dropdown and one wide black pill", [wait('#ob:not([hidden]) [data-ob="next"]'), wait('.ob-emblem canvas.ob-emb'), check("guide-window-fixed"), check("onboarding-welcome")], { onboarding: true }),
   scene("onboarding-tools", "First-run step 1: the AI tools as a store of one-row tiles, a search box, 熱門 the same for everyone, then each kind by name",[click('[data-ob="next"]'), wait('[data-ob-tools] [data-item="claude"].on .ob-tick'), check("onboarding-tools")], { onboarding: true }),
-  scene("onboarding-tools-key", "First-run step 1: the OpenRouter key being replaced shows its field and paste button", [click('[data-ob="next"]'), wait('[data-ob="key-replace"]'), click('[data-ob="key-replace"]'), wait("#ob-key-input"), check("onboarding-tools")], { onboarding: true }),
   scene("onboarding-back-hover", "First-run step 1: the round way back of the foot's pair takes a lighter surface under the pointer", [click('[data-ob="next"]'), wait('.ob-foot [data-ob="back"]'), hover('.ob-foot [data-ob="back"]'), check("onboarding-back-hover")], { onboarding: true }),
   scene("onboarding-back-focus", "First-run step 1: Shift+Tab from the primary lands on the round way back, with the app's focus ring", [click('[data-ob="next"]'), wait('.ob-foot [data-ob="back"]'), { action: "focus", selector: '.ob-foot [data-ob="next"]' }, { ...key("Tab"), shift: true }, check("onboarding-back-focus")], { onboarding: true }),
   scene("onboarding-services", "First-run step 2: a search box and the popular services of the store as tiles, one sign-in each", [click('[data-ob="next"]'), click('[data-ob="next"]'), wait('[data-ob-services] .ob-tile'), click('[data-item="gmail"][data-ob="conn-login"]'), wait('[data-item="gmail"].on .ob-tick'), check("onboarding-services")], { onboarding: true }),

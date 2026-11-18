@@ -341,6 +341,13 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn:hover:not(:disabled) { background: var(--btn-hover, var(--hover)); }
 .btn:active:not(:disabled) { background: var(--btn-pressed, var(--pressed)); filter: none; }
 .btn:disabled { opacity: 0.55; cursor: default; }
+/* A filled pill carries a row's secondary action. It stays distinct as the row and then the pill light up. */
+.btn:is(.cs-connect, .lang-variant-chip) { flex: none; padding-inline: var(--sp-4); border-radius: var(--r-pill); border-color: transparent; font-size: var(--fs-sm); }
+:is(.cs-card, .lang-row) > .btn:is(.cs-connect, .lang-variant-chip) { font-weight: var(--weight-medium); }
+:is(.cs-card, .lang-row):hover > .btn:is(.cs-connect, .lang-variant-chip),
+.menu .btn.lang-variant-chip:is(:focus-visible, [aria-expanded="true"]) { background: var(--float-ctl-raised); }
+:is(.cs-card, .lang-row) > .btn:is(.cs-connect, .lang-variant-chip):hover:not(:disabled) { background: var(--float-ctl-raised-hover); }
+:is(.cs-card, .lang-row) > .btn:is(.cs-connect, .lang-variant-chip):active:not(:disabled) { background: var(--float-ctl-raised-press); }
 .copy-label { display: inline-grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .copy-label > span { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); }
 .copy-label > .copy-reserve { visibility: hidden; }
@@ -623,7 +630,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* A menu is only so wide, and never wider than the window: a longer label is cut, with its whole
    text as a tooltip (ui.ts). Its right edge lines up with its button's, inside the window (placeMenu). */
 .menu { position: fixed; z-index: 130; min-width: 180px; max-width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-x: hidden; overflow-y: auto; padding: var(--sp-1); border-radius: var(--r-md); background: var(--float); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
-.menu button { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-sm); line-height: calc(var(--h-menu) - 8px); text-align: left; }
+.menu button:where(:not(.lang-variant-chip)) { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--h-menu); padding: var(--sp-1) var(--sp-2); border: 0; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-sm); line-height: calc(var(--h-menu) - 8px); text-align: left; }
 .menu button:hover { background: var(--hover); }
 .menu button[aria-haspopup="menu"][aria-expanded="true"] { background: var(--hover); }
 .menu:has(> button[aria-haspopup="menu"][aria-expanded="true"]) > button:hover:not([aria-expanded="true"]) { background: transparent; }
@@ -694,16 +701,13 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .lang-list { overflow-x: hidden; overflow-y: auto; max-height: min(340px, calc(100vh - 140px)); }
 .menu .lang-item .md { margin-left: var(--sp-3); }
 .menu .lang-item[aria-disabled="true"] { color: var(--text-3); cursor: not-allowed; }
-/* One row per language, one button: its whole width lights under the pointer, the chip of a language with several written
-   forms included, which stands on the row naming the one in use (R-UI-165). */
+/* A language row lights across its whole width. Its written-form pill stands on that fill (R-UI-165). */
 .lang-row { display: flex; align-items: center; border-radius: var(--r-sm); }
 .lang-row > .lang-item { flex: 1; min-width: 0; }
 .menu .lang-row > .lang-item:hover, .menu .lang-row > .lang-item:focus-visible { background: transparent; }
 .menu .lang-row:hover:not(:has(> .lang-item[aria-disabled="true"])), .menu .lang-row:has(> .lang-item:focus-visible) { background: var(--hover); }
-.lang-variant-chip.btn { display: inline-flex; align-items: center; gap: 2px; flex: none; max-width: 52%; min-height: 0; height: var(--h-ctl-sm); margin-right: var(--sp-1); padding: 0 var(--sp-1) 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.lang-variant-chip { max-width: calc(52% + var(--sp-6)); margin-inline-end: var(--sp-1); }
 .lang-variant-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lang-variant-chip .i { width: 16px; height: 16px; flex: none; }
-.lang-variant-chip.btn:hover:not(:disabled), .lang-variant-chip.btn[aria-expanded="true"] { background: var(--hover); color: var(--text); }
 :where(:root[data-keys]) .lang-variant-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .menu.lang-variant-menu { width: 260px; max-width: calc(100vw - 24px); }
 .menu .lang-variant { min-height: 36px; align-items: flex-start; }

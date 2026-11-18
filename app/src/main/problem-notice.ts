@@ -1,5 +1,5 @@
 import { visibilityGate, windowVisible } from "./window-visibility";
-/** Actionable dictation status, shared by the dictation page and conversation composer. */
+/** Actionable dictation status, on the dictation page only: the conversation shows nothing about dictation on its own. */
 import * as api from "./api";
 import { onLocaleChange } from "./i18n";
 import { buildReport, coreDownReport, type Report } from "./report";
@@ -51,7 +51,7 @@ export function createProblemNotice(app: AppContext, changed: () => void = () =>
   }
   el.addEventListener("click", event => {
     if (!(event.target as Element).closest("[data-problem-action]")) return;
-    if (report?.action?.target === "settings") app.go("settings", "usage");
+    if (report?.action?.target === "settings") app.go("settings", "models");
     else void check();
   });
   onLocaleChange(paint);

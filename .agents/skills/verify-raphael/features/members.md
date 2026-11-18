@@ -492,7 +492,7 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 
 Clear, clear all, delete and remove never stand open on a page. They wait in the ⋯ of the row or section title they
 act on, and its right click: the clears of Settings › 資料 in their rows (所有聽寫紀錄,
-所有對話紀錄), 移除金鑰 in the key's row of Settings › 模型 › 用量, a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
+所有對話紀錄), a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
 `openConfirmMenu` (app/src/main/ui.ts) keeps the second press the buttons had: the first press asks in the item's place for five seconds, and closing the menu forgets
 it. A local model still asks in its row, and a clear of 資料 still gives its ten seconds of 復原.
 
@@ -501,7 +501,7 @@ dialog about that one thing (`.mb-dialog`, `.cs-dialog`), in a local model's inl
 not excepted. Telegram's 中斷連線, a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
 
 ```powershell
-npm run look -- dictation usage-key-menu usage-key-removed context-menu-api-key messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
+npm run look -- dictation messaging-paired-aligned messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
 ```
 
 Each scene presses the real right button (the `right-click` driver step, which keeps the point it pressed) and its `context-menu` check asserts that the menu is open, starts

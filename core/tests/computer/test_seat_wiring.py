@@ -812,6 +812,27 @@ async def test_an_existing_holder_is_never_cleaned_and_stopped_computers_need_no
     vm.seat_windows.assert_not_awaited()
 
 
+async def test_with_docker_closed_a_new_member_takes_the_idlest_screen_instead_of_hearing_every_screen_is_in_use(shared_vm):
+    # Seen on a real computer: six screens had holders, Docker Desktop was closed, and a seventh member was told "every screen
+    # of the computer is in use" by every computer tool for an hour while nobody used it.
+    from raphael_core.computer.seats import ComputerSeats
+    vm, runtime = shared_vm
+    vm.seats = ComputerSeats(count=1)
+    old = await vm.seat(1)
+    runtime.raw, runtime.up = None, False
+    vm.seat_windows = AsyncMock(side_effect=AssertionError("A closed engine has no window to list"))
+    taken = await vm.seat(2)
+    assert taken.screen == 1 and vm.seats.holders("") == {1: 2}
+    assert old.screen == 1 and vm.target(1).screen == 0
+    vm.seat_windows.assert_not_awaited()
+    # An engine that answers but cannot say what runs keeps the screen with its holder, as before.
+    runtime.up = True
+    vm.inspect = AsyncMock(side_effect=VmError("invalid_status"))
+    with pytest.raises(VmError, match="seats_full"):
+        await vm.seat(3)
+    assert vm.seats.holders("") == {1: 2}
+
+
 async def test_failed_restore_cannot_give_leftover_windows_to_the_next_holder(shared_vm, conn):
     from raphael_core.computer.seats import ComputerSeats
     from .test_seat_tools import window

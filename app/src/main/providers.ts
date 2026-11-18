@@ -5,7 +5,7 @@ import { isTopLayer, registerDismissal } from "./dismissals";
 import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import type { MainEvent, ModelProvider, ProviderKind, ProviderField, ProviderPatch, ProviderModel, ProviderTest } from "./types";
-import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, iconButton, openMenu, sel, tg } from "./ui";
+import { DISCONNECT_CONFIRM_MS, btn, esc, fieldHTML, ico, iconButton, openMenu, sel } from "./ui";
 import { findsName } from "./find-match";
 
 export interface ProvidersView {
@@ -138,15 +138,17 @@ function modelsHTML(v: ProvidersView): string {
 }
 
 function statusNote(provider: ModelProvider): string {
+  if (!provider.enabled) return t("providers.off");
   if (provider.status === "ok") return t("providers.count", { p0: provider.models });
   return t(provider.status === "auth" ? "providers.auth" : provider.status === "offline" ? "providers.offline" : "providers.unknown");
 }
 
 export function providersHTML(v: ProvidersView): string {
-  // ChatGPT is a sign-in, shown with the subscription accounts rather than as an API key.
+  // ChatGPT is a sign-in, shown with the subscription accounts rather than as an API key. A card has no switch: it opens the
+  // provider's editor (test, replace the key, remove). A provider turned off in an earlier version says so and offers 啟用.
   const rows = v.providers.filter((p) => p.id !== "chatgpt").map((p) => `<div class="pv-card pv-item">` +
     btn(`<span class="ic">${providerMark(p.kind)}</span><span class="tx"><span class="nm">${esc(p.name)}</span><span class="ds">${esc(statusNote(p))}</span></span><span class="chev" aria-hidden="true">${ico("right")}</span>`, "cs-open", ` data-pv="open" data-id="${esc(p.id)}" data-k="pv-open:${esc(p.id)}" aria-haspopup="dialog"`) +
-    tg(p.enabled, t("providers.switch", { p0: p.name }), ` data-pv="toggle" data-id="${esc(p.id)}" data-k="pv-toggle:${esc(p.id)}"${v.busy ? " disabled" : ""}`) +
+    (p.enabled ? "" : btn(esc(t("providers.enable")), "sm", ` data-pv="enable" data-id="${esc(p.id)}" data-k="pv-enable:${esc(p.id)}" aria-label="${esc(t("providers.switch", { p0: p.name }))}"${v.busy ? " disabled" : ""}`)) +
     `</div>`).join("");
   const add = btn(`<span class="ic">${ico("plus")}</span><span class="tx"><span class="nm">${esc(t("providers.add"))}</span><span class="ds">${esc(t("providers.addNote"))}</span></span>`, "pv-card pv-create", ` data-pv="directory" data-k="pv-directory" aria-haspopup="dialog"${v.state === "ready" && !v.busy ? "" : " disabled"}`);
   return `<section class="sgroup pv"><h2>${esc(t("models.providers"))}</h2>` +
@@ -352,11 +354,11 @@ export function createProviders(host: ProvidersHost) {
     } catch { if (state.open === open) state.error = "error"; }
     finally { state.busy = false; redraw(); }
   }
-  async function toggle(id: string) {
+  async function enable(id: string) {
     const provider = state.providers.find((p) => p.id === id);
-    if (!provider || state.busy) return;
+    if (!provider || provider.enabled || state.busy) return;
     state.busy = true; state.error = null; redraw();
-    try { await api.providersUpdate({ id, enabled: !provider.enabled }); await load(); }
+    try { await api.providersUpdate({ id, enabled: true }); await load(); }
     catch { state.error = "error"; }
     finally { state.busy = false; redraw(); }
   }
@@ -390,7 +392,7 @@ export function createProviders(host: ProvidersHost) {
       if (button.dataset.pv !== "remove") clearConfirmation();
       if (button.dataset.pv === "directory") directory();
       if (button.dataset.pv === "back" && !views?.step("back", showNavView)) directory();
-      if (button.dataset.pv === "toggle") void toggle(button.dataset.id!);
+      if (button.dataset.pv === "enable") void enable(button.dataset.id!);
       if (button.dataset.pv === "add") {
         const existing = state.providers.find((p) => p.kind === button.dataset.id);
         if (existing || state.kinds.some((k) => k.kind === button.dataset.id && k.available)) show(button.dataset.id!, existing?.id ?? null);
