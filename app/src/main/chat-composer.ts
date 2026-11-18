@@ -170,7 +170,9 @@ function fitComposerRow(bar: HTMLElement): void {
     const fixed = shown.filter(child => child !== mode && child !== model && child !== folder).reduce((sum, child) => sum + width(child), 0);
     const gaps = (shown.length - 1) * (parseFloat(getComputedStyle(bar).columnGap) || 0);
     const fits = permissionWordFits({ room: bar.clientWidth, fixed, gaps, modeWide, modelNeed, shown: !hidden });
-    if (fits === hidden) { mode.toggleAttribute("data-word-hidden", !fits); folder?.toggleAttribute("data-word-hidden", !fits); }
+    if (fits === hidden) mode.toggleAttribute("data-word-hidden", !fits);
+    // The folder is drawn once its folders are read, often after the permission's word has already given way: it follows.
+    folder?.toggleAttribute("data-word-hidden", !fits);
   };
   const sizes = new ResizeObserver(fit);
   for (const element of [bar, word, model, ...(folder && folderWord ? [folder, folderWord] : [])]) sizes.observe(element);
