@@ -566,7 +566,7 @@ only a notice under its screen (the foot is `display: contents` there).
 How to get to it: open a member's computer tab, enlarge the screen, take control, then ⋯ → 教他做一次
 (press it again to stop; `teachFails` in the mock makes the draft fail). The ⋯ menu lists that one entry only:
 the 檔案變更 entry and its view are gone (R-COMP-UNDO-01); a member undoes its file changes when asked in chat
-with its tool `file_history`. `computer-menu-teach-only` opens the menu in the larger view and asserts exactly one entry, 教他做一次, and no 檔案變更.
+with its tool `file_history`. `computer-menu-teach-only` opens the menu in the larger view and asserts exactly 教他做一次 and 傳送檔案到電腦 (R-COMP-FILE-01), and no 檔案變更.
 
 `computer-foot-layout` (checks.mjs) asserts on every listed scene: the screen or its box keeps the
 proportions and is centred; every line, the pill and the actions lie inside its horizontal span, below it,

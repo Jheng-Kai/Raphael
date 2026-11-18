@@ -2068,7 +2068,8 @@ export function checkRendered(name, context = {}) {
     const menu = document.querySelector('#app-popover');
     require(menu && visible(menu), 'the ⋯ menu is open');
     const items = [...menu.querySelectorAll('[role="menuitem"]')].map(item => item.textContent.trim());
-    require(items.length === 1 && items[0] === '教他做一次', `the menu lists exactly 教他做一次: ${items}`);
+    // Sending a file joined teaching in the held computer's menu (R-COMP-FILE-01).
+    require(items.join('|') === '教他做一次|傳送檔案到電腦', `the menu lists exactly 教他做一次 and 傳送檔案到電腦: ${items}`);
     require(!menu.querySelector('[data-pick="files"]') && !/檔案變更/.test(document.body.innerText), 'no file-changes entry is offered');
     require(!document.querySelector('.desktop-checkpoints') && !window.__look.calls.some(call => call.method === 'computer.checkpoints'), 'no file-changes view or request exists');
     return {check:name};
@@ -3581,7 +3582,8 @@ export function checkRendered(name, context = {}) {
       if (mode) {
         const own = box(mode), mark = box(shield), letters = word && box(word);
         require(own.height >= 25.5 && mark.width >= 15.5 && mark.left >= own.left && mark.right <= own.right + 0.5 && visible(shield), `the permission keeps its shield whole: ${JSON.stringify(round(own))}`);
-        const wordShown = !!word && visible(word) && letters.left >= own.left - 0.5 && letters.right <= own.right + 0.5 && letters.top >= own.top - 0.5 && letters.bottom <= own.bottom + 0.5;
+        // A hidden word is laid out of the flow with visibility: hidden, often still inside the button's box.
+        const wordShown = !!word && visible(word) && word.checkVisibility({ visibilityProperty: true }) && letters.left >= own.left - 0.5 && letters.right <= own.right + 0.5 && letters.top >= own.top - 0.5 && letters.bottom <= own.bottom + 0.5;
         require((mode.getAttribute('aria-label') ?? '').includes(word.textContent.trim()), "the permission is named for a screen reader whether its word shows or not");
         const model = form.querySelector('.cmp-model .mp-trigger'), modelName = model?.querySelector('.mp-tname'), chevron = model?.querySelector(':scope > svg.i');
         if (model) {
@@ -3600,7 +3602,9 @@ export function checkRendered(name, context = {}) {
           if (folder) {
             const mark = folder.querySelector('svg.i'), own_ = box(folder);
             require(visible(mark) && box(mark).width >= 15.5 && box(mark).left >= own_.left && box(mark).right <= own_.right + 0.5, `the folder keeps its icon whole: ${JSON.stringify(round(own_))}`);
-            require(folder.hasAttribute('data-word-hidden') === !wordShown, "the folder's word shows and hides with the permission's");
+            require(folder.hasAttribute('data-word-hidden') === !wordShown, `the folder's word shows and hides with the permission's: ${JSON.stringify({
+              wordShown, modeHidden: mode.hasAttribute('data-word-hidden'), folderHidden: folder.hasAttribute('data-word-hidden'), mode: round(own),
+              word: letters && round(letters), folder: round(own_), bar: Math.round(box(bar).width), controls: rects.map(rect => [rect.control, Math.round(rect.width)]) })}`);
             require((folder.getAttribute('aria-label') ?? '').length > 0, "the folder is named for a screen reader whether its word shows or not");
             Object.assign(result, { folderWord: folderWord.textContent.trim() });
           }
