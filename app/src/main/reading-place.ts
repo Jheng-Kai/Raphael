@@ -55,7 +55,12 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
     const keep = anchor, want = offset, atBottom = bottom;
     const place = (): void => {
       if (atBottom) scroller.scrollTop = scroller.scrollHeight;
-      else if (keep?.isConnected) scroller.scrollTop += keep.getBoundingClientRect().top - scroller.getBoundingClientRect().top - want;
+      else if (keep?.isConnected) {
+        scroller.scrollTop += keep.getBoundingClientRect().top - scroller.getBoundingClientRect().top - want;
+        // The thread follows the newest turn only from its bottom (message-rich.ts readingAnchor): a place in the middle,
+        // which a narrower thread may have had clamped to the new end for a moment, is still the owner's.
+        scroller.dispatchEvent(new CustomEvent("conversation-hold"));
+      }
     };
     // Now, and again once the thread has measured its messages for the new width (a long one folds or unfolds).
     place();
@@ -63,9 +68,13 @@ export function keepReadingPlace(scroller: HTMLElement, items: string, slack = 4
     frame = requestAnimationFrame(() => { place(); take(); });
     if (repaint) { clearTimeout(settle); settle = window.setTimeout(paint, SETTLE_MS); }
   };
-  scroller.addEventListener("scroll", take, { passive: true });
+  // A thread made wider is shorter: the place read can lie past its new end, and the browser clamps it to the bottom with a
+  // scroll that may come before the width is reported (the details panel closed). That scroll is the width change, not the
+  // owner's: the place read before it is the one kept.
+  const scrolled = (): void => { if (scroller.clientWidth && scroller.clientWidth !== width) resized(); else take(); };
+  scroller.addEventListener("scroll", scrolled, { passive: true });
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(resized) : null;
   observer?.observe(scroller);
   take();
-  return () => { scroller.removeEventListener("scroll", take); observer?.disconnect(); clearTimeout(settle); cancelAnimationFrame(nudge); };
+  return () => { scroller.removeEventListener("scroll", scrolled); observer?.disconnect(); clearTimeout(settle); cancelAnimationFrame(nudge); };
 }

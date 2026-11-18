@@ -38,6 +38,41 @@ test("a conversation hidden and drawn again at the same width comes back where i
   expect(scroller.scrollTop).toBe(1200);
 });
 
+test("a wider, shorter thread clamped to its new end before the width is reported keeps the place read in the middle, and says the owner holds it", () => {
+  let listener: () => void = () => {};
+  vi.stubGlobal("ResizeObserver", class { constructor() {} observe() {} disconnect() {} });
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => { run(); return 1; });
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+  // 1800 px above the bottom of a 7000 px thread; the line read is 40 px under the view's top.
+  const view = { width: 800, client: 600, height: 7000, top: 4600, itemAt: 4640 };
+  const scroller = document.createElement("div");
+  const added = scroller.addEventListener.bind(scroller);
+  scroller.addEventListener = ((type: string, run: EventListener, options?: AddEventListenerOptions) => { if (type === "scroll") listener = run as () => void; else added(type, run, options); }) as typeof scroller.addEventListener;
+  const holds: string[] = [];
+  scroller.addEventListener("conversation-hold", () => holds.push("hold"));
+  const item = document.createElement("div");
+  item.className = "item";
+  scroller.append(item);
+  Object.defineProperties(scroller, {
+    clientWidth: { configurable: true, get: () => view.width },
+    clientHeight: { configurable: true, get: () => view.client },
+    scrollHeight: { configurable: true, get: () => view.height },
+    scrollTop: { configurable: true, get: () => view.top, set: (value: number) => { view.top = Math.max(0, Math.min(value, view.height - view.client)); } },
+  });
+  scroller.getBoundingClientRect = () => ({ top: 0 } as DOMRect);
+  item.getBoundingClientRect = () => ({ top: view.itemAt - view.top, bottom: view.itemAt - view.top + 300 } as DOMRect);
+  document.body.append(scroller);
+  keepReadingPlace(scroller, ".item", 4, false);
+  // The details panel closes: the lines rewrap, the thread is 5100 px, the line now stands at 3400, and the browser clamps the
+  // view to the new end (4500) with a scroll before any size is reported.
+  Object.assign(view, { width: 1100, height: 5100, itemAt: 3400 });
+  view.top = Math.min(view.top, view.height - view.client);
+  listener();
+  expect(view.top).toBe(3400 - 40);
+  expect(holds.length).toBeGreaterThan(0);
+  scroller.remove();
+});
+
 /** A scroller at `top` of a 4000 px thread in a 600 px view, whose ResizeObserver this hands back. */
 function scrollerAt(top: number): { scroller: HTMLElement; view: { width: number; client: number; height: number; top: number }; notify: () => void; tops: number[]; frames: (() => void)[] } {
   let notify: () => void = () => {};

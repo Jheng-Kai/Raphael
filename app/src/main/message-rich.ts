@@ -83,6 +83,12 @@ function readingAnchor(root: HTMLElement): ReadingAnchor {
   }, { passive: true });
   // The owner asked for the newest turn: the thread follows it from this press on.
   root.addEventListener("conversation-latest", () => { state.held = false; state.follows = true; state.node = undefined; state.position = undefined; });
+  // A width change put the owner's place in the middle back (reading-place.ts): it stays theirs, even if the narrower thread
+  // was clamped to its new end for a moment.
+  root.addEventListener("conversation-hold", () => {
+    state.follows = false; state.held = true; state.scrollTop = root.scrollTop; state.height = root.scrollHeight;
+    state.node = undefined; state.position = undefined;
+  });
   // One place keeps a following thread at its bottom, whatever changed its height or its scroller's: words drawn, a picture
   // or a card that loads late, the work line or the slime going, the composer growing or shrinking under it. A ResizeObserver is
   // told after layout and before paint, so the correction lands in the frame of the change and no frame is seen above the

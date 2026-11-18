@@ -3217,5 +3217,5 @@ composer's ground at any whole-pixel offset (it skips an emblem under the panel'
 Run the emblem at other ratios with `--scale 1.25` and `--scale 1.5`.
 
 ```powershell
-npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
+npm run look -- composer-row-narrow composer-row-owner composer-row-language composer-emblem-ratio panel-widest panel-dragged-wider panel-drag-keeps-place panel-close-keeps-place panel-drag-closes room composer-model-small polish-effort-composer --theme both --width 1120,720,1920x1080
 ```

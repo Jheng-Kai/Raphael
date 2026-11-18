@@ -3691,7 +3691,7 @@ export function checkRendered(name, context = {}) {
     return {check:name, width:Math.round(width)};
   }
   if (name === "reading-place-before" || name === "reading-place-kept") {
-    // The details panel dragged wider rewraps the conversation without moving what is read.
+    // The details panel dragged wider or closed rewraps the conversation without moving what is read.
     const scroller = [...document.querySelectorAll('.page-agent .ra-scroll')].find(visible);
     const top = scroller.getBoundingClientRect().top, items = [...scroller.querySelectorAll('.thread > li')];
     if (name === "reading-place-before") {
