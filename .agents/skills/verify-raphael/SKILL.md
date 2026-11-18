@@ -204,8 +204,8 @@ refresh the record as the header of `core/tests/shard_durations.py` describes: m
 A release workflow run asks for a green CI run on its commit instead of repeating the suites.
 
 For local UI hand-off, capture the selected affected scenes at both themes and all
-three sizes. Full UI integration acceptance uses
-`npm run look -- --all --theme both --width 1120,720,1920x1080`.
+three sizes. The whole matrix (`npm run look -- --all --theme both --width 1120,720,1920x1080`)
+runs only when asked or when a change spans the app, never by habit before a release (AGENTS.md).
 The 1920 viewport is 1080px high. Inspect every generated contact sheet and relevant
 full-size image, then run `npm run judge -- <look run dir> --references <external png/jpg paths...>`
 (or `npm run verify -- --judge <look run dir>` with RAPHAEL_JUDGE_REFERENCES as a JSON
