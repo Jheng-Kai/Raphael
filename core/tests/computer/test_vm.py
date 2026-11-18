@@ -1125,7 +1125,7 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
 
 async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(desktop, tmp_path):
     from raphael_core.computer.file_tools import DEFINITIONS as FILE_DEFINITIONS, FILE_TOOLS
-    from raphael_core.computer.vm_tools import ATTACH
+    from raphael_core.computer.vm_tools import ATTACH, COPY_FROM_OWNER
 
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
@@ -1151,6 +1151,10 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
             continue
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
+            continue
+        if tool.name == "copy_from_owner":
+            # Into the member's own computer, as the owner's drop: no outward act, and no rule after what it does.
+            assert tool.description == COPY_FROM_OWNER["description"]
             continue
         if tool.name in FILE_TOOLS:
             # A file in the member's own computer is no outward act: these say what they do, and no rule after it.
