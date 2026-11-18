@@ -572,8 +572,6 @@ export const modelsEnsure = (names: string[]): Promise<{ ok: boolean }> => core(
 
 /** Opens a fixed settings/login link or registered provider documentation. */
 export const openLink = (url: string): Promise<void> => invoke("open_link", { url });
-/** macOS: clears an Accessibility entry that no longer counts, asks again and opens its pane; whether the app may use it now. */
-export const repairAccessibility = (): Promise<boolean> => invoke("repair_accessibility");
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
 /** What the clipboard holds, for a paste button: WKWebView (macOS) does not let the page read it, so the shell does there. */
@@ -611,6 +609,8 @@ export const deviceComputerAppRemove = (exe: string): Promise<DeviceSettings> =>
   invoke("device_computer_app_remove", { exe });
 /** Whether the keyboard layout has an AltGr key (Right Alt types characters). */
 export const keyboardHasAltgr = (): Promise<boolean> => invoke("keyboard_has_altgr");
+/** macOS: whether the app may use Accessibility (the global keys, pasting, tidying), read without asking; null on Windows. */
+export const accessibilityAccess = (): Promise<boolean | null> => invoke("accessibility_access");
 /** The text on the owner's clipboard, read once for the desktop viewer's paste while the owner holds the screen; null when there is none. */
 export const ownerClipboardText = (): Promise<string | null> => invoke("owner_clipboard_text");
 /** A number that changes whenever the owner's clipboard does; null where the system has none. */

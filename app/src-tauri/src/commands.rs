@@ -22,7 +22,7 @@
 //!   is the file written. (A dictation that is under way finishes in the mode it began in.)
 //!   `device_computer_app_remove` takes one app off the always-allowed list of 電腦操作, from the
 //!   list as it is under the settings' lock.
-//! - `keyboard_has_altgr` and `hotkeys_pause` are small helpers of the settings page.
+//! - `keyboard_has_altgr`, `accessibility_access` and `hotkeys_pause` are small helpers of the settings page.
 //! - `owner_clipboard_text` reads the owner's clipboard text, once, for the desktop viewer's paste into a member's
 //!   computer; the page asks only while the owner holds that screen's control.
 //! - `hotkeys_practice` lets the first-run guide's lessons hear the keys without a dictation
@@ -2225,6 +2225,23 @@ fn launch_link(url: &str) -> Result<(), String> {
     }
 }
 
+/// Whether macOS lets the app use Accessibility (the global keys, pasting and tidying), read without
+/// asking; `None` where there is no such permission (Windows). The settings page shows its note while it
+/// is `false`, the one place the owner finds it again after Deny: without it no global key is heard, so
+/// no paste or tidy fails to say so.
+#[tauri::command]
+pub fn accessibility_access(webview: Webview) -> Result<Option<bool>, String> {
+    require_main(&webview)?;
+    #[cfg(target_os = "macos")]
+    {
+        Ok(Some(crate::macos::permissions::accessibility(false)))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(None)
+    }
+}
+
 /// Whether the keyboard layout in use has an AltGr key, which is the Right Alt key. A hotkey on
 /// Right Alt then gets in the way of typing some characters. On macOS, whether the layout needs
 /// Option to type plain characters it has on no other key (`@` on a German keyboard), which a
@@ -2242,30 +2259,6 @@ pub fn keyboard_has_altgr(webview: Webview) -> Result<bool, String> {
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
-        Ok(false)
-    }
-}
-
-/// The Accessibility note's button. On a Mac an entry that no longer counts (a rebuilt or updated app is another app to
-/// macOS, whose old switch still shows on) is cleared and macOS asked again, and the pane opens where the switch is
-/// turned on; a permission that counts is left alone. Windows has nothing to repair. Gives whether the app may use the
-/// accessibility API now.
-#[tauri::command]
-pub fn repair_accessibility(app: AppHandle, webview: Webview) -> Result<bool, String> {
-    require_main(&webview)?;
-    #[cfg(target_os = "macos")]
-    {
-        let allowed = crate::macos::permissions::repair_accessibility(&app.config().identifier);
-        if !allowed {
-            launch_link(
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            )?;
-        }
-        Ok(allowed)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app;
         Ok(false)
     }
 }
@@ -2636,6 +2629,7 @@ mod tests {
         assert_eq!(
             checked,
             [
+                "accessibility_access",
                 "agent_ask_text",
                 "agent_page_shown",
                 "agent_question_answer",
@@ -2665,7 +2659,6 @@ mod tests {
                 "owner_clipboard_sequence",
                 "owner_clipboard_text",
                 "pick_output_folder",
-                "repair_accessibility",
                 "report_save",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",

@@ -105,11 +105,11 @@ test("a dictionary notice that could not be delivered names the dictionary and o
   expect(root.querySelector("[data-missing-repair]")).toBeNull();
 });
 
-test("the keys waiting for Accessibility on a Mac say so, and the button repairs the permission rather than only opening its pane", async () => {
-  // A rebuilt or updated app finds its old switch showing on while it no longer counts, so the keys do nothing outside the
-  // window and nothing pastes: the shell clears that entry, asks again and opens the pane.
+test("the Accessibility note only opens its pane, says how to add the app there with +, and never clears the app's entry", async () => {
+  // Cleared while macOS's own question was up, the app was missing from the list that question opened, with no switch to
+  // turn on: the note's button opens the pane, and its words say to add the app with + when it is not listed.
   const api = await import("./api");
-  const repair = vi.spyOn(api, "repairAccessibility").mockResolvedValue(false);
+  expect("repairAccessibility" in api).toBe(false);
   const open = vi.spyOn(api, "openLink").mockResolvedValue(undefined);
   document.body.innerHTML = missingHTML({ resource: "hotkeys", requirement: "accessibility", state: "missing", repair: null });
   expect(document.body.textContent).toContain(t("missing.accessibility"));
@@ -117,13 +117,12 @@ test("the keys waiting for Accessibility on a Mac say so, and the button repairs
   const stop = bindMissing(document, go);
   document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
   await Promise.resolve();
-  expect(repair).toHaveBeenCalledTimes(1);
-  expect(open).not.toHaveBeenCalled();
+  expect(open).toHaveBeenCalledExactlyOnceWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
   expect(go).not.toHaveBeenCalled();
-  // A shell that cannot repair (an older build) still opens the pane.
-  repair.mockRejectedValueOnce(new Error("unknown command"));
-  document.querySelector<HTMLButtonElement>("[data-missing-pane]")!.click();
-  await new Promise(resolve => setTimeout(resolve, 0));
-  expect(open).toHaveBeenCalledWith("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
-  stop(); repair.mockRestore(); open.mockRestore();
+  for (const locale of ["zh-TW", "en"] as const) {
+    setLocale(locale);
+    expect(t("missing.accessibility")).toMatch(/[+＋]/);
+  }
+  setLocale("zh-TW");
+  stop(); open.mockRestore();
 });

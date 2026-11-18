@@ -226,10 +226,10 @@ pub struct HotkeyService {
     closed: tauri::async_runtime::JoinHandle<()>,
 }
 
-/// Tells the main window that macOS has not given Accessibility, with the button that repairs it
-/// (`repair_accessibility`): macOS asks only once, and a rebuilt or updated app (a new signature) is
-/// a new app to it, whose old switch still shows on. Said when the hotkeys start without it, and
-/// again whenever a paste or a tidy could not be made for want of it, at most once a minute.
+/// Tells the main window that macOS has not given Accessibility, with the button that opens its
+/// pane: whenever a paste or a tidy could not be made for want of it, at most once a minute. Not
+/// when the hotkeys start without it: macOS asks then with its own question, and a note of the
+/// app's own beside it asked twice.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn tell_accessibility_missing() {
     static LAST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
@@ -264,14 +264,13 @@ impl HotkeyService {
             return Self::start_with(WindowOnlyBackend::default(), wanted, events);
         }
         // macOS lets an app watch and swallow keys only once the person has allowed it under
-        // Accessibility. Until then the service runs and waits: macOS shows its question once, and
-        // the keys work from the moment the person says yes, without a restart.
+        // Accessibility. Until then the service runs and waits: macOS shows its own question, the
+        // app adds none, and the keys work from the moment the person says yes, without a restart.
         #[cfg(target_os = "macos")]
         if !handy_keys::check_accessibility() {
             crate::macos::permissions::accessibility(true);
             let service = Self::start_with(late::LateManager::default(), wanted, events)?;
             log::info!("global hotkeys wait for the accessibility permission: {bindings:?}");
-            tell_accessibility_missing();
             return Ok(service);
         }
         // Blocking mode: a plain `HotkeyManager::new()` would watch the keys without swallowing
@@ -2309,5 +2308,27 @@ mod tests {
             .err()
             .unwrap();
         assert!(err.contains("Nope"), "{err}");
+    }
+
+    #[test]
+    fn without_accessibility_macos_asks_alone_and_the_app_never_clears_its_entry() {
+        // A note of the app's own beside macOS's question asked twice, and its button cleared the
+        // app's entry, so the pane the question opened had no switch for the app to turn on.
+        let source = include_str!("hotkey.rs");
+        let start = source
+            .find("if !handy_keys::check_accessibility()")
+            .unwrap();
+        let waiting = &source[start..];
+        let waiting = &waiting[..waiting.find("return Ok(service);").unwrap()];
+        assert!(waiting.contains("permissions::accessibility(true)"));
+        assert!(!waiting.contains("tell_accessibility_missing"));
+        for shell in [
+            include_str!("macos/permissions.rs"),
+            include_str!("commands.rs"),
+            include_str!("lib.rs"),
+        ] {
+            assert!(!shell.contains("tccutil"));
+            assert!(!shell.contains("repair_accessibility"));
+        }
     }
 }

@@ -30,6 +30,8 @@ export default [
   scene("settings-about-brand", "The about tab's mark and name cannot be selected", [...settings("about"), wait('.about-brand'), check('about-brand-unselectable')]),
   // R-TIDY-01: the key that tidies the selected text is listed and changeable with the other shortcuts, Right Alt+T by default.
   scene("settings-tidy-key", "The 聽寫 tab lists 整理選取文字 with its key and a pencil beside the other shortcuts, as wide as theirs", [...settings("dictation"), wait('.modal-scrim [data-row="tidy-hotkey"]'), check("settings-tidy-key")]),
+  // R-PRIV-AX-01: on a Mac without Accessibility no global key is heard, so no paste or tidy fails to say so; 聽寫 says it instead.
+  scene("settings-accessibility-off", "A Mac without Accessibility: 聽寫 says so above the shortcuts, and its one button opens the pane", [...settings("dictation"), wait('.modal-scrim .missing-note [data-missing-pane]'), check("settings-accessibility-off")], { accessibility: false }),
 
   scene("local-command-settings-gone", "Safety has no local commands row and no 電腦操作 section: only the vault and the rules are left", [...settings("safety"), scroll(".modal-scrim .modal-body .sgroup:last-of-type"), check("local-command-setting-gone")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),

@@ -27,6 +27,7 @@ import { bindingLabels } from "../keys";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { type VaultView, emptyVaultView, vaultHTML } from "../vault";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
+import { missingHTML } from "../missing";
 import type { LocalView } from "../local-models";
 import { type ModelPickerLook, modelDisplayName, modelPickerHTML, modelsFor, onPlan, planRef, priceDescription, priceHTML, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
@@ -121,6 +122,8 @@ export interface SettingsView {
   devices: AudioDevices | null;
   /** The keyboard layout makes Right Alt an AltGr. */
   altgr: boolean;
+  /** macOS: whether the app may use Accessibility; null on Windows or while it is not known. */
+  accessibility?: boolean | null;
   /** The app's version, as Tauri gives it; empty while it is not known. */
   version: string;
   /** The key field is shown although there is a key (「變更」). */
@@ -405,6 +408,13 @@ function shortcutRow(name: string, bindings: readonly string[], change?: { act: 
 const altgrNote = (v: SettingsView, bindings: readonly string[]): string[] =>
   v.altgr && bindings.some((binding) => binding.split("+").includes("AltRight")) ? [note(st("warn", t("settings.054")))] : [];
 
+/**
+ * A Mac's Accessibility while it is off: no global key is heard, so no paste or tidy fails to say so, and macOS asks only
+ * once. This note is where the owner finds the pane again (R-PRIV-AX-01); while the permission is on it is not drawn.
+ */
+const accessibilityNote = (v: SettingsView): string =>
+  v.accessibility === false ? missingHTML({ resource: "hotkeys", requirement: "accessibility", state: "missing", repair: null }) : "";
+
 /** The pane title receives focus when settings open. A tab is its name alone: no line under it, no action beside it. */
 export const headingHTML = (v: SettingsView): string =>
   `<h1 id="set-title" tabindex="-1">${esc(paneTitle(v.pane))}</h1>`;
@@ -458,6 +468,7 @@ function dictationHTML(v: SettingsView): string {
   return (
     headingHTML(v) +
     coreNote(v) +
+    accessibilityNote(v) +
     section(t("home.shortcuts"), [
       shortcutRow(t("settings.agentKeys"), v.device.agent_keys ?? [], { act: "rec-agent", field: "agent_keys" }),
       ...altgrNote(v, v.device.agent_keys ?? []),

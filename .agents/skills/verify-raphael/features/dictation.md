@@ -15,15 +15,21 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   `layout_needs_option` to the main queue, and `layout()` gives nothing anywhere else. On macOS 26 the paste and copy
   threads' own reading stopped the app (a libdispatch assertion in `TSMGetInputSourceProperty`) after every dictation
   and every tidy. A main thread that does not answer within 500 ms means the ANSI V and C keys.
-- Permissions follow the app's signature: a rebuilt ad hoc app is another app to macOS, whose old switch under
-  Accessibility still shows on but no longer counts, and macOS never asks again. The hotkeys notice
-  (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`) carries a button that repairs it
-  (`commands.rs` `repair_accessibility`): when the app may not use Accessibility, its own entry is cleared
-  (`tccutil reset Accessibility <identifier>`), macOS asked again, and the pane opened. A permission that counts is left
-  alone. A local build signed with one Apple Development identity keeps its permissions across rebuilds.
+- Permissions follow the app's signature: a rebuilt or updated ad hoc app is another app to macOS, whose old entry
+  under Accessibility no longer counts. When the hotkeys start without Accessibility, macOS asks with its own question
+  (`permissions::accessibility(true)`; macOS 26 asks again for an entry of another signature) and the window adds no
+  note beside it (R-PRIV-AX-01). The app never clears its own entry: cleared while that question was up, Raphael was
+  missing from the list the question opened. Raphael missing from the list, or on without effect, is added from
+  Applications with + (the listed one removed with − first), which the note says. Another version or signature
+  of the app (a build folder, an older disk image) may not match the entry allowed, and opening the app again can bring
+  forward a copy still running: quit every copy before allowing the one in Applications. A local build signed with
+  one Apple Development identity keeps its permissions across rebuilds.
 - Without Accessibility macOS drops a posted key unseen: `paste` keeps
   the text on the pasteboard and says `NO_PASTE_PERMISSION` (press ⌘V), the tidy key says `NO_TIDY_PERMISSION`, and
-  both tell the main window again (at most once a minute) so its repair button is at hand.
+  both tell the main window (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`, at most once a minute),
+  whose button opens the Accessibility pane. Without Accessibility no global key is heard at all, so Settings > 聽寫 shows
+  the same note above the shortcuts while `accessibility_access` (read without asking) says false, read again when the
+  window comes back to the front: the place an owner who pressed Deny finds the pane again.
 - Learning from corrections: `learn/ax.rs` reads the focused text element through the accessibility API; terminals are
   not watched on macOS.
 - Media: `media/macos.rs`, MediaRemote where macOS answers, else Music, Spotify, TV and VLC through `osascript`.
@@ -94,7 +100,7 @@ nothing, keeps the selection and the clipboard, and says 《否。這次沒有�
 if it were tidied, and the answer of the core carries no `text` unless it was tidied.
 
 ```powershell
-npm run look -- settings-tidy-key dictation-overview dictation --theme both --width 1120,720,1920x1080
+npm run look -- settings-tidy-key settings-accessibility-off dictation-overview dictation --theme both --width 1120,720,1920x1080
 ```
 
 The other layers, each from its own folder (the core's tests, the shell's):
@@ -106,7 +112,10 @@ cd app\src-tauri; cargo test --lib -- hotkey:: dictation:: commands:: device_set
 
 `settings-tidy-key` opens Settings > 聽寫 and checks that the row is there after the dictation shortcuts and before Esc, shows
 右 Alt and T, has its pencil where the question key's is, is as high and as wide as that row, has a whole name and does not make
-the page scroll sideways; `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
+the page scroll sideways, and that no Accessibility note shows where that permission is not missing;
+`settings-accessibility-off` is a Mac without Accessibility (the look mock's `accessibility_access` answers false): 聽寫
+shows the `missing.accessibility` note above the shortcuts, saying to add Raphael with +, no wider than them, with the one
+button that opens the Accessibility pane (R-PRIV-AX-01); `dictation-overview` also requires the shortcut card to list five shortcuts. Not proved here: a real
 selection in a real app. A test cannot press keys or use the clipboard, so the owner tries it in a chat box, a document and
 a terminal: the selection is replaced, Ctrl+Z undoes it, what they had copied is still on the clipboard, Win+V shows their copied
 text once (the program's own copy is the one thing that cannot be kept out of clipboard history), nothing selected shows the
