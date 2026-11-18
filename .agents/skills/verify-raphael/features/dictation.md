@@ -15,15 +15,18 @@ Option (the `AltRight` binding: one key code, named by `keys.ts` and `mac-catalo
   `layout_needs_option` to the main queue, and `layout()` gives nothing anywhere else. On macOS 26 the paste and copy
   threads' own reading stopped the app (a libdispatch assertion in `TSMGetInputSourceProperty`) after every dictation
   and every tidy. A main thread that does not answer within 500 ms means the ANSI V and C keys.
-- Permissions follow the app's signature: a rebuilt ad hoc app is another app to macOS, whose old switch under
-  Accessibility still shows on but no longer counts, and macOS never asks again. The hotkeys notice
-  (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`) carries a button that repairs it
-  (`commands.rs` `repair_accessibility`): when the app may not use Accessibility, its own entry is cleared
-  (`tccutil reset Accessibility <identifier>`), macOS asked again, and the pane opened. A permission that counts is left
-  alone. A local build signed with one Apple Development identity keeps its permissions across rebuilds.
+- Permissions follow the app's signature: a rebuilt or updated ad hoc app is another app to macOS, whose old entry
+  under Accessibility no longer counts. When the hotkeys start without Accessibility, macOS asks with its own question
+  (`permissions::accessibility(true)`; macOS 26 asks again for an entry of another signature) and the window adds no
+  note beside it (R-PRIV-AX-01). The app never clears its own entry: cleared while that question was up, Raphael was
+  missing from the list the question opened. Raphael missing from the list, or on without effect, is added from
+  Applications with + (the listed one removed with − first), which the note says. Several copies with the app's
+  identifier (a mounted disk image, a build folder) are each another app to macOS; the one in Applications is the one
+  to allow. A local build signed with one Apple Development identity keeps its permissions across rebuilds.
 - Without Accessibility macOS drops a posted key unseen: `paste` keeps
   the text on the pasteboard and says `NO_PASTE_PERMISSION` (press ⌘V), the tidy key says `NO_TIDY_PERMISSION`, and
-  both tell the main window again (at most once a minute) so its repair button is at hand.
+  both tell the main window (`missing.accessibility`, `hotkey.rs` `tell_accessibility_missing`, at most once a minute),
+  whose button opens the Accessibility pane.
 - Learning from corrections: `learn/ax.rs` reads the focused text element through the accessibility API; terminals are
   not watched on macOS.
 - Media: `media/macos.rs`, MediaRemote where macOS answers, else Music, Spotify, TV and VLC through `osascript`.

@@ -2246,30 +2246,6 @@ pub fn keyboard_has_altgr(webview: Webview) -> Result<bool, String> {
     }
 }
 
-/// The Accessibility note's button. On a Mac an entry that no longer counts (a rebuilt or updated app is another app to
-/// macOS, whose old switch still shows on) is cleared and macOS asked again, and the pane opens where the switch is
-/// turned on; a permission that counts is left alone. Windows has nothing to repair. Gives whether the app may use the
-/// accessibility API now.
-#[tauri::command]
-pub fn repair_accessibility(app: AppHandle, webview: Webview) -> Result<bool, String> {
-    require_main(&webview)?;
-    #[cfg(target_os = "macos")]
-    {
-        let allowed = crate::macos::permissions::repair_accessibility(&app.config().identifier);
-        if !allowed {
-            launch_link(
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-            )?;
-        }
-        Ok(allowed)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app;
-        Ok(false)
-    }
-}
-
 /// The most characters of the owner's clipboard the desktop viewer pastes into a member's computer.
 const PASTE_MAX_CHARS: usize = 1_000_000;
 
@@ -2665,7 +2641,6 @@ mod tests {
                 "owner_clipboard_sequence",
                 "owner_clipboard_text",
                 "pick_output_folder",
-                "repair_accessibility",
                 "report_save",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",

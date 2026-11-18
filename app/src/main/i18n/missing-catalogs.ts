@@ -40,7 +40,7 @@ export const missingZh = {
   "missing.urlRead": "無法直接讀取這個網址，請提供可公開讀取的網頁或下載後附上檔案，登入與受限頁面則請親自開啟。",
   "missing.unknown": "目前無法確認這次失敗的原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。",
   "missing.microphone": "無法取得麥克風，請允許拉斐爾的麥克風存取並確認 Windows 已開放桌面應用程式使用。",
-  "missing.accessibility": "聽寫快捷鍵需要「輔助使用」權限：請到「系統設定 › 隱私權與安全性 › 輔助使用」允許拉斐爾。如果已經開著，請先用「−」移除拉斐爾再重新加入。",
+  "missing.accessibility": "聽寫快捷鍵需要「輔助使用」權限：請到「系統設定 › 隱私權與安全性 › 輔助使用」打開拉斐爾。清單裡沒有拉斐爾，或打開了仍沒有作用時，請按「＋」從「應用程式」加入拉斐爾（已在清單裡的先用「−」移除）。",
 } as const;
 
 export const missingEn: Record<keyof typeof missingZh, string> = {
@@ -85,7 +85,7 @@ export const missingEn: Record<keyof typeof missingZh, string> = {
   "missing.urlRead": "This URL could not be read directly. Provide a public page or attach a downloaded file; open signed-in or restricted pages yourself.",
   "missing.unknown": "The cause of this failure is unknown. Keep this conversation and try once more; report the problem if it continues.",
   "missing.microphone": "Microphone access failed. Allow Raphael to use it and allow desktop apps in Windows microphone privacy settings.",
-  "missing.accessibility": "The dictation keys need Accessibility. Allow Raphael in System Settings > Privacy & Security > Accessibility. If it’s already on, remove Raphael with − and add it again.",
+  "missing.accessibility": "The dictation keys need Accessibility. Turn on Raphael in System Settings > Privacy & Security > Accessibility. If Raphael isn’t listed, or is on but doesn’t work, add it from Applications with + (remove the one listed with − first).",
 };
 
 export const missingJa: Record<keyof typeof missingZh, string> = {
@@ -130,5 +130,5 @@ export const missingJa: Record<keyof typeof missingZh, string> = {
   "missing.urlRead": "この URL は直接読めません。公開ページかダウンロードしたファイルを渡し、ログインや制限のあるページはご自身で開いてください。",
   "missing.unknown": "原因を確認できません。この会話を残して一度再試行し、続く場合は問題を報告してください。",
   "missing.microphone": "マイクを利用できません。ラファエルと Windows のデスクトップアプリのマイクアクセスを許可してください。",
-  "missing.accessibility": "ディクテーションのキーにはアクセシビリティの許可が必要です。「システム設定 › プライバシーとセキュリティ › アクセシビリティ」でラファエルを許可してください。すでにオンの場合は、「−」でラファエルを削除してから追加し直してください。",
+  "missing.accessibility": "ディクテーションのキーにはアクセシビリティの許可が必要です。「システム設定 › プライバシーとセキュリティ › アクセシビリティ」でラファエルをオンにしてください。一覧にラファエルがない場合や、オンでも効かない場合は、「＋」で「アプリケーション」からラファエルを追加してください（一覧にあるものは先に「−」で削除します）。",
 };
