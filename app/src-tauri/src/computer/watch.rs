@@ -454,9 +454,10 @@ pub mod hook {
         .fold(0, |mask, kind| mask | event_mask(kind))
     }
 
-    /// The keys alone, which the owner presses to stop a run.
+    /// The keys alone, which the owner presses to stop a run. A modifier's change is left out: were
+    /// it delivered without Input Monitoring, a tap of it alone would still be made.
     fn key_mask() -> CGEventMask {
-        [kCGEventKeyDown, kCGEventKeyUp, kCGEventFlagsChanged]
+        [kCGEventKeyDown, kCGEventKeyUp]
             .into_iter()
             .fold(0, |mask, kind| mask | event_mask(kind))
     }
@@ -613,6 +614,7 @@ pub mod hook {
             assert_eq!(mask() & key_mask(), key_mask());
             assert_eq!(key_mask() & event_mask(kCGEventMouseMoved), 0);
             assert_eq!(key_mask() & event_mask(kCGEventLeftMouseDown), 0);
+            assert_eq!(key_mask() & event_mask(kCGEventFlagsChanged), 0);
             let source = include_str!("watch.rs");
             let start = &source[source.find("pub fn start(told").unwrap()..];
             let tried = start.find("if !keys_delivered()").unwrap();
