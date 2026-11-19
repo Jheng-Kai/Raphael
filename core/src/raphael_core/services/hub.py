@@ -221,7 +221,10 @@ class ServiceHub:
         """The model that reads images (the `vision_model` setting, or the answer model when it is
         ""), and whether OpenRouter's list says it reads them: None when the list does not say."""
         chosen = self._text("vision_model")
-        model = api_model(self._settings, chosen or self._text("agent_model"), api_providers=hosted_providers(self._provider))
+        answer = self._text("agent_model")
+        model = chosen or answer
+        if not chosen and (not answer or answer.startswith("cli:")):
+            model = api_model(self._settings, api_providers=hosted_providers(self._provider))
         return model, self._sees(model)
 
     def _text(self, key: str) -> str:

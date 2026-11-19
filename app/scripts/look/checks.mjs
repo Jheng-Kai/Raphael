@@ -4980,6 +4980,22 @@ export function checkRendered(name, context = {}) {
     require(toast.textContent.includes("小晴") && toast.textContent.includes("等你回答"), `says who waits: ${toast.textContent}`);
     return { check: name };
   }
+  // The composer's line (R-UI-118): quiet when the app put the caret there on its own, brighter while the owner is in it.
+  if (name === "composer-line-calm" || name === "composer-line-engaged") {
+    const form = [...document.querySelectorAll('.composer')].find(visible), input = form?.querySelector('.cmp-input');
+    const tone = token => { const probe = document.createElement('i'); probe.style.color = `var(${token})`; form.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; };
+    // The app gives the composer its focus on its own when a conversation opens; done here the same way, with no press or key.
+    if (name === "composer-line-calm") input?.focus({ preventScroll: true });
+    form.style.transition = 'none'; const line = getComputedStyle(form).borderTopColor; form.style.transition = '';
+    require(form && input && !input.value, "the composer is empty");
+    if (name === "composer-line-calm") {
+      require(document.activeElement === input, "the caret is in the composer");
+      require(!form.hasAttribute('data-engaged') && line === tone('--edge'), `a focus the app gave lights nothing, the line is the quiet edge: ${line} (${tone('--edge')})`);
+    } else {
+      require(form.hasAttribute('data-engaged') && line === tone('--line-focus'), `pressed into, the composer's line is the bright one: ${line}`);
+    }
+    return { check: name, line };
+  }
   if (name === "composer-url-chip") {
     const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), mirror = field.querySelector(".cmp-mirror"), chip = mirror.querySelector(".url-chip");
     // The link shows its whole address in the link colour, never a shortened name.

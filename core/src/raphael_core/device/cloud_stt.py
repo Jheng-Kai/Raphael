@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import base64
 import concurrent.futures
+import copy
 import io
 import logging
 import math
 import threading
 import time
+from dataclasses import dataclass
 import wave
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -100,6 +102,12 @@ def _kind(error: Exception) -> str:
     return "error"
 
 
+@dataclass
+class _RateLimit:
+    until: float = 0.0
+    error: Exception | None = None
+
+
 class CloudSttEngine:
     """Speech-to-text through the brain's `stt.transcribe`, with `fallback()` (the local engine,
     which may block while it loads) for whatever the cloud does not do. One per dictation.
@@ -123,8 +131,7 @@ class CloudSttEngine:
         self._call = call
         self._sleep = sleep
         self._now = now
-        self._cooldown_until = 0.0
-        self._rate_error: Exception | None = None
+        self._rate = _RateLimit()
         self._fallback = fallback
         self._warned = warned
         self._failed: str | None = None
@@ -142,10 +149,11 @@ class CloudSttEngine:
         """
         if not self._race_local or self._failed is not None:
             return self.transcribe(samples, hints=hints, language=language)
-        cloud = CloudSttEngine(self._call, fallback=self._fallback, warned=self._warned,
-                               sleep=self._sleep)
-        local = CloudSttEngine(self._call, fallback=self._fallback, warned=self._warned,
-                               sleep=self._sleep)
+        if self._rate.until - self._now() >= wait_for(samples.size / SAMPLE_RATE):
+            return self._local(samples, hints, language)
+        # Share the recording's cooldown while keeping each contender's attribution private.
+        cloud = copy.copy(self)
+        local = copy.copy(self)
         tasks = {
             _race_task(lambda: cloud._cloud_with_retries(samples, hints, language)): cloud,
             _race_task(lambda: local._local(samples, hints, language)): local,
@@ -210,15 +218,15 @@ class CloudSttEngine:
     def _cloud_with_retries(self, samples: np.ndarray, hints: Sequence[str], language: str) -> str:
         deadline = self._now() + wait_for(samples.size / SAMPLE_RATE)
         for attempt in range(len(_RETRY_WAITS_S) + 1):
-            cooldown = max(0.0, self._cooldown_until - self._now())
+            cooldown = max(0.0, self._rate.until - self._now())
             if cooldown:
                 if cooldown >= deadline - self._now():
-                    raise self._rate_error
+                    raise self._rate.error
                 self._sleep(cooldown)
             remaining = deadline - self._now()
             if remaining <= 0:
-                if self._rate_error is not None:
-                    raise self._rate_error
+                if self._rate.error is not None:
+                    raise self._rate.error
                 raise TimeoutError("Cloud speech-to-text retry budget exhausted")
             try:
                 return self._cloud(samples, hints, language, timeout=remaining)
@@ -229,15 +237,15 @@ class CloudSttEngine:
                 delay = float(delay) if type(delay) in (int, float) and math.isfinite(delay) and delay > 0 else 0.0
                 wait = max(_RETRY_WAITS_S[min(attempt, len(_RETRY_WAITS_S) - 1)], delay)
                 if _kind(error) == "rate_limit":
-                    self._rate_error = error
-                    self._cooldown_until = self._now() + wait
+                    self._rate.error = error
+                    self._rate.until = self._now() + wait
                 if attempt == len(_RETRY_WAITS_S) or wait >= deadline - self._now():
                     raise
                 logger.debug("Cloud speech-to-text refused (%s); trying again", _kind(error))
                 self._sleep(wait)
                 # Test clocks and production clocks share the same elapsed-time accounting.
                 if _kind(error) == "rate_limit":
-                    self._cooldown_until = 0.0
+                    self._rate.until = 0.0
 
     def _cloud(self, samples: np.ndarray, hints: Sequence[str], language: str, *, timeout: float | None = None) -> str:
         params = {

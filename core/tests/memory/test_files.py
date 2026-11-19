@@ -767,3 +767,35 @@ def test_an_owner_correction_never_confirms_the_outside_claim_it_edits_or_lets_o
     assert edit(memory, 1, add("使用者的店在高雄"), untrusted=True).ok
     assert edit(memory, 1, {"action": "replace", "old_text": "高雄", "content": "台南"}, untrusted=True, owner_text="店不是在高雄，改成台南了").ok
     assert is_unconfirmed(next(entry for entry in own_file(tmp_path, 1).strip().split("\n\n") if "台南" in entry))
+
+
+def test_background_correction_respects_the_owners_private_words(memory):
+    assert edit(memory, A, add("The office is in London."), target="user", share=True).ok
+    shared = memory.shared.read()
+    result = memory.reader_for(A).growth(
+        "memory_update", {"target": "user", "action": "replace", "old_text": "London", "content": "Paris"},
+        owner_text="The office is in Paris. Keep this private.")
+    assert result.ok and result.data["target"] == "memory"
+    assert "office is in Paris" in memory.own(A).read()
+    assert memory.shared.read() == shared
+
+
+def test_split_batch_refuses_before_writing_either_file(memory):
+    before = memory.shared.read()
+    result = edit(memory, A, add("Private meeting tomorrow."),
+                  {"action": "remove", "old_text": "missing shared entry"}, target="user")
+    assert not result.ok and result.error == "mixed_targets"
+    assert memory.own(A).read() == ""
+    assert memory.shared.read() == before
+
+
+@pytest.mark.parametrize("bad_name,body", [("README.md", b"not a journal"), ("2026-02-30.md", b"invalid date"),
+                                           ("2026-02-24.md", b"\xff")])
+def test_bad_journal_is_preserved_and_other_logs_are_indexed(make, tmp_path, conn, bad_name, body):
+    folder = tmp_path / "bots/7/memory/log"
+    folder.mkdir(parents=True)
+    (folder / bad_name).write_bytes(body)
+    (folder / "2026-02-25.md").write_text("valid log", encoding="utf-8")
+    make()
+    assert (folder / bad_name).read_bytes() == body
+    assert [r[0] for r in conn.execute("SELECT body FROM memory_search_documents WHERE kind='log'")] == ["valid log"]

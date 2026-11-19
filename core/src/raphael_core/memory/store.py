@@ -372,7 +372,7 @@ class MemoryFile:
 
     # --- writing -----------------------------------------------------------------------------------
 
-    def apply(self, operations: Sequence[dict], *, mark: str = "", told: str = "", unattended: bool = False, owner_text: str = "") -> dict:
+    def apply(self, operations: Sequence[dict], *, shared_sources: Sequence[str] = (), mark: str = "", told: str = "", unattended: bool = False, owner_text: str = "") -> dict:
         """Apply `operations` ({action: add|replace|remove, content?, old_text?}) to the live file, all
         or none, against the limit on their final result. `mark` is the mark of a turn that read
         outside content, `told` the stamp of a shared entry, and `unattended` a pass nobody watches,
@@ -400,7 +400,7 @@ class MemoryFile:
                         f"{self.name} exists but could not be read right now. Writing from an empty view "
                         "would wipe it, so nothing was changed. Try again later.")}
                 try:
-                    working = self._walk(before, ops, mark=mark, told=told, owner_text=owner_text)
+                    working = self._walk(before, ops, mark=mark, told=told, owner_text=owner_text, shared_sources=shared_sources)
                 except Refused as refused:
                     if refused.kind in ("secret", "injection"):
                         return {"success": False, "kind": refused.kind, "error": str(refused)}
@@ -439,7 +439,7 @@ class MemoryFile:
                 "message": f"Applied {len(ops)} operation(s)." if changed else "Entry already exists (no duplicate added).",
                 "note": "Write saved. This update is complete: do not repeat it."}
 
-    def _walk(self, entries: Sequence[str], ops: Sequence[dict], *, mark: str, told: str, owner_text: str = "") -> list[str]:
+    def _walk(self, entries: Sequence[str], ops: Sequence[dict], *, shared_sources: Sequence[str] = (), mark: str, told: str, owner_text: str = "") -> list[str]:
         working = list(entries)
         for number, op in enumerate(ops, 1):
             action = op.get("action")
@@ -457,11 +457,23 @@ class MemoryFile:
                           alone=len(ops) == 1, confirmed=confirmed)
             elif action in ("replace", "remove"):
                 index, ambiguous = _find_unique_match(working, old_text)
+                copied = False
+                # Copy a shared source into the private working batch only when correcting it.
+                if action == "replace" and shared_sources and old_text.strip() and index is None and not ambiguous:
+                    source, multiple = _find_unique_match(shared_sources, old_text)
+                    if multiple:
+                        raise Refused("ambiguous", f"{where}: several shared entries match. Include more of the entry.")
+                    if source is not None:
+                        copied = True
+                        index = len(working)
+                        working.append(shared_sources[source])
                 patched = working[index].replace(old_text, content, 1) if index is not None and not ambiguous else ""
                 confirmed = action == "replace" and owner_stated(patched, owner_text)
                 owner_edit = action == "replace" and not confirmed and bool(patched) and owner_replaced(working[index], patched, owner_text)
                 self._edit(working, action, old_text, content, where, mark="" if confirmed else mark,
                            told=told, alone=len(ops) == 1, confirmed=confirmed, owner_edit=owner_edit)
+                if copied and index < len(working):
+                    working[index] = _TOLD.sub("", working[index])
             else:
                 raise Refused("bad_arguments", f"{where}: unknown action. Use add, replace or remove.")
         return working

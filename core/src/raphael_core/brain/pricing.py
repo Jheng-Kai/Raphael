@@ -169,6 +169,12 @@ class PricingService:
             return builtin_catalog(), None, "builtin"
         return list(snapshot.entries), snapshot.fetched_at_ms, source
 
+    def cached_catalog(self) -> tuple[list[CatalogEntry], int | None, str]:
+        self._load_once()
+        if self._snapshot is None:
+            return builtin_catalog(), None, "builtin"
+        return list(self._snapshot.entries), self._snapshot.fetched_at_ms, "cached"
+
     def known(self) -> list[CatalogEntry] | None:
         """The models of the list OpenRouter gave last, however old, without fetching it; None if it
         never gave one. For what has to be quick: `settings.set` checks a model against it."""

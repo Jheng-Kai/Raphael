@@ -62,6 +62,76 @@ async def setup_registry():
     conn.close()
 
 
+async def test_stt_warmup_contacts_only_the_enabled_selected_provider(setup_registry):
+    _, keys, _, _, http, legacy, registry, _, _ = setup_registry
+    keys.set("stored")
+    pid = (await registry.add({"kind": "openai", "key": "stored"}))["provider"]["id"]
+    contacted = []
+    async def capture(request):
+        contacted.append((request.method, request.url.host))
+    http.event_hooks["request"].append(capture)
+    dispatch = ProviderRouter(registry, legacy)
+    registry.settings.set("stt_cloud_model", f"@{pid}:whisper-1")
+    dispatch.start_connection_warmup()
+    await registry.client(pid)._connection_warm
+    assert contacted == [("HEAD", "api.openai.com")]
+    await registry.update({"id": "openrouter", "enabled": False})
+    registry.settings.set("stt_cloud_model", "example/transcribe")
+    dispatch.start_connection_warmup()
+    assert legacy._connection_warm is None
+
+
+async def test_explicit_local_vision_never_contacts_a_cloud_fallback(setup_registry):
+    from raphael_core.services.vision import Vision
+    from raphael_core.services.common import ServiceError
+
+    _, keys, _, _, http, legacy, registry, _, _ = setup_registry
+    keys.set("stored")
+    pid = (await registry.add({"kind": "ollama"}))["provider"]["id"]
+    reference = f"@{pid}:llava"
+    registry.settings.set("vision_model", reference)
+    registry.settings.set("vision_fallbacks", ["acme/remote"])
+    seen = []
+    async def fail_locally(request):
+        seen.append(request.url.host)
+        raise httpx.ConnectError("Local server stopped")
+    http.event_hooks["request"].append(fail_locally)
+    vision = Vision(ProviderRouter(registry, legacy), lambda: (reference, True))
+    with pytest.raises(ServiceError) as failure:
+        await vision.look(["data:image/png;base64,YQ=="], "describe", None)
+    assert (failure.value.kind, failure.value.service) == ("network", reference)
+    assert len(seen) == 1 and seen[0] in ("localhost", "127.0.0.1")
+
+
+async def test_cached_router_media_choices_are_filtered(setup_registry):
+    _, keys, _, _, _, _, registry, _, _ = setup_registry
+    keys.set("stored")
+    registry._models["openrouter"] = [{"id": "openrouter/auto", "media": ["image"]},
+                                      {"id": "acme/paint", "media": ["image"]}]
+    assert [row["reference"] for row in registry.media_choices("image")] == ["acme/paint"]
+
+
+async def test_chatgpt_cache_requires_the_current_account_and_plan(setup_registry):
+    _, _, _, _, _, _, registry, _, _ = setup_registry
+    auth = registry.chatgpt.auth
+    auth._save({"active": "a", "accounts": {"a": {}, "b": {}}})
+    rows = [{"id": "a-only"}]
+    tokens = {"refresh_token": "fake", "scope": "chatgpt.tokens.use.direct"}
+    auth._store("a", tokens)
+    auth._store("b", tokens)
+    registry._models["chatgpt"] = {"account": "a", "rows": rows}
+    assert registry._chatgpt_rows() == rows
+    auth._save({**auth._state(), "active": "b"})
+    assert registry._chatgpt_rows() == []
+    registry._models["chatgpt"] = {"account": "b", "rows": rows}
+    auth._store("b", {**tokens, "scope": ""})
+    assert registry._chatgpt_rows() == []
+    registry._models["chatgpt"] = rows
+    assert registry._chatgpt_rows() == []
+    auth.clear_models()
+    assert "chatgpt" not in registry._load("providers.models.v1", {})
+
+
 async def test_provider_config_models_and_vault_survive_registry_reload(setup_registry):
     conn, keys, vault, credential, http, legacy, registry, router, notices = setup_registry
     pid = (await router.call("providers.add", {"kind": "openai", "key": "first-secret"}))["provider"]["id"]

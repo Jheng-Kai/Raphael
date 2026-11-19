@@ -13,7 +13,7 @@ from pathlib import Path
 from .process import Child, subscription_env
 from .records import workspace_root
 from .terminal_login import TerminalSignIn
-from .models import claude_cli_models, claude_models, codex_models, antigravity_models, find_model
+from .models import runnable_model, claude_cli_models, claude_models, codex_models, antigravity_models, find_model
 from ...brain.model_ref import CLI_NAMES as NAMES
 
 # Claude Code keeps its sign-in on a Mac in the login Keychain, as a password item of this name, not in a file.
@@ -264,6 +264,21 @@ class CliBrains:
         """The list the CLI gave; Claude's has a known first answer, so its menu is never empty."""
         return self._models.get(name) or (claude_models(self._claude_folder()) if name == "claude" else [])
 
+    def antigravity_model(self, reference):
+        """Resolve previously saved family ids to a listed variant before starting the CLI."""
+        _, model = brain_ref(reference)
+        row = find_model(self._known_models("gemini"), reference.partition("?")[0])
+        if row and row.get("effort_models"):
+            chosen = row["effort_models"].get(brain_effort(reference)) or runnable_model(row)
+            return brain_ref(chosen)[1]
+        return model
+
+    def model_ids(self, reference):
+        """Equivalent ids explicitly reported for this CLI model."""
+        name, model = brain_ref(reference)
+        row = find_model(self._known_models(name), reference.partition("?effort=")[0])
+        return (row["id"].rpartition(":")[2], *row.get("aliases", ())) if row else (model,)
+
     def model_name(self, reference):
         """What the owner calls a brain's model, with no depth and no id: the CLI's own name for it, else the CLI's."""
         found = brain_ref(reference)
@@ -299,7 +314,8 @@ class CliBrains:
             rows = self._known_models(name) or [{"id": f"cli:{name}"}]
             # A subscription program answers and takes quick questions; dictation's tidying stays fast, so it is never filled
             # with a program started for every phrase, and the program hears nothing (R-DEFAULT-05).
-            choices = {role: model for role, model in recommendations(rows).items() if role in ("answer", "quick")}
+            runnable = [{**row, "id": runnable_model(row)} for row in rows]
+            choices = {role: model for role, model in recommendations(runnable).items() if role in ("answer", "quick")}
             self.settings.fill_models(NAMES[name], choices, self.notify)
 
     async def _one(self, name):

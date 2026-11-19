@@ -2151,8 +2151,12 @@ A link in the composer is drawn in the link colour but stays words (R-UI-168): `
 Backspace at its end and again two letters in, and checks one letter went each time and it is still drawn as a link. An
 address (@) and a skill (/) stay one unit (`mention-field.test.ts`).
 
+The composer's line (R-UI-118): `composer-opened-calm` gives the composer its focus as opening a conversation does and
+expects the quiet `--edge`; `composer-engaged` presses into the empty composer and expects `--line-focus` (`data-engaged`,
+set by `bindComposerRow` on a press or a key, cleared when the focus leaves).
+
 ```powershell
-npm run look -- composer-long-link composer-long-link-sent composer-link-edit room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
+npm run look -- composer-opened-calm composer-engaged composer-long-link composer-long-link-sent composer-link-edit room-long-link room-composer-files room-composer-drop-sign room-draft-picture-opened room-files-sent --theme both --width 1120,720,1920x1080
 npm run look -- empty-conversation-recording empty-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-line-breaks rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```

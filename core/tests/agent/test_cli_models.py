@@ -131,7 +131,7 @@ print(json.dumps({"type": "control_response", "response": {"subtype": "success",
         await brains.aclose()
 
 
-def test_agy_collapses_efforts_and_resolves_display_default(tmp_path):
+def test_agy_collapses_efforts_and_resolves_display_default(tmp_path, conn):
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"model": "Gemini Argon High"}))
     models = agy_models("gemini-4-argon-low\tGemini Argon Low\ngemini-4-argon-high\tGemini Argon High\n", settings)
@@ -140,6 +140,14 @@ def test_agy_collapses_efforts_and_resolves_display_default(tmp_path):
     assert models[0]["is_default"] and models[0]["default_effort"] == "high"
     assert models[0]["id"] == "cli:gemini:gemini-4-argon"
     assert models[0]["effort_models"]["low"] == "cli:gemini:gemini-4-argon-low"
+    from raphael_core.agent.cli.discovery import CliBrains
+    from raphael_core.brain.settings import SettingsStore
+    brains = CliBrains(home=tmp_path, environ={}, settings=SettingsStore(conn))
+    brains._models["gemini"] = models
+    assert brains.antigravity_model(models[0]["id"]) == "gemini-4-argon-high"
+    assert brains.antigravity_model(models[0]["id"] + "?effort=low") == "gemini-4-argon-low"
+    brains._fill_models("gemini")
+    assert brains.settings.get("agent_model") == brains.settings.get("quick_model") == "cli:gemini:gemini-4-argon-high"
 
 
 async def test_antigravity_uses_public_model_command_and_google_account_file(tmp_path):
@@ -179,6 +187,30 @@ def test_antigravity_windows_executable_keeps_gemini_id(tmp_path):
     executable.touch()
     brains = CliBrains(home=tmp_path, environ={"PATH": "", "LOCALAPPDATA": str(tmp_path)})
     assert brains.command("gemini") == [str(executable)]
+
+
+@pytest.mark.parametrize("selected,actual,accepted", [
+    ("explicit-model", "different-model", False),
+    ("explicit-model", "openai/Explicit-Model", True),
+    ("known-alias", "explicit-model", True),
+    (None, "different-model", True),
+])
+async def test_codex_checks_reported_model_before_sending_turn(selected, actual, accepted):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from raphael_core.agent.cli.drivers import Driver
+    driver = Driver("codex", [], model=selected)
+    driver.model_aliases = ("explicit-model",) if selected == "known-alias" else ()
+    driver.child = SimpleNamespace(send=AsyncMock(), cwd=".")
+    driver._read = AsyncMock(side_effect=[
+        {"id": 1, "result": {}}, {"id": 2, "result": {"model": actual, "thread": {"id": "t"}}},
+        {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}])
+    events = [event async for event in driver._rpc("hello", "", "", "", None, None)]
+    methods = [call.args[0]["method"] for call in driver.child.send.await_args_list]
+    assert ("turn/start" in methods) == accepted
+    if not accepted:
+        assert events[-1].kind == "model_mismatch"
+        assert (events[-1].text, events[-1].data["actual"]) == (selected, actual)
 
 
 async def test_codex_public_model_list_protocol_pagination_hidden_and_config_default(tmp_path):

@@ -190,3 +190,58 @@ async def test_a_message_still_waiting_to_be_answered_is_withdrawn_and_its_repla
     edited = await say(rig, client, "waiting-edited", "waiting, said better", "B2", replace_turn_id=queued)
     # Its row stays (withdrawn), so nothing can take its id: the replacement is an ordinary new turn.
     assert edited["turn_id"] != queued and rig.history.get(queued).status == "withdrawn"
+
+
+async def test_global_clear_stops_a_direct_voice_writer(rig):
+    entered, release, stopped = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    from raphael_core.agent.ledger import Ledger
+    captured = []
+
+    async def answer(ask):
+        captured.append(ask)
+        ledger = Ledger(rig.service._spend)
+        rig.service._record(ask, "answer", "", "", "running", None, ledger)
+        entered.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            stopped.set()
+        return rig.service._finish(ask, "answer", "understood", "Late answer", ledger)
+
+    rig.service._answer = answer
+    request = asyncio.create_task(rig.service.ask("voice-session", "Private question", "en",
+                                                  conversation_id=rig.service.conversations.main(0)))
+    await asyncio.wait_for(entered.wait(), 2)
+    try:
+        await rig.call("agent.history.clear", {})
+    finally:
+        release.set()
+        await request
+    assert stopped.is_set()
+    # A delayed completion from this generation also loses the right to write after the clear.
+    rig.service._finish(captured[0], "answer", "understood", "Delayed", Ledger(rig.service._spend))
+    assert (await rig.call("agent.history.list", {}))["turns"] == []
+
+
+async def test_late_native_session_event_after_retraction_is_ignored(rig, monkeypatch, tmp_path):
+    from raphael_core.agent.cli.drivers import Event
+    from .test_cli_recovery import recovery_rig
+
+    turn = rig.history.add(session_id="old", question="Private", route="chat", prefix="", text="OK",
+                           detail=None, status="done")
+    conversation = rig.history.get(turn).conversation_id
+    sessions = rig.service._cli_sessions
+
+    async def play(loop, attempt):
+        await rig.call("agent.history.retract", {"session_id": "old", "turn_id": turn})
+        assert sessions.get(0, loop.model, conversation) is None
+        yield Event("session", "old-native")
+        yield Event("final", "Done.")
+
+    driver = recovery_rig(monkeypatch, tmp_path, play, brain="claude", sessions=sessions,
+                          member_id=0, conversation_id=conversation)
+    sessions.put(0, driver.loop.model, "old-native", conversation)
+    await driver.loop.run()
+    assert driver.calls[0]["session"] == "old-native"
+    assert sessions.get(0, driver.loop.model, conversation) is None

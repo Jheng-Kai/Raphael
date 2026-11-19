@@ -156,8 +156,8 @@ async def test_quick_and_formal_reusing_one_native_session_fails(tmp_path, monke
     from raphael_core.agent.cli.loop import Sessions
     honest_cli(monkeypatch)
     put = Sessions.put
-    monkeypatch.setattr(Sessions, "put", lambda self, member, brain, session, conversation_id=None:
-                        put(self, member, brain, "wrong-shared-native-session", conversation_id))
+    monkeypatch.setattr(Sessions, "put", lambda self, member, brain, session, conversation_id=None, *, generation=None:
+                        put(self, member, brain, "wrong-shared-native-session", conversation_id, generation=generation))
     reasons = await run_s16(tmp_path, "C", contrast_override="cli:codex:formal-model?effort=low")
     assert "concurrent_scope" in reasons and "quick_destination" not in reasons
 

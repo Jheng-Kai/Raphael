@@ -367,6 +367,17 @@ def test_retry_after_longer_than_budget_never_retries_early_or_switches_models()
     assert len(brain.calls) == 1
 
 
+def test_tail_keeps_the_recordings_retry_after():
+    brain = Brain(error=RpcError(INTERNAL_ERROR, "busy", {"kind": "rate_limit", "retry_after": 120}))
+    local = Local()
+    cloud = CloudSttEngine(brain, fallback=lambda: local, warned=set(), race_local=True, now=lambda: 0)
+    with pytest.raises(RpcError):
+        cloud.transcribe(speech())
+    assert cloud.transcribe_tail(speech())
+    assert len(brain.calls) == len(local.calls) == 1
+    assert cloud.last_used == local.name
+
+
 def test_scheduler_delay_during_rate_limit_backoff_cannot_switch_models():
     now = [0.0]
 
