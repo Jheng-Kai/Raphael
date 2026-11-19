@@ -113,8 +113,14 @@ warm=$main
 if __name__ == "__main__":
     profile = Path("/home/cua/workspace/.browser-profiles/driver/main")
     launcher = Path("/usr/local/bin/raphael-seat-browser")
-    original = launcher.read_text(encoding="utf-8")
-    source = launch_script(original, profile) or original
+    try:
+        source = launch_script(launcher.read_text(encoding="utf-8"), profile)
+    except UnicodeDecodeError:
+        source = None
     prepare_profile(profile, Path("/proc"))
-    os.execv("/bin/sh", ["sh", "-c", source, *sys.argv[1:]])
+    if source is not None:
+        os.execv("/bin/sh", ["sh", "-c", source, *sys.argv[1:]])
+    else:
+        # The wrapper's first argument was only the patched shell script's $0.
+        os.execv(str(launcher), [str(launcher), *sys.argv[2:]])
 """

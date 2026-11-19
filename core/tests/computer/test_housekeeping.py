@@ -213,33 +213,64 @@ def test_the_cleanup_command_names_exactly_tmp_and_the_job_folder(desktop):
     assert args[:-5] == exec_args(target, [])
     assert args[-5:-2] == ["sh", "-c", args[-3]] and args[-2:] == ["sh", f"{GUEST}/.raphael-jobs"]
     script = args[-3]
-    assert script.split("; ") == [
-        'find /tmp -xdev -mindepth 1 -type f ! -path "/tmp/.*" -mmin +4320 -amin +4320 -delete 2>/dev/null',
-        'find "$1" -maxdepth 1 -type f \\( -name "*.log" -o -name "*.exit" \\) -mmin +10080 -delete 2>/dev/null',
-        "true"]
+    assert 'find /tmp -xdev -mindepth 1 -type f ! -path "/tmp/.*" -mmin +4320 -amin +4320 -delete' in script
+    assert 'find "$1" -maxdepth 1 -type f \\( -name "*.log" -o -name "*.exit" \\) -mmin +10080 -delete' in script
     # Three days, and seven; nothing is removed with rm, nothing recursive, nothing else is searched.
     assert " rm " not in script and "-r" not in script.replace("-mindepth", "").replace("-maxdepth", "")
 
 
-async def test_a_cleanup_that_fails_is_logged_and_never_stops_the_computer(desktop, caplog):
-    vm, target, runtime = desktop
+@pytest.mark.parametrize("failure", ["undeletable", "timeout"])
+async def test_a_cleanup_that_fails_is_logged_and_never_stops_the_computer(desktop, caplog, tmp_path, failure):
+    vm, target, _ = desktop
     original = vm.run
+    vm.clock = lambda: 1000.0
+    old_log = tmp_path / "undeletable.log"
+    old_log.touch()
+    attempts = []
 
-    async def failing(args, **kwargs):
-        if "find" in " ".join(args):
-            runtime.calls.append((args, kwargs))
-            if kwargs.get("timeout") == 60 and len(runtime.calls) % 2:
-                raise TimeoutError
-            return Result(1, "", "find: error")
+    async def run(args, **kwargs):
+        if args == scratch_args(target):
+            attempts.append(args)
+            if len(attempts) == 1:
+                if failure == "timeout":
+                    raise TimeoutError
+                return Result(1, "", f"find: cannot delete {old_log.name}: Permission denied")
+            old_log.unlink()
+            return Result(0)
         return await original(args, **kwargs)
 
-    vm.run = failing
+    vm.run = run
     with caplog.at_level(logging.WARNING):
         assert (await vm.start(target))["ready"]
-        vm.scratch_cleaned.clear()
+        assert old_log.exists() and not vm.scratch_cleaned
         vm.running.clear()
         assert (await vm.start(target))["ready"]
+        assert not old_log.exists() and vm.scratch_cleaned
+        vm.running.clear()
+        assert (await vm.start(target))["ready"]
+    assert attempts == [scratch_args(target)] * 2
     assert "scratch could not be cleared" in caplog.text
+
+
+async def test_detached_output_is_capped_without_changing_the_job_exit_code(desktop, tmp_path, monkeypatch):
+    if SHELL is None:
+        pytest.skip("A POSIX shell is required")
+    vm, target, _ = desktop
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(module, "GUEST", "./workspace")
+
+    async def run(args, **kwargs):
+        assert "-d" in args
+        completed = subprocess.run([SHELL, *args[args.index(target.name) + 2:]],
+                                   cwd=tmp_path, capture_output=True, encoding="utf-8", timeout=30)
+        assert completed.returncode == 0, completed.stderr
+        return Result(completed.returncode, completed.stdout, completed.stderr)
+
+    monkeypatch.setattr(vm, "run", run)
+    job = await vm.execute(target, "printf out; printf err >&2; head -c 1048576 /dev/zero; exit 37", 10, background=True)
+    assert (tmp_path / job["log"]).read_bytes() == b"outerr" + bytes(module.JOB_LOG_MAX - 6)
+    assert (tmp_path / job["exit_file"]).read_text().strip() == "37"
 
 
 @pytest.fixture
@@ -254,9 +285,13 @@ def scratch(tmp_path):
     temporary.mkdir()
     jobs.mkdir()
 
-    def run():
-        script = scratch_args(module.LocalVm(tmp_path).target(1))[-3].replace("/tmp", temporary.as_posix())
-        return subprocess.run([SHELL, "-c", script, "sh", jobs.as_posix()], capture_output=True, text=True, timeout=30)
+    def run(fail_at=""):
+        script = scratch_args(module.LocalVm(tmp_path).target(1))[-3].replace("/tmp", "./tmp")
+        if fail_at:
+            script = ('failed=$2; find() { if [ "$1" = "$failed" ]; then echo "Permission denied" >&2; return 7; fi; '
+                      'command find "$@"; }; ' + script)
+        return subprocess.run([SHELL, "-c", script, "sh", "./jobs", fail_at], cwd=tmp_path,
+                              capture_output=True, encoding="utf-8", timeout=30)
 
     def make(path, days=0.0, content="x"):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -293,6 +328,18 @@ def test_job_logs_older_than_a_week_go_and_a_running_job_never_does(scratch):
     assert not finished_log.exists() and not finished_exit.exists()
     assert running.exists() and quiet_running.exists() and all(path.exists() for path in recent_pair)
     assert other.exists() and nested.exists()
+
+
+@pytest.mark.parametrize("fail_at", ["./tmp", "./jobs"])
+def test_cleanup_reports_an_undeletable_file_and_still_cleans_the_other_folder(scratch, fail_at):
+    temporary, jobs, run, make = scratch
+    scratch_file = make(temporary / "old", 9)
+    job_log = make(jobs / "old.log", 9)
+
+    result = run(fail_at)
+    assert result.returncode == 7 and "Permission denied" in result.stderr
+    assert scratch_file.exists() == (fail_at == "./tmp")
+    assert job_log.exists() == (fail_at == "./jobs")
 
 
 def test_a_missing_job_folder_is_no_failure(scratch):

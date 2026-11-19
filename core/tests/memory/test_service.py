@@ -2,7 +2,9 @@
 assistant, and when the reflection pass and the consolidation run."""
 
 import asyncio
+import json
 import logging
+from datetime import datetime
 
 import pytest
 
@@ -336,6 +338,45 @@ async def test_a_key_is_required_but_budget_does_not_block_memory(memory, histor
     keys.set("sk-or-v1-test")
     SettingsStore(conn).set("monthly_limit_usd", 0.0)
     assert memory.may_spend() is True
+
+
+async def test_daily_journal_prune_runs_for_a_small_document_without_a_model(memory, model, clock, keys, monkeypatch):
+    from raphael_core.memory.service import _JOURNALS_PRUNED
+
+    keys.clear()
+    memory.own(0).edit_document("A short memory.", None)
+    journal = memory.homes.state(0) / "journal"
+    journal.mkdir(parents=True, exist_ok=True)
+
+    def revision(days, path, before):
+        stamp = datetime.fromtimestamp(clock.ms() / 1000 - days * 86_400).strftime("%Y%m%dT%H%M%S%f")
+        identifier = f"{stamp}-000000000001"
+        file = journal / f"{identifier}.json"
+        file.write_text(json.dumps({"id": identifier, "path": path, "before": before, "applied": True}), encoding="utf-8")
+        return file
+
+    old_memory = revision(40, "MEMORY.md", "Old memory")
+    recent_memory = revision(10, "MEMORY.md", "Recent memory")
+    old_skill = revision(42, "skills/review/SKILL.md", "First skill version")
+    newest_skill = revision(41, "skills/review/SKILL.md", "Restorable skill version")
+    complete = asyncio.Event()
+    set_state = memory._set_state
+
+    def record_prune(key, value):
+        set_state(key, value)
+        if key == _JOURNALS_PRUNED:
+            complete.set()
+
+    monkeypatch.setattr(memory, "_set_state", record_prune)
+    assert not memory.consolidation_due()
+    memory.start()
+    await asyncio.wait_for(complete.wait(), timeout=5)
+
+    assert not old_memory.exists() and not old_skill.exists()
+    assert recent_memory.exists()
+    assert json.loads(newest_skill.read_text(encoding="utf-8"))["before"] == "Restorable skill version"
+    assert memory._state(_JOURNALS_PRUNED) == clock.ms()
+    assert model.calls == []
 
 
 async def test_the_consolidation_of_a_full_file_runs_daily(memory, model, clock):
