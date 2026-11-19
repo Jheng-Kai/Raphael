@@ -2,7 +2,9 @@
 assistant, and when the reflection pass and the consolidation run."""
 
 import asyncio
+import json
 import logging
+from datetime import datetime
 
 import pytest
 
@@ -338,6 +340,45 @@ async def test_a_key_is_required_but_budget_does_not_block_memory(memory, histor
     assert memory.may_spend() is True
 
 
+async def test_daily_journal_prune_runs_for_a_small_document_without_a_model(memory, model, clock, keys, monkeypatch):
+    from raphael_core.memory.service import _JOURNALS_PRUNED
+
+    keys.clear()
+    memory.own(0).edit_document("A short memory.", None)
+    journal = memory.homes.state(0) / "journal"
+    journal.mkdir(parents=True, exist_ok=True)
+
+    def revision(days, path, before):
+        stamp = datetime.fromtimestamp(clock.ms() / 1000 - days * 86_400).strftime("%Y%m%dT%H%M%S%f")
+        identifier = f"{stamp}-000000000001"
+        file = journal / f"{identifier}.json"
+        file.write_text(json.dumps({"id": identifier, "path": path, "before": before, "applied": True}), encoding="utf-8")
+        return file
+
+    old_memory = revision(40, "MEMORY.md", "Old memory")
+    recent_memory = revision(10, "MEMORY.md", "Recent memory")
+    old_skill = revision(42, "skills/review/SKILL.md", "First skill version")
+    newest_skill = revision(41, "skills/review/SKILL.md", "Restorable skill version")
+    complete = asyncio.Event()
+    set_state = memory._set_state
+
+    def record_prune(key, value):
+        set_state(key, value)
+        if key == _JOURNALS_PRUNED:
+            complete.set()
+
+    monkeypatch.setattr(memory, "_set_state", record_prune)
+    assert not memory.consolidation_due()
+    memory.start()
+    await asyncio.wait_for(complete.wait(), timeout=5)
+
+    assert not old_memory.exists() and not old_skill.exists()
+    assert recent_memory.exists()
+    assert json.loads(newest_skill.read_text(encoding="utf-8"))["before"] == "Restorable skill version"
+    assert memory._state(_JOURNALS_PRUNED) == clock.ms()
+    assert model.calls == []
+
+
 async def test_the_consolidation_of_a_full_file_runs_daily(memory, model, clock):
     memory.own(0).edit_document("\n\n".join(f"Fact number {n} about the owner and their projects" for n in range(45)), None)
     assert memory.consolidation_due() is True
@@ -400,3 +441,23 @@ async def test_the_memory_logs_no_memory_and_no_turn(memory, history, model, cap
         memory.search("秘密")
     assert SECRET_WORDS in memory.own(0).read()
     assert "秘密" not in caplog.text and SECRET_WORDS not in caplog.text and "烏龍" not in caplog.text
+
+
+@pytest.mark.parametrize("reuse_id", [False, True])
+async def test_reflection_discards_changed_source_turns(memory, history, model, reuse_id):
+    add_turn(history, "An earlier turn")
+    source = add_turn(history, "Withdraw this fact")
+
+    def retract_during_request(**_):
+        history.delete(source)
+        if reuse_id:
+            assert add_turn(history, "Different words") == source
+        return PLAN
+
+    model.replies.append(retract_during_request)
+    await memory.reflect()
+    assert memory.own(0).read() == ""
+    assert memory.reflected_through() == 0
+    model.replies.append({"actions": []})
+    await memory.reflect()
+    assert memory.reflected_through() > 0

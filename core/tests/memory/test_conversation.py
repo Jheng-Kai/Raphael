@@ -455,3 +455,22 @@ async def test_clearing_the_summary_while_a_fold_waits_keeps_it_cleared(conversa
     conversation._client.replies.append(clear_while_waiting)
     assert await conversation.fold("m", Ledger(SpendTracker(conn, clock.ms))) is False
     assert conversation.summary().text == ""
+
+
+@pytest.mark.parametrize("clear", [True, False])
+async def test_failed_fold_cannot_overwrite_a_newer_summary(conversation, history, conn, clock, clear):
+    seed(history, 40)
+    conversation._save("Private summary", 1)
+    conversation._failures = conversation_module.FOLD_FALLBACK_AFTER - 1
+
+    def clear_and_fail(**_):
+        if clear:
+            conversation.clear_summary()
+        else:
+            conversation._save("New summary", 2)
+        raise TimeoutError()
+
+    conversation._client.replies.append(clear_and_fail)
+    assert not await conversation.fold("m", Ledger(SpendTracker(conn, clock.ms)))
+    assert conversation.summary().text == ("" if clear else "New summary")
+    assert conversation.summary().through_turn_id == (0 if clear else 2)

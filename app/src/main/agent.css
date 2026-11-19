@@ -498,10 +498,10 @@ button.message-quote { width: 100%; text-align: start; background: none; cursor:
    card, never centred under the owner's message. */
 .page-agent [data-question-turn] .ask-card { width: min(calc(400px + 100 * var(--pa-u)), 100%); margin-inline: 0 auto; }
 .composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: var(--composer-shadow); transition: border-color 0.16s ease; }
-/* The composer's line brightens under the pointer, and more once it holds words. Never from the focus alone: opening a
-   conversation focuses the composer, and a jump lights nothing (R-UI-118). */
+/* The composer's line brightens under the pointer, and more while the owner is in it (pressed into it or typing) or it
+   holds words. Never from the focus alone: opening a conversation focuses the composer, and a jump lights nothing (R-UI-118). */
 .composer:hover { border-color: var(--line-lit); }
-.composer:has(.cmp-input:not(:placeholder-shown)) { border-color: var(--line-focus); }
+.composer[data-engaged], .composer:has(.cmp-input:not(:placeholder-shown)) { border-color: var(--line-focus); }
 /* The shadow is always black and focus changes nothing, so opening a conversation (which focuses the field)
    lights no halo around it in the dark theme. */
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }

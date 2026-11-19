@@ -149,10 +149,22 @@ class Sessions:
         conn.execute("CREATE TRIGGER IF NOT EXISTS delete_member_cli_sessions AFTER DELETE ON members BEGIN DELETE FROM agent_cli_sessions WHERE member_id=OLD.id; END")
         conn.execute("CREATE TABLE IF NOT EXISTS agent_conversation_cli_contexts (conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, brain TEXT NOT NULL, session_id TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY(conversation_id, brain))")
         conn.execute("CREATE TRIGGER IF NOT EXISTS delete_native_cli_context AFTER DELETE ON agent_conversation_cli_sessions BEGIN DELETE FROM agent_conversation_cli_contexts WHERE conversation_id=OLD.conversation_id AND brain=OLD.brain; END")
+        conn.execute("CREATE TABLE IF NOT EXISTS agent_cli_generations (conversation_id INTEGER PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE, generation INTEGER NOT NULL)")
         # Existing native resume IDs belong only to the member's default conversation.
         with conn:
             conn.execute("INSERT OR IGNORE INTO agent_conversation_cli_sessions SELECT c.id, s.brain, s.session_id FROM agent_cli_sessions s JOIN conversations c ON c.member_id=s.member_id AND c.is_default=1")
             conn.execute("DELETE FROM agent_cli_sessions WHERE member_id IN (SELECT member_id FROM conversations WHERE is_default=1)")
+
+    def generation(self, conversation_id):
+        row = self.conn.execute("SELECT generation FROM agent_cli_generations WHERE conversation_id=?",
+                                (conversation_id,)).fetchone()
+        return row[0] if row else 0
+
+    def invalidate(self, conversation_id):
+        with self.conn:
+            self.conn.execute("INSERT INTO agent_cli_generations SELECT id, 1 FROM conversations WHERE id=? "
+                              "ON CONFLICT(conversation_id) DO UPDATE SET generation=generation+1", (conversation_id,))
+            self.conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id=?", (conversation_id,))
 
     def get(self, member, brain, conversation_id=None):
         if conversation_id is None:
@@ -160,17 +172,24 @@ class Sessions:
         row = self.conn.execute("SELECT s.session_id FROM agent_conversation_cli_sessions s JOIN conversations c ON c.id=s.conversation_id WHERE c.id=? AND c.member_id=? AND s.brain=?", (conversation_id, member, brain)).fetchone()
         return row[0] if row else None
 
-    def put(self, member, brain, session, conversation_id=None):
+    def put(self, member, brain, session, conversation_id=None, *, generation=None):
         if not isinstance(session, str) or not 0 < len(session) <= 512:
             return
         if conversation_id is None:
             conversation_id = self.conversations.main(member)
         # A deleted conversation cannot be revived by a late session notification.
         with self.conn:
-            self.conn.execute("INSERT OR REPLACE INTO agent_conversation_cli_sessions SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM conversations WHERE id=? AND member_id=?)", (conversation_id, brain, session, conversation_id, member))
+            self.conn.execute(
+                "INSERT OR REPLACE INTO agent_conversation_cli_sessions SELECT c.id, ?, ? FROM conversations c "
+                "LEFT JOIN agent_cli_generations g ON g.conversation_id=c.id WHERE c.id=? AND c.member_id=? "
+                "AND (? IS NULL OR coalesce(g.generation, 0)=?)",
+                (brain, session, conversation_id, member, generation, generation),
+            )
 
     def clear(self):
         with self.conn:
+            self.conn.execute("INSERT INTO agent_cli_generations SELECT id, 1 FROM conversations WHERE true "
+                              "ON CONFLICT(conversation_id) DO UPDATE SET generation=generation+1")
             self.conn.execute("DELETE FROM agent_conversation_cli_contexts")
             self.conn.execute("DELETE FROM agent_conversation_cli_sessions")
             self.conn.execute("DELETE FROM agent_cli_sessions")
@@ -194,6 +213,8 @@ class Sessions:
 
     def clear_member(self, member_id):
         with self.conn:
+            self.conn.execute("INSERT INTO agent_cli_generations SELECT id, 1 FROM conversations WHERE member_id=? "
+                              "ON CONFLICT(conversation_id) DO UPDATE SET generation=generation+1", (member_id,))
             self.conn.execute(
                 "DELETE FROM agent_conversation_cli_sessions WHERE conversation_id IN "
                 "(SELECT id FROM conversations WHERE member_id = ?)",
@@ -260,6 +281,7 @@ class CliLoop:
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
         self.resume_session = resume_session
+        self._session_generation = sessions.generation(self.conversation_id) if isinstance(sessions, Sessions) else None
         self.structured = structured
         self.no_tools = no_tools
         # The tools still offered and called under `no_tools`: a first greeting may ask the owner one question card.
@@ -835,8 +857,15 @@ class CliLoop:
         self._fresh_sections = {name: text for name, text in self.context_sections.items() if text and text in user}
         return user
 
+    def _session_current(self):
+        return self._session_generation is None or self.sessions.generation(self.conversation_id) == self._session_generation
+
+    def _forget_session(self):
+        if self.resume_session and self._session_current():
+            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+
     def _save_context(self):
-        if not self.resume_session or not self._session or self.resume_user is None:
+        if not self.resume_session or not self._session_current() or not self._session or self.resume_user is None:
             return
         state = {"turn": max([self.turn_id or 0, *(identifier for identifier, _ in self.context_turns)]),
                  "sections": {name: line_hashes(text) for name, text in getattr(self, "_fresh_sections", self.context_sections).items()},
@@ -944,7 +973,7 @@ class CliLoop:
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
                 async with RaphaelMcp(self._mcp_tools, self._tool) as server:
-                    self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
+                    self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session and self._session_current() else None
                     if self.context_sections:
                         self.user += "\n\n" + "\n\n".join(self.context_sections.values())
                     if self._session and self.resume_user is not None:
@@ -952,7 +981,7 @@ class CliLoop:
                         self._context_window = self._context_state.get("window")
                         # Old mappings have no delivery cursor. Rebuild once rather than replaying history into them.
                         if not self._context_state:
-                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._forget_session()
                             self._session = None
                         else:
                             self.user = resumed_user(self.resume_user, self.context_sections, self.context_turns, self._context_state,
@@ -963,7 +992,7 @@ class CliLoop:
                     # cut a continued task of a 200K model back to a short work record).
                     self._context_window = self._context_window or self._known_window()
                     if should_compact(self._context_state, self.system, self.user, window=self._context_window):
-                        self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                        self._forget_session()
                         self._session = None
                         self._context_state = {}
                         self._fresh_context = True
@@ -989,7 +1018,7 @@ class CliLoop:
                             if not resumed or fresh_context:
                                 break
                             # A deleted native history gets one fresh attempt with bounded receipts.
-                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._forget_session()
                             self._session = None
                             self._context_state = {}
                             fresh_context = self._fresh_context = True
@@ -997,7 +1026,7 @@ class CliLoop:
                             continue
                         if failure == "context_overflow" and not fresh_context:
                             # One bounded fresh attempt can escape an oversized native history without replaying effects.
-                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._forget_session()
                             self._session = None
                             self._context_state = {}
                             fresh_context = self._fresh_context = True
@@ -1198,7 +1227,8 @@ class CliLoop:
                 if event.kind == "session":
                     self._session = event.text
                     if self.resume_session:
-                        self.sessions.put(self.member_id, self.model, event.text, self.conversation_id)
+                        guard = {} if self._session_generation is None else {"generation": self._session_generation}
+                        self.sessions.put(self.member_id, self.model, event.text, self.conversation_id, **guard)
                 elif event.kind == "context_reset":
                     self._context_state = {}
                     self._submitted_user = self._fresh_user()

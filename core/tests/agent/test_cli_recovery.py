@@ -12,7 +12,7 @@ from raphael_core.background.cli import RoomCliSessions
 from raphael_core.worker.loop import Stop, ToolOutcome, WAITING
 
 
-def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
+def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", sessions=None, member_id=5, conversation_id=7, **options):
     calls, effects, lines, events, interrupted = [], [], [], [], []
     loops = []
     made = []
@@ -41,7 +41,7 @@ def recovery_rig(monkeypatch, tmp_path, play, *, brain="codex", **options):
     loop = cli.CliLoop(
         brains=SimpleNamespace(environ={}, home=tmp_path, command=lambda name: ["fake"],
                                available=lambda *args, **kwargs: True),
-        sessions=RoomCliSessions(), member_id=5, conversation_id=7, model=f"cli:{brain}:fake",
+        sessions=sessions or RoomCliSessions(), member_id=member_id, conversation_id=conversation_id, model=f"cli:{brain}:fake",
         ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
         system="Keep the owner's scope.", user="Save a draft, then check it.", tools=[],
         progress=lines.append, thinking=lambda text: None, event=events.append,
