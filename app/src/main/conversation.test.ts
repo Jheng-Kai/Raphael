@@ -134,6 +134,28 @@ describe("one thread", () => {
     expect(lines([asked, joined(8, 3)]).map(([key]) => key)).toEqual(["turn:7", "turn:8"]);
   });
 
+  test("a message taken by older work still under way stands last, with that work's answer under it, below the turns since", () => {
+    const start = at("2026-10-20T09:00:00+08:00");
+    const said = (seq: number, minutes: number) => ({ seq, kind: "reply" as const, text: `Reply ${seq}`, at_ms: start + minutes * 60_000 });
+    const lines = (turns: AgentTurn[]) => threadItems(turns, now).flatMap(item => item.kind === "turn" ? [[item.key, item.part ?? null]] : []);
+    // A task that still works in the background (issue 231), the owner's next request answered meanwhile, then a message the
+    // core handed to that task: the task's answer to it comes after the message, so it stands under it, not up in the task's line.
+    const task = turn(1, "2026-10-20T09:00:00+08:00", { status: "running", messages: [said(1, 1), said(2, 12)] });
+    const asked = turn(2, "2026-10-20T09:04:00+08:00", { messages: [said(1, 6)] });
+    const message = turn(3, "2026-10-20T09:10:00+08:00", { route: "owner_input", text: "", source: "app" });
+    expect(lines([message, asked, task])).toEqual([
+      ["turn:1", { until: start + 10 * 60_000 }],
+      ["turn:2", null],
+      ["turn:3", null],
+      ["turn:1:after:3", { from: start + 10 * 60_000, after: 3 }],
+    ]);
+    // The newer work answering it is the one that took it, even when the older one also said something since.
+    const answered = { ...asked, messages: [said(1, 6), said(2, 11)] };
+    expect(lines([task, answered, message]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3", "turn:2:after:3"]);
+    // Work that has said nothing since the message took nothing of it: the message stays below every line.
+    expect(lines([{ ...task, messages: [said(1, 1)] }, asked, message]).map(([key]) => key)).toEqual(["turn:1", "turn:2", "turn:3"]);
+  });
+
   test("a turn from a core that keeps no source is a spoken one", () => {
     const old = { ...turn(1, "2026-10-20T09:00:00+08:00") };
     delete old.source;
