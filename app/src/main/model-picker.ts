@@ -636,8 +636,9 @@ export function modelPickerSelection(o: ModelPickerLook): { name: string; source
   const stale = !!ref && !!o.catalog && !o.loading && !model && !local && o.lead?.id !== ref;
   if (stale) return { name, source: t("missing.retired"), provider: cli ?? from, model };
   const source = inherited ? `${from} · ${t("services.sameAsAnswer")}` : from;
-  // The plain name of where it runs, the same kind of word for every source.
-  return { name, source, provider: cli ?? (!model && ref.startsWith("@chatgpt:") ? "ChatGPT" : from), model };
+  // The plain name of where it runs, the same kind of word for every source. A local model in use is shown as the
+  // local list shows it, with no mark: the cloud model kept for later lends it neither its name nor its maker's mark.
+  return { name, source, provider: cli ?? (!model && ref.startsWith("@chatgpt:") ? "ChatGPT" : from), model: local ? undefined : model };
 }
 
 function buttonFace(o: ModelPickerLook): { inner: string; label: string } {

@@ -7794,6 +7794,18 @@ export function checkRendered(name, context = {}) {
     require(price === "訂閱", `on the plan, not 價格未知: ${price}`);
     return { check: name };
   }
+  if (name === "settings-local-stt") {
+    // Issue 232: the local model in use took the cloud model's mark beside its own name.
+    const trigger = document.querySelector('.modal-scrim [data-model-picker="stt"] .mp-trigger');
+    require(trigger.querySelector(".mp-tname").textContent === "SenseVoice" && trigger.querySelector(".mp-source").textContent === "本機", `it reads SenseVoice · 本機: ${trigger.textContent}`);
+    require(trigger.firstElementChild.classList.contains("mp-ttext"), `no mark stands before the local model's name: ${trigger.firstElementChild.className}`);
+    const cloud = document.querySelector('.modal-scrim [data-model-picker="cleanup"] .mp-trigger');
+    require(!cloud.firstElementChild.classList.contains("mp-ttext"), "a cloud model keeps its maker's mark");
+    const own = trigger.querySelector(".mp-tname").getBoundingClientRect();
+    const unmarked = document.querySelector('.modal-scrim [data-model-picker="image"] .mp-trigger .mp-tname').getBoundingClientRect();
+    require(Math.abs(own.left - unmarked.left) < 1, `the name starts where the other unmarked choice's does: ${own.left} vs ${unmarked.left}`);
+    return { check: name, left: Math.round(own.left) };
+  }
   if (name === "permission-menu") {
     const card = document.querySelector("#app-popover.cb-menu > .cb-card.cb-modes"), rows = [...(card?.querySelectorAll(".cb-row[data-mode]") ?? [])];
     require(card, "the permission choice is the same card as the model menu");

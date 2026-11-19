@@ -612,6 +612,14 @@ describe("Models", () => {
     expect(row).toContain('data-price="stt-model"><span class="price-part">免費</span></span>');
   });
 
+  test("a local model in use wears no mark of the cloud model kept for later (issue 232)", () => {
+    const trigger = (html: string): string => /<button type="button" class="sel mp-trigger"[^>]*>([\s\S]*?)<\/button>/.exec(rowOf(html, "語音轉文字"))![1]!;
+    const local = trigger(tab("models", { brain: { ...brain, stt_engine: "local", stt_local_model: "sensevoice" } }));
+    expect(local.startsWith('<span class="mp-ttext"><strong class="mp-tname">SenseVoice</strong>')).toBe(true);
+    const cloud = trigger(tab("models"));
+    expect(cloud.indexOf('<span class="mp-ttext">')).toBeGreaterThan(0);
+  });
+
   test("gives each picker the favourites of its own role, none when the core has not said", () => {
     const starred = { ...brain, model_favorites: { cleanup: ["a/b"], answer: ["c/d", "e/f"] } };
     expect(modelPickerLook(view({ brain: starred }), "cleanup").favorites).toEqual(["a/b"]);
