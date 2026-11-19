@@ -3159,7 +3159,7 @@ export function checkRendered(name, context = {}) {
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
     require(!nav.querySelector('.brand, .app-icon, [data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row > .sidebar-account'),'no brand and no fold button (the edge drags); the owner\'s face stands in the foot');
-    if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content==='none','the list has a draggable edge at its right, with no handle drawn');}
+    if(!compact){const edge=nav.querySelector(':scope > .side-edge'),box=edge?.getBoundingClientRect(),side=nav.getBoundingClientRect();require(edge&&edge.getAttribute('role')==='separator'&&getComputedStyle(edge).cursor==='col-resize'&&Math.abs(box.right-side.right)<1&&box.width<=8&&getComputedStyle(edge,'::after').content!=='none'&&getComputedStyle(edge,'::after').width==='1px','the list has a draggable edge at its right, drawn as a quiet 1px line (R-UI-110)');}
     const pair=[...nav.querySelectorAll('[data-col]')];
     require(pair.map(button=>button.dataset.col).join()==='search,add'&&!column.querySelector('input'),'search then plus, with no field standing in the list');
     // The rail has no search: only the plus stands in its foot.
@@ -3358,7 +3358,7 @@ export function checkRendered(name, context = {}) {
     const box=tile.getBoundingClientRect(),face=tile.querySelector(':scope > .av').getBoundingClientRect(),label=tile.querySelector(':scope > b').getBoundingClientRect();
     // On the rail of faces a pinned member is a face like the others, on its own 54px square.
     if(document.documentElement.hasAttribute('data-sidebar-collapsed')){require(Math.abs(face.width-36)<1&&Math.abs(box.width-54)<1&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'on the rail a pinned member is a 36px face centred on its 54px square');return {check:name,face:face.width};}
-    require(face.width>=64&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'the tile has a larger centered face');
+    require(face.width>=44&&face.width<=60&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,`the tile has a larger centered face, kept small: ${face.width}`);
     require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'the name is centered below the face');
     return {check:name,face:face.width};
   }

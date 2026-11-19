@@ -51,6 +51,8 @@
   /* surfaces: the window (sidebar), the page, the panels on it, a recessed fill */
   --side: #f7f7f7; --content: #ffffff; --panel: #f7f7f7; --surface-2: #efefef;
   --edge: #e5e5e5; --line: #ebebeb;
+  /* A dividing line under the pointer (a sidebar's edge, the composer) and the composer being written in. */
+  --line-lit: #c8c8c8; --line-focus: #a8a8a8;
   --hover: #ededed; --pressed: #e2e2e2; --hover-edge: #8f8f8f; --edge-rim: #e3e3e3; --rail-line: #ececec;
   --danger-hover: #fdf0f0; --danger-pressed: #fbe5e5;
   /* text: body, secondary, muted (all at least AA on every surface above) */
@@ -111,6 +113,7 @@
 :root[data-theme="dark"] {
   --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
   --edge: #262626; --line: #262626;
+  --line-lit: #474747; --line-focus: #5c5c5c;
   /* No bright edges in the dark: controls are told apart by their fill. What stands apart from the page on its own (a pill,
      a round button, the Connections pill) wears a hairline a shade above its fill (`--edge-rim`, +12);
      a fill inside another surface (a chosen row, a tab, the composer's +) wears none. */
@@ -519,7 +522,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 /* ---------- settings: a panel over the window ---------- */
 .modal-scrim { --modal-gap: 24px; --set-nav: 196px; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: calc(var(--window-controls-height) + var(--modal-gap)) var(--modal-gap) var(--modal-gap); background: var(--scrim); }
 .modal { position: relative; display: grid; grid-template-columns: var(--set-nav) minmax(0, 1fr); width: min(1000px, 100%); height: min(760px, 100%); border-radius: var(--r-lg); overflow: hidden; background: var(--dialog); border: 1px solid var(--float-edge); box-shadow: var(--pop); }
-.modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: transparent; border-right: 0; overflow-x: hidden; overflow-y: auto; min-height: 0; }
+.modal-nav { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-4) var(--sp-2); background: transparent; border-right: 1px solid var(--line); overflow-x: hidden; overflow-y: auto; min-height: 0; }
 /* 連結應用程式 opens alone: one column, no list of Settings (R-UI-111). */
 .modal-scrim[data-standalone] > .modal { grid-template-columns: minmax(0, 1fr); width: min(900px, 100%); }
 .modal-scrim[data-standalone] .modal-nav { display: none; }
