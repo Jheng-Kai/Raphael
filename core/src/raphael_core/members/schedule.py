@@ -189,6 +189,18 @@ def next_run(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> 
     return due
 
 
+def first_eligible_slot(schedule: Schedule, pending_ms: int, cutoff_ms: int, *, tz: tzinfo | None = None) -> int | None:
+    """Find the first pending occurrence at or after the inclusive catch-up cutoff."""
+    if pending_ms >= cutoff_ms:
+        return pending_ms
+    if schedule.kind == "every" and not schedule.from_time and not schedule.start_date:
+        # A rolling interval has no calendar anchor. Keep the phase of its saved slot.
+        step = schedule.interval_minutes * 60_000
+        gaps = (cutoff_ms - pending_ms - 1) // step
+        return next_run(schedule, pending_ms + gaps * step, tz=tz)
+    return next_run(schedule, cutoff_ms - 1, tz=tz)
+
+
 def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int | None:
     """The first moment strictly after `after_ms` at which `schedule` is due, in ms."""
     if schedule.kind == "every" and schedule.from_time:

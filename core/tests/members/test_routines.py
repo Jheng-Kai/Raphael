@@ -2,6 +2,8 @@
 its thread."""
 
 import asyncio
+from datetime import datetime, timezone
+
 import pytest
 
 from raphael_core.agent.history import AgentHistory
@@ -155,6 +157,62 @@ async def test_a_routine_missed_longer_ago_is_not_run_only_moved_on(rig):
     assert rig.background.submitted == []
     moved = rig.service.store.routine(daily["id"])
     assert moved.last_run_ms is None and moved.next_run_ms > rig.wall.now
+
+
+@pytest.mark.parametrize(("schedule", "elapsed", "slot"), [
+    ({"kind": "weekdays", "time": "09:00", "timezone": "Asia/Taipei"}, 72 * HOUR, 72 * HOUR),
+    ({"kind": "weekly", "days": [1], "time": "08:49", "timezone": "Asia/Taipei"}, 169 * HOUR, 168 * HOUR),
+    ({"kind": "every", "hours": 3}, 15 * HOUR, 3 * HOUR),
+    ({"kind": "every", "hours": 24}, 25 * HOUR, 24 * HOUR),
+    ({"kind": "daily", "time": "09:00", "until": "2026-10-23"}, 24 * HOUR, None),
+])
+async def test_a_stale_cursor_does_not_hide_a_recent_missed_slot(rig, conn, schedule, elapsed, slot):
+    routine = await make(rig, schedule=schedule)
+    first = routine["next_run"]
+    rig.wall.now = first + elapsed
+
+    assert rig.service.tick() == ([routine["id"]] if slot is not None else [])
+    assert rig.service.tick() == []
+    runs = conn.execute("SELECT scheduled, started FROM routine_runs WHERE routine_id=?", (routine["id"],)).fetchall()
+    assert [tuple(row) for row in runs] == ([] if slot is None else [(first + slot, rig.wall.now)])
+    moved = rig.service.store.routine(routine["id"])
+    if slot is None:
+        assert moved.last_run_ms is None and moved.next_run_ms is None
+    else:
+        assert moved.last_run_ms == rig.wall.now and moved.next_run_ms > rig.wall.now
+
+
+async def test_a_weekly_routine_saves_and_runs_its_first_slot_in_the_saved_timezone(rig):
+    rig.service._tz = timezone.utc
+    routine = await make(rig, schedule={"kind": "weekly", "days": [1], "time": "08:49", "timezone": "Asia/Taipei"})
+    first = int(datetime(2026, 10, 26, 0, 49, tzinfo=timezone.utc).timestamp() * 1000)
+    assert routine["last_run"] is None and routine["next_run"] == first
+    rig.wall.now = first - 1
+    assert rig.service.tick() == []
+    rig.wall.now = first
+    assert rig.service.tick() == [routine["id"]]
+    assert rig.service.store.routine(routine["id"]).next_run_ms == first + 7 * 24 * HOUR
+
+
+async def test_auth_expired_finishes_the_run_and_the_next_slot_still_runs(rig, conn):
+    routine = await make(rig)
+    rig.wall.now = routine["next_run"]
+    assert rig.service.tick() == [routine["id"]]
+    task_id, turn_id = rig.background.attached[0]
+    rig.background.store.finish(task_id, "failed", prefix="", text="Sign-in expired.", detail=None,
+                                reason="auth_expired")
+    history = AgentHistory(conn)
+    history.resolve(turn_id, prefix="", text="Sign-in expired.", status="error",
+                    failure={"kind": "auth_expired", "provider": "cli:claude"})
+    rig.service.turn_arrived(turn_id)
+
+    failed = rig.service.store.routine(routine["id"])
+    assert history.get(turn_id).failure["kind"] == "auth_expired"
+    assert failed.enabled and failed.last_error == "Sign-in expired."
+    assert failed.next_run_ms == rig.wall.now + 24 * HOUR
+    rig.wall.now = failed.next_run_ms
+    assert rig.service.tick() == [routine["id"]]
+    assert len(rig.background.attached) == 2
 
 
 async def test_a_routine_that_is_off_never_runs(rig):
